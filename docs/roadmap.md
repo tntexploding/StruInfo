@@ -3,10 +3,25 @@
 - 状态：候选计划，按依赖而非日期排序
 - 最近更新：2026-08-02
 - 对应需求：[当前产品需求](product-requirements.md)
+- 工程方案：[开发大纲](development-outline.md)
 
 ## 总体策略
 
 先用一个真实信源证明“获取 → 可追溯 AI 摘要 → 批准 → 找回”的价值，再扩展为稳定日报与推送。知识树、时间线、混合问答、云端和自动发现均按真实任务与依赖逐步加入，不作为第一次验证的前置条件。
+
+## 实现前架构门
+
+开发大纲提出 TypeScript 模块化单体和 PostgreSQL 统一持久化方案。
+在创建生产源码、包清单或容器文件前需要：
+
+- 确认 Windows 是否可运行 Docker Desktop/WSL2 或原生 PostgreSQL 18；
+- 确认私有资料向外部 AI 发送的默认策略；
+- 确认 TypeScript 主后端选择或记录更强的 C# 偏好；
+- 完成 Windows/Linux 任务恢复、中文证据定位和重复副作用三个技术探针；
+- 接受 [ADR 0001](adr/0001-typescript-modular-monolith.md) 与
+  [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md)。
+
+该门槛不替代阶段 0 的真实场景验证，两者可以并行准备。
 
 ## 阶段 0：冻结真实场景
 
