@@ -16,4 +16,11 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 4. Do not rewrite an accepted decision to hide history. Add a new ADR and mark
    the old record `Superseded`.
 
+## Records
+
+| ADR | Status | Decision |
+| --- | --- | --- |
+| [0001](0001-typescript-modular-monolith.md) | Proposed | TypeScript modular monolith and toolchain |
+| [0002](0002-postgresql-persistence-and-durable-work.md) | Proposed | PostgreSQL persistence, durable work, and Blob storage |
+
 No architecture decision has been accepted yet.
