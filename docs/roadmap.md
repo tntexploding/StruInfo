@@ -12,12 +12,11 @@
 ## 实现前架构门
 
 开发大纲提出 TypeScript 模块化单体和 PostgreSQL 统一持久化方案。
+项目所有者已经确认 Windows Docker 环境、外部 AI 默认拒绝策略和 TypeScript 主后端方向。
 在创建生产源码、包清单或容器文件前需要：
 
-- 确认 Windows 是否可运行 Docker Desktop/WSL2 或原生 PostgreSQL 18；
-- 确认私有资料向外部 AI 发送的默认策略；
-- 确认 TypeScript 主后端选择或记录更强的 C# 偏好；
 - 完成 Windows/Linux 任务恢复、中文证据定位和重复副作用三个技术探针；
+- 完成候选依赖的精确版本、许可证和容器来源审查；
 - 接受 [ADR 0001](adr/0001-typescript-modular-monolith.md) 与
   [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md)。
 
