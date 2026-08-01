@@ -17,11 +17,18 @@ The project should optimize for a readable and maintainable first vertical
 slice, not independent service scaling.
 No production source tree may be created until this choice is accepted.
 
-Known assumptions:
+Owner confirmations on 2026-08-02:
+
+- TypeScript is accepted as the proposed primary backend language;
+- the maintainers do not currently have a stronger C# preference;
+- Windows development may use Docker Desktop/WSL2 for infrastructure;
+- private knowledge is denied to external AI by default, enabled explicitly per
+  workspace, and supported by local or self-hosted provider adapters.
+
+Remaining assumptions:
 
 - the initial AI workload is remote API orchestration rather than model training;
 - a later OCR or video workload may justify an isolated Python worker;
-- the current team does not have a stronger C# preference;
 - Windows can run the same PostgreSQL behavior used by Linux.
 
 ## Decision

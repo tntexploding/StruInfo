@@ -15,6 +15,8 @@ The same behavior must be testable on Windows and deployable on Linux.
 Its first workloads are small, but correctness requires transactions,
 constraints, recoverable jobs, idempotency, and auditable state transitions.
 Chinese and semantic retrieval will evolve after real corpus measurements.
+The project owner confirmed on 2026-08-02 that Windows development may use
+Docker Desktop/WSL2 for production-parity infrastructure.
 
 ## Decision
 
