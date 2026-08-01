@@ -20,6 +20,15 @@ Do not choose a production language, framework, database, deployment platform,
 or AI provider until the development outline is approved and the decision is
 recorded.
 
+## Local Multi-Agent Workflow
+
+If `.agents/development-workflow.md` exists, read it before starting parallel
+implementation or review work.
+The file is intentionally local and ignored by Git; canonical requirements,
+accepted ADRs, and repository standards take precedence.
+Move durable decisions and required evidence into tracked documentation instead
+of leaving them only in `.agents/`.
+
 ## Change Rules
 
 - Follow the relevant Google style guide and repository-local deviations.

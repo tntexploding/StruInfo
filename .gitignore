@@ -13,6 +13,9 @@
 /snapshots/
 /uploads/
 
+# Local multi-agent coordination and disposable architecture spikes.
+/.agents/
+
 # Logs, temporary files, and generated output.
 *.log
 /logs/
