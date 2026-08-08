@@ -1,7 +1,7 @@
 # StruInfo 分阶段计划
 
-- 状态：候选计划，按依赖而非日期排序
-- 最近更新：2026-08-02
+- 状态：基础架构门已完成；按依赖推进 M0-S 与真实场景冻结
+- 最近更新：2026-08-08
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
 
@@ -11,16 +11,19 @@
 
 ## 实现前架构门
 
-开发大纲提出 TypeScript 模块化单体和 PostgreSQL 统一持久化方案。
-项目所有者已经确认 Windows Docker 环境、外部 AI 默认拒绝策略和 TypeScript 主后端方向。
-在创建生产源码、包清单或容器文件前需要：
+基础架构门已于 2026-08-08 完成：
 
-- 完成 Windows/Linux 任务恢复、中文证据定位和重复副作用三个技术探针；
-- 完成候选依赖的精确版本、许可证和容器来源审查；
-- 接受 [ADR 0001](adr/0001-typescript-modular-monolith.md) 与
-  [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md)。
+- Windows/Linux 平台与恢复、中文/图片证据定位、协议与重复副作用方向已经过 M0-P 风险比例验证；
+- 发现的 writer/reader 预算、容器/字节身份、运行时 schema、工作区 scoping、原子幂等、状态 fencing 和 WS 一致恢复问题已写为生产不变量；
+- 非分布式探针依赖许可结果足以支持架构选择，但不授权生产依赖或发布；
+- [ADR 0001](adr/0001-typescript-modular-monolith.md) 与
+  [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md) 已接受；
+- 所有探针候选代码均禁止直接作为生产实现复用。
 
-该门槛不替代阶段 0 的真实场景验证，两者可以并行准备。
+下一步 M0-S 只建立工程地基：精确 package/lockfile、最小应用入口、数据库迁移与角色、CI、统一验证命令、生命周期脚本 allowlist、许可证/NOTICE 与初始 SBOM。
+浏览器/FFmpeg、正式镜像、项目发布许可证与生产备份/部署仍有独立后续门。
+
+架构门不替代阶段 0 的真实场景验证，两者可以并行准备；阶段 1 的范围仍由真实主题、信源、理想日报与任务样本决定。
 
 ## 阶段 0：冻结真实场景
 

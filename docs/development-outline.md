@@ -1,7 +1,7 @@
 # StruInfo 开发大纲
 
-- 状态：基础方向已由用户确认；待 P1–P3 技术探针后接受 ADR 并建立脚手架
-- 最近更新：2026-08-02
+- 状态：基础架构已接受；M0-P 完成，准备进入 M0-S 工程地基
+- 最近更新：2026-08-08
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
 - 基础 ADR：[ADR 0001](adr/0001-typescript-modular-monolith.md)、
@@ -24,8 +24,10 @@ StruInfo 首版采用“单仓库、模块化单体、多运行角色”架构�
 - Windows 开发与 Linux 部署使用相同数据库和迁移，不以 SQLite 模拟生产；
 - 首版不引入微服务、图数据库、独立搜索集群、Redis 或平台专属 QQ 逻辑。
 
-该方向仍是 `Proposed`，不是已经接受的实现许可。
-确认本文第 17 节的三个问题、完成三个技术探针并接受 ADR 后，才建立源码脚手架。
+该方向已由 [ADR 0001](adr/0001-typescript-modular-monolith.md) 与
+[ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md) 正式接受。
+M0-P 证明的是架构可行性，不是生产认证；任何探针候选源码都不得直接复制到生产树。
+下一步 M0-S 负责精确锁定工具和依赖版本、建立最小脚手架、CI、许可证记录与统一质量命令。
 
 ## 2. 为什么选择这个形态
 
@@ -88,6 +90,10 @@ flowchart LR
 6. 索引、向量和树视图都是可重建派生物，不是知识真相源。
 7. 外部网页、模型输出和媒体文件都是不可信输入。
 8. 先完成一个真实信源的纵向闭环，再扩展格式、连接器和自治能力。
+9. 工作区身份属于资源键、查询、缓存、幂等与事件边界，不能只靠调用方记得过滤。
+10. 外部 JSON 使用标准兼容的运行时 schema 和原始字节级重复成员检查；任意程序对象不能绕过数据边界。
+11. 成功写出的状态、导出和证据工件必须能被同版本公开 reader 读回；资源预算包含完整编码包络。
+12. WebSocket 是可恢复投影；快照、重放截止点和事件尾流必须来自一致且可核验的读取模型。
 
 ## 5. 模块边界
 
@@ -178,16 +184,22 @@ Delivery: pending -> sending -> delivered
 
 实现约束：
 
-- 所有外部可重试写操作接受 `Idempotency-Key`；
+- 所有外部可重试写操作接受 `Idempotency-Key`，并把工作区与规范请求身份纳入幂等范围；
+- 幂等记录必须在业务事务内原子地“插入或解析冲突”，相同请求精确重放，不同请求返回稳定冲突；
 - 更新知识时携带修订号或 `ETag/If-Match`，避免静默覆盖；
 - Worker 可能在超时或崩溃后再次执行，处理器必须幂等；
+- Worker 与投递领取使用带 owner/generation token 的 compare-and-set；必须检查受影响行数，并为租约定义到期语义；
+- 外部副作用发生前先提交耐久 attempt 身份；结果写入必须同时匹配预期状态与 exact claim/attempt token；
+- 终态单调不可回退，迟到或已被替代的结果不得覆盖成功、确认或更新后的状态；
 - 入库变更与 outbox 事件在同一 PostgreSQL 事务提交；
 - Webhook 至少一次投递，接收方按稳定 `event_id` 去重；
-- 对发送消息等外部副作用，不宣称端到端“恰好一次”。
+- 对发送消息等外部副作用，不宣称端到端“恰好一次”；
+- 序列化冲突和死锁重试必须有界、可观察，并保持相同幂等语义。
 
 业务模块在 Unit of Work 中通过端口登记领域事件或后续任务，不直接写 `platform` 表。
 PostgreSQL 适配器在同一事务中提交业务变更，并分别把内部后台工作写入 `pg-boss`、把需要送往外部的事件写入 outbox。
 Outbox Delivery Worker 直接租用 outbox 行并执行 Webhook 投递，不再把同一外部事件复制到第二条队列。
+任何 claim、状态转换和事件追加都必须由同一受保护的事务决定；未经成功 compare-and-set 的执行者不能追加事件或提交结果。
 
 计划时间使用 IANA 时区名称，实际执行时刻保存为 UTC 瞬间。
 遇到 Windows 休眠、停机或夏令时变化时，日报类任务默认只补跑一次最近遗漏窗口，不批量重放每个错过的触发点；具体 Watch 可以显式改为跳过。
@@ -211,7 +223,8 @@ Drizzle 作为薄 SQL 层的候选原因是它支持 PostgreSQL、显式迁移�
 - 树位置、报告、投递、操作、outbox 和审计；
 - Blob 的逻辑 ID、内容哈希、大小、类型和保留状态。
 
-所有私有业务记录都带工作区边界，唯一约束与查询不能只依赖调用方记得过滤。
+所有私有业务记录都带工作区边界。
+工作区身份必须进入仓储键、SQL 谓词、唯一约束、缓存键、历史/事件查询和幂等范围；授权检查与资源选择使用同一个有效工作区，不能只依赖 URL 前置检查、opaque ID 或调用方记得过滤。
 时间字段使用 `timestamptz` 表示确定瞬间，同时保留原始时区、精度和是否由 AI 推断；发布时间、事件时间、有效时间、抓取时间和入库时间继续分列。
 Snapshot 分别记录原始响应哈希和规范正文哈希，正文规范化算法也需要版本，避免把版式变化误判为知识变化。
 
@@ -220,12 +233,23 @@ Snapshot 分别记录原始响应哈希和规范正文哈希，正文规范化�
 大文本、原始响应、图片和未来视频保存为不可变 Blob。
 首版实现本地文件系统适配器，文件名由内容哈希派生，业务记录只引用逻辑 Blob ID。
 
+Blob 边界只接受通过 intrinsic brand 检查的普通字节视图，并立即复制精确可见范围。
+长度、内容哈希、Blob 身份、后续解析与保留字节都基于同一份 owned copy；不得通过 Proxy、accessor、共享可变 buffer 或调用方随后修改来重定向来源身份。
+
+状态、导出和证据包分别定义版本化 reader/writer 预算。
+预算包含 UTF-8 包络、base64 膨胀和全部字段；writer 在提交前测得最终字节数，超限时可见且原子失败。
+大型正文和媒体优先保留为 Blob 引用，不能通过反复嵌套 base64 形成不可读的 current-version 工件。
+writer contract 与边界测试必须证明每个成功输出都能由相同版本的公开 reader 往返读取；若确定性 encoder 与精确 preflight 已提供同等保证，运行时不要求为每次写入重复解析。
+
 Linux 单机部署可先使用受备份保护的持久卷。
 需要多机或对象存储服务时，再增加 S3 兼容适配器；迁移不能改变 Resource、Snapshot 或 Citation ID。
 
 不可变表示已保存的字节不会被原地改写，不表示永不删除。
 每个逻辑 Blob 都属于工作区，并通过显式引用与 Snapshot、Fragment 或处理运行关联；失去全部有效引用且超过保留期后才能进入垃圾回收。
 删除请求立即撤销普通读取并留下审计状态，物理字节和备份副本按公开的清理窗口删除；不能把异步清理描述成即时物理擦除。
+
+Fragment locator 与 trusted binding 绑定到明确的工作区、Resource、Snapshot、Blob 和知识修订上下文。
+Citation 指向具体 KnowledgeRevision；编辑后的语义不能自动继承旧引用。
 
 ### 8.3 搜索
 
@@ -253,7 +277,9 @@ Linux 单机部署可先使用受备份保护的持久卷。
 - `MediaProcessor`。
 
 每次处理至少记录：供应商、模型、提示模板版本、参数、输入引用与哈希、原始输出、规范化输出、耗时、用量、费用、警告和错误。
-模型输出必须通过运行时 schema 校验；引用还要核对目标修订和片段是否存在，不能只相信模型给出的 URL 或片段编号。
+模型输出必须通过经审查、符合所声明 JSON Schema dialect 与关键字子集的运行时校验；`if/then/else`、引用、组合和 closed-object 语义不能由不完整的自制 evaluator 代替。
+原始 JSON 在 materialization 前拒绝重复成员；程序化数据只接受普通、稠密且由 own data property 组成的 record/array，不能在验证期间执行 getter、iterator hook 或 Proxy trap。
+引用还要核对目标工作区、修订和片段是否存在，不能只相信模型给出的 URL 或片段编号。
 
 外部内容只能进入不可信数据区，不能覆盖系统指令、扩大工具权限或选择任意网络与文件目标。
 模型适配器不能直接写正式知识，也不能读取未被本次任务授权的工作区或 Blob。
@@ -263,6 +289,7 @@ Linux 单机部署可先使用受备份保护的持久卷。
 所有文本、JSON、数据库连接和导出统一使用 UTF-8。
 分段、长度预算和引用位置不能以 JavaScript UTF-16 下标冒充 Unicode 字符或 UTF-8 字节位置。
 Fragment 需要记录定位方案和版本，例如规范文本字符区间、DOM 路径、页码与图片区域。
+规范文本区间使用 Unicode code point 定义；浏览器选区按 grapheme cluster 展示时，由 UI 投影层完成双向换算并保留 round-trip 测试，不能改写 canonical offset。
 
 中文搜索与分段必须用真实语料做验收，不能把英文分词效果外推到中文。
 测试样本至少覆盖简体中文、中文与英文混排、全角标点、Emoji、不同 Unicode 规范化形式和时区文本。
@@ -271,6 +298,7 @@ Fragment 需要记录定位方案和版本，例如规范文本字符区间、DO
 
 首版对图片先做到：保存原始字节、类型、尺寸、来源位置、内容哈希和可回看的证据锚点。
 需要图片理解时，可由多模态模型或 OCR 适配器产生派生文本和区域引用，但原图始终是证据。
+M0-P 的 synthetic P6 结论不能外推到 PNG、JPEG、PDF、多帧媒体或 OCR；启用真实格式前必须分别评审 decoder provenance、区域/页码身份、解压与资源上限、隔离、依赖和许可证。
 
 视频在首版只允许作为 Blob 保存，不承诺解析。
 真实样本证明需要视频后，再增加独立媒体 Worker，并用时间范围、转写片段和关键帧作为 Fragment。
@@ -293,11 +321,17 @@ Fragment 需要记录定位方案和版本，例如规范文本字符区间、DO
 长操作返回 `202 Accepted`、公开 `operation_id` 和状态资源位置。
 错误响应使用稳定错误码、关联 ID 和可安全展示的信息，不泄漏凭据、私有正文或内部堆栈。
 外部契约以 OpenAPI 和 JSON Schema 为准，不能让其他项目直接依赖服务端内部 TypeScript 类型。
+Transport adapter 在调用应用接口前完成 bounded body、fatal UTF-8、重复 JSON 成员和运行时 schema 校验；领域模块只接收已物化的普通数据和 owned bytes。
 
 ### 10.2 WebSocket
 
 WebSocket 只推送 `operation.progress`、`candidate.ready`、`digest.ready` 等实时视图；底层传输即使全双工，也不开放 WS 业务命令。
 客户端断线或丢帧后必须能通过 HTTP 读取最终状态；高权限修改仍走经认证和幂等保护的 HTTP 命令。
+
+每次订阅的 cutoff、截止点内 replay rows 与 snapshot state 必须来自同一个 read-only repeatable-read 视图或等价的一致性机制。
+每个订阅只有一个串行 live-tail reader；共享 cursor 的轮询或 callback 不得重叠。
+恢复同时比较 sequence 与 event identity：完全相同的重复项可以抑制，同一 sequence 的身份冲突、gap 或不确定排序必须切换到权威 HTTP snapshot/replay。
+Snapshot 不得描述超过其公开 replay cutoff 的终态；并发写入期间也要验证重连和重启行为。
 
 握手需要认证并绑定工作区，浏览器连接校验 `Origin`，每条订阅再次执行资源授权。
 连接数、订阅数、消息大小和发送速率都有上限，进度载荷默认不包含原始私有正文。
@@ -309,6 +343,7 @@ WebSocket 只推送 `operation.progress`、`candidate.ready`、`digest.ready` �
 
 Webhook 包含版本、事件 ID、产生时间、工作区、资源 ID 和资源版本。
 投递使用 HMAC 签名、时间戳、短重放窗口、指数退避和死信状态。
+事件 sequence 按工作区分配，并使用能够表达契约范围的数据库类型；sequence 不能替代稳定 event identity。
 
 局域网内的现有项目通过受认证 HTTP 收发命令和查询，通过 WS 观察进度。
 本地服务默认只监听回环地址；监听局域网地址必须显式配置允许来源、认证和防火墙规则。
@@ -357,6 +392,9 @@ API、Scheduler 和 Worker 使用同一后端镜像与代码版本，只改变�
 
 生产反向代理、云供应商、备份目标和秘密管理产品等供应商选择延后到部署 ADR。
 
+M0-P 已证明上述 Node/PostgreSQL/队列/角色拆分在 Windows 与 Linux 上的非分布式可行性，但不构成生产等价证明。
+Docker Engine 27.4、`seccomp=unconfined`、探针中的 `skipLibCheck` 与离线备份只作为已知边界保留；公网或正式部署前仍需验证网络隔离、默认 seccomp、完整声明类型检查、在线一致性备份、加密、保留策略和 RPO/RTO。
+
 ## 12. 建议仓库布局
 
 ADR 接受后再创建以下源码布局：
@@ -392,7 +430,7 @@ docs/
 
 ## 13. 工具链与质量门
 
-拟采用：
+基础工具方向已经接受；M0-S 必须在首次 package/lockfile 变更中固定精确版本、来源、生命周期脚本与验证命令：
 
 | 目的 | 工具与约束 |
 | --- | --- |
@@ -428,6 +466,8 @@ pnpm verify
 - Operation、Candidate 和 Delivery 状态机；
 - 去重、时间窗口、时区和幂等规则；
 - 模型输出 schema 与引用核验；
+- raw JSON 重复成员、标准条件 schema、普通 record/array 与 exotic-container 拒绝；
+- state/export writer-reader 预算的边界值、超限原子失败与 caller-buffer mutation；
 - SSRF 地址判断、路径规范化和权限策略。
 
 ### 集成测试
@@ -436,6 +476,9 @@ pnpm verify
 - Blob 写入、按哈希去重、读取和损坏检测；
 - 抓取、AI、OCR、Webhook 与 WS 各自使用可控测试适配器；
 - 同一事务内的知识写入、任务发送和 outbox；
+- 跨工作区 lookup/history/cache/idempotency 负例；
+- 并发 equal/conflicting idempotency、竞争 claim、迟到 outcome 与单调终态；
+- WS 一致 cutoff/snapshot、并发 replay、gap/identity 冲突和 HTTP 恢复；
 - 中文子串、`pg_trgm` 与后续向量检索基准。
 
 ### 纵向 E2E
@@ -466,24 +509,30 @@ fetch -> snapshot -> fragment -> cited candidate -> digest
 
 ## 16. 实施顺序
 
-### 准备门：接受架构
+### 准备门：基础架构（已完成）
 
-交付：
+2026-08-08 完成以下交付：
 
 - 第 17 节的用户选择已记录；
-- 完成第 16.1 节定义的三个技术探针；
-- 将通过评审的 ADR 改为 `Accepted`；
-- 建立工具链、目录、数据库迁移、CI 和依赖记录。
+- M0-P 平台、证据、协议和依赖许可结论完成风险比例复审；
+- P2/P3 的材料缺陷已转化为本大纲和 ADR 中的生产不变量；
+- [ADR 0001](adr/0001-typescript-modular-monolith.md) 与
+  [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md) 已接受。
 
-### 16.1 三个阻塞技术探针
+这只允许进入 M0-S 工程地基，不允许复用探针候选或宣称生产就绪。
+M0-S 负责建立工具链、目录、数据库迁移、CI、精确依赖记录和统一质量门。
 
-| 探针 | 内容 | 通过条件 |
+### 16.1 M0-P 架构验证结论
+
+| 范围 | 接受结论 | 必须保留的边界 |
 | --- | --- | --- |
-| P1 平台与恢复 | 在 Windows 和 Linux 运行同一 Node/Nest/PostgreSQL/Drizzle/pg-boss 样例；中途终止 Worker；用迁移角色预建 schema | 任务安全恢复且不重复写知识；普通运行角色不需要 DDL |
-| P2 中文证据 | 处理中文、英文混排、Emoji 和图片区域 fixture；保存、重启、导出后重新定位 Fragment；测量基础搜索 | 引用逐字返回原证据；偏移定义无歧义；记录中文搜索基线 |
-| P3 协议与幂等 | 模拟 WS 断线、重复批准、Webhook 丢失确认和重复投递 | HTTP 可恢复最终状态；业务副作用各发生一次；失败状态可观察 |
+| P1 平台与恢复 | Windows/Linux 上的 Node、PostgreSQL、同事务后台工作、迁移/运行角色、恢复和备份路径足以支持架构选择 | 仅为离线、非分布式探针；网络隔离、seccomp、完整类型声明、在线备份、加密和 RPO/RTO 仍待正式验证 |
+| P2 中文与图片证据 | 中文、混排、Emoji、code-point 文本定位和 synthetic P6 区域定位可行；来源绑定与版本分类方向成立 | writer/reader 预算必须闭合；只接受普通稠密容器和 owned bytes；真实媒体 decoder 另行评审；探针源码不可复用 |
+| P3 协议与幂等 | HTTP 最终状态恢复、WS 投影和耐久副作用方向可行 | 使用标准 schema、工作区全链路 scoping、原子幂等、fenced transition/outcome 与一致 WS cutoff/replay；不执行额外的认证式探针循环 |
+| 依赖与许可证 | 已审查的非分布式探针图足以支持架构选择 | 生产 package/lockfile、生命周期 allowlist、完整依赖闭包、notices、SPDX SBOM、镜像 digest、浏览器/FFmpeg 和项目发布许可证仍是 M0-S/发布门 |
 
-许可证核验、精确版本固定、备份恢复和工具命令属于 ADR 接受检查与后续合并门，不另计为“第四个探针”。
+M0-P 的测试数量和候选实现不构成生产质量证明。
+正式测试直接针对 M0-S 之后的真实模块与契约，覆盖本大纲列出的不变量。
 
 ### 切片 A：手工输入到可追溯候选
 
@@ -535,10 +584,11 @@ fetch -> snapshot -> fragment -> cited candidate -> digest
 2. 私有知识默认禁止发送给外部 AI API，只能按工作区显式开启，并保留本地/自托管适配器；
 3. 接受 TypeScript 作为主后端语言，当前没有更强的 C# 团队偏好。
 
-这些确认消除了用户选择阻塞，但不会自动把 ADR 0001 和 ADR 0002 改为 `Accepted`。
-两个 ADR 仍需通过第 16.1 节的 P1–P3 技术探针及依赖许可检查。
+这些确认消除了用户选择阻塞。
+第 16.1 节的 M0-P 结论与最终架构复审已于 2026-08-08 完成，ADR 0001 和 ADR 0002 因此进入 `Accepted`。
+AI 供应商、云服务商、生产反向代理、备份目标和秘密管理产品仍未选择，并按各自功能/部署门另行决策。
 
-以下信息不阻塞架构文档，但阻塞首个真实功能切片：
+以下信息不阻塞 M0-S 工程地基，但阻塞首个真实功能切片：
 
 - 第一个主要信源、一个备选信源和至少 10 条样本；
 - 理想日报样例与“入库/只报告/忽略”标注；

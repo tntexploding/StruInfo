@@ -1,9 +1,9 @@
 # ADR 0001: TypeScript Modular Monolith
 
-- Status: Proposed
-- Date: 2026-08-02
+- Status: Accepted
+- Date: 2026-08-08
 - Decision owners: Project owner and maintainers
-- Supersedes: ENG-003 in part when accepted
+- Supersedes: ENG-003 in part
 - Superseded by:
 
 ## Context and Constraints
@@ -25,11 +25,16 @@ Owner confirmations on 2026-08-02:
 - private knowledge is denied to external AI by default, enabled explicitly per
   workspace, and supported by local or self-hosted provider adapters.
 
+M0-P confirmed that the proposed Node/PostgreSQL roles can run with equivalent
+core behavior on Windows and Linux within a bounded, non-distributed probe.
+That result is architecture evidence, not production certification.
+
 Remaining assumptions:
 
 - the initial AI workload is remote API orchestration rather than model training;
 - a later OCR or video workload may justify an isolated Python worker;
-- Windows can run the same PostgreSQL behavior used by Linux.
+- exact production package versions can pass the M0-S compatibility, license,
+  typecheck, and CI gates.
 
 ## Decision
 
@@ -45,8 +50,22 @@ application stack.
 - Use native WebSocket through the Nest `ws` adapter for ephemeral progress.
 - Generate a versioned OpenAPI contract for authoritative HTTP commands and
   queries.
+- Validate external payloads with a reviewed implementation of the declared
+  JSON Schema dialect and keyword subset. A partial bespoke evaluator is not a
+  production option.
+- Reject duplicate raw JSON members before materialization. Application and
+  domain interfaces accept ordinary own-data records, dense arrays, and owned
+  byte copies rather than arbitrary accessor, Proxy, or exotic objects.
+- Keep transport schema validation, persistence, scheduling, AI providers,
+  source adapters, Blob storage, and external delivery behind explicit ports.
+  Inject configuration, clocks, IDs, secrets, and external transports.
+- Treat HTTP as the authoritative command/query and recovery interface.
+  WebSocket is a versioned, authorized, recoverable projection and cannot own
+  business state transitions.
 - Add an isolated Python process only after a real OCR, local-model, or video
   requirement cannot be met safely in the primary runtime.
+- Do not copy M0-P probe candidate source into the production tree. Implement
+  the accepted invariants through reviewed modules and production tests.
 
 The initial repository shape is:
 
@@ -68,7 +87,7 @@ Any mechanically unavoidable mismatch with Google style must be narrow,
 documented, and enforced consistently.
 
 Exact package versions will be pinned in `package.json` and the single
-`pnpm-lock.yaml` in the scaffold change after this ADR is accepted.
+`pnpm-lock.yaml` in the M0-S scaffold change after this ADR is accepted.
 Production dependencies must use stable releases at that point.
 
 ## Alternatives Considered
@@ -120,6 +139,9 @@ Negative consequences:
 
 Fetched content, media, Webhook payloads, and model output are untrusted.
 All external data crosses runtime validation before application use.
+Runtime validation must preserve standard conditional/composition semantics,
+closed objects, bounded input, fatal UTF-8 decoding, and stable safe errors.
+It must not execute caller-provided getters, iteration hooks, or Proxy traps.
 CPU-heavy or native media processors run with explicit resource and file access
 limits.
 
@@ -135,16 +157,27 @@ After implementation begins, the stable boundaries are OpenAPI, event schemas,
 PostgreSQL data, Blob IDs, and processor contracts; these reduce but do not
 eliminate the cost of changing the runtime.
 
-## Validation
+## Acceptance Evidence and Remaining Gates
 
-Before changing the status to `Accepted`:
+Accepted on 2026-08-08 because:
 
-1. Confirm the maintainer language preference and Windows database setup.
-2. Pass P1, P2, and P3 defined in the development outline.
-3. Record exact tool versions, licenses, verification commands, style-guide
-   deviations, and the Windows/Linux CI matrix.
-4. Confirm that authenticated WebSocket subscriptions enforce Origin,
-   workspace, resource, connection, and message limits.
+1. The owner confirmed TypeScript and the Windows Docker/WSL2 development
+   boundary.
+2. M0-P established bounded Windows/Linux runtime feasibility and showed that
+   the P2 provenance and P3 protocol findings can be expressed as production
+   invariants without changing the modular-monolith choice.
+3. The final risk-proportional architecture review found no material blocker
+   and prohibited direct reuse of the disposable candidates.
+4. The reviewed dependency graph was sufficient for architecture selection in
+   a non-distributed probe.
+
+Acceptance authorizes M0-S foundation work, not production readiness.
+M0-S must pin exact package and tool versions, create the lockfile, review the
+complete dependency/lifecycle/license closure, define style deviations and
+verification commands, and establish the Windows/Linux CI matrix.
+Production implementation must independently test runtime Schema conformance,
+module boundaries, WebSocket Origin/workspace/resource limits, HTTP recovery,
+and the P2/P3 invariants recorded in the development outline and ADR 0002.
 
 ## References
 

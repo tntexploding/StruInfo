@@ -20,7 +20,8 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 
 | ADR | Status | Decision |
 | --- | --- | --- |
-| [0001](0001-typescript-modular-monolith.md) | Proposed | TypeScript modular monolith and toolchain |
-| [0002](0002-postgresql-persistence-and-durable-work.md) | Proposed | PostgreSQL persistence, durable work, and Blob storage |
+| [0001](0001-typescript-modular-monolith.md) | Accepted | TypeScript modular monolith and toolchain |
+| [0002](0002-postgresql-persistence-and-durable-work.md) | Accepted | PostgreSQL persistence, durable work, and Blob storage |
 
-No architecture decision has been accepted yet.
+The foundational application and persistence decisions were accepted on
+2026-08-08 after the M0-P architecture gate.
