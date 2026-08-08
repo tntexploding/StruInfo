@@ -1,9 +1,9 @@
 # ADR 0002: PostgreSQL Persistence and Durable Work
 
-- Status: Proposed
-- Date: 2026-08-02
+- Status: Accepted
+- Date: 2026-08-08
 - Decision owners: Project owner and maintainers
-- Supersedes: ENG-003 in part when accepted
+- Supersedes: ENG-003 in part
 - Superseded by:
 
 ## Context and Constraints
@@ -37,12 +37,40 @@ production.
 - Do not copy one external event through both pg-boss and the outbox.
 - Make every retryable job and external write idempotent; do not claim
   end-to-end exactly-once side effects.
+- Include workspace identity in every workspace-owned repository key, SQL
+  predicate, uniqueness rule, cache key, history/event lookup, and idempotency
+  scope. Authorization and resource selection use the same effective
+  workspace identity.
+- Implement idempotency as atomic insert-or-resolve in the business
+  transaction. Equal payloads replay exactly; conflicting payloads return a
+  stable conflict rather than an unhandled uniqueness failure.
+- Claim work and external effects with checked compare-and-set transitions,
+  owner/generation tokens, and lease expiry where required. Commit a durable
+  attempt identity before the external side effect.
+- Fence outcome writes by expected state and the exact claim/attempt token.
+  Terminal states are monotonic; late or superseded results cannot regress or
+  overwrite them.
 - Store large source bodies and media in an immutable content-addressed Blob
   store.
+- Establish Blob identity from an immediately owned defensive copy of the
+  exact byte range. Length checks, hashes, parsing, and retained bytes all use
+  that copy; Proxy or accessor-selected byte views are invalid inputs.
 - Start with a local-filesystem Blob adapter and add an S3-compatible adapter
   without changing logical Blob or evidence IDs.
 - Treat Blob bytes as immutable but garbage-collectable after workspace access
   is revoked, live references are gone, and documented retention expires.
+- Keep state, export, and evidence-package writer/reader budgets closed and
+  versioned. Measure the complete encoded artifact before atomic persistence;
+  a successful current writer must produce bytes accepted by its current
+  public reader. Large bytes remain Blob references rather than recursively
+  nested base64 envelopes.
+- Bind Fragment locators and trusted evidence roots to workspace, Resource,
+  Snapshot, Blob, and revision context. Citations target an immutable
+  KnowledgeRevision and are revalidated after semantic edits.
+- Derive each WebSocket replay cutoff, snapshot, and bounded replay set from
+  one repeatable-read view or an equivalently proven mechanism. Use a single
+  serialized live-tail reader per subscription; compare sequence plus stable
+  event identity and recover gaps or contradictions through HTTP.
 - Use relational adjacency tables for knowledge relations and tree placements.
 - Enable pgvector only when embedding search enters a validated slice.
 - Do not add Redis, a graph database, a vector database, or a separate search
@@ -109,6 +137,8 @@ Negative consequences:
 Blob paths are derived internally and never accepted directly from untrusted
 input.
 Blob reads are authorized through workspace-scoped logical IDs.
+Opaque IDs and prior path-membership checks are not authorization boundaries;
+every secondary-ID lookup repeats the effective workspace predicate.
 Database roles use least privilege, migrations do not run under the ordinary
 application role in production, and backups are encrypted and access-controlled.
 
@@ -129,19 +159,32 @@ remain stable while pending work is drained or explicitly re-enqueued.
 If pgvector is removed, embeddings can be rebuilt from recorded model and input
 versions because they are derived data.
 
-## Validation
+## Acceptance Evidence and Remaining Gates
 
-Before changing the status to `Accepted`:
+Accepted on 2026-08-08 because:
 
-1. Pass P1, P2, and P3 defined in the development outline.
-2. Verify Drizzle and pg-boss against the exact pinned PostgreSQL and Node
-   versions.
-3. Prove that a migration role can prepare and upgrade the pg-boss schema and
-   that the ordinary runtime role can start and work without DDL permission.
-4. Back up and restore PostgreSQL plus Blob bytes, then verify every stored hash
-   and citation target.
-5. Document logical deletion, physical garbage collection, and backup expiry
-   for Blob data before accepting a retention promise.
+1. M0-P exercised the selected PostgreSQL/Node/Drizzle/pg-boss direction,
+   same-transaction durable work, migration/runtime role separation, recovery,
+   and backup/restore on Windows and Linux at non-distributed probe scope.
+2. P2 showed that revision-level evidence location is feasible and identified
+   the closed-budget and deterministic-byte/container invariants now made
+   normative above.
+3. P3 showed that HTTP recovery, WebSocket projection, and durable side effects
+   fit the transaction model, while identifying the workspace, idempotency,
+   fencing, and consistent-read invariants now made normative above.
+4. The final architecture review found no material persistence or recovery
+   contradiction and prohibited direct reuse of the probe candidates.
+
+Acceptance authorizes M0-S foundation work, not a production storage claim.
+M0-S must pin and reverify exact Node, PostgreSQL, Drizzle, pg-boss, pgvector,
+and container artifacts; create the migration/runtime roles; and add focused
+real-PostgreSQL tests for workspace isolation, concurrent idempotency, claims,
+late outcomes, outbox monotonicity, and WebSocket recovery.
+
+The P1 backup result proves offline probe feasibility only.
+Before production deployment, verify consistent PostgreSQL-plus-Blob backup,
+hash and citation restoration, encryption, retention/garbage-collection
+windows, migration interruption, and declared RPO/RTO.
 
 ## References
 

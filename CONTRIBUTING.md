@@ -1,8 +1,10 @@
 # Contributing to StruInfo
 
-StruInfo currently accepts development-preparation and design changes.
-Implementation starts only after the development outline and its foundational
-architecture decisions are approved.
+StruInfo has accepted its foundational development outline and architecture
+decisions. Implementation proceeds through the scoped milestones in the
+roadmap, beginning with M0-S toolchain, dependency, CI, and migration
+foundations; an accepted ADR does not bypass the milestone's verification and
+license gates.
 
 ## Sources of Truth
 

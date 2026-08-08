@@ -15,10 +15,16 @@ Before changing the repository, read:
 
 ## Current Phase
 
-The repository is in pre-implementation planning.
-Do not choose a production language, framework, database, deployment platform,
-or AI provider until the development outline is approved and the decision is
-recorded.
+The foundational architecture is accepted in ADR 0001 and ADR 0002.
+The repository is entering M0-S engineering-foundation work: exact toolchain
+and dependency admission, minimal application entrypoints, database migration
+roles, CI, and unified verification commands.
+
+Do not change the accepted language, application shape, or persistence model
+without a superseding ADR. Cloud deployment vendors and AI providers remain
+unselected. Do not reuse M0-P probe candidate source as production code; carry
+the tracked provenance, workspace, idempotency, fencing, and recovery
+invariants into fresh implementation and tests.
 
 ## Local Multi-Agent Workflow
 
