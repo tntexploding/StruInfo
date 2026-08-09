@@ -34,6 +34,7 @@
 
 # Common dependency and language caches. Extend this list with the stack.
 node_modules/
+/.pnpm-store/
 .venv/
 venv/
 __pycache__/

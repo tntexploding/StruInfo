@@ -16,6 +16,7 @@ export default tseslint.config(
   {
     ignores: [
       '.agents/**',
+      '.pnpm-store/**',
       '**/node_modules/**',
       '**/dist/**',
       '**/.cache/**',
