@@ -196,7 +196,7 @@ export function OperationalHealthShell({
           </nav>
         </header>
 
-        <main className="workspace" id="main-content">
+        <main className="workspace" id="main-content" tabIndex={-1}>
           <section
             className="health-stage"
             id="readiness"

@@ -89,6 +89,10 @@ describe('OperationalHealthShell', () => {
     expect(markup).toContain('<footer');
     expect(markup.match(/<h1/g)).toHaveLength(1);
     expect(markup).toContain('href="#main-content"');
+    expect(markup).toMatch(
+      /<main[^>]*id="main-content"[^>]*tabindex="-1"[^>]*>/,
+    );
+    expect(markup).not.toContain('tabindex="0"');
     expect(markup).toContain('aria-current="page"');
   });
 });
