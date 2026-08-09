@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "1",
+  "source": "https://github.com/actions/toolkit",
+  "releaseRelation": "@actions/tool-cache@4.0.0 npm SLSA resolvedDependencies.gitCommit",
+  "commit": "9d912b18401c7590566ae76d8555b6f063daa852",
+  "sourceArchive": {
+    "url": "https://codeload.github.com/actions/toolkit/tar.gz/9d912b18401c7590566ae76d8555b6f063daa852",
+    "sha256": "F2F6F6B3B1CBFED10D2F514F0C2BE1AEF2FDA212FC8F475D3CF4372E677DF308",
+    "bytes": 680340,
+    "entries": 396
+  },
+  "npmTarballSha256": "6FE2DFF72E0DFFC08ED9C5AE9109D6F087BAA6FEDAD506607B74AD433711CD5E",
+  "bundled7zdec": {
+    "sourcePath": "packages/tool-cache/scripts/externals/7zdec.exe",
+    "bytes": 42496,
+    "sha256": "E14D8201C5C0D1049E717A63898A3B1C7CE4054A24871DAEBAA717DA64DCAFF5",
+    "sourceAndNpmTarballMatch": true
+  },
+  "relevantSourcePaths": [
+    "LICENSE.md",
+    "packages/artifact/LICENSE.md",
+    "packages/attest/LICENSE.md",
+    "packages/cache/LICENSE.md",
+    "packages/core/LICENSE.md",
+    "packages/exec/LICENSE.md",
+    "packages/github/LICENSE.md",
+    "packages/glob/LICENSE.md",
+    "packages/http-client/LICENSE",
+    "packages/io/LICENSE.md",
+    "packages/tool-cache/LICENSE.md",
+    "packages/tool-cache/scripts/Invoke-7zdec.ps1",
+    "packages/tool-cache/scripts/externals/7zdec.exe"
+  ],
+  "textualReferences": [
+    {
+      "path": "docs/specs/package-specs.md",
+      "line": 133,
+      "text": "Holds all the functions necessary for running the tools node-config depends on (aka 7-zip and tar)"
+    },
+    {
+      "path": "packages/tool-cache/__tests__/tool-cache.test.ts",
+      "line": 310,
+      "text": "'7zdec.exe'"
+    },
+    {
+      "path": "packages/tool-cache/scripts/Invoke-7zdec.ps1",
+      "line": 9,
+      "text": "# This script translates the output from 7zdec into UTF8. Node has limited"
+    },
+    {
+      "path": "packages/tool-cache/scripts/Invoke-7zdec.ps1",
+      "line": 12,
+      "text": "# 7zdec uses the system default code page. The system default code page varies"
+    },
+    {
+      "path": "packages/tool-cache/scripts/Invoke-7zdec.ps1",
+      "line": 38,
+      "text": "$_7zdec = Join-Path -Path \"$PSScriptRoot\" -ChildPath \"externals/7zdec.exe\""
+    },
+    {
+      "path": "packages/tool-cache/scripts/Invoke-7zdec.ps1",
+      "line": 39,
+      "text": "[System.Console]::WriteLine(\"##[command]$_7zdec x `\"$Source`\"\")"
+    },
+    {
+      "path": "packages/tool-cache/scripts/Invoke-7zdec.ps1",
+      "line": 45,
+      "text": "# Note, the output from 7zdec.exe needs to be iterated over. Otherwise PowerShell.exe"
+    },
+    {
+      "path": "packages/tool-cache/scripts/Invoke-7zdec.ps1",
+      "line": 47,
+      "text": "& $_7zdec x $Source 2>&1 |"
+    },
+    {
+      "path": "packages/tool-cache/scripts/Invoke-7zdec.ps1",
+      "line": 56,
+      "text": "[System.Console]::WriteLine(\"##[debug]7zdec.exe exit code '$LASTEXITCODE'\")"
+    },
+    {
+      "path": "packages/tool-cache/src/tool-cache.ts",
+      "line": 145,
+      "text": "* gracefully handle long paths. By default 7zdec.exe is used because it is a very small program and is"
+    },
+    {
+      "path": "packages/tool-cache/src/tool-cache.ts",
+      "line": 148,
+      "text": "* time of this writing, it is freely available from the LZMA SDK that is available on the 7zip website."
+    },
+    {
+      "path": "packages/tool-cache/src/tool-cache.ts",
+      "line": 184,
+      "text": ".join(__dirname, '..', 'scripts', 'Invoke-7zdec.ps1')"
+    }
+  ]
+}

@@ -26,6 +26,11 @@
 /dist/
 /out/
 /coverage/
+**/.cache/
+**/dist/
+**/*.tsbuildinfo
+/playwright-report/
+/test-results/
 
 # Common dependency and language caches. Extend this list with the stack.
 node_modules/

@@ -1,0 +1,53 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Quality (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      CI: true
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.18.0
+      - name: Enable exact pnpm through Corepack
+        run: corepack enable
+      - name: Record tool versions
+        run: |
+          node --version
+          corepack --version
+          pnpm --version
+      - name: Install admitted dependency graph
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Run non-browser and non-container quality gate
+        run: pnpm verify
+
+  quality-gate:
+    name: Quality gate
+    if: ${{ always() }}
+    needs: [quality]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the full matrix
+        shell: pwsh
+        run: |
+          if ('${{ needs.quality.result }}' -ne 'success') {
+            throw 'The Windows and Ubuntu quality matrix did not pass.'
+          }

@@ -1,7 +1,7 @@
 # StruInfo 分阶段计划
 
-- 状态：基础架构门已完成；按依赖推进 M0-S 与真实场景冻结
-- 最近更新：2026-08-08
+- 状态：基础架构门已完成；M0-S 工程地基按独立制品门分阶段推进
+- 最近更新：2026-08-09
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
 
@@ -20,8 +20,8 @@
   [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md) 已接受；
 - 所有探针候选代码均禁止直接作为生产实现复用。
 
-下一步 M0-S 只建立工程地基：精确 package/lockfile、最小应用入口、数据库迁移与角色、CI、统一验证命令、生命周期脚本 allowlist、许可证/NOTICE 与初始 SBOM。
-浏览器/FFmpeg、正式镜像、项目发布许可证与生产备份/部署仍有独立后续门。
+M0-S 先建立非浏览器、非容器的工程地基：精确 package/lockfile、最小应用入口边界、数据库迁移与角色合同、Windows/Linux 质量 CI、统一验证命令、默认拒绝的生命周期策略、许可证/NOTICE 与初始 SBOM。
+Playwright 的 npm 包只用于配置和测试源码；Chromium/FFmpeg/winldd、强制 E2E 与浏览器 CI 等待 `M0-S-BROWSER-MAINT-001`。Compose、Dockerfile、PostgreSQL/pgvector 容器实测与数据库 CI 等待 `M0-S-CONTAINER-MAINT-001`。这些待办不得写成跳过或已通过。项目发布许可证与生产备份/部署仍有独立后续门。
 
 架构门不替代阶段 0 的真实场景验证，两者可以并行准备；阶段 1 的范围仍由真实主题、信源、理想日报与任务样本决定。
 

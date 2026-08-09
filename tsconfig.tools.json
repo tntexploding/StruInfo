@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": [
+    "./playwright.config.ts",
+    "./vitest.config.ts",
+    "./vitest.integration.config.ts",
+    "./apps/web/vite.config.ts"
+  ]
+}
