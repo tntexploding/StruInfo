@@ -2,7 +2,11 @@
 
 import {describe, expect, it, vi} from 'vitest';
 
-import {ScriptedJsonHttpTransport} from './scripted-json-http-transport.js';
+import {
+  ScriptedJsonHttpTransport,
+  type JsonObject,
+  type JsonValue,
+} from './scripted-json-http-transport.js';
 import {testSupportErrorCodes} from './test-support-error.js';
 
 const readyResponse = {
@@ -55,6 +59,50 @@ describe('ScriptedJsonHttpTransport', () => {
     expect(() => {
       transport.assertConsumed();
     }).not.toThrow();
+  });
+
+  it('preserves an own __proto__ JSON field without changing the clone prototype', async () => {
+    const parsedBody: unknown = JSON.parse(
+      '{"__proto__":{"polluted":"no"},"ordinary":"preserved"}',
+    );
+    const sourceBody = parsedBody as JsonValue;
+    const sourceRecord = sourceBody as JsonObject;
+    expect(Object.hasOwn(sourceRecord, '__proto__')).toBe(true);
+    expect(Reflect.getPrototypeOf(sourceRecord)).toBe(Object.prototype);
+
+    const request = {method: 'GET', url: 'http://struinfo.test/special-key'};
+    const transport = new ScriptedJsonHttpTransport([
+      {
+        id: 'special-key',
+        request,
+        responses: [{status: 200, body: sourceBody}],
+      },
+    ]);
+
+    const response = await transport.send(request);
+    const clonedBody = response.body;
+    if (
+      clonedBody === undefined ||
+      clonedBody === null ||
+      typeof clonedBody !== 'object' ||
+      Array.isArray(clonedBody)
+    ) {
+      throw new Error('Expected a cloned JSON object response body.');
+    }
+
+    const clonedRecord = clonedBody as JsonObject;
+    expect(Object.hasOwn(clonedRecord, '__proto__')).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(clonedRecord, '__proto__')).toEqual({
+      configurable: true,
+      enumerable: true,
+      value: {polluted: 'no'},
+      writable: true,
+    });
+    expect(Reflect.getPrototypeOf(clonedRecord)).toBe(Object.prototype);
+    expect(clonedRecord.polluted).toBeUndefined();
+    expect(JSON.stringify(clonedRecord)).toBe(
+      '{"__proto__":{"polluted":"no"},"ordinary":"preserved"}',
+    );
   });
 
   it('fails explicitly on an unexpected request', () => {
