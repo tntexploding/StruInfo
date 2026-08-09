@@ -1,12 +1,29 @@
 <!doctype html>
-<html lang="zh-CN">
+<html
+  lang="zh-CN"
+  data-ui-family="struinfo-industrial"
+  data-ui-depth="moderate"
+>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StruInfo</title>
+    <meta
+      name="description"
+      content="StruInfo operational health — Personal Knowledge OS"
+    />
+    <link rel="stylesheet" href="/src/tokens.css" />
+    <link rel="stylesheet" href="/src/app.css" />
+    <title>系统就绪状态 · StruInfo</title>
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <main class="script-fallback">
+        <p class="script-fallback__index">M0-S / OPERATIONAL HEALTH</p>
+        <h1>无法检查系统就绪状态</h1>
+        <p>此页面需要 JavaScript 才能读取运行健康信息；尚未执行网络检查。</p>
+      </main>
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
