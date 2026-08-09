@@ -1,0 +1,735 @@
+# StruInfo Frontend Design Specification
+
+- Status: Project frontend baseline
+- Version: 1.0
+- Effective date: 2026-08-09
+- Scope: StruInfo web application design, implementation, and review
+
+## 1. Purpose and Authority
+
+This document turns the product requirements and the supplied visual direction
+into an implementable frontend contract.
+It is normative for StruInfo frontend work and design review.
+
+The following terms express requirement strength:
+
+- **MUST**: required for acceptance;
+- **SHOULD**: expected unless a documented reason justifies a deviation;
+- **MAY**: optional and must still satisfy all higher-priority requirements.
+
+Apply frontend guidance in this order:
+
+1. legal, privacy, security, provenance, and data-integrity requirements;
+2. `docs/product-requirements.md` and accepted ADRs;
+3. this specification;
+4. the supplied source direction in
+   `docs/AI_Personal_Knowledge_OS_Frontend_Style_Guide.md`;
+5. external design skills and high-level reference products.
+
+External skills are authoring and review aids, not runtime dependencies.
+This specification is self-contained so a contributor does not need a personal
+Skill installation to follow the project contract.
+
+## 2. Design Contract
+
+The fixed design contract is:
+
+| Axis                     | Decision                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------ |
+| Product identity         | A trustworthy, source-traceable personal intelligence workspace                      |
+| Visual family            | `struinfo-industrial`, an original black/white/cyan industrial information system    |
+| Full-product depth       | `complex / 3`: multi-zone shell and complete shared component treatment              |
+| M0-S depth               | `moderate / 2`: recognizable shell and states without fake product data              |
+| Primary evidence pattern | Black edge shell, cyan active rule, indexed sections, precise provenance dossier     |
+| Primary user question    | What changed, why does it matter, what evidence supports it, and what can I do next? |
+
+The interface MUST feel like an operating workspace, not a marketing landing
+page or a generic card dashboard.
+Information architecture and truthful state MUST remain legible before any
+decorative layer is noticed.
+
+The design may use high-level industrial and editorial patterns associated with
+the Ark UI family, but MUST remain an original StruInfo implementation.
+It MUST NOT copy protected logos, screenshots, character art, production
+bundles, proprietary fonts, or exact coordinates from reference products.
+
+## 3. Product Experience Principles
+
+### 3.1 Evidence before confidence
+
+Every important AI output MUST expose its evidence path.
+The interface MUST distinguish at least:
+
+- source excerpt;
+- source claim;
+- AI-derived summary;
+- AI inference;
+- user-authored assertion;
+- user review state.
+
+The interface MUST NOT compress trust into one ambiguous score such as
+`Trust Score: 88 / 100`.
+When data exists, show the following dimensions separately:
+
+- traceability to a captured snapshot and exact fragment;
+- source assessment and its scope;
+- extraction confidence;
+- entity or relation confidence;
+- independent corroboration or conflict;
+- freshness and relevant time type;
+- review status and reviewer.
+
+An absent dimension MUST read `未评估` or an equally explicit unknown state.
+It MUST NOT be replaced with a generated number.
+User confirmation means the user accepted the record or confirmed what a source
+said; it MUST NOT be rendered as proof that the claim is objectively true.
+
+### 3.2 AI is visible but not anthropomorphized
+
+AI-generated or AI-modified content MUST carry a persistent origin label such
+as `AI 生成 · 待审核` until its review state changes.
+The label MUST remain associated with the content when it is copied into a
+drawer, brief, graph dossier, or review view.
+
+`AI Agent Active` or similar status text MAY appear only when it reflects a real
+runtime state.
+The interface MUST NOT invent model activity, progress, telemetry, or system
+codes for atmosphere.
+
+### 3.3 User control remains explicit
+
+High-impact actions such as approve, reject, merge, archive, replace, delete,
+or push MUST use visible action verbs.
+They MUST NOT be represented by unexplained icon-only controls.
+
+Each view SHOULD expose one primary action and at most one co-primary action.
+Secondary operations SHOULD use progressive disclosure.
+The next state and any irreversible consequence MUST be clear before commit.
+
+### 3.4 Failure is a first-class state
+
+Loading, empty, partial, stale, offline, unauthorized, conflict, and failed
+states MUST be designed alongside the success state.
+An error MUST explain what failed, what remains safe, and what the user can do
+next.
+One generic `完成` state MUST NOT hide independent fetch, AI, storage, or
+delivery failures.
+
+### 3.5 Density has structure
+
+StruInfo SHOULD be information-dense, but density comes from hierarchy,
+alignment, compact metadata, and progressive disclosure.
+It MUST NOT come from tiny essential text, repeated metrics, border boxes around
+every region, or decorative telemetry.
+
+Every persistent datum MUST have one visual owner.
+For example, a candidate row owns comparable status fields, while its evidence
+drawer owns the supporting excerpt and provenance details.
+The same number SHOULD NOT be repeated in both places merely to fill space.
+
+## 4. Phase-aware Information Architecture
+
+The long-term information architecture reserves these modules:
+
+- Command Center;
+- Daily and Weekly Briefs;
+- Review Queue;
+- Saved Knowledge;
+- Sources;
+- Evidence Vault;
+- Knowledge Graph;
+- Timeline;
+- Ask AI;
+- Reports;
+- Settings.
+
+Only implemented routes MAY appear as active navigation.
+Future modules MUST NOT be rendered as working controls, live metrics, or empty
+shells solely to make the product appear complete.
+
+For MVP-0, prioritize this task path:
+
+```text
+Source update
+  -> traceable digest item
+  -> evidence inspection
+  -> approve, edit then approve, or reject
+  -> saved item
+  -> source and excerpt recall
+```
+
+Knowledge Graph, Timeline, mixed online query, and complete weekly reporting are
+later modules unless a tracked milestone explicitly releases them.
+
+## 5. Application Shell
+
+### 5.1 Desktop composition
+
+The full product uses four structural zones:
+
+```text
+top command bar
+left navigation | main workspace | contextual evidence rail
+```
+
+Recommended dimensions are tokens, not one-off component values:
+
+- command bar: `64px`;
+- expanded navigation: `232px`;
+- compact navigation: `72px`;
+- evidence rail: `clamp(360px, 30vw, 480px)`;
+- main workspace: `minmax(0, 1fr)` with no arbitrary dashboard max-width.
+
+The main workspace owns the current task.
+The left rail owns navigation.
+The right rail owns additional context for the selected record.
+The command bar owns global search and genuinely global actions.
+
+Do not put the same action in the command bar, page header, card header, and
+footer at the same time.
+
+### 5.2 Responsive recomposition
+
+Required verification widths are `320px`, `390px`, `768px`, `1024px`, and
+`1440px`.
+
+| Width or condition | Required behavior                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------ |
+| `>= 1200px`        | Expanded or user-collapsible left rail; contextual rail may remain docked                  |
+| `768px-1199px`     | Compact rail; contextual rail becomes a dismissible overlay or replaces a secondary column |
+| `< 768px`          | One-column workspace; navigation becomes a disclosed menu or bounded bottom strip          |
+| Portrait           | Recompose actions and drawers; do not scale desktop absolute positions                     |
+| Short-wide         | Preserve primary content and actions; reduce optional instrumentation first                |
+
+Essential actions MUST remain reachable without horizontal scrolling.
+Tables MAY use a contained horizontal scroll region when a meaningful stacked
+alternative would destroy comparison.
+The document itself MUST NOT overflow horizontally.
+
+### 5.3 M0-S shell profile
+
+M0-S implements only an operational-health shell.
+It MUST NOT fabricate sources, knowledge counts, AI activity, insights, graphs,
+notifications, or review work.
+
+The initial screen SHOULD contain:
+
+- StruInfo product identity and a short `Personal Knowledge OS` descriptor;
+- one semantic page heading for system readiness;
+- the exact API health state: loading, ready, not ready, or unexpected error;
+- role and database readiness when supplied by the contract;
+- one explicit retry action when retry is supported;
+- a visible development/mock label when deterministic mock transport is active.
+
+The M0-S screen uses `moderate / 2` depth: one edge shell, one quiet blueprint
+rule or grid layer, indexed metadata, restrained reveal, and complete responsive
+states.
+It does not need the full long-term navigation or a synthetic dashboard.
+
+## 6. Design Tokens
+
+All visual values MUST be reached through semantic `--si-*` custom properties
+or an equivalent typed token layer.
+Components MUST NOT introduce raw hex colors or arbitrary spacing when a project
+token already expresses the role.
+
+### 6.1 Color
+
+```css
+:root {
+  color-scheme: dark;
+
+  --si-color-bg-canvas: #121515;
+  --si-color-bg-shell: #0d1011;
+  --si-color-surface-1: #1f2326;
+  --si-color-surface-2: #252b2e;
+  --si-color-surface-ai: #1c234b;
+
+  --si-color-text-primary: #f3f7f8;
+  --si-color-text-secondary: #a8b0b5;
+  --si-color-text-muted: #879298;
+  --si-color-text-disabled: #6f7a80;
+
+  --si-color-border-subtle: #2b3134;
+  --si-color-border-default: #394146;
+  --si-color-signal: #26cdcb;
+
+  --si-color-warning: #d9a441;
+  --si-color-danger: #d9534f;
+  --si-color-danger-text: #ff7c77;
+  --si-color-topic: #7c6fe8;
+  --si-color-topic-text: #a99eff;
+  --si-color-info: #4d86ff;
+  --si-color-info-text: #8db0ff;
+}
+```
+
+Neutral surfaces SHOULD occupy at least three quarters of a representative
+screen.
+Electric cyan is reserved for current selection, focus, the primary action,
+real active processing, traceable state, and important graph edges.
+It MUST NOT become the color of all headings, body text, and borders.
+
+The supplied muted color `#6f7a80` is below the normal-text contrast target on
+the approved elevated surfaces.
+It is therefore a disabled or decorative token.
+Readable muted text uses `#879298` or a later verified equivalent.
+
+The base danger, topic, and information colors MAY identify borders, icons, or
+filled badges.
+Their lighter text variants MUST be used for normal text on dark surfaces.
+Color MUST NOT be the sole carrier of any state.
+
+### 6.2 Typography
+
+No font file is admitted by this specification.
+Use system and already-installed fallbacks until a font receives dependency and
+license review.
+
+```css
+:root {
+  --si-font-ui:
+    'Noto Sans SC', 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC',
+    system-ui, sans-serif;
+  --si-font-display:
+    'Bahnschrift SemiCondensed', 'Arial Narrow', var(--si-font-ui);
+  --si-font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+
+  --si-text-xs: 0.75rem;
+  --si-text-sm: 0.8125rem;
+  --si-text-body: 0.875rem;
+  --si-text-control: 1rem;
+  --si-text-title: clamp(1.75rem, 4vw, 3.5rem);
+}
+```
+
+Rules:
+
+- use one `h1` for each routed page and do not skip heading levels;
+- keep Chinese body text at normal tracking and comfortable line height;
+- use uppercase Latin only for short section labels, status keys, and indices;
+- use tabular numerals for timestamps, counts, hashes, and coordinates;
+- do not use oversized landing-page titles inside operational workspaces;
+- essential text MUST NOT be smaller than `0.8125rem` at default zoom;
+- mobile inputs SHOULD use at least `1rem` text.
+
+### 6.3 Spacing and sizing
+
+Use the following spacing scale:
+
+```text
+2, 4, 8, 12, 16, 20, 24, 32, 40, 48, 64px
+```
+
+Use `4px` as the base unit.
+Values outside the scale require a component-level reason, such as a 1px rule
+or a responsive viewport calculation.
+
+Interactive targets MUST be at least `40x40px` on pointer-oriented desktop
+layouts and `44x44px` on touch layouts.
+
+### 6.4 Radius, rules, and elevation
+
+Use a restrained radius hierarchy:
+
+- `0px`: stage geometry, rules, table edges, clipped decoration;
+- `4px`: compact status and data controls;
+- `6px`: standard inputs and buttons;
+- `8px`: drawers, dialogs, and large functional surfaces;
+- values above `10px`: only circular or semantically pill-shaped controls.
+
+Use 1px low-contrast rules and one strong edge instead of four-sided card
+chrome wherever possible.
+Depth comes from surface contrast, masks, overlap, and information hierarchy.
+Heavy stacked shadows and broad glass effects are prohibited.
+
+### 6.5 Iconography and texture
+
+Use one consistent original or approved open-source line-icon system with
+`1.5-2px` strokes.
+Icon-only controls require an accessible name and are limited to familiar
+secondary actions.
+
+Blueprint grids, directional rules, corner brackets, and clipped wedges MAY be
+generated with original CSS or SVG.
+They MUST be low contrast, ignore pointer events, and support grouping,
+direction, state, or product identity.
+Random scanlines, terminal noise, hexagons, and fake readouts are prohibited.
+
+## 7. Motion
+
+Use motion to reveal hierarchy and confirm real state:
+
+```css
+:root {
+  --si-motion-direct: 240ms;
+  --si-motion-reveal: 650ms;
+  --si-motion-attention: 1800ms;
+  --si-motion-ease: cubic-bezier(0.22, 0.8, 0.2, 1);
+}
+```
+
+M0-S MAY use one masked or directional page reveal and direct hover/focus
+feedback.
+The full product MAY coordinate reveal and real-state attention motion.
+
+Nonessential loops MUST stop under `prefers-reduced-motion: reduce`.
+Reduced motion MUST preserve state clarity and focus, not simply remove all
+feedback.
+Do not animate decorative properties continuously on dense data screens.
+
+## 8. Shared Component Model
+
+Prefer composition over large configuration objects.
+Colocate a focused component, its styles, tests, and local types.
+Separate data access and state orchestration from presentational rendering.
+
+More than 200 lines is a review signal, not an automatic violation.
+Split a component when it has multiple reasons to change or cannot be tested in
+isolation; do not split cohesive code to satisfy a number.
+
+The shared component vocabulary SHOULD grow around real use:
+
+- `AppShell`;
+- `CommandBar`;
+- `PrimaryNavigation`;
+- `WorkspaceHeader`;
+- `StatusBadge`;
+- `SourceReference`;
+- `AiOriginLabel`;
+- `EvidenceDrawer`;
+- `ReviewActions`;
+- `DataTable`;
+- `EmptyState`;
+- `ErrorState`;
+- `LoadingState`;
+- `Dialog` and `Drawer`;
+- `GraphViewport` and its accessible list alternative;
+- `TimelineList`;
+- `BriefSection`.
+
+Do not create a speculative component library before a component has one real
+consumer and a credible second use.
+
+## 9. Component and Page Patterns
+
+### 9.1 Command bar
+
+The command bar is a global operation surface, not duplicated page navigation.
+Search, Ask AI, Capture, filters, notifications, and agent status appear only
+after the corresponding behavior exists.
+
+Search and Ask AI MUST communicate their scope: saved knowledge, current online
+material, or mixed results.
+Capture MUST make the destination and subsequent review state clear.
+
+### 9.2 Candidate and review queue
+
+A candidate row owns comparable decision data:
+
+- title and short summary;
+- epistemic role;
+- source count;
+- traceability state;
+- conflict or risk state;
+- review state;
+- one primary review action.
+
+The evidence drawer owns excerpts, snapshot metadata, derivation, and detailed
+assessments.
+Approve, revise, reject, merge, archive, and add-to-library actions MUST expose
+their real availability and consequences.
+
+### 9.3 Evidence drawer
+
+The drawer SHOULD contain these ordered regions when data exists:
+
+1. origin and review state;
+2. exact supporting excerpt or image region;
+3. captured snapshot and canonical source links;
+4. separated assessment dimensions;
+5. derivation and provenance events;
+6. source, capture, language, content type, and revision metadata.
+
+The drawer MUST preserve keyboard focus, provide a clear close action, and
+return focus to the invoking record.
+On narrow screens it becomes a full-height dialog or routed detail view.
+
+### 9.4 Daily and weekly briefs
+
+A brief is a decision surface, not a feed of uniform article cards.
+Group information by change, topic, object, or event.
+Each item SHOULD answer:
+
+- what changed;
+- why it may matter;
+- what evidence supports it;
+- how it relates to saved knowledge;
+- what action is available.
+
+Every important conclusion MUST link to its evidence.
+A weekly brief MUST NOT visually imply it is only seven daily briefs joined
+together.
+
+### 9.5 Knowledge graph
+
+The graph uses a dark bounded grid and restrained node colors.
+It MUST NOT resemble a decorative 3D star field.
+
+Relation semantics require more than color:
+
+- strong relation: solid line plus relation label;
+- weak relation: dashed line plus relation label;
+- AI inference: distinct dash or marker plus AI origin label;
+- source support: explicit source-to-claim direction;
+- conflict: visible conflict marker and accessible text.
+
+Zoom, pan, filter, focus, expand, selection, and open-evidence actions MUST be
+keyboard-operable where technically possible.
+A searchable list or tree alternative MUST expose the same essential records
+and relations to assistive technology and low-power devices.
+
+### 9.6 Timeline
+
+Every displayed timestamp MUST identify its semantic type when ambiguity is
+possible: event, published, captured, validity, or knowledge revision time.
+AI-inferred times require an inference label and precision.
+
+The timeline SHOULD use a semantic list in document order.
+Visual rails and markers are supplementary, not the only representation.
+
+### 9.7 Ask AI
+
+Answers MUST separate saved knowledge from real-time online material.
+Important claims require citations.
+When evidence is insufficient, the primary answer state MUST say so directly.
+
+AI output MUST show generation state, source scope, citation availability, and
+review status.
+The UI MUST NOT portray fluent prose as verified merely because generation
+completed successfully.
+
+## 10. State and Content Language
+
+Use concise Chinese as the primary product language.
+Short English micro-labels MAY clarify hierarchy, for example
+`EVIDENCE / 证据` or `REVIEW / 审阅`.
+Do not scatter ornamental English or invented protocol names.
+
+Use stable, explicit state terms.
+Recommended labels include:
+
+- `可追溯`;
+- `待审核`;
+- `用户已确认`;
+- `有争议`;
+- `已驳回`;
+- `已撤回`;
+- `证据不足`;
+- `可能过期`;
+- `处理中`;
+- `处理失败`;
+- `部分完成`;
+- `离线`.
+
+Status text MUST be understandable without its icon or color.
+Dates MUST include timezone or make the active timezone visible at the view
+level.
+Hashes and trace IDs SHOULD be shortened visually but remain copyable in full.
+
+## 11. Accessibility
+
+The minimum target is WCAG 2.1 AA.
+Compatible WCAG 2.2 interaction criteria SHOULD be adopted where practical.
+
+Every frontend change MUST satisfy:
+
+- semantic `header`, `nav`, `main`, `aside`, and heading structure;
+- a keyboard-visible skip link to the main workspace;
+- logical DOM and focus order matching the visual task order;
+- keyboard access to every interaction, with no positive `tabindex`;
+- a visible `2px` signal-colored focus outline with offset;
+- focus trapping and return for modal dialogs and drawers;
+- visible labels for form controls;
+- accessible names for icon-only controls;
+- `aria-live="polite"` for nonurgent status updates;
+- `role="alert"` only for actionable urgent failures;
+- table headers and scopes for evidence tables;
+- meaningful image alternative text and empty alt for decoration;
+- normal text contrast of at least `4.5:1`;
+- large text and non-text UI contrast of at least `3:1`;
+- 200% text zoom without lost content or function;
+- state communication through text or shape as well as color;
+- reduced-motion parity;
+- no hover-only information or controls.
+
+Dark mode is the only approved visual theme at this stage.
+The absence of a light theme is not a defect.
+Forced-colors and high-contrast behavior MUST remain usable and MUST NOT be
+disabled to preserve the art direction.
+
+## 12. Frontend Engineering Constraints
+
+The accepted application shape is React, Vite, and TypeScript.
+Use the existing dependency graph and token-based CSS.
+
+The source style guide mentions Next.js, Tailwind CSS, headless component
+libraries, graph libraries, table libraries, server-state libraries, and global
+state stores as possible future tools.
+That mention is not dependency authorization.
+Any such addition requires the repository dependency and open-source review
+process and, when it changes the accepted application shape, an ADR.
+
+Current implementation rules:
+
+- use named first-party exports;
+- keep component APIs small and composable;
+- keep fetch adapters behind narrow interfaces;
+- use local state for component-local interaction;
+- lift state only to the nearest real shared owner;
+- use URL state for shareable filters only when routing exists;
+- do not add a global store for the M0-S shell;
+- keep mock transports deterministic and prevent live-network fallback;
+- render untrusted source and AI text as text, never injected HTML;
+- keep CSS family tokens and depth tokens independent;
+- use one semantic markup tree rather than duplicate pages per depth.
+
+A representative root contract is:
+
+```html
+<html
+  lang="zh-CN"
+  data-ui-family="struinfo-industrial"
+  data-ui-depth="moderate"
+></html>
+```
+
+The full product may advance the shell to `complex` without changing semantic
+content or accessible names.
+
+## 13. Performance and Large-data Behavior
+
+The UI MUST preserve interaction quality as sources, evidence, and relations
+grow.
+
+- paginate or virtualize large tables and timelines after measurement;
+- load graph neighborhoods incrementally rather than rendering the full graph;
+- pause offscreen motion and media;
+- lazy-load noncritical images with explicit dimensions;
+- memoize only measured expensive computation;
+- avoid broad context updates that rerender the entire workspace;
+- use CSS transitions for direct motion and reserve JavaScript animation for
+  behavior CSS cannot express;
+- provide a low-complexity list alternative for graph-heavy workflows.
+
+Performance tooling or virtualization libraries still require dependency
+admission.
+Do not add them speculatively.
+
+## 14. Asset and Provenance Rules
+
+All shipped UI code and visual assets MUST be original, user-owned, or admitted
+under a compatible license with required attribution.
+
+Do not ship:
+
+- Hypergryph, Arknights, Endfield, Palantir, Linear, Raycast, or Obsidian logos;
+- reference-product screenshots, production bundles, character art, or icon
+  sheets;
+- fonts with unclear redistribution rights;
+- copied community themes whose embedded asset rights are unknown.
+
+Prefer original CSS/SVG grids, lines, masks, and diagrams.
+Reference-product names describe high-level qualities only and do not imply
+affiliation or source-code reuse.
+
+## 15. Verification and Design Review Gate
+
+### 15.1 Required implementation evidence
+
+Before frontend handoff, record:
+
+- format, lint, typecheck, focused unit tests, and build results;
+- loading, ready/success, empty, partial, offline, and error behavior relevant to
+  the task;
+- keyboard focus order and named controls;
+- reduced-motion behavior;
+- viewport evidence at `320`, `390`, `768`, `1024`, and `1440` widths;
+- console and runtime-error result;
+- token usage and absence of unreviewed asset or dependency additions.
+
+Browser screenshots, automated accessibility scans, and real interaction runs
+remain visibly pending until the browser artifact gate is admitted.
+Static or unit evidence MUST NOT be described as a browser PASS.
+
+### 15.2 Design review output
+
+Use this review structure:
+
+1. context, user task, phase, family, and depth;
+2. summary verdict: `PASS`, `NEEDS_WORK`, or `BLOCKED`;
+3. design-token and component compliance;
+4. three-pillar assessment;
+5. blocking, major, and minor findings;
+6. exact remediation and rerun scope.
+
+The three pillars are:
+
+| Pillar        | Acceptance question                                                      |
+| ------------- | ------------------------------------------------------------------------ |
+| Frictionless  | Is the primary task and next action obvious and efficient?               |
+| Quality Craft | Is the result coherent, responsive, accessible, and token-driven?        |
+| Trustworthy   | Are AI origin, evidence, uncertainty, and failures represented honestly? |
+
+Blocking findings include:
+
+- an inaccessible primary task;
+- misleading AI or evidence status;
+- a hidden failure or dead end;
+- fabricated telemetry or product data;
+- copied or unreviewed third-party assets;
+- a broken responsive layout at a required width;
+- a material contract or dependency violation.
+
+The project has no Figma library or Storybook at this stage.
+Review against this document, rendered states, and code tokens.
+Do not mark their absence as a defect or pretend that a Figma comparison
+occurred.
+
+## 16. Agent Handoff Contract
+
+Every frontend implementation or review task MUST state:
+
+- the fixed Git baseline;
+- the released route or component scope;
+- `data-ui-family` and target `data-ui-depth`;
+- real user content and states allowed in the task;
+- unavailable modules that must not be fabricated;
+- owned paths and forbidden dependency/config paths;
+- required viewport, accessibility, test, and build evidence;
+- whether browser execution is admitted or still pending;
+- the design-review verdict and unresolved material findings.
+
+For M0-S, use:
+
+```text
+family = struinfo-industrial
+depth = moderate
+screen = operational health shell
+primary task = understand readiness and retry a failed check
+real data = operational-health contract only
+future product modules = do not render as active UI
+```
+
+## 17. Design Inputs
+
+This specification synthesizes:
+
+- [StruInfo product requirements](product-requirements.md);
+- [supplied frontend style direction](AI_Personal_Knowledge_OS_Frontend_Style_Guide.md);
+- [Ark UI Skill](https://github.com/Brandon030722/ark-ui-skill);
+- [Frontend UI Engineering](https://github.com/addyosmani/agent-skills/tree/main/skills/frontend-ui-engineering);
+- [Frontend Design Review](https://github.com/microsoft/skills/tree/main/.github/skills/frontend-design-review).
+
+No external Skill code, reference-product asset, or runtime dependency is
+copied into the application by this document.
