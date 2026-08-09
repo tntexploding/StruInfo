@@ -213,7 +213,12 @@ function cloneJson(value: JsonValue): JsonValue {
     const entry = objectValue[key];
     if (entry === undefined)
       throw new Error('Validated JSON member is missing.');
-    clone[key] = cloneJson(entry);
+    Object.defineProperty(clone, key, {
+      configurable: true,
+      enumerable: true,
+      value: cloneJson(entry),
+      writable: true,
+    });
   }
   return clone;
 }
