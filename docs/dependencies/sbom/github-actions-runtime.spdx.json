@@ -1,0 +1,2061 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "StruInfo M0-S foundation GitHub Actions runtime closure",
+  "documentNamespace": "https://struinfo.invalid/spdx/m0-s/foundation/actions-2f123616430cb9cf5a8db0336d57a12b",
+  "creationInfo": {
+    "created": "2026-08-09T00:00:00Z",
+    "creators": [
+      "Tool: M0-S-TOOLCHAIN-MAINT-001/scripts/build-final-evidence.mjs",
+      "Tool: M0-S-FOUNDATION-MAINT-001 exact-action materialization"
+    ]
+  },
+  "documentDescribes": [
+    "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+    "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020"
+  ],
+  "packages": [
+    {
+      "SPDXID": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "name": "actions/checkout",
+      "versionInfo": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "downloadLocation": "https://codeload.github.com/actions/checkout/tar.gz/3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "B59292069298C7BE5FFD9C636431A229FAFF70ECE00E0C24FD31BAEB7B309FA3"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:github/actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "name": "actions/setup-node",
+      "versionInfo": "820762786026740c76f36085b0efc47a31fe5020",
+      "downloadLocation": "https://codeload.github.com/actions/setup-node/tar.gz/820762786026740c76f36085b0efc47a31fe5020",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "FDEE89DF47CA73CAF052E3441478465572276E6D831F638F7820367818447B50"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:github/actions/setup-node@820762786026740c76f36085b0efc47a31fe5020"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--actions-cache-6.1.0",
+      "name": "@actions/cache",
+      "versionInfo": "6.1.0",
+      "downloadLocation": "https://registry.npmjs.org/@actions/cache/-/cache-6.1.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "88ED2CF43D91201DE44A2F1B40741DC67D50FB0F1260B3AC8E6C3CFD1842BD47"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40actions/cache@6.1.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--actions-core-3.0.1",
+      "name": "@actions/core",
+      "versionInfo": "3.0.1",
+      "downloadLocation": "https://registry.npmjs.org/@actions/core/-/core-3.0.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "1C4F1AD94C257DF998DEC6CF26F0A86B834C16C942DFFC7508E445BA7461E084"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40actions/core@3.0.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--actions-exec-3.0.0",
+      "name": "@actions/exec",
+      "versionInfo": "3.0.0",
+      "downloadLocation": "https://registry.npmjs.org/@actions/exec/-/exec-3.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "DBCADD151824DBFFBD134FE59D2968AA063FA7C52DBB9515247E6EBA9C09CC0E"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40actions/exec@3.0.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--actions-github-9.1.1",
+      "name": "@actions/github",
+      "versionInfo": "9.1.1",
+      "downloadLocation": "https://registry.npmjs.org/@actions/github/-/github-9.1.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "415A7A042524C6E93DDFF26530D2F4E94058428D37E1D062F619D1C0AFDAFCBF"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40actions/github@9.1.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--actions-glob-0.6.1",
+      "name": "@actions/glob",
+      "versionInfo": "0.6.1",
+      "downloadLocation": "https://registry.npmjs.org/@actions/glob/-/glob-0.6.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "55941906586DD9A38F0D3ED17C7865FFB2882B490A587600863F5507BA5D7DF5"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40actions/glob@0.6.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--actions-glob-0.7.0",
+      "name": "@actions/glob",
+      "versionInfo": "0.7.0",
+      "downloadLocation": "https://registry.npmjs.org/@actions/glob/-/glob-0.7.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "E276809F44613EC9D3C7D9E1A6E1E608B24E65B8743AC843E6D8926C048CCED2"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40actions/glob@0.7.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--actions-http-client-3.0.2",
+      "name": "@actions/http-client",
+      "versionInfo": "3.0.2",
+      "downloadLocation": "https://registry.npmjs.org/@actions/http-client/-/http-client-3.0.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "AACDF3C8DBED7F41AF60D1A6496BDD47E1AC9820EBC287C849C508D19862CA79"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40actions/http-client@3.0.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--actions-http-client-4.0.1",
+      "name": "@actions/http-client",
+      "versionInfo": "4.0.1",
+      "downloadLocation": "https://registry.npmjs.org/@actions/http-client/-/http-client-4.0.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "7F4B0466CA81B3CF0F48FC5091FD3AA138D576FC6F43CB6DDCE00C37644BEC34"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40actions/http-client@4.0.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--actions-io-3.0.2",
+      "name": "@actions/io",
+      "versionInfo": "3.0.2",
+      "downloadLocation": "https://registry.npmjs.org/@actions/io/-/io-3.0.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "9AD0F5E5D1C6D48E495FAABD97DD7CC2EB01008303A3C551C0A20C8583BACB44"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40actions/io@3.0.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--actions-tool-cache-4.0.0",
+      "name": "@actions/tool-cache",
+      "versionInfo": "4.0.0",
+      "downloadLocation": "https://registry.npmjs.org/@actions/tool-cache/-/tool-cache-4.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "6FE2DFF72E0DFFC08ED9C5AE9109D6F087BAA6FEDAD506607B74AD433711CD5E"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40actions/tool-cache@4.0.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--azure-abort-controller-2.1.2",
+      "name": "@azure/abort-controller",
+      "versionInfo": "2.1.2",
+      "downloadLocation": "https://registry.npmjs.org/@azure/abort-controller/-/abort-controller-2.1.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "D98FFA76628EA162DDF7539B7B84AB851EF889689B16D454483456BA2E166D84"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40azure/abort-controller@2.1.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--azure-core-auth-1.10.1",
+      "name": "@azure/core-auth",
+      "versionInfo": "1.10.1",
+      "downloadLocation": "https://registry.npmjs.org/@azure/core-auth/-/core-auth-1.10.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "E993CB3C4532E3BC165590D7BC0B99B47D5B2DE843CE4EE0C106DC896E2402F5"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40azure/core-auth@1.10.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--azure-core-client-1.10.1",
+      "name": "@azure/core-client",
+      "versionInfo": "1.10.1",
+      "downloadLocation": "https://registry.npmjs.org/@azure/core-client/-/core-client-1.10.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "0DE528BA02D4FBA1B7B4753605386911EAC7082AD5D70031C033D655F7446F65"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40azure/core-client@1.10.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--azure-core-http-compat-2.4.0",
+      "name": "@azure/core-http-compat",
+      "versionInfo": "2.4.0",
+      "downloadLocation": "https://registry.npmjs.org/@azure/core-http-compat/-/core-http-compat-2.4.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "D1EF1F116D00148F429F1B3B5E02EAE7E04F0F1E788D69382A4413259C699B1D"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40azure/core-http-compat@2.4.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--azure-core-lro-2.7.2",
+      "name": "@azure/core-lro",
+      "versionInfo": "2.7.2",
+      "downloadLocation": "https://registry.npmjs.org/@azure/core-lro/-/core-lro-2.7.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "1EC1A665070DD1DE495047071E04CDCC775FCAD4592D115BD931713F5443783D"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40azure/core-lro@2.7.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--azure-core-paging-1.6.2",
+      "name": "@azure/core-paging",
+      "versionInfo": "1.6.2",
+      "downloadLocation": "https://registry.npmjs.org/@azure/core-paging/-/core-paging-1.6.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "6B95D2283EB88140E9F3EFFE4449E7835EBFE5A3B7D711884EA793F25856E951"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40azure/core-paging@1.6.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--azure-core-rest-pipeline-1.23.0",
+      "name": "@azure/core-rest-pipeline",
+      "versionInfo": "1.23.0",
+      "downloadLocation": "https://registry.npmjs.org/@azure/core-rest-pipeline/-/core-rest-pipeline-1.23.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "EBBFAFA94FDB100F2CD273AA827191E0E344D49AD5BC8F36AD3CCB2A7E323450"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40azure/core-rest-pipeline@1.23.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--azure-core-tracing-1.3.1",
+      "name": "@azure/core-tracing",
+      "versionInfo": "1.3.1",
+      "downloadLocation": "https://registry.npmjs.org/@azure/core-tracing/-/core-tracing-1.3.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "52F588B0F2EFA667E863DF855C1470253D32DC46FEE3A33A7734EDF210F33C2F"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40azure/core-tracing@1.3.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--azure-core-util-1.13.1",
+      "name": "@azure/core-util",
+      "versionInfo": "1.13.1",
+      "downloadLocation": "https://registry.npmjs.org/@azure/core-util/-/core-util-1.13.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "A03D763406B766AEE921955F2531A608658E03B82CE20F455F972560DFFEAFB1"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40azure/core-util@1.13.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--azure-core-xml-1.5.1",
+      "name": "@azure/core-xml",
+      "versionInfo": "1.5.1",
+      "downloadLocation": "https://registry.npmjs.org/@azure/core-xml/-/core-xml-1.5.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "E9F7BF31730510EB3AED53CC44D42B487845E3FF0B2A10765A7D551D63D46AF7"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40azure/core-xml@1.5.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--azure-logger-1.3.0",
+      "name": "@azure/logger",
+      "versionInfo": "1.3.0",
+      "downloadLocation": "https://registry.npmjs.org/@azure/logger/-/logger-1.3.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "4A8AAC68A201FE0ED1EAE25AD6D8161967D2A1F75F55F0B08C5FC10AC36C90AF"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40azure/logger@1.3.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--azure-storage-blob-12.31.0",
+      "name": "@azure/storage-blob",
+      "versionInfo": "12.31.0",
+      "downloadLocation": "https://registry.npmjs.org/@azure/storage-blob/-/storage-blob-12.31.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "182FC54931D78B2B14580060CB716670DE45F7A2716C6C9C3C1AB206EC00E597"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40azure/storage-blob@12.31.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--azure-storage-common-12.3.0",
+      "name": "@azure/storage-common",
+      "versionInfo": "12.3.0",
+      "downloadLocation": "https://registry.npmjs.org/@azure/storage-common/-/storage-common-12.3.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "94E71BB4BCE51C5CC9DC4BCC3026DB74F57D0D30FB24FC1670A9C7E91FB0847C"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40azure/storage-common@12.3.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--nodable-entities-2.1.0",
+      "name": "@nodable/entities",
+      "versionInfo": "2.1.0",
+      "downloadLocation": "https://registry.npmjs.org/@nodable/entities/-/entities-2.1.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "9C864305F59A18ECE5505610859E3308BD0C2250562F1D1F9CE9A8EA3BE3518D"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40nodable/entities@2.1.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--octokit-auth-token-6.0.0",
+      "name": "@octokit/auth-token",
+      "versionInfo": "6.0.0",
+      "downloadLocation": "https://registry.npmjs.org/@octokit/auth-token/-/auth-token-6.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "EC8290D3E7194D9F04605DA928BA2C868A1C5499FEFE7FBEF0748FA1AD1FC8DA"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40octokit/auth-token@6.0.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--octokit-core-7.0.6",
+      "name": "@octokit/core",
+      "versionInfo": "7.0.6",
+      "downloadLocation": "https://registry.npmjs.org/@octokit/core/-/core-7.0.6.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "BEB4ED93A330B928364EAAC20DC51A5ED0B526ABA6483C3F1614B8F77FE7345F"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40octokit/core@7.0.6"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--octokit-endpoint-11.0.3",
+      "name": "@octokit/endpoint",
+      "versionInfo": "11.0.3",
+      "downloadLocation": "https://registry.npmjs.org/@octokit/endpoint/-/endpoint-11.0.3.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "3A1DEBE286FB61768EFDEE4C635D121DD6A7E21D7874F0E1CE4B783C03D9D61D"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40octokit/endpoint@11.0.3"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--octokit-graphql-9.0.3",
+      "name": "@octokit/graphql",
+      "versionInfo": "9.0.3",
+      "downloadLocation": "https://registry.npmjs.org/@octokit/graphql/-/graphql-9.0.3.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "ED25E825FA311719A460060325309C5E123A864F2BEB18A92346FBE8A4BFE232"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40octokit/graphql@9.0.3"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--octokit-openapi-types-27.0.0",
+      "name": "@octokit/openapi-types",
+      "versionInfo": "27.0.0",
+      "downloadLocation": "https://registry.npmjs.org/@octokit/openapi-types/-/openapi-types-27.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "BDC132C5D4802AB1434F30EC051984358C779A64DB7E357527DB2C6EACA1CA35"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40octokit/openapi-types@27.0.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--octokit-plugin-paginate-rest-14.0.0",
+      "name": "@octokit/plugin-paginate-rest",
+      "versionInfo": "14.0.0",
+      "downloadLocation": "https://registry.npmjs.org/@octokit/plugin-paginate-rest/-/plugin-paginate-rest-14.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "85ACA2EE78926E2355B0DB20354DBF96EFA268C0CE52570BD4FA643C4CD4FFF6"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40octokit/plugin-paginate-rest@14.0.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--octokit-plugin-rest-endpoint-methods-17.0.0",
+      "name": "@octokit/plugin-rest-endpoint-methods",
+      "versionInfo": "17.0.0",
+      "downloadLocation": "https://registry.npmjs.org/@octokit/plugin-rest-endpoint-methods/-/plugin-rest-endpoint-methods-17.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "338F607489B427532298089BBAD73711C17FAAAADAE1467141C11DD2F41831BF"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40octokit/plugin-rest-endpoint-methods@17.0.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--octokit-request-error-7.1.0",
+      "name": "@octokit/request-error",
+      "versionInfo": "7.1.0",
+      "downloadLocation": "https://registry.npmjs.org/@octokit/request-error/-/request-error-7.1.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "C972AA101E669D4EA3BCE855A3A95A2DE1D85345096605069E6A0D1D63ECE5A3"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40octokit/request-error@7.1.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--octokit-request-10.0.10",
+      "name": "@octokit/request",
+      "versionInfo": "10.0.10",
+      "downloadLocation": "https://registry.npmjs.org/@octokit/request/-/request-10.0.10.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "22F315719B7EDB5DC25CC1D56BE19F496CFDB7C641D73E6107DC1251A327AE8F"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40octokit/request@10.0.10"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--octokit-request-10.0.8",
+      "name": "@octokit/request",
+      "versionInfo": "10.0.8",
+      "downloadLocation": "https://registry.npmjs.org/@octokit/request/-/request-10.0.8.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "FC069BE16A2A65269B0F653D8841507AC243F477E6E3EB59896F94FBD32DB943"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40octokit/request@10.0.8"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--octokit-types-16.0.0",
+      "name": "@octokit/types",
+      "versionInfo": "16.0.0",
+      "downloadLocation": "https://registry.npmjs.org/@octokit/types/-/types-16.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "2BF6989A23E386C6D425420FCC57AA78751FE491D5CE10ABDBB4AE6AACFE248F"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40octokit/types@16.0.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--protobuf-ts-runtime-rpc-2.11.1",
+      "name": "@protobuf-ts/runtime-rpc",
+      "versionInfo": "2.11.1",
+      "downloadLocation": "https://registry.npmjs.org/@protobuf-ts/runtime-rpc/-/runtime-rpc-2.11.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "B4226F2052274F94FA3D509580389C1E51908A1D4CB6BBBEB134C0E4BF795A5F"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40protobuf-ts/runtime-rpc@2.11.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--protobuf-ts-runtime-2.11.1",
+      "name": "@protobuf-ts/runtime",
+      "versionInfo": "2.11.1",
+      "downloadLocation": "https://registry.npmjs.org/@protobuf-ts/runtime/-/runtime-2.11.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "(Apache-2.0 AND BSD-3-Clause)",
+      "licenseDeclared": "(Apache-2.0 AND BSD-3-Clause)",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "3BB18CB373565B5C95E466C1DB76E4B1D8166B62276A15E3547C36F9E25B502B"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40protobuf-ts/runtime@2.11.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm--typespec-ts-http-runtime-0.3.5",
+      "name": "@typespec/ts-http-runtime",
+      "versionInfo": "0.3.5",
+      "downloadLocation": "https://registry.npmjs.org/@typespec/ts-http-runtime/-/ts-http-runtime-0.3.5.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "13FA7EABF1FDCCF7AD665D51BEC80F2652B673DA5A8CA224D29AA37C5A84DA3C"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40typespec/ts-http-runtime@0.3.5"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-agent-base-7.1.4",
+      "name": "agent-base",
+      "versionInfo": "7.1.4",
+      "downloadLocation": "https://registry.npmjs.org/agent-base/-/agent-base-7.1.4.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "7DD4A61668A9A4E8D4E903F1A254F94D53DAFD3F316F2B9B597C5AD8C79CB57E"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/agent-base@7.1.4"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-balanced-match-1.0.2",
+      "name": "balanced-match",
+      "versionInfo": "1.0.2",
+      "downloadLocation": "https://registry.npmjs.org/balanced-match/-/balanced-match-1.0.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "D854F7ABDD0C7A8120CF381E0AD5F972CBD0255F5D987424BD672C8C4FCEBCC1"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/balanced-match@1.0.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-balanced-match-4.0.4",
+      "name": "balanced-match",
+      "versionInfo": "4.0.4",
+      "downloadLocation": "https://registry.npmjs.org/balanced-match/-/balanced-match-4.0.4.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "9025508D9125EEE531BBC49CE3AE560183975AD595F058C378BD56AF4152FB16"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/balanced-match@4.0.4"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-before-after-hook-4.0.0",
+      "name": "before-after-hook",
+      "versionInfo": "4.0.0",
+      "downloadLocation": "https://registry.npmjs.org/before-after-hook/-/before-after-hook-4.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "Apache-2.0",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "7546CC1A38C955C463617674D7B4F8BFEA98B5E04CC468A501759A9CA9BAD4F4"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/before-after-hook@4.0.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-brace-expansion-1.1.13",
+      "name": "brace-expansion",
+      "versionInfo": "1.1.13",
+      "downloadLocation": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.13.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "362D09743422DDD2AE1215FBB623EACEBACBA61F843C0A6961641A51723A9BF2"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/brace-expansion@1.1.13"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-brace-expansion-5.0.6",
+      "name": "brace-expansion",
+      "versionInfo": "5.0.6",
+      "downloadLocation": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.6.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "FCA5C7F55B6C26AD332B915FA9F77E69DF50D711CA22D9033D13A58FB0480600"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/brace-expansion@5.0.6"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-concat-map-0.0.1",
+      "name": "concat-map",
+      "versionInfo": "0.0.1",
+      "downloadLocation": "https://registry.npmjs.org/concat-map/-/concat-map-0.0.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "35902DD620CF0058C49EA614120F18A889D984269A90381B7622E79C2CFE4261"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/concat-map@0.0.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-content-type-2.0.0",
+      "name": "content-type",
+      "versionInfo": "2.0.0",
+      "downloadLocation": "https://registry.npmjs.org/content-type/-/content-type-2.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "A2D4689D44F4DE2C2C5039F58E01279F2D4BB13994A5046DE413E772A5A1BC06"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/content-type@2.0.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-debug-4.4.3",
+      "name": "debug",
+      "versionInfo": "4.4.3",
+      "downloadLocation": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "89C1AC9C946EE8905A875837114528E97EEAE35E03BE3190584B2216AF43E4A7"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/debug@4.4.3"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-events-3.3.0",
+      "name": "events",
+      "versionInfo": "3.3.0",
+      "downloadLocation": "https://registry.npmjs.org/events/-/events-3.3.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "2C30DD630B58299BDFAAC8688F763C6F312D29779C500B1E3701A1D4FB3B534B"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/events@3.3.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-fast-content-type-parse-3.0.0",
+      "name": "fast-content-type-parse",
+      "versionInfo": "3.0.0",
+      "downloadLocation": "https://registry.npmjs.org/fast-content-type-parse/-/fast-content-type-parse-3.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "C107C2F08C23D8714656E9E7AA2CAB52AA3E22D46ED9F3A0C9F72D542310E7E9"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/fast-content-type-parse@3.0.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-fast-xml-builder-1.2.0",
+      "name": "fast-xml-builder",
+      "versionInfo": "1.2.0",
+      "downloadLocation": "https://registry.npmjs.org/fast-xml-builder/-/fast-xml-builder-1.2.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "B9344EA671B80AB2D3D4614883991C8584D36DB9607E32B57E56B81B9C8AF487"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/fast-xml-builder@1.2.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-fast-xml-parser-5.7.2",
+      "name": "fast-xml-parser",
+      "versionInfo": "5.7.2",
+      "downloadLocation": "https://registry.npmjs.org/fast-xml-parser/-/fast-xml-parser-5.7.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "49C7D453E254B0B536B22FA7C8D5B5904DA5BC811F56200ED62438A0D9971A3B"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/fast-xml-parser@5.7.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-http-proxy-agent-7.0.2",
+      "name": "http-proxy-agent",
+      "versionInfo": "7.0.2",
+      "downloadLocation": "https://registry.npmjs.org/http-proxy-agent/-/http-proxy-agent-7.0.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "785F73FAA92BFBA8D61DA20BF59325AB2B3DCA1BBC0BBAC523406F404D8A6F02"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/http-proxy-agent@7.0.2"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-https-proxy-agent-7.0.6",
+      "name": "https-proxy-agent",
+      "versionInfo": "7.0.6",
+      "downloadLocation": "https://registry.npmjs.org/https-proxy-agent/-/https-proxy-agent-7.0.6.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "960F89E8E5240882F64249D04A538421DD39D62FFACC138544647CC3251BC0E0"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/https-proxy-agent@7.0.6"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-json-with-bigint-3.5.8",
+      "name": "json-with-bigint",
+      "versionInfo": "3.5.8",
+      "downloadLocation": "https://registry.npmjs.org/json-with-bigint/-/json-with-bigint-3.5.8.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "6E9BCB6561354E2D82B2010C65EA45DD123DB807B093BBE4C7CDD2E6797A51FF"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/json-with-bigint@3.5.8"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-minimatch-10.2.5",
+      "name": "minimatch",
+      "versionInfo": "10.2.5",
+      "downloadLocation": "https://registry.npmjs.org/minimatch/-/minimatch-10.2.5.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "BlueOak-1.0.0",
+      "licenseDeclared": "BlueOak-1.0.0",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "A6CEA46915BFC6C3FAE60F9BD003EA4F9D6A4233AA59A9CA729474D3824CA9E5"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/minimatch@10.2.5"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-minimatch-3.1.5",
+      "name": "minimatch",
+      "versionInfo": "3.1.5",
+      "downloadLocation": "https://registry.npmjs.org/minimatch/-/minimatch-3.1.5.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "ISC",
+      "licenseDeclared": "ISC",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "D81817ECF72DE3C8C5D3724407752D943C9E1A42AF5C437D9CB923BE8A72C648"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/minimatch@3.1.5"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-ms-2.1.3",
+      "name": "ms",
+      "versionInfo": "2.1.3",
+      "downloadLocation": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "F6616E15E530ED552F9DAA2D3CE71963947C6BC7C98C9B64FD3E673FD02622C6"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/ms@2.1.3"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-path-expression-matcher-1.5.0",
+      "name": "path-expression-matcher",
+      "versionInfo": "1.5.0",
+      "downloadLocation": "https://registry.npmjs.org/path-expression-matcher/-/path-expression-matcher-1.5.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "1351FF7F33DAE4660827CF6FB74C109F0840DAEA989FAA2C991CD85BC3E9B173"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/path-expression-matcher@1.5.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-semver-7.8.4",
+      "name": "semver",
+      "versionInfo": "7.8.4",
+      "downloadLocation": "https://registry.npmjs.org/semver/-/semver-7.8.4.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "ISC",
+      "licenseDeclared": "ISC",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "700E9AFEBC59F214DC2D833D159ACD050712800E7868AD50B5412994B7731C12"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/semver@7.8.4"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-semver-7.8.5",
+      "name": "semver",
+      "versionInfo": "7.8.5",
+      "downloadLocation": "https://registry.npmjs.org/semver/-/semver-7.8.5.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "ISC",
+      "licenseDeclared": "ISC",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "D85045D4300D7D57C891336B95DF532E73F34C22FFCD222452B6D08B9D127D5D"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/semver@7.8.5"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-strnum-2.2.3",
+      "name": "strnum",
+      "versionInfo": "2.2.3",
+      "downloadLocation": "https://registry.npmjs.org/strnum/-/strnum-2.2.3.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "F21E40E405870567DA029D909533A9B3444CCFD515877F84D23C0716DA33FCE8"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/strnum@2.2.3"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-tslib-2.8.1",
+      "name": "tslib",
+      "versionInfo": "2.8.1",
+      "downloadLocation": "https://registry.npmjs.org/tslib/-/tslib-2.8.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "0BSD",
+      "licenseDeclared": "0BSD",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "66F635D5EEABAE44807534976913A102CF615B9A045368359C9F79AE6EE2119E"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/tslib@2.8.1"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-tunnel-0.0.6",
+      "name": "tunnel",
+      "versionInfo": "0.0.6",
+      "downloadLocation": "https://registry.npmjs.org/tunnel/-/tunnel-0.0.6.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "24F765728141836F8C34F32997F0B3CF3CBAB6CF382BB46501ADC68355BA7D4D"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/tunnel@0.0.6"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-undici-6.27.0",
+      "name": "undici",
+      "versionInfo": "6.27.0",
+      "downloadLocation": "https://registry.npmjs.org/undici/-/undici-6.27.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "CB4ECDF54572260FBBBD0FB03929FF04CA1BE8B3D3BB41E60E8B4A72FC2B1036"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/undici@6.27.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-universal-user-agent-7.0.3",
+      "name": "universal-user-agent",
+      "versionInfo": "7.0.3",
+      "downloadLocation": "https://registry.npmjs.org/universal-user-agent/-/universal-user-agent-7.0.3.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "ISC",
+      "licenseDeclared": "ISC",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "FBCD90A2C231D06731DDC015A5213961BFF28F224E0459ED986C26870CB18001"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/universal-user-agent@7.0.3"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-npm-xml-naming-0.1.0",
+      "name": "xml-naming",
+      "versionInfo": "0.1.0",
+      "downloadLocation": "https://registry.npmjs.org/xml-naming/-/xml-naming-0.1.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "19347CBCBA429E9F240427CE4E5998EFE30A47CB9131B5673FC2F0441F7F4F57"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/xml-naming@0.1.0"
+        }
+      ]
+    },
+    {
+      "SPDXID": "SPDXRef-External-LZMA-SDK-7zdec",
+      "name": "LZMA SDK 7zdec.exe",
+      "versionInfo": "bundled-with-actions-tool-cache-4.0.0",
+      "downloadLocation": "https://github.com/actions/toolkit",
+      "filesAnalyzed": false,
+      "licenseConcluded": "LicenseRef-Public-Domain-LZMA-SDK",
+      "licenseDeclared": "LicenseRef-Public-Domain-LZMA-SDK",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "E14D8201C5C0D1049E717A63898A3B1C7CE4054A24871DAEBAA717DA64DCAFF5"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1"
+    },
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-core-3.0.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-exec-3.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-github-9.1.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-http-client-3.0.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-http-client-4.0.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-io-3.0.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-tool-cache-4.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-semver-7.8.4"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-auth-token-6.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-core-7.0.6"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-endpoint-11.0.3"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-graphql-9.0.3"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-openapi-types-27.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-plugin-paginate-rest-14.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-plugin-rest-endpoint-methods-17.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-request-10.0.10"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-request-error-7.1.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-types-16.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-before-after-hook-4.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-content-type-2.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-json-with-bigint-3.5.8"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-tunnel-0.0.6"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-undici-6.27.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-checkout-3d3c42e5aac5ba805825da76410c181273ba90b1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-universal-user-agent-7.0.3"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-cache-6.1.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-glob-0.6.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-core-3.0.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-exec-3.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-github-9.1.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-http-client-3.0.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-glob-0.7.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-balanced-match-4.0.4"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-brace-expansion-5.0.6"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-minimatch-10.2.5"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-http-client-4.0.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-io-3.0.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--actions-tool-cache-4.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--azure-abort-controller-2.1.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--azure-core-auth-1.10.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--azure-core-client-1.10.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--azure-core-http-compat-2.4.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--azure-core-lro-2.7.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--azure-core-paging-1.6.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--azure-core-rest-pipeline-1.23.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--azure-core-tracing-1.3.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--azure-core-util-1.13.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--azure-core-xml-1.5.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--azure-logger-1.3.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--azure-storage-blob-12.31.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--azure-storage-common-12.3.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--nodable-entities-2.1.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-auth-token-6.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-core-7.0.6"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-endpoint-11.0.3"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-graphql-9.0.3"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-openapi-types-27.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-plugin-paginate-rest-14.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-plugin-rest-endpoint-methods-17.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-request-10.0.8"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-request-error-7.1.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--octokit-types-16.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--protobuf-ts-runtime-2.11.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--protobuf-ts-runtime-rpc-2.11.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm--typespec-ts-http-runtime-0.3.5"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-agent-base-7.1.4"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-balanced-match-1.0.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-before-after-hook-4.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-brace-expansion-1.1.13"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-concat-map-0.0.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-debug-4.4.3"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-events-3.3.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-fast-content-type-parse-3.0.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-fast-xml-builder-1.2.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-fast-xml-parser-5.7.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-http-proxy-agent-7.0.2"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-https-proxy-agent-7.0.6"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-json-with-bigint-3.5.8"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-minimatch-3.1.5"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-ms-2.1.3"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-path-expression-matcher-1.5.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-semver-7.8.5"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-strnum-2.2.3"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-tslib-2.8.1"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-tunnel-0.0.6"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-undici-6.27.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-universal-user-agent-7.0.3"
+    },
+    {
+      "spdxElementId": "SPDXRef-actions-setup-node-820762786026740c76f36085b0efc47a31fe5020",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-npm-xml-naming-0.1.0"
+    },
+    {
+      "spdxElementId": "SPDXRef-npm--actions-tool-cache-4.0.0",
+      "relationshipType": "CONTAINS",
+      "relatedSpdxElement": "SPDXRef-External-LZMA-SDK-7zdec"
+    }
+  ],
+  "hasExtractedLicensingInfos": [
+    {
+      "licenseId": "LicenseRef-Public-Domain-LZMA-SDK",
+      "extractedText": "The exact bundled 7zdec.exe is recorded as LZMA SDK material. The official LZMA SDK distribution states that LZMA SDK is placed in the public domain. Preserve this attribution and exact artifact hash.",
+      "seeAlsos": [
+        "https://www.7-zip.org/sdk.html"
+      ]
+    }
+  ]
+}

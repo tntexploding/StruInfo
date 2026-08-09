@@ -1,7 +1,7 @@
 # StruInfo 开发大纲
 
-- 状态：基础架构已接受；M0-P 完成，准备进入 M0-S 工程地基
-- 最近更新：2026-08-08
+- 状态：基础架构已接受；M0-S 工程地基按独立制品门推进
+- 最近更新：2026-08-09
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
 - 基础 ADR：[ADR 0001](adr/0001-typescript-modular-monolith.md)、
@@ -439,8 +439,8 @@ docs/
 | 格式 | Prettier，配置固定且不手工争论等价格式 |
 | 静态检查 | ESLint + typescript-eslint 类型感知规则 + 模块边界规则 |
 | 单元/集成 | Vitest；时钟、网络、模型和随机值均可注入 |
-| 浏览器 E2E | Playwright，首轮 Chromium，CI 覆盖 Windows 与 Linux 关键路径 |
-| 数据库 | 只提交前向迁移；测试实际执行升级、回滚策略和恢复 |
+| 浏览器 E2E | Playwright npm 包与真实命令先进入地基；Chromium/FFmpeg/winldd 下载、强制 E2E 与浏览器 CI 等待 `M0-S-BROWSER-MAINT-001` |
+| 数据库 | 只提交前向迁移；先建立首方 runner 与角色合同和合成边界，真实 PostgreSQL/pgvector 容器执行等待 `M0-S-CONTAINER-MAINT-001` |
 | API 契约 | OpenAPI 快照与兼容性测试；事件使用版本化 JSON Schema |
 | 依赖 | 精确锁定、`pnpm audit`、许可证审查和发行前 SPDX SBOM |
 
@@ -448,15 +448,22 @@ docs/
 
 ```text
 pnpm format
+pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test
 pnpm test:integration
 pnpm test:e2e
+pnpm build
 pnpm verify
+pnpm db:migrate
 ```
 
-`pnpm verify` 是本地与 CI 的统一合并门，不能依赖已登录浏览器、实时网站或真实 AI 供应商。
+当前非浏览器、非容器地基的 `pnpm verify` 按
+`format:check → lint → typecheck → test → test:integration → build`
+失败即停；不能依赖已登录浏览器、实时网站或真实 AI 供应商。
+`pnpm test:e2e` 必须是真实、无空测试放行的命令，但在浏览器制品准入前不进入 `verify` 或 CI 必需门。
+数据库真实集成同样不能用跳过或合成结果冒充，必须等待独立容器/基础设施准入。
 
 ## 14. 测试策略
 
@@ -471,6 +478,9 @@ pnpm verify
 - SSRF 地址判断、路径规范化和权限策略。
 
 ### 集成测试
+
+M0-S 首轮只接入可注入、确定性的合成边界，不宣称真实 PostgreSQL 已通过。
+以下数据库用例在 `M0-S-CONTAINER-MAINT-001` 或另一项独立基础设施准入后成为真实集成门：
 
 - PostgreSQL 18 的约束、迁移、事务与并发任务领取；
 - Blob 写入、按哈希去重、读取和损坏检测；
@@ -520,7 +530,8 @@ fetch -> snapshot -> fragment -> cited candidate -> digest
   [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md) 已接受。
 
 这只允许进入 M0-S 工程地基，不允许复用探针候选或宣称生产就绪。
-M0-S 负责建立工具链、目录、数据库迁移、CI、精确依赖记录和统一质量门。
+M0-S 负责建立工具链、目录、数据库迁移合同、CI、精确依赖记录和统一质量门。
+浏览器与容器制品按独立准入任务关闭后，才把真实 E2E 和 PostgreSQL/pgvector 执行加入必需门；首轮地基不得把它们表示为已通过。
 
 ### 16.1 M0-P 架构验证结论
 
