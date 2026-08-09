@@ -94,6 +94,19 @@ these dependency principles:
 - The README or contributor guide must list one command for formatting, linting,
   static checks, tests, and the complete local gate after the stack is selected.
 
+## Frontend Design
+
+Frontend implementation and review must follow
+`docs/frontend-design-specification.md`.
+That document owns the project visual contract, evidence and AI presentation,
+design tokens, responsive behavior, accessibility target, and design-review
+gate.
+
+Visual reference documents and personal Agent Skills do not authorize new
+frameworks, packages, fonts, assets, or copied third-party code.
+Those changes still pass the technology, dependency, and open-source gates in
+this document and the accepted ADRs.
+
 ## Documentation
 
 Follow the Google Markdown guide: one H1, ATX headings, blank lines around
@@ -138,5 +151,6 @@ leaving contradictory sources of truth.
 
 - `CONTRIBUTING.md`
 - `docs/open-source-policy.md`
+- `docs/frontend-design-specification.md`
 - `docs/decision-log.md`
 - `docs/adr/README.md`

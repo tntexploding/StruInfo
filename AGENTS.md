@@ -13,6 +13,10 @@ Before changing the repository, read:
 - `docs/open-source-policy.md`
 - `CONTRIBUTING.md`
 
+Before frontend implementation or frontend design review, also read:
+
+- `docs/frontend-design-specification.md`
+
 ## Current Phase
 
 The foundational architecture is accepted in ADR 0001 and ADR 0002.
@@ -47,6 +51,8 @@ of leaving them only in `.agents/`.
   and attribution record.
 - Preserve source provenance, idempotency, permission boundaries, and visible
   failure states in all later implementation work.
+- Frontend work must preserve AI-origin, evidence, uncertainty, and review-state
+  distinctions defined by `docs/frontend-design-specification.md`.
 - Keep changes scoped and update canonical documentation in the same change.
 
 If a required command or tool has not been selected, do not invent a permanent
