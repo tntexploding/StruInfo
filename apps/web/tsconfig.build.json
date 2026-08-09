@@ -10,5 +10,6 @@
     "rootDir": "./src",
     "outDir": "./.cache/typescript",
     "tsBuildInfoFile": "./.cache/typescript/.tsbuildinfo"
-  }
+  },
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

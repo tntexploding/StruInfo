@@ -10,5 +10,6 @@
     "rootDir": "./src",
     "outDir": "./dist",
     "tsBuildInfoFile": "./dist/.tsbuildinfo"
-  }
+  },
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

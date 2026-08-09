@@ -15,6 +15,7 @@ const firstPartySourceFiles = [
 export default tseslint.config(
   {
     ignores: [
+      '.agents/**',
       '**/node_modules/**',
       '**/dist/**',
       '**/.cache/**',
