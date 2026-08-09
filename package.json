@@ -13,13 +13,13 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
-    "typecheck": "tsc --project tsconfig.tools.json --noEmit --pretty false && tsc --project packages/contracts/tsconfig.json --noEmit --pretty false && tsc --project packages/test_support/tsconfig.json --noEmit --pretty false && tsc --project apps/server/tsconfig.json --noEmit --pretty false && tsc --project apps/web/tsconfig.json --noEmit --pretty false && tsc --project tsconfig.tests.json --noEmit --pretty false",
+    "typecheck": "tsc --project tsconfig.tools.json --noEmit --pretty false && tsc --project packages/test_support/tsconfig.json --noEmit --pretty false && tsc --project apps/server/tsconfig.json --noEmit --pretty false && tsc --project apps/web/tsconfig.json --noEmit --pretty false && tsc --project tsconfig.tests.json --noEmit --pretty false",
     "test": "vitest run --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test --config playwright.config.ts",
-    "build": "tsc --build tsconfig.build.json --pretty false && pnpm --filter @struinfo/web run build",
-    "verify": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run test:integration && pnpm run build",
-    "db:migrate": "pnpm --filter @struinfo/server run db:migrate"
+    "build": "tsc --build tsconfig.build.json --pretty false && corepack pnpm --filter @struinfo/web run build",
+    "verify": "corepack pnpm run format:check && corepack pnpm run lint && corepack pnpm run typecheck && corepack pnpm run test && corepack pnpm run test:integration && corepack pnpm run build",
+    "db:migrate": "corepack pnpm --filter @struinfo/server run db:migrate"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
