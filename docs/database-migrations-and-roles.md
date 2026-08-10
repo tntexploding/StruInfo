@@ -1,14 +1,15 @@
 # Database Migrations and Roles
 
-- Status: M0-S operator contract; implementation pending Backend ownership
+- Status: M0-S operator contract; first-party runner implemented with synthetic
+  boundary coverage
 - Contract: `C-M0-S-r2`
 - Database direction: PostgreSQL 18 with separate migration and runtime
   credentials
 
 This document defines the operator and code boundary for forward migrations. It
-does not contain migration SQL, role-creation SQL, passwords, or an implemented
-runner. Real PostgreSQL execution remains pending the separately admitted
-infrastructure gate.
+does not contain role-creation SQL or passwords. The first-party runner and first
+project-owned migration are implemented; real PostgreSQL execution remains
+pending the separately admitted infrastructure gate.
 
 ## Role boundary
 
@@ -29,27 +30,29 @@ as separate operations.
 
 ## First-party runner contract
 
-The later Backend task owns these paths and the migration-sequence lock:
+The separately executed runner uses these tracked paths:
 
 ```text
 apps/server/src/entrypoints/migrate.ts
 apps/server/src/platform/database/migrations/**
-apps/server/migrations/000001_<snake_case_name>.sql
+apps/server/migrations/000001_create_application_schema.sql
 ```
 
 The runner is first-party code over the already admitted `pg@8.22.0` driver.
 `drizzle-orm@0.45.2` remains the runtime typed SQL mapper. `drizzle-kit` and any
 replacement migration package are not admitted.
 
-The implementation must:
+The implementation:
 
-1. discover only committed UTF-8 `.sql` files whose names begin with one unique,
-   zero-padded version and a snake-case description;
+1. resolves exactly one `apps/server/migrations` root and discovers only regular,
+   readable UTF-8 files named by six decimal digits, an underscore, a lowercase
+   snake-case description, and `.sql`;
 2. reject malformed names, duplicate versions, unreadable files, and an empty or
    ambiguous discovery root before applying anything;
 3. order unapplied files lexically by the fixed-width version;
-4. serialize concurrent runners with one documented, project-stable PostgreSQL
-   advisory-lock identity;
+4. serializes concurrent runners on the owned connection with the two-key
+   PostgreSQL advisory-lock identity `(1398035029, 1296648018)`, whose symbolic
+   identity is ASCII `STRU` / `MIGR`;
 5. store the exact SHA-256 of each committed file's bytes in
    `struinfo_meta.schema_migrations` and fail visibly if an applied file changes;
 6. execute one unapplied migration and its ledger insert atomically in one
@@ -57,10 +60,23 @@ The implementation must:
 7. stop on the first failure, roll back that transaction, and leave later files
    unapplied;
 8. make repeated invocation a no-op for exact already-applied versions;
-9. close the database connection and release owned resources on success or
-   failure; and
-10. expose only safe structured status, never SQL contents, credentials, or raw
-    driver stacks.
+9. releases that lock on the same connection and closes the connection on success
+   and every reached failure path; and
+10. emits newline-delimited JSON containing only `event`, `version`, `name`,
+    `checksum`, and `outcome` when those fields apply. It never emits SQL contents,
+    credentials, environment snapshots, raw driver errors, or stacks.
+
+The runner bootstraps only `struinfo_meta` and its
+`struinfo_meta.schema_migrations` ledger while holding the advisory lock. The
+ledger columns are `version character(6)` as the primary key, `name text`,
+`checksum character(64)`, and an `applied_at timestamp with time zone` defaulting
+to the database current timestamp. Reconciliation requires every ledger version,
+name, and lowercase SHA-256 checksum to match an exact committed file and rejects
+missing applied files or non-linear historical gaps.
+
+The first forward file creates only the project-owned `struinfo` application
+schema. It does not create product tables, roles, grants, extensions, sequences,
+or pg-boss/vendor objects.
 
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.
@@ -96,12 +112,13 @@ requires operator review before retry.
 
 ## Verification gates
 
-The Backend and Test owners must add deterministic tests for ordering, malformed
-and duplicate versions, lock serialization, checksum drift, transaction rollback,
-repeat invocation, startup cleanup, secret redaction, and proof that runtime
-entrypoints never issue DDL.
+Deterministic tests now cover credentials, discovery and exact-byte hashing,
+stable lock use, ledger reconciliation, atomic transaction ordering, rollback and
+first-error stop, repeat no-op behavior, resource cleanup, safe output, and the
+ordinary runtime no-DDL/no-import boundary through injected filesystem,
+PostgreSQL, logger, and process boundaries.
 
-Those tests may first use injected PostgreSQL boundaries. They must not be
-described as real PostgreSQL coverage. Exact PostgreSQL 18 and pgvector execution,
-runtime grants, migration interruption, and Windows/Linux parity remain pending
+These synthetic tests are not real PostgreSQL coverage. Exact PostgreSQL 18 and
+pgvector execution, runtime grants, real advisory-lock concurrency, migration
+interruption, and Windows/Linux database parity remain pending
 `M0-S-CONTAINER-MAINT-001` or another separately admitted infrastructure fixture.
