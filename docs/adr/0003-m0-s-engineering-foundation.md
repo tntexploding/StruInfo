@@ -1,7 +1,8 @@
 # ADR 0003: M0-S Engineering Foundation
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-09
+- Accepted: 2026-08-10
 - Decision owners: Project owner and maintainers
 - Supersedes:
 - Superseded by:
@@ -74,8 +75,8 @@ format:check -> lint -> typecheck -> test -> test:integration -> build
 ```
 
 The commands do not enable empty-test success. `test:e2e` is real but remains
-outside `verify` until browser admission. `db:migrate` targets the future
-first-party migration entrypoint and cannot fall back to the runtime credential.
+outside `verify` until browser admission. `db:migrate` targets the first-party
+migration entrypoint and cannot fall back to the runtime credential.
 
 Use GitHub Actions for a Windows/Ubuntu quality matrix. Pin only:
 
@@ -95,8 +96,9 @@ and no-store responses, and add no `/api/v1` product route.
 Use a first-party ordered SQL migration runner over admitted `pg@8.22.0` rather
 than `drizzle-kit`. Require a separate migration credential, immutable checksummed
 forward files, an advisory lock, and atomic migration/ledger transactions. The
-ordinary runtime roles never perform DDL. Implementation and SQL remain Backend
-work after this foundation is integrated.
+ordinary runtime roles never perform DDL. The implemented runner validates all
+committed migration files before connection, reconciles a project-owned ledger,
+and starts with one migration that creates only the `struinfo` schema.
 
 Track the actual npm and action SPDX inventories, exact legal material, source
 reconciliation, and third-party notice in the repository. The project remains
@@ -150,8 +152,8 @@ Positive consequences:
 
 Negative consequences:
 
-- the initial foundation commit cannot produce a green `verify` result until
-  Backend, Frontend, Contract, and Test owners add real source and tests;
+- producing a green foundation required coordinated Backend, Frontend,
+  Contract, Test, and Maintenance ownership rather than one placeholder commit;
 - E2E and real PostgreSQL integration remain unavailable until their artifact
   gates close;
 - the first-party migration runner becomes maintained project code; and
@@ -181,18 +183,34 @@ Do not edit applied SQL migrations during rollback. Database schema reversal use
 a reviewed forward compensation or a consistent PostgreSQL-plus-Blob restore as
 described in `docs/database-migrations-and-roles.md`.
 
-## Validation
+## Acceptance Evidence and Remaining Gates
 
-The fixed Windows environment generated the lock and performed a frozen install
-with reviewed pnpm `11.20.0`, `--ignore-scripts`, and browser download disabled.
-The resolved lock sections equal the admitted candidate, and a current audit
-reported zero vulnerabilities. JSON/SPDX/reference checks and configuration
-format/lint checks pass.
+Accepted on 2026-08-10 because:
 
-Typecheck and build stop at `TS18003` because the owned source trees are
-intentionally absent. Unit, integration, and E2E discovery stop with no tests
-found. Those are pending owner prerequisites, not foundation passes and not
-configuration defects. This Proposed ADR does not mark M0-S accepted.
+1. The exact Node, Corepack, pnpm, package, lock, lifecycle, action, NOTICE, and
+   SPDX/SBOM identities passed the bounded admission and correction reviews.
+2. Fresh Backend, Frontend, Contract, and Test implementations established the
+   application roles, operational-health contract, trustworthy UI shell, strict
+   fixtures, and non-empty quality gates without reusing M0-P candidate source.
+3. The first-party migration runner closed the independent credential,
+   exact-byte checksum, advisory-lock, ledger, transaction, retry, cleanup, and
+   ordinary-runtime no-DDL contract using only admitted `pg@8.22.0`.
+4. Formal Windows and WSL Ubuntu testing on fixed candidate
+   `6bc881659e0a6df52ca42c8960f27c986524bcde` passed formatting, linting, strict
+   typechecking, 160 unit tests, 2 synthetic integration tests, builds, 53
+   focused migration tests, source/built fail-closed smokes, and 15-test static
+   Playwright discovery with clean tracked state on both platforms.
+5. The final focused Maintenance review closed the sole material finding and
+   found no new material regression or dependency, contract, permission,
+   provenance, or governance drift.
+
+This acceptance establishes the non-browser, non-container engineering
+foundation; it is not production readiness. Runtime browser E2E and browser CI
+remain behind `M0-S-BROWSER-MAINT-001`. Real PostgreSQL 18/pgvector execution,
+grants, advisory-lock concurrency, interruption recovery, Compose, Dockerfiles,
+and database CI remain behind `M0-S-CONTAINER-MAINT-001`. The project
+distribution license, real product scenario, AI provider, cloud vendor,
+production backup, and deployment decisions also remain open.
 
 ## References
 
