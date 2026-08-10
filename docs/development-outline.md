@@ -1,11 +1,12 @@
 # StruInfo 开发大纲
 
-- 状态：基础架构已接受；M0-S 工程地基按独立制品门推进
-- 最近更新：2026-08-09
+- 状态：基础架构与 M0-S 工程地基已接受；准备阶段 0 与首个产品切片
+- 最近更新：2026-08-10
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
 - 基础 ADR：[ADR 0001](adr/0001-typescript-modular-monolith.md)、
-  [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md)
+  [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md)、
+  [ADR 0003](adr/0003-m0-s-engineering-foundation.md)
 
 ## 1. 结论
 
@@ -27,7 +28,8 @@ StruInfo 首版采用“单仓库、模块化单体、多运行角色”架构�
 该方向已由 [ADR 0001](adr/0001-typescript-modular-monolith.md) 与
 [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md) 正式接受。
 M0-P 证明的是架构可行性，不是生产认证；任何探针候选源码都不得直接复制到生产树。
-下一步 M0-S 负责精确锁定工具和依赖版本、建立最小脚手架、CI、许可证记录与统一质量命令。
+M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁移 runner、CI、许可证记录与统一质量命令；该工程地基由 [ADR 0003](adr/0003-m0-s-engineering-foundation.md) 接受。
+下一步使用阶段 0 的真实主题、信源、理想日报和任务样本冻结首个产品纵向切片。
 
 ## 2. 为什么选择这个形态
 
@@ -529,8 +531,8 @@ fetch -> snapshot -> fragment -> cited candidate -> digest
 - [ADR 0001](adr/0001-typescript-modular-monolith.md) 与
   [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md) 已接受。
 
-这只允许进入 M0-S 工程地基，不允许复用探针候选或宣称生产就绪。
-M0-S 负责建立工具链、目录、数据库迁移合同、CI、精确依赖记录和统一质量门。
+M0-S 工程地基已于 2026-08-10 完成：工具链、目录、最小运行角色、数据库迁移合同与首方 runner、CI、精确依赖记录和统一质量门均已落地，并通过 Windows/Linux 固定候选复验与材料性关闭审查。
+该结果允许进入真实场景冻结与首个产品切片，不允许复用探针候选或宣称生产就绪。
 浏览器与容器制品按独立准入任务关闭后，才把真实 E2E 和 PostgreSQL/pgvector 执行加入必需门；首轮地基不得把它们表示为已通过。
 
 ### 16.1 M0-P 架构验证结论

@@ -19,10 +19,13 @@ Before frontend implementation or frontend design review, also read:
 
 ## Current Phase
 
-The foundational architecture is accepted in ADR 0001 and ADR 0002.
-The repository is entering M0-S engineering-foundation work: exact toolchain
-and dependency admission, minimal application entrypoints, database migration
-roles, CI, and unified verification commands.
+The foundational architecture and the non-browser, non-container engineering
+foundation are accepted in ADR 0001, ADR 0002, and ADR 0003. The repository is
+preparing the real-scenario freeze and first product vertical slice.
+
+Browser runtime artifacts and real PostgreSQL/container execution remain behind
+their named admission gates. Do not represent either deferred gate as passed or
+make it mandatory before its dependency and distribution review is accepted.
 
 Do not change the accepted language, application shape, or persistence model
 without a superseding ADR. Cloud deployment vendors and AI providers remain

@@ -22,6 +22,9 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | --- | --- | --- |
 | [0001](0001-typescript-modular-monolith.md) | Accepted | TypeScript modular monolith and toolchain |
 | [0002](0002-postgresql-persistence-and-durable-work.md) | Accepted | PostgreSQL persistence, durable work, and Blob storage |
+| [0003](0003-m0-s-engineering-foundation.md) | Accepted | Exact engineering foundation, dependency policy, quality gates, and migration boundary |
 
 The foundational application and persistence decisions were accepted on
-2026-08-08 after the M0-P architecture gate.
+2026-08-08 after the M0-P architecture gate. The non-browser, non-container
+engineering foundation was accepted on 2026-08-10 after fixed-candidate
+Windows/Linux testing and material closure review.

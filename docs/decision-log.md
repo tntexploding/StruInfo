@@ -25,6 +25,7 @@ from this file.
 | ENG-005 | 2026-08-08 | Accepted | Use PostgreSQL for business truth and durable work, plus immutable Blob storage | M0-P persistence/provenance evidence and zero-blocker final review; [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md) |
 | ENG-006 | 2026-08-02 | Accepted | Windows development may use Docker Desktop/WSL2 for production-parity infrastructure | Owner confirmation |
 | ENG-007 | 2026-08-08 | Accepted | Treat M0-P candidates as disposable architecture evidence and implement the accepted P2/P3 data, workspace, idempotency, fencing, and recovery invariants afresh | `M0-P1-BE-001-R4`, `M0-P2-MAINT-001-R2`, `M0-P3-CANDIDATE-MAINT-001`, `M0-LIC-MAINT-001-R3`, and `M0-P-REVIEW-001` |
+| ENG-008 | 2026-08-10 | Accepted | Use the exact M0-S workspace, toolchain, dependency policy, CI, quality gates, operational-health shell, and first-party migration boundary as the engineering foundation | Fixed-candidate Windows/Linux Test R1, zero-finding Maintenance closure, and [ADR 0003](adr/0003-m0-s-engineering-foundation.md) |
 | SEC-001 | 2026-08-02 | Accepted | Private knowledge is denied to external AI by default; enable per workspace and retain local/self-hosted adapters | Owner confirmation; threat model still required before transfer |
 | LEGAL-001 | 2026-08-02 | Deferred | Project distribution license | Decide before any public or distributable release |
 
