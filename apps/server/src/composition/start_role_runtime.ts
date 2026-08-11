@@ -23,6 +23,7 @@ import {
   type RuntimeResource,
 } from '../lifecycle/runtime_resource.js';
 import type {RuntimeLogger} from '../logging/structured_logger.js';
+import {createLocalStorageServices} from '../platform/storage/local_storage_services.js';
 import {
   createPgBossOptions,
   PgBossRuntime,
@@ -30,6 +31,10 @@ import {
   SystemPgBossFactory,
   type PgBossFactory,
 } from '../queue/pg_boss_runtime.js';
+import type {
+  StorageServices,
+  StorageServicesFactory,
+} from '../storage/storage_services.js';
 import {
   NestHealthListenerFactory,
   type HealthListenerFactory,
@@ -37,6 +42,7 @@ import {
 
 export interface StartedRoleRuntime {
   readonly resources: readonly RuntimeResource[];
+  readonly storage: Readonly<StorageServices>;
   readonly shutdown: ShutdownCoordinator;
   disposeSignalHandlers(): void;
 }
@@ -47,6 +53,7 @@ export interface RoleRuntimeDependencies {
   readonly healthListenerFactory?: HealthListenerFactory;
   readonly signalSource?: SignalSource;
   readonly exitDecision?: ExitDecision;
+  readonly storageServicesFactory?: StorageServicesFactory;
 }
 
 export async function startRoleRuntime(
@@ -54,6 +61,9 @@ export async function startRoleRuntime(
   logger: RuntimeLogger,
   dependencies: Readonly<RoleRuntimeDependencies> = {},
 ): Promise<StartedRoleRuntime> {
+  const storage = await (
+    dependencies.storageServicesFactory ?? createLocalStorageServices
+  )(config.dataRoot);
   const deadline = new SystemDeadline(new NodeTimerScheduler());
   const database = createRuntimeDatabase(
     config,
@@ -109,7 +119,7 @@ export async function startRoleRuntime(
       listener_host: address.host,
       listener_port: address.port,
     });
-    return {resources, shutdown, disposeSignalHandlers};
+    return {resources, storage, shutdown, disposeSignalHandlers};
   } catch (startupFailure) {
     gate.beginShutdown();
     const cleanupFailures = [...(await closeResourcesInReverse(resources))];

@@ -1,8 +1,8 @@
 # StruInfo Frontend Design Specification
 
 - Status: Project frontend baseline
-- Version: 1.0
-- Effective date: 2026-08-09
+- Version: 1.1
+- Effective date: 2026-08-10
 - Scope: StruInfo web application design, implementation, and review
 
 ## 1. Purpose and Authority
@@ -34,14 +34,14 @@ Skill installation to follow the project contract.
 
 The fixed design contract is:
 
-| Axis                     | Decision                                                                             |
-| ------------------------ | ------------------------------------------------------------------------------------ |
-| Product identity         | A trustworthy, source-traceable personal intelligence workspace                      |
-| Visual family            | `struinfo-industrial`, an original black/white/cyan industrial information system    |
-| Full-product depth       | `complex / 3`: multi-zone shell and complete shared component treatment              |
-| M0-S depth               | `moderate / 2`: recognizable shell and states without fake product data              |
-| Primary evidence pattern | Black edge shell, cyan active rule, indexed sections, precise provenance dossier     |
-| Primary user question    | What changed, why does it matter, what evidence supports it, and what can I do next? |
+| Axis                     | Decision                                                                                                     |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Product identity         | A trustworthy, source-traceable, AI-augmentable knowledge workspace                                          |
+| Visual family            | `struinfo-industrial`, an original black/white/cyan industrial information system                            |
+| Full-product depth       | `complex / 3`: multi-zone shell and complete shared component treatment                                      |
+| M0-S depth               | `moderate / 2`: recognizable shell and states without fake product data                                      |
+| Primary evidence pattern | Black edge shell, cyan active rule, indexed sections, precise provenance dossier                             |
+| Primary user question    | What is worth retaining or exploring, what knowledge changed, what supports it, and what can I control next? |
 
 The interface MUST feel like an operating workspace, not a marketing landing
 page or a generic card dashboard.
@@ -84,12 +84,29 @@ It MUST NOT be replaced with a generated number.
 User confirmation means the user accepted the record or confirmed what a source
 said; it MUST NOT be rendered as proof that the claim is objectively true.
 
+Information value, current interest, exploration value, noise, and factual
+reliability are separate concepts.
+The interface MUST NOT use interest as proof, source quality as a reason to
+force attention, or one aggregate score to hide these dimensions.
+When an item is surfaced to break an information bubble, the UI MUST explain
+the exploration type, such as adjacent expansion, cross-domain connection,
+foundational gap, emerging signal, viewpoint diversity, or serendipity.
+
 ### 3.2 AI is visible but not anthropomorphized
 
+AI is optional. The interface MUST remain fully operable for capture, content
+classification, intake decisions, manual splitting, editing, typed relations,
+recomposition, revision history, deterministic search, export, and restore when
+no model or embedding provider is configured. `AI 未启用` is a capability state,
+not a product failure, and MUST NOT disable non-AI actions.
+
 AI-generated or AI-modified content MUST carry a persistent origin label such
-as `AI 生成 · 待审核` until its review state changes.
+as `AI 生成 · 待审核` or `AI 生成 · 策略自动入库` according to its real state.
 The label MUST remain associated with the content when it is copied into a
 drawer, brief, graph dossier, or review view.
+Policy-authorized content MUST also expose the policy name/version and a route
+to inspect, pause, or override the decision; automatic admission never removes
+AI origin.
 
 `AI Agent Active` or similar status text MAY appear only when it reflects a real
 runtime state.
@@ -105,6 +122,8 @@ They MUST NOT be represented by unexplained icon-only controls.
 Each view SHOULD expose one primary action and at most one co-primary action.
 Secondary operations SHOULD use progressive disclosure.
 The next state and any irreversible consequence MUST be clear before commit.
+Automatic decisions MUST provide a visible reason, scope, policy version, and
+manual takeover path.
 
 ### 3.4 Failure is a first-class state
 
@@ -132,14 +151,17 @@ The same number SHOULD NOT be repeated in both places merely to fill space.
 The long-term information architecture reserves these modules:
 
 - Command Center;
-- Daily and Weekly Briefs;
+- Intake Workspace;
 - Review Queue;
 - Saved Knowledge;
+- Search;
 - Sources;
 - Evidence Vault;
+- Processing Runs and Change Sets;
 - Knowledge Graph;
 - Timeline;
 - Ask AI;
+- Daily and Weekly Briefs;
 - Reports;
 - Settings.
 
@@ -150,16 +172,20 @@ shells solely to make the product appear complete.
 For MVP-0, prioritize this task path:
 
 ```text
-Source update
-  -> traceable digest item
-  -> evidence inspection
-  -> approve, edit then approve, or reject
-  -> saved item
-  -> source and excerpt recall
+Fixed weekly source document
+  -> document structure and independent items
+  -> evidence and media inspection
+  -> content classification, separate from intake action
+  -> full / split / condense / source-only / ignore / review decision
+  -> manual or deterministic knowledge change set
+  -> commit stable items, immutable revisions, relations, and citations
+  -> deterministic search and return to source or change evidence
+  -> optional AI proposal through the same change-set boundary
 ```
 
-Knowledge Graph, Timeline, mixed online query, and complete weekly reporting are
-later modules unless a tracked milestone explicitly releases them.
+Scheduled acquisition, Daily and Weekly Briefs, QQbot, public integration APIs,
+Knowledge Graph canvas, complete Timeline, and mixed online query are later
+modules unless a tracked milestone explicitly releases them.
 
 ## 5. Application Shell
 
@@ -397,6 +423,12 @@ The shared component vocabulary SHOULD grow around real use:
 - `StatusBadge`;
 - `SourceReference`;
 - `AiOriginLabel`;
+- `IntakeDecisionControls`;
+- `ValueAssessment`;
+- `ExplorationReason`;
+- `ProcessingPlanSummary`;
+- `KnowledgeChangeSet`;
+- `MediaUsageLabel`;
 - `EvidenceDrawer`;
 - `ReviewActions`;
 - `DataTable`;
@@ -423,33 +455,56 @@ Search and Ask AI MUST communicate their scope: saved knowledge, current online
 material, or mixed results.
 Capture MUST make the destination and subsequent review state clear.
 
-### 9.2 Candidate and review queue
+### 9.2 Intake, change sets, and review queue
 
-A candidate row owns comparable decision data:
+An intake item row owns comparable decision data:
 
 - title and short summary;
-- epistemic role;
-- source count;
+- source document, section, and stable item location;
+- user-defined content classification and vocabulary version;
+- information value and noise dimensions;
+- current-interest and exploration types;
 - traceability state;
 - conflict or risk state;
-- review state;
-- one primary review action.
+- intake decision and review state;
+- operation origin: user, deterministic parser, rule, import, AI, or external client;
+- the policy responsible for any automatic decision;
+- one primary intake or takeover action.
+
+The interface MUST distinguish content classification, knowledge-admission
+action, knowledge kind, epistemic role, review state, operation origin, and
+attention routing. For example, `小说` says what the content is and does not
+choose an intake action. `安静入库`, `探索推荐`, and `优先审核` describe
+presentation; they MUST NOT replace `完整处理`, `拆分`, `压缩`,
+`仅保留来源`, `忽略`, or `待定`.
+
+A knowledge change set owns proposed additions, revisions, relations,
+conflicts, citations, derivations, operation origin, and authorization basis.
+It MUST show which operations were committed automatically and which require
+human review. AI origin appears only when AI actually produced or changed an
+operation; user and deterministic changes MUST NOT be visually relabeled as AI.
 
 The evidence drawer owns excerpts, snapshot metadata, derivation, and detailed
 assessments.
-Approve, revise, reject, merge, archive, and add-to-library actions MUST expose
-their real availability and consequences.
+Full-process, split, condense, source-only, ignore, revise, authorize, reject,
+merge, archive, revert-policy, and reprocess actions MUST expose their real
+availability and consequences.
+
+Negative feedback SHOULD distinguish `已经知道`, `质量低`, `来源不可靠`,
+`暂时不需要`, `不感兴趣`, and `陌生但值得探索` so preference learning does
+not treat every rejection as permanent topic exclusion.
 
 ### 9.3 Evidence drawer
 
 The drawer SHOULD contain these ordered regions when data exists:
 
-1. origin and review state;
+1. origin, content classification, intake decision, review state, and policy authorization;
 2. exact supporting excerpt or image region;
 3. captured snapshot and canonical source links;
-4. separated assessment dimensions;
-5. derivation and provenance events;
-6. source, capture, language, content type, and revision metadata.
+4. separated information, preference, exploration, noise, and trust dimensions;
+5. optional processing plan, change set, derivation, and provenance events;
+6. media usage and whether it came from source text, AI inference, or user confirmation;
+7. source, capture, language, content type, and revision metadata.
 
 The drawer MUST preserve keyboard focus, provide a clear close action, and
 return focus to the invoking record.
@@ -500,6 +555,11 @@ Visual rails and markers are supplementary, not the only representation.
 
 ### 9.7 Ask AI
 
+Ask AI is an optional enhancement route. It MUST NOT replace Saved Knowledge or
+Search, and hiding or disabling it MUST leave deterministic filtering, exact
+and alias matching, Chinese substring search, source/time filters, and relation
+navigation available.
+
 Answers MUST separate saved knowledge from real-time online material.
 Important claims require citations.
 When evidence is insufficient, the primary answer state MUST say so directly.
@@ -521,6 +581,11 @@ Recommended labels include:
 
 - `可追溯`;
 - `待审核`;
+- `策略自动入库`;
+- `待人工判断`;
+- `探索推荐`;
+- `已压缩`;
+- `仅保留来源`;
 - `用户已确认`;
 - `有争议`;
 - `已驳回`;
@@ -591,6 +656,13 @@ Current implementation rules:
 - do not add a global store for the M0-S shell;
 - keep mock transports deterministic and prevent live-network fallback;
 - render untrusted source and AI text as text, never injected HTML;
+- never compile personal knowledge, custom categories, preferences, source
+  subscriptions, saved queries, user prompts, real snapshots, or actual runtime
+  configuration into frontend constants, mocks, fixtures, or assets;
+- load workspace-owned vocabulary and preferences through authenticated runtime
+  contracts; tracked demos and tests use clearly synthetic values only;
+- treat missing AI configuration as a supported state and keep all non-AI
+  routes and actions usable;
 - keep CSS family tokens and depth tokens independent;
 - use one semantic markup tree rather than duplicate pages per depth.
 

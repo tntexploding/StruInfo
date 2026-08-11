@@ -23,8 +23,16 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0001](0001-typescript-modular-monolith.md) | Accepted | TypeScript modular monolith and toolchain |
 | [0002](0002-postgresql-persistence-and-durable-work.md) | Accepted | PostgreSQL persistence, durable work, and Blob storage |
 | [0003](0003-m0-s-engineering-foundation.md) | Accepted | Exact engineering foundation, dependency policy, quality gates, and migration boundary |
+| [0004](0004-adaptive-knowledge-ingestion-and-policy-authorized-writes.md) | Accepted | Adaptive knowledge ingestion, separated exploration policy, and policy-authorized formal writes |
+| [0005](0005-versioned-knowledge-core-and-ai-optional-operations.md) | Accepted | Versioned relational knowledge core and complete AI-optional operations |
+| [0006](0006-external-configuration-and-personal-data-isolation.md) | Accepted | External runtime configuration and isolation of all personal data from source and packages |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
 engineering foundation was accepted on 2026-08-10 after fixed-candidate
-Windows/Linux testing and material closure review.
+Windows/Linux testing and material closure review. The first product authority
+model was accepted on 2026-08-10 after the owner confirmed the knowledge-core,
+preference/exploration, and progressive-automation requirements.
+The personal-data isolation boundary was accepted on 2026-08-10 by explicit
+owner requirement. ADR 0005 now fixes the canonical versioned knowledge model,
+including deterministic fuzzy and associative retrieval without AI.

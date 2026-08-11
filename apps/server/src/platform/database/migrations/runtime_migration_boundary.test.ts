@@ -1,4 +1,6 @@
 import {readFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {describe, expect, it} from 'vitest';
@@ -35,7 +37,10 @@ describe('ordinary runtime migration boundary', () => {
   it('keeps runtime SQL read-only and pg-boss automatic DDL disabled', () => {
     const databaseUrl = 'postgresql://runtime:synthetic@localhost/struinfo';
     const options = createPgBossOptions(
-      parseRuntimeConfig('worker', {DATABASE_URL: databaseUrl}),
+      parseRuntimeConfig('worker', {
+        DATABASE_URL: databaseUrl,
+        STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),
+      }),
     );
 
     expect(DATABASE_READINESS_SQL).toBe('SELECT 1 AS ready');

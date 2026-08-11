@@ -6,6 +6,7 @@
   "type": "module",
   "files": [
     "dist",
+    "json-schema",
     "openapi"
   ],
   "engines": {

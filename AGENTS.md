@@ -9,6 +9,7 @@ Before changing the repository, read:
 
 - `docs/product-requirements.md`
 - `docs/roadmap.md`
+- `docs/knowledge-core-architecture.md`
 - `docs/development-standards.md`
 - `docs/open-source-policy.md`
 - `CONTRIBUTING.md`
@@ -19,9 +20,16 @@ Before frontend implementation or frontend design review, also read:
 
 ## Current Phase
 
-The foundational architecture and the non-browser, non-container engineering
-foundation are accepted in ADR 0001, ADR 0002, and ADR 0003. The repository is
-preparing the real-scenario freeze and first product vertical slice.
+The foundational architecture, non-browser/non-container engineering
+foundation, and first product authority model are accepted in ADR 0001 through
+ADR 0004. The repository has fixed `ruanyf/weekly` issues 398 through 407 at one
+upstream commit and has a candidate 345-unit structural inventory. ADR 0005
+accepts the canonical versioned knowledge model and AI-optional operations;
+ADR 0006 accepts external configuration and personal-data isolation. Implement
+the source-evidence and manual/deterministic knowledge core next; Slice 0 has
+already established external configuration, fixed data areas, local Blob
+storage, candidate-package auditing, and the versioned workspace-bundle
+envelope. Do not make preference calibration or AI availability a dependency.
 
 Browser runtime artifacts and real PostgreSQL/container execution remain behind
 their named admission gates. Do not represent either deferred gate as passed or
@@ -50,12 +58,24 @@ of leaving them only in `.agents/`.
 - Add tests with behavior changes once a test stack exists.
 - Never commit credentials, personal knowledge, fetched snapshots, or private
   source material.
+- Never place personal knowledge, custom vocabulary, preferences, policies,
+  source subscriptions, saved views, real snapshots, exports, or backups in the
+  repository, installation tree, test fixtures, or package. Load them from an
+  external workspace store; tracked examples must be synthetic and value-free.
 - Do not add or copy third-party code without completing the open-source review
   and attribution record.
 - Preserve source provenance, idempotency, permission boundaries, and visible
   failure states in all later implementation work.
+- Preserve a complete non-AI path for classification, editing, relations,
+  recomposition, search, export, and recovery. AI adapters only create proposals
+  consumed by the same application commands.
 - Frontend work must preserve AI-origin, evidence, uncertainty, and review-state
-  distinctions defined by `docs/frontend-design-specification.md`.
+  distinctions, and must keep information value, current preference,
+  exploration value, noise, and factual reliability separate as defined by
+  `docs/frontend-design-specification.md`.
+- Model and source adapters never write formal knowledge directly. Automatic
+  commits require a user command or an enabled, versioned policy and retain a
+  manual takeover, audit, and compensating-revision path.
 - Keep changes scoped and update canonical documentation in the same change.
 
 If a required command or tool has not been selected, do not invent a permanent

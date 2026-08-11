@@ -1,3 +1,6 @@
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+
 import {describe, expect, it, vi} from 'vitest';
 
 import {
@@ -16,10 +19,18 @@ import type {
 import type {RuntimeResource} from '../lifecycle/runtime_resource.js';
 import type {RuntimeLogger} from '../logging/structured_logger.js';
 import type {PgBossClient, PgBossFactory} from '../queue/pg_boss_runtime.js';
+import type {
+  StorageServices,
+  StorageServicesFactory,
+} from '../storage/storage_services.js';
 import type {HealthListenerFactory} from '../transport/nest_health_listener.js';
 import {startRoleRuntime} from './start_role_runtime.js';
 
 const DATABASE_URL = 'postgresql://runtime:synthetic@localhost/struinfo';
+const RUNTIME_ENVIRONMENT = {
+  DATABASE_URL,
+  STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),
+};
 
 describe('startRoleRuntime', () => {
   it.each([
@@ -59,9 +70,13 @@ describe('startRoleRuntime', () => {
       const signalSource: SignalSource = {subscribe: () => () => undefined};
       const exitDecision: ExitDecision = {exit: vi.fn()};
       const logger: RuntimeLogger = {write: vi.fn()};
+      const storage = createStorageServices();
+      const storageServicesFactory = vi.fn<StorageServicesFactory>(() =>
+        Promise.resolve(storage),
+      );
 
       const runtime = await startRoleRuntime(
-        parseRuntimeConfig(role, {DATABASE_URL}),
+        parseRuntimeConfig(role, RUNTIME_ENVIRONMENT),
         logger,
         {
           databasePoolFactory,
@@ -69,9 +84,14 @@ describe('startRoleRuntime', () => {
           healthListenerFactory,
           signalSource,
           exitDecision,
+          storageServicesFactory,
         },
       );
 
+      expect(storageServicesFactory).toHaveBeenCalledExactlyOnceWith(
+        RUNTIME_ENVIRONMENT.STRUIINFO_DATA_ROOT,
+      );
+      expect(runtime.storage).toBe(storage);
       expect(listenerOptions?.host).toBe('127.0.0.1');
       expect(listenerOptions?.port).toBe(expectedPort);
       await expect(listenerOptions?.health.ready()).resolves.toMatchObject({
@@ -120,10 +140,12 @@ describe('startRoleRuntime', () => {
         throw signalFailure;
       },
     };
+    const storageServicesFactory: StorageServicesFactory = () =>
+      Promise.resolve(createStorageServices());
 
     await expect(
       startRoleRuntime(
-        parseRuntimeConfig('worker', {DATABASE_URL}),
+        parseRuntimeConfig('worker', RUNTIME_ENVIRONMENT),
         {write: vi.fn()},
         {
           databasePoolFactory: () => databasePool,
@@ -131,6 +153,7 @@ describe('startRoleRuntime', () => {
           healthListenerFactory,
           signalSource,
           exitDecision: {exit: vi.fn()},
+          storageServicesFactory,
         },
       ),
     ).rejects.toBe(signalFailure);
@@ -138,6 +161,31 @@ describe('startRoleRuntime', () => {
     expect(closeListener).toHaveBeenCalledTimes(1);
     expect(queueStop).toHaveBeenCalledTimes(1);
     expect(end).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not acquire database or listener resources when data-root initialization fails', async () => {
+    const storageFailure = new Error('synthetic data-root failure');
+    const databasePoolFactory = vi.fn(() => {
+      throw new Error('database must not be acquired');
+    });
+    const healthListenerFactory = {
+      start: vi.fn(() => Promise.reject(new Error('listener must not start'))),
+    } satisfies HealthListenerFactory;
+
+    await expect(
+      startRoleRuntime(
+        parseRuntimeConfig('api', RUNTIME_ENVIRONMENT),
+        {write: vi.fn()},
+        {
+          storageServicesFactory: () => Promise.reject(storageFailure),
+          databasePoolFactory,
+          healthListenerFactory,
+        },
+      ),
+    ).rejects.toBe(storageFailure);
+
+    expect(databasePoolFactory).not.toHaveBeenCalled();
+    expect(healthListenerFactory.start).not.toHaveBeenCalled();
   });
 });
 
@@ -155,4 +203,13 @@ function createListenerResource(): Readonly<{
       close,
     },
   };
+}
+
+function createStorageServices(): Readonly<StorageServices> {
+  return Object.freeze({
+    blobStore: {
+      put: () => Promise.reject(new Error('unexpected Blob write')),
+      read: () => Promise.reject(new Error('unexpected Blob read')),
+    },
+  });
 }
