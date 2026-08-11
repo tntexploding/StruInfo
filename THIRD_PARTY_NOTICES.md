@@ -1,11 +1,12 @@
 # Third-Party Notices
 
 - Foundation task: `M0-S-FOUNDATION-MAINT-001`
-- Tracked lock SHA-256: `A783E1C5B2DADD8B653D8E16446847530473D5569BB08830D7FC03D79400880B`
-- Admitted candidate lock SHA-256: `2FAFED41EF12107322AA7498935EF4CBEF59ABC2FAB28F92A222B57F90696095`
+- Dependency increment: `M1A-MD-DEP-MAINT-001`
+- Tracked lock SHA-256: `99F261C35311919380BF6AEF018E0B2A9D076DC7937A5EDE1E0D7F26F56192A0`
+- Pre-increment baseline lock SHA-256: `A783E1C5B2DADD8B653D8E16446847530473D5569BB08830D7FC03D79400880B`
 - Scope: tracked Windows x64 and Linux x64/glibc npm closure plus the two
   pinned GitHub Actions
-- Status: foundation attribution index; not a public-release authorization
+- Status: dependency attribution index; not a public-release authorization
 
 This inventory does not select the StruInfo distribution license. Exact legal
 files are retained under `docs/dependencies/licenses/`. Exact tarballs that omit
@@ -67,6 +68,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `@types/body-parser@1.19.6` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__body-parser@1.19.6/body-parser__LICENSE` |
 | `@types/chai@5.2.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__chai@5.2.3/chai__LICENSE` |
 | `@types/connect@3.4.38` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__connect@3.4.38/connect__LICENSE` |
+| `@types/debug@4.1.13` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__debug@4.1.13/debug__LICENSE` |
 | `@types/deep-eql@4.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__deep-eql@4.0.2/deep-eql__LICENSE` |
 | `@types/esrecurse@4.3.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__esrecurse@4.3.1/esrecurse__LICENSE` |
 | `@types/estree@1.0.9` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__estree@1.0.9/estree__LICENSE` |
@@ -74,6 +76,8 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `@types/express@5.0.6` | development | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__express@5.0.6/express__LICENSE` |
 | `@types/http-errors@2.0.5` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__http-errors@2.0.5/http-errors__LICENSE` |
 | `@types/json-schema@7.0.15` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__json-schema@7.0.15/json-schema__LICENSE` |
+| `@types/mdast@4.0.4` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__mdast@4.0.4/mdast__LICENSE` |
+| `@types/ms@2.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__ms@2.1.0/ms__LICENSE` |
 | `@types/node@24.13.3` | development | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__node@24.13.3/node v24.13__LICENSE` |
 | `@types/pg@8.20.3` | development | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__pg@8.20.3/pg__LICENSE` |
 | `@types/qs@6.15.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__qs@6.15.1/qs__LICENSE` |
@@ -82,6 +86,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `@types/react@19.2.18` | development | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__react@19.2.18/react__LICENSE` |
 | `@types/send@1.2.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__send@1.2.1/send__LICENSE` |
 | `@types/serve-static@2.2.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__serve-static@2.2.0/serve-static__LICENSE` |
+| `@types/unist@3.0.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/types__unist@3.0.3/unist__LICENSE` |
 | `@typescript-eslint/eslint-plugin@8.66.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/typescript-eslint__eslint-plugin@8.66.0/LICENSE` |
 | `@typescript-eslint/parser@8.66.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/typescript-eslint__parser@8.66.0/LICENSE` |
 | `@typescript-eslint/project-service@8.66.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/typescript-eslint__project-service@8.66.0/LICENSE` |
@@ -118,6 +123,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `call-bound@1.0.4` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/call-bound@1.0.4/LICENSE` |
 | `caniuse-lite@1.0.30001809` | transitive | `CC-BY-4.0` | CONDITIONAL_REVIEW | `docs/dependencies/licenses/npm/caniuse-lite@1.0.30001809/LICENSE` |
 | `chai@6.2.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/chai@6.2.2/LICENSE` |
+| `character-entities@2.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/character-entities@2.0.2/license` |
 | `concat-stream@2.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/concat-stream@2.0.0/LICENSE` |
 | `content-disposition@1.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/content-disposition@1.1.0/LICENSE` |
 | `content-type@1.0.5` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/content-type@1.0.5/LICENSE` |
@@ -130,9 +136,12 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `cross-spawn@7.0.6` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/cross-spawn@7.0.6/LICENSE` |
 | `csstype@3.2.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/csstype@3.2.3/LICENSE` |
 | `debug@4.4.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/debug@4.4.3/LICENSE` |
+| `decode-named-character-reference@1.3.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/decode-named-character-reference@1.3.0/license` |
 | `deep-is@0.1.4` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/deep-is@0.1.4/LICENSE` |
 | `depd@2.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/depd@2.0.0/LICENSE` |
+| `dequal@2.0.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/dequal@2.0.3/license` |
 | `detect-libc@2.1.2` | transitive | `Apache-2.0` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/detect-libc@2.1.2/LICENSE` |
+| `devlop@1.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/devlop@1.1.0/license` |
 | `drizzle-orm@0.45.2` | runtime | `Apache-2.0` | ROUTINE_REVIEW | `tracked legal/reconciliation route` (INHERITED_EXACT_PROVENANCE_SOURCE_LICENSE) |
 | `dunder-proto@1.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/dunder-proto@1.0.1/LICENSE` |
 | `ee-first@1.1.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ee-first@1.1.1/LICENSE` |
@@ -215,9 +224,32 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `luxon@3.7.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/luxon@3.7.2/LICENSE.md` |
 | `magic-string@0.30.21` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/magic-string@0.30.21/LICENSE` |
 | `math-intrinsics@1.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/math-intrinsics@1.1.0/LICENSE` |
+| `mdast-util-from-markdown@2.0.3` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/mdast-util-from-markdown@2.0.3/license` |
+| `mdast-util-to-string@4.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/mdast-util-to-string@4.0.0/license` |
 | `media-typer@0.3.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/media-typer@0.3.0/LICENSE` |
 | `media-typer@1.1.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/media-typer@1.1.1/LICENSE` |
 | `merge-descriptors@2.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/merge-descriptors@2.0.0/license` |
+| `micromark-core-commonmark@2.0.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-core-commonmark@2.0.3/license` |
+| `micromark-factory-destination@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-factory-destination@2.0.1/license` |
+| `micromark-factory-label@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-factory-label@2.0.1/license` |
+| `micromark-factory-space@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-factory-space@2.0.1/license` |
+| `micromark-factory-title@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-factory-title@2.0.1/license` |
+| `micromark-factory-whitespace@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-factory-whitespace@2.0.1/license` |
+| `micromark-util-character@2.1.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-util-character@2.1.1/license` |
+| `micromark-util-chunked@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-util-chunked@2.0.1/license` |
+| `micromark-util-classify-character@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-util-classify-character@2.0.1/license` |
+| `micromark-util-combine-extensions@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-util-combine-extensions@2.0.1/license` |
+| `micromark-util-decode-numeric-character-reference@2.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-util-decode-numeric-character-reference@2.0.2/license` |
+| `micromark-util-decode-string@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-util-decode-string@2.0.1/license` |
+| `micromark-util-encode@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-util-encode@2.0.1/license` |
+| `micromark-util-html-tag-name@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-util-html-tag-name@2.0.1/license` |
+| `micromark-util-normalize-identifier@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-util-normalize-identifier@2.0.1/license` |
+| `micromark-util-resolve-all@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-util-resolve-all@2.0.1/license` |
+| `micromark-util-sanitize-uri@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-util-sanitize-uri@2.0.1/license` |
+| `micromark-util-subtokenize@2.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-util-subtokenize@2.1.0/license` |
+| `micromark-util-symbol@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-util-symbol@2.0.1/license` |
+| `micromark-util-types@2.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark-util-types@2.0.2/license` |
+| `micromark@4.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/micromark@4.0.2/license` |
 | `mime-db@1.52.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/mime-db@1.52.0/LICENSE` |
 | `mime-db@1.54.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/mime-db@1.54.0/LICENSE` |
 | `mime-types@2.1.35` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/mime-types@2.1.35/LICENSE` |
@@ -319,6 +351,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `uid@2.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/uid@2.0.2/license` |
 | `uint8array-extras@1.5.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/uint8array-extras@1.5.0/license` |
 | `undici-types@7.18.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/undici-types@7.18.2/LICENSE` |
+| `unist-util-stringify-position@4.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/unist-util-stringify-position@4.0.0/license` |
 | `unpipe@1.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/unpipe@1.0.0/LICENSE` |
 | `update-browserslist-db@1.3.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/update-browserslist-db@1.3.0/LICENSE` |
 | `uri-js@4.4.1` | transitive | `BSD-2-Clause` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/uri-js@4.4.1/LICENSE` |
