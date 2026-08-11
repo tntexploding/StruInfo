@@ -1,7 +1,7 @@
 # Source Evidence Storage Contract
 
 - Status: Frozen implementation contract
-- Contract: `C-SLICE-A-EVIDENCE-r1`
+- Contract: `C-SLICE-A-EVIDENCE-r2`
 - Date: 2026-08-11
 - Scope: First PostgreSQL schema and application boundary for source evidence
 - Migration reservation: `000002_create_source_evidence_schema.sql`
@@ -11,6 +11,10 @@ boundary needed before import, parsing, curation, or browser work can proceed.
 It does not change the accepted architecture and does not claim that real
 PostgreSQL execution has passed.
 
+Revision 2 changes only the application validation contract for portable
+Resource source keys. It does not change the PostgreSQL schema, migration bytes,
+or any other revision 1 semantic.
+
 ## Scope
 
 This revision covers:
@@ -19,6 +23,7 @@ This revision covers:
 - workspace-authorized logical Blob metadata over the existing content-addressed
   byte store;
 - stable source resources and immutable content snapshots;
+- portable, adapter-owned source identities that do not retain machine paths;
 - exact Git source observations for the first source adapter;
 - versioned deterministic document structures;
 - ordered document nodes and Unicode code-point Fragments;
@@ -102,14 +107,37 @@ using a digest or filesystem path alone.
 ### `resource` and `git_resource`
 
 `resource` has composite primary key `(workspace_id, resource_id)`, a constrained
-system `resource_kind`, an adapter-owned deterministic `source_key`, an optional
-canonical URI, and `created_at`.
+system `resource_kind`, an adapter-owned deterministic and portable opaque
+`source_key`, an optional canonical URI, and `created_at`.
 `(workspace_id, resource_kind, source_key)` is unique.
 
-Revision 1 may admit protocol kinds needed by the near-term import boundary,
-such as `git_file`, `manual_text`, and `uploaded_file`. These are transport or
-evidence kinds, not user content classifications. A local absolute path must
-never become a public resource ID or a seeded default.
+Revision 2 retains the revision 1 protocol kinds needed by the near-term import
+boundary, such as `git_file`, `manual_text`, and `uploaded_file`. These are
+transport or evidence kinds, not user content classifications.
+
+`source_key` is an identity assigned by its adapter, not a filesystem locator.
+The closed application boundary rejects:
+
+- a Windows drive prefix such as an ASCII letter followed by `:`;
+- a UNC, Windows-rooted, or POSIX-absolute form;
+- any Windows backslash path form; and
+- a literal `.` or `..` segment when the value is segmented by `/` or `\`.
+
+Colons and forward slashes remain permitted in otherwise valid portable keys;
+for example, an adapter namespace may use an opaque shape such as
+`adapter:record/item`. A local-file adapter uses an upload registration ID,
+adapter record ID, content identity, or another portable opaque key. It never
+copies the original local path into `source_key`.
+
+If a later use case must retain an original local path, a superseding contract
+defines a private typed locator with explicit export and log-redaction rules.
+The path must not be overloaded into `source_key`. Canonical URI behavior is
+unchanged: it remains a separately validated field, and `file:` URIs are still
+rejected.
+
+These source-key rules are application validation. Revision 2 deliberately
+leaves migration `000002_create_source_evidence_schema.sql`, its column types,
+and `(workspace_id, resource_kind, source_key)` uniqueness byte-identical.
 
 `git_resource` is a typed extension with a one-to-one workspace-scoped foreign
 key to a `git_file` resource. It records the canonical repository URI and
@@ -148,7 +176,7 @@ repository ref, Git commit hash algorithm and digest, optional Git Blob object
 identity, and `observed_at`. This separation preserves a later unchanged Git
 commit observation without manufacturing a duplicate Snapshot. Repeating the
 same repository/ref/commit observation is unique within the workspace.
-Revision 1 accepts only lowercase `sha1` with 40 hexadecimal digits or lowercase
+Revision 2 retains lowercase `sha1` with 40 hexadecimal digits or lowercase
 `sha256` with 64 hexadecimal digits. The algorithm token and digest together
 form the Git object identity; callers never infer an algorithm from length.
 
@@ -183,7 +211,7 @@ must require exactly one root before committing the structure transaction.
 
 ### `fragment`
 
-Revision 1 supports the locator needed by the fixed Markdown source:
+Revision 2 retains the locator needed by the fixed Markdown source:
 `unicode_code_point_range` version 1.
 
 Each Fragment contains:
@@ -231,7 +259,7 @@ dimensions are either both absent or both positive.
 node with a stable ordinal. It records a constrained purpose, purpose origin,
 optional confidence, optional superseded usage ID, and `created_at`.
 
-Revision 1 purpose values are `cover`, `concept_explanation`,
+Revision 2 retains the purpose values `cover`, `concept_explanation`,
 `data_visualization`, `screenshot`, `example`, `decorative`, and `unknown`.
 Origin values distinguish `source_statement`, `deterministic_parser`,
 `ai_inference`, `user_confirmation`, and `unknown`. Confidence is permitted only
@@ -278,7 +306,8 @@ write use case will eventually accept one closed capture command containing:
 - effective workspace identity;
 - caller-supplied stable IDs and command idempotency identity;
 - exact Blob identities already returned by the Blob store;
-- Resource and source-observation identity;
+- Resource, its portable adapter-owned source identity, and source-observation
+  identity;
 - Snapshot hashes and time metadata;
 - one deterministic document structure with ordered nodes and Fragments; and
 - zero or more media assets and usages.
@@ -310,8 +339,8 @@ Before a real PostgreSQL fixture is admitted, tracked checks may prove only:
 
 - migration discovery, ordering, exact-byte hashing, and static presence of the
   material table/constraint contract;
-- pure domain validation for digests, ranges, Git identities, media modes, and
-  workspace-consistent aggregate references; and
+- pure domain validation for source-key portability, digests, ranges, Git
+  identities, media modes, and workspace-consistent aggregate references; and
 - that ordinary runtime entrypoints still neither run migrations nor issue DDL.
 
 They must not claim that PostgreSQL accepted the DDL, enforced the constraints,

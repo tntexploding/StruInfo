@@ -268,6 +268,11 @@ PostgreSQL 工作区数据
 
 代码可以固定数据库协议、状态机、权限规则、字段校验和合成测试数据。仓库可以保存没有真实值的配置 schema 与示例，但实际运行配置、个人配置和数据必须从包体外加载。
 
+证据 Resource 的 `source_key` 是 adapter-owned、deterministic、portable opaque identity。
+盘符路径、UNC/rooted path、POSIX 绝对路径、Windows 反斜杠形式或 traversal segment 不得成为持久身份。
+本地文件适配器应使用上传登记 ID、适配器记录 ID、内容身份或其他可移植 key。
+若未来必须保留原始本地路径，应定义独立的私有 typed locator 及导出和日志脱敏规则，不能把路径重载到 `source_key`。
+
 Windows 本地运行和 Linux 部署都必须使用源码/安装目录之外的数据根。启动时规范化真实路径并拒绝把个人数据根、Blob 根、导出或备份目录放在仓库、应用安装目录或只读包体内部。容器部署使用外部卷或对象存储，不能把数据写入镜像层。
 
 候选应用包通过[制品边界](application-artifact-boundary.md)实际枚举并生成哈希清单；被 Git 忽略不代表可以进入包体。容器镜像仍在独立准入门中验证，当前结果不能被描述为镜像或发布许可已经完成。
@@ -275,7 +280,7 @@ Windows 本地运行和 Linux 部署都必须使用源码/安装目录之外的�
 ## 11. 首个实现顺序
 
 1. 建立外部运行配置加载和数据根隔离检查；
-2. 按 [`C-SLICE-A-EVIDENCE-r1`](source-evidence-storage-contract.md) 实现
+2. 按 [`C-SLICE-A-EVIDENCE-r2`](source-evidence-storage-contract.md) 实现
    `Workspace`、来源证据和文档结构，再实现用户词表/分类；
 3. 实现知识项、不可变修订、别名、关系修订、引用、派生和原子变更集；
 4. 实现网页手工创建、拆分、分类、关联、重组、修订和撤回；

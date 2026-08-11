@@ -77,7 +77,10 @@ Playwright 的 npm 包只用于配置和测试源码；Chromium/FFmpeg/winldd、
 2026-08-11 进展：前置切片 0 已在当前非容器范围内完成。普通运行角色强制从包体外加载闭合配置，规范化外部数据根，并拒绝源码/安装目录 containment、配置与数据互相包含以及 symlink/junction 逃逸；固定数据区域和本地 SHA-256 Blob 端口已实现。pnpm 实际候选包内容现在通过闭合路径、普通文件、容量、秘密/本机路径检查并生成 SHA-256 清单；工作区 Bundle v1 通过注册分区 codec、规范 JSON、16 MiB 默认预算、Blob 引用和 `secretHandling=excluded` 完成合成往返。上传、备份、导出文件落盘和完整恢复仍随正式领域模块实现。容器镜像不存在，因此镜像内容枚举继续属于独立容器准入门；以上结果不表示阶段 1、生产发布或容器部署已经完成。
 
 来源证据数据库边界已冻结为
-[`C-SLICE-A-EVIDENCE-r1`](source-evidence-storage-contract.md)。下一实现增量只建立
+[`C-SLICE-A-EVIDENCE-r2`](source-evidence-storage-contract.md)。r2 仅要求
+`Resource.source_key` 使用 adapter-owned、deterministic、portable opaque identity，
+并由闭合应用边界拒绝本机绝对路径、Windows 反斜杠形式和 traversal segment；
+`000002` 迁移及其他 r1 语义保持不变。下一实现增量只建立
 工作区、逻辑 Blob、Resource/Snapshot、Git 观察、确定性文档结构、Fragment 和
 MediaAsset/Usage 的前向迁移与纯逻辑边界；HTTP、浏览器、分类和正式知识仍是后续合同。
 

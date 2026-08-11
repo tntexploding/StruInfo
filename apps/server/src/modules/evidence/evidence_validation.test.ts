@@ -1044,12 +1044,88 @@ describe('source-evidence domain validation', () => {
     }
   });
 
+  it.each([
+    ['drive path with forward slashes', 'S:/synthetic/item'],
+    ['drive path with backslashes', String.raw`S:\synthetic\item`],
+    ['UNC path', String.raw`\\synthetic-host\share\item`],
+    ['Windows rooted path', String.raw`\synthetic-root\item`],
+    ['POSIX absolute path', '/synthetic/item'],
+    ['leading traversal', '../synthetic/item'],
+    ['embedded traversal', 'adapter:synthetic/../item'],
+    ['backslash traversal', String.raw`adapter:synthetic\..\item`],
+  ])('rejects a %s as resource.sourceKey', (_, sourceKey) => {
+    const capture = changed((draft) => {
+      draft.resource.sourceKey = sourceKey;
+    });
+
+    const result = validateEvidenceCapture(capture);
+    expect(result).toEqual({
+      status: 'validation_failed',
+      issue: {code: 'invalid_resource', path: 'resource.sourceKey'},
+    });
+    expect(JSON.stringify(result)).not.toContain(sourceKey);
+  });
+
+  it.each([
+    'synthetic-resource-key',
+    'adapter:synthetic/item',
+    'adapter.synthetic/item.v1',
+  ])('accepts portable opaque resource.sourceKey %s', (sourceKey) => {
+    const capture = changed((draft) => {
+      draft.resource.sourceKey = sourceKey;
+    });
+
+    const result = validateEvidenceCapture(capture);
+    expect(result).toMatchObject({
+      status: 'validated',
+      value: {resource: {sourceKey}},
+    });
+  });
+
+  it('accepts path-shaped ordinary source text without changing its bytes', () => {
+    const sourceText = String.raw`S:\synthetic\body\..\item and /synthetic/body`;
+    const capture = captureForRange(
+      sourceText,
+      {start: 0, end: Array.from(sourceText).length},
+      undefined,
+      undefined,
+    );
+    const originalBytes = Array.from(capture.structure.normalizedTextUtf8);
+
+    expectValidated(capture);
+    expect(Array.from(capture.structure.normalizedTextUtf8)).toEqual(
+      originalBytes,
+    );
+  });
+
+  it('keeps canonical URI validation separate from source-key validation', () => {
+    const validHttps = changed((draft) => {
+      draft.resource.canonicalUri =
+        'https://example.invalid/adapter/synthetic-item';
+    });
+    const fileUri = changed((draft) => {
+      draft.resource.canonicalUri = 'file:///synthetic/item';
+    });
+
+    expectValidated(validHttps);
+    expect(validateEvidenceCapture(fileUri)).toEqual({
+      status: 'validation_failed',
+      issue: {code: 'invalid_uri', path: 'resource.canonicalUri'},
+    });
+  });
+
   it('rejects local absolute and traversal Git paths without network access', () => {
+    const validRelativePath = changed((draft) => {
+      required(draft.gitResource).repositoryRelativePath =
+        'docs/synthetic.folder/item.v1.md';
+    });
     const paths = [
       'C:/synthetic/private.md',
       '/synthetic/file.md',
       '../file.md',
     ];
+
+    expectValidated(validRelativePath);
     for (const path of paths) {
       const capture = changed((draft) => {
         required(draft.gitResource).repositoryRelativePath = path;

@@ -80,10 +80,12 @@ or pg-boss/vendor objects.
 
 The first product-table migration is reserved as
 `000002_create_source_evidence_schema.sql` and must implement
-[`C-SLICE-A-EVIDENCE-r1`](source-evidence-storage-contract.md). Until that file
-is implemented and a real PostgreSQL fixture passes its named infrastructure
-gate, the contract is a reviewed schema target rather than executed-database
-evidence.
+[`C-SLICE-A-EVIDENCE-r2`](source-evidence-storage-contract.md). Revision 2 leaves
+the migration bytes and database uniqueness model unchanged: portable
+`source_key` and machine-path isolation are enforced by the closed application
+boundary, not new DDL. Until a real PostgreSQL fixture passes its named
+infrastructure gate, the migration remains reviewed static schema evidence
+rather than executed-database evidence.
 
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.
