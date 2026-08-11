@@ -25,11 +25,14 @@ foundation, and first product authority model are accepted in ADR 0001 through
 ADR 0004. The repository has fixed `ruanyf/weekly` issues 398 through 407 at one
 upstream commit and has a candidate 345-unit structural inventory. ADR 0005
 accepts the canonical versioned knowledge model and AI-optional operations;
-ADR 0006 accepts external configuration and personal-data isolation. Implement
-the source-evidence and manual/deterministic knowledge core next; Slice 0 has
-already established external configuration, fixed data areas, local Blob
-storage, candidate-package auditing, and the versioned workspace-bundle
-envelope. Do not make preference calibration or AI availability a dependency.
+ADR 0006 accepts external configuration and personal-data isolation. Slice 0
+has established external configuration, fixed data areas, local Blob storage,
+candidate-package auditing, and the versioned workspace-bundle envelope. The
+`C-SLICE-A-EVIDENCE-r2` source-evidence migration and closed pure boundary have
+passed their fixed-candidate TM1 gate. Implement the deterministic Markdown
+structure parser and separate manual classification/intake boundary next, then
+continue the manual/deterministic knowledge core. Do not make preference
+calibration or AI availability a dependency.
 
 Browser runtime artifacts and real PostgreSQL/container execution remain behind
 their named admission gates. Do not represent either deferred gate as passed or
