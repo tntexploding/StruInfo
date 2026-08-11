@@ -32,6 +32,7 @@ const SHA1_PATTERN = /^[0-9a-f]{40}$/u;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const URI_SCHEME_PATTERN = /^[A-Za-z][A-Za-z0-9+.-]*:/u;
+const WINDOWS_DRIVE_PREFIX_PATTERN = /^[A-Za-z]:/u;
 const ISO_TIMESTAMP_PATTERN =
   /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]{1,6}))?(Z|([+-])([0-9]{2}):([0-9]{2}))$/u;
 
@@ -329,7 +330,7 @@ function validateResource(input: Readonly<CaptureEvidenceInput>): void {
   if (!isOneOf(RESOURCE_KINDS, resource.resourceKind)) {
     fail('invalid_resource', 'resource.resourceKind');
   }
-  validateNonEmpty(resource.sourceKey, 'resource.sourceKey');
+  validateSourceKey(resource.sourceKey, 'resource.sourceKey');
   if (resource.canonicalUri !== undefined) {
     validateUri(resource.canonicalUri, 'resource.canonicalUri');
   }
@@ -1068,6 +1069,20 @@ function validateRepositoryRelativePath(value: unknown, path: string): void {
     segments.some(
       (segment) => segment === '' || segment === '.' || segment === '..',
     )
+  ) {
+    fail('invalid_resource', path);
+  }
+}
+
+function validateSourceKey(value: string, path: string): void {
+  validateNonEmpty(value, path);
+  const segments = value.split(/[\\/]/u);
+  if (
+    WINDOWS_DRIVE_PREFIX_PATTERN.test(value) ||
+    value.startsWith('/') ||
+    value.startsWith('\\') ||
+    value.includes('\\') ||
+    segments.some((segment) => segment === '.' || segment === '..')
   ) {
     fail('invalid_resource', path);
   }
