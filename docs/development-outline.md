@@ -1,6 +1,6 @@
 # StruInfo 开发大纲
 
-- 状态：基础架构、M0-S 与前置切片 0 已完成；准备来源证据和非 AI 知识核心切片
+- 状态：基础架构、M0-S、切片 0 与来源证据纯逻辑边界已完成；准备确定性结构解析和人工分类/准入
 - 最近更新：2026-08-11
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
@@ -35,7 +35,7 @@ M0-P 证明的是架构可行性，不是生产认证；任何探针候选源码
 M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁移 runner、CI、许可证记录与统一质量命令；该工程地基由 [ADR 0003](adr/0003-m0-s-engineering-foundation.md) 接受。
 自适应摄取、偏好/探索分离和策略授权知识写入由 [ADR 0004](adr/0004-adaptive-knowledge-ingestion-and-policy-authorized-writes.md) 接受。
 [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求。
-第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。下一步先关闭外部配置/数据根合同，并实现来源证据、人工摄取、版本化知识和确定性检索；AI 与偏好学习随后接入，不能反向定义数据库语义。
+第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。外部配置/数据根以及 `C-SLICE-A-EVIDENCE-r2` 来源证据迁移与闭合纯逻辑边界已经完成当前非容器 TM1。下一步实现全新的确定性 Markdown 结构解析和独立的人工分类/准入合同，再继续版本化知识与确定性检索；AI 与偏好学习随后接入，不能反向定义数据库语义。
 
 ## 2. 为什么选择这个形态
 
@@ -654,6 +654,10 @@ M0-P 的测试数量和候选实现不构成生产质量证明。
 - Windows 与 Linux 集成测试。
 
 退出条件：满足路线图阶段 1；每个条目和图片都能稳定返回原始上下文，重复导入和标注不产生重复副作用。
+
+2026-08-11 进展：`C-SLICE-A-EVIDENCE-r2` 的 `000002` 迁移、闭合输入、来源/快照/文档结构/Fragment/媒体纯逻辑校验和静态 SQL 合同已在提交 `c50ad35e07b2f1b64cd938b0417d4b6bd7c231aa` 上通过完整 TM1（27/27）。这接受的是非浏览器、非容器的模块与静态边界；PostgreSQL 实际解析、catalog、事务、并发和运行角色仍等待具名基础设施准入，不得表示为通过。
+
+切片 A 的下一增量只实现确定性 Markdown 解析和来源字节到 DocumentNode/Fragment/Media 引用的纯转换合同，再实现与 ContentClassification 分列的人工 IntakeDecision/Assessment。阶段 0 的本地解析脚本仍是不可复用工件；正式实现不得读取 `.agents/stage-0`，真实 Markdown 继续留在包体外数据根，tracked 测试只使用合成且无价值的结构 fixture。
 
 ### 切片 B1：获准资料到非 AI 知识与确定性检索
 

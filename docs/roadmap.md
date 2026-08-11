@@ -1,6 +1,6 @@
 # StruInfo 分阶段计划
 
-- 状态：M0-S 与前置切片 0 已完成；第 398–407 期客观语料已冻结，准备实现来源证据与非 AI 知识内核
+- 状态：M0-S、前置切片 0 与来源证据纯逻辑边界已完成；准备确定性结构解析和人工分类/准入
 - 最近更新：2026-08-11
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
@@ -80,9 +80,10 @@ Playwright 的 npm 包只用于配置和测试源码；Chromium/FFmpeg/winldd、
 [`C-SLICE-A-EVIDENCE-r2`](source-evidence-storage-contract.md)。r2 仅要求
 `Resource.source_key` 使用 adapter-owned、deterministic、portable opaque identity，
 并由闭合应用边界拒绝本机绝对路径、Windows 反斜杠形式和 traversal segment；
-`000002` 迁移及其他 r1 语义保持不变。下一实现增量只建立
-工作区、逻辑 Blob、Resource/Snapshot、Git 观察、确定性文档结构、Fragment 和
-MediaAsset/Usage 的前向迁移与纯逻辑边界；HTTP、浏览器、分类和正式知识仍是后续合同。
+`000002` 迁移及其他 r1 语义保持不变。提交
+`c50ad35e07b2f1b64cd938b0417d4b6bd7c231aa` 已通过固定候选 TM1：27 项模块与静态矩阵全部通过，覆盖工作区、逻辑 Blob、Resource/Snapshot、Git 观察、确定性文档结构、Fragment 和 MediaAsset/Usage 的迁移声明与纯逻辑边界。该结果不包含 PostgreSQL 实际解析、约束、事务、运行角色或容器执行；这些项目继续位于具名 TM2/容器准入门之后。
+
+下一实现增量是全新的确定性 Markdown 结构解析器及其导入边界：从包体外的固定来源字节产生可验证的 DocumentNode、Fragment 和媒体引用，同时保持整篇结构、原始顺序、主文内部编号和栏目条目边界。随后冻结与内容分类分列的人工 IntakeDecision/Assessment；HTTP、浏览器和正式知识仍使用各自后续合同。
 
 ## 阶段 2A：非 AI 知识形成与确定性检索核心
 
