@@ -748,6 +748,11 @@ Revision 1 exports, documents, and tests these inclusive constants:
 | Canonical structure bytes | 16,777,216 |
 | Canonical JSON values     |    100,000 |
 
+Structural depth is the number of parent edges from the document root: the root
+has depth 0, a direct child has depth 1, and every additional parent edge adds
+one. Synthetic section nodes and image nodes count like all other mapped nodes.
+The deepest emitted node must have depth no greater than 64.
+
 The source-byte limit also bounds a single line, label, target, alt value, or
 fence; revision 1 does not add redundant token-length knobs. Source through
 diagnostic limits are reachable construction limits and receive at-limit and
