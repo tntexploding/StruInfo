@@ -299,6 +299,13 @@ The migration and all repositories preserve these rules:
 
 ## Application boundary for the next implementation task
 
+The concrete deterministic Markdown transformation layered on this evidence
+model is frozen in
+[`C-SLICE-A-MARKDOWN-r1`](deterministic-markdown-structure-contract.md).
+That contract does not change this migration or add a table: it first produces
+an ID-independent parse result, then purely materializes the existing evidence
+DTOs.
+
 The evidence module exposes domain input and result types independent of
 NestJS, PostgreSQL, Drizzle, the filesystem adapter, and AI providers. The first
 write use case will eventually accept one closed capture command containing:
