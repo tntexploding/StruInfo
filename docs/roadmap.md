@@ -83,7 +83,7 @@ Playwright 的 npm 包只用于配置和测试源码；Chromium/FFmpeg/winldd、
 `000002` 迁移及其他 r1 语义保持不变。提交
 `c50ad35e07b2f1b64cd938b0417d4b6bd7c231aa` 已通过固定候选 TM1：27 项模块与静态矩阵全部通过，覆盖工作区、逻辑 Blob、Resource/Snapshot、Git 观察、确定性文档结构、Fragment 和 MediaAsset/Usage 的迁移声明与纯逻辑边界。该结果不包含 PostgreSQL 实际解析、约束、事务、运行角色或容器执行；这些项目继续位于具名 TM2/容器准入门之后。
 
-下一实现增量是全新的确定性 Markdown 结构解析器及其导入边界：从包体外的固定来源字节产生可验证的 DocumentNode、Fragment 和媒体引用，同时保持整篇结构、原始顺序、主文内部编号和栏目条目边界。随后冻结与内容分类分列的人工 IntakeDecision/Assessment；HTTP、浏览器和正式知识仍使用各自后续合同。
+下一实现增量已经冻结为 [`C-SLICE-A-MARKDOWN-r1`](deterministic-markdown-structure-contract.md)：全新的纯 CommonMark 解析器先产生 ID 无关结构，独立 `ruanyf-weekly-v1` profile 再识别栏目条目，最后由无 I/O 装配器生成现有 DocumentNode、Fragment 和外部媒体引用。该增量保留整篇结构、原始顺序、主文内部编号和“二级链接尚未抓取”边界，不新增数据库表。实现通过后再冻结与内容分类分列的人工 IntakeDecision/Assessment；HTTP、浏览器和正式知识仍使用各自后续合同。
 
 ## 阶段 2A：非 AI 知识形成与确定性检索核心
 

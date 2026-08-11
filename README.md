@@ -19,6 +19,7 @@ StruInfo 是一个来源可追溯、AI 可增强的个人知识摄取与维护�
 - [包体外运行配置与数据根](docs/runtime-configuration.md)
 - [工作区 Bundle 合同](docs/workspace-bundle-contract.md)
 - [候选应用制品边界](docs/application-artifact-boundary.md)
+- [确定性 Markdown 结构合同](docs/deterministic-markdown-structure-contract.md)
 - [阶段 0 首批语料与行为冻结](docs/stage-0-corpus-freeze.md)
 - [真实样本采集模板](docs/sample-intake-template.md)
 - [历史需求归档](docs/archive/product-requirements-v0.1.md)
@@ -39,6 +40,6 @@ M0-P 探针代码只作为架构证据，不直接复用为生产实现。
 
 ## 当前最重要的下一步
 
-第 398–407 期周刊已固定到同一上游提交，并形成 345 个内容单元、图片引用和证据定位清单。版本化关系知识模型与无 AI 操作合同已经接受；切片 0 的包体外配置、数据区域、本地 Blob、候选包内容清单和合成工作区 Bundle/秘密排除合同已经完成。`Workspace → Resource → Snapshot → DocumentNode/Fragment → MediaAsset` 的来源证据迁移与闭合纯逻辑边界已经通过固定候选 TM1。下一步用全新的正式模块实现确定性 Markdown 结构解析，并冻结与内容分类相互独立的人工准入决定；偏好校准继续作为后续输入，不阻塞知识数据库核心。
+第 398–407 期周刊已固定到同一上游提交，并形成 345 个内容单元、图片引用和证据定位清单。版本化关系知识模型与无 AI 操作合同已经接受；切片 0 的包体外配置、数据区域、本地 Blob、候选包内容清单和合成工作区 Bundle/秘密排除合同已经完成。`Workspace → Resource → Snapshot → DocumentNode/Fragment → MediaAsset` 的来源证据迁移与闭合纯逻辑边界已经通过固定候选 TM1。[`C-SLICE-A-MARKDOWN-r1`](docs/deterministic-markdown-structure-contract.md) 已冻结下一增量的纯 CommonMark 解析、周刊 profile、规范定位、ID 无关结构哈希和 Evidence 装配边界；实现通过后再冻结与内容分类相互独立的人工准入决定。偏好校准继续作为后续输入，不阻塞知识数据库核心。
 AI 拆分、关系建议、语义检索和偏好学习随后接入同一套提案与正式命令边界。
 真实 PostgreSQL 执行、浏览器运行时和容器制品仍处于各自具名准入门之后；当前 TM1 结论不代表这些门已经通过。
