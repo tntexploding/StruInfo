@@ -59,14 +59,36 @@ container files before those decisions are made.
 - Use structured logs and exclude credentials, private content, and unnecessary
   personal data.
 
+## Configuration and Personal Data
+
+- Keep executable code, configuration schema, active runtime configuration,
+  secrets, and workspace data as separate boundaries.
+- The repository and release artifact may contain configuration schemas and
+  synthetic placeholder examples, but never an active personal configuration.
+- Load environment-specific runtime values from an external configuration path,
+  environment variables, or secret references. Do not encode them in domain or
+  composition code.
+- Store personal knowledge, custom vocabulary, preferences, policies, source
+  subscriptions, saved searches, prompt overlays, snapshots, exports, and
+  backups in workspace-owned PostgreSQL or an external data root.
+- Personal data roots must resolve outside the Git worktree and installed
+  application/package directory. Validate canonical paths at startup and reject
+  containment, traversal, and link-based escapes.
+- Do not use real user data as a test, documentation, example, benchmark, or AI
+  fixture. Tracked fixtures are synthetic and must not be derived from private
+  content without a separately approved sanitized artifact.
+- Code may define system state machines, authorization semantics, schemas, and
+  universal safety limits. User categories, topic weights, sources, scores,
+  provider permissions, and personal prompts are data, not code constants.
+
 There is no arbitrary maximum file or function length. Reviewers should ask
 whether a unit has one understandable responsibility and can be tested without
 unrelated setup.
 
 ## Modular Design
 
-The final repository layout is not yet selected. Later designs must preserve
-these dependency principles:
+The repository uses the accepted modular-monolith workspace shape. Later
+modules and layout changes must preserve these dependency principles:
 
 - Domain knowledge and policy do not depend on web frameworks, databases,
   schedulers, model vendors, source adapters, or QQ-specific APIs.

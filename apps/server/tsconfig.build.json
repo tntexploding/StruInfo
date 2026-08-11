@@ -9,7 +9,7 @@
     "sourceMap": true,
     "rootDir": "./src",
     "outDir": "./dist",
-    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    "tsBuildInfoFile": "./.cache/typescript/.tsbuildinfo"
   },
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

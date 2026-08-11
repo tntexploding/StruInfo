@@ -78,6 +78,13 @@ The first forward file creates only the project-owned `struinfo` application
 schema. It does not create product tables, roles, grants, extensions, sequences,
 or pg-boss/vendor objects.
 
+The first product-table migration is reserved as
+`000002_create_source_evidence_schema.sql` and must implement
+[`C-SLICE-A-EVIDENCE-r1`](source-evidence-storage-contract.md). Until that file
+is implemented and a real PostgreSQL fixture passes its named infrastructure
+gate, the contract is a reviewed schema target rather than executed-database
+evidence.
+
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.
 

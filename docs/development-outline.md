@@ -1,12 +1,15 @@
 # StruInfo 开发大纲
 
-- 状态：基础架构与 M0-S 工程地基已接受；准备阶段 0 与首个产品切片
-- 最近更新：2026-08-10
+- 状态：基础架构、M0-S 与前置切片 0 已完成；准备来源证据和非 AI 知识核心切片
+- 最近更新：2026-08-11
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
 - 基础 ADR：[ADR 0001](adr/0001-typescript-modular-monolith.md)、
   [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md)、
-  [ADR 0003](adr/0003-m0-s-engineering-foundation.md)
+  [ADR 0003](adr/0003-m0-s-engineering-foundation.md)、
+  [ADR 0004](adr/0004-adaptive-knowledge-ingestion-and-policy-authorized-writes.md)、
+  [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、
+  [ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)
 
 ## 1. 结论
 
@@ -21,7 +24,8 @@ StruInfo 首版采用“单仓库、模块化单体、多运行角色”架构�
 - Drizzle ORM 提供薄、类型安全的 SQL 与迁移层，并保留显式 SQL 通道；
 - `pg-boss` 在 PostgreSQL 中提供定时任务、重试和后台执行；
 - 原始网页、文本和图片进入内容寻址的 Blob 存储，不塞入关系表；
-- AI、OCR 和未来的视频处理通过稳定接口接入，不能直接修改正式知识；
+- 用户、确定性解析器、声明式规则、导入器和 AI 共用同一套知识命令与变更集；AI、OCR 和未来的视频处理通过可选稳定接口接入，模型适配器不能直接修改正式知识；
+- 工程代码与实际运行配置、工作区数据、Blob/导出/备份和秘密存储完全分离；个人值不进入 Git、测试 fixture 或正式包体；
 - Windows 开发与 Linux 部署使用相同数据库和迁移，不以 SQLite 模拟生产；
 - 首版不引入微服务、图数据库、独立搜索集群、Redis 或平台专属 QQ 逻辑。
 
@@ -29,7 +33,9 @@ StruInfo 首版采用“单仓库、模块化单体、多运行角色”架构�
 [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md) 正式接受。
 M0-P 证明的是架构可行性，不是生产认证；任何探针候选源码都不得直接复制到生产树。
 M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁移 runner、CI、许可证记录与统一质量命令；该工程地基由 [ADR 0003](adr/0003-m0-s-engineering-foundation.md) 接受。
-下一步使用阶段 0 的真实主题、信源、理想日报和任务样本冻结首个产品纵向切片。
+自适应摄取、偏好/探索分离和策略授权知识写入由 [ADR 0004](adr/0004-adaptive-knowledge-ingestion-and-policy-authorized-writes.md) 接受。
+[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求。
+第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。下一步先关闭外部配置/数据根合同，并实现来源证据、人工摄取、版本化知识和确定性检索；AI 与偏好学习随后接入，不能反向定义数据库语义。
 
 ## 2. 为什么选择这个形态
 
@@ -84,30 +90,34 @@ flowchart LR
 
 ## 4. 核心工程原则
 
-1. 来源、快照、AI 产物与正式知识分层保存。
+1. 来源、快照、处理提案与正式知识分层保存；AI 产物只是处理提案的一种来源。
 2. 领域规则不依赖 NestJS、数据库、模型供应商、文件路径或 QQ API。
 3. 模块只能通过公开应用接口协作，不能跨模块直接改表。
 4. HTTP 是命令与查询的权威接口；WebSocket 只是可丢失的实时视图。
 5. 任务与事件按可能重复执行设计，副作用由幂等键和唯一约束保护。
 6. 索引、向量和树视图都是可重建派生物，不是知识真相源。
 7. 外部网页、模型输出和媒体文件都是不可信输入。
-8. 先完成一个真实信源的纵向闭环，再扩展格式、连接器和自治能力。
+8. 先在无 AI 条件下完成一个真实信源的证据、分类、准入、知识形成和网页检索闭环，再接 AI、偏好、更多格式、报告、连接器和自治能力。
 9. 工作区身份属于资源键、查询、缓存、幂等与事件边界，不能只靠调用方记得过滤。
 10. 外部 JSON 使用标准兼容的运行时 schema 和原始字节级重复成员检查；任意程序对象不能绕过数据边界。
 11. 成功写出的状态、导出和证据工件必须能被同版本公开 reader 读回；资源预算包含完整编码包络。
 12. WebSocket 是可恢复投影；快照、重放截止点和事件尾流必须来自一致且可核验的读取模型。
+13. 内容分类、准入动作、知识类型、认知角色、审核状态和操作来源是独立维度，不能用一个标签或状态替代。
+14. 稳定知识项、不可变修订、引用、派生和版本化关系构成规范事实；树、布局、搜索索引、向量和 AI 摘要均可重建。
+15. 应用安装物不携带任何个人知识、类别、偏好、信源或真实配置；所有个人数据根必须位于仓库和安装目录之外。
 
 ## 5. 模块边界
 
 | 模块 | 拥有的数据与职责 | 明确禁止 |
 | --- | --- | --- |
 | `access` | 用户、工作区、会话、权限和策略 | 把单用户假设写成无工作区的数据模型 |
-| `sources` | Watch、Endpoint、抓取计划、游标和来源适配器 | 直接产生正式知识 |
-| `evidence` | Resource、Snapshot、Fragment、Blob 元数据和证据定位 | 覆盖不可变快照 |
-| `processing` | Operation、AI/OCR 运行、CandidateProposal 和插件编排 | 直接创建 Candidate 或 KnowledgeRevision |
-| `knowledge` | Candidate、KnowledgeItem、Revision、Citation、Relation 和审核 | 让来源适配器直接改知识表 |
-| `retrieval` | 过滤、关键词、向量、树、时间线和混合查询 | 把索引当成唯一数据副本 |
-| `digests` | 日报/周报、时间窗口、排序和 Delivery | 在渠道适配器中编排业务摘要 |
+| `sources` | Watch、Endpoint、Git/网页/API/文件入口、抓取计划、游标和来源适配器 | 直接产生正式知识或扩大采集范围 |
+| `evidence` | Resource、Snapshot、DocumentNode、Fragment、MediaAsset/Usage、Blob 元数据和证据定位 | 覆盖不可变快照或把解析结构冒充正式知识 |
+| `curation` | IntakeDecision、Assessment、用户反馈、PreferenceProfile、ExplorationPolicy 和 AutomationPolicy | 把内容分类、准入动作、兴趣、探索价值和事实可靠性压成一个字段或分数 |
+| `processing` | Operation、可选处理计划、确定性/AI/OCR 运行、KnowledgeChangeProposal 和插件编排 | 直接创建或更新 KnowledgeRevision |
+| `knowledge` | VocabularyTerm、ContentClassification、Candidate、KnowledgeChangeSet、KnowledgeItem/Revision/Alias、Citation、Derivation、Relation/Revision、Collection/Placement、SavedView、ConflictCase 和授权提交 | 让模型、来源或传输适配器直接改知识表，或用复制正文实现重组 |
+| `retrieval` | 结构化过滤、精确/别名/子串匹配、关系遍历、可选向量、树、时间线和混合查询 | 把索引、向量或 AI 答案当成唯一数据副本 |
+| `digests` | 后续日报/周报、时间窗口、排序和 Delivery | 在知识核心完成前成为正式知识唯一入口 |
 | `integrations` | HTTP 契约、WS 事件、Webhook 订阅、投递和外部项目授权 | 在核心中加入 QQ 平台细节 |
 | `platform` | 数据库、Blob、队列、事务性 outbox、配置、日志、指标和秘密引用 | 承载产品领域规则 |
 
@@ -119,38 +129,48 @@ flowchart LR
 ### 6.1 采集与入库
 
 ```text
-Watch / Endpoint
-  -> FetchRun
+Watch / Endpoint / ManualInput
+  -> FetchRun (when acquisition is remote)
   -> Resource
   -> immutable Snapshot
-  -> Fragment
-  -> ProcessingRun
-  -> CandidateProposal
-  -> Candidate
-  -> user approval
-  -> KnowledgeItem + KnowledgeRevision + Citation
+  -> DocumentNode + Fragment + MediaAsset/Usage
+  -> ContentClassification + independent IntakeDecision
+  -> user command / deterministic parser / declarative rule / import / AI proposal
+  -> KnowledgeChangeSet
+  -> user command or versioned policy authorization
+  -> Candidate only when review is required
+  -> KnowledgeItem + KnowledgeRevision + Alias/Relation/Citation/Derivation
   -> transactional outbox event
 ```
 
 来源适配器的终点是 `Snapshot`，不是 `KnowledgeItem`。
-AI 的终点是有证据的 `CandidateProposal`；`processing` 通过 `knowledge` 的应用接口把有效提案登记为 `Candidate`。
-正式知识只能由 `knowledge` 模块的批准用例创建。
+证据解析器可以创建文档结构、片段和媒体用途提案，但不能把它们直接声明为正式知识。
+内容分类只回答“这是什么”，`IntakeDecision` 只回答“如何处理”；分类为“小说”不能自动推断准入动作。
+人工命令、确定性解析器、规则、导入器与 AI 可以产生相同的规范变更形状。AI 的终点是带证据、处理计划和模型身份的 `KnowledgeChangeProposal`；模型适配器不能写知识表。
+`curation` 记录人工决定、偏好/探索规则和自动化授权，`knowledge` 将提案规范化为 `KnowledgeChangeSet`，核验动作、工作区、证据、幂等键和授权范围后再提交。
+正式知识只能由 `knowledge` 模块的应用用例创建或修订。调用依据可以是当前用户命令，也可以是用户已启用的具体 `AutomationPolicy` 版本；不确定或高影响动作登记为 `Candidate`/审核项。
+
+整份资料获准处理不表示所有原子变更无条件获准。授权需要按动作区分新增、非破坏性修订、关系补充、合并、删除、冲突裁决和结构重排。
 
 ### 6.2 查询
 
 ```text
 query request
-  -> choose private / live web / hybrid scope
-  -> retrieve revisions and fragments
-  -> optionally fetch and snapshot live evidence
-  -> AI synthesis
-  -> citation and evidence validation
-  -> answer + per-claim citations + uncertainty
+  -> typed filters and exact/alias matching
+  -> Chinese substring / pg_trgm retrieval
+  -> bounded relation traversal
+  -> revisions + fragments + deterministic match reasons
+  -> optional vector recall
+  -> optional live evidence capture
+  -> optional AI synthesis
+  -> records or answer + per-claim citations + uncertainty
 ```
 
-实时网页只有先产生快照和片段，才能转成候选或支持可保存回答。
+首个切片只查询私人知识、来源和处理记录，并直接返回可排序、可过滤、可追溯的确定性结果。实时网页只有先产生快照和片段，才能支持可保存回答或进入 `KnowledgeChangeSet`；在线结果不因生成了流畅答案而自动成为正式知识。AI 未配置、禁用或失败时，查询不应进入错误态。
 
 ### 6.3 报告与推送
+
+该数据流在知识摄取与检索核心稳定后实现，不属于首个产品切片。
 
 ```text
 schedule window
@@ -174,12 +194,26 @@ schedule window
 Operation: queued -> running -> retry_wait -> running
                               -> succeeded | failed | cancelled
 
-Candidate: pending_review -> approved | rejected | superseded
+IntakeDecision: pending -> full | structured | condensed
+                        -> source_only | ignored | needs_review
+
+ContentClassification: versioned vocabulary assignment; no workflow transition
+
+AutomationPolicy: draft -> trial -> active -> paused | retired
+
+KnowledgeChangeSet: proposed -> authorized -> committed
+                             -> review_required -> authorized | rejected
+                             -> superseded
+
+Candidate: pending_review -> authorized | rejected | superseded
 
 Delivery: pending -> sending -> delivered
                             -> retry_wait -> sending
                             -> dead_letter
 ```
+
+已提交的知识修订保持不可变。所谓撤回或回滚通过新的补偿修订及 `reverted_by`/`supersedes` 关系表达，不把 `committed` 状态改回未提交，也不删除原证据和授权历史。
+`ContentClassification` 是可版本化的工作区词表赋值，不是状态机。修改分类不会暗中修改 `IntakeDecision`、知识修订或审核状态。
 
 公开的 `Operation` 记录业务阶段、进度、父任务、尝试次数、下一次重试、错误码和关联 ID。
 `pg-boss` 负责耐久调度与任务领取，但其内部 ID 不作为公共 API 的稳定标识。
@@ -187,6 +221,7 @@ Delivery: pending -> sending -> delivered
 实现约束：
 
 - 所有外部可重试写操作接受 `Idempotency-Key`，并把工作区与规范请求身份纳入幂等范围；
+- 自动知识提交把策略 ID、策略版本、动作类型和规范提案身份纳入授权与审计；停用策略后不得继续领取新的授权工作；
 - 幂等记录必须在业务事务内原子地“插入或解析冲突”，相同请求精确重放，不同请求返回稳定冲突；
 - 更新知识时携带修订号或 `ETag/If-Match`，避免静默覆盖；
 - Worker 可能在超时或崩溃后再次执行，处理器必须幂等；
@@ -219,10 +254,12 @@ Drizzle 作为薄 SQL 层的候选原因是它支持 PostgreSQL、显式迁移�
 关系表保存：
 
 - 工作区、来源、抓取运行和游标；
-- 快照与片段元数据；
-- AI/OCR 运行、候选和审核；
-- 知识项、不可变修订、引用、派生与关系；
-- 树位置、报告、投递、操作、outbox 和审计；
+- 快照、文档结构、片段、媒体身份与用途元数据；
+- 工作区词表、内容分类及其赋值历史；
+- 准入决定、分维度 Assessment、用户反馈、偏好/探索和自动化策略版本；
+- 可选处理计划、确定性/AI/OCR 运行、知识变更集、候选和审核；
+- 稳定知识项、不可变修订、别名、修订级引用、派生、稳定关系及关系修订与冲突案例；
+- 集合、排序成员、树位置、保存查询、报告、投递、操作、outbox 和审计；
 - Blob 的逻辑 ID、内容哈希、大小、类型和保留状态。
 
 所有私有业务记录都带工作区边界。
@@ -230,10 +267,18 @@ Drizzle 作为薄 SQL 层的候选原因是它支持 PostgreSQL、显式迁移�
 时间字段使用 `timestamptz` 表示确定瞬间，同时保留原始时区、精度和是否由 AI 推断；发布时间、事件时间、有效时间、抓取时间和入库时间继续分列。
 Snapshot 分别记录原始响应哈希和规范正文哈希，正文规范化算法也需要版本，避免把版式变化误判为知识变化。
 
+`KnowledgeItem` 和 `KnowledgeRelation` 提供稳定身份；语义内容、关系类型、方向、范围或证据变化创建不可变修订。引用固定到明确的知识/关系修订和 Fragment，编辑后的语义不能自动继承旧引用。重组使用 Collection、Framework、OrderedMembership、TreePlacement 和 SavedView 引用既有知识，不复制规范正文。
+
+核心字段使用受约束的关系列。只有类型特有、schema 版本化且经过运行时校验的扩展才进入 `jsonb`；不采用无限制 EAV 或任意 JSON 文档作为知识真相。
+
 ### 8.2 Blob 存储
 
 大文本、原始响应、图片和未来视频保存为不可变 Blob。
 首版实现本地文件系统适配器，文件名由内容哈希派生，业务记录只引用逻辑 Blob ID。
+
+切片 0 已以全新生产模块实现本地适配器，没有复用 M0-P 探针候选源码。外部数据根固定分为 `blobs/`、`uploads/`、`exports/` 和 `backups/`；只有 `blobs/sha256/<前两位>/<次两位>/<完整摘要>` 当前具有文件系统 byte-store reader/writer。其余三个区域仍未开放文件落盘用例。
+
+当前低层端口接收字节并返回 SHA-256 内容身份，默认拒绝大于 64 MiB 的单个 Blob；它不暴露原始文件路径，也不承担工作区授权。逻辑 Blob ID、工作区所有权、引用计数/保留状态和传输层授权由后续数据库与应用服务组合，未来 S3 兼容适配器必须保持这些上层身份稳定。
 
 Blob 边界只接受通过 intrinsic brand 检查的普通字节视图，并立即复制精确可见范围。
 长度、内容哈希、Blob 身份、后续解析与保留字节都基于同一份 owned copy；不得通过 Proxy、accessor、共享可变 buffer 或调用方随后修改来重定向来源身份。
@@ -242,6 +287,8 @@ Blob 边界只接受通过 intrinsic brand 检查的普通字节视图，并立�
 预算包含 UTF-8 包络、base64 膨胀和全部字段；writer 在提交前测得最终字节数，超限时可见且原子失败。
 大型正文和媒体优先保留为 Blob 引用，不能通过反复嵌套 base64 形成不可读的 current-version 工件。
 writer contract 与边界测试必须证明每个成功输出都能由相同版本的公开 reader 往返读取；若确定性 encoder 与精确 preflight 已提供同等保证，运行时不要求为每次写入重复解析。
+
+切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload，信封使用 16 MiB 默认预算的规范 UTF-8 JSON，只携带 Blob 身份并固定 `secretHandling=excluded`。合成往返证明用户类别、信源和保存查询可作为数据变化且不会携带内部秘密；正式领域分区、数据库一致性快照、Blob 包和 `exports/` 原子落盘随对应切片实现。
 
 Linux 单机部署可先使用受备份保护的持久卷。
 需要多机或对象存储服务时，再增加 S3 兼容适配器；迁移不能改变 Resource、Snapshot 或 Citation ID。
@@ -257,11 +304,16 @@ Citation 指向具体 KnowledgeRevision；编辑后的语义不能自动继承�
 
 搜索按证据逐步升级：
 
-1. MVP-0 使用结构化过滤、标题/正文子串和来源、时间筛选；
-2. 用真实中文样本评估 `pg_trgm` 的召回率与索引大小；
-3. 需要语义检索时，在 PostgreSQL 中启用 `pgvector`；
-4. 混合排序同时保留关键词得分、向量得分和过滤原因；
-5. 只有单库检索无法达到已量化目标时，才评估独立搜索引擎。
+1. 先按工作区、类型、分类、审核状态、来源、时间和其他结构字段过滤；
+2. 对规范标题、别名和稳定标识做精确匹配；
+3. 对标题、别名和当前修订正文做中文原文子串匹配；
+4. 用真实中文样本评估 `pg_trgm` 的召回率、排序质量与索引大小；
+5. 对明确关系类型做有界递归遍历，并返回路径和方向；
+6. 需要语义召回且有真实指标时，在 PostgreSQL 中启用 `pgvector`；
+7. 启用 AI 时，才在已经找回的记录上做查询扩展或带引用综合；
+8. 只有单库检索无法达到已量化目标时，才评估独立搜索引擎。
+
+`SearchProjection` 保存当前修订的规范化可检索字段和聚合键，是可重建读取模型。每个结果都返回匹配字段、过滤条件、关系路径、当前修订和来源摘要；确定性搜索本身不依赖 Embedding 或 AI。
 
 知识关系先用带方向、类型、版本和审核状态的关系表表达。
 树视图使用 `TreePlacement`，递归查询不足以满足真实规模前不引入图数据库。
@@ -269,6 +321,8 @@ Citation 指向具体 KnowledgeRevision；编辑后的语义不能自动继承�
 ## 9. AI、中文与媒体处理
 
 ### 9.1 AI 边界
+
+AI 是可选生产力适配器，不是启动依赖、数据库一致性依赖或唯一搜索入口。没有 Provider、模型凭据或 Embedding 时，系统必须正常提供人工摄取、分类、拆分、编辑、关系、重组、冲突、历史、确定性搜索、导出、备份和恢复，并把 AI 功能显示为“未启用”而不是系统故障。
 
 应用层定义小而稳定的能力接口，例如：
 
@@ -278,13 +332,15 @@ Citation 指向具体 KnowledgeRevision；编辑后的语义不能自动继承�
 - `OcrProvider`；
 - `MediaProcessor`。
 
-每次处理至少记录：供应商、模型、提示模板版本、参数、输入引用与哈希、原始输出、规范化输出、耗时、用量、费用、警告和错误。
+每次处理至少记录：供应商、模型、提示模板版本、处理计划版本、参数、输入引用与哈希、原始输出、规范化输出、耗时、用量、费用、警告和错误。
 模型输出必须通过经审查、符合所声明 JSON Schema dialect 与关键字子集的运行时校验；`if/then/else`、引用、组合和 closed-object 语义不能由不完整的自制 evaluator 代替。
 原始 JSON 在 materialization 前拒绝重复成员；程序化数据只接受普通、稠密且由 own data property 组成的 record/array，不能在验证期间执行 getter、iterator hook 或 Proxy trap。
 引用还要核对目标工作区、修订和片段是否存在，不能只相信模型给出的 URL 或片段编号。
 
 外部内容只能进入不可信数据区，不能覆盖系统指令、扩大工具权限或选择任意网络与文件目标。
-模型适配器不能直接写正式知识，也不能读取未被本次任务授权的工作区或 Blob。
+模型适配器不能直接写正式知识，也不能读取未被本次任务授权的工作区或 Blob。它只返回普通数据形式的 Assessment、规则建议或 KnowledgeChangeProposal；`curation` 与 `knowledge` 应用层重新核验工作区、证据、动作权限、规则版本和预算。人工、规则和导入路径使用同样的 schema、引用校验、乐观并发、幂等和变更集事务。
+
+偏好学习与探索策略使用独立输入、版本和评估。普通点击、忽略或拒绝不能直接改写探索策略；反馈需要保留“已经知道、质量低、暂时不需要、不感兴趣、陌生但值得探索”等原因，避免把所有负反馈学习成领域排斥。
 
 ### 9.2 中文
 
@@ -298,7 +354,8 @@ Fragment 需要记录定位方案和版本，例如规范文本字符区间、DO
 
 ### 9.3 图片与未来视频
 
-首版对图片先做到：保存原始字节、类型、尺寸、来源位置、内容哈希和可回看的证据锚点。
+首版对图片先做到：保存或受控引用允许保留的原始字节、类型、尺寸、来源位置、内容哈希和可回看的证据锚点；关联所在 DocumentNode/Fragment，并标注封面、概念解释、数据图表、操作截图、示例、装饰或未知用途。
+用途记录区分原文说明、AI 推断和用户确认；AI 推断保留置信度，装饰图片不得作为事实证据。
 需要图片理解时，可由多模态模型或 OCR 适配器产生派生文本和区域引用，但原图始终是证据。
 M0-P 的 synthetic P6 结论不能外推到 PNG、JPEG、PDF、多帧媒体或 OCR；启用真实格式前必须分别评审 decoder provenance、区域/页码身份、解压与资源上限、隔离、依赖和许可证。
 
@@ -313,12 +370,16 @@ M0-P 的 synthetic P6 结论不能外推到 PNG、JPEG、PDF、多帧媒体或 O
 权威接口使用 `/api/v1`，以 OpenAPI 作为可测试契约。
 首个纵向切片预计需要：
 
-- 创建和查询信源；
-- 手工触发采集并查询 Operation；
-- 查看快照、片段和候选；
-- 批准、编辑后批准或拒绝候选；
-- 查询已保存知识和证据；
-- 查询日报及投递状态。
+- 导入固定周刊资料并查询 Operation；
+- 查看 Resource、Snapshot、文档结构、片段、图片和来源身份；
+- 独立提交 ContentClassification、IntakeDecision 与可选反馈原因；
+- 手工创建、拆分、修订、关联、重组和撤回知识；
+- 查看确定性/AI 处理运行和 KnowledgeChangeSet；
+- 授权、拒绝、纠错、撤回规则或重新处理知识变更；
+- 查询已保存知识、关系、冲突、证据和授权依据；
+- 搜索关键词、对象、来源、时间、关系和处理状态。
+
+创建定时信源、日报、投递和面向其他项目的公共能力在后续切片加入；内部网页同样使用版本化应用契约，但不能为了首屏提前发布未验证的外部产品 API。
 
 长操作返回 `202 Accepted`、公开 `operation_id` 和状态资源位置。
 错误响应使用稳定错误码、关联 ID 和可安全展示的信息，不泄漏凭据、私有正文或内部堆栈。
@@ -327,7 +388,7 @@ Transport adapter 在调用应用接口前完成 bounded body、fatal UTF-8、�
 
 ### 10.2 WebSocket
 
-WebSocket 只推送 `operation.progress`、`candidate.ready`、`digest.ready` 等实时视图；底层传输即使全双工，也不开放 WS 业务命令。
+WebSocket 只推送 `operation.progress`、`review.required`、`knowledge.changed` 以及后续 `digest.ready` 等实时视图；底层传输即使全双工，也不开放 WS 业务命令。
 客户端断线或丢帧后必须能通过 HTTP 读取最终状态；高权限修改仍走经认证和幂等保护的 HTTP 命令。
 
 每次订阅的 cutoff、截止点内 replay rows 与 snapshot state 必须来自同一个 read-only repeatable-read 视图或等价的一致性机制。
@@ -362,12 +423,15 @@ QQbot 继续作为独立项目。
 
 - Node.js 和前端开发服务器在 Windows 原生运行；
 - PostgreSQL 18 + pgvector 通过 Docker Desktop/WSL2 运行；
-- Blob 使用仓库外、配置明确的本地数据目录；
+- 运行配置从源码和安装物之外的显式文件或环境注入加载；
+- Blob、上传、导出、备份和个人文档使用仓库外、安装目录外且配置明确的本地数据目录；
 - API、Scheduler 和 Worker 默认合并启动，故障测试时再分角色；
 - 端到端测试使用 Playwright 的 Chromium，并在 CI 补充 Linux。
 
 如果不能使用 Docker，使用原生 PostgreSQL 18 + pgvector 安装作为备选。
 不因为本地安装方便而改用 SQLite，避免把兼容性风险推迟到部署阶段。
+
+启动时必须把运行配置和所有数据根解析为规范绝对路径，并拒绝 Git 工作树、源码目录、安装目录及其子目录。仓库相对路径不得成为个人数据的隐式回退。开发配置只能指向外部数据根；仓库内只保留没有真实值的 schema 与占位示例。
 
 ### 11.2 Linux 正式部署
 
@@ -388,6 +452,7 @@ persistent Blob volume + encrypted backup
 
 API、Scheduler 和 Worker 使用同一后端镜像与代码版本，只改变启动角色。
 部署必须包含数据库迁移、健康检查、优雅停止、资源限制、日志保留、备份与恢复演练。
+容器镜像只包含代码、迁移、契约、声明资产、NOTICE 和合成 fixture；实际配置通过外部挂载或环境注入，个人数据通过 PostgreSQL、持久卷或对象存储提供，不能写入镜像层。
 
 应用 schema、扩展和 `pg-boss` schema 由独立迁移角色在服务启动前升级。
 普通 API/Worker 角色只获得运行所需的最小 DML 权限；技术探针必须证明预建 schema 后启动不会要求普通角色执行 DDL，否则不能接受当前队列方案。
@@ -410,6 +475,7 @@ apps/
         access/
         sources/
         evidence/
+        curation/
         processing/
         knowledge/
         retrieval/
@@ -426,6 +492,8 @@ docs/
 
 `apps/server` 生成 API、Scheduler 和 Worker 入口。
 `packages/contracts` 只保存有明确版本和所有者的共享契约，不成为任意通用工具的堆放处。
+
+个人知识、分类、偏好、信源、规则、保存查询、提示覆盖、快照、媒体、导出、备份和实际运行配置不属于仓库布局。它们位于工作区数据库或显式外部数据根；`.gitignore` 只是事故防护，不能把仓库内忽略目录当作正式数据位置。
 
 文件与标识符遵循 Google TypeScript Style Guide，包括 UTF-8、ES 模块、ASCII 标识符和 Google 命名规则。
 框架生成的默认命名与 Google 文件名规则冲突时，以记录在 ADR 中且由工具统一执行的项目规则为准。
@@ -471,13 +539,18 @@ pnpm db:migrate
 
 ### 单元测试
 
-- 知识修订、引用继承、审批、撤回和关系不变量；
-- Operation、Candidate 和 Delivery 状态机；
+- 知识修订、引用继承、授权提交、补偿修订和关系不变量；
+- 内容分类、准入动作、知识类型、认知角色、审核状态和操作来源互不隐式改写；
+- 手工、确定性规则、导入器和 AI 提案产生同一规范知识命令形状；
+- IntakeDecision、AutomationPolicy、KnowledgeChangeSet、Operation、Candidate 和 Delivery 状态机；
+- 信息价值、偏好、探索、噪声和事实可靠性维度不混用；负反馈原因不被错误折叠；
+- 模型提案不能绕过动作级授权，停用或过期策略不能提交新变更；
 - 去重、时间窗口、时区和幂等规则；
 - 模型输出 schema 与引用核验；
 - raw JSON 重复成员、标准条件 schema、普通 record/array 与 exotic-container 拒绝；
 - state/export writer-reader 预算的边界值、超限原子失败与 caller-buffer mutation；
 - SSRF 地址判断、路径规范化和权限策略。
+- 外部配置 schema、仓库/安装目录 containment 拒绝及无仓库相对个人数据回退。
 
 ### 集成测试
 
@@ -492,26 +565,33 @@ M0-S 首轮只接入可注入、确定性的合成边界，不宣称真实 Postg
 - 并发 equal/conflicting idempotency、竞争 claim、迟到 outcome 与单调终态；
 - WS 一致 cutoff/snapshot、并发 replay、gap/identity 冲突和 HTTP 恢复；
 - 中文子串、`pg_trgm` 与后续向量检索基准。
+- 删除并重建 SearchProjection、树视图和可选向量后，规范知识与找回结果保持一致。
 
 ### 纵向 E2E
 
-固定许可的 RSS fixture 经过：
+固定许可的科技周刊 Markdown fixture 经过：
 
 ```text
-fetch -> snapshot -> fragment -> cited candidate -> digest
-      -> approve -> retrieve -> webhook
+import -> snapshot -> document nodes/fragments/media
+       -> classification + independent intake decision
+       -> manual/deterministic knowledge change set
+       -> commit -> deterministic search -> retrieve evidence -> correct/reprocess
 ```
 
-测试重复抓取、重复批准、重复事件、进程重启、AI 超时、发送确认丢失和 Windows 休眠后的补跑。
+首个纵向 E2E 不配置 AI、Embedding 或外部模型凭据。测试重复导入、重复授权、策略暂停、并发变更、进程重启、引用不匹配、补偿修订和 Windows 休眠后的后续每周补跑；AI 切片另加超时、无效提案和供应商禁用场景。
+日报、Webhook 和 QQbot 在对应后续切片使用独立 E2E，不作为知识核心成功的替代证据。
 真实外部模型只做显式启用的 smoke test，不进入默认 CI。
 
 ## 15. 安全、隐私与运维门槛
 
 进入相应功能前必须完成：
 
+- 首个个人数据写入前：外部配置 schema、规范路径 containment、包体内容清单及工作区/Blob 联合备份合同；
 - 首个浏览器切片前：本地会话认证、写操作 CSRF、WS 认证与 Origin/工作区授权；
 - 任意 URL 抓取前：SSRF 威胁模型、DNS/跳转复查、内网阻断、大小和超时限制；
 - 外部 AI 前：按工作区配置的数据外发策略、最小输入、日志脱敏和删除策略；
+- 自动知识提交前：动作级授权、策略版本/有效期、试运行、预算、暂停、补偿修订和审计；
+- 保存第三方全文或图片前：来源授权、保留期限、删除规则和再分发边界；
 - 公网部署前：公网身份策略、TLS、速率限制、秘密管理、备份和恢复演练；
 - Webhook 前：签名、轮换、防重放、幂等和死信处置；
 - 本地桥接前：出站连接、能力级授权、路径边界、撤销和审计；
@@ -547,46 +627,89 @@ M0-S 工程地基已于 2026-08-10 完成：工具链、目录、最小运行角
 M0-P 的测试数量和候选实现不构成生产质量证明。
 正式测试直接针对 M0-S 之后的真实模块与契约，覆盖本大纲列出的不变量。
 
-### 切片 A：手工输入到可追溯候选
+### 切片 0：外部配置与个人数据边界
 
 交付：
 
-- 工作区、Operation、Blob、Resource、Snapshot 和 Fragment；
+- 闭合、版本化的运行配置 schema 和包体外配置加载；
+- Windows/Linux 规范绝对路径与仓库/安装目录 containment 拒绝；
+- 外部 Blob、上传、导出和备份数据根端口；
+- 候选构建包内容清单检查，禁止个人配置、知识、快照和真实样本；容器存在后在独立准入门枚举镜像；
+- 合成工作区导出/导入及秘密排除合同。
+
+退出条件：改变用户分类、偏好或信源无需修改代码或重建包；应用拒绝把个人数据写入仓库、安装目录或容器非持久层。
+
+2026-08-11 结论：切片 0 在当前非容器范围内完成。闭合外部配置、规范路径隔离、四个固定数据区域、本地 SHA-256 内容寻址 Blob、候选包实际内容枚举与哈希清单，以及工作区 Bundle v1 合成往返/秘密排除均已实现并进入统一验证。仓库尚无已准入容器镜像，镜像内容枚举继续由 `M0-S-CONTAINER-MAINT-001` 关闭；这不构成生产发布或完整工作区恢复声明。
+
+### 切片 A：科技周刊到证据化人工摄取
+
+交付：
+
+- 工作区、Operation、Blob、Resource、Snapshot、DocumentNode、Fragment 和 MediaAsset/Usage；
 - 本地会话认证、浏览器写操作 CSRF 防护和 WS Origin/授权检查；
-- 手工粘贴文本或提交固定 fixture；
-- fake AI 与一个真实 AI 适配器；
-- 带证据的 Candidate 页面；
+- 至少 10 期固定科技周刊 Markdown fixture 及 Git 来源身份；
+- 确定性文档解析、栏目/独立条目和图片位置；
+- 工作区词表与 ContentClassification；与其独立的 IntakeDecision、分维度 Assessment 和可选反馈原因；
+- 证据查看、逐条标注、错误和重复导入页面；
 - Windows 与 Linux 集成测试。
 
-退出条件：中文摘要中的每项引用都能稳定返回原始片段，重复处理不产生重复候选。
+退出条件：满足路线图阶段 1；每个条目和图片都能稳定返回原始上下文，重复导入和标注不产生重复副作用。
 
-### 切片 B：一个 RSS 信源到批准入库
-
-交付：
-
-- 一个公开 RSS/Atom Endpoint；
-- 定时抓取、内容哈希、游标、重试和补跑；
-- 最简日报；
-- 批准、拒绝、纠错和 KnowledgeRevision；
-- 已保存列表与关键词找回。
-
-退出条件：满足产品需求中的 MVP-0 验收场景。
-
-### 切片 C：稳定推送与第二信源
+### 切片 B1：获准资料到非 AI 知识与确定性检索
 
 交付：
 
-- 第二个真实信源；
-- Webhook outbox、签名、重试与死信；
-- QQbot 只读推送；
-- 变化检测、更新候选与受影响知识复核；
-- 导出、备份和恢复演练。
+- `knowledge` 与 `retrieval` 的首批应用接口；
+- KnowledgeItem、不可变 Revision、Alias、Citation、Derivation、Relation/Revision 和 ConflictCase；
+- Collection、OrderedMembership、Framework、TreePlacement 和 SavedView；
+- 手工选区拆分、创建、修订、连接、重组、纠错、补偿修订、撤回和重新处理；
+- 用户命令、确定性解析器、规则和导入器共享的 KnowledgeChangeSet；
+- 结构化过滤、精确/别名/中文子串、来源、时间、关系和状态搜索，并返回匹配原因与出处；
+- 来源、文档、词表、分类、知识、引用、变更集和冲突的版本化工作区导出。
 
-退出条件：连续运行一周无静默漏抓、重复入库或无法解释的投递状态。
+退出条件：不配置 AI 或 Embedding 时满足产品需求中的 MVP-0A 验收场景；规范投影可重建，个人数据不进入仓库或构建物。
+
+### 切片 B2：AI 提案与检索增强
+
+交付：
+
+- `processing` 的 AI 能力端口、fake AI 与一个显式启用的真实 AI 适配器；
+- ProcessingPlan、KnowledgeChangeProposal、模型运行记录和引用校验；
+- AI 提案与 B1 完全相同的 KnowledgeChangeSet 和权限入口；
+- A1 范围授权下的低风险自动新增和非破坏性修订；
+- 高影响动作审核、暂停、预算、供应商失败和人工接管；
+- 可选向量召回和带出处综合，不替代确定性搜索结果。
+
+退出条件：满足产品需求中的 MVP-0B 验收场景；AI 提高真实任务效率且所有结果可追溯、可拒绝、可重放，关闭 AI 后 B1 的行为和数据仍完整可用。
+
+### 切片 C：每周监测与自适应分流
+
+交付：
+
+- 科技周刊 Git Endpoint、每周调度、游标、重试、补跑和变化检测；
+- PreferenceProfile、ExplorationPolicy 和 AutomationPolicy 的建议、试运行、启用、暂停与版本；
+- 高确定性自动处理、低价值自动忽略和不确定项审核；
+- 探索原因展示、预算和反信息茧房回归测试；
+- 允许站点内的冲突网络核验；
+- 规则、知识和任务恢复演练。
+
+退出条件：满足产品需求中的 MVP-1 验收场景；连续处理多期无静默漏抓、重复入库或无法解释的自动决定。
+
+### 切片 D：异构资料与在线核验
+
+交付：
+
+- 经过准入的 Markdown、文本、HTML、项目文档和 PDF 适配器；
+- 与文档类型匹配的处理计划和全文级/框架级知识；
+- 图片派生处理与需要时的 OCR；
+- 私人、在线和混合查询；
+- 按真实任务加入最小树、时间线或关系浏览。
+
+退出条件：满足路线图阶段 4 的退出条件。
 
 ### 后续切片
 
-按真实使用依次加入混合查询、知识树/时间线、云端公开访问、本地桥接、图片 OCR、视频和受控自动发现。
+按真实使用依次加入报告、版本化外部接口、QQbot 薄适配器、云端公开访问、本地桥接、视频和受控自动发现。
 顺序由样本和指标决定，不并行建设所有远期能力。
 
 ## 17. 已确认的架构前提
@@ -601,16 +724,21 @@ M0-P 的测试数量和候选实现不构成生产质量证明。
 第 16.1 节的 M0-P 结论与最终架构复审已于 2026-08-08 完成，ADR 0001 和 ADR 0002 因此进入 `Accepted`。
 AI 供应商、云服务商、生产反向代理、备份目标和秘密管理产品仍未选择，并按各自功能/部署门另行决策。
 
-以下信息不阻塞 M0-S 工程地基，但阻塞首个真实功能切片：
+以下信息不阻塞切片 0、A 或 B1 的工程实现；只有在使用相应能力前才成为功能门：
 
-- 第一个主要信源、一个备选信源和至少 10 条样本；
-- 理想日报样例与“入库/只报告/忽略”标注；
-- 现有 QQbot 是接收 Webhook，还是主动调用 StruInfo；
-- 快照保存全文、正文、截图或引用片段的授权与保留期限；
-- 图片在首批样本中的比例，以及是否必须从第一版读取图片文字。
+- 至少 10 期科技周刊的固定提交/文件身份已完成；B1 只需覆盖分类、准入、拆分、连接、重组和撤回的代表性处理样例，不要求完整偏好评级；
+- 5–6 个真实搜索、比较、核验或维护任务已经有草案，人工效率基线可在 B1 可操作后补测；
+- 首要成功指标和必要的引用、变更接受率或找回质量指标；
+- 周刊全文、图片与二级链接的授权、保留期限和删除规则；
+- 外部 AI 可接收的样本范围，以及冲突网络核验的允许站点和预算，只阻塞 B2 与在线核验；
+- 初始知识/关系类型和图片用途的最小词表；
+- 首个网页切片前的浏览器制品准入，以及首个真实持久化切片前的 PostgreSQL/容器准入。
+
+备选信源、探索展示比例、QQbot 接入方式、具体报告格式和云部署选择不再阻塞知识核心切片。
 
 ## 18. 参考资料
 
+- [阮一峰科技周刊 GitHub 仓库](https://github.com/ruanyf/weekly)
 - [Node.js 发布与 LTS 状态](https://nodejs.org/en/about/previous-releases)
 - [Google TypeScript Style Guide](https://google.github.io/styleguide/tsguide.html)
 - [NestJS 文档](https://docs.nestjs.com/)

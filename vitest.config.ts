@@ -6,6 +6,7 @@ export default defineConfig({
     include: [
       'apps/**/src/**/*.test.{ts,tsx}',
       'packages/**/src/**/*.test.{ts,tsx}',
+      'tools/**/*.test.ts',
     ],
     exclude: ['tests/integration/**', 'tests/e2e/**'],
     clearMocks: true,

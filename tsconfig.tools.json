@@ -10,6 +10,7 @@
     "./playwright.config.ts",
     "./vitest.config.ts",
     "./vitest.integration.config.ts",
-    "./apps/web/vite.config.ts"
+    "./apps/web/vite.config.ts",
+    "./tools/**/*.ts"
   ]
 }

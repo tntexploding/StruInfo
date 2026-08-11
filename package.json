@@ -4,6 +4,20 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
+  "files": [
+    "apps/server/dist",
+    "apps/server/migrations",
+    "apps/server/package.json",
+    "apps/web/dist",
+    "apps/web/package.json",
+    "packages/contracts/json-schema",
+    "packages/contracts/openapi",
+    "packages/contracts/package.json",
+    "THIRD_PARTY_NOTICES.md",
+    "docs/dependencies/licenses/npm",
+    "docs/dependencies/licenses/npm-source",
+    "docs/dependencies/sbom/npm-closure.spdx.json"
+  ],
   "packageManager": "pnpm@11.20.0",
   "engines": {
     "node": "24.18.0",
@@ -17,8 +31,9 @@
     "test": "vitest run --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test --config playwright.config.ts",
-    "build": "tsc --build tsconfig.build.json --pretty false && corepack pnpm --filter @struinfo/web run build",
-    "verify": "corepack pnpm run format:check && corepack pnpm run lint && corepack pnpm run typecheck && corepack pnpm run test && corepack pnpm run test:integration && corepack pnpm run build",
+    "build": "tsc --build tsconfig.build.json --clean && tsc --build tsconfig.build.json --pretty false && corepack pnpm --filter @struinfo/web run build",
+    "artifact:verify": "tsx tools/verify_application_artifact.ts",
+    "verify": "corepack pnpm run format:check && corepack pnpm run lint && corepack pnpm run typecheck && corepack pnpm run test && corepack pnpm run test:integration && corepack pnpm run build && corepack pnpm run artifact:verify",
     "db:migrate": "corepack pnpm --filter @struinfo/server run db:migrate"
   },
   "devDependencies": {

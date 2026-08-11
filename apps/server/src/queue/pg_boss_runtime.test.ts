@@ -1,3 +1,6 @@
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+
 import type {ConstructorOptions} from 'pg-boss';
 import {describe, expect, it, vi} from 'vitest';
 
@@ -14,6 +17,10 @@ import {
 } from './pg_boss_runtime.js';
 
 const DATABASE_URL = 'postgresql://runtime:synthetic@localhost/struinfo';
+const RUNTIME_ENVIRONMENT = {
+  DATABASE_URL,
+  STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),
+};
 
 describe('createPgBossOptions', () => {
   it.each([
@@ -24,7 +31,7 @@ describe('createPgBossOptions', () => {
     'disables every implicit DDL path for the %s role',
     (role, schedule, supervise) => {
       const options = createPgBossOptions(
-        parseRuntimeConfig(role, {DATABASE_URL}),
+        parseRuntimeConfig(role, RUNTIME_ENVIRONMENT),
       );
 
       expect(options).toEqual({
@@ -62,7 +69,7 @@ describe('PgBossRuntime', () => {
       },
     };
     const config = createPgBossOptions(
-      parseRuntimeConfig('worker', {DATABASE_URL}),
+      parseRuntimeConfig('worker', RUNTIME_ENVIRONMENT),
     );
 
     const runtime = await PgBossRuntime.start({
@@ -101,7 +108,7 @@ describe('PgBossRuntime', () => {
       PgBossRuntime.start({
         factory,
         config: createPgBossOptions(
-          parseRuntimeConfig('scheduler', {DATABASE_URL}),
+          parseRuntimeConfig('scheduler', RUNTIME_ENVIRONMENT),
         ),
         shutdownTimeoutMs: 2000,
       }),

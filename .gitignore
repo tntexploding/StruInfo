@@ -12,6 +12,10 @@
 /runtime/
 /snapshots/
 /uploads/
+/workspace-data/
+/user-profiles/
+/exports/
+/backups/
 
 # Local multi-agent coordination and disposable architecture spikes.
 /.agents/

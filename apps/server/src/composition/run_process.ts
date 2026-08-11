@@ -1,8 +1,8 @@
 import {
   ConfigurationError,
-  parseRuntimeConfig,
   type ProcessRole,
 } from '../config/runtime_config.js';
+import {loadRuntimeConfig} from '../config/external_runtime_config.js';
 import {
   collectEnvironmentSecrets,
   StandardOutputSink,
@@ -15,7 +15,7 @@ export async function runProcess(role: ProcessRole): Promise<void> {
   const clock = new SystemClock();
   let config;
   try {
-    config = parseRuntimeConfig(role, process.env);
+    config = loadRuntimeConfig(role, process.env);
   } catch (error) {
     writeBootstrapFailure(role, error, clock);
     process.exitCode = 1;

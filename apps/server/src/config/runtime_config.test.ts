@@ -1,3 +1,6 @@
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+
 import {describe, expect, it} from 'vitest';
 
 import {
@@ -7,14 +10,17 @@ import {
 } from './runtime_config.js';
 
 const DATABASE_URL = 'postgresql://runtime:synthetic@127.0.0.1/struinfo';
+const DATA_ROOT = join(tmpdir(), 'struinfo-synthetic-data');
+const RUNTIME_ENVIRONMENT = {DATABASE_URL, STRUIINFO_DATA_ROOT: DATA_ROOT};
 
 describe('parseRuntimeConfig', () => {
   it('parses defaults once into a frozen ordinary object', () => {
-    const config = parseRuntimeConfig('api', {DATABASE_URL});
+    const config = parseRuntimeConfig('api', RUNTIME_ENVIRONMENT);
 
     expect(config).toEqual({
       role: 'api',
       databaseUrl: DATABASE_URL,
+      dataRoot: DATA_ROOT,
       host: '127.0.0.1',
       port: 3000,
       healthHost: '127.0.0.1',
@@ -34,7 +40,7 @@ describe('parseRuntimeConfig', () => {
   ] satisfies readonly [ProcessRole, number][])(
     'uses the frozen %s health-port default',
     (role, healthPort) => {
-      expect(parseRuntimeConfig(role, {DATABASE_URL}).healthPort).toBe(
+      expect(parseRuntimeConfig(role, RUNTIME_ENVIRONMENT).healthPort).toBe(
         healthPort,
       );
     },
@@ -43,6 +49,7 @@ describe('parseRuntimeConfig', () => {
   it('accepts explicit valid values and inclusive boundaries', () => {
     const config = parseRuntimeConfig('worker', {
       DATABASE_URL: 'postgres://runtime@localhost/database',
+      STRUIINFO_DATA_ROOT: DATA_ROOT,
       STRUIINFO_HOST: 'localhost',
       STRUIINFO_PORT: '1',
       STRUIINFO_HEALTH_HOST: '::1',
@@ -62,21 +69,37 @@ describe('parseRuntimeConfig', () => {
     expect(
       parseRuntimeConfig('api', {
         DATABASE_URL,
+        STRUIINFO_DATA_ROOT: DATA_ROOT,
         STRUIINFO_SHUTDOWN_TIMEOUT_MS: '1000',
       }).shutdownTimeoutMs,
     ).toBe(1000);
   });
 
   it('rejects a missing database URL', () => {
-    expect(() => parseRuntimeConfig('api', {})).toThrow(
-      new ConfigurationError('DATABASE_URL is required.'),
+    expect(() =>
+      parseRuntimeConfig('api', {STRUIINFO_DATA_ROOT: DATA_ROOT}),
+    ).toThrow(new ConfigurationError('DATABASE_URL is required.'));
+  });
+
+  it('requires an absolute external data root', () => {
+    expect(() => parseRuntimeConfig('api', {DATABASE_URL})).toThrow(
+      new ConfigurationError('STRUIINFO_DATA_ROOT is required.'),
     );
+    expect(() =>
+      parseRuntimeConfig('api', {
+        DATABASE_URL,
+        STRUIINFO_DATA_ROOT: 'relative-data',
+      }),
+    ).toThrow('STRUIINFO_DATA_ROOT must be an absolute filesystem path.');
   });
 
   it('rejects an invalid database URL without echoing it', () => {
     const injectedSecret = 'not-a-url-with-synthetic-password';
     const error = captureConfigurationError(() =>
-      parseRuntimeConfig('api', {DATABASE_URL: injectedSecret}),
+      parseRuntimeConfig('api', {
+        DATABASE_URL: injectedSecret,
+        STRUIINFO_DATA_ROOT: DATA_ROOT,
+      }),
     );
 
     expect(error.message).toBe(
@@ -94,13 +117,16 @@ describe('parseRuntimeConfig', () => {
     ['STRUIINFO_SHUTDOWN_TIMEOUT_MS', '60001'],
   ])('rejects invalid numeric input for %s', (name, value) => {
     expect(() =>
-      parseRuntimeConfig('api', {DATABASE_URL, [name]: value}),
+      parseRuntimeConfig('api', {
+        ...RUNTIME_ENVIRONMENT,
+        [name]: value,
+      }),
     ).toThrow(name);
   });
 
   it.each(['', 'host with spaces'])('rejects invalid host %j', (host) => {
     expect(() =>
-      parseRuntimeConfig('api', {DATABASE_URL, STRUIINFO_HOST: host}),
+      parseRuntimeConfig('api', {...RUNTIME_ENVIRONMENT, STRUIINFO_HOST: host}),
     ).toThrow('STRUIINFO_HOST');
   });
 
@@ -108,6 +134,7 @@ describe('parseRuntimeConfig', () => {
     expect(() =>
       parseRuntimeConfig('api', {
         DATABASE_URL,
+        STRUIINFO_DATA_ROOT: DATA_ROOT,
         STRUIINFO_LOG_LEVEL: 'trace',
       }),
     ).toThrow('STRUIINFO_LOG_LEVEL');

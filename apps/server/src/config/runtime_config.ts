@@ -1,3 +1,5 @@
+import {isAbsolute} from 'node:path';
+
 export type ProcessRole = 'api' | 'scheduler' | 'worker' | 'all';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -5,6 +7,7 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 export interface RuntimeConfig {
   readonly role: ProcessRole;
   readonly databaseUrl: string;
+  readonly dataRoot: string;
   readonly host: string;
   readonly port: number;
   readonly healthHost: string;
@@ -38,6 +41,7 @@ export function parseRuntimeConfig(
   environment: Readonly<Record<string, string | undefined>>,
 ): Readonly<RuntimeConfig> {
   const databaseUrl = parseDatabaseUrl(environment.DATABASE_URL);
+  const dataRoot = parseDataRoot(environment.STRUIINFO_DATA_ROOT);
   const host = parseHost('STRUIINFO_HOST', environment.STRUIINFO_HOST);
   const port = parseInteger(
     'STRUIINFO_PORT',
@@ -69,6 +73,7 @@ export function parseRuntimeConfig(
   return Object.freeze({
     role,
     databaseUrl,
+    dataRoot,
     host,
     port,
     healthHost,
@@ -77,6 +82,18 @@ export function parseRuntimeConfig(
     shutdownTimeoutMs,
     logLevel,
   });
+}
+
+function parseDataRoot(value: string | undefined): string {
+  if (value === undefined || value.trim() === '') {
+    throw new ConfigurationError('STRUIINFO_DATA_ROOT is required.');
+  }
+  if (!isAbsolute(value)) {
+    throw new ConfigurationError(
+      'STRUIINFO_DATA_ROOT must be an absolute filesystem path.',
+    );
+  }
+  return value;
 }
 
 function parseDatabaseUrl(value: string | undefined): string {

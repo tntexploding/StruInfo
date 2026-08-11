@@ -1,3 +1,6 @@
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+
 import type {PoolConfig} from 'pg';
 import {describe, expect, it, vi} from 'vitest';
 
@@ -85,6 +88,7 @@ describe('RuntimeDatabase', () => {
     let poolConfig: PoolConfig | undefined;
     const config = parseRuntimeConfig('api', {
       DATABASE_URL: 'postgresql://runtime:synthetic@localhost/struinfo',
+      STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),
     });
     const database = createRuntimeDatabase(
       config,
