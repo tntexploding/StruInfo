@@ -1,8 +1,8 @@
 # Deterministic Markdown Structure Contract
 
-- Contract ID: `C-SLICE-A-MARKDOWN-r1`
-- Status: Frozen for implementation; acceptance requires the named TM1 gate
-- Baseline: `07dcf6a343430d533ff96d6ad53c4c9530aea290`
+- Contract ID: `C-SLICE-A-MARKDOWN-r2`
+- Status: Frozen corrected implementation contract; acceptance requires the named TM1 gate
+- Baseline: `e478ff06b817c2987578baa3c14534e30279d579`
 - Upstream contract:
   [`C-SLICE-A-EVIDENCE-r2`](source-evidence-storage-contract.md)
 - First source profile: `ruanyf-weekly-v1`
@@ -21,9 +21,20 @@ source-controlled code.
 The parser preserves evidence and proposes reviewable structural units. It does
 not decide whether those units are interesting, reliable, admitted, or factual.
 
+Revision 2 changes only the resource-budget execution boundary. The admitted
+CommonMark dependency exposes a synchronous API that completely buffers its
+public parse result and has no supported abort or streaming limit. The fixed
+source-byte ceiling bounds that upstream step. After it returns, one bounded
+StruInfo preflight decides all reachable product-graph budgets before the full
+StruInfo graph is allocated. Revision 2 does not change parser identity,
+normalization, output, errors, budget values, CommonMark semantics, or the
+dependency set.
+
 ## Fixed implementation profile
 
-Revision 1 uses these identities:
+Contract revision 2 does not increment a parser, projection, or storage
+identity. References below to revision 1 describe that unchanged parser and
+output shape, which uses these identities:
 
 | Identity                     | Value                                 |
 | ---------------------------- | ------------------------------------- |
@@ -734,7 +745,8 @@ the canonical JSON encoder's 100,000 visited values before hashing.
 
 ## Resource budgets
 
-Revision 1 exports, documents, and tests these inclusive constants:
+The unchanged parser/output revision exports, documents, and tests these
+inclusive constants:
 
 | Budget                    |      Limit |
 | ------------------------- | ---------: |
@@ -753,27 +765,47 @@ has depth 0, a direct child has depth 1, and every additional parent edge adds
 one. Synthetic section nodes and image nodes count like all other mapped nodes.
 The deepest emitted node must have depth no greater than 64.
 
-The source-byte limit also bounds a single line, label, target, alt value, or
-fence; revision 1 does not add redundant token-length knobs. Source through
-diagnostic limits are reachable construction limits and receive at-limit and
+The source-byte limit is checked before copying, decoding, or invoking the
+CommonMark dependency. It also bounds a single line, label, target, alt value,
+or fence; the parser/output revision does not add redundant token-length knobs.
+The admitted `mdast-util-from-markdown@2.0.3` public API synchronously buffers
+the complete micromark-event/MDAST result. It exposes no supported signal,
+abort, event limit, node limit, or streaming compiler callback. This contract
+therefore bounds that upstream allocation by the fixed inclusive source-byte
+limit; the implementation does not use package-private interfaces, duplicate
+the compiler, or silently change CommonMark semantics.
+
+Depth through diagnostic limits are reachable StruInfo product-graph limits.
+After the dependency returns, one deterministic preflight traverses the
+complete public MDAST, saturates each count at its inclusive limit plus one,
+and retains at most the node limit plus one lightweight preorder records. It
+evaluates every reachable budget in the required priority before allocating a
+complete `NodeDraft`, Fragment, link, media, or diagnostic product graph. A
+passing mapping is checked against the preflight counts so count-model drift
+cannot silently change accepted output. These budgets receive at-limit and
 over-limit tests. The lower Fragment limit allows its over-limit case to remain
-below the node limit. The last two rows are downstream defensive ceilings, not
-separate reachable Markdown quotas: the exact projection with 2,500 nodes and
-2,000 Fragments visits 40,511 canonical JSON values, and its maximum bounded
-field representation remains below 16 MiB. TM1 proves those strict inequalities
-for a maximum legal projection; it does not manufacture an otherwise illegal
-Markdown result solely to reach either encoder ceiling. Limits are checked
-during construction and fail the whole parse without returning a persistable
-partial result. Callers cannot raise them per request.
+below the node limit.
+
+The last two rows are downstream defensive ceilings, not separate reachable
+Markdown quotas: the exact projection with 2,500 nodes and 2,000 Fragments
+visits 40,511 canonical JSON values, and its maximum bounded field
+representation remains below 16 MiB. TM1 proves those strict inequalities for
+a maximum legal projection; it does not manufacture an otherwise illegal
+Markdown result solely to reach either encoder ceiling. Every failure rejects
+the whole parse without returning a persistable partial result. Callers cannot
+raise limits per request.
 
 If one request violates more than one limit, the single reported budget uses
 this priority: `source_bytes`, `depth`, `nodes`, `fragments`, `links`, `media`,
 `diagnostics`, `canonical_structure_bytes`, then `canonical_json_values`.
 
-Wall-clock timing is not a deterministic correctness assertion. Process or
-worker cancellation remains a later runtime-admission concern; current TM1 uses
-bounded bytes, nodes, depth, links, media, diagnostics, and canonical output and
-never treats a timing-only test as the sole resource-safety proof.
+Wall-clock timing is not a deterministic correctness assertion. TM1 proves the
+pre-dependency source-byte check, bounded StruInfo preflight, saturated ledger,
+reachable budget priority, and canonical output limits. It does not claim a
+tight peak-heap ceiling inside the admitted dependency for an at-limit source.
+Process/worker cancellation and stronger runtime isolation remain later
+runtime-admission concerns; a timing-only test is never the sole
+resource-safety proof.
 
 ## Results and errors
 
@@ -883,8 +915,11 @@ value-free fixtures:
 7. poisoned AI, network, filesystem, clock, and randomness capabilities proving
    that parsing has no such dependency;
 8. at-limit/over-limit source, node, depth, link, media, diagnostic, and Fragment
-   budgets; a maximum legal projection strictly below both downstream canonical
-   encoder ceilings; and no partial persistable output on any failure; and
+   budgets; the source limit before dependency invocation; a deterministic
+   saturated preflight that bounds StruInfo product-graph allocation and
+   preserves combined-limit priority; a maximum legal projection strictly
+   below both downstream canonical encoder ceilings; and no partial persistable
+   output on any failure; and
 9. format, lint, strict type checking, focused tests, full unit/integration
    tests, build, dependency/notice/SBOM review, and candidate-artifact audit.
 
