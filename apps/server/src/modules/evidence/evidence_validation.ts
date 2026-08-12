@@ -26,6 +26,12 @@ import {
   decodeCaptureEvidence,
   decodeImmutableEvidenceRecord,
 } from './closed_input_decoder.js';
+import {
+  indexMarkdownText,
+  lineRangeFromIndex,
+  type IndexedMarkdownText,
+} from './markdown/markdown_line_index.js';
+import {validateFixedMarkdownEvidenceStructureWithTextIndex} from './markdown/markdown_projection.js';
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/u;
 const SHA1_PATTERN = /^[0-9a-f]{40}$/u;
@@ -293,9 +299,18 @@ function validateCapture(input: Readonly<CaptureEvidenceInput>): void {
   validateSnapshot(input, blobsById);
   validateGitObservations(input);
   const text = validateStructure(input, blobsById);
-  const codePoints = Array.from(text);
-  const nodesById = validateNodes(input, codePoints);
-  validateFragments(input, codePoints, nodesById);
+  const textIndex = indexMarkdownText(text);
+  const nodesById = validateNodes(input, textIndex);
+  validateFragments(input, textIndex, nodesById);
+  const markdownStructureCheck =
+    validateFixedMarkdownEvidenceStructureWithTextIndex(
+      input.structure,
+      input.snapshot,
+      textIndex,
+    );
+  if (markdownStructureCheck.status === 'invalid') {
+    fail('invalid_structure', markdownStructureCheck.path);
+  }
   const assetsById = validateMediaAssets(input, blobsById);
   validateMediaUsages(input, nodesById, assetsById);
 }
@@ -520,7 +535,7 @@ function validateStructure(
     fail('blob_identity_mismatch', 'structure.normalizedTextUtf8');
   }
   try {
-    return new TextDecoder('utf-8', {fatal: true}).decode(
+    return new TextDecoder('utf-8', {fatal: true, ignoreBOM: true}).decode(
       structure.normalizedTextUtf8,
     );
   } catch {
@@ -530,7 +545,7 @@ function validateStructure(
 
 function validateNodes(
   input: Readonly<CaptureEvidenceInput>,
-  codePoints: readonly string[],
+  textIndex: Readonly<IndexedMarkdownText>,
 ): ReadonlyMap<string, Readonly<DocumentNodeInput>> {
   const {nodes} = input.structure;
   if (!isArray(nodes) || nodes.length === 0) {
@@ -551,12 +566,12 @@ function validateNodes(
     validateNonNegativeInteger(node.siblingOrdinal, `${path}.siblingOrdinal`);
     validateCodePointRange(
       node.codePointRange,
-      codePoints.length,
+      textIndex.codePoints.length,
       `${path}.codePointRange`,
     );
     validateOptionalLineRange(
       node.lineRange,
-      codePoints,
+      textIndex,
       node.codePointRange,
       `${path}.lineRange`,
     );
@@ -619,7 +634,7 @@ function validateNodeCycles(
 
 function validateFragments(
   input: Readonly<CaptureEvidenceInput>,
-  codePoints: readonly string[],
+  textIndex: Readonly<IndexedMarkdownText>,
   nodesById: ReadonlyMap<string, Readonly<DocumentNodeInput>>,
 ): void {
   const {fragments} = input.structure;
@@ -655,7 +670,7 @@ function validateFragments(
     }
     validateCodePointRange(
       fragment.codePointRange,
-      codePoints.length,
+      textIndex.codePoints.length,
       `${path}.codePointRange`,
     );
     if (
@@ -666,7 +681,7 @@ function validateFragments(
     }
     validateOptionalLineRange(
       fragment.lineRange,
-      codePoints,
+      textIndex,
       fragment.codePointRange,
       `${path}.lineRange`,
     );
@@ -679,7 +694,7 @@ function validateFragments(
       fail('invalid_line_range', `${path}.lineRange`);
     }
     validateSha256(fragment.selectedTextSha256, `${path}.selectedTextSha256`);
-    const selectedText = codePoints
+    const selectedText = textIndex.codePoints
       .slice(fragment.codePointRange.start, fragment.codePointRange.end)
       .join('');
     if (
@@ -997,7 +1012,7 @@ function validateCodePointRange(
 
 function validateOptionalLineRange(
   range: Readonly<LineRange> | undefined,
-  codePoints: readonly string[],
+  textIndex: Readonly<IndexedMarkdownText>,
   codePointRange: Readonly<CodePointRange>,
   path: string,
 ): void {
@@ -1012,30 +1027,14 @@ function validateOptionalLineRange(
   ) {
     fail('invalid_line_range', path);
   }
-  const expected = deriveLineRange(codePoints, codePointRange);
+  const expected = lineRangeFromIndex(
+    textIndex.lineIndex,
+    codePointRange.start,
+    codePointRange.end,
+  );
   if (range.start !== expected.start || range.end !== expected.end) {
     fail('invalid_line_range', path);
   }
-}
-
-function deriveLineRange(
-  codePoints: readonly string[],
-  range: Readonly<CodePointRange>,
-): LineRange {
-  return {
-    start: lineOfCodePoint(codePoints, range.start),
-    end: lineOfCodePoint(codePoints, range.end - 1),
-  };
-}
-
-function lineOfCodePoint(codePoints: readonly string[], index: number): number {
-  let line = 1;
-  for (let cursor = 0; cursor < index; cursor += 1) {
-    if (codePoints[cursor] === '\n') {
-      line += 1;
-    }
-  }
-  return line;
 }
 
 function validateOptionalMediaDimensions(
