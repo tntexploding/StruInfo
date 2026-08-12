@@ -1,6 +1,6 @@
 # StruInfo 分阶段计划
 
-- 状态：M0-S、前置切片 0、来源证据与确定性 Markdown 纯逻辑边界已完成；准备人工分类/准入边界
+- 状态：M0-S、前置切片 0、来源证据与确定性 Markdown 纯逻辑边界已完成；人工分类/准入合同已冻结，准备实现
 - 最近更新：2026-08-12
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
@@ -83,7 +83,9 @@ Playwright 的 npm 包只用于配置和测试源码；Chromium/FFmpeg/winldd、
 `000002` 迁移及其他 r1 语义保持不变。提交
 `c50ad35e07b2f1b64cd938b0417d4b6bd7c231aa` 已通过固定候选 TM1：27 项模块与静态矩阵全部通过，覆盖工作区、逻辑 Blob、Resource/Snapshot、Git 观察、确定性文档结构、Fragment 和 MediaAsset/Usage 的迁移声明与纯逻辑边界。该结果不包含 PostgreSQL 实际解析、约束、事务、运行角色或容器执行；这些项目继续位于具名 TM2/容器准入门之后。
 
-[`C-SLICE-A-MARKDOWN-r2`](deterministic-markdown-structure-contract.md) 的实现提交 `7a27c2d63c64c13a2e933bdcc90ce13f98fbfaf2` 已通过正式固定候选 TM1：128/128 项强制矩阵和 23/23 项精确错误矩阵全部通过。该结果接受纯 CommonMark 解析、独立 `ruanyf-weekly-v1` profile、规范定位、稳定 ID 与结构哈希、外部媒体引用、封闭 Evidence 装配和有界资源预检；它不新增数据库表，也不表示真实 PostgreSQL、HTTP、浏览器、网络抓取或真实周刊导入已经通过。下一增量是冻结与 `ContentClassification` 分列的人工 `IntakeDecision`/`Assessment` 合同，再实现对应的无 AI 人工摄取边界。
+[`C-SLICE-A-MARKDOWN-r2`](deterministic-markdown-structure-contract.md) 的实现提交 `7a27c2d63c64c13a2e933bdcc90ce13f98fbfaf2` 已通过正式固定候选 TM1：128/128 项强制矩阵和 23/23 项精确错误矩阵全部通过。该结果接受纯 CommonMark 解析、独立 `ruanyf-weekly-v1` profile、规范定位、稳定 ID 与结构哈希、外部媒体引用、封闭 Evidence 装配和有界资源预检；它不新增数据库表，也不表示真实 PostgreSQL、HTTP、浏览器、网络抓取或真实周刊导入已经通过。
+
+[`C-SLICE-A-CURATION-r1`](manual-curation-contract.md) 已冻结下一增量：只对精确 Snapshot/Fragment 提供空起始用户词表、版本化内容分类、六种独立准入动作、可选的分维度评级、A0 人工命令、原子幂等和 `000003` 迁移。它不包含偏好模型、综合分、阈值、自动准入、正式知识、HTTP/浏览器或 AI。下一步是实现该纯边界并通过固定候选 TM1。
 
 ## 阶段 2A：非 AI 知识形成与确定性检索核心
 

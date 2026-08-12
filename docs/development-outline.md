@@ -1,6 +1,6 @@
 # StruInfo 开发大纲
 
-- 状态：基础架构、M0-S、切片 0、来源证据与确定性 Markdown 纯逻辑边界已完成；准备人工分类/准入
+- 状态：基础架构、M0-S、切片 0、来源证据与确定性 Markdown 纯逻辑边界已完成；人工分类/准入合同已冻结，准备实现
 - 最近更新：2026-08-12
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
@@ -35,7 +35,7 @@ M0-P 证明的是架构可行性，不是生产认证；任何探针候选源码
 M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁移 runner、CI、许可证记录与统一质量命令；该工程地基由 [ADR 0003](adr/0003-m0-s-engineering-foundation.md) 接受。
 自适应摄取、偏好/探索分离和策略授权知识写入由 [ADR 0004](adr/0004-adaptive-knowledge-ingestion-and-policy-authorized-writes.md) 接受。
 [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求。
-第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。外部配置/数据根、`C-SLICE-A-EVIDENCE-r2` 来源证据边界以及 `C-SLICE-A-MARKDOWN-r2` 确定性 Markdown 纯转换与闭合装配边界已经完成各自当前非容器 TM1。下一步冻结并实现与内容分类分列的人工 `IntakeDecision`/`Assessment` 合同，再继续版本化知识与确定性检索；AI 与偏好学习随后接入，不能反向定义数据库语义。
+第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。外部配置/数据根、`C-SLICE-A-EVIDENCE-r2` 来源证据边界以及 `C-SLICE-A-MARKDOWN-r2` 确定性 Markdown 纯转换与闭合装配边界已经完成各自当前非容器 TM1。[`C-SLICE-A-CURATION-r1`](manual-curation-contract.md) 已冻结精确证据目标上的用户词表、内容分类、独立 `IntakeDecision`/`Assessment` 与 A0 人工命令；下一步实现并验证该合同，再继续版本化知识与确定性检索。AI、偏好模型、综合分和自动准入随后接入，不能反向定义数据库语义。
 
 ## 2. 为什么选择这个形态
 
@@ -113,9 +113,9 @@ flowchart LR
 | `access` | 用户、工作区、会话、权限和策略 | 把单用户假设写成无工作区的数据模型 |
 | `sources` | Watch、Endpoint、Git/网页/API/文件入口、抓取计划、游标和来源适配器 | 直接产生正式知识或扩大采集范围 |
 | `evidence` | Resource、Snapshot、DocumentNode、Fragment、MediaAsset/Usage、Blob 元数据和证据定位 | 覆盖不可变快照或把解析结构冒充正式知识 |
-| `curation` | IntakeDecision、Assessment、用户反馈、PreferenceProfile、ExplorationPolicy 和 AutomationPolicy | 把内容分类、准入动作、兴趣、探索价值和事实可靠性压成一个字段或分数 |
+| `curation` | 证据目标上的 VocabularyTerm/ContentClassification、IntakeDecision、Assessment、用户反馈、PreferenceProfile、ExplorationPolicy 和 AutomationPolicy | 把内容分类、准入动作、兴趣、探索价值和事实可靠性压成一个字段或分数；直接修改证据或正式知识 |
 | `processing` | Operation、可选处理计划、确定性/AI/OCR 运行、KnowledgeChangeProposal 和插件编排 | 直接创建或更新 KnowledgeRevision |
-| `knowledge` | VocabularyTerm、ContentClassification、Candidate、KnowledgeChangeSet、KnowledgeItem/Revision/Alias、Citation、Derivation、Relation/Revision、Collection/Placement、SavedView、ConflictCase 和授权提交 | 让模型、来源或传输适配器直接改知识表，或用复制正文实现重组 |
+| `knowledge` | 正式知识目标上的分类指派、Candidate、KnowledgeChangeSet、KnowledgeItem/Revision/Alias、Citation、Derivation、Relation/Revision、Collection/Placement、SavedView、ConflictCase 和授权提交 | 让模型、来源或传输适配器直接改知识表，或用复制正文实现重组 |
 | `retrieval` | 结构化过滤、精确/别名/子串匹配、关系遍历、可选向量、树、时间线和混合查询 | 把索引、向量或 AI 答案当成唯一数据副本 |
 | `digests` | 后续日报/周报、时间窗口、排序和 Delivery | 在知识核心完成前成为正式知识唯一入口 |
 | `integrations` | HTTP 契约、WS 事件、Webhook 订阅、投递和外部项目授权 | 在核心中加入 QQ 平台细节 |
