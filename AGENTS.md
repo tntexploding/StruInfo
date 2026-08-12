@@ -31,7 +31,7 @@ candidate-package auditing, and the versioned workspace-bundle envelope. The
 `C-SLICE-A-EVIDENCE-r2` source-evidence migration and closed pure boundary, and
 the `C-SLICE-A-MARKDOWN-r2` deterministic CommonMark transform and closed
 materializer, have passed their fixed-candidate TM1 gates.
-`C-SLICE-A-CURATION-r1` now freezes the separate A0 manual
+`C-SLICE-A-CURATION-r2` now freezes the separate A0 manual
 classification/intake/assessment boundary; implement it next, then the
 manual/deterministic knowledge core. Do not make preference calibration or AI
 availability a dependency.

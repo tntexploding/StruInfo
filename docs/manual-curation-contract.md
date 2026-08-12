@@ -1,10 +1,11 @@
 # Manual Classification and Intake Contract
 
-- Contract ID: `C-SLICE-A-CURATION-r1`
+- Contract ID: `C-SLICE-A-CURATION-r2`
 - Status: Frozen implementation contract; acceptance requires the named TM1
   gate
 - Date: 2026-08-12
-- Baseline: `8f4518a4a5f246c222acae3bb50dbc2ab1f25589`
+- Baseline: `800d7cd0df44e8305e0f4d1c4537601db9b23f69`
+- Supersedes: `C-SLICE-A-CURATION-r1`
 - Upstream evidence contract:
   [`C-SLICE-A-EVIDENCE-r2`](source-evidence-storage-contract.md)
 - Upstream parser contract:
@@ -30,9 +31,17 @@ No answer implies either of the other two.
 Classifying a target never chooses an intake action, a score never chooses an
 action, and an intake action never creates or revises formal knowledge.
 
+Revision 2 closes three pre-implementation protocol ambiguities found during
+independent maintenance review: preserving an existing parent does not
+revalidate that parent's active lifecycle, all UUID-bearing boundary values use
+one rejected-on-mismatch text form, and both commands return closed result and
+issue unions. It does not change the tables, migration reservation, feature
+scope, automation authority, or persisted command schema version first frozen
+by revision 1.
+
 ## Scope and deferred boundaries
 
-Revision 1 includes:
+Revision 2 includes:
 
 - workspace-owned, user-created content-classification terms with immutable
   revisions;
@@ -46,13 +55,13 @@ Revision 1 includes:
   and a pure state-transition boundary; and
 - a forward PostgreSQL migration plus static contract tests.
 
-The classification rows in revision 1 apply only to evidence targets owned by
+The classification rows in revision 2 apply only to evidence targets owned by
 this contract. Classification of future `KnowledgeItem` identities remains a
 separate knowledge-core command and migration concern; it may reuse the same
 workspace vocabulary only after that later contract freezes the cross-module
 read boundary.
 
-Revision 1 does not include:
+Revision 2 does not include:
 
 - `PreferenceProfile`, `ExplorationPolicy`, attention-allocation policy, learned
   rules, thresholds, recommendation ranking, or automatic intake;
@@ -74,7 +83,7 @@ Their absence is not a failure of this pure/manual slice.
 The `curation` application module owns this contract.
 It does not own evidence or formal knowledge.
 
-Revision 1 implements only automation level A0.
+Revision 2 implements only automation level A0.
 Every accepted mutation has the fixed origin `manual_user` and is constructed
 by the trusted application boundary after user authorization.
 `manual_user` is not a field accepted from an untrusted request body, source
@@ -104,7 +113,7 @@ command.
 
 ## Exact curation targets
 
-Revision 1 curates an immutable evidence version, never a moving Resource.
+Revision 2 curates an immutable evidence version, never a moving Resource.
 
 ```ts
 export type CurationTargetRef =
@@ -174,11 +183,17 @@ export interface PutContentClassificationTermRequest {
   appends nothing.
 - A term can be renamed, reparented, retired, or reactivated through a new
   revision.
-- Parent terms exist and are active in the same workspace.
-  Self-parenting and direct or indirect cycles fail closed.
+- On term creation, a supplied parent exists and is active in the same
+  workspace. On term revision, that requirement applies only when
+  `parentTermId` changes from its current exact presence/value to a supplied
+  parent. Changing to root has no parent lifecycle to validate.
+  Self-parenting and direct or indirect cycles fail closed on creation or an
+  actual parent change.
 - Retiring a term does not delete or rewrite its assignments or descendants;
   active descendants under a retired parent remain valid historical/current
-  terms, while any later reparent operation must choose an active parent.
+  terms. Preserving an existing parent link never revalidates the parent's
+  active lifecycle. A later reparent to a supplied parent must choose an active
+  parent.
 - A retired term cannot receive a new `assign_classification` operation.
   Removing an existing assignment remains allowed.
 - A new command that assigns a retired term returns `term_retired` even when
@@ -203,6 +218,26 @@ trimmed or stored.
 Omitting a description or parent means no description or root placement in the
 new immutable value; it is not a patch sentinel that preserves the old value.
 Internal whitespace and Unicode normalization are preserved exactly.
+
+Assuming shape, identifier, command-key reconciliation, primary-term lookup,
+and expected revision have already succeeded, a term whose stored parent is now
+retired follows this closed table:
+
+| Requested transition                                       | Result                                                         |
+| ---------------------------------------------------------- | -------------------------------------------------------------- |
+| Exact current value, including the same parent             | `unchanged`                                                    |
+| Rename and/or description change, same parent              | `applied`                                                      |
+| Active to retired, same parent                             | `applied`                                                      |
+| Retired to active, same parent                             | `applied`                                                      |
+| Any of the above plus removal of the parent to become root | `applied`                                                      |
+| Create with a retired parent                               | `rejected` / `invalid_parent` at `request.value.parentTermId`  |
+| Change from any current parent/root to a retired parent    | `rejected` / `invalid_parent` at `request.value.parentTermId`  |
+| Change to a missing, cross-workspace, or self parent       | `rejected` / `invalid_parent` at `request.value.parentTermId`  |
+| Change to an active parent that creates a cycle            | `rejected` / `hierarchy_cycle` at `request.value.parentTermId` |
+
+Reactivation under the same retired parent is deliberate: it preserves an
+already accepted topology rather than introducing a new reference. Exact
+same-key replay still precedes this table and returns the stored receipt.
 
 ## Manual target command
 
@@ -264,7 +299,7 @@ dimension.
 
 If a target has no current intake decision, `set_intake_decision` creates
 decision revision 1. There is no `clear_intake_decision` operation in revision
-1; unresolved work is represented explicitly by `needs_review` rather than by
+2; unresolved work is represented explicitly by `needs_review` rather than by
 deleting decision history.
 
 ## Intake actions and feedback
@@ -365,7 +400,7 @@ The dimensions remain in these groups:
 | Noise and cost       | `noise_marketing`, `cognitive_cost`                                                                                                     |
 | Reliability evidence | `traceability`, `source_reliability`, `extraction_confidence`, `identity_confidence`, `corroboration`, `freshness`                      |
 
-Revision 1 defines no total, average, weight, threshold, admission formula,
+Revision 2 defines no total, average, weight, threshold, admission formula,
 ranking formula, preference model, or exploration policy.
 Changing one assessment cannot mutate another dimension or the intake decision.
 
@@ -395,7 +430,7 @@ term revision used by the command.
 - Removing an assigned term appends `removed`.
 - Assigning an already assigned term or removing an already removed/absent term
   is semantically unchanged.
-- Classification order has no semantic meaning in revision 1.
+- Classification order has no semantic meaning in revision 2.
 - Adding, removing, renaming, retiring, or reactivating a classification never
   changes the target's intake decision or assessments.
 - Changing the intake decision or an assessment never adds or removes a
@@ -405,6 +440,30 @@ Semantic equality is exact protocol equality: strings, optional-field
 presence, reason order, scores, lifecycle, and parent ID are compared exactly
 after validation. The boundary performs no case folding, trimming, Unicode
 normalization, locale collation, or implicit reason sorting.
+
+## Canonical UUID boundary
+
+Every UUID string crossing the pure boundary has exactly this lowercase,
+hyphenated text shape:
+
+```text
+^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$
+```
+
+This rule applies to `context.effectiveWorkspaceId`, `request.termId`, an
+included `request.value.parentTermId`, either target-branch ID, every
+classification-operation `termId`, and every UUID in the closed repository
+snapshot consumed by the planner. Uppercase hex, braces, a `urn:uuid:` prefix,
+missing hyphens, leading/trailing whitespace, and all other spellings are
+rejected; the boundary never trims or normalizes them.
+
+Request UUIDs are validated before request-digest construction, UUID sorting,
+workspace lookup, semantic comparison, or UUIDv5 derivation. An invalid request
+UUID returns `invalid_identifier` at its exact declared field path. Thus
+PostgreSQL's ability to parse multiple textual spellings cannot create a second
+request identity for one logical UUID. UUIDs produced by the application also
+use this shape; UUIDv5 outputs additionally carry their RFC 9562 version and
+variant bits.
 
 ## Stable identities
 
@@ -546,11 +605,67 @@ No new production dependency is authorized by this contract.
 
 ## Result and error contract
 
-Both command kinds return one of:
+The two command kinds expose separate, closed discriminated result unions.
+Receipt fields are nested under `receipt`; rejected results contain only one
+`issue`. No result object, receipt, or issue accepts additional properties.
 
 ```ts
 export type CurationCommandStatus =
   'applied' | 'replayed' | 'unchanged' | 'rejected';
+
+export type CurationOriginalOutcome = 'applied' | 'unchanged';
+
+export interface PutContentClassificationTermReceipt<
+  Outcome extends CurationOriginalOutcome = CurationOriginalOutcome,
+> {
+  readonly workspaceId: string;
+  readonly commandIdempotencyKey: string;
+  readonly commandKind: 'put_content_classification_term';
+  readonly termId: string;
+  readonly resultingRevision: number;
+  readonly originalOutcome: Outcome;
+}
+
+export interface ApplyManualCurationReceipt<
+  Outcome extends CurationOriginalOutcome = CurationOriginalOutcome,
+> {
+  readonly workspaceId: string;
+  readonly commandIdempotencyKey: string;
+  readonly commandKind: 'apply_manual_curation';
+  readonly targetId: string;
+  readonly resultingVersion: number;
+  readonly originalOutcome: Outcome;
+}
+
+export type PutContentClassificationTermResult =
+  | Readonly<{
+      status: 'applied';
+      receipt: PutContentClassificationTermReceipt<'applied'>;
+    }>
+  | Readonly<{
+      status: 'unchanged';
+      receipt: PutContentClassificationTermReceipt<'unchanged'>;
+    }>
+  | Readonly<{
+      status: 'replayed';
+      receipt: PutContentClassificationTermReceipt;
+    }>
+  | CurationRejectedResult;
+
+export type ApplyManualCurationResult =
+  | Readonly<{
+      status: 'applied';
+      receipt: ApplyManualCurationReceipt<'applied'>;
+    }>
+  | Readonly<{
+      status: 'unchanged';
+      receipt: ApplyManualCurationReceipt<'unchanged'>;
+    }>
+  | Readonly<{
+      status: 'replayed';
+      receipt: ApplyManualCurationReceipt;
+    }>
+  | CurationRejectedResult;
 
 export type CurationIssueCode =
   | 'invalid_shape'
@@ -568,41 +683,266 @@ export type CurationIssueCode =
   | 'idempotency_conflict'
   | 'persistence_failed';
 
-export interface CurationIssue {
-  readonly code: CurationIssueCode;
-  readonly path: string;
-  readonly budget?: string;
-}
+export type CurationBudgetName =
+  | 'command_operations'
+  | 'current_classifications'
+  | 'feedback_reasons'
+  | 'display_name_code_points'
+  | 'display_name_utf8_bytes'
+  | 'description_code_points'
+  | 'description_utf8_bytes'
+  | 'note_code_points'
+  | 'note_utf8_bytes'
+  | 'idempotency_key_characters'
+  | 'revision_number'
+  | 'target_version';
+
+export type CurationOperationIndex =
+  | 0
+  | 1
+  | 2
+  | 3
+  | 4
+  | 5
+  | 6
+  | 7
+  | 8
+  | 9
+  | 10
+  | 11
+  | 12
+  | 13
+  | 14
+  | 15
+  | 16
+  | 17
+  | 18
+  | 19
+  | 20
+  | 21
+  | 22
+  | 23
+  | 24
+  | 25
+  | 26
+  | 27
+  | 28
+  | 29
+  | 30
+  | 31
+  | 32
+  | 33
+  | 34
+  | 35
+  | 36
+  | 37
+  | 38
+  | 39
+  | 40
+  | 41
+  | 42
+  | 43
+  | 44
+  | 45
+  | 46
+  | 47
+  | 48
+  | 49
+  | 50
+  | 51
+  | 52
+  | 53
+  | 54
+  | 55
+  | 56
+  | 57
+  | 58
+  | 59
+  | 60
+  | 61
+  | 62
+  | 63;
+
+export type CurationReasonIndex = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+
+export type CurationIssuePath =
+  | 'context'
+  | 'context.effectiveWorkspaceId'
+  | 'context.commandIdempotencyKey'
+  | 'context.authority'
+  | 'request'
+  | 'request.termId'
+  | 'request.expectedRevision'
+  | 'request.value'
+  | 'request.value.displayName'
+  | 'request.value.description'
+  | 'request.value.parentTermId'
+  | 'request.value.lifecycle'
+  | 'request.target'
+  | 'request.target.kind'
+  | 'request.target.snapshotId'
+  | 'request.target.fragmentId'
+  | 'request.expectedTargetVersion'
+  | 'request.operations'
+  | `request.operations[${CurationOperationIndex}]`
+  | `request.operations[${CurationOperationIndex}].kind`
+  | `request.operations[${CurationOperationIndex}].termId`
+  | `request.operations[${CurationOperationIndex}].action`
+  | `request.operations[${CurationOperationIndex}].reasonCodes`
+  | `request.operations[${CurationOperationIndex}].reasonCodes[${CurationReasonIndex}]`
+  | `request.operations[${CurationOperationIndex}].note`
+  | `request.operations[${CurationOperationIndex}].dimension`
+  | `request.operations[${CurationOperationIndex}].score`
+  | 'state'
+  | 'persistence';
+
+export type CurationIssue =
+  | Readonly<{
+      code: 'limit_exceeded';
+      path: CurationIssuePath;
+      budget: CurationBudgetName;
+    }>
+  | Readonly<{
+      code: Exclude<CurationIssueCode, 'limit_exceeded'>;
+      path: CurationIssuePath;
+    }>;
+
+export type CurationRejectedResult = Readonly<{
+  status: 'rejected';
+  issue: CurationIssue;
+}>;
 ```
 
-Successful receipts contain only workspace ID, command key, command kind,
-stable target or term ID, outcome, and the resulting target or term version.
-They do not contain labels, descriptions, notes, reasons, scores, source text,
-or database errors.
+Every successful result has exactly `status` and `receipt`. Every receipt has
+exactly the six fields declared for its command kind. A term receipt always uses
+`termId` and `resultingRevision`; a target receipt always uses `targetId` and
+`resultingVersion`. Neither substitutes `targetVersion`, `version`, `outcome`,
+or another alias. All receipt UUIDs use canonical UUID text and resulting
+revision/version values include 0 only where the target-version rules permit
+it.
 
 An exact replay returns status `replayed` while preserving the stored original
 outcome (`applied` or `unchanged`) as a separate receipt field. The command row
 stores that original outcome; it never rewrites it to `replayed`.
 
-Rejected results contain no mutation plan or partial value.
-Issues contain only declared fields and stable schema paths; they never echo an
-input value, source text, private label/note, URI, filesystem path, rendered
-object, database text, stack, or credential.
+Every rejected result has exactly `status: 'rejected'` and `issue`; it has no
+receipt, mutation plan, partial value, or result identity. A non-budget issue
+has exactly `code` and `path`. A `limit_exceeded` issue additionally and always
+has the closed `budget` field. Issues never echo an input value, source text,
+private label/note, URI, filesystem path, rendered object, database text,
+stack, or credential.
+Every result, receipt, and issue returned by the boundary is deeply frozen.
 
-Validation and transition precedence is:
+In a dynamic issue path, `i` and `j` are rendered as zero-based unsigned decimal
+indices with no leading zero except the value 0. A missing or unexpected field
+uses the declared field path when one exists; an unknown extra key uses its
+nearest declared container path so attacker-controlled key text is never
+echoed. Any malformed or inconsistent closed repository snapshot uses `state`
+rather than exposing repository values or internal row layout.
 
-1. closed shape and fixed field set;
-2. scalar, Unicode, identifier, enum, request-local state,
-   duplicate-operation, and budget checks;
-3. exact command replay or idempotency conflict;
-4. workspace-scoped target or term lookup;
-5. expected target/term revision;
-6. referenced term/parent existence, lifecycle, state, and hierarchy checks;
-7. semantic delta calculation; and
-8. atomic persistence.
+A non-record, custom prototype, Proxy, symbol, cycle, dangerous key, sparse
+array, or unknown extra property reports its nearest declared container. A
+missing required property, own accessor, inherited accessor for a declared
+property, or invalid property value reports that declared property. These rules
+remove any choice between, for example, `request` and `request.termId`, and all
+paths start with `context`, `request`, `state`, or `persistence`; they never use
+a `$` prefix.
 
-Cross-workspace references resolve as `target_not_found` or `term_not_found`.
-The boundary does not reveal whether an ID exists in another workspace.
+The complete issue mapping is:
+
+| Scenario                                                                                       | Code                   | Path                                                                                                   | Budget                                                  |
+| ---------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| Invalid container, density, own-property, declared-field, or branch shape                      | `invalid_shape`        | Nearest declared `context`, `request`, value, target, operations, operation, or reason container/field | Absent                                                  |
+| Invalid workspace, term, parent, Snapshot, Fragment, or operation-term UUID in context/request | `invalid_identifier`   | Its exact declared UUID field                                                                          | Absent                                                  |
+| Empty or lexically invalid command key                                                         | `invalid_identifier`   | `context.commandIdempotencyKey`                                                                        | Absent                                                  |
+| Invalid closed repository snapshot container, relation, or value shape                         | `invalid_shape`        | `state`                                                                                                | Absent                                                  |
+| Non-canonical UUID in a closed repository snapshot                                             | `invalid_identifier`   | `state`                                                                                                | Absent                                                  |
+| Invalid Unicode scalar, whitespace form, or empty present text                                 | `invalid_text`         | Exact display-name, description, or note field                                                         | Absent                                                  |
+| Authority is not `manual_user`                                                                 | `invalid_state`        | `context.authority`                                                                                    | Absent                                                  |
+| Unknown target, operation, lifecycle, action, reason, or dimension protocol value              | `invalid_state`        | Exact discriminator/enum field; a reason uses `request.operations[i].reasonCodes[j]`                   | Absent                                                  |
+| Expected revision/version is not a safe non-negative integer                                   | `invalid_state`        | `request.expectedRevision` or `request.expectedTargetVersion`                                          | Absent                                                  |
+| New term requests lifecycle `retired`                                                          | `invalid_state`        | `request.value.lifecycle`                                                                              | Absent                                                  |
+| Operations array is empty                                                                      | `invalid_state`        | `request.operations`                                                                                   | Absent                                                  |
+| Assessment score is not an integer 0 through 4                                                 | `invalid_state`        | `request.operations[i].score`                                                                          | Absent                                                  |
+| Decision repeats a reason code                                                                 | `invalid_state`        | `request.operations[i].reasonCodes[j]` for the later occurrence                                        | Absent                                                  |
+| Decision includes `other` without a present valid note                                         | `invalid_state`        | `request.operations[i].note`                                                                           | Absent                                                  |
+| More than 64 operations                                                                        | `limit_exceeded`       | `request.operations`                                                                                   | `command_operations`                                    |
+| Result would contain more than 64 current classifications                                      | `limit_exceeded`       | `request.operations`                                                                                   | `current_classifications`                               |
+| More than 10 decision reasons                                                                  | `limit_exceeded`       | `request.operations[i].reasonCodes`                                                                    | `feedback_reasons`                                      |
+| Display name exceeds its code-point or byte limit                                              | `limit_exceeded`       | `request.value.displayName`                                                                            | `display_name_code_points` or `display_name_utf8_bytes` |
+| Description exceeds its code-point or byte limit                                               | `limit_exceeded`       | `request.value.description`                                                                            | `description_code_points` or `description_utf8_bytes`   |
+| Decision or assessment note exceeds its code-point or byte limit                               | `limit_exceeded`       | `request.operations[i].note`                                                                           | `note_code_points` or `note_utf8_bytes`                 |
+| Command key exceeds 200 ASCII characters                                                       | `limit_exceeded`       | `context.commandIdempotencyKey`                                                                        | `idempotency_key_characters`                            |
+| Requested or next term revision exceeds its limit                                              | `limit_exceeded`       | `request.expectedRevision`                                                                             | `revision_number`                                       |
+| Requested or next target version exceeds its limit                                             | `limit_exceeded`       | `request.expectedTargetVersion`                                                                        | `target_version`                                        |
+| Later operation repeats a classification term, decision, or assessment dimension               | `duplicate_operation`  | `request.operations[i]` for the later occurrence                                                       | Absent                                                  |
+| Target is missing or belongs to another workspace                                              | `target_not_found`     | `request.target`                                                                                       | Absent                                                  |
+| Updated primary term is missing                                                                | `term_not_found`       | `request.termId`                                                                                       | Absent                                                  |
+| Referenced classification term is missing or cross-workspace                                   | `term_not_found`       | `request.operations[i].termId`                                                                         | Absent                                                  |
+| A new assignment references a retired term, including an already-current assignment            | `term_retired`         | `request.operations[i].termId`                                                                         | Absent                                                  |
+| New or changed parent is missing, cross-workspace, retired, or self                            | `invalid_parent`       | `request.value.parentTermId`                                                                           | Absent                                                  |
+| New or changed parent would create a cycle                                                     | `hierarchy_cycle`      | `request.value.parentTermId`                                                                           | Absent                                                  |
+| Primary optimistic revision/version differs                                                    | `stale_revision`       | `request.expectedRevision` or `request.expectedTargetVersion`                                          | Absent                                                  |
+| Existing command key has a different request digest                                            | `idempotency_conflict` | `context.commandIdempotencyKey`                                                                        | Absent                                                  |
+| Adapter cannot atomically commit a prepared accepted command                                   | `persistence_failed`   | `persistence`                                                                                          | Absent                                                  |
+
+Collection length and its collection budget are checked before visiting array
+elements. Within an admitted array, validation visits indices in ascending
+order; within each declared record or tagged branch, it visits fields in their
+TypeScript declaration order. For operations, the boundary validates the
+operation container and `kind`, checks whether that kind's classification term,
+single decision slot, or assessment dimension was already mentioned, then
+validates its remaining fields in declaration order. Reason enum and duplicate
+checks likewise visit reason indices in ascending order.
+
+Identifier lexical validity precedes its length budget. Numeric type,
+finiteness, safe-integer form, and non-negativity precede the inclusive numeric
+budget; a safe non-negative integer above 2,147,483,647 is `limit_exceeded`.
+When both code-point and UTF-8 budgets fail for the same otherwise valid text,
+the code-point budget wins. Unicode scalar/text validity precedes both text
+budgets. The first failing issue under these rules is returned.
+
+After the common closed-shape and request-local checks, term-command precedence
+is:
+
+1. exact command replay or idempotency conflict;
+2. workspace-scoped primary-term lookup;
+3. expected term revision;
+4. exact current-value comparison, returning `unchanged` before any unchanged
+   parent link is lifecycle-checked;
+5. for creation or an actual `parentTermId` change only, parent existence,
+   workspace, active lifecycle, self-parent, and cycle checks; and
+6. next-revision budget validation; and
+7. atomic persistence.
+
+An absent primary term with expected revision greater than 0 is
+`term_not_found`; an existing primary term with expected revision 0 is
+`stale_revision`. Rename, description change, retirement, and reactivation under
+the same retired parent therefore reach semantic planning rather than
+`invalid_parent`.
+
+After the same common checks, target-command precedence is:
+
+1. exact command replay or idempotency conflict;
+2. workspace-scoped evidence-target and current-target lookup;
+3. expected target version;
+4. referenced-term existence and current lifecycle checks in ascending UUID
+   order, followed by resulting-classification-count validation;
+5. semantic delta calculation; and
+6. next-target-version budget validation when the delta is nonempty; and
+7. atomic persistence.
+
+Consequently, a new assignment command for a retired term returns
+`term_retired` even if that assignment is already current, while an exact
+same-key successful command still replays before current lifecycle checks.
+An unchanged command at the maximum revision/version remains `unchanged`; only
+a nonempty delta that would exceed the next-value budget is rejected.
+
+Cross-workspace evidence targets resolve as `target_not_found`, and
+cross-workspace primary or assignment terms resolve as `term_not_found`.
+A cross-workspace parent follows the closed parent table and resolves as
+`invalid_parent`. None of these outcomes reveals whether the ID exists in
+another workspace.
 
 ## PostgreSQL schema contract
 
@@ -761,8 +1101,8 @@ tests prove all of the following:
    UUIDv5 known answers, and no inheritance across Snapshots;
 2. empty initial vocabulary, term create/revise/rename/reparent/retire/reactivate,
    invalid retired creation, exact revision IDs, duplicate display names,
-   stale revision handling, concurrent-cycle serialization, and cycle
-   rejection;
+   stale revision handling, the complete retired-parent transition table,
+   concurrent-cycle serialization, and cycle rejection;
 3. classification assign/remove history, retired-term behavior, maximum current
    count, exact term-revision binding, concurrent lifecycle revalidation, and
    no effect on decisions/assessments;
@@ -776,10 +1116,12 @@ tests prove all of the following:
    stale commands, and no partial plan;
 7. same-key equal replay, same-key conflict, different-key equal-state
    `unchanged`, canonical digest identity, and replay of the original receipt
-   after later state advances, plus rejected-key reuse;
+   after later state advances, plus rejected-key reuse and rejection of every
+   non-canonical UUID spelling before digesting or UUIDv5 derivation;
 8. hostile records, arrays, accessors, inherited setters, Proxy objects,
    dangerous keys, Unicode edge cases, all fixed budgets, deep freeze, safe
-   issue shape, and non-echoing errors;
+   issue shape, both exact discriminated result/receipt unions, the complete
+   code/path/budget mapping, and non-echoing errors;
 9. poisoned filesystem, network, environment, clock, randomness, AI, and
    framework/database seams proving a pure non-AI domain boundary;
 10. static DDL proof for exactly the 11 tables, workspace-first keys and

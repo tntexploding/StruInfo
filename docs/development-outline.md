@@ -35,7 +35,7 @@ M0-P 证明的是架构可行性，不是生产认证；任何探针候选源码
 M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁移 runner、CI、许可证记录与统一质量命令；该工程地基由 [ADR 0003](adr/0003-m0-s-engineering-foundation.md) 接受。
 自适应摄取、偏好/探索分离和策略授权知识写入由 [ADR 0004](adr/0004-adaptive-knowledge-ingestion-and-policy-authorized-writes.md) 接受。
 [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求。
-第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。外部配置/数据根、`C-SLICE-A-EVIDENCE-r2` 来源证据边界以及 `C-SLICE-A-MARKDOWN-r2` 确定性 Markdown 纯转换与闭合装配边界已经完成各自当前非容器 TM1。[`C-SLICE-A-CURATION-r1`](manual-curation-contract.md) 已冻结精确证据目标上的用户词表、内容分类、独立 `IntakeDecision`/`Assessment` 与 A0 人工命令；下一步实现并验证该合同，再继续版本化知识与确定性检索。AI、偏好模型、综合分和自动准入随后接入，不能反向定义数据库语义。
+第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。外部配置/数据根、`C-SLICE-A-EVIDENCE-r2` 来源证据边界以及 `C-SLICE-A-MARKDOWN-r2` 确定性 Markdown 纯转换与闭合装配边界已经完成各自当前非容器 TM1。[`C-SLICE-A-CURATION-r2`](manual-curation-contract.md) 已冻结精确证据目标上的用户词表、内容分类、独立 `IntakeDecision`/`Assessment` 与 A0 人工命令，并关闭父级生命周期、UUID 文本与结果协议歧义；下一步实现并验证该合同，再继续版本化知识与确定性检索。AI、偏好模型、综合分和自动准入随后接入，不能反向定义数据库语义。
 
 ## 2. 为什么选择这个形态
 
