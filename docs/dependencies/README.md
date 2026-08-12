@@ -1,7 +1,7 @@
 # Dependency Governance
 
 - Status: tracked foundation inventory plus the M1A Markdown dependency increment
-- Contracts: `C-M0-S-r2`, `C-SLICE-A-MARKDOWN-r1`
+- Contracts: `C-M0-S-r2`, `C-SLICE-A-MARKDOWN-r2`
 - Review date: 2026-08-11
 - Distribution status: not authorized
 

@@ -29,7 +29,7 @@ ADR 0006 accepts external configuration and personal-data isolation. Slice 0
 has established external configuration, fixed data areas, local Blob storage,
 candidate-package auditing, and the versioned workspace-bundle envelope. The
 `C-SLICE-A-EVIDENCE-r2` source-evidence migration and closed pure boundary have
-passed their fixed-candidate TM1 gate. Implement `C-SLICE-A-MARKDOWN-r1` next,
+passed their fixed-candidate TM1 gate. Implement `C-SLICE-A-MARKDOWN-r2` next,
 then the separate manual classification/intake boundary and the
 manual/deterministic knowledge core. Do not make preference calibration or AI
 availability a dependency.

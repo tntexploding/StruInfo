@@ -657,7 +657,7 @@ M0-P 的测试数量和候选实现不构成生产质量证明。
 
 2026-08-11 进展：`C-SLICE-A-EVIDENCE-r2` 的 `000002` 迁移、闭合输入、来源/快照/文档结构/Fragment/媒体纯逻辑校验和静态 SQL 合同已在提交 `c50ad35e07b2f1b64cd938b0417d4b6bd7c231aa` 上通过完整 TM1（27/27）。这接受的是非浏览器、非容器的模块与静态边界；PostgreSQL 实际解析、catalog、事务、并发和运行角色仍等待具名基础设施准入，不得表示为通过。
 
-切片 A 的下一增量按 [`C-SLICE-A-MARKDOWN-r1`](deterministic-markdown-structure-contract.md) 只实现确定性 CommonMark 解析、独立周刊 profile 和来源字节到现有 DocumentNode/Fragment/Media 引用的纯装配边界，再实现与 ContentClassification 分列的人工 IntakeDecision/Assessment。阶段 0 的本地解析脚本仍是不可复用工件；正式实现不得读取 `.agents/stage-0`，真实 Markdown 继续留在包体外数据根，tracked 测试只使用合成且无价值的结构 fixture。
+切片 A 的下一增量按 [`C-SLICE-A-MARKDOWN-r2`](deterministic-markdown-structure-contract.md) 只实现确定性 CommonMark 解析、独立周刊 profile 和来源字节到现有 DocumentNode/Fragment/Media 引用的纯装配边界，再实现与 ContentClassification 分列的人工 IntakeDecision/Assessment。r2 仅澄清上游完整缓冲受固定源字节上限约束、StruInfo 产品图由有界预检先行裁决，不改变解析语义或数据身份。阶段 0 的本地解析脚本仍是不可复用工件；正式实现不得读取 `.agents/stage-0`，真实 Markdown 继续留在包体外数据根，tracked 测试只使用合成且无价值的结构 fixture。
 
 ### 切片 B1：获准资料到非 AI 知识与确定性检索
 
