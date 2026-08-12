@@ -1,11 +1,11 @@
 # Manual Classification and Intake Contract
 
-- Contract ID: `C-SLICE-A-CURATION-r2`
+- Contract ID: `C-SLICE-A-CURATION-r3`
 - Status: Frozen implementation contract; acceptance requires the named TM1
   gate
 - Date: 2026-08-12
-- Baseline: `800d7cd0df44e8305e0f4d1c4537601db9b23f69`
-- Supersedes: `C-SLICE-A-CURATION-r1`
+- Baseline: `417bab760d42d1ebb2a04859ff23174a54ab651a`
+- Supersedes: `C-SLICE-A-CURATION-r2`
 - Upstream evidence contract:
   [`C-SLICE-A-EVIDENCE-r2`](source-evidence-storage-contract.md)
 - Upstream parser contract:
@@ -31,17 +31,19 @@ No answer implies either of the other two.
 Classifying a target never chooses an intake action, a score never chooses an
 action, and an intake action never creates or revises formal knowledge.
 
-Revision 2 closes three pre-implementation protocol ambiguities found during
-independent maintenance review: preserving an existing parent does not
-revalidate that parent's active lifecycle, all UUID-bearing boundary values use
-one rejected-on-mismatch text form, and both commands return closed result and
-issue unions. It does not change the tables, migration reservation, feature
-scope, automation authority, or persisted command schema version first frozen
-by revision 1.
+Revision 3 carries forward revision 2's closed parent-lifecycle, UUID, result,
+receipt, issue-path, and budget protocols. It removes three unreachable UTF-8
+byte ceilings found by independent test preparation: within the existing valid
+Unicode-scalar and code-point ceilings, display names can occupy at most 480
+UTF-8 bytes and descriptions or notes at most 8,000, so the former 512/8,192
+checks could never reject a value. It also makes the already-frozen
+collection-length-first rule explicit for the ten-value feedback-reason
+protocol. This changes no accepted input, table, migration reservation,
+feature scope, automation authority, or persisted command schema version.
 
 ## Scope and deferred boundaries
 
-Revision 2 includes:
+Revision 3 includes:
 
 - workspace-owned, user-created content-classification terms with immutable
   revisions;
@@ -55,13 +57,13 @@ Revision 2 includes:
   and a pure state-transition boundary; and
 - a forward PostgreSQL migration plus static contract tests.
 
-The classification rows in revision 2 apply only to evidence targets owned by
+The classification rows in revision 3 apply only to evidence targets owned by
 this contract. Classification of future `KnowledgeItem` identities remains a
 separate knowledge-core command and migration concern; it may reuse the same
 workspace vocabulary only after that later contract freezes the cross-module
 read boundary.
 
-Revision 2 does not include:
+Revision 3 does not include:
 
 - `PreferenceProfile`, `ExplorationPolicy`, attention-allocation policy, learned
   rules, thresholds, recommendation ranking, or automatic intake;
@@ -83,7 +85,7 @@ Their absence is not a failure of this pure/manual slice.
 The `curation` application module owns this contract.
 It does not own evidence or formal knowledge.
 
-Revision 2 implements only automation level A0.
+Revision 3 implements only automation level A0.
 Every accepted mutation has the fixed origin `manual_user` and is constructed
 by the trusted application boundary after user authorization.
 `manual_user` is not a field accepted from an untrusted request body, source
@@ -113,7 +115,7 @@ command.
 
 ## Exact curation targets
 
-Revision 2 curates an immutable evidence version, never a moving Resource.
+Revision 3 curates an immutable evidence version, never a moving Resource.
 
 ```ts
 export type CurationTargetRef =
@@ -206,15 +208,13 @@ export interface PutContentClassificationTermRequest {
   Historical assignment revisions retain the exact term revision used at the
   time; current displays may also show the term's current label.
 
-Display names contain 1 through 120 Unicode code points and at most 512 UTF-8
-bytes.
+Display names contain 1 through 120 Unicode code points.
 They contain no U+0000 or unpaired surrogate, are not all ECMAScript whitespace,
 and have no leading or trailing ECMAScript whitespace.
 Descriptions are optional. When present, they contain 1 through 2,000 code
-points and at most 8,192 UTF-8 bytes, are not all ECMAScript whitespace, have no
-leading or trailing ECMAScript whitespace, and follow the same scalar-value
-restrictions. Empty or whitespace-only descriptions are rejected rather than
-trimmed or stored.
+points, are not all ECMAScript whitespace, have no leading or trailing
+ECMAScript whitespace, and follow the same scalar-value restrictions. Empty or
+whitespace-only descriptions are rejected rather than trimmed or stored.
 Omitting a description or parent means no description or root placement in the
 new immutable value; it is not a patch sentinel that preserves the old value.
 Internal whitespace and Unicode normalization are preserved exactly.
@@ -299,7 +299,7 @@ dimension.
 
 If a target has no current intake decision, `set_intake_decision` creates
 decision revision 1. There is no `clear_intake_decision` operation in revision
-2; unresolved work is represented explicitly by `needs_review` rather than by
+3; unresolved work is represented explicitly by `needs_review` rather than by
 deleting decision history.
 
 ## Intake actions and feedback
@@ -400,7 +400,7 @@ The dimensions remain in these groups:
 | Noise and cost       | `noise_marketing`, `cognitive_cost`                                                                                                     |
 | Reliability evidence | `traceability`, `source_reliability`, `extraction_confidence`, `identity_confidence`, `corroboration`, `freshness`                      |
 
-Revision 2 defines no total, average, weight, threshold, admission formula,
+Revision 3 defines no total, average, weight, threshold, admission formula,
 ranking formula, preference model, or exploration policy.
 Changing one assessment cannot mutate another dimension or the intake decision.
 
@@ -413,9 +413,9 @@ retaining history.
 dimension is semantically unchanged.
 
 Decision and assessment notes are optional personal workspace data.
-When present, each contains 1 through 2,000 Unicode code points and at most
-8,192 UTF-8 bytes, no U+0000 or unpaired surrogate, is not all ECMAScript
-whitespace, and has no leading or trailing ECMAScript whitespace. The boundary
+When present, each contains 1 through 2,000 Unicode code points, no U+0000 or
+unpaired surrogate, is not all ECMAScript whitespace, and has no leading or
+trailing ECMAScript whitespace. The boundary
 rejects rather than trims empty, whitespace-only, or padded notes.
 Errors, logs, metrics, and ordinary command receipts never echo notes, labels,
 descriptions, source text, or target content.
@@ -430,7 +430,7 @@ term revision used by the command.
 - Removing an assigned term appends `removed`.
 - Assigning an already assigned term or removing an already removed/absent term
   is semantically unchanged.
-- Classification order has no semantic meaning in revision 2.
+- Classification order has no semantic meaning in revision 3.
 - Adding, removing, renaming, retiring, or reactivating a classification never
   changes the target's intake decision or assessments.
 - Changing the intake decision or an assessment never adds or removes a
@@ -587,16 +587,28 @@ mutation cannot change a prepared command or plan.
 
 Budgets are fixed and cannot be raised per request:
 
-| Budget                                 | Inclusive limit |
-| -------------------------------------- | --------------: |
-| Command operations                     |              64 |
-| Current classifications on one target  |              64 |
-| Feedback reasons on one decision       |              10 |
-| Display-name code points / UTF-8 bytes |       120 / 512 |
-| Description code points / UTF-8 bytes  |   2,000 / 8,192 |
-| Note code points / UTF-8 bytes         |   2,000 / 8,192 |
-| Idempotency-key ASCII characters       |             200 |
-| Revision number / target version       |   2,147,483,647 |
+| Budget                                | Inclusive limit |
+| ------------------------------------- | --------------: |
+| Command operations                    |              64 |
+| Current classifications on one target |              64 |
+| Feedback reasons on one decision      |              10 |
+| Display-name Unicode code points      |             120 |
+| Description Unicode code points       |           2,000 |
+| Note Unicode code points              |           2,000 |
+| Idempotency-key ASCII characters      |             200 |
+| Revision number / target version      |   2,147,483,647 |
+
+The admitted text values consist only of valid Unicode scalar values. One such
+value occupies at most four UTF-8 bytes, so the code-point limits imply hard
+maxima of 480 UTF-8 bytes for a display name and 8,000 UTF-8 bytes for a
+description or note. No separate text-byte budget or byte-budget issue token
+exists because it could not reject an otherwise admitted value.
+
+Although the feedback protocol currently has exactly ten distinct reason
+values and requires a duplicate-free admitted result, the raw array length is
+checked before any element or duplicate check. An 11-element raw array
+therefore deterministically returns the `feedback_reasons` limit issue without
+requiring eleven valid distinct protocol values.
 
 The boundary does not use filesystem, network, environment, clock, randomness,
 AI, locale-sensitive collation, or database capability.
@@ -688,11 +700,8 @@ export type CurationBudgetName =
   | 'current_classifications'
   | 'feedback_reasons'
   | 'display_name_code_points'
-  | 'display_name_utf8_bytes'
   | 'description_code_points'
-  | 'description_utf8_bytes'
   | 'note_code_points'
-  | 'note_utf8_bytes'
   | 'idempotency_key_characters'
   | 'revision_number'
   | 'target_version';
@@ -857,41 +866,41 @@ to every scenario in the table below.
 
 The complete issue mapping is:
 
-| Scenario                                                                                       | Code                   | Path                                                                                                   | Budget                                                  |
-| ---------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
-| Invalid container, density, own-property, declared-field, or branch shape                      | `invalid_shape`        | Nearest declared `context`, `request`, value, target, operations, operation, or reason container/field | Absent                                                  |
-| Invalid workspace, term, parent, Snapshot, Fragment, or operation-term UUID in context/request | `invalid_identifier`   | Its exact declared UUID field                                                                          | Absent                                                  |
-| Empty or lexically invalid command key                                                         | `invalid_identifier`   | `context.commandIdempotencyKey`                                                                        | Absent                                                  |
-| Invalid closed repository snapshot container, relation, or value shape                         | `invalid_shape`        | `state`                                                                                                | Absent                                                  |
-| Non-canonical UUID in a closed repository snapshot                                             | `invalid_identifier`   | `state`                                                                                                | Absent                                                  |
-| Invalid Unicode scalar, whitespace form, or empty present text                                 | `invalid_text`         | Exact display-name, description, or note field                                                         | Absent                                                  |
-| Authority is not `manual_user`                                                                 | `invalid_state`        | `context.authority`                                                                                    | Absent                                                  |
-| Unknown target, operation, lifecycle, action, reason, or dimension protocol value              | `invalid_state`        | Exact discriminator/enum field; a reason uses `request.operations[i].reasonCodes[j]`                   | Absent                                                  |
-| Expected revision/version is not a safe non-negative integer                                   | `invalid_state`        | `request.expectedRevision` or `request.expectedTargetVersion`                                          | Absent                                                  |
-| After lookup shows the primary term is absent, its create request uses lifecycle `retired`     | `invalid_state`        | `request.value.lifecycle`                                                                              | Absent                                                  |
-| Operations array is empty                                                                      | `invalid_state`        | `request.operations`                                                                                   | Absent                                                  |
-| Assessment score is not an integer 0 through 4                                                 | `invalid_state`        | `request.operations[i].score`                                                                          | Absent                                                  |
-| Decision repeats a reason code                                                                 | `invalid_state`        | `request.operations[i].reasonCodes[j]` for the later occurrence                                        | Absent                                                  |
-| Decision includes `other` without a present valid note                                         | `invalid_state`        | `request.operations[i].note`                                                                           | Absent                                                  |
-| More than 64 operations                                                                        | `limit_exceeded`       | `request.operations`                                                                                   | `command_operations`                                    |
-| Result would contain more than 64 current classifications                                      | `limit_exceeded`       | `request.operations`                                                                                   | `current_classifications`                               |
-| More than 10 decision reasons                                                                  | `limit_exceeded`       | `request.operations[i].reasonCodes`                                                                    | `feedback_reasons`                                      |
-| Display name exceeds its code-point or byte limit                                              | `limit_exceeded`       | `request.value.displayName`                                                                            | `display_name_code_points` or `display_name_utf8_bytes` |
-| Description exceeds its code-point or byte limit                                               | `limit_exceeded`       | `request.value.description`                                                                            | `description_code_points` or `description_utf8_bytes`   |
-| Decision or assessment note exceeds its code-point or byte limit                               | `limit_exceeded`       | `request.operations[i].note`                                                                           | `note_code_points` or `note_utf8_bytes`                 |
-| Command key exceeds 200 ASCII characters                                                       | `limit_exceeded`       | `context.commandIdempotencyKey`                                                                        | `idempotency_key_characters`                            |
-| Requested or next term revision exceeds its limit                                              | `limit_exceeded`       | `request.expectedRevision`                                                                             | `revision_number`                                       |
-| Requested or next target version exceeds its limit                                             | `limit_exceeded`       | `request.expectedTargetVersion`                                                                        | `target_version`                                        |
-| Later operation repeats a classification term, decision, or assessment dimension               | `duplicate_operation`  | `request.operations[i]` for the later occurrence                                                       | Absent                                                  |
-| Target is missing or belongs to another workspace                                              | `target_not_found`     | `request.target`                                                                                       | Absent                                                  |
-| Updated primary term is missing                                                                | `term_not_found`       | `request.termId`                                                                                       | Absent                                                  |
-| Referenced classification term is missing or cross-workspace                                   | `term_not_found`       | `request.operations[i].termId`                                                                         | Absent                                                  |
-| A new assignment references a retired term, including an already-current assignment            | `term_retired`         | `request.operations[i].termId`                                                                         | Absent                                                  |
-| New or changed parent is missing, cross-workspace, retired, or self                            | `invalid_parent`       | `request.value.parentTermId`                                                                           | Absent                                                  |
-| New or changed parent would create a cycle                                                     | `hierarchy_cycle`      | `request.value.parentTermId`                                                                           | Absent                                                  |
-| Primary optimistic revision/version differs                                                    | `stale_revision`       | `request.expectedRevision` or `request.expectedTargetVersion`                                          | Absent                                                  |
-| Existing command key has a different request digest                                            | `idempotency_conflict` | `context.commandIdempotencyKey`                                                                        | Absent                                                  |
-| Adapter cannot atomically commit a prepared accepted command                                   | `persistence_failed`   | `persistence`                                                                                          | Absent                                                  |
+| Scenario                                                                                       | Code                   | Path                                                                                                   | Budget                       |
+| ---------------------------------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| Invalid container, density, own-property, declared-field, or branch shape                      | `invalid_shape`        | Nearest declared `context`, `request`, value, target, operations, operation, or reason container/field | Absent                       |
+| Invalid workspace, term, parent, Snapshot, Fragment, or operation-term UUID in context/request | `invalid_identifier`   | Its exact declared UUID field                                                                          | Absent                       |
+| Empty or lexically invalid command key                                                         | `invalid_identifier`   | `context.commandIdempotencyKey`                                                                        | Absent                       |
+| Invalid closed repository snapshot container, relation, or value shape                         | `invalid_shape`        | `state`                                                                                                | Absent                       |
+| Non-canonical UUID in a closed repository snapshot                                             | `invalid_identifier`   | `state`                                                                                                | Absent                       |
+| Invalid Unicode scalar, whitespace form, or empty present text                                 | `invalid_text`         | Exact display-name, description, or note field                                                         | Absent                       |
+| Authority is not `manual_user`                                                                 | `invalid_state`        | `context.authority`                                                                                    | Absent                       |
+| Unknown target, operation, lifecycle, action, reason, or dimension protocol value              | `invalid_state`        | Exact discriminator/enum field; a reason uses `request.operations[i].reasonCodes[j]`                   | Absent                       |
+| Expected revision/version is not a safe non-negative integer                                   | `invalid_state`        | `request.expectedRevision` or `request.expectedTargetVersion`                                          | Absent                       |
+| After lookup shows the primary term is absent, its create request uses lifecycle `retired`     | `invalid_state`        | `request.value.lifecycle`                                                                              | Absent                       |
+| Operations array is empty                                                                      | `invalid_state`        | `request.operations`                                                                                   | Absent                       |
+| Assessment score is not an integer 0 through 4                                                 | `invalid_state`        | `request.operations[i].score`                                                                          | Absent                       |
+| Decision repeats a reason code                                                                 | `invalid_state`        | `request.operations[i].reasonCodes[j]` for the later occurrence                                        | Absent                       |
+| Decision includes `other` without a present valid note                                         | `invalid_state`        | `request.operations[i].note`                                                                           | Absent                       |
+| More than 64 operations                                                                        | `limit_exceeded`       | `request.operations`                                                                                   | `command_operations`         |
+| Result would contain more than 64 current classifications                                      | `limit_exceeded`       | `request.operations`                                                                                   | `current_classifications`    |
+| More than 10 decision reasons                                                                  | `limit_exceeded`       | `request.operations[i].reasonCodes`                                                                    | `feedback_reasons`           |
+| Display name exceeds 120 code points                                                           | `limit_exceeded`       | `request.value.displayName`                                                                            | `display_name_code_points`   |
+| Description exceeds 2,000 code points                                                          | `limit_exceeded`       | `request.value.description`                                                                            | `description_code_points`    |
+| Decision or assessment note exceeds 2,000 code points                                          | `limit_exceeded`       | `request.operations[i].note`                                                                           | `note_code_points`           |
+| Command key exceeds 200 ASCII characters                                                       | `limit_exceeded`       | `context.commandIdempotencyKey`                                                                        | `idempotency_key_characters` |
+| Requested or next term revision exceeds its limit                                              | `limit_exceeded`       | `request.expectedRevision`                                                                             | `revision_number`            |
+| Requested or next target version exceeds its limit                                             | `limit_exceeded`       | `request.expectedTargetVersion`                                                                        | `target_version`             |
+| Later operation repeats a classification term, decision, or assessment dimension               | `duplicate_operation`  | `request.operations[i]` for the later occurrence                                                       | Absent                       |
+| Target is missing or belongs to another workspace                                              | `target_not_found`     | `request.target`                                                                                       | Absent                       |
+| Updated primary term is missing                                                                | `term_not_found`       | `request.termId`                                                                                       | Absent                       |
+| Referenced classification term is missing or cross-workspace                                   | `term_not_found`       | `request.operations[i].termId`                                                                         | Absent                       |
+| A new assignment references a retired term, including an already-current assignment            | `term_retired`         | `request.operations[i].termId`                                                                         | Absent                       |
+| New or changed parent is missing, cross-workspace, retired, or self                            | `invalid_parent`       | `request.value.parentTermId`                                                                           | Absent                       |
+| New or changed parent would create a cycle                                                     | `hierarchy_cycle`      | `request.value.parentTermId`                                                                           | Absent                       |
+| Primary optimistic revision/version differs                                                    | `stale_revision`       | `request.expectedRevision` or `request.expectedTargetVersion`                                          | Absent                       |
+| Existing command key has a different request digest                                            | `idempotency_conflict` | `context.commandIdempotencyKey`                                                                        | Absent                       |
+| Adapter cannot atomically commit a prepared accepted command                                   | `persistence_failed`   | `persistence`                                                                                          | Absent                       |
 
 Collection length and its collection budget are checked before visiting array
 elements. Within an admitted array, validation visits indices in ascending
@@ -907,9 +916,8 @@ order.
 Identifier lexical validity precedes its length budget. Numeric type,
 finiteness, safe-integer form, and non-negativity precede the inclusive numeric
 budget; a safe non-negative integer above 2,147,483,647 is `limit_exceeded`.
-When both code-point and UTF-8 budgets fail for the same otherwise valid text,
-the code-point budget wins. Unicode scalar/text validity precedes both text
-budgets. The first failing issue under these rules is returned.
+Unicode scalar/text validity precedes the code-point budget. The first failing
+issue under these rules is returned.
 
 After the common closed-shape and request-local checks (which do not presume
 whether a term already exists), term-command precedence is:
@@ -1051,7 +1059,7 @@ status reconstructed from the stored receipt, and rejected commands have no
 row.
 
 The database may enforce universal protocol checks, but the application remains
-responsible for closed input, exact UTF-8/code-point budgets, hierarchy cycle
+responsible for closed input, exact code-point budgets, hierarchy cycle
 checks, deterministic IDs, command digest equality, first-error order, and
 authorization context.
 
