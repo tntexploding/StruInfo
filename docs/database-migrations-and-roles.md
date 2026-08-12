@@ -89,7 +89,7 @@ rather than executed-database evidence.
 
 The next product-table migration is reserved as
 `000003_create_manual_curation_schema.sql` and must implement
-[`C-SLICE-A-CURATION-r1`](manual-curation-contract.md). It adds only the A0
+[`C-SLICE-A-CURATION-r2`](manual-curation-contract.md). It adds only the A0
 manual evidence-target vocabulary, classification, intake-decision, assessment,
 and command-history tables fixed by that contract. It does not seed personal
 values or add formal knowledge, policy, AI, search, transport, grant, or
