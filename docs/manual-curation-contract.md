@@ -848,6 +848,13 @@ remove any choice between, for example, `request` and `request.termId`, and all
 paths start with `context`, `request`, `state`, or `persistence`; they never use
 a `$` prefix.
 
+A present field with the wrong primitive/container type is `invalid_shape` at
+that declared field. After type admission, a UUID-shaped field uses
+`invalid_identifier` for non-canonical text, a text field uses `invalid_text`
+for its declared content rules, and a correctly typed but unsupported enum,
+number, or cross-field state uses `invalid_state`. This type-first rule applies
+to every scenario in the table below.
+
 The complete issue mapping is:
 
 | Scenario                                                                                       | Code                   | Path                                                                                                   | Budget                                                  |
@@ -861,7 +868,7 @@ The complete issue mapping is:
 | Authority is not `manual_user`                                                                 | `invalid_state`        | `context.authority`                                                                                    | Absent                                                  |
 | Unknown target, operation, lifecycle, action, reason, or dimension protocol value              | `invalid_state`        | Exact discriminator/enum field; a reason uses `request.operations[i].reasonCodes[j]`                   | Absent                                                  |
 | Expected revision/version is not a safe non-negative integer                                   | `invalid_state`        | `request.expectedRevision` or `request.expectedTargetVersion`                                          | Absent                                                  |
-| New term requests lifecycle `retired`                                                          | `invalid_state`        | `request.value.lifecycle`                                                                              | Absent                                                  |
+| After lookup shows the primary term is absent, its create request uses lifecycle `retired`     | `invalid_state`        | `request.value.lifecycle`                                                                              | Absent                                                  |
 | Operations array is empty                                                                      | `invalid_state`        | `request.operations`                                                                                   | Absent                                                  |
 | Assessment score is not an integer 0 through 4                                                 | `invalid_state`        | `request.operations[i].score`                                                                          | Absent                                                  |
 | Decision repeats a reason code                                                                 | `invalid_state`        | `request.operations[i].reasonCodes[j]` for the later occurrence                                        | Absent                                                  |
@@ -890,10 +897,12 @@ Collection length and its collection budget are checked before visiting array
 elements. Within an admitted array, validation visits indices in ascending
 order; within each declared record or tagged branch, it visits fields in their
 TypeScript declaration order. For operations, the boundary validates the
-operation container and `kind`, checks whether that kind's classification term,
-single decision slot, or assessment dimension was already mentioned, then
-validates its remaining fields in declaration order. Reason enum and duplicate
-checks likewise visit reason indices in ascending order.
+operation container and `kind`, then validates the identity needed for duplicate
+detection: canonical `termId` for a classification, the single decision slot,
+or a valid `dimension` for an assessment. It next checks whether that identity
+was already mentioned and validates the remaining fields in declaration order.
+Reason enum and duplicate checks likewise visit reason indices in ascending
+order.
 
 Identifier lexical validity precedes its length budget. Numeric type,
 finiteness, safe-integer form, and non-negativity precede the inclusive numeric
@@ -902,18 +911,19 @@ When both code-point and UTF-8 budgets fail for the same otherwise valid text,
 the code-point budget wins. Unicode scalar/text validity precedes both text
 budgets. The first failing issue under these rules is returned.
 
-After the common closed-shape and request-local checks, term-command precedence
-is:
+After the common closed-shape and request-local checks (which do not presume
+whether a term already exists), term-command precedence is:
 
 1. exact command replay or idempotency conflict;
 2. workspace-scoped primary-term lookup;
 3. expected term revision;
-4. exact current-value comparison, returning `unchanged` before any unchanged
+4. for an absent term, rejection of requested lifecycle `retired`;
+5. exact current-value comparison, returning `unchanged` before any unchanged
    parent link is lifecycle-checked;
-5. for creation or an actual `parentTermId` change only, parent existence,
-   workspace, active lifecycle, self-parent, and cycle checks; and
-6. next-revision budget validation; and
-7. atomic persistence.
+6. for creation or an actual `parentTermId` change only, parent existence,
+   workspace, active lifecycle, self-parent, and cycle checks;
+7. next-revision budget validation; and
+8. atomic persistence.
 
 An absent primary term with expected revision greater than 0 is
 `term_not_found`; an existing primary term with expected revision 0 is
@@ -928,7 +938,7 @@ After the same common checks, target-command precedence is:
 3. expected target version;
 4. referenced-term existence and current lifecycle checks in ascending UUID
    order, followed by resulting-classification-count validation;
-5. semantic delta calculation; and
+5. semantic delta calculation;
 6. next-target-version budget validation when the delta is nonempty; and
 7. atomic persistence.
 
