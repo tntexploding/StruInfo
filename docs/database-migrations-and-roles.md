@@ -87,6 +87,15 @@ boundary, not new DDL. Until a real PostgreSQL fixture passes its named
 infrastructure gate, the migration remains reviewed static schema evidence
 rather than executed-database evidence.
 
+The next product-table migration is reserved as
+`000003_create_manual_curation_schema.sql` and must implement
+[`C-SLICE-A-CURATION-r1`](manual-curation-contract.md). It adds only the A0
+manual evidence-target vocabulary, classification, intake-decision, assessment,
+and command-history tables fixed by that contract. It does not seed personal
+values or add formal knowledge, policy, AI, search, transport, grant, or
+background-work tables. Until the same real PostgreSQL gate is admitted, its
+DDL result is likewise static schema evidence only.
+
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.
 

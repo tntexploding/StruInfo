@@ -1,7 +1,7 @@
 # StruInfo 知识核心架构
 
-- 状态：知识模型、无 AI 操作路径与个人数据隔离边界均已由用户确认
-- 最近更新：2026-08-11
+- 状态：知识模型、无 AI 操作路径、个人数据隔离与 A0 人工分类/准入合同均已冻结
+- 最近更新：2026-08-12
 - 相关决策：[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)
 
 ## 1. 核心结论
@@ -102,7 +102,7 @@ flowchart LR
 
 核心表保存稳定且经常查询的字段，例如工作区、类型、状态、语言、时间范围、当前修订、归属者和版本。低频且随知识类型变化的字段可以进入带 schema 版本的受验证 `jsonb` payload，但不能把整个数据库退化为无约束 EAV 或任意 JSON 文档库。
 
-用户分类、主题、领域和自定义标签通过 `VocabularyTerm` 与 `ClassificationAssignment` 建模。词表记录稳定 key、显示名、父词条、版本、适用对象和退役状态；重命名显示名不改变历史引用。
+用户分类、主题、领域和自定义标签通过 `VocabularyTerm` 与 `ClassificationAssignment` 建模。词表记录稳定 key、显示名、父词条、版本、适用对象和退役状态；重命名显示名不改变历史引用。首个证据目标实现由 [`C-SLICE-A-CURATION-r1`](manual-curation-contract.md) 冻结并归 `curation` 模块所有；未来对正式 `KnowledgeItem` 的分类只复用其词表读取边界，由知识核心命令拥有指派，不能让两个模块共同写同一行。
 
 ### 5.3 别名、同一性与合并
 
@@ -280,16 +280,19 @@ Windows 本地运行和 Linux 部署都必须使用源码/安装目录之外的�
 ## 11. 首个实现顺序
 
 1. 建立外部运行配置加载和数据根隔离检查；
-2. 按 [`C-SLICE-A-EVIDENCE-r2`](source-evidence-storage-contract.md) 实现
-   `Workspace`、来源证据和文档结构，再实现用户词表/分类；
-3. 实现知识项、不可变修订、别名、关系修订、引用、派生和原子变更集；
-4. 实现网页手工创建、拆分、分类、关联、重组、修订和撤回；
-5. 实现无 AI 的结构化、子串、别名、`pg_trgm`、来源、时间、关系关联和确定性结果融合；
-6. 实现可移植工作区导出和恢复验证；
-7. 再把 AI 处理器接到同一个提案与命令边界；
-8. 最后启用向量、自然语言综合、偏好学习和自动维护。
+2. 按 [`C-SLICE-A-EVIDENCE-r2`](source-evidence-storage-contract.md) 和
+   [`C-SLICE-A-MARKDOWN-r2`](deterministic-markdown-structure-contract.md)
+   实现 `Workspace`、来源证据和文档结构；这两项已通过当前 TM1；
+3. 按 [`C-SLICE-A-CURATION-r1`](manual-curation-contract.md) 实现证据目标上的
+   用户词表、分类、独立准入决定和可选分维度评级；
+4. 实现知识项、不可变修订、别名、关系修订、引用、派生和原子变更集；
+5. 实现网页手工创建、拆分、分类、关联、重组、修订和撤回；
+6. 实现无 AI 的结构化、子串、别名、`pg_trgm`、来源、时间、关系关联和确定性结果融合；
+7. 实现可移植工作区导出和恢复验证；
+8. 再把 AI 处理器接到同一个提案与命令边界；
+9. 最后启用向量、自然语言综合、偏好学习和自动维护。
 
-偏好校准可以继续积累，但它不再阻塞第 1–6 步，也不能决定知识数据库的基本结构。
+偏好校准可以继续积累，但它不再阻塞第 1–7 步，也不能决定知识数据库的基本结构。
 
 ## 12. 验收问题
 
