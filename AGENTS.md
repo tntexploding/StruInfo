@@ -28,9 +28,10 @@ accepts the canonical versioned knowledge model and AI-optional operations;
 ADR 0006 accepts external configuration and personal-data isolation. Slice 0
 has established external configuration, fixed data areas, local Blob storage,
 candidate-package auditing, and the versioned workspace-bundle envelope. The
-`C-SLICE-A-EVIDENCE-r2` source-evidence migration and closed pure boundary have
-passed their fixed-candidate TM1 gate. Implement `C-SLICE-A-MARKDOWN-r2` next,
-then the separate manual classification/intake boundary and the
+`C-SLICE-A-EVIDENCE-r2` source-evidence migration and closed pure boundary, and
+the `C-SLICE-A-MARKDOWN-r2` deterministic CommonMark transform and closed
+materializer, have passed their fixed-candidate TM1 gates. Freeze and implement
+the separate manual classification/intake boundary next, then the
 manual/deterministic knowledge core. Do not make preference calibration or AI
 availability a dependency.
 
