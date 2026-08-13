@@ -28,13 +28,12 @@ accepts the canonical versioned knowledge model and AI-optional operations;
 ADR 0006 accepts external configuration and personal-data isolation. Slice 0
 has established external configuration, fixed data areas, local Blob storage,
 candidate-package auditing, and the versioned workspace-bundle envelope. The
-`C-SLICE-A-EVIDENCE-r2` source-evidence migration and closed pure boundary, and
-the `C-SLICE-A-MARKDOWN-r2` deterministic CommonMark transform and closed
-materializer, have passed their fixed-candidate TM1 gates.
-`C-SLICE-A-CURATION-r3` now freezes the separate A0 manual
-classification/intake/assessment boundary; implement it next, then the
-manual/deterministic knowledge core. Do not make preference calibration or AI
-availability a dependency.
+`C-SLICE-A-EVIDENCE-r2` source-evidence migration and closed pure boundary,
+`C-SLICE-A-MARKDOWN-r2` deterministic CommonMark transform and closed
+materializer, and `C-SLICE-A-CURATION-r3` A0 manual
+classification/intake/assessment boundary have passed their fixed-candidate
+TM1 gates. Implement the manual/deterministic knowledge core next. Do not make
+preference calibration or AI availability a dependency.
 
 Browser runtime artifacts and real PostgreSQL/container execution remain behind
 their named admission gates. Do not represent either deferred gate as passed or
