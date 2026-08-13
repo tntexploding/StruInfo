@@ -87,6 +87,13 @@ Playwright 的 npm 包只用于配置和测试源码；Chromium/FFmpeg/winldd、
 
 [`C-SLICE-A-CURATION-r3`](manual-curation-contract.md) 的实现提交 `ac03c18ce568b3d2d090104bbb41727aa22afe05` 已通过正式固定候选 TM1：128/128 项强制矩阵和 31/31 项精确问题矩阵全部通过。该结果接受精确 Snapshot/Fragment 上的空起始用户词表、版本化内容分类、六种独立准入动作、可选分维度评级、A0 人工命令、原子幂等回放、闭合输入与 `000003` 静态迁移合同；它不表示真实 PostgreSQL、HTTP/浏览器、正式知识、检索、偏好模型、自动准入或 AI 已经通过。下一步进入阶段 2A，冻结并实现无 AI 的原子知识变更、版本化知识项与关系核心。
 
+阶段 2A 的首个候选边界是草案
+[`C-SLICE-B-KNOWLEDGE-r1`](manual-knowledge-core-contract.md)：先固定从一项当前
+获准证据或显式人工编辑到 A0 人工 `KnowledgeChangeSet`、稳定知识项/关系身份、
+不可变修订和精确来源的规范写入核心。该草案尚待 Maintenance 与 Test 独立
+评审，未授权 Backend 实现。确定性检索作为紧邻子增量读取这套规范模型；
+别名、集合、树、冲突、导出、HTTP/浏览器和 AI 不与首个迁移捆绑。
+
 ## 阶段 2A：非 AI 知识形成与确定性检索核心
 
 目标：在没有任何 AI、Embedding 或模型凭据时完成首个真正的产品闭环，让获准资料能够被人工或确定性工具变成可解释、可维护和可找回的知识。

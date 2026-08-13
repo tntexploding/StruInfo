@@ -96,6 +96,16 @@ values or add formal knowledge, policy, AI, search, transport, grant, or
 background-work tables. Until the same real PostgreSQL gate is admitted, its
 DDL result is likewise static schema evidence only.
 
+The next product-table migration is reserved as
+`000004_create_manual_knowledge_core.sql` and is currently governed by the draft
+[`C-SLICE-B-KNOWLEDGE-r1`](manual-knowledge-core-contract.md). Backend work is
+not admitted until independent Maintenance and Test review close material
+contract findings. The migration is limited to the A0 manual change-set,
+versioned item/relation, typed provenance, and payload-free committed-change
+event boundary declared there; it does not authorize search projections,
+aliases, collections, AI, transport, event delivery/consumers, roles, grants,
+background work, personal seeds, or real PostgreSQL claims.
+
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.
 
