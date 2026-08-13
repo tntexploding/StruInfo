@@ -1,9 +1,9 @@
 # Manual Knowledge Core Contract
 
-- Contract ID: `C-SLICE-B-KNOWLEDGE-r1`
-- Status: Draft implementation contract; Backend implementation is blocked
-  until independent Maintenance and Test reviews close material findings
-- Date: 2026-08-13
+- Contract ID: `C-SLICE-B-KNOWLEDGE-r2`
+- Status: Corrected implementation-contract candidate; Backend implementation
+  remains blocked until independent Maintenance and Test re-reviews pass
+- Date: 2026-08-14
 - Upstream implementation baseline: `60964673b4b25f308dc0867e6cf0e1e5d678c063`
 - Upstream evidence contract:
   [`C-SLICE-A-EVIDENCE-r2`](source-evidence-storage-contract.md)
@@ -40,9 +40,14 @@ canonical model and add deterministic exact, substring, source, state, and
 relation retrieval. Search indexes remain rebuildable projections and are not
 part of the database truth frozen here.
 
+Revision 2 supersedes the unimplemented revision-1 draft. It closes the input
+ownership, numeric-revision, provenance-precedence, and repository-projection
+ambiguities found by independent Maintenance and Test review. It changes no
+accepted ADR, table scope, dependency, authority level, or deferred gate.
+
 ## Scope and deferred boundaries
 
-Revision 1 includes:
+Contract revision 2 includes:
 
 - one A0 `manual_user` knowledge-change-set command;
 - a closed authorization branch for either one current eligible
@@ -62,7 +67,7 @@ Revision 1 includes:
 - a forward PostgreSQL migration plus static SQL contract tests; and
 - a pure application boundary plus a transaction-oriented repository port.
 
-Revision 1 does not include:
+Contract revision 2 does not include:
 
 - AI, OCR, embeddings, model proposals, processing runs, prompt/model identity,
   or automatic policy authority;
@@ -92,7 +97,7 @@ The `knowledge` application module exclusively owns formal knowledge writes.
 Evidence, parser, curation, source, model, transport, and storage adapters never
 insert or update knowledge tables directly.
 
-Revision 1 implements only A0 manual authority:
+Contract revision 2 implements only A0 manual authority:
 
 ```ts
 export interface ManualKnowledgeContext {
@@ -109,7 +114,7 @@ relation label. This contract does not claim that HTTP authentication exists.
 
 The fixed operation origin is also `manual_user`. Authority answers who may
 commit; operation origin answers which product path produced the change. They
-are separate persisted fields even though revision 1 admits the same single
+are separate persisted fields even though this contract admits the same single
 value for both.
 
 ## Closed authorization modes
@@ -178,7 +183,7 @@ through a distinct error.
 
 ## Closed command contract
 
-Revision 1 exposes one command:
+Contract revision 2 exposes one command:
 
 ```ts
 export interface ApplyManualKnowledgeChangeSetRequest {
@@ -280,7 +285,8 @@ export interface PutKnowledgeRelationOperation {
 ```
 
 Direction is always `subjectItemId -> objectItemId`; there is no independent
-direction flag. A relation cannot point from an item to itself in revision 1.
+direction flag. A relation cannot point from an item to itself in this
+contract.
 
 `relationTypeKey` is exact, stable user workspace data rather than a display
 label. It is not a TypeScript enum, does not grant permission or algorithm
@@ -290,12 +296,11 @@ versioned relation vocabulary may attach labels and governance to these keys
 without allowing personal values into code.
 
 For a stable relation identity, subject, relation-type key, and object are
-immutable
-natural-identity fields. Revision 1 allows later revisions to change qualifier,
-epistemic role, review state, or provenance. Changing an endpoint or relation
-type requires a new caller-selected relation ID. Multiple independent relations
-with equal endpoints and type are allowed so sources and conflicting claims do
-not collapse silently.
+immutable natural-identity fields. This contract allows later revisions to
+change qualifier, epistemic role, review state, or provenance. Changing an
+endpoint or relation type requires a new caller-selected relation ID. Multiple
+independent relations with equal endpoints and type are allowed so sources and
+conflicting claims do not collapse silently.
 
 Creation uses `expectedRevision: 0`; an existing relation requires its current
 revision. Its first revision cannot be `rejected` or `withdrawn`. A relation in
@@ -340,7 +345,7 @@ operation. The same branch/stable-ID/revision tuple cannot appear twice. Input
 order is preserved and participates in exact semantic equality.
 
 Knowledge derivations cannot refer to an item or relation revision being created
-by the same change set in revision 1. This closes derivation cycles without
+by the same change set in this contract. This closes derivation cycles without
 adding a graph topology protocol. Relation endpoints may still refer to items
 created in the same change set; the relation itself uses direct Fragment
 provenance or older formal revisions.
@@ -357,6 +362,92 @@ Role-specific provenance rules are:
 
 These rules distinguish a quote, a source's claim, a derived summary, an
 inference, and the user's assertion. They do not rate factual reliability.
+
+### Closed provenance preflight and issue selection
+
+For each operation, the decoder completes a descriptor-only shallow preflight
+of the `provenance` record and all three declared arrays before it reads any
+array element value. In declaration order it first verifies each array
+container, Proxy status, prototype, and own `length` data descriptor, then adds
+the three lengths. A total greater than 64 returns `limit_exceeded` at
+`request.operations[i].provenance` with budget
+`operation_provenance_inputs` before any element UUID, tag, or revision is
+examined and before index enumeration. If the total is admitted, the preflight
+then verifies each array's own index keys and data descriptors, density, and
+absence of inherited index accessors; a defect returns `invalid_shape` at that
+exact array field. Only after that successful preflight are elements decoded in
+`citations`, `fragmentDerivations`, then `knowledgeDerivations` order and by
+ascending index within each array.
+
+Let `P` mean `request.operations[i].provenance`, `V` mean
+`request.operations[i].value`, and `K[j]` mean
+`request.operations[i].provenance.knowledgeDerivations[j]`. The following
+cross-field failures have one exact result after their referenced element
+shapes and identifiers are valid:
+
+| Scenario                                                                                                | Code                 | Exact path                                                                      |
+| ------------------------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------- |
+| All three provenance arrays are empty                                                                   | `invalid_provenance` | `P`                                                                             |
+| A Fragment repeats within `citations`                                                                   | `invalid_provenance` | Later `P.citations[j]`                                                          |
+| A Fragment repeats within `fragmentDerivations` or repeats an earlier citation                          | `invalid_provenance` | Later `P.fragmentDerivations[j]`                                                |
+| A formal revision tuple repeats                                                                         | `invalid_provenance` | Later `K[j]`                                                                    |
+| A formal revision names an item or relation operated on by this command                                 | `invalid_provenance` | Exact `K[j]`                                                                    |
+| An `eligible_target` operation has no admitted target-scoped Fragment after all Fragment inputs resolve | `invalid_provenance` | `P`                                                                             |
+| `source_excerpt` body is absent                                                                         | `invalid_provenance` | `V.body`                                                                        |
+| `source_excerpt` has other than one citation                                                            | `invalid_provenance` | `P.citations`                                                                   |
+| `source_excerpt` has any Fragment derivation                                                            | `invalid_provenance` | `P.fragmentDerivations`                                                         |
+| `source_excerpt` has any formal-revision derivation                                                     | `invalid_provenance` | `P.knowledgeDerivations`                                                        |
+| `source_excerpt` body bytes do not match its resolved Fragment digest                                   | `invalid_provenance` | `V.body`                                                                        |
+| `source_claim` has no Fragment citation or Fragment derivation                                          | `invalid_provenance` | `P`                                                                             |
+| `inference` has citations but no Fragment or formal-revision derivation                                 | `invalid_provenance` | `P`                                                                             |
+| A relation has equal subject and object IDs                                                             | `invalid_relation`   | `V.objectItemId`                                                                |
+| An existing relation changes a natural-identity field                                                   | `invalid_relation`   | First changed field in `subjectItemId`, `relationTypeKey`, `objectItemId` order |
+
+The all-empty rule precedes role-specific cardinality rules. Target grounding
+precedes the remaining role-specific rules. For `source_excerpt`, after the
+all-empty and target-grounding rules, the five rows above are checked in their
+displayed order. The exact one-citation row therefore owns a zero-citation
+failure when another derivation made the general provenance set non-empty. A
+relation input containing the excluded `source_excerpt` enum value is instead
+request-local `invalid_state` at `V.epistemicRole`. These paths do not depend on
+which repository adapter or test fixture supplies the resolved rows.
+
+## Closed input ownership and inspection
+
+Context, request, and repository snapshot are untrusted closed inputs. The
+boundary inspects a container before reading any caller-supplied value from it.
+It uses the trusted Node.js Proxy predicate before reflection so rejecting a
+Proxy invokes zero traps. It then admits only ordinary records whose prototype
+is exactly `Object.prototype` and dense ordinary arrays whose prototype is
+exactly `Array.prototype`. Declared fields and indices must be enumerable own
+data properties. Extra or symbol keys, class/custom/null prototypes, own
+accessors, inherited accessors for any declared field or array index,
+dangerous keys, sparse arrays, and cycles are rejected without invoking a
+caller-owned getter, setter, iterator, coercion hook, or other code.
+
+Descriptor inspection precedes all field-value reads. In particular, an
+accessor installed on `Object.prototype` for a declared record field or on
+`Array.prototype` for a declared index is rejected even when ordinary
+assignment would otherwise reach it. The boundary never uses ordinary
+property assignment into a container that can dispatch such an inherited
+setter.
+
+After admission, every accepted record and array is projected into fresh,
+implementation-owned ordinary containers. Record fields are created with
+`Object.defineProperty` as own enumerable data properties; arrays are created
+with their standard own `length` and populated only after the boundary has
+proved that no relevant inherited index setter exists. Nested values are
+recursively copied. The boundary never retains or freezes a caller-owned
+container. Decoded context, request, repository state, successful plan,
+receipt, result, and issue values are deeply frozen owned graphs. Mutating any
+original caller value after decoding cannot change a digest, comparison,
+prepared plan, result, or replay receipt.
+
+For context or request, a malformed container uses the nearest declared path;
+an own or inherited accessor for a declared field uses that field's path. Any
+malformed repository container, accessor, ordering, relation, or value uses
+`state`. These rules apply before hashing, lookup, sorting, comparison, or ID
+derivation.
 
 ## Text and identifier boundary
 
@@ -395,11 +486,33 @@ The fixed budgets are:
 | Qualifier                             | 2,000 Unicode code points                                    |
 | Command idempotency key               | 200 ASCII characters from `[A-Za-z0-9._:-]`                  |
 | Revision number                       | signed 32-bit positive integer; expected creation value is 0 |
-| Canonical request projection          | 8 MiB UTF-8 bytes including its terminal LF                  |
 
 Collection length is checked before visiting collection elements. Text lexical
-validity is checked before its code-point budget. Safe-integer form and
-non-negativity are checked before the revision-number budget.
+validity is checked before its code-point budget.
+
+Operation `expectedRevision` accepts positive zero for creation or an integer
+from 1 through 2,147,483,647. `expectedDecisionRevision` and every historical
+derivation `revision` accept only 1 through 2,147,483,647. For each field, a
+wrong primitive type is `invalid_shape`; negative zero
+(`Object.is(value, -0)`), a negative value, a non-finite value, a non-integer,
+or a non-safe integer is `invalid_state`; and a safe integer above
+2,147,483,647 is `limit_exceeded` with budget
+`revision_number`. Thus zero is valid only for operation creation, never for a
+curation-decision expectation or historical derivation. Repository revision
+and current-revision values must be positive signed 32-bit integers; a defect
+there is `invalid_shape` at `state`.
+
+The closed field and collection limits make a public encoded-byte rejection
+unreachable. The largest admitted canonical command projection uses the longer
+`eligible_target` authorization, 64 maximized `put_item` operations, and 64
+maximized relation-revision derivations per operation. It is 5,601,498 UTF-8
+bytes including its terminal LF, visits 17,294 canonical JSON values, and has
+maximum JSON depth 7. These values remain below the existing encoder's internal
+8 MiB, 100,000-value, and depth-64 defenses. Those encoder limits are
+implementation invariants, not request budgets: this protocol has no
+`request_bytes` budget or issue branch. Reaching an encoder limit after
+successful closed decoding is an implementation fault and cannot be mapped to
+a caller-visible rejection.
 
 ## Stable identities
 
@@ -598,14 +711,63 @@ export interface ManualKnowledgeRepositorySnapshot {
 }
 ```
 
-All containers and nested values obey the same ordinary-record, own-data-field,
-dense-array, no-accessor, no-Proxy, no-cycle, no-dangerous-key, and deep-freeze
-rules as the request. Every row belongs to the effective workspace. Each array
-is sorted by its declared stable ID, then revision/operation ordinal where
-applicable, with no duplicate identity. The adapter loads only rows needed by
-the command, but it must load the current revision for every returned identity,
-every requested historical revision, the referenced Fragments, the optional
-matching stored change set and all of that set's operations.
+All containers and nested values obey the closed inspection and owned-copy
+rules above. Every row belongs to the effective workspace. Canonical UUID and
+ASCII key strings compare by ascending UTF-8 bytes; numeric tuple members
+compare arithmetically. The ten arrays use exactly these sort and uniqueness
+rules:
+
+| Array               | Ascending sort tuple                   | Required unique identities                           |
+| ------------------- | -------------------------------------- | ---------------------------------------------------- |
+| `curationTargets`   | `(targetId)`                           | `targetId`                                           |
+| `intakeDecisions`   | `(targetId, decisionId)`               | `targetId`; independently `decisionId`               |
+| `fragments`         | `(fragmentId)`                         | `fragmentId`                                         |
+| `items`             | `(itemId)`                             | `itemId`                                             |
+| `revisions`         | `(itemId, revision)`                   | `(itemId, revision)`; independently `revisionId`     |
+| `relations`         | `(relationId)`                         | `relationId`                                         |
+| `relationRevisions` | `(relationId, revision)`               | `(relationId, revision)`; independently `revisionId` |
+| `changeSets`        | `(commandIdempotencyKey, changeSetId)` | `commandIdempotencyKey`; independently `changeSetId` |
+| `changeOperations`  | `(changeSetId, operationIndex)`        | `(changeSetId, operationIndex)`                      |
+| `changeEvents`      | `(changeSetId, eventId)`               | `changeSetId`; independently `eventId`               |
+
+The snapshot contains an exact closure, not an arbitrary superset. Its rows
+have one of two mutually exclusive shapes:
+
+1. **Stored-command closure.** `changeSets` contains exactly one row whose key
+   equals the context key; `changeOperations` contains exactly its declared
+   operation count; `changeEvents` contains exactly its one committed event;
+   and the other seven arrays are empty. This branch is enough to reconstruct
+   replay or detect a digest conflict without observing later domain state.
+2. **New-command closure.** `changeSets`, `changeOperations`, and
+   `changeEvents` are empty. For `eligible_target`, `curationTargets` contains
+   the requested target if it exists and `intakeDecisions` contains that
+   target's current decision if it exists; each is otherwise empty and neither
+   contains another target. For `manual_edit`, both arrays are empty.
+   `fragments` contains exactly every existing distinct Fragment named by any
+   citation or Fragment derivation. `items` contains exactly every existing
+   distinct item named as a primary item, relation endpoint, or historical
+   item derivation. `relations` contains exactly every existing distinct
+   relation named as a primary relation or historical relation derivation.
+   `revisions` contains each loaded item's current revision plus every existing
+   requested historical item revision, with identical rows de-duplicated.
+   `relationRevisions` follows the same rule for relations.
+
+An identity that does not exist in the effective workspace contributes no row;
+that absence drives the declared not-found result. An unrelated row, a second
+candidate for a single current target/decision/command/event, a row outside the
+listed closure, or a row omitted from a returned existing identity's required
+closure is malformed state rather than additional context. The pure planner
+validates this projection; TM2 later proves that the repository adapter loads
+it truthfully under the required transaction and locks.
+
+For exact-closure validation, the requested identity sets come from the already
+decoded request. The pure planner rejects unrelated rows and detectable gaps
+inside returned identities, such as a missing current revision. An entirely
+absent requested business identity is the ordinary not-found representation;
+the row arrays alone cannot distinguish that database fact from an adapter
+that failed to load an existing identity. Therefore completeness for wholly
+absent lookups is an explicit repository-adapter obligation proved against
+PostgreSQL in TM2, not a TM1 claim or a fabricated snapshot field.
 
 Current pointers must resolve an exact returned revision. A loaded item or
 relation revision must include its complete ordered provenance arrays, including
@@ -722,8 +884,7 @@ export type KnowledgeBudgetName =
   | 'body_code_points'
   | 'qualifier_code_points'
   | 'idempotency_key_characters'
-  | 'revision_number'
-  | 'request_bytes';
+  | 'revision_number';
 
 export type KnowledgeBoundedIndex =
   | 0
@@ -850,44 +1011,47 @@ Issue objects contain no rejected values, titles, bodies, relation labels,
 Fragment text, database details, exception messages, stacks, or credentials.
 Dynamic indices are zero-based decimal values in the closed 0-through-63 union.
 A missing declared field uses its exact field path. An unknown extra key,
-dangerous key, invalid container/prototype, accessor, Proxy, symbol, sparse
-array, or cycle uses the nearest declared container path, so caller-controlled
-key text is never echoed. Every result, receipt, issue, and prepared plan is
+dangerous key, invalid container/prototype, Proxy, symbol, sparse array, or
+cycle uses the nearest declared container path, so caller-controlled key text
+is never echoed. An own or inherited accessor for a declared field uses that
+declared field path. Inspection and owned-copy semantics are fixed by the
+closed-input section above. Every result, receipt, issue, and prepared plan is
 deeply frozen.
 
 The stable scenario mapping is:
 
-| Scenario                                                                                                                    | Code                                     | Path                                                               | Budget                        |
-| --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------ | ----------------------------- |
-| Invalid ordinary-record, dense-array, own-property, declared-field, tagged-union, descriptor, or closed-state shape         | `invalid_shape`                          | Nearest declared container or field; repository input uses `state` | Absent                        |
-| Non-canonical UUID in context/request                                                                                       | `invalid_identifier`                     | Exact UUID field                                                   | Absent                        |
-| Non-canonical UUID or SHA-256, bad derived ID, ordering/duplicate defect, or inconsistent repository projection             | `invalid_shape`                          | `state`                                                            | Absent                        |
-| Empty or lexically invalid command key                                                                                      | `invalid_identifier`                     | `context.commandIdempotencyKey`                                    | Absent                        |
-| Invalid Unicode scalar, control, line-break, boundary whitespace, or empty present text                                     | `invalid_text`                           | Exact text field                                                   | Absent                        |
-| Unknown authority, authorization kind, target kind, operation kind, knowledge kind, epistemic role, or review state         | `invalid_state`                          | Exact discriminator/enum field                                     | Absent                        |
-| Expected revision is not a safe non-negative integer                                                                        | `invalid_state`                          | Exact expected-revision field                                      | Absent                        |
-| Operations array is empty                                                                                                   | `invalid_state`                          | `request.operations`                                               | Absent                        |
-| After lookup proves an identity is absent, its first requested revision is rejected or withdrawn                            | `invalid_state`                          | Operation review-state field                                       | Absent                        |
-| More than 64 operations                                                                                                     | `limit_exceeded`                         | `request.operations`                                               | `change_set_operations`       |
-| More than 64 total provenance inputs for one operation                                                                      | `limit_exceeded`                         | Operation provenance                                               | `operation_provenance_inputs` |
-| Text exceeds its fixed code-point limit                                                                                     | `limit_exceeded`                         | Exact text field                                                   | Matching text budget          |
-| Command key exceeds 200 characters                                                                                          | `limit_exceeded`                         | `context.commandIdempotencyKey`                                    | `idempotency_key_characters`  |
-| Requested or next revision exceeds signed positive 32-bit range                                                             | `limit_exceeded`                         | Operation expected revision                                        | `revision_number`             |
-| Canonical request exceeds 8 MiB                                                                                             | `limit_exceeded`                         | `request`                                                          | `request_bytes`               |
-| Later operation repeats an earlier item or relation ID of the same kind                                                     | `duplicate_operation`                    | Later `request.operations[i]`                                      | Absent                        |
-| `eligible_target` target is missing or cross-workspace                                                                      | `curation_target_not_found`              | `request.authorization.target`                                     | Absent                        |
-| `eligible_target` decision is absent, or its action is `source_only`, `ignore`, or `needs_review`                           | `curation_not_eligible`                  | `request.authorization`                                            | Absent                        |
-| `eligible_target` current decision revision differs from expected                                                           | `stale_curation_revision`                | `request.authorization.expectedDecisionRevision`                   | Absent                        |
-| Fragment missing or cross-workspace                                                                                         | `fragment_not_found`                     | Exact Fragment input                                               | Absent                        |
-| Fragment exists but is outside an `eligible_target` authorization                                                           | `fragment_out_of_scope`                  | Exact Fragment input                                               | Absent                        |
-| Primary item or relation identity is absent for a positive expected revision                                                | `item_not_found` or `relation_not_found` | Operation identity                                                 | Absent                        |
-| Relation endpoint item is absent/cross-workspace                                                                            | `item_not_found`                         | Exact endpoint field                                               | Absent                        |
-| Historical derivation revision is absent/cross-workspace                                                                    | `revision_not_found`                     | Exact knowledge-derivation element                                 | Absent                        |
-| Existing primary identity does not have the expected current revision                                                       | `stale_revision`                         | Operation expected revision                                        | Absent                        |
-| Empty provenance, missing target grounding, duplicate input, role mismatch, same-change-set derivation, or excerpt mismatch | `invalid_provenance`                     | First offending provenance field or item body                      | Absent                        |
-| Self relation or changed stable relation identity                                                                           | `invalid_relation`                       | First offending relation value field                               | Absent                        |
-| Existing command key has a different canonical request digest                                                               | `idempotency_conflict`                   | `context.commandIdempotencyKey`                                    | Absent                        |
-| Adapter cannot atomically commit the accepted plan                                                                          | `persistence_failed`                     | `persistence`                                                      | Absent                        |
+| Scenario                                                                                                                    | Code                                     | Path                                                                                    | Budget                        |
+| --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------- |
+| Invalid ordinary-record, dense-array, own-property, declared-field, tagged-union, descriptor, or closed-state shape         | `invalid_shape`                          | Nearest declared container or field; repository input uses `state`                      | Absent                        |
+| Non-canonical UUID in context/request                                                                                       | `invalid_identifier`                     | Exact UUID field                                                                        | Absent                        |
+| Non-canonical UUID or SHA-256, bad derived ID, ordering/duplicate defect, or inconsistent repository projection             | `invalid_shape`                          | `state`                                                                                 | Absent                        |
+| Empty or lexically invalid command key                                                                                      | `invalid_identifier`                     | `context.commandIdempotencyKey`                                                         | Absent                        |
+| Invalid Unicode scalar, control, line-break, boundary whitespace, or empty present text                                     | `invalid_text`                           | Exact text field                                                                        | Absent                        |
+| Unknown authority, authorization kind, target kind, operation kind, knowledge kind, epistemic role, or review state         | `invalid_state`                          | Exact discriminator/enum field                                                          | Absent                        |
+| Revision field has the wrong primitive type                                                                                 | `invalid_shape`                          | Exact revision field                                                                    | Absent                        |
+| Revision field is negative zero, negative, non-finite, non-integer, or not a safe integer                                   | `invalid_state`                          | Exact revision field                                                                    | Absent                        |
+| `expectedDecisionRevision` or historical derivation revision is zero                                                        | `invalid_state`                          | Exact revision field                                                                    | Absent                        |
+| Operations array is empty                                                                                                   | `invalid_state`                          | `request.operations`                                                                    | Absent                        |
+| After lookup proves an identity is absent, its first requested revision is rejected or withdrawn                            | `invalid_state`                          | Operation review-state field                                                            | Absent                        |
+| More than 64 operations                                                                                                     | `limit_exceeded`                         | `request.operations`                                                                    | `change_set_operations`       |
+| More than 64 total provenance inputs for one operation                                                                      | `limit_exceeded`                         | Operation provenance                                                                    | `operation_provenance_inputs` |
+| Text exceeds its fixed code-point limit                                                                                     | `limit_exceeded`                         | Exact text field                                                                        | Matching text budget          |
+| Command key exceeds 200 characters                                                                                          | `limit_exceeded`                         | `context.commandIdempotencyKey`                                                         | `idempotency_key_characters`  |
+| Request revision field or a calculated next revision exceeds signed positive 32-bit range                                   | `limit_exceeded`                         | Exact request revision field; calculated next revision uses operation expected revision | `revision_number`             |
+| Later operation repeats an earlier item or relation ID of the same kind                                                     | `duplicate_operation`                    | Later `request.operations[i]`                                                           | Absent                        |
+| `eligible_target` target is missing or cross-workspace                                                                      | `curation_target_not_found`              | `request.authorization.target`                                                          | Absent                        |
+| `eligible_target` decision is absent, or its action is `source_only`, `ignore`, or `needs_review`                           | `curation_not_eligible`                  | `request.authorization`                                                                 | Absent                        |
+| `eligible_target` current decision revision differs from expected                                                           | `stale_curation_revision`                | `request.authorization.expectedDecisionRevision`                                        | Absent                        |
+| Fragment missing or cross-workspace                                                                                         | `fragment_not_found`                     | Exact Fragment input                                                                    | Absent                        |
+| Fragment exists but is outside an `eligible_target` authorization                                                           | `fragment_out_of_scope`                  | Exact Fragment input                                                                    | Absent                        |
+| Primary item or relation identity is absent for a positive expected revision                                                | `item_not_found` or `relation_not_found` | Operation identity                                                                      | Absent                        |
+| Relation endpoint item is absent/cross-workspace                                                                            | `item_not_found`                         | Exact endpoint field                                                                    | Absent                        |
+| Historical derivation revision is absent/cross-workspace                                                                    | `revision_not_found`                     | Exact knowledge-derivation element                                                      | Absent                        |
+| Existing primary identity does not have the expected current revision                                                       | `stale_revision`                         | Operation expected revision                                                             | Absent                        |
+| Empty provenance, missing target grounding, duplicate input, role mismatch, same-change-set derivation, or excerpt mismatch | `invalid_provenance`                     | Exact path in the closed provenance table                                               | Absent                        |
+| Self relation or changed stable relation identity                                                                           | `invalid_relation`                       | Exact path in the closed provenance/relation table                                      | Absent                        |
+| Existing command key has a different canonical request digest                                                               | `idempotency_conflict`                   | `context.commandIdempotencyKey`                                                         | Absent                        |
+| Adapter cannot atomically commit the accepted plan                                                                          | `persistence_failed`                     | `persistence`                                                                           | Absent                        |
 
 ## Deterministic validation and state precedence
 
@@ -895,8 +1059,10 @@ Closed request validation visits fields in TypeScript declaration order.
 Arrays are validated by ascending index. For operations, the boundary validates
 the container, `kind`, primary ID, and expected revision before value and
 provenance fields. Duplicate primary operations are detected immediately after
-the later primary ID is valid. Fragment and knowledge input duplicates are
-detected at the later element.
+the later primary ID is valid. Before any provenance element, the boundary runs
+the closed shallow preflight and total-count check specified above. It then
+detects Fragment and formal-revision input duplicates at the exact later
+element.
 
 After request-local checks and canonical request hashing, state-dependent
 precedence is:
@@ -914,7 +1080,8 @@ precedence is:
    order;
 9. resolve relation endpoint identities against existing and same-command
    items;
-10. validate role-specific provenance and stable relation identity;
+10. validate target grounding, the closed role-specific provenance table, and
+    stable relation identity in the frozen order above;
 11. calculate exact semantic deltas and next-revision budgets; and
 12. atomically persist or return `persistence_failed`.
 
@@ -941,8 +1108,10 @@ interface ManualKnowledgeCommandProjection {
 ```
 
 Absent optional fields remain absent. Array order remains exact. The existing
-canonical JSON encoder produces UTF-8 plus one terminal LF, bounded to 8 MiB,
-and SHA-256 stores only its lowercase digest in the database.
+canonical JSON encoder produces UTF-8 plus one terminal LF using its internal
+8 MiB defense, and SHA-256 stores only its lowercase digest in the database.
+Closed request budgets prove every admitted projection fits, so the encoder
+limit is not a public validation branch.
 
 The rules are:
 
@@ -1120,7 +1289,9 @@ value-free tests prove at least:
    decisions, decision-revision staleness, manual-edit behavior, and conditional
    Fragment target scoping;
 2. closed UUID, text, enum, array, optional-field, budget, hostile-object,
-   accessor, Proxy, dangerous-key, deep-freeze, and non-echoing-error behavior;
+   own/inherited accessor and setter, zero-trap Proxy rejection, owned-copy,
+   caller-mutation isolation, dangerous-key, deep-freeze, and non-echoing-error
+   behavior;
 3. change-set, item-revision, and relation-revision UUIDv5 known answers plus
    canonical request digest known answers;
 4. item create, revise, unchanged, withdraw, reactivate, stale, missing, and
@@ -1131,12 +1302,15 @@ value-free tests prove at least:
 6. direct citation versus derivation semantics, exact excerpt digest,
    duplicates, out-of-scope/missing Fragments, historical item/relation
    revision inputs, complete provenance replacement, and rejection of
-   same-change-set derivation;
+   same-change-set derivation, including the exact role/scenario issue paths
+   and provenance-total preflight precedence;
 7. multi-item split plus relation in one atomic plan, operation-order receipts,
    duplicate primary operations, mixed applied/unchanged behavior, and no
    partial plan;
 8. same-key replay, same-key conflict, rejected-key reuse, original receipt
-   replay after later state changes, and exact first-error precedence;
+   replay after later state changes, exact first-error precedence, every
+   request revision domain branch, and all ten repository-array sort,
+   uniqueness, exact-closure, and malformed-superset cases;
 9. poisoned filesystem, network, environment, clock, randomness, AI,
    framework, and database seams proving a pure non-AI module;
 10. static DDL proof for exactly thirteen new tables, the one admitted upstream
