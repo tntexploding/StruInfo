@@ -55,6 +55,26 @@ const eventUnique = [
   ')',
 ] as const;
 
+const eventCreatedAtColumn = [
+  'change_set_id',
+  'uuid',
+  'not',
+  'null',
+  ',',
+  'created_at',
+  'timestamp',
+  'with',
+  'time',
+  'zone',
+  'not',
+  'null',
+  'default',
+  'current_timestamp',
+  ',',
+  'primary',
+  'key',
+] as const;
+
 function requireMigrationSql(row: KnowledgeTm1LedgerRow): string {
   const exists = existsSync(migrationUrl);
   expect(
@@ -73,6 +93,14 @@ function expectFinding(sql: string, code: string): void {
   const actual = auditManualKnowledgeSql(sql).map((finding) => finding.code);
   expect(actual, `expected ${code}; received ${actual.join(',')}`).toContain(
     code,
+  );
+}
+
+function replaceEventCreatedAtTail(sql: string, tail: string): string {
+  return replaceExecutableTokenSequence(
+    sql,
+    eventCreatedAtColumn,
+    `change_set_id uuid NOT NULL, created_at timestamp with time zone ${tail}, PRIMARY KEY`,
   );
 }
 
@@ -98,6 +126,39 @@ function evaluateMigrationRow(row: KnowledgeTm1LedgerRow): void {
         tokenizeManualKnowledgeSql("CHECK (synthetic_value @ 'synthetic')"),
       ).toThrow(/Unsupported SQL character/u);
       expect(MANUAL_KNOWLEDGE_TABLES).toHaveLength(13);
+      for (const [sequence, replacement] of [
+        [['authorization_kind', 'in', '('], 'authorization_kind "in" ('],
+        [
+          [
+            'decision_revision_id',
+            'is',
+            'not',
+            'null',
+            ')',
+            'or',
+            '(',
+            'authorization_kind',
+          ],
+          'decision_revision_id IS NOT NULL) "or" (authorization_kind',
+        ],
+        [
+          [
+            'resulting_revision_id',
+            ')',
+            'references',
+            'struinfo',
+            '.',
+            'knowledge_revision',
+            '(',
+          ],
+          'resulting_revision_id) "references" struinfo.knowledge_revision (',
+        ],
+      ] as const) {
+        expectFinding(
+          replaceExecutableTokenSequence(reference, sequence, replacement),
+          'constraint_set',
+        );
+      }
       expectFinding(
         `${reference}\n\nCREATE TABLE struinfo.synthetic_extra (` +
           'workspace_id uuid NOT NULL, synthetic_id uuid NOT NULL, ' +
@@ -275,6 +336,42 @@ function evaluateMigrationRow(row: KnowledgeTm1LedgerRow): void {
             'ON struinfo.knowledge_revision (workspace_id, item_id);',
         ),
       ).toEqual([]);
+      expect(
+        auditManualKnowledgeSql(
+          replaceEventCreatedAtTail(
+            reference,
+            'DEFAULT CURRENT_TIMESTAMP NOT NULL',
+          ),
+        ),
+      ).toEqual([]);
+      const invalidTails = [
+        'NOT NULL NOT NULL DEFAULT CURRENT_TIMESTAMP',
+        'NOT NULL DEFAULT CURRENT_TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+        'NOT NULL DEFAULT synthetic_default',
+        'NOT NULL DEFAULT CURRENT_TIMESTAMP synthetic_tail',
+        '"NOT" NULL DEFAULT CURRENT_TIMESTAMP',
+        'NOT "NULL" DEFAULT CURRENT_TIMESTAMP',
+        'NOT NULL "DEFAULT" CURRENT_TIMESTAMP',
+        'NOT NULL DEFAULT "CURRENT_TIMESTAMP"',
+        'NOT',
+        'DEFAULT',
+        'NOT NULL DEFAULT',
+      ] as const;
+      for (const tail of invalidTails) {
+        expectFinding(
+          replaceEventCreatedAtTail(reference, tail),
+          'column_declaration',
+        );
+      }
+      expect(
+        auditManualKnowledgeSql(
+          replaceEventCreatedAtTail(reference, 'DEFAULT CURRENT_TIMESTAMP'),
+        ),
+      ).toContainEqual({
+        code: 'column_declaration',
+        detail: 'created_at:timestamp with time zone:true',
+        table: 'knowledge_change_event',
+      });
       break;
     }
     default:

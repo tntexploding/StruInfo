@@ -723,11 +723,19 @@ function parseDocument(sql: string): ParsedDocument {
 }
 
 function tokenValues(tokens: readonly SqlToken[]): readonly string[] {
-  return tokens.map((token) =>
-    token.kind === 'string' || token.kind === 'e_string'
-      ? `${token.kind}:${token.value}`
-      : token.value,
-  );
+  return tokens.map((token) => {
+    if (token.kind === 'quoted_identifier') {
+      return `quoted_identifier:${JSON.stringify(token.value)}`;
+    }
+    if (token.kind === 'string' || token.kind === 'e_string') {
+      return `${token.kind}:${token.value}`;
+    }
+    return token.value;
+  });
+}
+
+function canonicalTokenFingerprint(tokens: readonly SqlToken[]): string {
+  return JSON.stringify(tokens.map((token) => [token.kind, token.value]));
 }
 
 function parseColumnExpectation(
@@ -753,18 +761,34 @@ function parseColumnExpectation(
   } else {
     return undefined;
   }
-  const tail = tokens.slice(offset);
-  if (tail.length === 0) return {type, nullable: true};
-  if (containsSequence(tail, ['not', 'null']) && tail.length === 2) {
-    return {type, nullable: false};
+  let cursor = offset;
+  let sawNotNull = false;
+  let sawDefaultCurrentTimestamp = false;
+  while (cursor < tokens.length) {
+    if (isWord(tokens[cursor], 'not')) {
+      if (sawNotNull || !isWord(tokens[cursor + 1], 'null')) return undefined;
+      sawNotNull = true;
+      cursor += 2;
+      continue;
+    }
+    if (isWord(tokens[cursor], 'default')) {
+      if (
+        sawDefaultCurrentTimestamp ||
+        !isWord(tokens[cursor + 1], 'current_timestamp')
+      ) {
+        return undefined;
+      }
+      sawDefaultCurrentTimestamp = true;
+      cursor += 2;
+      continue;
+    }
+    return undefined;
   }
-  if (
-    containsSequence(tail, ['not', 'null', 'default', 'current_timestamp']) &&
-    tail.length === 4
-  ) {
-    return {type, nullable: false, defaultCurrentTimestamp: true};
-  }
-  return undefined;
+  return {
+    type,
+    nullable: !sawNotNull,
+    ...(sawDefaultCurrentTimestamp ? {defaultCurrentTimestamp: true} : {}),
+  };
 }
 
 function sameColumnExpectation(
@@ -1130,7 +1154,7 @@ function constraintFingerprints(
   return constraints
     .map(
       (constraint) =>
-        `${constraint.kind}:${tokenValues(constraint.tokens).join(' ')}`,
+        `${constraint.kind}:${canonicalTokenFingerprint(constraint.tokens)}`,
     )
     .sort();
 }
@@ -1140,7 +1164,7 @@ function materialIndexFingerprint(index: ParsedIndex): string {
     index.unique ? 'unique' : 'plain',
     index.table,
     index.columns.join(','),
-    tokenValues(index.predicate).join(' '),
+    canonicalTokenFingerprint(index.predicate),
   ].join(':');
 }
 
