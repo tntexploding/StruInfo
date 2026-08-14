@@ -20,6 +20,7 @@ import {
   createDigestProjectionFromTrustedRequest,
   createExpectedCursor,
   createRichProjection,
+  createRichRequest,
   createSaturatedCursor,
   createSaturatedProjection,
   createSyntheticContext,
@@ -406,7 +407,9 @@ function asciiIndependent(value: string): string {
     .join('');
 }
 
-function evaluateUtf8OrderOracle(row: RetrievalTm1LedgerRow): void {
+async function evaluateUtf8OrderOracle(
+  row: RetrievalTm1LedgerRow,
+): Promise<void> {
   const vectors: readonly Readonly<{
     left: string;
     right: string;
@@ -436,13 +439,17 @@ function evaluateUtf8OrderOracle(row: RetrievalTm1LedgerRow): void {
     throw new RangeError(`${row.id} comparator vector missing.`);
   const actual = Math.sign(compareUtf8(vector.left, vector.right));
   expect(actual, row.id).toBe(vector.expected);
+  if (row.groupOrdinal === 8) {
+    const module = await loadPublicRetrievalModule(row);
+    await expectPublicItemUuidTieBreakOrder(module, row);
+  }
   if (row.groupOrdinal === 10) {
     const values = ['\u{1f600}', 'a', '\u77e5'].sort(compareUtf8);
     expect(values, row.id).toEqual(['a', '\u77e5', '\u{1f600}']);
   }
 }
 
-function evaluateDigestOracle(row: RetrievalTm1LedgerRow): void {
+async function evaluateDigestOracle(row: RetrievalTm1LedgerRow): Promise<void> {
   switch (row.groupOrdinal) {
     case 1: {
       const request = createBrowseRequest();
@@ -456,9 +463,14 @@ function evaluateDigestOracle(row: RetrievalTm1LedgerRow): void {
         measureIndependentCanonicalJson(projection).text,
         row.id,
       ).toContain('\u01f0');
+      await expectPublicQueryDigest(
+        await loadPublicRetrievalModule(row),
+        row,
+        request,
+      );
       return;
     }
-    case 2:
+    case 2: {
       expectMeasurement(
         measureIndependentCanonicalJson(
           createTextProjection(searchKeyV1('e\u0301')),
@@ -467,8 +479,17 @@ function evaluateDigestOracle(row: RetrievalTm1LedgerRow): void {
         row.id,
       );
       expect(searchKeyV1('e\u0301'), row.id).toBe(searchKeyV1('\u00e9'));
+      const module = await loadPublicRetrievalModule(row);
+      const nfdRequest = createBrowseRequest();
+      setText(nfdRequest, 'e\u0301');
+      const nfcRequest = createBrowseRequest();
+      setText(nfcRequest, '\u00e9');
+      const nfdResult = await expectPublicQueryDigest(module, row, nfdRequest);
+      const nfcResult = await expectPublicQueryDigest(module, row, nfcRequest);
+      expect(nfdResult.querySha256, row.id).toBe(nfcResult.querySha256);
       return;
-    case 3:
+    }
+    case 3: {
       expectMeasurement(
         measureIndependentCanonicalJson(
           createTextProjection(searchKeyV1('J\u030c')),
@@ -476,8 +497,16 @@ function evaluateDigestOracle(row: RetrievalTm1LedgerRow): void {
         RETRIEVAL_DIGEST_KNOWN_ANSWERS.jCaron,
         row.id,
       );
+      const request = createBrowseRequest();
+      setText(request, 'J\u030c');
+      await expectPublicQueryDigest(
+        await loadPublicRetrievalModule(row),
+        row,
+        request,
+      );
       return;
-    case 4:
+    }
+    case 4: {
       expectMeasurement(
         measureIndependentCanonicalJson(
           createTextProjection(searchKeyV1('H\u0331')),
@@ -485,21 +514,45 @@ function evaluateDigestOracle(row: RetrievalTm1LedgerRow): void {
         RETRIEVAL_DIGEST_KNOWN_ANSWERS.hLineBelow,
         row.id,
       );
+      const request = createBrowseRequest();
+      setText(request, 'H\u0331');
+      await expectPublicQueryDigest(
+        await loadPublicRetrievalModule(row),
+        row,
+        request,
+      );
       return;
-    case 5:
+    }
+    case 5: {
       expectMeasurement(
         measureIndependentCanonicalJson(createBrowseProjection()),
         RETRIEVAL_DIGEST_KNOWN_ANSWERS.browse,
         row.id,
       );
+      await expectPublicQueryDigest(
+        await loadPublicRetrievalModule(row),
+        row,
+        createBrowseRequest(),
+      );
       return;
-    case 6:
+    }
+    case 6: {
       expectMeasurement(
         measureIndependentCanonicalJson(createRichProjection()),
         RETRIEVAL_DIGEST_KNOWN_ANSWERS.rich,
         row.id,
       );
+      const request = createRichRequest();
+      expect(createDigestProjectionFromTrustedRequest(request), row.id).toEqual(
+        createRichProjection(),
+      );
+      await expectPublicQueryDigest(
+        await loadPublicRetrievalModule(row),
+        row,
+        request,
+      );
       return;
+    }
     case 7:
       expectMeasurement(
         measureIndependentCanonicalJson(createSaturatedProjection()),
@@ -538,8 +591,13 @@ function evaluateDigestOracle(row: RetrievalTm1LedgerRow): void {
       const filters = requestFilters(request);
       filters.knowledgeKinds = ['work', 'entity'];
       const first = querySha256FromTrustedRequest(request);
+      const module = await loadPublicRetrievalModule(row);
+      const firstResult = await expectPublicQueryDigest(module, row, request);
       filters.knowledgeKinds = ['entity', 'work'];
-      expect(querySha256FromTrustedRequest(request), row.id).toBe(first);
+      const second = querySha256FromTrustedRequest(request);
+      const secondResult = await expectPublicQueryDigest(module, row, request);
+      expect(second, row.id).toBe(first);
+      expect(firstResult.querySha256, row.id).toBe(secondResult.querySha256);
       return;
     }
     case 10: {
@@ -548,28 +606,72 @@ function evaluateDigestOracle(row: RetrievalTm1LedgerRow): void {
       expect(querySha256FromTrustedRequest(first), row.id).toBe(
         querySha256FromTrustedRequest(second),
       );
+      const module = await loadPublicRetrievalModule(row);
+      const firstResult = await expectPublicQueryDigest(module, row, first);
+      const secondResult = await expectPublicQueryDigest(module, row, second);
+      expect(firstResult.querySha256, row.id).toBe(secondResult.querySha256);
       return;
     }
     case 11: {
-      const first = createBrowseRequest();
-      const second = cloneSynthetic(first);
-      requestPage(second).after = createExpectedCursor(
-        second,
-        4,
-        'synthetic',
-        SYNTHETIC_RETRIEVAL_IDS.itemA,
+      const first = createBrowseRequest(1);
+      const module = await loadPublicRetrievalModule(row);
+      const firstResult = await expectPublicQueryDigest(module, row, first);
+      const cursor = requireRecord(
+        firstResult.nextCursor,
+        `${row.id} first-page cursor`,
       );
+      const second = cloneSynthetic(first);
+      requestPage(second).after = cloneSynthetic(cursor);
       expect(querySha256FromTrustedRequest(first), row.id).toBe(
         querySha256FromTrustedRequest(second),
       );
+      const secondResult = await expectPublicQueryDigest(module, row, second);
+      expect(firstResult.querySha256, row.id).toBe(secondResult.querySha256);
       return;
     }
     case 12: {
-      const first = createBrowseRequest();
-      const second = cloneSynthetic(first);
-      setText(second, 'synthetic');
-      expect(querySha256FromTrustedRequest(second), row.id).not.toBe(
-        querySha256FromTrustedRequest(first),
+      const module = await loadPublicRetrievalModule(row);
+      const ids = SYNTHETIC_RETRIEVAL_IDS;
+      const sourceA = createBrowseRequest(1);
+      requestFilters(sourceA).source = sourceFilter('resource', ids.resourceA);
+      const sourceAResult = await expectPublicQueryDigest(module, row, sourceA);
+      const sourceACursor = requireRecord(
+        sourceAResult.nextCursor,
+        `${row.id} source A cursor`,
+      );
+      const sourceB = createBrowseRequest(1);
+      requestFilters(sourceB).source = sourceFilter('resource', ids.resourceB);
+      const sourceBResult = await expectPublicQueryDigest(module, row, sourceB);
+      expect(sourceBResult.querySha256, row.id).not.toBe(
+        sourceAResult.querySha256,
+      );
+
+      const crossSource = cloneSynthetic(sourceB);
+      requestPage(crossSource).after = cloneSynthetic(sourceACursor);
+      await expectRequestRejection(
+        module,
+        row,
+        issue('invalid_cursor', 'request.page.after.querySha256'),
+        {request: crossSource},
+      );
+
+      const changedFilter = cloneSynthetic(sourceA);
+      requestFilters(changedFilter).reviewStates = ['confirmed'];
+      const changedFilterResult = await expectPublicQueryDigest(
+        module,
+        row,
+        changedFilter,
+      );
+      expect(changedFilterResult.querySha256, row.id).not.toBe(
+        sourceAResult.querySha256,
+      );
+      const crossFilter = cloneSynthetic(changedFilter);
+      requestPage(crossFilter).after = cloneSynthetic(sourceACursor);
+      await expectRequestRejection(
+        module,
+        row,
+        issue('invalid_cursor', 'request.page.after.querySha256'),
+        {request: crossFilter},
       );
       expect(RETRIEVAL_BUDGET_NAMES, row.id).not.toContain('request_bytes');
       return;
@@ -579,13 +681,15 @@ function evaluateDigestOracle(row: RetrievalTm1LedgerRow): void {
   }
 }
 
-function evaluateIndependentOracle(row: RetrievalTm1LedgerRow): void {
+async function evaluateIndependentOracle(
+  row: RetrievalTm1LedgerRow,
+): Promise<void> {
   if (row.group === 'normalization') {
     evaluateNormalizationOracle(row);
   } else if (row.group === 'utf8-order') {
-    evaluateUtf8OrderOracle(row);
+    await evaluateUtf8OrderOracle(row);
   } else if (row.group === 'digest-capacity') {
-    evaluateDigestOracle(row);
+    await evaluateDigestOracle(row);
   } else {
     throw new RangeError(`${row.id} is not an independent oracle row.`);
   }
@@ -763,6 +867,21 @@ async function expectBrowseIds(
   return result;
 }
 
+async function expectPublicQueryDigest(
+  module: PublicRetrievalModule,
+  row: RetrievalTm1LedgerRow,
+  request: Record<string, unknown>,
+  snapshot: Record<string, unknown> = createSyntheticSnapshot(),
+): Promise<Record<string, unknown>> {
+  const expected = querySha256FromTrustedRequest(request);
+  const result = requireOk(
+    (await executeWithModule(module, row, {request, snapshot})).result,
+    row,
+  );
+  expect(result.querySha256, `${row.id} public query digest`).toBe(expected);
+  return result;
+}
+
 function sourceFilter(
   kind: 'resource' | 'snapshot' | 'fragment',
   identifier: string,
@@ -824,6 +943,165 @@ function exactResultItem(
   return requireRecord(found, `${row.id} result item ${itemId}`);
 }
 
+function currentItemRevision(
+  snapshot: Record<string, unknown>,
+  itemId: string,
+): Record<string, unknown> {
+  const found = snapshotArray(snapshot, 'revisions').find(
+    (entry) => isRecord(entry) && entry.itemId === itemId,
+  );
+  return requireRecord(found, `snapshot item revision ${itemId}`);
+}
+
+function currentRelationRevision(
+  snapshot: Record<string, unknown>,
+  relationId: string,
+): Record<string, unknown> {
+  const found = snapshotArray(snapshot, 'relationRevisions').find(
+    (entry) => isRecord(entry) && entry.relationId === relationId,
+  );
+  return requireRecord(found, `snapshot relation revision ${relationId}`);
+}
+
+async function expectInvalidRepositoryFixture(
+  module: PublicRetrievalModule,
+  row: RetrievalTm1LedgerRow,
+  snapshot: Record<string, unknown>,
+  scenario: string,
+): Promise<void> {
+  const execution = await executeWithModule(module, row, {snapshot});
+  expect(execution.result, `${row.id} ${scenario}`).toEqual({
+    status: 'failed',
+    issue: {code: 'invalid_repository_snapshot', path: 'repository'},
+  });
+}
+
+function createItemUuidTieFixture(): Readonly<{
+  request: Record<string, unknown>;
+  snapshot: Record<string, unknown>;
+  normalizedTitle: string;
+}> {
+  const snapshot = createSyntheticSnapshot();
+  const request = createBrowseRequest();
+  const nfdTitle = 'e\u0301';
+  const nfcTitle = '\u00e9';
+  itemValue(snapshot, SYNTHETIC_RETRIEVAL_IDS.itemA).title = nfdTitle;
+  itemValue(snapshot, SYNTHETIC_RETRIEVAL_IDS.itemB).title = nfcTitle;
+  setText(request, nfcTitle, 'exact', ['title']);
+  return {
+    request,
+    snapshot,
+    normalizedTitle: searchKeyV1(nfcTitle),
+  };
+}
+
+async function expectPublicItemUuidTieBreakOrder(
+  module: PublicRetrievalModule,
+  row: RetrievalTm1LedgerRow,
+): Promise<void> {
+  const fixture = createItemUuidTieFixture();
+  const ids = SYNTHETIC_RETRIEVAL_IDS;
+  expect(
+    searchKeyV1(
+      requireString(itemValue(fixture.snapshot, ids.itemA).title, 'A'),
+    ),
+    row.id,
+  ).toBe(
+    searchKeyV1(
+      requireString(itemValue(fixture.snapshot, ids.itemB).title, 'B'),
+    ),
+  );
+  const result = await expectPublicQueryDigest(
+    module,
+    row,
+    fixture.request,
+    fixture.snapshot,
+  );
+  const items = resultItems(result, row);
+  expect(
+    items.map((item) => item.itemId),
+    `${row.id} item UUID tie order`,
+  ).toEqual([ids.itemA, ids.itemB]);
+  expect(
+    items.map((item) => item.matchRank),
+    `${row.id} equal match rank`,
+  ).toEqual([0, 0]);
+}
+
+async function exercisePublicItemUuidTiePagination(
+  module: PublicRetrievalModule,
+  row: RetrievalTm1LedgerRow,
+): Promise<readonly string[]> {
+  const fixture = createItemUuidTieFixture();
+  const ids = SYNTHETIC_RETRIEVAL_IDS;
+  requestPage(fixture.request).limit = 1;
+
+  const first = await expectPublicQueryDigest(
+    module,
+    row,
+    fixture.request,
+    fixture.snapshot,
+  );
+  expect(first.totalCount, `${row.id} first-page total`).toBe(2);
+  expect(
+    resultItems(first, row).map((item) => item.itemId),
+    `${row.id} first-page UUID`,
+  ).toEqual([ids.itemA]);
+  const firstCursor = requireRecord(
+    first.nextCursor,
+    `${row.id} first-page cursor`,
+  );
+  expect(firstCursor, `${row.id} lower UUID cursor`).toEqual(
+    createExpectedCursor(
+      fixture.request,
+      0,
+      fixture.normalizedTitle,
+      ids.itemA,
+    ),
+  );
+
+  const secondRequest = cloneSynthetic(fixture.request);
+  requestPage(secondRequest).after = cloneSynthetic(firstCursor);
+  const second = await expectPublicQueryDigest(
+    module,
+    row,
+    secondRequest,
+    fixture.snapshot,
+  );
+  expect(second.totalCount, `${row.id} second-page total`).toBe(2);
+  expect(
+    resultItems(second, row).map((item) => item.itemId),
+    `${row.id} second-page UUID`,
+  ).toEqual([ids.itemB]);
+  expect(second, `${row.id} last page`).not.toHaveProperty('nextCursor');
+
+  const finalRequest = cloneSynthetic(fixture.request);
+  requestPage(finalRequest).after = createExpectedCursor(
+    finalRequest,
+    0,
+    fixture.normalizedTitle,
+    ids.itemB,
+  );
+  const finalPage = await expectPublicQueryDigest(
+    module,
+    row,
+    finalRequest,
+    fixture.snapshot,
+  );
+  expect(finalPage.totalCount, `${row.id} empty continuation total`).toBe(2);
+  expect(resultItems(finalPage, row), `${row.id} empty continuation`).toEqual(
+    [],
+  );
+  expect(finalPage, `${row.id} empty continuation cursor`).not.toHaveProperty(
+    'nextCursor',
+  );
+
+  return [
+    ...resultItems(first, row).map((item) => requireString(item.itemId, 'ID')),
+    ...resultItems(second, row).map((item) => requireString(item.itemId, 'ID')),
+  ];
+}
+
 function expectSyntheticSnapshotFixtureInvariants(): void {
   const snapshot = createSyntheticSnapshot();
   const inputs = snapshotArray(snapshot, 'fragmentInputs').map((entry) =>
@@ -871,6 +1149,16 @@ function expectSyntheticSnapshotFixtureInvariants(): void {
   }
 
   const relation = onlyRelation(snapshot, SYNTHETIC_RETRIEVAL_IDS.relationC);
+  const item = onlyItem(snapshot, SYNTHETIC_RETRIEVAL_IDS.itemC);
+  const itemRevision = currentItemRevision(
+    snapshot,
+    SYNTHETIC_RETRIEVAL_IDS.itemC,
+  );
+  expect(item.currentRevision).toBe(2);
+  expect(itemRevision.revision).toBe(2);
+  expect(requireRecord(itemRevision.value, 'itemC value').reviewState).toBe(
+    'withdrawn',
+  );
   const revision = snapshotArray(snapshot, 'relationRevisions')
     .map((entry) => requireRecord(entry, 'relation revision'))
     .find((entry) => entry.relationId === SYNTHETIC_RETRIEVAL_IDS.relationC);
@@ -2466,7 +2754,6 @@ async function evaluateOneHopRelations(
       return;
     }
     case 13:
-    case 14:
     case 15: {
       relation.direction = 'outgoing';
       const result = await expectBrowseIds(
@@ -2494,6 +2781,59 @@ async function evaluateOneHopRelations(
         return Number(left.revision) - Number(right.revision);
       });
       expect(matches, row.id).toEqual(sorted);
+      return;
+    }
+    case 14: {
+      const relationB = onlyRelation(snapshot, ids.relationB);
+      relationB.subjectItemId = ids.itemB;
+      relationB.relationTypeKey = 'synthetic.related';
+      relationB.objectItemId = ids.itemA;
+      const relationBRevision = currentRelationRevision(
+        snapshot,
+        ids.relationB,
+      );
+      const relationBValue = requireRecord(
+        relationBRevision.value,
+        'relation B value',
+      );
+      relationBValue.subjectItemId = ids.itemB;
+      relationBValue.relationTypeKey = 'synthetic.related';
+      relationBValue.objectItemId = ids.itemA;
+      relation.relationTypeKeys = ['synthetic.related'];
+
+      const result = await expectBrowseIds(
+        module,
+        row,
+        request,
+        [ids.itemB],
+        snapshot,
+      );
+      const item = exactResultItem(result, row, ids.itemB);
+      expect(item.relationMatchCount, row.id).toBe(2);
+      expect(item.relationMatchesTruncated, row.id).toBe(false);
+      const matches = requireArray(
+        item.relationMatches,
+        'relation ID tie matches',
+      ).map((match) => requireRecord(match, 'relation ID tie match'));
+      expect(
+        matches.map((match) => ({
+          relationTypeKey: match.relationTypeKey,
+          relationId: match.relationId,
+          direction: match.direction,
+        })),
+        row.id,
+      ).toEqual([
+        {
+          relationTypeKey: 'synthetic.related',
+          relationId: ids.relationA,
+          direction: 'outgoing',
+        },
+        {
+          relationTypeKey: 'synthetic.related',
+          relationId: ids.relationB,
+          direction: 'incoming',
+        },
+      ]);
       return;
     }
     case 16:
@@ -2905,8 +3245,16 @@ async function evaluatePagination(
     if (after === undefined) break;
   }
   expect(collected, row.id).toEqual(orderedIds);
+  const tieCollected = await exercisePublicItemUuidTiePagination(module, row);
+  expect(tieCollected, `${row.id} equal-title pagination`).toEqual([
+    ids.itemA,
+    ids.itemB,
+  ]);
   if (row.groupOrdinal === 14) {
     expect(new Set(collected).size, row.id).toBe(collected.length);
+    expect(new Set(tieCollected).size, `${row.id} tie-page uniqueness`).toBe(
+      tieCollected.length,
+    );
   }
 }
 
@@ -2995,6 +3343,30 @@ async function evaluateItemRevisionClosure(
 ): Promise<void> {
   const snapshot = createSyntheticSnapshot();
   const ids = SYNTHETIC_RETRIEVAL_IDS;
+  if (row.groupOrdinal === 9) {
+    const extraFieldSnapshot = createSyntheticSnapshot();
+    itemValue(extraFieldSnapshot, ids.itemA).extra = true;
+    await expectInvalidRepositoryFixture(
+      module,
+      row,
+      extraFieldSnapshot,
+      'closed revision value',
+    );
+    for (const reviewState of ['rejected', 'withdrawn']) {
+      const lifecycleSnapshot = createSyntheticSnapshot();
+      requireRecord(
+        currentItemRevision(lifecycleSnapshot, ids.itemA).value,
+        'item revision-one value',
+      ).reviewState = reviewState;
+      await expectInvalidRepositoryFixture(
+        module,
+        row,
+        lifecycleSnapshot,
+        `item revision one ${reviewState}`,
+      );
+    }
+    return;
+  }
   switch (row.groupOrdinal) {
     case 1:
       snapshotArray(snapshot, 'items').reverse();
@@ -3061,9 +3433,6 @@ async function evaluateItemRevisionClosure(
         'struinfo:knowledge-revision:v1:2',
       );
       break;
-    case 9:
-      itemValue(snapshot, ids.itemA).extra = true;
-      break;
     case 10:
       snapshotArray(snapshot, 'items').splice(
         1,
@@ -3085,14 +3454,33 @@ async function evaluateFragmentRelationClosure(
   const snapshot = createSyntheticSnapshot();
   const ids = SYNTHETIC_RETRIEVAL_IDS;
   if (row.groupOrdinal === 3) {
-    const request = createBrowseRequest();
-    requestFilters(request).source = sourceFilter(
+    const itemAInputs = snapshotArray(snapshot, 'fragmentInputs')
+      .map((entry) => requireRecord(entry, 'kind-local Fragment input'))
+      .filter((entry) => entry.itemId === ids.itemA);
+    expect(
+      itemAInputs.map((input) => ({
+        inputKind: input.inputKind,
+        inputOrdinal: input.inputOrdinal,
+      })),
+      `${row.id} kind-local ordinals`,
+    ).toEqual([
+      {inputKind: 'citation', inputOrdinal: 0},
+      {inputKind: 'derivation', inputOrdinal: 0},
+    ]);
+
+    const sourceRequest = createBrowseRequest();
+    requestFilters(sourceRequest).source = sourceFilter(
       'resource',
       ids.resourceA,
       [],
     );
     const result = requireOk(
-      (await executeWithModule(module, row, {request, snapshot})).result,
+      (
+        await executeWithModule(module, row, {
+          request: sourceRequest,
+          snapshot,
+        })
+      ).result,
       row,
     );
     const item = exactResultItem(result, row, ids.itemA);
@@ -3105,6 +3493,102 @@ async function evaluateFragmentRelationClosure(
         fragmentId: ids.fragmentA,
       },
     ]);
+
+    const browseResult = requireOk(
+      (await executeWithModule(module, row, {snapshot})).result,
+      row,
+    );
+    const withdrawnItem = exactResultItem(browseResult, row, ids.itemC);
+    expect(withdrawnItem.revision, `${row.id} withdrawn item revision`).toBe(2);
+    expect(
+      requireRecord(withdrawnItem.value, 'withdrawn item value').reviewState,
+      row.id,
+    ).toBe('withdrawn');
+
+    const relationRequest = createBrowseRequest();
+    const relation = connectedFilter('incoming');
+    relation.relationTypeKeys = ['synthetic.incoming'];
+    relation.reviewStates = ['withdrawn'];
+    requestFilters(relationRequest).relation = relation;
+    const relationResult = await expectBrowseIds(
+      module,
+      row,
+      relationRequest,
+      [ids.itemC],
+      snapshot,
+    );
+    const relationMatch = requireRecord(
+      requireArray(
+        exactResultItem(relationResult, row, ids.itemC).relationMatches,
+        'withdrawn relation matches',
+      )[0],
+      'withdrawn relation match',
+    );
+    expect(
+      relationMatch.revision,
+      `${row.id} withdrawn relation revision`,
+    ).toBe(2);
+    expect(relationMatch.reviewState, row.id).toBe('withdrawn');
+
+    const gapSnapshot = cloneSynthetic(snapshot);
+    requireRecord(
+      snapshotArray(gapSnapshot, 'fragmentInputs')[0],
+      'gap Fragment input',
+    ).inputOrdinal = 1;
+    await expectInvalidRepositoryFixture(
+      module,
+      row,
+      gapSnapshot,
+      'kind-local ordinal gap',
+    );
+
+    const domainSnapshot = cloneSynthetic(snapshot);
+    requireRecord(
+      snapshotArray(domainSnapshot, 'fragmentInputs')[0],
+      'negative Fragment input ordinal',
+    ).inputOrdinal = -1;
+    await expectInvalidRepositoryFixture(
+      module,
+      row,
+      domainSnapshot,
+      'negative Fragment input ordinal',
+    );
+    return;
+  }
+  if (row.groupOrdinal === 7) {
+    const historicalSnapshot = createSyntheticSnapshot();
+    const historical = cloneSynthetic(
+      currentRelationRevision(historicalSnapshot, ids.relationA),
+    );
+    historical.revision = 2;
+    historical.revisionId = independentUuidV5(
+      ids.relationA,
+      'struinfo:knowledge-relation-revision:v1:2',
+    );
+    snapshotArray(historicalSnapshot, 'relationRevisions').splice(
+      1,
+      0,
+      historical,
+    );
+    await expectInvalidRepositoryFixture(
+      module,
+      row,
+      historicalSnapshot,
+      'historical relation revision',
+    );
+    for (const reviewState of ['rejected', 'withdrawn']) {
+      const lifecycleSnapshot = createSyntheticSnapshot();
+      requireRecord(
+        currentRelationRevision(lifecycleSnapshot, ids.relationA).value,
+        'relation revision-one value',
+      ).reviewState = reviewState;
+      await expectInvalidRepositoryFixture(
+        module,
+        row,
+        lifecycleSnapshot,
+        `relation revision one ${reviewState}`,
+      );
+    }
     return;
   }
   switch (row.groupOrdinal) {
@@ -3121,8 +3605,8 @@ async function evaluateFragmentRelationClosure(
           'fragment input',
         ),
       );
-      duplicate.inputOrdinal = 2;
-      snapshotArray(snapshot, 'fragmentInputs').splice(2, 0, duplicate);
+      duplicate.inputOrdinal = 1;
+      snapshotArray(snapshot, 'fragmentInputs').splice(1, 0, duplicate);
       break;
     }
     case 4:
@@ -3138,21 +3622,6 @@ async function evaluateFragmentRelationClosure(
         cloneSynthetic(snapshotArray(snapshot, 'relations')[0]),
       );
       break;
-    case 7: {
-      const historical = cloneSynthetic(
-        requireRecord(
-          snapshotArray(snapshot, 'relationRevisions')[0],
-          'relation revision',
-        ),
-      );
-      historical.revision = 2;
-      historical.revisionId = independentUuidV5(
-        ids.relationA,
-        'struinfo:knowledge-relation-revision:v1:2',
-      );
-      snapshotArray(snapshot, 'relationRevisions').splice(1, 0, historical);
-      break;
-    }
     case 8:
       requireRecord(
         snapshotArray(snapshot, 'relationRevisions')[0],
@@ -3594,8 +4063,8 @@ describe('deterministic knowledge retrieval mandatory ledger', () => {
 describe('Test-owned deterministic retrieval independent oracles', () => {
   it.each(RETRIEVAL_TM1_LEDGER.filter((row) => row.layer === 'oracle'))(
     '$id $title',
-    (row) => {
-      evaluateIndependentOracle(row);
+    async (row) => {
+      await evaluateIndependentOracle(row);
     },
   );
 });

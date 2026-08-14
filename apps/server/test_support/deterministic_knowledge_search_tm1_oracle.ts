@@ -364,6 +364,34 @@ export function createRichProjection(): JsonObject {
   };
 }
 
+export function createRichRequest(limit = 100): Record<string, unknown> {
+  return {
+    text: {
+      value: '\u77e5\u8bc6 e\u0301 \u{1f600} ABC',
+      mode: 'substring',
+      fields: ['title', 'body'],
+    },
+    filters: {
+      knowledgeKinds: ['entity', 'work'],
+      epistemicRoles: ['source_claim', 'user_assertion'],
+      reviewStates: ['confirmed', 'withdrawn'],
+      source: {
+        kind: 'resource',
+        resourceId: '11111111-1111-4111-8111-111111111111',
+        inputKinds: ['citation', 'derivation'],
+      },
+      relation: {
+        kind: 'connected_to',
+        anchorItemId: '22222222-2222-4222-8222-222222222222',
+        direction: 'either',
+        relationTypeKeys: ['a.synthetic', 'z.synthetic'],
+        reviewStates: ['draft', 'withdrawn'],
+      },
+    },
+    page: {limit},
+  };
+}
+
 export function createSaturatedProjection(): JsonObject {
   const relationTypeKeys = Array.from({length: 32}, (_, index) =>
     String.fromCodePoint(0x10000 + index).repeat(120),
