@@ -105,9 +105,9 @@ export const MANUAL_KNOWLEDGE_COLUMN_ORACLE: ReadonlyMap<
       ['authority', required('text')],
       ['operation_origin', required('text')],
       ['authorization_kind', required('text')],
-      ['curation_target_id', optional('uuid')],
+      ['target_id', optional('uuid')],
       ['decision_id', optional('uuid')],
-      ['decision_revision_number', optional('integer')],
+      ['decision_revision', optional('integer')],
       ['decision_revision_id', optional('uuid')],
       ['original_outcome', required('text')],
       ['operation_count', required('integer')],
@@ -183,9 +183,10 @@ export const MANUAL_KNOWLEDGE_COLUMN_ORACLE: ReadonlyMap<
       ['operation_kind', required('text')],
       ['item_id', optional('uuid')],
       ['relation_id', optional('uuid')],
-      ['outcome', required('text')],
+      ['operation_outcome', required('text')],
       ['resulting_revision', required('integer')],
       ['resulting_revision_id', required('uuid')],
+      ['created_at', createdAt],
     ]),
   ],
   [
@@ -193,10 +194,12 @@ export const MANUAL_KNOWLEDGE_COLUMN_ORACLE: ReadonlyMap<
     columnMap([
       ['workspace_id', required('uuid')],
       ['item_id', required('uuid')],
+      ['revision_number', required('integer')],
       ['revision_id', required('uuid')],
       ['input_kind', required('text')],
       ['input_ordinal', required('integer')],
       ['fragment_id', required('uuid')],
+      ['created_at', createdAt],
     ]),
   ],
   [
@@ -204,11 +207,13 @@ export const MANUAL_KNOWLEDGE_COLUMN_ORACLE: ReadonlyMap<
     columnMap([
       ['workspace_id', required('uuid')],
       ['item_id', required('uuid')],
+      ['revision_number', required('integer')],
       ['revision_id', required('uuid')],
       ['input_ordinal', required('integer')],
       ['input_item_id', required('uuid')],
       ['input_revision_number', required('integer')],
       ['input_revision_id', required('uuid')],
+      ['created_at', createdAt],
     ]),
   ],
   [
@@ -216,11 +221,13 @@ export const MANUAL_KNOWLEDGE_COLUMN_ORACLE: ReadonlyMap<
     columnMap([
       ['workspace_id', required('uuid')],
       ['item_id', required('uuid')],
+      ['revision_number', required('integer')],
       ['revision_id', required('uuid')],
       ['input_ordinal', required('integer')],
       ['input_relation_id', required('uuid')],
       ['input_revision_number', required('integer')],
       ['input_revision_id', required('uuid')],
+      ['created_at', createdAt],
     ]),
   ],
   [
@@ -228,10 +235,12 @@ export const MANUAL_KNOWLEDGE_COLUMN_ORACLE: ReadonlyMap<
     columnMap([
       ['workspace_id', required('uuid')],
       ['relation_id', required('uuid')],
+      ['revision_number', required('integer')],
       ['revision_id', required('uuid')],
       ['input_kind', required('text')],
       ['input_ordinal', required('integer')],
       ['fragment_id', required('uuid')],
+      ['created_at', createdAt],
     ]),
   ],
   [
@@ -239,11 +248,13 @@ export const MANUAL_KNOWLEDGE_COLUMN_ORACLE: ReadonlyMap<
     columnMap([
       ['workspace_id', required('uuid')],
       ['relation_id', required('uuid')],
+      ['revision_number', required('integer')],
       ['revision_id', required('uuid')],
       ['input_ordinal', required('integer')],
       ['input_item_id', required('uuid')],
       ['input_revision_number', required('integer')],
       ['input_revision_id', required('uuid')],
+      ['created_at', createdAt],
     ]),
   ],
   [
@@ -251,11 +262,13 @@ export const MANUAL_KNOWLEDGE_COLUMN_ORACLE: ReadonlyMap<
     columnMap([
       ['workspace_id', required('uuid')],
       ['relation_id', required('uuid')],
+      ['revision_number', required('integer')],
       ['revision_id', required('uuid')],
       ['input_ordinal', required('integer')],
       ['input_relation_id', required('uuid')],
       ['input_revision_number', required('integer')],
       ['input_revision_id', required('uuid')],
+      ['created_at', createdAt],
     ]),
   ],
   [
@@ -276,7 +289,7 @@ const wordStart = /[A-Za-z_]/u;
 const wordContinue = /[A-Za-z0-9_$]/u;
 const digit = /[0-9]/u;
 const punctuation = new Set(['(', ')', ',', '.', ';']);
-const operatorStart = new Set(['=', '<', '>', '+', '-', '*', '/']);
+const operatorStart = new Set(['=', '<', '>', '+', '-', '*', '/', '~']);
 
 export function tokenizeManualKnowledgeSql(sql: string): readonly SqlToken[] {
   const tokens: SqlToken[] = [];
@@ -863,14 +876,29 @@ const requiredSemanticSequences: Readonly<
 > = Object.freeze({
   knowledge_change_set: [
     uniqueKey(['workspace_id', 'command_idempotency_key']),
-    foreignKey(['workspace_id', 'curation_target_id'], 'curation_target', [
+    foreignKey(['workspace_id', 'target_id'], 'curation_target', [
       'workspace_id',
       'target_id',
     ]),
     foreignKey(
-      ['workspace_id', 'curation_target_id', 'decision_id'],
+      ['workspace_id', 'target_id', 'decision_id'],
       'intake_decision',
       ['workspace_id', 'target_id', 'decision_id'],
+    ),
+    foreignKey(
+      [
+        'workspace_id',
+        'decision_id',
+        'decision_revision',
+        'decision_revision_id',
+      ],
+      'intake_decision_revision',
+      [
+        'workspace_id',
+        'decision_id',
+        'revision_number',
+        'decision_revision_id',
+      ],
     ),
     [
       'check',
@@ -944,10 +972,23 @@ const requiredSemanticSequences: Readonly<
       'revision_number',
       'revision_id',
     ]),
-    foreignKey(['workspace_id', 'relation_id'], 'knowledge_relation', [
-      'workspace_id',
-      'relation_id',
-    ]),
+    foreignKey(
+      [
+        'workspace_id',
+        'relation_id',
+        'subject_item_id',
+        'relation_type_key',
+        'object_item_id',
+      ],
+      'knowledge_relation',
+      [
+        'workspace_id',
+        'relation_id',
+        'subject_item_id',
+        'relation_type_key',
+        'object_item_id',
+      ],
+    ),
     foreignKey(
       ['workspace_id', 'relation_id', 'previous_revision_id'],
       'knowledge_relation_revision',
@@ -975,9 +1016,9 @@ const requiredSemanticSequences: Readonly<
   ],
   knowledge_revision_fragment_input: [
     foreignKey(
-      ['workspace_id', 'item_id', 'revision_id'],
+      ['workspace_id', 'item_id', 'revision_number', 'revision_id'],
       'knowledge_revision',
-      ['workspace_id', 'item_id', 'revision_id'],
+      ['workspace_id', 'item_id', 'revision_number', 'revision_id'],
     ),
     foreignKey(['workspace_id', 'fragment_id'], 'fragment', [
       'workspace_id',
@@ -987,9 +1028,9 @@ const requiredSemanticSequences: Readonly<
   ],
   knowledge_revision_item_input: [
     foreignKey(
-      ['workspace_id', 'item_id', 'revision_id'],
+      ['workspace_id', 'item_id', 'revision_number', 'revision_id'],
       'knowledge_revision',
-      ['workspace_id', 'item_id', 'revision_id'],
+      ['workspace_id', 'item_id', 'revision_number', 'revision_id'],
     ),
     foreignKey(
       [
@@ -1004,9 +1045,9 @@ const requiredSemanticSequences: Readonly<
   ],
   knowledge_revision_relation_input: [
     foreignKey(
-      ['workspace_id', 'item_id', 'revision_id'],
+      ['workspace_id', 'item_id', 'revision_number', 'revision_id'],
       'knowledge_revision',
-      ['workspace_id', 'item_id', 'revision_id'],
+      ['workspace_id', 'item_id', 'revision_number', 'revision_id'],
     ),
     foreignKey(
       [
@@ -1021,9 +1062,9 @@ const requiredSemanticSequences: Readonly<
   ],
   relation_revision_fragment_input: [
     foreignKey(
-      ['workspace_id', 'relation_id', 'revision_id'],
+      ['workspace_id', 'relation_id', 'revision_number', 'revision_id'],
       'knowledge_relation_revision',
-      ['workspace_id', 'relation_id', 'revision_id'],
+      ['workspace_id', 'relation_id', 'revision_number', 'revision_id'],
     ),
     foreignKey(['workspace_id', 'fragment_id'], 'fragment', [
       'workspace_id',
@@ -1033,9 +1074,9 @@ const requiredSemanticSequences: Readonly<
   ],
   relation_revision_item_input: [
     foreignKey(
-      ['workspace_id', 'relation_id', 'revision_id'],
+      ['workspace_id', 'relation_id', 'revision_number', 'revision_id'],
       'knowledge_relation_revision',
-      ['workspace_id', 'relation_id', 'revision_id'],
+      ['workspace_id', 'relation_id', 'revision_number', 'revision_id'],
     ),
     foreignKey(
       [
@@ -1050,9 +1091,9 @@ const requiredSemanticSequences: Readonly<
   ],
   relation_revision_relation_input: [
     foreignKey(
-      ['workspace_id', 'relation_id', 'revision_id'],
+      ['workspace_id', 'relation_id', 'revision_number', 'revision_id'],
       'knowledge_relation_revision',
-      ['workspace_id', 'relation_id', 'revision_id'],
+      ['workspace_id', 'relation_id', 'revision_number', 'revision_id'],
     ),
     foreignKey(
       [
@@ -1092,6 +1133,15 @@ function constraintFingerprints(
         `${constraint.kind}:${tokenValues(constraint.tokens).join(' ')}`,
     )
     .sort();
+}
+
+function materialIndexFingerprint(index: ParsedIndex): string {
+  return [
+    index.unique ? 'unique' : 'plain',
+    index.table,
+    index.columns.join(','),
+    tokenValues(index.predicate).join(' '),
+  ].join(':');
 }
 
 export function auditManualKnowledgeSql(sql: string): readonly SqlFinding[] {
@@ -1251,6 +1301,21 @@ export function auditManualKnowledgeSql(sql: string): readonly SqlFinding[] {
       ),
     );
   }
+  const expectedMaterialIndexes = new Set(
+    frozenDocument.indexes
+      .filter((index) => index.unique || index.predicate.length > 0)
+      .map(materialIndexFingerprint),
+  );
+  const actualMaterialIndexes = new Set(
+    document.indexes
+      .filter((index) => index.unique || index.predicate.length > 0)
+      .map(materialIndexFingerprint),
+  );
+  for (const fingerprint of expectedMaterialIndexes) {
+    if (!actualMaterialIndexes.has(fingerprint)) {
+      findings.push(finding('missing_material_index', fingerprint));
+    }
+  }
   for (const index of document.indexes) {
     const table = document.tables.get(index.table);
     if (!tableSet.has(index.table) || table === undefined)
@@ -1259,7 +1324,10 @@ export function auditManualKnowledgeSql(sql: string): readonly SqlFinding[] {
       findings.push(
         finding('workspace_index', index.columns.join(','), index.table),
       );
-    if (index.unique || index.predicate.length > 0)
+    if (
+      (index.unique || index.predicate.length > 0) &&
+      !expectedMaterialIndexes.has(materialIndexFingerprint(index))
+    )
       findings.push(
         finding(
           'unexpected_material_index',
@@ -1355,15 +1423,18 @@ export function createSyntheticManualKnowledgeSql(): string {
     createSyntheticTable('knowledge_change_set', [
       'PRIMARY KEY (workspace_id, change_set_id)',
       workspaceForeignKey,
-      'FOREIGN KEY (workspace_id, curation_target_id) REFERENCES struinfo.curation_target (workspace_id, target_id)',
-      'FOREIGN KEY (workspace_id, curation_target_id, decision_id) REFERENCES struinfo.intake_decision (workspace_id, target_id, decision_id)',
+      'FOREIGN KEY (workspace_id, target_id) REFERENCES struinfo.curation_target (workspace_id, target_id)',
+      'FOREIGN KEY (workspace_id, target_id, decision_id) REFERENCES struinfo.intake_decision (workspace_id, target_id, decision_id)',
+      'FOREIGN KEY (workspace_id, decision_id, decision_revision, decision_revision_id) REFERENCES struinfo.intake_decision_revision (workspace_id, decision_id, revision_number, decision_revision_id)',
       'UNIQUE (workspace_id, command_idempotency_key)',
+      "CHECK (command_idempotency_key ~ '^[A-Za-z0-9._:-]{1,200}$')",
+      "CHECK (request_sha256 ~ '^[0-9a-f]{64}$')",
       "CHECK (command_kind = 'apply_manual_knowledge_change_set')",
       "CHECK (authority = 'manual_user')",
       "CHECK (operation_origin = 'manual_user')",
       "CHECK (authorization_kind IN ('eligible_target', 'manual_edit'))",
-      "CHECK ((authorization_kind = 'manual_edit' AND curation_target_id IS NULL AND decision_id IS NULL AND decision_revision_number IS NULL AND decision_revision_id IS NULL) OR (authorization_kind = 'eligible_target' AND curation_target_id IS NOT NULL AND decision_id IS NOT NULL AND decision_revision_number IS NOT NULL AND decision_revision_id IS NOT NULL))",
-      'CHECK (decision_revision_number IS NULL OR decision_revision_number >= 1)',
+      "CHECK ((authorization_kind = 'eligible_target' AND target_id IS NOT NULL AND decision_id IS NOT NULL AND decision_revision IS NOT NULL AND decision_revision_id IS NOT NULL) OR (authorization_kind = 'manual_edit' AND target_id IS NULL AND decision_id IS NULL AND decision_revision IS NULL AND decision_revision_id IS NULL))",
+      'CHECK (decision_revision IS NULL OR decision_revision >= 1)',
       "CHECK (original_outcome IN ('applied', 'unchanged'))",
       'CHECK (operation_count >= 1 AND operation_count <= 64)',
     ]),
@@ -1376,6 +1447,7 @@ export function createSyntheticManualKnowledgeSql(): string {
     createSyntheticTable('knowledge_revision', [
       'PRIMARY KEY (workspace_id, item_id, revision_id)',
       'FOREIGN KEY (workspace_id, item_id) REFERENCES struinfo.knowledge_item (workspace_id, item_id)',
+      'FOREIGN KEY (workspace_id, change_set_id) REFERENCES struinfo.knowledge_change_set (workspace_id, change_set_id)',
       'FOREIGN KEY (workspace_id, item_id, previous_revision_id) REFERENCES struinfo.knowledge_revision (workspace_id, item_id, revision_id)',
       'UNIQUE (workspace_id, item_id, revision_number)',
       'UNIQUE (workspace_id, item_id, revision_number, revision_id)',
@@ -1385,6 +1457,7 @@ export function createSyntheticManualKnowledgeSql(): string {
       reviewCheck,
       "CHECK (btrim(title) <> '')",
       "CHECK (body IS NULL OR btrim(body) <> '')",
+      'CHECK (operation_index >= 0 AND operation_index < 64)',
       'CHECK ((revision_number = 1 AND previous_revision_id IS NULL) OR (revision_number > 1 AND previous_revision_id IS NOT NULL))',
     ]),
     createSyntheticTable('knowledge_relation', [
@@ -1392,13 +1465,18 @@ export function createSyntheticManualKnowledgeSql(): string {
       workspaceForeignKey,
       'FOREIGN KEY (workspace_id, subject_item_id) REFERENCES struinfo.knowledge_item (workspace_id, item_id)',
       'FOREIGN KEY (workspace_id, object_item_id) REFERENCES struinfo.knowledge_item (workspace_id, item_id)',
+      'UNIQUE (workspace_id, relation_id, subject_item_id, relation_type_key, object_item_id)',
       'UNIQUE (workspace_id, relation_id, current_revision, current_revision_id)',
       'CHECK (current_revision >= 1)',
       'CHECK (subject_item_id <> object_item_id)',
+      "CHECK (btrim(relation_type_key) <> '')",
     ]),
     createSyntheticTable('knowledge_relation_revision', [
       'PRIMARY KEY (workspace_id, relation_id, revision_id)',
-      'FOREIGN KEY (workspace_id, relation_id) REFERENCES struinfo.knowledge_relation (workspace_id, relation_id)',
+      'FOREIGN KEY (workspace_id, relation_id, subject_item_id, relation_type_key, object_item_id) REFERENCES struinfo.knowledge_relation (workspace_id, relation_id, subject_item_id, relation_type_key, object_item_id)',
+      'FOREIGN KEY (workspace_id, subject_item_id) REFERENCES struinfo.knowledge_item (workspace_id, item_id)',
+      'FOREIGN KEY (workspace_id, object_item_id) REFERENCES struinfo.knowledge_item (workspace_id, item_id)',
+      'FOREIGN KEY (workspace_id, change_set_id) REFERENCES struinfo.knowledge_change_set (workspace_id, change_set_id)',
       'FOREIGN KEY (workspace_id, relation_id, previous_revision_id) REFERENCES struinfo.knowledge_relation_revision (workspace_id, relation_id, revision_id)',
       'UNIQUE (workspace_id, relation_id, revision_number)',
       'UNIQUE (workspace_id, relation_id, revision_number, revision_id)',
@@ -1408,60 +1486,63 @@ export function createSyntheticManualKnowledgeSql(): string {
       "CHECK (epistemic_role IN ('source_claim', 'summary', 'inference', 'user_assertion'))",
       reviewCheck,
       "CHECK (qualifier IS NULL OR btrim(qualifier) <> '')",
+      'CHECK (operation_index >= 0 AND operation_index < 64)',
       'CHECK ((revision_number = 1 AND previous_revision_id IS NULL) OR (revision_number > 1 AND previous_revision_id IS NOT NULL))',
     ]),
     createSyntheticTable('knowledge_change_operation', [
       'PRIMARY KEY (workspace_id, change_set_id, operation_index)',
       'FOREIGN KEY (workspace_id, change_set_id) REFERENCES struinfo.knowledge_change_set (workspace_id, change_set_id)',
+      'FOREIGN KEY (workspace_id, item_id) REFERENCES struinfo.knowledge_item (workspace_id, item_id)',
+      'FOREIGN KEY (workspace_id, relation_id) REFERENCES struinfo.knowledge_relation (workspace_id, relation_id)',
+      'CHECK (operation_index >= 0 AND operation_index < 64)',
       "CHECK (operation_kind IN ('put_item', 'put_relation'))",
       "CHECK ((operation_kind = 'put_item' AND item_id IS NOT NULL AND relation_id IS NULL) OR (operation_kind = 'put_relation' AND item_id IS NULL AND relation_id IS NOT NULL))",
-      "CHECK (outcome IN ('applied', 'unchanged'))",
-      'CHECK (operation_index >= 0 AND operation_index <= 63)',
+      "CHECK (operation_outcome IN ('applied', 'unchanged'))",
       'CHECK (resulting_revision >= 1)',
     ]),
     createSyntheticTable('knowledge_revision_fragment_input', [
       'PRIMARY KEY (workspace_id, item_id, revision_id, input_kind, input_ordinal)',
-      'FOREIGN KEY (workspace_id, item_id, revision_id) REFERENCES struinfo.knowledge_revision (workspace_id, item_id, revision_id)',
+      'FOREIGN KEY (workspace_id, item_id, revision_number, revision_id) REFERENCES struinfo.knowledge_revision (workspace_id, item_id, revision_number, revision_id)',
       'FOREIGN KEY (workspace_id, fragment_id) REFERENCES struinfo.fragment (workspace_id, fragment_id)',
       'UNIQUE (workspace_id, item_id, revision_id, fragment_id)',
       "CHECK (input_kind IN ('citation', 'derivation'))",
-      'CHECK (input_ordinal >= 0 AND input_ordinal <= 63)',
+      'CHECK (input_ordinal >= 0 AND input_ordinal < 64)',
     ]),
     createSyntheticTable('knowledge_revision_item_input', [
       'PRIMARY KEY (workspace_id, item_id, revision_id, input_ordinal)',
-      'FOREIGN KEY (workspace_id, item_id, revision_id) REFERENCES struinfo.knowledge_revision (workspace_id, item_id, revision_id)',
+      'FOREIGN KEY (workspace_id, item_id, revision_number, revision_id) REFERENCES struinfo.knowledge_revision (workspace_id, item_id, revision_number, revision_id)',
       'FOREIGN KEY (workspace_id, input_item_id, input_revision_number, input_revision_id) REFERENCES struinfo.knowledge_revision (workspace_id, item_id, revision_number, revision_id)',
       'UNIQUE (workspace_id, item_id, revision_id, input_item_id, input_revision_number)',
-      'CHECK (input_ordinal >= 0 AND input_ordinal <= 63)',
+      'CHECK (input_ordinal >= 0 AND input_ordinal < 64)',
     ]),
     createSyntheticTable('knowledge_revision_relation_input', [
       'PRIMARY KEY (workspace_id, item_id, revision_id, input_ordinal)',
-      'FOREIGN KEY (workspace_id, item_id, revision_id) REFERENCES struinfo.knowledge_revision (workspace_id, item_id, revision_id)',
+      'FOREIGN KEY (workspace_id, item_id, revision_number, revision_id) REFERENCES struinfo.knowledge_revision (workspace_id, item_id, revision_number, revision_id)',
       'FOREIGN KEY (workspace_id, input_relation_id, input_revision_number, input_revision_id) REFERENCES struinfo.knowledge_relation_revision (workspace_id, relation_id, revision_number, revision_id)',
       'UNIQUE (workspace_id, item_id, revision_id, input_relation_id, input_revision_number)',
-      'CHECK (input_ordinal >= 0 AND input_ordinal <= 63)',
+      'CHECK (input_ordinal >= 0 AND input_ordinal < 64)',
     ]),
     createSyntheticTable('relation_revision_fragment_input', [
       'PRIMARY KEY (workspace_id, relation_id, revision_id, input_kind, input_ordinal)',
-      'FOREIGN KEY (workspace_id, relation_id, revision_id) REFERENCES struinfo.knowledge_relation_revision (workspace_id, relation_id, revision_id)',
+      'FOREIGN KEY (workspace_id, relation_id, revision_number, revision_id) REFERENCES struinfo.knowledge_relation_revision (workspace_id, relation_id, revision_number, revision_id)',
       'FOREIGN KEY (workspace_id, fragment_id) REFERENCES struinfo.fragment (workspace_id, fragment_id)',
       'UNIQUE (workspace_id, relation_id, revision_id, fragment_id)',
       "CHECK (input_kind IN ('citation', 'derivation'))",
-      'CHECK (input_ordinal >= 0 AND input_ordinal <= 63)',
+      'CHECK (input_ordinal >= 0 AND input_ordinal < 64)',
     ]),
     createSyntheticTable('relation_revision_item_input', [
       'PRIMARY KEY (workspace_id, relation_id, revision_id, input_ordinal)',
-      'FOREIGN KEY (workspace_id, relation_id, revision_id) REFERENCES struinfo.knowledge_relation_revision (workspace_id, relation_id, revision_id)',
+      'FOREIGN KEY (workspace_id, relation_id, revision_number, revision_id) REFERENCES struinfo.knowledge_relation_revision (workspace_id, relation_id, revision_number, revision_id)',
       'FOREIGN KEY (workspace_id, input_item_id, input_revision_number, input_revision_id) REFERENCES struinfo.knowledge_revision (workspace_id, item_id, revision_number, revision_id)',
       'UNIQUE (workspace_id, relation_id, revision_id, input_item_id, input_revision_number)',
-      'CHECK (input_ordinal >= 0 AND input_ordinal <= 63)',
+      'CHECK (input_ordinal >= 0 AND input_ordinal < 64)',
     ]),
     createSyntheticTable('relation_revision_relation_input', [
       'PRIMARY KEY (workspace_id, relation_id, revision_id, input_ordinal)',
-      'FOREIGN KEY (workspace_id, relation_id, revision_id) REFERENCES struinfo.knowledge_relation_revision (workspace_id, relation_id, revision_id)',
+      'FOREIGN KEY (workspace_id, relation_id, revision_number, revision_id) REFERENCES struinfo.knowledge_relation_revision (workspace_id, relation_id, revision_number, revision_id)',
       'FOREIGN KEY (workspace_id, input_relation_id, input_revision_number, input_revision_id) REFERENCES struinfo.knowledge_relation_revision (workspace_id, relation_id, revision_number, revision_id)',
       'UNIQUE (workspace_id, relation_id, revision_id, input_relation_id, input_revision_number)',
-      'CHECK (input_ordinal >= 0 AND input_ordinal <= 63)',
+      'CHECK (input_ordinal >= 0 AND input_ordinal < 64)',
     ]),
     createSyntheticTable('knowledge_change_event', [
       'PRIMARY KEY (workspace_id, event_id)',
@@ -1475,6 +1556,14 @@ export function createSyntheticManualKnowledgeSql(): string {
     'ALTER TABLE struinfo.intake_decision ADD CONSTRAINT synthetic_decision_target_uq UNIQUE (workspace_id, target_id, decision_id);',
     'ALTER TABLE struinfo.knowledge_item ADD CONSTRAINT synthetic_item_current_fk FOREIGN KEY (workspace_id, item_id, current_revision, current_revision_id) REFERENCES struinfo.knowledge_revision (workspace_id, item_id, revision_number, revision_id) DEFERRABLE INITIALLY DEFERRED;',
     'ALTER TABLE struinfo.knowledge_relation ADD CONSTRAINT synthetic_relation_current_fk FOREIGN KEY (workspace_id, relation_id, current_revision, current_revision_id) REFERENCES struinfo.knowledge_relation_revision (workspace_id, relation_id, revision_number, revision_id) DEFERRABLE INITIALLY DEFERRED;',
+    'ALTER TABLE struinfo.knowledge_revision ADD CONSTRAINT synthetic_item_change_operation_fk FOREIGN KEY (workspace_id, change_set_id, operation_index) REFERENCES struinfo.knowledge_change_operation (workspace_id, change_set_id, operation_index) DEFERRABLE INITIALLY DEFERRED;',
+    'ALTER TABLE struinfo.knowledge_relation_revision ADD CONSTRAINT synthetic_relation_change_operation_fk FOREIGN KEY (workspace_id, change_set_id, operation_index) REFERENCES struinfo.knowledge_change_operation (workspace_id, change_set_id, operation_index) DEFERRABLE INITIALLY DEFERRED;',
+    'ALTER TABLE struinfo.knowledge_change_operation ADD CONSTRAINT synthetic_operation_item_revision_fk FOREIGN KEY (workspace_id, item_id, resulting_revision, resulting_revision_id) REFERENCES struinfo.knowledge_revision (workspace_id, item_id, revision_number, revision_id) DEFERRABLE INITIALLY DEFERRED;',
+    'ALTER TABLE struinfo.knowledge_change_operation ADD CONSTRAINT synthetic_operation_relation_revision_fk FOREIGN KEY (workspace_id, relation_id, resulting_revision, resulting_revision_id) REFERENCES struinfo.knowledge_relation_revision (workspace_id, relation_id, revision_number, revision_id) DEFERRABLE INITIALLY DEFERRED;',
   ];
-  return [...tables, ...currentPointers].join('\n\n');
+  const materialIndexes = [
+    "CREATE UNIQUE INDEX synthetic_operation_item_uq ON struinfo.knowledge_change_operation (workspace_id, change_set_id, item_id) WHERE operation_kind = 'put_item';",
+    "CREATE UNIQUE INDEX synthetic_operation_relation_uq ON struinfo.knowledge_change_operation (workspace_id, change_set_id, relation_id) WHERE operation_kind = 'put_relation';",
+  ];
+  return [...tables, ...currentPointers, ...materialIndexes].join('\n\n');
 }

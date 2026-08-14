@@ -601,43 +601,6 @@ export function createOwnAccessorRequest(counter: TrapCounter): object {
   return request;
 }
 
-export function createInheritedAccessorRequest(counter: TrapCounter): object {
-  const prototype = Object.create(Object.prototype) as Record<string, unknown>;
-  Object.defineProperty(prototype, 'authorization', {
-    enumerable: true,
-    get: () => {
-      counter.touch();
-      return {kind: 'manual_edit'};
-    },
-  });
-  const request = Object.create(prototype) as Record<string, unknown>;
-  Object.defineProperty(request, 'operations', {
-    enumerable: true,
-    value: [createSyntheticItemOperation()],
-  });
-  return request;
-}
-
-export function createInheritedSetterRequest(counter: TrapCounter): object {
-  const prototype = Object.create(Object.prototype) as Record<string, unknown>;
-  Object.defineProperty(prototype, 'authorization', {
-    enumerable: true,
-    set: () => {
-      counter.touch();
-    },
-  });
-  const request = Object.create(prototype) as Record<string, unknown>;
-  Object.defineProperty(request, 'authorization', {
-    enumerable: true,
-    value: {kind: 'manual_edit'},
-  });
-  Object.defineProperty(request, 'operations', {
-    enumerable: true,
-    value: [createSyntheticItemOperation()],
-  });
-  return request;
-}
-
 export function createZeroTrapProxy(counter: TrapCounter): object {
   const trap = (): never => {
     counter.touch();
