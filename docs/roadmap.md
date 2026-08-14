@@ -98,6 +98,13 @@ Playwright 的 npm 包只用于配置和测试源码；Chromium/FFmpeg/winldd、
 子增量读取这套规范模型；别名、集合、树、冲突、导出、HTTP/浏览器和 AI 不与
 首个迁移捆绑。
 
+紧邻检索增量现以草案
+[`C-SLICE-B-RETRIEVAL-r1`](deterministic-knowledge-retrieval-contract.md)
+冻结当前知识项的 NFC + ASCII 大小写折叠文本匹配、显式结构过滤、直接来源、
+一跳关系、稳定 UTF-8 排序、游标和匹配原因。它不新增迁移、依赖或搜索投影，
+也不声称真实 PostgreSQL 查询已实现；Backend 必须等待 Maintenance 与 Test
+独立合同复审通过。
+
 ## 阶段 2A：非 AI 知识形成与确定性检索核心
 
 目标：在没有任何 AI、Embedding 或模型凭据时完成首个真正的产品闭环，让获准资料能够被人工或确定性工具变成可解释、可维护和可找回的知识。
