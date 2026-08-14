@@ -21,7 +21,7 @@ StruInfo 是一个来源可追溯、AI 可增强的个人知识摄取与维护�
 - [候选应用制品边界](docs/application-artifact-boundary.md)
 - [确定性 Markdown 结构合同](docs/deterministic-markdown-structure-contract.md)
 - [人工分类与准入合同](docs/manual-curation-contract.md)
-- [人工知识核心合同（修订候选）](docs/manual-knowledge-core-contract.md)
+- [人工知识核心合同（冻结实现合同）](docs/manual-knowledge-core-contract.md)
 - [阶段 0 首批语料与行为冻结](docs/stage-0-corpus-freeze.md)
 - [真实样本采集模板](docs/sample-intake-template.md)
 - [历史需求归档](docs/archive/product-requirements-v0.1.md)
