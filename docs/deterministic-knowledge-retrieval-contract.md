@@ -1,6 +1,6 @@
 # Deterministic Knowledge Retrieval Contract
 
-- Contract ID: `C-SLICE-B-RETRIEVAL-r1`
+- Contract ID: `C-SLICE-B-RETRIEVAL-r2`
 - Status: Draft for independent Maintenance and Test review; implementation is
   blocked until the contract is accepted
 - Date: 2026-08-14
@@ -35,7 +35,7 @@ visibility.
 
 ## Scope and deferred boundaries
 
-Revision 1 includes:
+Search schema version 1 includes:
 
 - current `KnowledgeItem` revisions only;
 - exact and Unicode-aware substring matching over title and optional body;
@@ -49,7 +49,7 @@ Revision 1 includes:
 - a pure implementation that needs no filesystem, network, clock, randomness,
   database client, framework, AI, or model configuration.
 
-Revision 1 deliberately excludes:
+Search schema version 1 deliberately excludes:
 
 - historical-revision search;
 - aliases, content classifications on formal knowledge, collections, tree
@@ -67,7 +67,7 @@ Revision 1 deliberately excludes:
 - export/restore, personal preference, exploration policy, or automatic
   knowledge maintenance.
 
-An empty result is a successful, explainable result. A missing or
+A zero-match result is a successful, explainable result. A missing or
 cross-workspace source, relation anchor, or candidate is not exposed through a
 distinct not-found error.
 
@@ -204,7 +204,8 @@ silently trim it.
 
 The canonical digest projection has conservative strict upper bounds of 32 KiB
 UTF-8, 128 canonical values, and depth 8 under the existing encoder's root-depth
-convention. These are deliberately loose safety bounds, not public rejection
+convention. These bounds include the largest permitted `search_key_v1` expansion
+of query text. They are deliberately loose safety bounds, not public rejection
 budgets. They remain far below the encoder's 8 MiB, 100,000-value, and depth-64
 defenses. Reaching an encoder defense after successful decoding is an
 implementation failure, not a caller rejection branch.
@@ -219,6 +220,22 @@ search_key_v1(text) = ascii_lowercase(NFC(text))
 
 `NFC` is Unicode canonical composition. `ascii_lowercase` maps only U+0041
 through U+005A to U+0061 through U+007A. It does not use the process locale.
+
+Version 1 freezes Unicode 17.0 normalization behavior, matching the repository's
+required Node.js 24.18.0 and ICU 78.3 runtime. Windows and Linux implementations
+must pass the same normalization vectors. A runtime Unicode-data upgrade may not
+silently change `search_key_v1`; it requires an explicit parity review or a new
+search-key version.
+
+Under Unicode 17.0, the NFC form of one valid Unicode scalar contains at most
+three Unicode code points. Therefore an accepted 300-code-point knowledge title
+produces at most 900 code points in `search_key_v1`. `U+FB2C` repeated 300 times
+is the required saturated witness: its NFC/search-key result contains exactly
+900 code points. Canonical decomposition is scalar-local and canonical
+composition cannot increase that decomposed length, so the bound applies to the
+whole title rather than only isolated scalars. Independent TM1 must verify this
+bound, including exhaustive single-scalar enumeration and the generated-cursor
+round trip.
 
 The same function is applied to the query, current title, and current body.
 It deliberately does not apply NFKC, full Unicode case folding, accent removal,
@@ -357,37 +374,54 @@ The query digest is SHA-256 over the canonical JSON plus LF encoding of this
 owned semantic projection:
 
 ```ts
+interface KnowledgeSearchDigestTextClause {
+  readonly searchKey: string;
+  readonly mode: KnowledgeSearchTextMode;
+  readonly fields: readonly KnowledgeSearchTextField[];
+}
+
 interface KnowledgeSearchDigestProjection {
   readonly schemaVersion: typeof DETERMINISTIC_KNOWLEDGE_SEARCH_SCHEMA_VERSION;
-  readonly text?: Readonly<KnowledgeSearchTextClause>;
+  readonly text?: Readonly<KnowledgeSearchDigestTextClause>;
   readonly filters: Readonly<KnowledgeSearchFilters>;
 }
 ```
 
-The projection uses canonicalized set arrays and excludes `page.limit` and
-`page.after`. Changing page size therefore does not invalidate a cursor;
-changing any matching or filter semantic does.
+When the request contains text, `text.searchKey` is exactly
+`search_key_v1(decodedRequest.text.value)`; the original decoded code-point
+spelling is not retained in the digest projection. Canonically equivalent text,
+such as `e\u0301` and `\u00e9`, therefore has one query digest because it has one
+matching meaning. The projection uses canonicalized set arrays and excludes
+`page.limit` and `page.after`. Changing page size therefore does not invalidate
+a cursor; changing any matching or filter semantic does.
 
 A cursor is accepted only when its schema version is 1 and its lowercase
 SHA-256 equals the current query digest. Its sort tuple is an exclusive lower
 bound. Fabricating a valid-shape cursor can skip results but cannot reveal a
 different workspace or bypass a filter.
 
-The cursor title must contain 1–300 valid Unicode code points, satisfy the
+The cursor title must contain 1–900 valid Unicode code points, satisfy the
 upstream title control/boundary-whitespace rules, and already equal its own
-`search_key_v1` result. The cursor item ID must be canonical UUID text. Any
-well-shaped cursor schema, digest, rank, title key, or item-ID violation is
-`invalid_cursor`, not a lookup or identifier error.
+`search_key_v1` result. This decoder bound is closed over every legal 300-code-
+point title under the frozen Unicode 17.0 behavior. The cursor match rank must
+be a finite integer from 0 through 4 and must not be negative zero. The cursor
+item ID must be canonical UUID text. Any well-shaped cursor schema, digest,
+rank, title key, or item-ID violation is `invalid_cursor`, not a lookup or
+identifier error.
 
-`totalCount` counts all matches in the current repository snapshot before the
-cursor. The page contains at most `limit` matches after the cursor.
+`totalCount` is the cardinality after all matching and filter semantics and
+before applying either `page.after` or `page.limit`. It is constant for an
+unchanged repository snapshot regardless of the cursor or requested page size.
+The page contains at most `limit` matches strictly after the cursor.
 `nextCursor` is present only when at least one further match exists and uses the
-last returned item's tuple.
+last returned item's tuple. A valid or fabricated cursor at or beyond the final
+tuple can therefore return `items: []` with a nonzero `totalCount`.
 
-Every call observes one repository snapshot. Revision 1 does not promise a
-repeatable snapshot across several page requests; concurrent current-revision
-changes can move an item between pages. Callers that require a stable export or
-saved-result snapshot must use a later versioned export/query contract.
+Every call observes one repository snapshot. Search schema version 1 does not
+promise a repeatable snapshot across several page requests; concurrent
+current-revision changes can move an item between pages. Callers that require a
+stable export or saved-result snapshot must use a later versioned export/query
+contract.
 
 ## Result contract
 
@@ -452,7 +486,7 @@ Successful values are implementation-owned, recursively frozen records and
 dense arrays. They never retain caller or repository objects. The optional body
 and qualifier preserve absence rather than being rewritten as empty strings.
 
-An empty result is exactly:
+A zero-match result is exactly:
 
 ```ts
 {
@@ -463,7 +497,8 @@ An empty result is exactly:
 }
 ```
 
-It has no `nextCursor`.
+It has no `nextCursor`. An empty continuation page is not a zero-match result:
+it preserves the full pre-pagination `totalCount` and also has no `nextCursor`.
 
 ## Closed repository snapshot
 
@@ -721,23 +756,26 @@ text or IDs.
 | ---------------------------------------------------------------------------------- | -------------------- | -------------------------------------- | --------------------------- |
 | Wrong container, key set, descriptor, primitive type, or sparse array              | `invalid_shape`      | Exact field or containing record/array | absent                      |
 | Non-canonical context/filter UUID                                                  | `invalid_identifier` | Exact UUID field                       | absent                      |
+| Unknown context authority                                                          | `invalid_enum`       | `context.authority`                    | absent                      |
 | Unknown request enum literal                                                       | `invalid_enum`       | Exact enum field/element               | absent                      |
 | Empty, whitespace-boundary, control-containing, or invalid-scalar query/key        | `invalid_text`       | Exact text field                       | absent                      |
 | Query over 300 code points                                                         | `limit_exceeded`     | `request.text.value`                   | `query_text_code_points`    |
+| Empty text-field array                                                             | `invalid_state`      | `request.text.fields`                  | absent                      |
 | Relation key over 120 code points                                                  | `limit_exceeded`     | Exact key element                      | `relation_type_code_points` |
 | Set array over its stated maximum                                                  | `limit_exceeded`     | Array field                            | Matching collection budget  |
 | Later duplicate set element                                                        | `duplicate_value`    | Later element                          | absent                      |
 | Page limit wrong numeric domain, including -0, non-integer, non-finite, or below 1 | `invalid_state`      | `request.page.limit`                   | absent                      |
 | Integer page limit above 100                                                       | `limit_exceeded`     | `request.page.limit`                   | `result_limit`              |
-| Cursor wrong schema, SHA syntax, rank, normalized-title key, UUID, or query digest | `invalid_cursor`     | Exact cursor field                     | absent                      |
+| Cursor wrong schema, SHA syntax, rank including -0, title key, UUID, or digest     | `invalid_cursor`     | Exact cursor field                     | absent                      |
 
 First error order is:
 
 1. zero-execution container/prototype/key/descriptor inspection for context and
    request;
-2. context fields in declaration order;
+2. context fields in declaration order: effective workspace UUID, then authority;
 3. request top-level shape;
-4. text container, scalar budget, mode, fields length, elements, and duplicates;
+4. text container, primitive type, lexical validity, code-point budget, mode,
+   fields length, elements, and duplicates;
 5. item filters in order: knowledge kind, epistemic role, review state;
 6. source branch, branch identifier, then input-kind length, elements, and
    duplicates;
@@ -749,12 +787,20 @@ First error order is:
 
 Every array length failure precedes reading any element of that array. For a
 duplicate, the later duplicate element owns the path. A wrong primitive type is
-`invalid_shape`; an unknown request protocol literal is `invalid_enum`; a
-malformed context or filter UUID is `invalid_identifier`; invalid
-scalar/control/whitespace text is `invalid_text`; an invalid numeric domain is
-`invalid_state`; over-budget input is `limit_exceeded`; and every well-shaped
-but semantically invalid cursor field, including its embedded item UUID, is
-`invalid_cursor`.
+`invalid_shape`; an unknown context authority or request protocol literal is
+`invalid_enum`; a malformed context or filter UUID is `invalid_identifier`;
+invalid scalar/control/whitespace text is `invalid_text`; an invalid numeric
+domain is `invalid_state`; over-budget input is `limit_exceeded`; and every
+well-shaped but semantically invalid cursor field, including negative-zero rank
+and its embedded item UUID, is `invalid_cursor`.
+
+Lexical validity of the complete query string is checked before its code-point
+budget. Therefore a query that both contains a forbidden scalar or control and
+exceeds 300 code points returns `invalid_text` at `request.text.value` with no
+budget. For `text.fields`, length zero returns `invalid_state` at
+`request.text.fields` with no budget; length above two returns `limit_exceeded`
+at that path with the `text_fields` budget. Neither branch reads an array
+element before resolving its length outcome.
 
 Rejected requests do not call the repository. Rejected and failed results do not
 include partial items or cursors.
@@ -791,7 +837,9 @@ value-free tests prove at least:
    isolation for request and repository values;
 3. every normalization known answer, UTF-8 byte comparator parity on ASCII,
    Chinese, Emoji, BMP/non-BMP, NFC/NFD, full-width, and German sharp-s cases,
-   plus an independent saturated digest-projection bound;
+   exhaustive Unicode 17.0 single-scalar expansion, the 900-code-point cursor
+   round trip, equivalent-text digest parity, and an independent saturated
+   digest-projection bound;
 4. exact/substring title/body matching, selected-field behavior, absent body,
    all text ranks, multiple reasons, and no-text rank 4;
 5. each item filter alone, empty-array semantics, within-filter OR,
@@ -802,9 +850,10 @@ value-free tests prove at least:
 7. incoming/outgoing/either one-hop traversal, exact type and relation-state
    filters, parallel relation deduplication, reason ordering/truncation,
    endpoint state visibility, and missing/cross-workspace anchor emptiness;
-8. complete stable ordering, tie-breaks, limit boundaries, total count,
-   next-cursor creation, exclusive continuation, changed page size, mismatched
-   digest, fabricated boundaries, and empty pages;
+8. complete stable ordering, tie-breaks, limit boundaries, pre-pagination total
+   count, zero-match versus empty-continuation results, next-cursor creation,
+   exclusive continuation, changed page size, mismatched digest, fabricated
+   boundaries, and empty pages;
 9. every repository array's ordering, uniqueness, current-pointer closure,
    workspace boundary, endpoint closure, Fragment-input closure, malformed
    optional fields, and non-echoing repository failures;
