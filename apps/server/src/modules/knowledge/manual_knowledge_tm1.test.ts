@@ -10,8 +10,6 @@ import {
   KNOWLEDGE_UUID_KNOWN_ANSWERS,
   SYNTHETIC_KNOWLEDGE_IDS,
   SYNTHETIC_KNOWLEDGE_TEXT,
-  createInheritedAccessorRequest,
-  createInheritedSetterRequest,
   createOwnAccessorRequest,
   createSaturatedKnowledgeProjection,
   createSmallKnowledgeCommandProjection,
@@ -139,7 +137,6 @@ const ADDITIONAL_IDS = Object.freeze({
   fragmentMissing: '40000000-0000-4000-8000-000000000099',
   resourceB: '50000000-0000-4000-8000-000000000002',
   snapshotB: '60000000-0000-4000-8000-000000000002',
-  decisionRevisionA: '70000000-0000-4000-8000-000000000001',
 });
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
@@ -362,8 +359,24 @@ function addEndpointItems(
   reviewState: 'draft' | 'withdrawn' = 'draft',
 ): void {
   const value = itemValue({reviewState});
-  addCurrentItem(state, SYNTHETIC_KNOWLEDGE_IDS.itemA, 1, value);
-  addCurrentItem(state, SYNTHETIC_KNOWLEDGE_IDS.itemB, 1, value);
+  const revision = reviewState === 'withdrawn' ? 2 : 1;
+  addCurrentItem(state, SYNTHETIC_KNOWLEDGE_IDS.itemA, revision, value);
+  addCurrentItem(state, SYNTHETIC_KNOWLEDGE_IDS.itemB, revision, value);
+}
+
+function retainItemClosure(
+  state: KnowledgeStateFixture,
+  itemIds: readonly string[],
+): void {
+  const admitted = new Set(itemIds);
+  state.items = state.items.filter((entry) => {
+    const record = requireRecord(entry, 'item state');
+    return typeof record.itemId === 'string' && admitted.has(record.itemId);
+  });
+  state.revisions = state.revisions.filter((entry) => {
+    const record = requireRecord(entry, 'revision state');
+    return typeof record.itemId === 'string' && admitted.has(record.itemId);
+  });
 }
 
 function manualFixture(
@@ -666,7 +679,6 @@ function addHistoricalRelation(
   currentRevision = 1,
   requestedRevision = 1,
 ): void {
-  addEndpointItems(state);
   addCurrentRelation(state, relationId, currentRevision);
   if (requestedRevision !== currentRevision) {
     state.relationRevisions.unshift({
@@ -877,6 +889,49 @@ function numericFixture(oracle: NumericIssueOracle): ModuleFixture {
     );
     request = requireRecord(fixture.request, 'request');
     setDerivationRevision(request, oracle.value);
+  } else if (
+    oracle.name ===
+    'repository_or_calculated_revision:calculated-item-next-overflow'
+  ) {
+    const state = freshState();
+    state.fragments.push(fragmentState());
+    addCurrentItem(
+      state,
+      SYNTHETIC_KNOWLEDGE_IDS.itemA,
+      KNOWLEDGE_LIMITS.revisionNumber,
+    );
+    fixture = manualFixture(
+      [
+        itemOperation({
+          expectedRevision: KNOWLEDGE_LIMITS.revisionNumber,
+          value: itemValue({title: 'synthetic-next-item-revision'}),
+        }),
+      ],
+      state,
+    );
+  } else if (
+    oracle.name ===
+    'repository_or_calculated_revision:calculated-relation-next-overflow'
+  ) {
+    const state = freshState();
+    state.fragments.push(fragmentState());
+    addEndpointItems(state);
+    addCurrentRelation(
+      state,
+      SYNTHETIC_KNOWLEDGE_IDS.relationA,
+      KNOWLEDGE_LIMITS.revisionNumber,
+    );
+    fixture = manualFixture(
+      [
+        relationOperation({
+          expectedRevision: KNOWLEDGE_LIMITS.revisionNumber,
+          value: relationValue({
+            qualifier: 'synthetic-next-relation-revision',
+          }),
+        }),
+      ],
+      state,
+    );
   } else {
     const state = freshState();
     state.fragments.push(fragmentState());
@@ -915,6 +970,35 @@ async function evaluateNumericCase(
   expectModuleResult(actual, row, fixture.expectation);
 }
 
+function withObjectPrototypeAuthorizationDescriptor<T>(
+  descriptor: PropertyDescriptor,
+  action: () => T,
+): T {
+  const original = Object.getOwnPropertyDescriptor(
+    Object.prototype,
+    'authorization',
+  );
+  if (original?.configurable === false) {
+    throw new TypeError(
+      'Object.prototype.authorization is unexpectedly non-configurable.',
+    );
+  }
+  Object.defineProperty(Object.prototype, 'authorization', {
+    configurable: true,
+    enumerable: false,
+    ...descriptor,
+  });
+  try {
+    return action();
+  } finally {
+    if (original === undefined) {
+      delete (Object.prototype as Record<string, unknown>).authorization;
+    } else {
+      Object.defineProperty(Object.prototype, 'authorization', original);
+    }
+  }
+}
+
 async function evaluateHostileCase(row: KnowledgeTm1LedgerRow): Promise<void> {
   const module = await loadPublicKnowledgeModule(row);
   let context: unknown = createSyntheticKnowledgeContext();
@@ -928,13 +1012,45 @@ async function evaluateHostileCase(row: KnowledgeTm1LedgerRow): Promise<void> {
       expectedPath = 'request.authorization';
       break;
     case 166:
-      request = createInheritedAccessorRequest(counter);
-      expectedPath = 'request.authorization';
-      break;
-    case 167:
-      request = createInheritedSetterRequest(counter);
-      expectedPath = 'request.authorization';
-      break;
+    case 167: {
+      const ordinaryRequest = createSyntheticManualRequest();
+      expect(Object.getPrototypeOf(ordinaryRequest), row.id).toBe(
+        Object.prototype,
+      );
+      const descriptor: PropertyDescriptor =
+        row.ordinal === 166
+          ? {
+              get: () => {
+                counter.touch();
+                return {kind: 'manual_edit'};
+              },
+            }
+          : {
+              set: () => {
+                counter.touch();
+              },
+            };
+      const actual = withObjectPrototypeAuthorizationDescriptor(
+        descriptor,
+        () =>
+          module.prepareApplyManualKnowledgeChangeSet(
+            context,
+            ordinaryRequest,
+            state,
+          ),
+      );
+      expect(actual, row.id).toEqual(
+        expectedResolvedIssue({
+          code: 'invalid_shape',
+          path: 'request.authorization',
+        }),
+      );
+      expect(counter.count(), `${row.id} caller code invocation count`).toBe(0);
+      expect(Object.getPrototypeOf(ordinaryRequest), row.id).toBe(
+        Object.prototype,
+      );
+      return;
+    }
     case 168:
       context = createZeroTrapProxy(counter);
       expectedPath = 'context';
@@ -1097,8 +1213,15 @@ function moduleFixtures(row: KnowledgeTm1LedgerRow): readonly ModuleFixture[] {
         'intakeDecisions',
       );
       const decision = requireRecord(decisions[0], 'intake decision');
+      const decisionId = decision.decisionId;
+      if (typeof decisionId !== 'string') {
+        throw new TypeError('Synthetic decision ID is missing.');
+      }
       decision.currentRevision = 2;
-      decision.currentRevisionId = ADDITIONAL_IDS.decisionRevisionA;
+      decision.currentRevisionId = independentUuidV5(
+        decisionId,
+        'struinfo:intake-decision-revision:v1:2',
+      );
       return [
         withIssue(
           fixture,
@@ -1144,6 +1267,8 @@ function moduleFixtures(row: KnowledgeTm1LedgerRow): readonly ModuleFixture[] {
           itemValue({reviewState: 'draft'}),
           provenance(),
           itemValue({reviewState: 'withdrawn'}),
+          provenance(),
+          2,
         ),
       ];
     case 19:
@@ -1196,20 +1321,25 @@ function moduleFixtures(row: KnowledgeTm1LedgerRow): readonly ModuleFixture[] {
       ];
     case 25:
       return [existingRelationFixture(relationValue())];
-    case 26:
+    case 26: {
+      const fixture = relationCreateFixture(
+        relationOperation({
+          value: relationValue({
+            objectItemId: SYNTHETIC_KNOWLEDGE_IDS.itemA,
+          }),
+        }),
+      );
+      retainItemClosure(requireState(fixture.state), [
+        SYNTHETIC_KNOWLEDGE_IDS.itemA,
+      ]);
       return [
         withIssue(
-          relationCreateFixture(
-            relationOperation({
-              value: relationValue({
-                objectItemId: SYNTHETIC_KNOWLEDGE_IDS.itemA,
-              }),
-            }),
-          ),
+          fixture,
           'invalid_relation',
           'request.operations[0].value.objectItemId',
         ),
       ];
+    }
     case 27: {
       const fixture = existingRelationFixture(
         relationValue({subjectItemId: SYNTHETIC_KNOWLEDGE_IDS.itemC}),
@@ -1219,6 +1349,10 @@ function moduleFixtures(row: KnowledgeTm1LedgerRow): readonly ModuleFixture[] {
         SYNTHETIC_KNOWLEDGE_IDS.itemC,
         1,
       );
+      retainItemClosure(requireState(fixture.state), [
+        SYNTHETIC_KNOWLEDGE_IDS.itemB,
+        SYNTHETIC_KNOWLEDGE_IDS.itemC,
+      ]);
       return [
         withIssue(
           fixture,
@@ -1246,6 +1380,10 @@ function moduleFixtures(row: KnowledgeTm1LedgerRow): readonly ModuleFixture[] {
         SYNTHETIC_KNOWLEDGE_IDS.itemC,
         1,
       );
+      retainItemClosure(requireState(fixture.state), [
+        SYNTHETIC_KNOWLEDGE_IDS.itemA,
+        SYNTHETIC_KNOWLEDGE_IDS.itemC,
+      ]);
       return [
         withIssue(
           fixture,
@@ -1254,20 +1392,25 @@ function moduleFixtures(row: KnowledgeTm1LedgerRow): readonly ModuleFixture[] {
         ),
       ];
     }
-    case 30:
+    case 30: {
+      const fixture = relationCreateFixture(
+        relationOperation({
+          value: relationValue({
+            objectItemId: SYNTHETIC_KNOWLEDGE_IDS.itemC,
+          }),
+        }),
+      );
+      retainItemClosure(requireState(fixture.state), [
+        SYNTHETIC_KNOWLEDGE_IDS.itemA,
+      ]);
       return [
         withIssue(
-          relationCreateFixture(
-            relationOperation({
-              value: relationValue({
-                objectItemId: SYNTHETIC_KNOWLEDGE_IDS.itemC,
-              }),
-            }),
-          ),
+          fixture,
           'item_not_found',
           'request.operations[0].value.objectItemId',
         ),
       ];
+    }
     case 31:
       return [
         existingRelationFixture(
@@ -1670,11 +1813,14 @@ function moduleFixtures(row: KnowledgeTm1LedgerRow): readonly ModuleFixture[] {
     case 59:
       return [
         withIssue(
-          manualFixture([
-            itemOperation({
-              provenance: provenance([SYNTHETIC_KNOWLEDGE_IDS.fragmentB]),
-            }),
-          ]),
+          manualFixture(
+            [
+              itemOperation({
+                provenance: provenance([SYNTHETIC_KNOWLEDGE_IDS.fragmentB]),
+              }),
+            ],
+            freshState(),
+          ),
           'fragment_not_found',
           'request.operations[0].provenance.citations[0]',
         ),
@@ -1743,10 +1889,7 @@ function moduleFixtures(row: KnowledgeTm1LedgerRow): readonly ModuleFixture[] {
     }
     case 65: {
       const state = freshState();
-      state.fragments.push(
-        fragmentState(),
-        fragmentState(SYNTHETIC_KNOWLEDGE_IDS.fragmentB),
-      );
+      state.fragments.push(fragmentState(SYNTHETIC_KNOWLEDGE_IDS.fragmentB));
       addCurrentItem(state, SYNTHETIC_KNOWLEDGE_IDS.itemA, 1);
       return [
         manualFixture(
@@ -1762,10 +1905,7 @@ function moduleFixtures(row: KnowledgeTm1LedgerRow): readonly ModuleFixture[] {
     }
     case 66: {
       const state = freshState();
-      state.fragments.push(
-        fragmentState(),
-        fragmentState(SYNTHETIC_KNOWLEDGE_IDS.fragmentB),
-      );
+      state.fragments.push(fragmentState(SYNTHETIC_KNOWLEDGE_IDS.fragmentB));
       addEndpointItems(state);
       addCurrentRelation(state, SYNTHETIC_KNOWLEDGE_IDS.relationA, 1);
       return [
@@ -1860,11 +2000,14 @@ function moduleFixtures(row: KnowledgeTm1LedgerRow): readonly ModuleFixture[] {
     case 75:
       return [
         withIssue(
-          manualFixture([
-            itemOperation({
-              provenance: provenance([ADDITIONAL_IDS.fragmentMissing]),
-            }),
-          ]),
+          manualFixture(
+            [
+              itemOperation({
+                provenance: provenance([ADDITIONAL_IDS.fragmentMissing]),
+              }),
+            ],
+            freshState(),
+          ),
           'fragment_not_found',
           'request.operations[0].provenance.citations[0]',
         ),
@@ -1872,11 +2015,14 @@ function moduleFixtures(row: KnowledgeTm1LedgerRow): readonly ModuleFixture[] {
     case 76:
       return [
         withIssue(
-          manualFixture([
-            itemOperation({
-              provenance: provenance([], [ADDITIONAL_IDS.fragmentMissing]),
-            }),
-          ]),
+          manualFixture(
+            [
+              itemOperation({
+                provenance: provenance([], [ADDITIONAL_IDS.fragmentMissing]),
+              }),
+            ],
+            freshState(),
+          ),
           'fragment_not_found',
           'request.operations[0].provenance.fragmentDerivations[0]',
         ),
@@ -1932,7 +2078,7 @@ function moduleFixtures(row: KnowledgeTm1LedgerRow): readonly ModuleFixture[] {
         relationValue({
           subjectItemId: SYNTHETIC_KNOWLEDGE_IDS.itemC,
           relationTypeKey: 'synthetic.changed.relation',
-          objectItemId: SYNTHETIC_KNOWLEDGE_IDS.itemC,
+          objectItemId: SYNTHETIC_KNOWLEDGE_IDS.itemA,
         }),
       );
       addCurrentItem(
@@ -1940,6 +2086,10 @@ function moduleFixtures(row: KnowledgeTm1LedgerRow): readonly ModuleFixture[] {
         SYNTHETIC_KNOWLEDGE_IDS.itemC,
         1,
       );
+      retainItemClosure(requireState(fixture.state), [
+        SYNTHETIC_KNOWLEDGE_IDS.itemA,
+        SYNTHETIC_KNOWLEDGE_IDS.itemC,
+      ]);
       return [
         withIssue(
           fixture,

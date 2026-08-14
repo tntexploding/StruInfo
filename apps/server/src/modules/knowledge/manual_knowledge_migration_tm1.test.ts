@@ -87,7 +87,16 @@ function evaluateMigrationRow(row: KnowledgeTm1LedgerRow): void {
     `${row.id} Test-owned reference`,
   ).toEqual([]);
   switch (row.ordinal) {
-    case 207:
+    case 207: {
+      const regexTokens = tokenizeManualKnowledgeSql(
+        "CHECK (synthetic_value ~ '^[a-z]+$')",
+      );
+      expect(
+        regexTokens.filter((token) => token.kind === 'operator'),
+      ).toMatchObject([{kind: 'operator', value: '~'}]);
+      expect(() =>
+        tokenizeManualKnowledgeSql("CHECK (synthetic_value @ 'synthetic')"),
+      ).toThrow(/Unsupported SQL character/u);
       expect(MANUAL_KNOWLEDGE_TABLES).toHaveLength(13);
       expectFinding(
         `${reference}\n\nCREATE TABLE struinfo.synthetic_extra (` +
@@ -96,6 +105,7 @@ function evaluateMigrationRow(row: KnowledgeTm1LedgerRow): void {
         'table_set',
       );
       break;
+    }
     case 208: {
       const weakened = replaceExecutableTokenSequence(
         reference,
