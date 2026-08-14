@@ -673,7 +673,7 @@ PostgreSQL、事务/锁/并发、运行角色、HTTP/浏览器、检索、导出
 把全部 B1 能力和首个知识迁移一次耦合。
 
 确定性检索的首个候选边界是草案
-[`C-SLICE-B-RETRIEVAL-r1`](deterministic-knowledge-retrieval-contract.md)：
+[`C-SLICE-B-RETRIEVAL-r2`](deterministic-knowledge-retrieval-contract.md)：
 只读取当前知识修订及其直接 Fragment 输入和当前一跳关系，提供 NFC + ASCII
 大小写折叠的精确/子串匹配、显式状态过滤、稳定 UTF-8 排序、游标和匹配原因。
 它不新增迁移、依赖或搜索投影；真实 PostgreSQL 查询下推与索引优化等待 TM2
