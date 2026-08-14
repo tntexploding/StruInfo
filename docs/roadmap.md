@@ -99,7 +99,7 @@ Playwright 的 npm 包只用于配置和测试源码；Chromium/FFmpeg/winldd、
 首个迁移捆绑。
 
 紧邻检索增量现以草案
-[`C-SLICE-B-RETRIEVAL-r2`](deterministic-knowledge-retrieval-contract.md)
+[`C-SLICE-B-RETRIEVAL-r3`](deterministic-knowledge-retrieval-contract.md)
 冻结当前知识项的 NFC + ASCII 大小写折叠文本匹配、显式结构过滤、直接来源、
 一跳关系、稳定 UTF-8 排序、游标和匹配原因。它不新增迁移、依赖或搜索投影，
 也不声称真实 PostgreSQL 查询已实现；Backend 必须等待 Maintenance 与 Test
