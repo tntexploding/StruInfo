@@ -1,7 +1,7 @@
 # StruInfo 开发大纲
 
-- 状态：基础架构、M0-S、切片 0、来源证据、确定性 Markdown 与人工分类/准入纯逻辑边界已完成；准备非 AI 知识形成核心
-- 最近更新：2026-08-13
+- 状态：基础架构、M0-S、切片 0、来源证据、确定性 Markdown、人工分类/准入与首个人工知识写入纯逻辑边界已完成；准备确定性检索
+- 最近更新：2026-08-14
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
 - 基础 ADR：[ADR 0001](adr/0001-typescript-modular-monolith.md)、
@@ -35,7 +35,7 @@ M0-P 证明的是架构可行性，不是生产认证；任何探针候选源码
 M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁移 runner、CI、许可证记录与统一质量命令；该工程地基由 [ADR 0003](adr/0003-m0-s-engineering-foundation.md) 接受。
 自适应摄取、偏好/探索分离和策略授权知识写入由 [ADR 0004](adr/0004-adaptive-knowledge-ingestion-and-policy-authorized-writes.md) 接受。
 [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求。
-第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。外部配置/数据根、`C-SLICE-A-EVIDENCE-r2` 来源证据边界、`C-SLICE-A-MARKDOWN-r2` 确定性 Markdown 纯转换与闭合装配边界，以及 [`C-SLICE-A-CURATION-r3`](manual-curation-contract.md) 的用户词表、内容分类、独立 `IntakeDecision`/`Assessment` 与 A0 人工命令边界已经完成各自当前非容器 TM1。下一步冻结并实现无 AI 的原子知识变更、版本化知识项、关系与确定性检索核心。AI、偏好模型、综合分和自动准入随后接入，不能反向定义数据库语义。
+第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。外部配置/数据根、`C-SLICE-A-EVIDENCE-r2` 来源证据边界、`C-SLICE-A-MARKDOWN-r2` 确定性 Markdown 纯转换与闭合装配边界、[`C-SLICE-A-CURATION-r3`](manual-curation-contract.md) 的用户词表/独立准入边界，以及 [`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md) 的 A0 原子知识写入核心已经完成各自当前非容器 TM1。下一步实现完全不依赖 AI 的确定性检索。AI、偏好模型、综合分和自动准入随后接入，不能反向定义数据库或检索语义。
 
 ## 2. 为什么选择这个形态
 
@@ -661,15 +661,16 @@ M0-P 的测试数量和候选实现不构成生产质量证明。
 
 [`C-SLICE-A-CURATION-r3`](manual-curation-contract.md) 实现已在提交 `ac03c18ce568b3d2d090104bbb41727aa22afe05` 上通过正式固定候选 TM1（128/128 项强制矩阵、31/31 项精确问题矩阵）。它接受证据目标上的用户词表、版本化分类、独立准入决定、可选分维度评级、闭合 A0 人工命令、幂等回放和 `000003` 静态迁移合同。真实 PostgreSQL、浏览器、HTTP、真实周刊导入、正式知识与检索仍待各自后续门；下一增量从获准证据形成原子 `KnowledgeChangeSet`、版本化知识项和关系。
 
-阶段 B1 先以冻结实现合同
-[`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md) 收紧第一项实现：
-一项当前获准的 Snapshot/Fragment 或显式人工编辑经 A0 人工命令，原子形成
-带精确来源的知识项/关系及不可变修订。r3 保留 r2 对首轮独立审查缺口的修正，
-并拆分冻结 canonical JSON 的独立字节、value 数和深度上界。Maintenance 聚焦
-复审已 PASS，Test 设计已 READY，Backend 与独立 Test 实现现已获准启动，但正式
-TM1 尚未通过；检索会在
-规范写入核心稳定后作为紧邻子增量实现，而不是把全部 B1 能力和首个知识迁移
-一次耦合。
+阶段 B1 的首个冻结实现合同
+[`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md) 已在固定候选
+`f18c0346910de824ef20d074d88744c446946025` 上通过正式 TM1：224/224 项强制
+矩阵、282 项聚焦测试、811 项全仓单元测试、2 项集成测试、完整质量门及 611 项
+候选应用制品审计全部通过。该结果接受一项当前获准的 Snapshot/Fragment 或
+显式人工编辑经 A0 人工命令原子形成带精确来源的知识项/关系及不可变修订，并
+接受原子幂等回放、闭合 repository snapshot 和 `000004` 静态迁移合同。真实
+PostgreSQL、事务/锁/并发、运行角色、HTTP/浏览器、检索、导出恢复和 AI 继续
+位于各自后续门。确定性检索现在作为紧邻子增量读取这套规范写入模型，而不是
+把全部 B1 能力和首个知识迁移一次耦合。
 
 ### 切片 B1：获准资料到非 AI 知识与确定性检索
 

@@ -32,11 +32,10 @@ candidate-package auditing, and the versioned workspace-bundle envelope. The
 `C-SLICE-A-MARKDOWN-r2` deterministic CommonMark transform and closed
 materializer, and `C-SLICE-A-CURATION-r3` A0 manual
 classification/intake/assessment boundary have passed their fixed-candidate
-TM1 gates. The frozen `C-SLICE-B-KNOWLEDGE-r3` contract defines the next manual,
-source-backed knowledge-write increment; Backend and independent Test
-implementation are admitted, but its fixed-candidate TM1 gate has not yet
-passed. Deterministic retrieval follows that stable canonical write model. Do
-not make preference calibration or AI availability a dependency.
+TM1 gates. The `C-SLICE-B-KNOWLEDGE-r3` A0 manual, source-backed knowledge-write
+core has also passed its fixed-candidate TM1 gate. Deterministic retrieval is the
+next increment over that stable canonical write model. Do not make preference
+calibration or AI availability a dependency.
 
 Browser runtime artifacts and real PostgreSQL/container execution remain behind
 their named admission gates. Do not represent either deferred gate as passed or
