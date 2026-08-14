@@ -84,6 +84,10 @@ function requireString(value: unknown, label: string): string {
   return value;
 }
 
+function nonCanonicalUppercaseUuid(value: string): string {
+  return `A${value.slice(1)}`;
+}
+
 function setText(
   request: Record<string, unknown>,
   value: string,
@@ -220,16 +224,40 @@ async function executeWithModule(
     repositoryFailure?: Error;
   }> = {},
 ): Promise<ExecutedFixture> {
+  const snapshot = selectOwnDataOption(
+    options,
+    'snapshot',
+    createSyntheticSnapshot,
+  );
+  const context = selectOwnDataOption(
+    options,
+    'context',
+    createSyntheticContext,
+  );
+  const request = selectOwnDataOption(options, 'request', createBrowseRequest);
   const repository = new SyntheticRepository(
-    options.snapshot ?? createSyntheticSnapshot(),
+    snapshot,
     options.repositoryFailure,
   );
   const result = await module.executeDeterministicKnowledgeSearch(
     repository,
-    options.context ?? createSyntheticContext(),
-    options.request ?? createBrowseRequest(),
+    context,
+    request,
   );
   return {result, repository};
+}
+
+function selectOwnDataOption(
+  options: object,
+  key: 'context' | 'request' | 'snapshot',
+  createDefault: () => unknown,
+): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(options, key);
+  if (descriptor === undefined) return createDefault();
+  if (!Object.hasOwn(descriptor, 'value')) {
+    throw new TypeError(`Fixture option ${key} must be an own data property.`);
+  }
+  return descriptor.value;
 }
 
 async function withObjectPrototypeDescriptor<T>(
@@ -796,6 +824,70 @@ function exactResultItem(
   return requireRecord(found, `${row.id} result item ${itemId}`);
 }
 
+function expectSyntheticSnapshotFixtureInvariants(): void {
+  const snapshot = createSyntheticSnapshot();
+  const inputs = snapshotArray(snapshot, 'fragmentInputs').map((entry) =>
+    requireRecord(entry, 'synthetic Fragment input'),
+  );
+  const expectedOrder = [...inputs].sort((left, right) => {
+    const itemOrder = compareUtf8(
+      requireString(left.itemId, 'left item ID'),
+      requireString(right.itemId, 'right item ID'),
+    );
+    if (itemOrder !== 0) return itemOrder;
+    const kindOrder: Readonly<Record<string, number>> = {
+      citation: 0,
+      derivation: 1,
+    };
+    const kindDifference =
+      (kindOrder[requireString(left.inputKind, 'left input kind')] ?? 99) -
+      (kindOrder[requireString(right.inputKind, 'right input kind')] ?? 99);
+    if (kindDifference !== 0) return kindDifference;
+    return Number(left.inputOrdinal) - Number(right.inputOrdinal);
+  });
+  expect(inputs).toEqual(expectedOrder);
+
+  const nextOrdinal = new Map<string, number>();
+  for (const input of inputs) {
+    const key = [
+      requireString(input.itemId, 'Fragment input item ID'),
+      String(input.revision),
+      requireString(input.inputKind, 'Fragment input kind'),
+    ].join('\u0000');
+    const expectedOrdinal = nextOrdinal.get(key) ?? 0;
+    expect(input.inputOrdinal).toBe(expectedOrdinal);
+    nextOrdinal.set(key, expectedOrdinal + 1);
+  }
+
+  for (const field of ['revisions', 'relationRevisions']) {
+    for (const entry of snapshotArray(snapshot, field)) {
+      const revision = requireRecord(entry, `${field} entry`);
+      const value = requireRecord(revision.value, `${field} value`);
+      if (revision.revision === 1) {
+        expect(value.reviewState).not.toBe('rejected');
+        expect(value.reviewState).not.toBe('withdrawn');
+      }
+    }
+  }
+
+  const relation = onlyRelation(snapshot, SYNTHETIC_RETRIEVAL_IDS.relationC);
+  const revision = snapshotArray(snapshot, 'relationRevisions')
+    .map((entry) => requireRecord(entry, 'relation revision'))
+    .find((entry) => entry.relationId === SYNTHETIC_RETRIEVAL_IDS.relationC);
+  const relationRevision = requireRecord(revision, 'relationC revision');
+  const expectedRevisionId = independentUuidV5(
+    SYNTHETIC_RETRIEVAL_IDS.relationC,
+    'struinfo:knowledge-relation-revision:v1:2',
+  );
+  expect(relation.currentRevision).toBe(2);
+  expect(relation.currentRevisionId).toBe(expectedRevisionId);
+  expect(relationRevision.revision).toBe(2);
+  expect(relationRevision.revisionId).toBe(expectedRevisionId);
+  expect(
+    requireRecord(relationRevision.value, 'relationC value').reviewState,
+  ).toBe('withdrawn');
+}
+
 async function evaluateIdentityGovernance(
   module: PublicRetrievalModule,
   row: RetrievalTm1LedgerRow,
@@ -1068,7 +1160,7 @@ async function evaluateHostileOwnership(
       await expectRequestRejection(
         module,
         row,
-        issue('invalid_shape', 'context'),
+        issue('invalid_shape', 'context.effectiveWorkspaceId'),
         {
           context,
         },
@@ -1080,7 +1172,7 @@ async function evaluateHostileOwnership(
       await expectRequestRejection(
         module,
         row,
-        issue('invalid_shape', 'request'),
+        issue('invalid_shape', 'request.filters'),
         {
           request,
         },
@@ -1092,7 +1184,7 @@ async function evaluateHostileOwnership(
       await expectRequestRejection(
         module,
         row,
-        issue('invalid_shape', 'request.filters'),
+        issue('invalid_shape', 'request.filters.knowledgeKinds'),
         {request},
       );
       expect(counter.count(), row.id).toBe(0);
@@ -1111,7 +1203,7 @@ async function evaluateHostileOwnership(
           await expectRequestRejection(
             module,
             row,
-            issue('invalid_shape', 'context'),
+            issue('invalid_shape', 'context.authority'),
             {
               context,
             },
@@ -1186,8 +1278,12 @@ async function evaluateHostileOwnership(
       return;
     }
     case 10: {
+      snapshot.items = createZeroTrapProxy(
+        snapshotArray(snapshot, 'items'),
+        counter,
+      );
       const execution = await executeWithModule(module, row, {
-        snapshot: createZeroTrapProxy(snapshot, counter),
+        snapshot,
       });
       expectFailed(execution.result, 'invalid_repository_snapshot', row);
       expect(counter.count(), row.id).toBe(0);
@@ -1339,8 +1435,9 @@ async function evaluateUuidTextBudgets(
   const context = createSyntheticContext();
   switch (row.groupOrdinal) {
     case 1:
-      context.effectiveWorkspaceId =
-        SYNTHETIC_RETRIEVAL_IDS.workspace.toUpperCase();
+      context.effectiveWorkspaceId = nonCanonicalUppercaseUuid(
+        SYNTHETIC_RETRIEVAL_IDS.workspace,
+      );
       await expectRequestRejection(
         module,
         row,
@@ -1351,7 +1448,7 @@ async function evaluateUuidTextBudgets(
     case 2:
       requestFilters(request).source = sourceFilter(
         'resource',
-        SYNTHETIC_RETRIEVAL_IDS.resourceA.toUpperCase(),
+        nonCanonicalUppercaseUuid(SYNTHETIC_RETRIEVAL_IDS.resourceA),
       );
       await expectRequestRejection(
         module,
@@ -1362,7 +1459,9 @@ async function evaluateUuidTextBudgets(
       return;
     case 3: {
       const relation = connectedFilter();
-      relation.anchorItemId = SYNTHETIC_RETRIEVAL_IDS.itemA.toUpperCase();
+      relation.anchorItemId = nonCanonicalUppercaseUuid(
+        SYNTHETIC_RETRIEVAL_IDS.itemA,
+      );
       requestFilters(request).relation = relation;
       await expectRequestRejection(
         module,
@@ -1380,7 +1479,7 @@ async function evaluateUuidTextBudgets(
           'synthetic',
           SYNTHETIC_RETRIEVAL_IDS.itemA,
         ),
-        itemId: SYNTHETIC_RETRIEVAL_IDS.itemA.toUpperCase(),
+        itemId: nonCanonicalUppercaseUuid(SYNTHETIC_RETRIEVAL_IDS.itemA),
       };
       await expectRequestRejection(
         module,
@@ -1708,7 +1807,10 @@ async function evaluatePageCursorNumeric(
     const expected =
       row.groupOrdinal === 6
         ? issue('limit_exceeded', 'request.page.limit', 'result_limit')
-        : issue('invalid_state', 'request.page.limit');
+        : issue(
+            row.groupOrdinal === 1 ? 'invalid_shape' : 'invalid_state',
+            'request.page.limit',
+          );
     await expectRequestRejection(module, row, expected, {request});
     return;
   }
@@ -1764,8 +1866,9 @@ async function evaluateExactIssuesPrecedence(
       expected = issue('invalid_shape', 'request.page');
       break;
     case 2:
-      context.effectiveWorkspaceId =
-        SYNTHETIC_RETRIEVAL_IDS.workspace.toUpperCase();
+      context.effectiveWorkspaceId = nonCanonicalUppercaseUuid(
+        SYNTHETIC_RETRIEVAL_IDS.workspace,
+      );
       expected = issue('invalid_identifier', 'context.effectiveWorkspaceId');
       break;
     case 3:
@@ -2512,7 +2615,7 @@ async function evaluateCursor(
       await expectRequestRejection(
         module,
         row,
-        issue('invalid_cursor', 'request.page.after'),
+        issue('invalid_shape', 'request.page.after'),
         {request},
       );
       return;
@@ -2564,7 +2667,7 @@ async function evaluateCursor(
       );
       return;
     case 7:
-      cursor.itemId = ids.itemA.toUpperCase();
+      cursor.itemId = nonCanonicalUppercaseUuid(ids.itemA);
       await expectRequestRejection(
         module,
         row,
@@ -2581,7 +2684,10 @@ async function evaluateCursor(
         row,
       );
       expect(result.totalCount, row.id).toBe(3);
-      expect(resultItems(result, row), row.id).toEqual([]);
+      expect(
+        resultItems(result, row).map((item) => item.itemId),
+        row.id,
+      ).toEqual(witness === 'fb2c' ? [ids.itemB, ids.itemC] : [ids.itemC]);
       const known = RETRIEVAL_CURSOR_KNOWN_ANSWERS[witness];
       expect(
         measureIndependentCursorJson(createSaturatedCursor(witness)),
@@ -2629,7 +2735,12 @@ async function evaluateCursor(
         issue('invalid_cursor', 'request.page.after.querySha256'),
         {request},
       );
-      const fabricated = createExpectedCursor(request, 4, 'zzzz', ids.itemC);
+      const fabricated = createExpectedCursor(
+        request,
+        4,
+        '\u{10fffd}',
+        ids.itemC,
+      );
       requestPage(request).after = fabricated;
       const result = requireOk(
         (await executeWithModule(module, row, {request, snapshot})).result,
@@ -2763,7 +2874,7 @@ async function evaluatePagination(
     requestPage(request).after = createExpectedCursor(
       request,
       4,
-      'zzzz',
+      '\u{10fffd}',
       ids.itemC,
     );
     const result = requireOk(
@@ -2857,7 +2968,7 @@ async function evaluateRepositoryShape(
   if (row.groupOrdinal === 10) {
     const execution = await executeWithModule(module, row, {
       request,
-      snapshot: {items: []},
+      snapshot: null,
     });
     expectFailed(execution.result, 'invalid_repository_snapshot', row);
     return;
@@ -3456,6 +3567,27 @@ describe('deterministic knowledge retrieval mandatory ledger', () => {
     expect(
       RETRIEVAL_TM1_LEDGER.filter((row) => row.layer === 'module'),
     ).toHaveLength(264);
+
+    const explicitNull = {context: null, request: null, snapshot: null};
+    expect(selectOwnDataOption(explicitNull, 'context', Object)).toBeNull();
+    expect(selectOwnDataOption(explicitNull, 'request', Object)).toBeNull();
+    expect(selectOwnDataOption(explicitNull, 'snapshot', Object)).toBeNull();
+
+    const inherited = Object.create({context: null}) as object;
+    const inheritedDefault = Object.freeze({kind: 'synthetic-default'});
+    expect(
+      selectOwnDataOption(inherited, 'context', () => inheritedDefault),
+    ).toBe(inheritedDefault);
+
+    const counter = createTrapCounter();
+    const accessorOptions = {};
+    defineOwnAccessor(accessorOptions, 'request', counter);
+    expect(() =>
+      selectOwnDataOption(accessorOptions, 'request', Object),
+    ).toThrow('Fixture option request must be an own data property.');
+    expect(counter.count()).toBe(0);
+
+    expectSyntheticSnapshotFixtureInvariants();
   });
 });
 
