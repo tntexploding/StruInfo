@@ -662,10 +662,11 @@ M0-P 的测试数量和候选实现不构成生产质量证明。
 [`C-SLICE-A-CURATION-r3`](manual-curation-contract.md) 实现已在提交 `ac03c18ce568b3d2d090104bbb41727aa22afe05` 上通过正式固定候选 TM1（128/128 项强制矩阵、31/31 项精确问题矩阵）。它接受证据目标上的用户词表、版本化分类、独立准入决定、可选分维度评级、闭合 A0 人工命令、幂等回放和 `000003` 静态迁移合同。真实 PostgreSQL、浏览器、HTTP、真实周刊导入、正式知识与检索仍待各自后续门；下一增量从获准证据形成原子 `KnowledgeChangeSet`、版本化知识项和关系。
 
 阶段 B1 先以修订候选
-[`C-SLICE-B-KNOWLEDGE-r2`](manual-knowledge-core-contract.md) 收紧第一项实现：
+[`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md) 收紧第一项实现：
 一项当前获准的 Snapshot/Fragment 或显式人工编辑经 A0 人工命令，原子形成
-带精确来源的知识项/关系及不可变修订。r2 已关闭首轮独立审查提出的材料性
-合同缺口，但在 Maintenance 与 Test 复审通过前仍未授权 Backend；检索会在
+带精确来源的知识项/关系及不可变修订。r3 保留 r2 对首轮独立审查缺口的修正，
+并拆分冻结 canonical JSON 的独立字节、value 数和深度上界；在 Maintenance 与
+Test 复审通过前仍未授权 Backend；检索会在
 规范写入核心稳定后作为紧邻子增量实现，而不是把全部 B1 能力和首个知识迁移
 一次耦合。
 

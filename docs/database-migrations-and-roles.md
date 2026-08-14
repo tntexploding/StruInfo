@@ -99,7 +99,7 @@ DDL result is likewise static schema evidence only.
 The next product-table migration is reserved as
 `000004_create_manual_knowledge_core.sql` and is currently governed by the
 corrected candidate
-[`C-SLICE-B-KNOWLEDGE-r2`](manual-knowledge-core-contract.md). Backend work is
+[`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md). Backend work is
 not admitted until independent Maintenance and Test re-review the corrected
 contract candidate. The migration is limited to the A0 manual change-set,
 versioned item/relation, typed provenance, and payload-free committed-change
