@@ -1,8 +1,8 @@
 # Manual Knowledge Core Contract
 
 - Contract ID: `C-SLICE-B-KNOWLEDGE-r3`
-- Status: Corrected implementation-contract candidate; Backend implementation
-  remains blocked until independent Maintenance and Test re-reviews pass
+- Status: Frozen implementation contract; acceptance requires the named TM1
+  gate
 - Date: 2026-08-14
 - Upstream implementation baseline: `60964673b4b25f308dc0867e6cf0e1e5d678c063`
 - Upstream evidence contract:
@@ -47,6 +47,12 @@ review. Revision 3 only corrects its canonical-JSON capacity oracle by freezing
 the independently maximized byte, value-count, and depth projections. It
 changes no accepted ADR, table scope, dependency, authority level, protocol
 branch, or deferred gate.
+
+Independent Maintenance and Test re-review passed against fixed revision-3
+commit `e25721491a263fb0ac5b98195acec9f88ef9f31e`. Backend and independent Test
+implementation may now start from the accepted contract baseline. This freezes
+the protocol for implementation; it does not pass TM1 or any deferred runtime
+gate.
 
 ## Scope and deferred boundaries
 

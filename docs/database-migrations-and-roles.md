@@ -97,12 +97,12 @@ background-work tables. Until the same real PostgreSQL gate is admitted, its
 DDL result is likewise static schema evidence only.
 
 The next product-table migration is reserved as
-`000004_create_manual_knowledge_core.sql` and is currently governed by the
-corrected candidate
-[`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md). Backend work is
-not admitted until independent Maintenance and Test re-review the corrected
-contract candidate. The migration is limited to the A0 manual change-set,
-versioned item/relation, typed provenance, and payload-free committed-change
+`000004_create_manual_knowledge_core.sql` and is governed by the frozen
+[`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md) contract.
+Independent Maintenance and Test re-review passed against its fixed r3
+candidate, so Backend and independent Test implementation are admitted. The
+migration is limited to the A0 manual change-set, versioned item/relation, typed
+provenance, and payload-free committed-change
 event boundary declared there; it does not authorize search projections,
 aliases, collections, AI, transport, event delivery/consumers, roles, grants,
 background work, personal seeds, or real PostgreSQL claims.
