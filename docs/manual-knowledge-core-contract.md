@@ -1,6 +1,6 @@
 # Manual Knowledge Core Contract
 
-- Contract ID: `C-SLICE-B-KNOWLEDGE-r2`
+- Contract ID: `C-SLICE-B-KNOWLEDGE-r3`
 - Status: Corrected implementation-contract candidate; Backend implementation
   remains blocked until independent Maintenance and Test re-reviews pass
 - Date: 2026-08-14
@@ -40,14 +40,17 @@ canonical model and add deterministic exact, substring, source, state, and
 relation retrieval. Search indexes remain rebuildable projections and are not
 part of the database truth frozen here.
 
-Revision 2 supersedes the unimplemented revision-1 draft. It closes the input
-ownership, numeric-revision, provenance-precedence, and repository-projection
-ambiguities found by independent Maintenance and Test review. It changes no
-accepted ADR, table scope, dependency, authority level, or deferred gate.
+Revision 3 supersedes the unimplemented revision-2 candidate. Revision 2 closed
+the input-ownership, numeric-revision, provenance-precedence, and
+repository-projection ambiguities found by independent Maintenance and Test
+review. Revision 3 only corrects its canonical-JSON capacity oracle by freezing
+the independently maximized byte, value-count, and depth projections. It
+changes no accepted ADR, table scope, dependency, authority level, protocol
+branch, or deferred gate.
 
 ## Scope and deferred boundaries
 
-Contract revision 2 includes:
+Contract revision 3 includes:
 
 - one A0 `manual_user` knowledge-change-set command;
 - a closed authorization branch for either one current eligible
@@ -67,7 +70,7 @@ Contract revision 2 includes:
 - a forward PostgreSQL migration plus static SQL contract tests; and
 - a pure application boundary plus a transaction-oriented repository port.
 
-Contract revision 2 does not include:
+Contract revision 3 does not include:
 
 - AI, OCR, embeddings, model proposals, processing runs, prompt/model identity,
   or automatic policy authority;
@@ -97,7 +100,7 @@ The `knowledge` application module exclusively owns formal knowledge writes.
 Evidence, parser, curation, source, model, transport, and storage adapters never
 insert or update knowledge tables directly.
 
-Contract revision 2 implements only A0 manual authority:
+Contract revision 3 implements only A0 manual authority:
 
 ```ts
 export interface ManualKnowledgeContext {
@@ -183,7 +186,7 @@ through a distinct error.
 
 ## Closed command contract
 
-Contract revision 2 exposes one command:
+Contract revision 3 exposes one command:
 
 ```ts
 export interface ApplyManualKnowledgeChangeSetRequest {
@@ -503,11 +506,23 @@ and current-revision values must be positive signed 32-bit integers; a defect
 there is `invalid_shape` at `state`.
 
 The closed field and collection limits make a public encoded-byte rejection
-unreachable. The largest admitted canonical command projection uses the longer
-`eligible_target` authorization, 64 maximized `put_item` operations, and 64
-maximized relation-revision derivations per operation. It is 5,601,498 UTF-8
-bytes including its terminal LF, visits 17,294 canonical JSON values, and has
-maximum JSON depth 7. These values remain below the existing encoder's internal
+unreachable. No single saturated request maximizes every encoder measure. The
+independent upper bounds across closed-decoded canonical command projections
+are:
+
+- **UTF-8 bytes:** the longer `eligible_target` authorization, 64 maximized
+  `put_item` operations, and 64 maximized relation-revision derivations per
+  operation produce 5,601,498 bytes including the terminal LF, visit 17,294
+  canonical JSON values, and have depth 7;
+- **canonical JSON values:** the longer `eligible_target` authorization, 64
+  maximized `put_relation` operations with present maximized qualifiers, and 64
+  maximized relation-revision derivations per operation visit 17,358 values,
+  produce 954,074 bytes including the terminal LF, and have depth 7; and
+- **JSON depth:** every admitted shape has depth at most 7.
+
+These are encoder-input bounds after closed decoding, not claims that each
+saturated `eligible_target` projection later satisfies target grounding against
+repository state. Every measure remains below the existing encoder's internal
 8 MiB, 100,000-value, and depth-64 defenses. Those encoder limits are
 implementation invariants, not request budgets: this protocol has no
 `request_bytes` budget or issue branch. Reaching an encoder limit after
@@ -1293,7 +1308,8 @@ value-free tests prove at least:
    caller-mutation isolation, dangerous-key, deep-freeze, and non-echoing-error
    behavior;
 3. change-set, item-revision, and relation-revision UUIDv5 known answers plus
-   canonical request digest known answers;
+   canonical request digest known answers and independent saturated byte-count,
+   value-count, and depth vectors;
 4. item create, revise, unchanged, withdraw, reactivate, stale, missing, and
    first-revision lifecycle behavior for every kind/role/state protocol;
 5. relation create, revise, unchanged, identity immutability, self-edge,
