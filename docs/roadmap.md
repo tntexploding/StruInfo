@@ -1,7 +1,7 @@
 # StruInfo 分阶段计划
 
-- 状态：M0-S、前置切片 0、来源证据、确定性 Markdown 与人工分类/准入纯逻辑边界已完成；准备非 AI 知识形成核心
-- 最近更新：2026-08-13
+- 状态：M0-S、前置切片 0、来源证据、确定性 Markdown、人工分类/准入及首个人工知识写入纯逻辑边界已完成；准备确定性检索
+- 最近更新：2026-08-14
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
 
@@ -87,16 +87,16 @@ Playwright 的 npm 包只用于配置和测试源码；Chromium/FFmpeg/winldd、
 
 [`C-SLICE-A-CURATION-r3`](manual-curation-contract.md) 的实现提交 `ac03c18ce568b3d2d090104bbb41727aa22afe05` 已通过正式固定候选 TM1：128/128 项强制矩阵和 31/31 项精确问题矩阵全部通过。该结果接受精确 Snapshot/Fragment 上的空起始用户词表、版本化内容分类、六种独立准入动作、可选分维度评级、A0 人工命令、原子幂等回放、闭合输入与 `000003` 静态迁移合同；它不表示真实 PostgreSQL、HTTP/浏览器、正式知识、检索、偏好模型、自动准入或 AI 已经通过。下一步进入阶段 2A，冻结并实现无 AI 的原子知识变更、版本化知识项与关系核心。
 
-阶段 2A 的首个边界已冻结为实现合同
-[`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md)：先固定从一项当前
-获准证据或显式人工编辑到 A0 人工 `KnowledgeChangeSet`、稳定知识项/关系身份、
-不可变修订和精确来源的规范写入核心。r3 保留 r2 对输入所有权、修订数值域、
-来源首错顺序和 repository snapshot 闭包歧义的修正，并冻结互相独立的 canonical
-JSON 字节、value 数和深度上界。Maintenance 聚焦复审已 PASS，Test 设计已
-READY，Backend 与独立 Test 实现现已获准启动；正式固定候选 TM1 仍待实现后
-裁决。确定性检索作为紧邻子增量
-读取这套规范模型；别名、集合、树、冲突、导出、HTTP/浏览器和 AI 不与首个
-迁移捆绑。
+阶段 2A 的首个边界
+[`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md) 已在固定候选
+`f18c0346910de824ef20d074d88744c446946025` 上通过正式 TM1：224/224 项强制
+矩阵、282 项聚焦测试、811 项全仓单元测试和 2 项集成测试全部通过，完整质量门
+与 611 项候选应用制品审计通过。该结果接受从当前获准证据或显式人工编辑到 A0
+人工 `KnowledgeChangeSet`、稳定知识项/关系身份、不可变修订、精确来源、原子
+幂等回放和 `000004` 静态迁移合同。它不表示真实 PostgreSQL、事务/锁/并发、
+运行角色、HTTP/浏览器、检索、导出恢复或 AI 已经通过。确定性检索作为紧邻
+子增量读取这套规范模型；别名、集合、树、冲突、导出、HTTP/浏览器和 AI 不与
+首个迁移捆绑。
 
 ## 阶段 2A：非 AI 知识形成与确定性检索核心
 
