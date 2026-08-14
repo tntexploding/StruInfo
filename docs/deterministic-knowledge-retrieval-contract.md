@@ -1,6 +1,6 @@
 # Deterministic Knowledge Retrieval Contract
 
-- Contract ID: `C-SLICE-B-RETRIEVAL-r2`
+- Contract ID: `C-SLICE-B-RETRIEVAL-r3`
 - Status: Draft for independent Maintenance and Test review; implementation is
   blocked until the contract is accepted
 - Date: 2026-08-14
@@ -215,11 +215,22 @@ implementation failure, not a caller rejection branch.
 Search matching uses one versioned function:
 
 ```text
-search_key_v1(text) = ascii_lowercase(NFC(text))
+search_key_v1(text) = NFC(ascii_lowercase(NFC(text)))
 ```
 
 `NFC` is Unicode canonical composition. `ascii_lowercase` maps only U+0041
 through U+005A to U+0061 through U+007A. It does not use the process locale.
+Both NFC applications are required. The inner NFC gives canonically equivalent
+input one representation before ASCII lowering. ASCII lowering can create a new
+composition opportunity, as in `J` + U+030C becoming `j` + U+030C. The outer NFC
+closes that opportunity to U+01F0. Omitting it would make generated sort keys
+fail their own cursor validation.
+
+`search_key_v1` is idempotent: applying it to one of its outputs returns exactly
+the same code-point sequence. The final NFC cannot introduce an ASCII uppercase
+character after ASCII lowering, so another application performs no new lowering
+or composition. Every generated cursor `normalizedTitle` is the exact final
+search key used for ordering and must pass this fixed-point property.
 
 Version 1 freezes Unicode 17.0 normalization behavior, matching the repository's
 required Node.js 24.18.0 and ICU 78.3 runtime. Windows and Linux implementations
@@ -231,11 +242,12 @@ Under Unicode 17.0, the NFC form of one valid Unicode scalar contains at most
 three Unicode code points. Therefore an accepted 300-code-point knowledge title
 produces at most 900 code points in `search_key_v1`. `U+FB2C` repeated 300 times
 is the required saturated witness: its NFC/search-key result contains exactly
-900 code points. Canonical decomposition is scalar-local and canonical
-composition cannot increase that decomposed length, so the bound applies to the
-whole title rather than only isolated scalars. Independent TM1 must verify this
-bound, including exhaustive single-scalar enumeration and the generated-cursor
-round trip.
+900 code points. Canonical decomposition is scalar-local and either canonical
+composition pass can only preserve or reduce that decomposed length, so the
+bound applies to the whole title rather than only isolated scalars. Independent
+TM1 must verify this bound, including exhaustive single-scalar enumeration, the
+ASCII-lowering composition cases, idempotence, and the generated-cursor round
+trip.
 
 The same function is applied to the query, current title, and current body.
 It deliberately does not apply NFKC, full Unicode case folding, accent removal,
@@ -248,6 +260,8 @@ Required known-answer behavior includes:
 | --------------- | --------------------- | ---------------- |
 | `ABC`           | `abc`                 | yes              |
 | `e` + U+0301    | U+00E9                | yes              |
+| `J` + U+030C    | U+01F0                | yes              |
+| `H` + U+0331    | U+1E96                | yes              |
 | full-width `Ａ` | ASCII `A`             | no               |
 | `Straße`        | `STRASSE`             | no               |
 | `知识数据库`    | `知识` as a substring | yes              |
@@ -837,9 +851,10 @@ value-free tests prove at least:
    isolation for request and repository values;
 3. every normalization known answer, UTF-8 byte comparator parity on ASCII,
    Chinese, Emoji, BMP/non-BMP, NFC/NFD, full-width, and German sharp-s cases,
-   exhaustive Unicode 17.0 single-scalar expansion, the 900-code-point cursor
-   round trip, equivalent-text digest parity, and an independent saturated
-   digest-projection bound;
+   exhaustive Unicode 17.0 single-scalar expansion, ASCII-lowering composition
+   vectors including `J` + U+030C and `H` + U+0331, search-key idempotence, the
+   900-code-point cursor round trip, equivalent-text digest parity, and an
+   independent saturated digest-projection bound;
 4. exact/substring title/body matching, selected-field behavior, absent body,
    all text ranks, multiple reasons, and no-text rank 4;
 5. each item filter alone, empty-array semantics, within-filter OR,
