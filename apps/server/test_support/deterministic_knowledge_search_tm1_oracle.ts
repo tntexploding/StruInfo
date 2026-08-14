@@ -665,7 +665,7 @@ export function createSyntheticSnapshot(): Record<string, unknown> {
   const itemCRevisionId = itemRevisionId(ids.itemC, 2);
   const relationARevisionId = relationRevisionId(ids.relationA, 1);
   const relationBRevisionId = relationRevisionId(ids.relationB, 1);
-  const relationCRevisionId = relationRevisionId(ids.relationC, 1);
+  const relationCRevisionId = relationRevisionId(ids.relationC, 2);
   return {
     items: [
       {
@@ -745,7 +745,7 @@ export function createSyntheticSnapshot(): Record<string, unknown> {
         revision: 1,
         revisionId: itemARevisionId,
         inputKind: 'derivation',
-        inputOrdinal: 1,
+        inputOrdinal: 0,
         resourceId: ids.resourceB,
         snapshotId: ids.snapshotB,
         fragmentId: ids.fragmentB,
@@ -787,7 +787,7 @@ export function createSyntheticSnapshot(): Record<string, unknown> {
         subjectItemId: ids.itemC,
         relationTypeKey: 'synthetic.incoming',
         objectItemId: ids.itemA,
-        currentRevision: 1,
+        currentRevision: 2,
         currentRevisionId: relationCRevisionId,
       },
     ],
@@ -822,7 +822,7 @@ export function createSyntheticSnapshot(): Record<string, unknown> {
       {
         workspaceId: ids.workspace,
         relationId: ids.relationC,
-        revision: 1,
+        revision: 2,
         revisionId: relationCRevisionId,
         value: {
           subjectItemId: ids.itemC,
