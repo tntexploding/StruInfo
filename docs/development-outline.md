@@ -672,6 +672,13 @@ PostgreSQL、事务/锁/并发、运行角色、HTTP/浏览器、检索、导出
 位于各自后续门。确定性检索现在作为紧邻子增量读取这套规范写入模型，而不是
 把全部 B1 能力和首个知识迁移一次耦合。
 
+确定性检索的首个候选边界是草案
+[`C-SLICE-B-RETRIEVAL-r1`](deterministic-knowledge-retrieval-contract.md)：
+只读取当前知识修订及其直接 Fragment 输入和当前一跳关系，提供 NFC + ASCII
+大小写折叠的精确/子串匹配、显式状态过滤、稳定 UTF-8 排序、游标和匹配原因。
+它不新增迁移、依赖或搜索投影；真实 PostgreSQL 查询下推与索引优化等待 TM2
+等价性和基准，Backend 实现等待 Maintenance 与 Test 独立合同复审。
+
 ### 切片 B1：获准资料到非 AI 知识与确定性检索
 
 交付：

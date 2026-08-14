@@ -33,9 +33,11 @@ candidate-package auditing, and the versioned workspace-bundle envelope. The
 materializer, and `C-SLICE-A-CURATION-r3` A0 manual
 classification/intake/assessment boundary have passed their fixed-candidate
 TM1 gates. The `C-SLICE-B-KNOWLEDGE-r3` A0 manual, source-backed knowledge-write
-core has also passed its fixed-candidate TM1 gate. Deterministic retrieval is the
-next increment over that stable canonical write model. Do not make preference
-calibration or AI availability a dependency.
+core has also passed its fixed-candidate TM1 gate. The draft
+`C-SLICE-B-RETRIEVAL-r1` defines deterministic current-item text, source, state,
+and one-hop relation retrieval over that stable write model; implementation is
+blocked until independent Maintenance and Test contract review. Do not make
+preference calibration or AI availability a dependency.
 
 Browser runtime artifacts and real PostgreSQL/container execution remain behind
 their named admission gates. Do not represent either deferred gate as passed or
