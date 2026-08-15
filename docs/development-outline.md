@@ -681,6 +681,14 @@ Fragment 输入和当前一跳关系的 NFC + ASCII 大小写折叠精确/子串
 状态过滤、稳定 UTF-8 排序、游标和匹配原因。它不新增迁移、依赖或搜索投影；
 真实 PostgreSQL 查询下推、结果等价性、索引与性能仍等待 TM2 和基准。
 
+下一持久化增量以草案
+[`C-SLICE-B-POSTGRES-r1`](postgresql-knowledge-adapter-contract.md) 收敛真实
+PostgreSQL 18 的首个 TM2：实际执行 `000001`–`000004`，验证迁移/运行角色分离、
+最小权限、A0 分类与知识写事务、当前知识完整加载和纯逻辑结果等价性。首版检索
+适配器使用一致只读事务加载完整当前工作区后调用已验收评估器，不提前重写 Unicode
+匹配、排序或分页 SQL。Compose、镜像、Linux、查询下推、索引与性能继续等待各自
+具名门；Backend 实现须等待 Maintenance 与 Test 独立合同复审。
+
 ### 切片 B1：获准资料到非 AI 知识与确定性检索
 
 交付：
