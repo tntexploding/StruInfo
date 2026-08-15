@@ -2,6 +2,8 @@ import {isIP} from 'node:net';
 
 import {describe, expect, it, vi} from 'vitest';
 
+import {PostgresConnectionConfigError} from '../../apps/server/src/platform/database/postgresql/index.js';
+
 import {
   classifyTm2HarnessOutcome,
   decodeTm2AdmissionChannel,
@@ -10,6 +12,17 @@ import {
   type Tm2AdmissionDependencies,
   type Tm2AdmissionEnvironmentObservation,
 } from '../../apps/server/test_support/postgres_tm2/admission_outcome.js';
+import {isTm2OperationalConnectionError} from '../../apps/server/test_support/postgres_tm2/admission_child.js';
+import {
+  failureCodeForBoundedChild,
+  runTm2BoundedChild,
+  TM2_ADMISSION_CHILD_DEADLINE_MS,
+  TM2_CHILD_REAP_DEADLINE_MS,
+  TM2_MANDATORY_CHILD_DEADLINE_MS,
+  type Tm2ChildOutputPort,
+  type Tm2ChildProcessPort,
+  type Tm2DeadlinePort,
+} from '../../apps/server/test_support/postgres_tm2/bounded_child.js';
 import {
   admitTm2Environment,
   auditClosedPgConfig,
@@ -96,7 +109,7 @@ function parsePgPassLine(line: string): readonly string[] {
 function acceptedFromInput(role: Exclude<Tm2Role, 'admin'>, input: unknown) {
   const result = decodeTm2Url(role, input);
   if (result.status !== 'accepted') {
-    throw new Error(`SYNTHETIC_PRODUCT_INPUT_REJECTED:${result.code}`);
+    throw new PostgresConnectionConfigError();
   }
   return result.config;
 }
@@ -175,6 +188,9 @@ function admissionDependencies(
 ): Tm2AdmissionDependencies {
   return {
     decodeProductConfig: acceptedFromInput,
+    isProductConfigError(error) {
+      return error instanceof PostgresConnectionConfigError;
+    },
     inspectEnvironment,
   };
 }
@@ -188,6 +204,129 @@ function formalSyntheticEnvironment() {
     STRUIINFO_TM2_RUNTIME_DATABASE_URL:
       'postgres://struinfo_tm2_runtime:c@127.0.0.1/struinfo_tm2',
   };
+}
+
+function throwUnknown(value: unknown): never {
+  const iterator = (function* syntheticThrower() {
+    yield undefined;
+  })();
+  iterator.next();
+  iterator.throw(value);
+  throw new Error('SYNTHETIC_THROW_DID_NOT_PROPAGATE');
+}
+
+async function rejectUnknown(value: unknown): Promise<never> {
+  await Promise.resolve();
+  return throwUnknown(value);
+}
+
+class FakeDeadline implements Tm2DeadlinePort {
+  readonly scheduledDelays: number[] = [];
+  readonly #entries = new Map<
+    object,
+    {readonly delayMs: number; readonly callback: () => void}
+  >();
+  #nextId = 0;
+
+  public schedule(delayMs: number, callback: () => void): object {
+    const handle = Object.freeze({id: this.#nextId});
+    this.#nextId += 1;
+    this.scheduledDelays.push(delayMs);
+    this.#entries.set(handle, {delayMs, callback});
+    return handle;
+  }
+
+  public cancel(handle: object): void {
+    this.#entries.delete(handle);
+  }
+
+  public fire(delayMs: number): void {
+    const entry = [...this.#entries.entries()].find(
+      ([, candidate]) => candidate.delayMs === delayMs,
+    );
+    if (entry === undefined) {
+      throw new Error('SYNTHETIC_DEADLINE_NOT_REGISTERED');
+    }
+    this.#entries.delete(entry[0]);
+    entry[1].callback();
+  }
+
+  public get activeCount(): number {
+    return this.#entries.size;
+  }
+}
+
+class FakeChild implements Tm2ChildProcessPort {
+  readonly killCalls: NodeJS.Signals[] = [];
+  readonly #errorListeners = new Set<(error: unknown) => void>();
+  readonly #closeListeners = new Set<
+    (exitCode: number | null, signal: NodeJS.Signals | null) => void
+  >();
+  public killResult = true;
+
+  public onError(listener: (error: unknown) => void): void {
+    this.#errorListeners.add(listener);
+  }
+
+  public offError(listener: (error: unknown) => void): void {
+    this.#errorListeners.delete(listener);
+  }
+
+  public onClose(
+    listener: (exitCode: number | null, signal: NodeJS.Signals | null) => void,
+  ): void {
+    this.#closeListeners.add(listener);
+  }
+
+  public offClose(
+    listener: (exitCode: number | null, signal: NodeJS.Signals | null) => void,
+  ): void {
+    this.#closeListeners.delete(listener);
+  }
+
+  public kill(signal: NodeJS.Signals): boolean {
+    this.killCalls.push(signal);
+    return this.killResult;
+  }
+
+  public emitError(error: unknown): void {
+    for (const listener of [...this.#errorListeners]) {
+      listener(error);
+    }
+  }
+
+  public emitClose(
+    exitCode: number | null,
+    signal: NodeJS.Signals | null,
+  ): void {
+    for (const listener of [...this.#closeListeners]) {
+      listener(exitCode, signal);
+    }
+  }
+
+  public get listenerCount(): number {
+    return this.#errorListeners.size + this.#closeListeners.size;
+  }
+}
+
+class FakeOutput implements Tm2ChildOutputPort {
+  readonly stops: boolean[] = [];
+  public value = 'synthetic-child-output';
+  #stopped = false;
+
+  public append(value: string): void {
+    if (!this.#stopped) {
+      this.value += value;
+    }
+  }
+
+  public stop(discard: boolean): void {
+    this.#stopped = true;
+    this.stops.push(discard);
+    if (discard) {
+      this.value = '';
+    }
+  }
 }
 
 describe('Test-owned PostgreSQL TM2 environment oracle', () => {
@@ -459,6 +598,51 @@ describe('Test-owned PostgreSQL TM2 environment oracle', () => {
 });
 
 describe('Test-owned PostgreSQL TM2 admission outcome channel', () => {
+  it('decodes every new fail-closed harness code and rejects unknown codes', () => {
+    const codes = [
+      'tm2_product_decoder_failure',
+      'tm2_admission_probe_failure',
+      'tm2_admission_child_timeout',
+      'tm2_admission_child_termination_failure',
+      'tm2_mandatory_child_failure',
+      'tm2_mandatory_child_timeout',
+      'tm2_mandatory_child_termination_failure',
+      'tm2_harness_failure',
+    ] as const;
+    for (const code of codes) {
+      expect(
+        decodeTm2AdmissionChannel(JSON.stringify({status: 'failed', code})),
+      ).toEqual({status: 'failed', code});
+    }
+    expect(
+      decodeTm2AdmissionChannel(
+        JSON.stringify({status: 'failed', code: 'tm2_unknown_failure'}),
+      ),
+    ).toBeUndefined();
+  });
+
+  it('recognizes operational connection failures only by a closed own code', () => {
+    const operational = new Error('synthetic-redacted');
+    Object.defineProperty(operational, 'code', {
+      value: 'ECONNREFUSED',
+      enumerable: true,
+    });
+    const serverUnavailable = new Error('synthetic-redacted');
+    Object.defineProperty(serverUnavailable, 'code', {
+      value: '57P03',
+      enumerable: true,
+    });
+    expect(isTm2OperationalConnectionError(operational)).toBe(true);
+    expect(isTm2OperationalConnectionError(serverUnavailable)).toBe(true);
+    expect(isTm2OperationalConnectionError(new Error('ECONNREFUSED'))).toBe(
+      false,
+    );
+    expect(isTm2OperationalConnectionError(new TypeError('ECONNREFUSED'))).toBe(
+      false,
+    );
+    expect(isTm2OperationalConnectionError('ECONNREFUSED')).toBe(false);
+  });
+
   it('classifies a syntax-valid unreachable endpoint as NOT_READY with exit 2', async () => {
     const outcome = await runTm2AdmissionPreflight(
       formalSyntheticEnvironment(),
@@ -579,6 +763,9 @@ describe('Test-owned PostgreSQL TM2 admission outcome channel', () => {
         }
         return acceptedFromInput(role, input);
       },
+      isProductConfigError(error) {
+        return error instanceof PostgresConnectionConfigError;
+      },
       inspectEnvironment() {
         return Promise.resolve(admittedObservation());
       },
@@ -590,25 +777,310 @@ describe('Test-owned PostgreSQL TM2 admission outcome channel', () => {
     expect(classifyTm2HarnessOutcome(outcome).exitCode).toBe(1);
   });
 
-  it('emits only closed safe admission records when probes throw sensitive text', async () => {
-    const sensitiveCanary = 'synthetic-sensitive-probe-text';
+  it('accepts only the public config error as a prohibited URL rejection', async () => {
+    const environment = formalSyntheticEnvironment();
+    environment.STRUIINFO_TM2_RUNTIME_DATABASE_URL += '?sslmode=disable';
     const outcome = await runTm2AdmissionPreflight(
-      formalSyntheticEnvironment(),
-      admissionDependencies(() => Promise.reject(new Error(sensitiveCanary))),
+      environment,
+      admissionDependencies(() => Promise.resolve(admittedObservation())),
     );
-    const encoded = JSON.stringify(outcome);
     expect(outcome).toEqual({
       status: 'not_ready',
-      code: 'tm2_environment_probe_unavailable',
+      code: 'tm2_url_override',
+      variable: 'STRUIINFO_TM2_RUNTIME_DATABASE_URL',
     });
-    expect(encoded).not.toContain(sensitiveCanary);
-    expect(encoded).not.toContain('sensitive-probe');
-    expect(decodeTm2AdmissionChannel(encoded)).toEqual(outcome);
+    expect(classifyTm2HarnessOutcome(outcome).exitCode).toBe(2);
+  });
+
+  it('fails closed when a prohibited URL triggers a TypeError', async () => {
+    const environment = formalSyntheticEnvironment();
+    environment.STRUIINFO_TM2_RUNTIME_DATABASE_URL += '?sslmode=disable';
+    const dependencies = admissionDependencies(() =>
+      Promise.resolve(admittedObservation()),
+    );
+    const outcome = await runTm2AdmissionPreflight(environment, {
+      ...dependencies,
+      decodeProductConfig(role, input) {
+        if (role === 'runtime') {
+          throw new TypeError('synthetic-sensitive-decoder-text');
+        }
+        return dependencies.decodeProductConfig(role, input);
+      },
+    });
+    expect(outcome).toEqual({
+      status: 'failed',
+      code: 'tm2_product_decoder_failure',
+    });
+    expect(classifyTm2HarnessOutcome(outcome).exitCode).toBe(1);
+  });
+
+  it('fails closed when an admitted URL triggers any decoder exception', async () => {
+    for (const thrown of [
+      new PostgresConnectionConfigError(),
+      new TypeError('synthetic-sensitive-decoder-text'),
+      new Error('synthetic-sensitive-decoder-text'),
+      'synthetic-sensitive-decoder-text',
+    ]) {
+      const dependencies = admissionDependencies(() =>
+        Promise.resolve(admittedObservation()),
+      );
+      const outcome = await runTm2AdmissionPreflight(
+        formalSyntheticEnvironment(),
+        {
+          ...dependencies,
+          decodeProductConfig(role, input) {
+            if (role === 'runtime') {
+              return throwUnknown(thrown);
+            }
+            return dependencies.decodeProductConfig(role, input);
+          },
+        },
+      );
+      expect(outcome).toEqual({
+        status: 'failed',
+        code:
+          thrown instanceof PostgresConnectionConfigError
+            ? 'tm2_product_rejected_admitted_url'
+            : 'tm2_product_decoder_failure',
+      });
+      expect(classifyTm2HarnessOutcome(outcome).exitCode).toBe(1);
+      expect(JSON.stringify(outcome)).not.toContain('sensitive');
+    }
+  });
+
+  it('fails closed on unknown probe errors and malformed observations', async () => {
+    const sensitiveCanary = 'synthetic-sensitive-probe-text';
+    for (const thrown of [
+      new Error(sensitiveCanary),
+      new TypeError(sensitiveCanary),
+      sensitiveCanary,
+    ]) {
+      const outcome = await runTm2AdmissionPreflight(
+        formalSyntheticEnvironment(),
+        admissionDependencies(() => rejectUnknown(thrown)),
+      );
+      const encoded = JSON.stringify(outcome);
+      expect(outcome).toEqual({
+        status: 'failed',
+        code: 'tm2_admission_probe_failure',
+      });
+      expect(classifyTm2HarnessOutcome(outcome).exitCode).toBe(1);
+      expect(encoded).not.toContain(sensitiveCanary);
+      expect(encoded).not.toContain('sensitive-probe');
+      expect(decodeTm2AdmissionChannel(encoded)).toEqual(outcome);
+    }
+    const malformed = await runTm2AdmissionPreflight(
+      formalSyntheticEnvironment(),
+      admissionDependencies(() =>
+        Promise.resolve({} as Tm2AdmissionEnvironmentObservation),
+      ),
+    );
+    expect(malformed).toEqual({
+      status: 'failed',
+      code: 'tm2_admission_probe_failure',
+    });
     expect(
       decodeTm2AdmissionChannel(
-        `${encoded.slice(0, -1)},"unexpected":"sensitive-probe"}`,
+        '{"status":"failed","code":"tm2_admission_probe_failure","unexpected":"synthetic"}',
       ),
     ).toBeUndefined();
+  });
+});
+
+describe('Test-owned PostgreSQL TM2 bounded child seam', () => {
+  it('freezes independent finite execution and reap deadlines', () => {
+    expect(TM2_ADMISSION_CHILD_DEADLINE_MS).toBe(60_000);
+    expect(TM2_MANDATORY_CHILD_DEADLINE_MS).toBe(1_800_000);
+    expect(TM2_CHILD_REAP_DEADLINE_MS).toBe(10_000);
+    expect(TM2_MANDATORY_CHILD_DEADLINE_MS).toBeGreaterThan(
+      TM2_ADMISSION_CHILD_DEADLINE_MS,
+    );
+  });
+
+  it('clears the deadline and never kills a normally closed child', async () => {
+    const child = new FakeChild();
+    const deadline = new FakeDeadline();
+    const output = new FakeOutput();
+    const resultPromise = runTm2BoundedChild({
+      child,
+      deadline,
+      deadlineMs: TM2_ADMISSION_CHILD_DEADLINE_MS,
+      reapDeadlineMs: TM2_CHILD_REAP_DEADLINE_MS,
+      output,
+    });
+    expect(deadline.scheduledDelays).toEqual([60_000]);
+    child.emitClose(0, null);
+    await expect(resultPromise).resolves.toEqual({
+      status: 'completed',
+      exitCode: 0,
+      signal: null,
+    });
+    expect(child.killCalls).toEqual([]);
+    expect(child.listenerCount).toBe(0);
+    expect(deadline.activeCount).toBe(0);
+    expect(output.stops).toEqual([false]);
+  });
+
+  it('cleans up and fails safely on a child spawn error', async () => {
+    const child = new FakeChild();
+    const deadline = new FakeDeadline();
+    const output = new FakeOutput();
+    const resultPromise = runTm2BoundedChild({
+      child,
+      deadline,
+      deadlineMs: TM2_ADMISSION_CHILD_DEADLINE_MS,
+      reapDeadlineMs: TM2_CHILD_REAP_DEADLINE_MS,
+      output,
+    });
+    child.emitError(new Error('synthetic-sensitive-child-error'));
+    const result = await resultPromise;
+    expect(result).toEqual({status: 'spawn_failed'});
+    if (result.status !== 'completed') {
+      const code = failureCodeForBoundedChild('admission', result);
+      expect(code).toBe('tm2_admission_child_failure');
+      expect(classifyTm2HarnessOutcome({status: 'failed', code}).exitCode).toBe(
+        1,
+      );
+    }
+    expect(JSON.stringify(result)).not.toContain('sensitive');
+    expect(child.listenerCount).toBe(0);
+    expect(deadline.activeCount).toBe(0);
+    expect(output.stops).toEqual([true]);
+  });
+
+  it('kills and reaps a hung admission child as FAIL', async () => {
+    const child = new FakeChild();
+    const deadline = new FakeDeadline();
+    const output = new FakeOutput();
+    const resultPromise = runTm2BoundedChild({
+      child,
+      deadline,
+      deadlineMs: TM2_ADMISSION_CHILD_DEADLINE_MS,
+      reapDeadlineMs: TM2_CHILD_REAP_DEADLINE_MS,
+      output,
+    });
+    deadline.fire(TM2_ADMISSION_CHILD_DEADLINE_MS);
+    expect(child.killCalls).toEqual(['SIGKILL']);
+    expect(deadline.scheduledDelays).toEqual([60_000, 10_000]);
+    child.emitClose(null, 'SIGKILL');
+    const result = await resultPromise;
+    expect(result).toEqual({status: 'timed_out'});
+    if (result.status !== 'completed') {
+      const code = failureCodeForBoundedChild('admission', result);
+      expect(code).toBe('tm2_admission_child_timeout');
+      expect(classifyTm2HarnessOutcome({status: 'failed', code}).exitCode).toBe(
+        1,
+      );
+    }
+    expect(output.value).toBe('');
+    expect(output.stops).toEqual([true]);
+    expect(child.listenerCount).toBe(0);
+    expect(deadline.activeCount).toBe(0);
+  });
+
+  it('kills and reaps a hung mandatory child as FAIL', async () => {
+    const child = new FakeChild();
+    const deadline = new FakeDeadline();
+    const output = new FakeOutput();
+    const resultPromise = runTm2BoundedChild({
+      child,
+      deadline,
+      deadlineMs: TM2_MANDATORY_CHILD_DEADLINE_MS,
+      reapDeadlineMs: TM2_CHILD_REAP_DEADLINE_MS,
+      output,
+    });
+    deadline.fire(TM2_MANDATORY_CHILD_DEADLINE_MS);
+    child.emitClose(null, 'SIGKILL');
+    const result = await resultPromise;
+    expect(result).toEqual({status: 'timed_out'});
+    if (result.status !== 'completed') {
+      const code = failureCodeForBoundedChild('mandatory', result);
+      expect(code).toBe('tm2_mandatory_child_timeout');
+      expect(classifyTm2HarnessOutcome({status: 'failed', code}).exitCode).toBe(
+        1,
+      );
+    }
+    expect(child.killCalls).toEqual(['SIGKILL']);
+    expect(child.listenerCount).toBe(0);
+    expect(deadline.activeCount).toBe(0);
+  });
+
+  it('fails closed when termination cannot be reaped', async () => {
+    const child = new FakeChild();
+    const deadline = new FakeDeadline();
+    const output = new FakeOutput();
+    const resultPromise = runTm2BoundedChild({
+      child,
+      deadline,
+      deadlineMs: TM2_ADMISSION_CHILD_DEADLINE_MS,
+      reapDeadlineMs: TM2_CHILD_REAP_DEADLINE_MS,
+      output,
+    });
+    deadline.fire(TM2_ADMISSION_CHILD_DEADLINE_MS);
+    deadline.fire(TM2_CHILD_REAP_DEADLINE_MS);
+    const result = await resultPromise;
+    expect(result).toEqual({status: 'termination_failed'});
+    if (result.status !== 'completed') {
+      expect(failureCodeForBoundedChild('admission', result)).toBe(
+        'tm2_admission_child_termination_failure',
+      );
+    }
+    expect(child.listenerCount).toBe(0);
+    expect(deadline.activeCount).toBe(0);
+  });
+
+  it('fails closed when child termination reports failure before close', async () => {
+    const child = new FakeChild();
+    child.killResult = false;
+    const deadline = new FakeDeadline();
+    const output = new FakeOutput();
+    const resultPromise = runTm2BoundedChild({
+      child,
+      deadline,
+      deadlineMs: TM2_MANDATORY_CHILD_DEADLINE_MS,
+      reapDeadlineMs: TM2_CHILD_REAP_DEADLINE_MS,
+      output,
+    });
+    deadline.fire(TM2_MANDATORY_CHILD_DEADLINE_MS);
+    child.emitClose(null, 'SIGKILL');
+    const result = await resultPromise;
+    expect(result).toEqual({status: 'termination_failed'});
+    if (result.status !== 'completed') {
+      expect(failureCodeForBoundedChild('mandatory', result)).toBe(
+        'tm2_mandatory_child_termination_failure',
+      );
+    }
+    expect(child.killCalls).toEqual(['SIGKILL']);
+    expect(child.listenerCount).toBe(0);
+    expect(deadline.activeCount).toBe(0);
+  });
+
+  it('ignores late close and output after a timeout result is frozen', async () => {
+    const child = new FakeChild();
+    const deadline = new FakeDeadline();
+    const output = new FakeOutput();
+    const resultPromise = runTm2BoundedChild({
+      child,
+      deadline,
+      deadlineMs: TM2_MANDATORY_CHILD_DEADLINE_MS,
+      reapDeadlineMs: TM2_CHILD_REAP_DEADLINE_MS,
+      output,
+    });
+    deadline.fire(TM2_MANDATORY_CHILD_DEADLINE_MS);
+    child.emitClose(null, 'SIGKILL');
+    const result = await resultPromise;
+    output.append('synthetic-late-report');
+    child.emitClose(0, null);
+    expect(result).toEqual({status: 'timed_out'});
+    if (result.status !== 'completed') {
+      expect(failureCodeForBoundedChild('mandatory', result)).toBe(
+        'tm2_mandatory_child_timeout',
+      );
+    }
+    expect(child.listenerCount).toBe(0);
+    expect(deadline.activeCount).toBe(0);
+    expect(output.stops).toEqual([true]);
+    expect(output.value).toBe('');
   });
 });
 

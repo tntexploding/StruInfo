@@ -1,4 +1,4 @@
-import {spawn} from 'node:child_process';
+import {spawn, type ChildProcess} from 'node:child_process';
 import {chmod, mkdir, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -6,9 +6,21 @@ import {join} from 'node:path';
 import {
   classifyTm2HarnessOutcome,
   decodeTm2AdmissionChannel,
+  type Tm2AdmissionFailureCode,
   type Tm2AdmissionPreflightOutcome,
   type Tm2HarnessOutcome,
 } from '../../apps/server/test_support/postgres_tm2/admission_outcome.js';
+import {
+  failureCodeForBoundedChild,
+  runTm2BoundedChild,
+  SYSTEM_TM2_DEADLINE,
+  TM2_ADMISSION_CHILD_DEADLINE_MS,
+  TM2_CHILD_REAP_DEADLINE_MS,
+  TM2_MANDATORY_CHILD_DEADLINE_MS,
+  type Tm2BoundedChildResult,
+  type Tm2ChildOutputPort,
+  type Tm2ChildProcessPort,
+} from '../../apps/server/test_support/postgres_tm2/bounded_child.js';
 import {
   admitTm2Environment,
   createPoisonPgPassLine,
@@ -16,12 +28,8 @@ import {
   type AcceptedTm2Environment,
 } from '../../apps/server/test_support/postgres_tm2/environment_oracle.js';
 
-interface ChildResult {
-  readonly exitCode: number | null;
-  readonly signal: NodeJS.Signals | null;
-}
-
-interface AdmissionChildResult extends ChildResult {
+interface AdmissionChildResult {
+  readonly process: Tm2BoundedChildResult;
   readonly stdout: string;
 }
 
@@ -64,35 +72,42 @@ function collectFailedMandatoryIds(value: unknown, target: Set<string>): void {
 async function runChild(
   environment: NodeJS.ProcessEnv,
   reportPath: string,
-): Promise<ChildResult> {
+): Promise<Tm2BoundedChildResult> {
   const vitestEntry = join(
     process.cwd(),
     'node_modules',
     'vitest',
     'vitest.mjs',
   );
-  const child = spawn(
-    process.execPath,
-    [
-      vitestEntry,
-      'run',
-      '--config',
-      'vitest.postgres.config.ts',
-      '--reporter=json',
-      `--outputFile=${reportPath}`,
-    ],
-    {
-      cwd: process.cwd(),
-      env: environment,
-      stdio: 'ignore',
-      windowsHide: true,
-    },
-  );
-  return await new Promise<ChildResult>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('exit', (exitCode, signal) => {
-      resolve({exitCode, signal});
-    });
+  let child: ChildProcess;
+  try {
+    child = spawn(
+      process.execPath,
+      [
+        vitestEntry,
+        'run',
+        '--config',
+        'vitest.postgres.config.ts',
+        '--pool=threads',
+        '--reporter=json',
+        `--outputFile=${reportPath}`,
+      ],
+      {
+        cwd: process.cwd(),
+        env: environment,
+        stdio: 'ignore',
+        windowsHide: true,
+      },
+    );
+  } catch {
+    return {status: 'spawn_failed'};
+  }
+  return await runTm2BoundedChild({
+    child: childPort(child),
+    deadline: SYSTEM_TM2_DEADLINE,
+    deadlineMs: TM2_MANDATORY_CHILD_DEADLINE_MS,
+    reapDeadlineMs: TM2_CHILD_REAP_DEADLINE_MS,
+    output: NO_CHILD_OUTPUT,
   });
 }
 
@@ -106,29 +121,76 @@ async function runAdmissionChild(
     'dist',
     'cli.mjs',
   );
-  const child = spawn(
-    process.execPath,
-    [tsxEntry, 'tests/postgres/run_postgres_tm2_admission.ts'],
-    {
-      cwd: process.cwd(),
-      env: environment,
-      stdio: ['ignore', 'pipe', 'ignore'],
-      windowsHide: true,
-    },
-  );
+  let child;
+  try {
+    child = spawn(
+      process.execPath,
+      [tsxEntry, 'tests/postgres/run_postgres_tm2_admission.ts'],
+      {
+        cwd: process.cwd(),
+        env: environment,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        windowsHide: true,
+      },
+    );
+  } catch {
+    return {process: {status: 'spawn_failed'}, stdout: ''};
+  }
   child.stdout.setEncoding('utf8');
   let stdout = '';
-  child.stdout.on('data', (chunk: string) => {
+  const onData = (chunk: string): void => {
     if (stdout.length <= 16_384) {
       stdout += chunk;
     }
+  };
+  child.stdout.on('data', onData);
+  const result = await runTm2BoundedChild({
+    child: childPort(child),
+    deadline: SYSTEM_TM2_DEADLINE,
+    deadlineMs: TM2_ADMISSION_CHILD_DEADLINE_MS,
+    reapDeadlineMs: TM2_CHILD_REAP_DEADLINE_MS,
+    output: {
+      stop(discard: boolean): void {
+        child.stdout.removeListener('data', onData);
+        if (discard) {
+          stdout = '';
+        }
+      },
+    },
   });
-  return await new Promise<AdmissionChildResult>((resolve, reject) => {
-    child.once('error', reject);
-    child.once('exit', (exitCode, signal) => {
-      resolve({exitCode, signal, stdout});
-    });
-  });
+  return {process: result, stdout};
+}
+
+const NO_CHILD_OUTPUT: Tm2ChildOutputPort = Object.freeze({
+  stop(discard: boolean): void {
+    void discard;
+  },
+});
+
+function childPort(child: ChildProcess): Tm2ChildProcessPort {
+  return {
+    onError(listener) {
+      child.on('error', listener);
+    },
+    offError(listener) {
+      child.removeListener('error', listener);
+    },
+    onClose(listener) {
+      child.on('close', listener);
+    },
+    offClose(listener) {
+      child.removeListener('close', listener);
+    },
+    kill(signal) {
+      return child.kill(signal);
+    },
+  };
+}
+
+function failedAdmission(
+  code: Tm2AdmissionFailureCode,
+): Tm2AdmissionPreflightOutcome {
+  return Object.freeze({status: 'failed', code});
 }
 
 function getAcceptedConfigurations(admission: AcceptedTm2Environment) {
@@ -181,7 +243,7 @@ function emitHarnessOutcome(outcome: Tm2HarnessOutcome): void {
 }
 
 function admissionChannelIsConsistent(
-  processResult: AdmissionChildResult,
+  processResult: Extract<Tm2BoundedChildResult, {readonly status: 'completed'}>,
   outcome: Tm2AdmissionPreflightOutcome,
 ): boolean {
   const expectedExitCode =
@@ -219,15 +281,23 @@ async function main(): Promise<number> {
     childEnvironment.STRUIINFO_TM2_POISON_ROOT = taskRoot;
 
     const admissionProcess = await runAdmissionChild(childEnvironment);
-    let admissionOutcome = decodeTm2AdmissionChannel(admissionProcess.stdout);
-    if (
-      admissionOutcome === undefined ||
-      !admissionChannelIsConsistent(admissionProcess, admissionOutcome)
-    ) {
-      admissionOutcome = {
-        status: 'failed',
-        code: 'tm2_admission_channel_invalid',
-      };
+    let admissionOutcome: Tm2AdmissionPreflightOutcome;
+    if (admissionProcess.process.status !== 'completed') {
+      admissionOutcome = failedAdmission(
+        failureCodeForBoundedChild('admission', admissionProcess.process),
+      );
+    } else {
+      admissionOutcome =
+        decodeTm2AdmissionChannel(admissionProcess.stdout) ??
+        failedAdmission('tm2_admission_channel_invalid');
+      if (
+        !admissionChannelIsConsistent(
+          admissionProcess.process,
+          admissionOutcome,
+        )
+      ) {
+        admissionOutcome = failedAdmission('tm2_admission_channel_invalid');
+      }
     }
     if (admissionOutcome.status !== 'admitted') {
       const outcome = classifyTm2HarnessOutcome(admissionOutcome);
@@ -235,10 +305,9 @@ async function main(): Promise<number> {
       return outcome.exitCode;
     }
     if (syntaxAdmission.status !== 'accepted') {
-      const outcome = classifyTm2HarnessOutcome({
-        status: 'failed',
-        code: 'tm2_admission_channel_invalid',
-      });
+      const outcome = classifyTm2HarnessOutcome(
+        failedAdmission('tm2_admission_channel_invalid'),
+      );
       emitHarnessOutcome(outcome);
       return outcome.exitCode;
     }
@@ -248,6 +317,14 @@ async function main(): Promise<number> {
     childEnvironment.STRUIINFO_TM2_ADMISSION_PROVEN = '1';
     const reportPath = join(taskRoot, 'vitest-result.json');
     const result = await runChild(childEnvironment, reportPath);
+
+    if (result.status !== 'completed') {
+      const outcome = classifyTm2HarnessOutcome(
+        failedAdmission(failureCodeForBoundedChild('mandatory', result)),
+      );
+      emitHarnessOutcome(outcome);
+      return outcome.exitCode;
+    }
 
     const outcome = classifyTm2HarnessOutcome(admissionOutcome, result);
     if (outcome.exitCode === 0) {
@@ -284,7 +361,7 @@ try {
   emit({
     event: 'postgres_tm2_failed',
     outcome: 'failed',
-    code: 'harness_failure',
+    code: 'tm2_harness_failure',
   });
   process.exitCode = 1;
 }
