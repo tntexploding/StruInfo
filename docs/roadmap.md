@@ -1,7 +1,7 @@
 # StruInfo 分阶段计划
 
-- 状态：M0-S、前置切片 0、来源证据、确定性 Markdown、人工分类/准入及首个人工知识写入纯逻辑边界已完成；准备确定性检索
-- 最近更新：2026-08-14
+- 状态：M0-S、前置切片 0、来源证据、确定性 Markdown、人工分类/准入、首个人工知识写入及确定性检索纯逻辑边界已完成；准备真实 PostgreSQL 适配
+- 最近更新：2026-08-15
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
 
@@ -98,12 +98,14 @@ Playwright 的 npm 包只用于配置和测试源码；Chromium/FFmpeg/winldd、
 子增量读取这套规范模型；别名、集合、树、冲突、导出、HTTP/浏览器和 AI 不与
 首个迁移捆绑。
 
-紧邻检索增量现以草案
-[`C-SLICE-B-RETRIEVAL-r3`](deterministic-knowledge-retrieval-contract.md)
-冻结当前知识项的 NFC + ASCII 大小写折叠文本匹配、显式结构过滤、直接来源、
-一跳关系、稳定 UTF-8 排序、游标和匹配原因。它不新增迁移、依赖或搜索投影，
-也不声称真实 PostgreSQL 查询已实现；Backend 必须等待 Maintenance 与 Test
-独立合同复审通过。
+紧邻检索增量
+[`C-SLICE-B-RETRIEVAL-r3`](deterministic-knowledge-retrieval-contract.md) 已在固定
+候选 `dfaecb622515cc640802562485e715cc7da35cc8` 上通过正式 TM1：308/308 项
+强制矩阵、324 项聚焦测试、1,135 项全仓单元测试和 2 项集成测试全部通过，
+完整质量门与 631 项候选应用制品审计通过。该结果接受当前知识项的双 NFC +
+ASCII 大小写折叠文本匹配、显式结构过滤、直接来源、一跳关系、稳定 UTF-8
+排序、游标和匹配原因。它不表示真实 PostgreSQL 查询下推、跨页并发一致性、
+索引、查询计划、HTTP/浏览器或扩展检索已经通过；这些能力保留给后续具名门。
 
 ## 阶段 2A：非 AI 知识形成与确定性检索核心
 
