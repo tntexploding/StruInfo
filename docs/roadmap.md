@@ -108,7 +108,7 @@ ASCII 大小写折叠文本匹配、显式结构过滤、直接来源、一跳�
 索引、查询计划、HTTP/浏览器或扩展检索已经通过；这些能力保留给后续具名门。
 
 下一持久化门现以草案
-[`C-SLICE-B-POSTGRES-r1`](postgresql-knowledge-adapter-contract.md) 冻结真实
+[`C-SLICE-B-POSTGRES-r2`](postgresql-knowledge-adapter-contract.md) 冻结真实
 PostgreSQL 18 的 `000001`–`000004` 迁移执行、迁移/运行角色分离、最小权限、
 分类与知识写事务、当前知识完整读取以及与既有纯逻辑结果的等价性。它不新增迁移
 或依赖，也不引入 Compose、镜像、查询下推或性能声明；Backend 必须等待

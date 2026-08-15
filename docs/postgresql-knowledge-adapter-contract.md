@@ -1,9 +1,11 @@
 # PostgreSQL Knowledge Adapter Parity Contract
 
-- Contract ID: `C-SLICE-B-POSTGRES-r1`
-- Status: Draft for independent Maintenance and Test review; implementation is
-  blocked until this contract is accepted
+- Contract ID: `C-SLICE-B-POSTGRES-r2`
+- Status: Draft for independent Maintenance and Test re-review; implementation
+  is blocked until this contract is accepted
 - Date: 2026-08-15
+- Supersedes: draft `C-SLICE-B-POSTGRES-r1`; closes its URL/session-identity,
+  command-lookup, role-membership, and temporary-object ambiguities
 - Implementation baseline: `267d8cd151a36e5375143f2cc68d10ec451ecc3b`
 - Accepted curation candidate:
   `ac03c18ce568b3d2d090104bbb41727aa22afe05`
@@ -132,16 +134,70 @@ adapter test composition. Product modules do not read any TM2 variable.
 The operator supplies one disposable UTF-8 database and three existing login
 roles. The fixed test identities are `struinfo_tm2_admin`,
 `struinfo_tm2_migrator`, and `struinfo_tm2_runtime`; production role names
-remain operator-selected. All three URLs refer to that same database, and
-`SELECT current_user` must return the corresponding fixed test role. The admin
-role is a disposable-fixture superuser able to inspect the catalog, apply
-grants, and seed synthetic prerequisites; it never enters an application
-process. Tests require:
+remain operator-selected. The admin role is a disposable-fixture superuser able
+to inspect the catalog, apply grants, and seed synthetic prerequisites; it
+never enters an application process.
 
-- a closed test-environment decoder verifies the three PostgreSQL URLs have the
-  same normalized hostname, effective port, and decoded database name; only
-  credentials and connection settings may differ;
+Before any `pg` client or pool exists, the production PostgreSQL platform
+decoder maps the migration/runtime secret URL to an owned explicit connection
+configuration. Test owns a separate implementation of the same frozen grammar
+for environment admission and the admin connection; it must not import the
+product decoder or its expected values. An accepted TM2 URL:
 
+- uses the exact `postgres:` or `postgresql:` scheme and a local TCP authority
+  hostname that WHATWG URL normalization renders as `127.0.0.1`, `[::1]`, or
+  `localhost`;
+- is byte-for-byte equal to its trimmed form and contains no raw ASCII control,
+  space, or DEL character; such bytes must be percent-encoded inside an allowed
+  component;
+- has one authority username whose percent-decoded value is the fixed role for
+  that variable;
+- has at most one authority password, which is treated only as an opaque secret;
+- has an absent port or one decimal port in `1..65535`, with absence normalized
+  to `5432`;
+- has exactly one non-empty percent-decoded database path segment whose decoded
+  value contains no slash, backslash, NUL, or invalid Unicode;
+- contains no query string or fragment; this rejects `host`, `hostaddr`, `port`,
+  `user`, `database`, `dbname`, `options`, `service`, SSL, or any other
+  parameter override; and
+- is not a Unix-socket, multi-host, service-file, or keyword/value connection
+  form.
+
+The original URL is never passed to `pg` as a string or `connectionString`.
+The decoder projects only `host`, `port`, `database`, `user`, `password`,
+`ssl: false`, the role-specific non-secret `application_name`
+`struinfo-tm2-admin`, `struinfo-tm2-migrator`, or `struinfo-tm2-runtime`, and
+the exact startup option `-c role=none -c search_path=pg_catalog` into an owned
+null-prototype configuration. No unknown field survives the projection. The
+formal TM2 child processes receive a Test-owned sanitized environment with no
+variable whose case-insensitive name begins with `PG`; they never inherit
+libpq or node-postgres identity, session, password, SSL, or service defaults.
+TLS and a broader production connection grammar remain part of the later
+deployment gate rather than an implicit behavior of this local parity gate.
+
+All three decoded configurations have the same normalized hostname, effective
+port, decoded database name, and transport settings; only the fixed username
+and opaque password may differ. After connecting, every client queries
+`session_user`, `current_user`, `current_setting('role')`,
+`current_database()`, `inet_server_addr()`, and `inet_server_port()`. Admission
+requires:
+
+- `session_user = current_user =` the fixed role for that variable;
+- `current_setting('role') = 'none'`;
+- `current_database()` equals the decoded database name; and
+- all three non-null server-address/server-port pairs are identical. A NAT or
+  port-forward boundary means the server-side port need not equal the URL port.
+
+Comparing only the URL authority or only `current_user` is forbidden. Tests
+also require:
+
+- all three fixed identities have `LOGIN`;
+- migration and runtime have no direct role-membership row as a member in
+  `pg_auth_members`; any row fails regardless of its `inherit_option`,
+  `set_option`, or `admin_option`, so their recursive membership closure is
+  empty;
+- migration and runtime are not the database owner;
+- runtime owns no non-temporary schema or project object;
 - `server_version_num >= 180000 AND server_version_num < 190000`;
 - `server_encoding = 'UTF8'`;
 - `standard_conforming_strings = on`;
@@ -152,7 +208,6 @@ process. Tests require:
 - a migration role capable of owning the two project schemas and their objects;
 - migration and runtime roles are not superusers and have no create-role,
   create-database, replication, or bypass-RLS attribute;
-- a runtime role that is not a member of the admin or migration role; and
 - no credential or connection URL in source, fixtures, logs, snapshots,
   errors, manifests, or test reports.
 
@@ -182,18 +237,26 @@ FAIL, or SKIP.
 Roles are provisioned outside application migrations. No tracked migration
 creates a role, password, grant, default privilege, or policy.
 
-After the first-party runner succeeds, a Test-owned setup module uses only the
-test-admin connection to apply the exact grant matrix below to the fixed
-synthetic runtime role and to insert synthetic Evidence prerequisites. That
-module contains no password, URL, production role name, role creation, schema
-creation, or real business value, and it is excluded from the application
-artifact. Production grant automation remains a later operator deliverable;
-this contract freezes its required semantics, not a deployment script. The
-migration credential remains confined to the first-party migration runner.
+Before the first migration invocation, a Test-owned setup module uses only the
+test-admin connection to revoke `CONNECT`, `CREATE`, and `TEMPORARY` on the
+disposable database from `PUBLIC`, grant `CONNECT` to all three fixed roles,
+and grant database `CREATE` only to the migration role. It also revokes `CREATE`
+on the initially empty `public` schema from `PUBLIC`, migration, and runtime.
+Migration and runtime must have no effective database `TEMPORARY` privilege;
+runtime must have no effective `CREATE` on any non-temporary schema. After the
+first-party runner succeeds, the same Test-owned boundary applies the exact
+schema/table grant matrix below and inserts synthetic Evidence prerequisites.
+The setup contains no password, URL, production role name, role creation,
+schema creation, or real business value, and it is excluded from the
+application artifact. Production grant automation remains a later operator
+deliverable; this contract freezes its required semantics, not a deployment
+script. The migration credential remains confined to the first-party migration
+runner.
 
 The migration role owns `struinfo_meta`, `struinfo`, their tables, constraints,
-and indexes. It is used only by the migration command and test fixture setup.
-Ordinary API, scheduler, worker, and combined roles never receive its URL.
+and indexes. It is used only by the migration command; synthetic fixture setup
+uses the test-admin connection. Ordinary API, scheduler, worker, and combined
+roles never receive its URL.
 
 The runtime role has:
 
@@ -218,16 +281,19 @@ It does not receive:
 - `INSERT` on workspace or source-evidence tables under this contract;
 - table-level `INSERT`/`UPDATE`, `DELETE`, `TRUNCATE`, `REFERENCES`, or
   `TRIGGER`;
+- database `CREATE` or `TEMPORARY`, including `CREATE TEMP TABLE`;
 - `CREATE` on either project schema;
 - permission to create/alter/drop schemas, tables, roles, extensions, policies,
   functions, or indexes; or
-- membership in, or the ability to `SET ROLE` to, the migration identity.
+- any direct or indirect role membership or ability to `SET ROLE` away from
+  its authenticated identity.
 
 Runtime grant tests attempt representative allowed and forbidden operations on
 real PostgreSQL. They prove history, provenance, command, and event rows cannot
 be updated or deleted, identity stable fields cannot be rewritten, and the
 seven approved current-pointer/version updates remain possible only through
-their named columns. A permission error is expected evidence and must not be
+their named columns. They also prove persistent and temporary DDL fail under
+the runtime identity. A permission error is expected evidence and must not be
 weakened into an allowlist based only on application APIs.
 
 ## Production adapter boundary
@@ -315,7 +381,9 @@ Every transaction:
 1. begins on one acquired runtime client;
 2. derives and acquires the versioned workspace advisory lock, then fails
    safely if the exact workspace row does not exist;
-3. performs the command-key lookup before optimistic revision checks;
+3. performs the command-key lookup before optimistic revision checks using a
+   workspace-scoped ordinary `SELECT` under the advisory lock, never a locking
+   clause on an immutable command or change-set table;
 4. acquires any additional existing identity locks in the fixed order below;
 5. loads and maps one closed snapshot accepted by the corresponding pure
    decoder/planner;
@@ -330,14 +398,23 @@ No rejected pure result writes a row. No failed transaction returns an applied,
 unchanged, or replayed receipt. The public executor continues to collapse
 database failures to its accepted non-echoing persistence result.
 
+For Curation, the command-key lookup is an ordinary `SELECT` from
+`struinfo.curation_command`. For Knowledge, it is an ordinary `SELECT` from
+`struinfo.knowledge_change_set`. Both include `workspace_id` and the exact
+idempotency key. Neither statement uses `FOR UPDATE`, `FOR NO KEY UPDATE`,
+`FOR SHARE`, or `FOR KEY SHARE`; immutable command, change-set, operation,
+event, history, and provenance tables are never row-locked. The preceding
+workspace advisory lock supplies serialization. This rule must not be
+implemented by expanding runtime `UPDATE` grants.
+
 ### Curation adapter
 
-After the workspace and command-key lock, a term command uses the complete
-current term hierarchy for that workspace. A target command locks all referenced
-existing term identities in ascending canonical UUID order, then loads the
-requested Evidence target, current curation target, current assignments,
-decision, assessments, current term revisions, and any stored command receipt
-needed by the accepted `ManualCurationRepositorySnapshot`.
+After the workspace lock and ordinary command-key lookup, a term command uses
+the complete current term hierarchy for that workspace. A target command locks
+all referenced existing term identities in ascending canonical UUID order, then
+loads the requested Evidence target, current curation target, current
+assignments, decision, assessments, current term revisions, and any stored
+command receipt needed by the accepted `ManualCurationRepositorySnapshot`.
 
 The adapter reconstructs decision reason arrays in stored ordinal order and
 omits absent descriptions/parents/notes. It never treats a missing Evidence
@@ -352,8 +429,9 @@ command.
 
 ### Knowledge-write adapter
 
-After the workspace and command-key lock, existing identities are locked in
-this order, each group ascending by canonical UUID with duplicates removed:
+After the workspace lock and ordinary command-key lookup, existing identities
+are locked in this order, each group ascending by canonical UUID with duplicates
+removed:
 
 1. primary KnowledgeItem identities;
 2. primary KnowledgeRelation identities;
@@ -429,17 +507,21 @@ they do not use an unbounded wait or a sleep as proof of lock order.
 
 Independent Test owns a mandatory row ledger. At minimum it proves:
 
-1. PostgreSQL 18 identity, UTF-8 configuration, distinct roles, secret
-   non-disclosure, and fail-closed environment admission;
+1. closed URL projection, sanitized ambient environment, PostgreSQL 18
+   identity, exact session/current users, actual endpoint identity, UTF-8
+   configuration, distinct roles, secret non-disclosure, and fail-closed
+   environment admission;
 2. real application of all four exact migrations, exact ledger rows, repeat
    no-op behavior, advisory-lock serialization, and real rollback of a synthetic
    failing migration;
 3. actual catalog agreement for the 35 business tables and every material
    key/check/reference/current-pointer/index/no-cascade invariant already frozen
    by TM1;
-4. every allowed runtime SELECT/INSERT/current-pointer operation and every
-   forbidden metadata, evidence-write, stable-column update, history update,
-   delete, truncate, DDL, role, and extension operation;
+4. empty migration/runtime role-membership closures, database/schema/object
+   ownership, database `CONNECT`/`CREATE`/`TEMPORARY`, every allowed runtime
+   SELECT/INSERT/current-pointer operation, and every forbidden metadata,
+   evidence-write, stable-column update, history update, delete, truncate,
+   persistent or temporary DDL, role, and extension operation;
 5. curation term create/revise/reparent/retire/reactivate, target version 0,
    mixed target changes, unchanged, replay, conflict, stale revision, missing
    Evidence target, reason order, and exact database rows;

@@ -35,7 +35,7 @@ classification/intake/assessment boundary have passed their fixed-candidate
 TM1 gates. The `C-SLICE-B-KNOWLEDGE-r3` A0 manual, source-backed knowledge-write
 core and the `C-SLICE-B-RETRIEVAL-r3` deterministic current-item text, source,
 state, and one-hop relation read boundary have also passed their fixed-candidate
-TM1 gates. Draft `C-SLICE-B-POSTGRES-r1` defines the next real PostgreSQL 18
+TM1 gates. Draft `C-SLICE-B-POSTGRES-r2` defines the next real PostgreSQL 18
 migration, runtime-grant, transaction, adapter-completeness, and result-parity
 gate; implementation is blocked until independent Maintenance and Test contract
 review. Do not make preference calibration or AI availability a dependency.
