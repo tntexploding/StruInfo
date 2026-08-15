@@ -15,6 +15,7 @@ const execFileAsync = promisify(execFile);
 const OWNED_SCAN_FILES = Object.freeze([
   'apps/server/test_support/postgres_tm2/admission_outcome.ts',
   'apps/server/test_support/postgres_tm2/admission_child.ts',
+  'apps/server/test_support/postgres_tm2/bounded_child.ts',
   'apps/server/test_support/postgres_tm2/bound_runtime.ts',
   'apps/server/test_support/postgres_tm2/concurrency_oracle.ts',
   'apps/server/test_support/postgres_tm2/database_cases.ts',

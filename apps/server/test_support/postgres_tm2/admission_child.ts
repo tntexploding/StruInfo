@@ -55,6 +55,30 @@ interface DatabaseOwnerRow extends QueryResultRow {
 
 type PgClientConstructor = new (config: ClientConfig) => PgClient;
 
+const OPERATIONAL_CONNECTION_ERROR_CODES = new Set([
+  '08000',
+  '08001',
+  '08003',
+  '08004',
+  '08006',
+  '08007',
+  '08P01',
+  '28000',
+  '28P01',
+  '3D000',
+  '42501',
+  '53300',
+  '57P03',
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'EPIPE',
+  'ETIMEDOUT',
+]);
+
 const SESSION_IDENTITY_SQL = `SELECT
   session_user::text AS session_user,
   current_user::text AS current_user,
@@ -123,6 +147,53 @@ function asClientConfig(config: Readonly<Tm2PgConfig>): ClientConfig {
   return config;
 }
 
+function ownOperationalErrorCode(error: unknown): string | undefined {
+  if (!(error instanceof Error)) {
+    return undefined;
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(error, 'code');
+  return descriptor !== undefined &&
+    'value' in descriptor &&
+    typeof descriptor.value === 'string'
+    ? descriptor.value
+    : undefined;
+}
+
+export function isTm2OperationalConnectionError(error: unknown): boolean {
+  const code = ownOperationalErrorCode(error);
+  if (code !== undefined) {
+    return OPERATIONAL_CONNECTION_ERROR_CODES.has(code);
+  }
+  if (!(error instanceof AggregateError)) {
+    return false;
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(error, 'errors');
+  if (
+    descriptor === undefined ||
+    !('value' in descriptor) ||
+    !Array.isArray(descriptor.value) ||
+    descriptor.value.length === 0
+  ) {
+    return false;
+  }
+  return descriptor.value.every(isTm2OperationalConnectionError);
+}
+
+async function environmentQuery<Row extends QueryResultRow>(
+  client: PgClient,
+  sql: string,
+): Promise<readonly Row[]> {
+  try {
+    const result = await client.query<Row>(sql);
+    return result.rows;
+  } catch (error) {
+    if (isTm2OperationalConnectionError(error)) {
+      throw new Tm2AdmissionProbeError('tm2_environment_probe_unavailable');
+    }
+    throw error;
+  }
+}
+
 async function connectClient(
   Client: PgClientConstructor,
   config: Readonly<Tm2PgConfig>,
@@ -135,13 +206,12 @@ async function connectClient(
   try {
     await client.connect();
     return client;
-  } catch {
-    try {
-      await client.end();
-    } catch {
-      // The stable NOT_READY code is the complete outward observation.
+  } catch (error) {
+    await client.end();
+    if (isTm2OperationalConnectionError(error)) {
+      throw new Tm2AdmissionProbeError('tm2_connection_unavailable', variable);
     }
-    throw new Tm2AdmissionProbeError('tm2_connection_unavailable', variable);
+    throw error;
   }
 }
 
@@ -195,10 +265,13 @@ async function oneSession(
   role: Tm2Role,
   client: PgClient,
 ): Promise<Tm2AdmissionSessionObservation> {
-  const result = await client.query<SessionIdentityRow>(SESSION_IDENTITY_SQL);
-  const row = result.rows[0];
+  const rows = await environmentQuery<SessionIdentityRow>(
+    client,
+    SESSION_IDENTITY_SQL,
+  );
+  const row = rows[0];
   if (row === undefined) {
-    throw new Tm2AdmissionProbeError('tm2_environment_probe_unavailable');
+    throw new Error('TM2_SESSION_OBSERVATION_MISSING');
   }
   return projectSession(role, row);
 }
@@ -209,7 +282,7 @@ async function inspectEnvironment(
 ): Promise<Tm2AdmissionEnvironmentObservation> {
   const clients: PgClient[] = [];
   let observation: Tm2AdmissionEnvironmentObservation | undefined;
-  let probeError: Tm2AdmissionProbeError | undefined;
+  let probeFailure: {readonly error: unknown} | undefined;
   try {
     const admin = await connectClient(
       Client,
@@ -235,7 +308,9 @@ async function inspectEnvironment(
       oneSession('migration', migration),
       oneSession('runtime', runtime),
     ]);
-    const roleRows = await admin.query<RoleRow>(`SELECT
+    const roleRows = await environmentQuery<RoleRow>(
+      admin,
+      `SELECT
   rolname::text AS rolname,
   rolcanlogin,
   rolsuper,
@@ -245,48 +320,61 @@ async function inspectEnvironment(
   rolbypassrls
 FROM pg_catalog.pg_roles
 WHERE rolname IN ('struinfo_tm2_admin', 'struinfo_tm2_migrator', 'struinfo_tm2_runtime')
-ORDER BY rolname`);
-    const directMembership =
-      await admin.query<CountRow>(`SELECT count(*)::integer AS count
+ORDER BY rolname`,
+    );
+    const directMembership = await environmentQuery<CountRow>(
+      admin,
+      `SELECT count(*)::integer AS count
 FROM pg_catalog.pg_auth_members membership
 JOIN pg_catalog.pg_roles member_role ON member_role.oid = membership.member
-WHERE member_role.rolname IN ('struinfo_tm2_migrator', 'struinfo_tm2_runtime')`);
-    const databaseOwner =
-      await admin.query<DatabaseOwnerRow>(`SELECT owner_role.rolname::text AS owner
+WHERE member_role.rolname IN ('struinfo_tm2_migrator', 'struinfo_tm2_runtime')`,
+    );
+    const databaseOwner = await environmentQuery<DatabaseOwnerRow>(
+      admin,
+      `SELECT owner_role.rolname::text AS owner
 FROM pg_catalog.pg_database database_record
 JOIN pg_catalog.pg_roles owner_role ON owner_role.oid = database_record.datdba
-WHERE database_record.datname = current_database()`);
-    const runtimeSchemas =
-      await admin.query<CountRow>(`SELECT count(*)::integer AS count
+WHERE database_record.datname = current_database()`,
+    );
+    const runtimeSchemas = await environmentQuery<CountRow>(
+      admin,
+      `SELECT count(*)::integer AS count
 FROM pg_catalog.pg_namespace namespace_record
 JOIN pg_catalog.pg_roles owner_role ON owner_role.oid = namespace_record.nspowner
 WHERE owner_role.rolname = 'struinfo_tm2_runtime'
-  AND namespace_record.nspname !~ '^pg_(?:toast_)?temp_'`);
-    const runtimeObjects =
-      await admin.query<CountRow>(`SELECT count(*)::integer AS count
+  AND namespace_record.nspname !~ '^pg_(?:toast_)?temp_'`,
+    );
+    const runtimeObjects = await environmentQuery<CountRow>(
+      admin,
+      `SELECT count(*)::integer AS count
 FROM pg_catalog.pg_class object_record
 JOIN pg_catalog.pg_namespace namespace_record ON namespace_record.oid = object_record.relnamespace
 JOIN pg_catalog.pg_roles owner_role ON owner_role.oid = object_record.relowner
 WHERE owner_role.rolname = 'struinfo_tm2_runtime'
-  AND namespace_record.nspname IN ('struinfo', 'struinfo_meta')`);
-    const runtimeSetRole =
-      await admin.query<CountRow>(`SELECT count(*)::integer AS count
+  AND namespace_record.nspname IN ('struinfo', 'struinfo_meta')`,
+    );
+    const runtimeSetRole = await environmentQuery<CountRow>(
+      admin,
+      `SELECT count(*)::integer AS count
 FROM pg_catalog.pg_roles target_role
 WHERE target_role.rolname <> 'struinfo_tm2_runtime'
-  AND pg_catalog.pg_has_role('struinfo_tm2_runtime', target_role.oid, 'SET')`);
-    const projectSchemas =
-      await admin.query<CountRow>(`SELECT count(*)::integer AS count
+  AND pg_catalog.pg_has_role('struinfo_tm2_runtime', target_role.oid, 'SET')`,
+    );
+    const projectSchemas = await environmentQuery<CountRow>(
+      admin,
+      `SELECT count(*)::integer AS count
 FROM pg_catalog.pg_namespace
-WHERE nspname IN ('struinfo', 'struinfo_meta')`);
+WHERE nspname IN ('struinfo', 'struinfo_meta')`,
+    );
 
-    const projectedRoles = roleRows.rows
+    const projectedRoles = roleRows
       .map(projectRole)
       .filter(
         (role): role is Tm2AdmissionRoleObservation => role !== undefined,
       );
-    const owner = databaseOwner.rows[0]?.owner;
+    const owner = databaseOwner[0]?.owner;
     if (owner === undefined) {
-      throw new Tm2AdmissionProbeError('tm2_environment_probe_unavailable');
+      throw new Error('TM2_DATABASE_OWNER_OBSERVATION_MISSING');
     }
     observation = Object.freeze({
       sessions: Object.freeze({
@@ -295,18 +383,15 @@ WHERE nspname IN ('struinfo', 'struinfo_meta')`);
         runtime: runtimeSession,
       }),
       roles: Object.freeze(projectedRoles),
-      directMembershipCount: directMembership.rows[0]?.count ?? -1,
+      directMembershipCount: directMembership[0]?.count ?? -1,
       databaseOwner: owner,
-      runtimeOwnedNonTemporarySchemaCount: runtimeSchemas.rows[0]?.count ?? -1,
-      runtimeOwnedProjectObjectCount: runtimeObjects.rows[0]?.count ?? -1,
-      runtimeSetRoleCount: runtimeSetRole.rows[0]?.count ?? -1,
-      projectSchemaCount: projectSchemas.rows[0]?.count ?? -1,
+      runtimeOwnedNonTemporarySchemaCount: runtimeSchemas[0]?.count ?? -1,
+      runtimeOwnedProjectObjectCount: runtimeObjects[0]?.count ?? -1,
+      runtimeSetRoleCount: runtimeSetRole[0]?.count ?? -1,
+      projectSchemaCount: projectSchemas[0]?.count ?? -1,
     });
   } catch (error) {
-    probeError =
-      error instanceof Tm2AdmissionProbeError
-        ? error
-        : new Tm2AdmissionProbeError('tm2_environment_probe_unavailable');
+    probeFailure = {error};
   }
 
   const closed = await Promise.allSettled(
@@ -315,13 +400,13 @@ WHERE nspname IN ('struinfo', 'struinfo_meta')`);
     }),
   );
   if (closed.some((result) => result.status === 'rejected')) {
-    throw new Tm2AdmissionProbeError('tm2_environment_probe_unavailable');
+    throw new Error('TM2_ADMISSION_CLIENT_CLEANUP_FAILED');
   }
-  if (probeError !== undefined) {
-    throw probeError;
+  if (probeFailure !== undefined) {
+    throw probeFailure.error;
   }
   if (observation === undefined) {
-    throw new Tm2AdmissionProbeError('tm2_environment_probe_unavailable');
+    throw new Error('TM2_ADMISSION_OBSERVATION_MISSING');
   }
   return observation;
 }
@@ -341,7 +426,10 @@ export async function runTm2AdmissionChild(
     return failed('tm2_admission_poison_fixture_invalid');
   }
 
-  const [{Client}, {decodePostgresConnectionUrl}] = await Promise.all([
+  const [
+    {Client},
+    {decodePostgresConnectionUrl, PostgresConnectionConfigError},
+  ] = await Promise.all([
     import('pg'),
     import('../../src/platform/database/postgresql/index.js'),
   ]);
@@ -351,6 +439,9 @@ export async function runTm2AdmissionChild(
         input,
         role === 'migration' ? 'migrator' : 'runtime',
       );
+    },
+    isProductConfigError(error) {
+      return error instanceof PostgresConnectionConfigError;
     },
     async inspectEnvironment(_admission, configs) {
       return await inspectEnvironment(Client, configs);

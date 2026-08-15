@@ -33,13 +33,21 @@ export type Tm2EnvironmentNotReadyCode =
 export type Tm2AdmissionFailureCode =
   | 'tm2_product_accepted_prohibited_url'
   | 'tm2_product_rejected_admitted_url'
+  | 'tm2_product_decoder_failure'
   | 'tm2_product_config_projection_mismatch'
+  | 'tm2_admission_probe_failure'
   | 'tm2_admission_environment_not_isolated'
   | 'tm2_admission_poison_fixture_invalid'
   | 'tm2_admission_channel_invalid'
   | 'tm2_admission_child_failure'
+  | 'tm2_admission_child_timeout'
+  | 'tm2_admission_child_termination_failure'
   | 'tm2_mandatory_child_missing'
-  | 'tm2_mandatory_failure';
+  | 'tm2_mandatory_child_failure'
+  | 'tm2_mandatory_failure'
+  | 'tm2_mandatory_child_timeout'
+  | 'tm2_mandatory_child_termination_failure'
+  | 'tm2_harness_failure';
 
 export interface Tm2AdmittedOutcome {
   readonly status: 'admitted';
@@ -105,6 +113,7 @@ export interface Tm2AdmissionConnectionConfigs {
 
 export interface Tm2AdmissionDependencies {
   decodeProductConfig(role: ProductRole, input: unknown): unknown;
+  isProductConfigError(error: unknown): boolean;
   inspectEnvironment(
     admission: AcceptedTm2Environment,
     configs: Tm2AdmissionConnectionConfigs,
@@ -184,13 +193,21 @@ const NOT_READY_CODES = new Set<Tm2EnvironmentNotReadyCode>([
 const FAILURE_CODES = new Set<Tm2AdmissionFailureCode>([
   'tm2_product_accepted_prohibited_url',
   'tm2_product_rejected_admitted_url',
+  'tm2_product_decoder_failure',
   'tm2_product_config_projection_mismatch',
+  'tm2_admission_probe_failure',
   'tm2_admission_environment_not_isolated',
   'tm2_admission_poison_fixture_invalid',
   'tm2_admission_channel_invalid',
   'tm2_admission_child_failure',
+  'tm2_admission_child_timeout',
+  'tm2_admission_child_termination_failure',
   'tm2_mandatory_child_missing',
+  'tm2_mandatory_child_failure',
   'tm2_mandatory_failure',
+  'tm2_mandatory_child_timeout',
+  'tm2_mandatory_child_termination_failure',
+  'tm2_harness_failure',
 ]);
 
 const CONFIG_KEYS = [
@@ -223,6 +240,195 @@ function admitted(): Tm2AdmittedOutcome {
   return Object.freeze({
     status: 'admitted',
     code: 'tm2_environment_admitted',
+  });
+}
+
+function readsAsProductConfigError(
+  dependencies: Tm2AdmissionDependencies,
+  error: unknown,
+): boolean {
+  try {
+    return dependencies.isProductConfigError(error);
+  } catch {
+    return false;
+  }
+}
+
+function readClosedDataRecord(
+  value: unknown,
+  expectedKeys: readonly string[],
+): ReadonlyMap<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const prototype: unknown = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return undefined;
+  }
+  const keys = Reflect.ownKeys(value);
+  if (
+    keys.some((key) => typeof key !== 'string') ||
+    JSON.stringify([...keys].sort()) !==
+      JSON.stringify([...expectedKeys].sort())
+  ) {
+    return undefined;
+  }
+  const fields = new Map<string, unknown>();
+  for (const key of expectedKeys) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor === undefined || !('value' in descriptor)) {
+      return undefined;
+    }
+    fields.set(key, descriptor.value);
+  }
+  return fields;
+}
+
+function readDenseArray(value: unknown): readonly unknown[] | undefined {
+  if (
+    !Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Array.prototype
+  ) {
+    return undefined;
+  }
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+  if (
+    lengthDescriptor === undefined ||
+    !('value' in lengthDescriptor) ||
+    typeof lengthDescriptor.value !== 'number' ||
+    !Number.isSafeInteger(lengthDescriptor.value) ||
+    lengthDescriptor.value < 0
+  ) {
+    return undefined;
+  }
+  const result: unknown[] = [];
+  for (let index = 0; index < lengthDescriptor.value; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (descriptor === undefined || !('value' in descriptor)) {
+      return undefined;
+    }
+    result.push(descriptor.value);
+  }
+  if (Reflect.ownKeys(value).length !== result.length + 1) {
+    return undefined;
+  }
+  return result;
+}
+
+function isFiniteInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value);
+}
+
+function isSessionObservation(value: unknown, role: Tm2Role): boolean {
+  const fields = readClosedDataRecord(value, [
+    'role',
+    'sessionUser',
+    'currentUser',
+    'roleSetting',
+    'databaseName',
+    'serverAddress',
+    'serverPort',
+    'serverVersionNumber',
+    'serverEncoding',
+    'clientEncoding',
+    'timeZone',
+    'standardConformingStrings',
+  ]);
+  if (fields === undefined) {
+    return false;
+  }
+  const serverAddress = fields.get('serverAddress');
+  const serverPort = fields.get('serverPort');
+  return (
+    fields.get('role') === role &&
+    typeof fields.get('sessionUser') === 'string' &&
+    typeof fields.get('currentUser') === 'string' &&
+    typeof fields.get('roleSetting') === 'string' &&
+    typeof fields.get('databaseName') === 'string' &&
+    (serverAddress === null || typeof serverAddress === 'string') &&
+    (serverPort === null || isFiniteInteger(serverPort)) &&
+    isFiniteInteger(fields.get('serverVersionNumber')) &&
+    typeof fields.get('serverEncoding') === 'string' &&
+    typeof fields.get('clientEncoding') === 'string' &&
+    typeof fields.get('timeZone') === 'string' &&
+    typeof fields.get('standardConformingStrings') === 'string'
+  );
+}
+
+function isRoleObservation(value: unknown): boolean {
+  const fields = readClosedDataRecord(value, [
+    'role',
+    'name',
+    'canLogin',
+    'superuser',
+    'createRole',
+    'createDatabase',
+    'replication',
+    'bypassRowLevelSecurity',
+  ]);
+  if (fields === undefined) {
+    return false;
+  }
+  return (
+    (fields.get('role') === 'admin' ||
+      fields.get('role') === 'migration' ||
+      fields.get('role') === 'runtime') &&
+    typeof fields.get('name') === 'string' &&
+    [
+      'canLogin',
+      'superuser',
+      'createRole',
+      'createDatabase',
+      'replication',
+      'bypassRowLevelSecurity',
+    ].every((key) => typeof fields.get(key) === 'boolean')
+  );
+}
+
+function isClosedEnvironmentObservation(
+  value: unknown,
+): value is Tm2AdmissionEnvironmentObservation {
+  const fields = readClosedDataRecord(value, [
+    'sessions',
+    'roles',
+    'directMembershipCount',
+    'databaseOwner',
+    'runtimeOwnedNonTemporarySchemaCount',
+    'runtimeOwnedProjectObjectCount',
+    'runtimeSetRoleCount',
+    'projectSchemaCount',
+  ]);
+  if (fields === undefined) {
+    return false;
+  }
+  const sessions = readClosedDataRecord(fields.get('sessions'), [
+    'admin',
+    'migration',
+    'runtime',
+  ]);
+  const roles = readDenseArray(fields.get('roles'));
+  if (sessions === undefined || roles === undefined) {
+    return false;
+  }
+  if (
+    roles.length !== 3 ||
+    !isSessionObservation(sessions.get('admin'), 'admin') ||
+    !isSessionObservation(sessions.get('migration'), 'migration') ||
+    !isSessionObservation(sessions.get('runtime'), 'runtime') ||
+    !roles.every(isRoleObservation) ||
+    typeof fields.get('databaseOwner') !== 'string'
+  ) {
+    return false;
+  }
+  return [
+    'directMembershipCount',
+    'runtimeOwnedNonTemporarySchemaCount',
+    'runtimeOwnedProjectObjectCount',
+    'runtimeSetRoleCount',
+    'projectSchemaCount',
+  ].every((key) => {
+    const count = fields.get(key);
+    return isFiniteInteger(count) && count >= 0;
   });
 }
 
@@ -378,8 +584,10 @@ export async function runTm2AdmissionPreflight(
         try {
           dependencies.decodeProductConfig(role, input);
           return failed('tm2_product_accepted_prohibited_url');
-        } catch {
-          // Both independent decoders rejected the environment value.
+        } catch (error) {
+          if (!readsAsProductConfigError(dependencies, error)) {
+            return failed('tm2_product_decoder_failure');
+          }
         }
       }
       return notReady(expected.code, variable);
@@ -388,8 +596,12 @@ export async function runTm2AdmissionPreflight(
       let observed: unknown;
       try {
         observed = dependencies.decodeProductConfig(role, input);
-      } catch {
-        return failed('tm2_product_rejected_admitted_url');
+      } catch (error) {
+        return failed(
+          readsAsProductConfigError(dependencies, error)
+            ? 'tm2_product_rejected_admitted_url'
+            : 'tm2_product_decoder_failure',
+        );
       }
       if (!isExactProductConfig(expected.config, observed)) {
         return failed('tm2_product_config_projection_mismatch');
@@ -419,9 +631,16 @@ export async function runTm2AdmissionPreflight(
     if (error instanceof Tm2AdmissionProbeError) {
       return notReady(error.code, error.variable);
     }
-    return notReady('tm2_environment_probe_unavailable');
+    return failed('tm2_admission_probe_failure');
   }
-  return classifyEnvironmentObservation(admission, observation);
+  try {
+    if (!isClosedEnvironmentObservation(observation)) {
+      return failed('tm2_admission_probe_failure');
+    }
+    return classifyEnvironmentObservation(admission, observation);
+  } catch {
+    return failed('tm2_admission_probe_failure');
+  }
 }
 
 export function classifyTm2HarnessOutcome(
