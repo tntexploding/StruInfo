@@ -30,6 +30,7 @@
     "typecheck": "tsc --project tsconfig.tools.json --noEmit --pretty false && tsc --project packages/test_support/tsconfig.json --noEmit --pretty false && tsc --project apps/server/tsconfig.json --noEmit --pretty false && tsc --project apps/web/tsconfig.json --noEmit --pretty false && tsc --project tsconfig.tests.json --noEmit --pretty false",
     "test": "vitest run --config vitest.config.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:postgres": "tsx tests/postgres/run_postgres_tm2.ts",
     "test:e2e": "playwright test --config playwright.config.ts",
     "build": "tsc --build tsconfig.build.json --clean && tsc --build tsconfig.build.json --pretty false && corepack pnpm --filter @struinfo/web run build",
     "artifact:verify": "tsx tools/verify_application_artifact.ts",
