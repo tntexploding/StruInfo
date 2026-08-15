@@ -99,13 +99,13 @@ DDL result is likewise static schema evidence only.
 The next product-table migration is reserved as
 `000004_create_manual_knowledge_core.sql` and is governed by the frozen
 [`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md) contract.
-Independent Maintenance and Test re-review passed against its fixed r3
-candidate, so Backend and independent Test implementation are admitted. The
-migration is limited to the A0 manual change-set, versioned item/relation, typed
-provenance, and payload-free committed-change
-event boundary declared there; it does not authorize search projections,
-aliases, collections, AI, transport, event delivery/consumers, roles, grants,
-background work, personal seeds, or real PostgreSQL claims.
+Its fixed implementation candidate
+`f18c0346910de824ef20d074d88744c446946025` passed formal TM1. The migration is
+limited to the A0 manual change-set, versioned item/relation, typed provenance,
+and payload-free committed-change event boundary declared there; it does not
+authorize search projections, aliases, collections, AI, transport, event
+delivery/consumers, roles, grants, background work, personal seeds, or by itself
+make a real PostgreSQL claim.
 
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.
@@ -151,3 +151,12 @@ These synthetic tests are not real PostgreSQL coverage. Exact PostgreSQL 18 and
 pgvector execution, runtime grants, real advisory-lock concurrency, migration
 interruption, and Windows/Linux database parity remain pending
 `M0-S-CONTAINER-MAINT-001` or another separately admitted infrastructure fixture.
+
+Draft [`C-SLICE-B-POSTGRES-r1`](postgresql-knowledge-adapter-contract.md)
+defines the narrower non-container TM2 candidate for externally provisioned
+PostgreSQL 18: actual migrations `000001` through `000004`, curation/knowledge
+transactions, complete current-knowledge reads, least-privilege runtime grants,
+and parity with the accepted pure boundaries. Its implementation remains
+blocked until independent Maintenance and Test contract review. Compose,
+container images, pgvector, Linux parity, and production resource claims remain
+outside that draft.
