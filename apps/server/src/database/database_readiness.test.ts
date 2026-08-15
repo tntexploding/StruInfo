@@ -1,7 +1,6 @@
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import type {PoolConfig} from 'pg';
 import {describe, expect, it, vi} from 'vitest';
 
 import {parseRuntimeConfig} from '../config/runtime_config.js';
@@ -10,8 +9,11 @@ import {
   BoundedDatabaseReadinessCheck,
   createRuntimeDatabase,
   DATABASE_READINESS_SQL,
-  type DatabasePool,
+  type DatabasePoolFactory,
+  RuntimeDatabase,
+  RuntimeDatabaseError,
 } from './database_readiness.js';
+import type {PostgresPoolBoundary} from '../platform/database/postgresql/postgres_pool.js';
 
 class ImmediateDeadline implements Deadline {
   public readonly calls: Readonly<{label: string; timeoutMs: number}>[] = [];
@@ -30,7 +32,7 @@ describe('BoundedDatabaseReadinessCheck', () => {
   it('executes only the fixed read-only probe within an explicit timeout', async () => {
     const query = vi.fn((sql: string) => {
       void sql;
-      return Promise.resolve({rows: [{ready: 1}]});
+      return Promise.resolve({rows: [{ready: 1}], rowCount: 1});
     });
     const deadline = new ImmediateDeadline();
     const readiness = new BoundedDatabaseReadinessCheck({
@@ -68,7 +70,7 @@ describe('BoundedDatabaseReadinessCheck', () => {
           new DeadlineExceededError('database readiness check', 100),
         ),
     };
-    const query = vi.fn(() => Promise.resolve());
+    const query = vi.fn(() => Promise.resolve({rows: [], rowCount: 0}));
     const readiness = new BoundedDatabaseReadinessCheck({
       executor: {query},
       deadline,
@@ -82,10 +84,14 @@ describe('BoundedDatabaseReadinessCheck', () => {
 
 describe('RuntimeDatabase', () => {
   it('sets bounded driver timeouts and closes the pool idempotently', async () => {
-    const query = vi.fn(() => Promise.resolve({rows: []}));
+    const query = vi.fn(() => Promise.resolve({rows: [], rowCount: 0}));
     const end = vi.fn(() => Promise.resolve());
-    const pool: DatabasePool = {query, end};
-    let poolConfig: PoolConfig | undefined;
+    const pool: PostgresPoolBoundary = {
+      query,
+      connect: () => Promise.reject(new Error('unexpected acquisition')),
+      end,
+    };
+    let poolConfig: Parameters<DatabasePoolFactory>[0] | undefined;
     const config = parseRuntimeConfig('api', {
       DATABASE_URL: 'postgresql://runtime:synthetic@localhost/struinfo',
       STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),
@@ -103,14 +109,36 @@ describe('RuntimeDatabase', () => {
     await database.close();
     await database.close();
 
-    expect(poolConfig).toMatchObject({
-      connectionString: config.databaseUrl,
-      application_name: 'struinfo-api',
-      connectionTimeoutMillis: 1000,
-      query_timeout: 1000,
-      statement_timeout: 1000,
+    expect(poolConfig).toEqual({
+      host: 'localhost',
+      port: 5432,
+      database: 'struinfo',
+      user: 'runtime',
+      password: 'synthetic',
+      ssl: false,
+      application_name: 'struinfo-tm2-runtime',
+      options: '-c role=none -c search_path=pg_catalog',
     });
     expect(query).toHaveBeenCalledExactlyOnceWith('SELECT 1 AS ready');
+    expect(end).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains one safe pool shutdown failure across repeated close calls', async () => {
+    const end = vi.fn(() =>
+      Promise.reject(new Error('synthetic private shutdown detail')),
+    );
+    const database = new RuntimeDatabase({
+      pool: {
+        query: () => Promise.resolve({rows: [], rowCount: 0}),
+        connect: () => Promise.reject(new Error('unexpected acquisition')),
+        end,
+      },
+      deadline: new ImmediateDeadline(),
+      readinessTimeoutMs: 100,
+    });
+
+    await expect(database.close()).rejects.toEqual(new RuntimeDatabaseError());
+    await expect(database.close()).rejects.not.toThrow(/private|synthetic/iu);
     expect(end).toHaveBeenCalledTimes(1);
   });
 });

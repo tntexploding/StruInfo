@@ -4,6 +4,7 @@ import {TextEncoder} from 'node:util';
 import {describe, expect, it} from 'vitest';
 
 import type {MigrationFileSystem} from './migration_files.js';
+import {parseMigrationConfig} from './migration_config.js';
 import type {MigrationLogRecord, MigrationLogger} from './migration_log.js';
 import {
   ACQUIRE_MIGRATION_LOCK_SQL,
@@ -23,6 +24,9 @@ import type {
 
 const DATABASE_URL =
   'postgresql://migration:synthetic-secret@localhost/struinfo';
+const MIGRATION_CONFIG = parseMigrationConfig({
+  STRUIINFO_MIGRATION_DATABASE_URL: DATABASE_URL,
+});
 const ROOT = 'synthetic-root';
 const FIRST_FILENAME = '000001_first_step.sql';
 const FIRST_SQL = 'SELECT synthetic_first;';
@@ -110,15 +114,17 @@ class ScriptedConnection implements MigrationConnection {
 }
 
 class QueueConnector implements MigrationConnector {
-  public readonly databaseUrls: string[] = [];
+  public readonly connections: unknown[] = [];
   readonly #connections: ScriptedConnection[];
 
   public constructor(connections: readonly ScriptedConnection[]) {
     this.#connections = [...connections];
   }
 
-  public connect(databaseUrl: string): Promise<MigrationConnection> {
-    this.databaseUrls.push(databaseUrl);
+  public connect(
+    config: typeof MIGRATION_CONFIG.connection,
+  ): Promise<MigrationConnection> {
+    this.connections.push(config);
     const connection = this.#connections.shift();
     return connection === undefined
       ? Promise.reject(new Error('raw connector failure'))
@@ -146,7 +152,7 @@ function run(options: {
   readonly logger?: MigrationLogger;
 }): ReturnType<typeof executeMigrations> {
   return executeMigrations({
-    config: {databaseUrl: DATABASE_URL},
+    config: MIGRATION_CONFIG,
     migrationRoots: [ROOT],
     fileSystem: new MemoryFileSystem(
       options.files ?? [[FIRST_FILENAME, FIRST_SQL]],
@@ -240,7 +246,7 @@ describe('executeMigrations', () => {
     const connector = new QueueConnector([firstConnection, secondConnection]);
     const logger = new RecordingLogger();
     const options = {
-      config: {databaseUrl: DATABASE_URL},
+      config: MIGRATION_CONFIG,
       migrationRoots: [ROOT],
       fileSystem: new MemoryFileSystem([[FIRST_FILENAME, FIRST_SQL]]),
       connector,
@@ -260,7 +266,10 @@ describe('executeMigrations', () => {
         ({sql}) => sql === INSERT_MIGRATION_LEDGER_SQL,
       ),
     ).toBe(false);
-    expect(connector.databaseUrls).toEqual([DATABASE_URL, DATABASE_URL]);
+    expect(connector.connections).toEqual([
+      MIGRATION_CONFIG.connection,
+      MIGRATION_CONFIG.connection,
+    ]);
     expect(firstConnection.closeCalls).toBe(1);
     expect(secondConnection.closeCalls).toBe(1);
   });
@@ -493,7 +502,7 @@ describe('executeMigrations', () => {
 
     await expect(
       executeMigrations({
-        config: {databaseUrl: DATABASE_URL},
+        config: MIGRATION_CONFIG,
         migrationRoots: [ROOT],
         fileSystem,
         connector,
@@ -502,6 +511,6 @@ describe('executeMigrations', () => {
     ).rejects.toMatchObject({
       record: {event: 'migration_file_name_invalid', outcome: 'failed'},
     });
-    expect(connector.databaseUrls).toEqual([]);
+    expect(connector.connections).toEqual([]);
   });
 });

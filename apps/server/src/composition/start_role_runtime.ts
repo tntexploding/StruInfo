@@ -25,6 +25,10 @@ import {
 import type {RuntimeLogger} from '../logging/structured_logger.js';
 import {createLocalStorageServices} from '../platform/storage/local_storage_services.js';
 import {
+  createPostgresKnowledgeRepositories,
+  type PostgresKnowledgeRepositorySet,
+} from '../platform/database/postgresql/index.js';
+import {
   createPgBossOptions,
   PgBossRuntime,
   roleUsesPgBoss,
@@ -43,6 +47,7 @@ import {
 export interface StartedRoleRuntime {
   readonly resources: readonly RuntimeResource[];
   readonly storage: Readonly<StorageServices>;
+  readonly repositories: Readonly<PostgresKnowledgeRepositorySet>;
   readonly shutdown: ShutdownCoordinator;
   disposeSignalHandlers(): void;
 }
@@ -71,6 +76,7 @@ export async function startRoleRuntime(
     dependencies.databasePoolFactory,
   );
   const gate = new ReadinessGate();
+  const repositories = createPostgresKnowledgeRepositories(database.pool);
   const health = new OperationalHealthService({
     role: config.role,
     gate,
@@ -83,7 +89,7 @@ export async function startRoleRuntime(
     starters.push(() =>
       PgBossRuntime.start({
         factory,
-        config: createPgBossOptions(config),
+        config: createPgBossOptions(config, database.pool),
         shutdownTimeoutMs: config.shutdownTimeoutMs,
       }),
     );
@@ -119,7 +125,13 @@ export async function startRoleRuntime(
       listener_host: address.host,
       listener_port: address.port,
     });
-    return {resources, storage, shutdown, disposeSignalHandlers};
+    return {
+      resources,
+      storage,
+      repositories,
+      shutdown,
+      disposeSignalHandlers,
+    };
   } catch (startupFailure) {
     gate.beginShutdown();
     const cleanupFailures = [...(await closeResourcesInReverse(resources))];

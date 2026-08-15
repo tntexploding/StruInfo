@@ -3,18 +3,33 @@ import {PgBoss, type ConstructorOptions, type StopOptions} from 'pg-boss';
 import type {ProcessRole, RuntimeConfig} from '../config/runtime_config.js';
 import type {RuntimeResource} from '../lifecycle/runtime_resource.js';
 import {toError} from '../lifecycle/runtime_resource.js';
+import type {PostgresPoolBoundary} from '../platform/database/postgresql/postgres_pool.js';
 
 export interface PgBossClient {
   start(): Promise<unknown>;
   stop(options?: StopOptions): Promise<void>;
 }
 
+export interface PgBossDatabaseBoundary {
+  executeSql(sql: string, values?: unknown[]): Promise<{rows: unknown[]}>;
+}
+
+export class PgBossDatabaseError extends Error {
+  public constructor() {
+    super('pg-boss database operation failed.');
+    this.name = 'PgBossDatabaseError';
+  }
+}
+
+export type PgBossRuntimeOptions = ConstructorOptions &
+  Readonly<{db: PgBossDatabaseBoundary}>;
+
 export interface PgBossFactory {
-  create(options: ConstructorOptions): PgBossClient;
+  create(options: PgBossRuntimeOptions): PgBossClient;
 }
 
 export class SystemPgBossFactory implements PgBossFactory {
-  public create(options: ConstructorOptions): PgBossClient {
+  public create(options: PgBossRuntimeOptions): PgBossClient {
     return new PgBoss(options);
   }
 }
@@ -32,7 +47,7 @@ export class PgBossRuntime implements RuntimeResource {
 
   public static async start(options: {
     readonly factory: PgBossFactory;
-    readonly config: ConstructorOptions;
+    readonly config: PgBossRuntimeOptions;
     readonly shutdownTimeoutMs: number;
   }): Promise<PgBossRuntime> {
     const client = options.factory.create(options.config);
@@ -83,9 +98,10 @@ export class PgBossRuntime implements RuntimeResource {
 
 export function createPgBossOptions(
   config: Readonly<RuntimeConfig>,
-): ConstructorOptions {
+  pool: PostgresPoolBoundary,
+): PgBossRuntimeOptions {
   return {
-    connectionString: config.databaseUrl,
+    db: createPgBossDatabaseAdapter(pool),
     schema: 'pgboss',
     migrate: false,
     createSchema: false,
@@ -94,6 +110,21 @@ export function createPgBossOptions(
     useListenNotify: false,
     connectionTimeoutMillis: config.databaseReadinessTimeoutMs,
   };
+}
+
+export function createPgBossDatabaseAdapter(
+  pool: PostgresPoolBoundary,
+): PgBossDatabaseBoundary {
+  return Object.freeze({
+    async executeSql(sql: string, values: unknown[] = []) {
+      try {
+        const result = await pool.query(sql, values);
+        return {rows: [...result.rows]};
+      } catch {
+        throw new PgBossDatabaseError();
+      }
+    },
+  });
 }
 
 export function roleUsesPgBoss(role: ProcessRole): boolean {

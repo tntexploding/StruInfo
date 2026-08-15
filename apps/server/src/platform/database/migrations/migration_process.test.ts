@@ -21,6 +21,7 @@ import type {
   MigrationConnector,
   MigrationRow,
 } from './postgres_migration_connection.js';
+import type {PostgresConnectionConfig} from '../postgresql/postgres_connection_config.js';
 
 const MIGRATION_URL =
   'postgresql://migration:synthetic-migration-secret@localhost/struinfo';
@@ -79,15 +80,17 @@ class ProcessConnection implements MigrationConnection {
 }
 
 class SingleConnector implements MigrationConnector {
-  public readonly databaseUrls: string[] = [];
+  public readonly connections: Readonly<PostgresConnectionConfig>[] = [];
   readonly #connection: MigrationConnection;
 
   public constructor(connection: MigrationConnection) {
     this.#connection = connection;
   }
 
-  public connect(databaseUrl: string): Promise<MigrationConnection> {
-    this.databaseUrls.push(databaseUrl);
+  public connect(
+    config: Readonly<PostgresConnectionConfig>,
+  ): Promise<MigrationConnection> {
+    this.connections.push(config);
     return Promise.resolve(this.#connection);
   }
 }
@@ -139,7 +142,7 @@ describe('runMigrationProcess', () => {
     expect(outcome).toBe('failed');
     expect(exitDecision.codes).toEqual([1]);
     expect(fileSystem.directoryReads).toBe(0);
-    expect(connector.databaseUrls).toEqual([]);
+    expect(connector.connections).toEqual([]);
     expect(connection.queries).toEqual([]);
     expect(sink.lines).toEqual([
       '{"event":"migration_credential_missing","outcome":"failed"}',
@@ -164,7 +167,13 @@ describe('runMigrationProcess', () => {
 
     expect(outcome).toBe('succeeded');
     expect(exitDecision.codes).toEqual([0]);
-    expect(connector.databaseUrls).toEqual([MIGRATION_URL]);
+    expect(connector.connections).toHaveLength(1);
+    expect(connector.connections[0]).toMatchObject({
+      host: 'localhost',
+      user: 'migration',
+      password: 'synthetic-migration-secret',
+      database: 'struinfo',
+    });
     expect(connection.closeCalls).toBe(1);
     const records = sink.lines.map(
       (line) => JSON.parse(line) as Readonly<Record<string, unknown>>,

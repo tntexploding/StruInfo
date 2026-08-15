@@ -1,12 +1,18 @@
 import {isAbsolute} from 'node:path';
 
+import {
+  decodePostgresConnectionUrl,
+  PostgresConnectionConfigError,
+  type PostgresConnectionConfig,
+} from '../platform/database/postgresql/postgres_connection_config.js';
+
 export type ProcessRole = 'api' | 'scheduler' | 'worker' | 'all';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export interface RuntimeConfig {
   readonly role: ProcessRole;
-  readonly databaseUrl: string;
+  readonly database: Readonly<PostgresConnectionConfig>;
   readonly dataRoot: string;
   readonly host: string;
   readonly port: number;
@@ -40,7 +46,7 @@ export function parseRuntimeConfig(
   role: ProcessRole,
   environment: Readonly<Record<string, string | undefined>>,
 ): Readonly<RuntimeConfig> {
-  const databaseUrl = parseDatabaseUrl(environment.DATABASE_URL);
+  const database = parseDatabaseConfig(environment.DATABASE_URL);
   const dataRoot = parseDataRoot(environment.STRUIINFO_DATA_ROOT);
   const host = parseHost('STRUIINFO_HOST', environment.STRUIINFO_HOST);
   const port = parseInteger(
@@ -72,7 +78,7 @@ export function parseRuntimeConfig(
 
   return Object.freeze({
     role,
-    databaseUrl,
+    database,
     dataRoot,
     host,
     port,
@@ -96,25 +102,19 @@ function parseDataRoot(value: string | undefined): string {
   return value;
 }
 
-function parseDatabaseUrl(value: string | undefined): string {
-  if (value === undefined || value.trim() === '') {
-    throw new ConfigurationError('DATABASE_URL is required.');
-  }
-
+function parseDatabaseConfig(
+  value: string | undefined,
+): Readonly<PostgresConnectionConfig> {
   try {
-    const parsed = new URL(value);
-    const hasSupportedProtocol =
-      parsed.protocol === 'postgres:' || parsed.protocol === 'postgresql:';
-    if (!hasSupportedProtocol || parsed.hostname === '') {
-      throw new Error('unsupported database URL');
+    return decodePostgresConnectionUrl(value, 'runtime');
+  } catch (error) {
+    if (!(error instanceof PostgresConnectionConfigError)) {
+      throw error;
     }
-  } catch {
     throw new ConfigurationError(
-      'DATABASE_URL must be a valid PostgreSQL connection URL.',
+      'DATABASE_URL must be a valid local PostgreSQL connection URL with explicit credentials.',
     );
   }
-
-  return value;
 }
 
 function parseHost(name: string, value: string | undefined): string {
