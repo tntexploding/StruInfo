@@ -11,6 +11,7 @@ import {
 import {
   admitTm2Environment,
   auditClosedPgConfig,
+  createPgPassLine,
   createPoisonPgPassLine,
   decodeTm2Url,
   sanitizePgEnvironment,
@@ -584,7 +585,7 @@ async function assertAmbientCase(
       `${row.id}:explicit_password_copied`,
     );
   } else if (row.number === 104) {
-    const valid = `${config.host}:${String(config.port)}:${config.database}:${config.user}:${config.password}\n`;
+    const valid = `${createPgPassLine(config, config.password)}\n`;
     const connected = await withPoisonFiles(
       context,
       valid,
@@ -598,7 +599,10 @@ async function assertAmbientCase(
     const poison =
       row.number === 107
         ? undefined
-        : `${config.host}:${String(config.port)}:${config.database}:${config.user}:synthetic-${String(row.number)}-poison\n`;
+        : `${createPgPassLine(
+            config,
+            `synthetic-${String(row.number)}-poison`,
+          )}\n`;
     const connected = await withPoisonFiles(
       context,
       poison,

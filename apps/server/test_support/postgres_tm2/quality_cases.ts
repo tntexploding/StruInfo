@@ -13,6 +13,8 @@ import {Tm2SafeFailure} from './bound_runtime.js';
 
 const execFileAsync = promisify(execFile);
 const OWNED_SCAN_FILES = Object.freeze([
+  'apps/server/test_support/postgres_tm2/admission_outcome.ts',
+  'apps/server/test_support/postgres_tm2/admission_child.ts',
   'apps/server/test_support/postgres_tm2/bound_runtime.ts',
   'apps/server/test_support/postgres_tm2/concurrency_oracle.ts',
   'apps/server/test_support/postgres_tm2/database_cases.ts',
@@ -28,6 +30,7 @@ const OWNED_SCAN_FILES = Object.freeze([
   'tests/postgres/postgres_tm2_mandatory.tm2.ts',
   'tests/postgres/postgres_tm2_oracle_selftest.tm2.ts',
   'tests/postgres/run_postgres_tm2.ts',
+  'tests/postgres/run_postgres_tm2_admission.ts',
   'vitest.postgres.config.ts',
 ] as const);
 const SELF_REFERENTIAL_FORBIDDEN_PHRASES = Object.freeze([
