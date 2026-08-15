@@ -4,6 +4,12 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
 import {
+  classifyTm2HarnessOutcome,
+  decodeTm2AdmissionChannel,
+  type Tm2AdmissionPreflightOutcome,
+  type Tm2HarnessOutcome,
+} from '../../apps/server/test_support/postgres_tm2/admission_outcome.js';
+import {
   admitTm2Environment,
   createPoisonPgPassLine,
   sanitizePgEnvironment,
@@ -13,6 +19,10 @@ import {
 interface ChildResult {
   readonly exitCode: number | null;
   readonly signal: NodeJS.Signals | null;
+}
+
+interface AdmissionChildResult extends ChildResult {
+  readonly stdout: string;
 }
 
 type JsonRecord = Readonly<Record<string, unknown>>;
@@ -86,6 +96,41 @@ async function runChild(
   });
 }
 
+async function runAdmissionChild(
+  environment: NodeJS.ProcessEnv,
+): Promise<AdmissionChildResult> {
+  const tsxEntry = join(
+    process.cwd(),
+    'node_modules',
+    'tsx',
+    'dist',
+    'cli.mjs',
+  );
+  const child = spawn(
+    process.execPath,
+    [tsxEntry, 'tests/postgres/run_postgres_tm2_admission.ts'],
+    {
+      cwd: process.cwd(),
+      env: environment,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
+    },
+  );
+  child.stdout.setEncoding('utf8');
+  let stdout = '';
+  child.stdout.on('data', (chunk: string) => {
+    if (stdout.length <= 16_384) {
+      stdout += chunk;
+    }
+  });
+  return await new Promise<AdmissionChildResult>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (exitCode, signal) => {
+      resolve({exitCode, signal, stdout});
+    });
+  });
+}
+
 function getAcceptedConfigurations(admission: AcceptedTm2Environment) {
   return [
     admission.admin.config,
@@ -96,7 +141,7 @@ function getAcceptedConfigurations(admission: AcceptedTm2Environment) {
 
 async function createIsolatedCredentialRoots(
   root: string,
-  admission: AcceptedTm2Environment,
+  admission: AcceptedTm2Environment | undefined,
 ): Promise<{
   readonly home: string;
   readonly userProfile: string;
@@ -111,50 +156,107 @@ async function createIsolatedCredentialRoots(
     mkdir(userProfile, {recursive: true}),
     mkdir(windowsPgDirectory, {recursive: true}),
   ]);
-  const contents = `${getAcceptedConfigurations(admission)
-    .map(createPoisonPgPassLine)
-    .join('\n')}\n`;
-  const posixPath = join(home, '.pgpass');
-  const windowsPath = join(windowsPgDirectory, 'pgpass.conf');
-  await Promise.all([
-    writeFile(posixPath, contents, {encoding: 'utf8', mode: 0o600}),
-    writeFile(windowsPath, contents, {encoding: 'utf8'}),
-  ]);
-  await chmod(posixPath, 0o600);
+  if (admission !== undefined) {
+    const contents = `${getAcceptedConfigurations(admission)
+      .map(createPoisonPgPassLine)
+      .join('\n')}\n`;
+    const posixPath = join(home, '.pgpass');
+    const windowsPath = join(windowsPgDirectory, 'pgpass.conf');
+    await Promise.all([
+      writeFile(posixPath, contents, {encoding: 'utf8', mode: 0o600}),
+      writeFile(windowsPath, contents, {encoding: 'utf8'}),
+    ]);
+    await chmod(posixPath, 0o600);
+  }
   return {home, userProfile, appData};
 }
 
+function emitHarnessOutcome(outcome: Tm2HarnessOutcome): void {
+  emit({
+    event: outcome.event,
+    outcome: outcome.outcome,
+    ...(outcome.code === undefined ? {} : {code: outcome.code}),
+    ...(outcome.variable === undefined ? {} : {variable: outcome.variable}),
+  });
+}
+
+function admissionChannelIsConsistent(
+  processResult: AdmissionChildResult,
+  outcome: Tm2AdmissionPreflightOutcome,
+): boolean {
+  const expectedExitCode =
+    outcome.status === 'admitted' ? 0 : outcome.status === 'not_ready' ? 2 : 1;
+  return (
+    processResult.signal === null && processResult.exitCode === expectedExitCode
+  );
+}
+
 async function main(): Promise<number> {
-  const admission = admitTm2Environment(process.env);
-  if (admission.status === 'not_ready') {
-    emit({
-      event: 'postgres_tm2_not_ready',
-      outcome: 'not_ready',
-      code: admission.code,
-      variable: admission.variable,
+  const syntaxAdmission = admitTm2Environment(process.env);
+  if (
+    syntaxAdmission.status === 'not_ready' &&
+    syntaxAdmission.code === 'tm2_url_missing'
+  ) {
+    const outcome = classifyTm2HarnessOutcome({
+      status: 'not_ready',
+      code: syntaxAdmission.code,
+      variable: syntaxAdmission.variable,
     });
-    return 2;
+    emitHarnessOutcome(outcome);
+    return outcome.exitCode;
   }
 
   const taskRoot = await mkdtemp(join(tmpdir(), 'struinfo-pg-tm2-'));
   try {
-    const roots = await createIsolatedCredentialRoots(taskRoot, admission);
+    const roots = await createIsolatedCredentialRoots(
+      taskRoot,
+      syntaxAdmission.status === 'accepted' ? syntaxAdmission : undefined,
+    );
     const childEnvironment = sanitizePgEnvironment(process.env, roots);
     delete childEnvironment.DATABASE_URL;
+    delete childEnvironment.STRUIINFO_MIGRATION_DATABASE_URL;
+    childEnvironment.STRUIINFO_TM2_ADMISSION_PREFLIGHT = '1';
+    childEnvironment.STRUIINFO_TM2_POISON_ROOT = taskRoot;
+
+    const admissionProcess = await runAdmissionChild(childEnvironment);
+    let admissionOutcome = decodeTm2AdmissionChannel(admissionProcess.stdout);
+    if (
+      admissionOutcome === undefined ||
+      !admissionChannelIsConsistent(admissionProcess, admissionOutcome)
+    ) {
+      admissionOutcome = {
+        status: 'failed',
+        code: 'tm2_admission_channel_invalid',
+      };
+    }
+    if (admissionOutcome.status !== 'admitted') {
+      const outcome = classifyTm2HarnessOutcome(admissionOutcome);
+      emitHarnessOutcome(outcome);
+      return outcome.exitCode;
+    }
+    if (syntaxAdmission.status !== 'accepted') {
+      const outcome = classifyTm2HarnessOutcome({
+        status: 'failed',
+        code: 'tm2_admission_channel_invalid',
+      });
+      emitHarnessOutcome(outcome);
+      return outcome.exitCode;
+    }
+
     childEnvironment.STRUIINFO_MIGRATION_DATABASE_URL =
       process.env.STRUIINFO_TM2_MIGRATION_DATABASE_URL ?? '';
     childEnvironment.STRUIINFO_TM2_ADMISSION_PROVEN = '1';
-    childEnvironment.STRUIINFO_TM2_POISON_ROOT = taskRoot;
     const reportPath = join(taskRoot, 'vitest-result.json');
     const result = await runChild(childEnvironment, reportPath);
 
-    if (result.exitCode === 0 && result.signal === null) {
+    const outcome = classifyTm2HarnessOutcome(admissionOutcome, result);
+    if (outcome.exitCode === 0) {
       emit({
-        event: 'postgres_tm2_complete',
-        outcome: 'pass',
+        event: outcome.event,
+        outcome: outcome.outcome,
         mandatory: 488,
       });
-      return 0;
+      return outcome.exitCode;
     }
 
     const failedIds = new Set<string>();
@@ -165,12 +267,12 @@ async function main(): Promise<number> {
       // A missing or malformed report is represented by a stable harness code.
     }
     emit({
-      event: 'postgres_tm2_failed',
-      outcome: 'failed',
-      code: 'mandatory_failure',
+      event: outcome.event,
+      outcome: outcome.outcome,
+      code: outcome.code,
       vectors: [...failedIds].sort(),
     });
-    return 1;
+    return outcome.exitCode;
   } finally {
     await rm(taskRoot, {recursive: true, force: false});
   }

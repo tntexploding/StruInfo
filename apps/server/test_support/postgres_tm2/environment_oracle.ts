@@ -73,6 +73,7 @@ export interface Tm2PgConfig {
 export interface AcceptedTm2Url {
   readonly status: 'accepted';
   readonly role: Tm2Role;
+  readonly authorityHost: '127.0.0.1' | '[::1]' | 'localhost';
   readonly config: Tm2PgConfig;
 }
 
@@ -360,6 +361,7 @@ export function decodeTm2Url(role: Tm2Role, input: unknown): Tm2UrlAdmission {
   return {
     status: 'accepted',
     role,
+    authorityHost: url.hostname as AcceptedTm2Url['authorityHost'],
     config: createOwnedConfig(role, {
       host: url.hostname === '[::1]' ? '::1' : url.hostname,
       port: parsedPort,
@@ -389,12 +391,12 @@ export function admitTm2Environment(
   if (admin === undefined || migration === undefined || runtime === undefined) {
     throw new Error('TM2_ENVIRONMENT_ORACLE_INCOMPLETE');
   }
-  const endpoint = `${admin.config.host}:${String(admin.config.port)}/${admin.config.database}`;
+  const endpoint = `${admin.authorityHost}:${String(admin.config.port)}/${admin.config.database}`;
   for (const [variable, value] of [
     ['STRUIINFO_TM2_MIGRATION_DATABASE_URL', migration],
     ['STRUIINFO_TM2_RUNTIME_DATABASE_URL', runtime],
   ] as const) {
-    const candidate = `${value.config.host}:${String(value.config.port)}/${value.config.database}`;
+    const candidate = `${value.authorityHost}:${String(value.config.port)}/${value.config.database}`;
     if (candidate !== endpoint) {
       return {status: 'not_ready', code: 'tm2_endpoint_mismatch', variable};
     }
@@ -485,12 +487,19 @@ function escapePgPassField(value: string): string {
 }
 
 export function createPoisonPgPassLine(config: Tm2PgConfig): string {
+  return createPgPassLine(config, 'synthetic-poison-password');
+}
+
+export function createPgPassLine(
+  config: Tm2PgConfig,
+  password: string,
+): string {
   return [
     config.host,
     String(config.port),
     config.database,
     config.user,
-    'synthetic-poison-password',
+    password,
   ]
     .map(escapePgPassField)
     .join(':');

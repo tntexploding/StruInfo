@@ -46,6 +46,7 @@ function admissionIdentity(admission: AcceptedTm2Environment): string {
     entries.map(([role, entry]) => {
       return [
         role,
+        entry.authorityHost,
         entry.config.host,
         entry.config.port,
         entry.config.database,

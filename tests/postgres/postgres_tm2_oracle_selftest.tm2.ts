@@ -1,5 +1,15 @@
+import {isIP} from 'node:net';
+
 import {describe, expect, it, vi} from 'vitest';
 
+import {
+  classifyTm2HarnessOutcome,
+  decodeTm2AdmissionChannel,
+  runTm2AdmissionPreflight,
+  Tm2AdmissionProbeError,
+  type Tm2AdmissionDependencies,
+  type Tm2AdmissionEnvironmentObservation,
+} from '../../apps/server/test_support/postgres_tm2/admission_outcome.js';
 import {
   admitTm2Environment,
   auditClosedPgConfig,
@@ -57,6 +67,127 @@ function expectRejected(
   code: Tm2AdmissionCode,
 ): void {
   expect(decodeTm2Url(role, url)).toEqual({status: 'not_ready', role, code});
+}
+
+function parsePgPassLine(line: string): readonly string[] {
+  const fields: string[] = [];
+  let field = '';
+  let escaped = false;
+  for (const character of line) {
+    if (escaped) {
+      field += character;
+      escaped = false;
+    } else if (character === '\\') {
+      escaped = true;
+    } else if (character === ':') {
+      fields.push(field);
+      field = '';
+    } else {
+      field += character;
+    }
+  }
+  if (escaped) {
+    throw new Error('SYNTHETIC_PGPASS_ESCAPE_INCOMPLETE');
+  }
+  fields.push(field);
+  return Object.freeze(fields);
+}
+
+function acceptedFromInput(role: Exclude<Tm2Role, 'admin'>, input: unknown) {
+  const result = decodeTm2Url(role, input);
+  if (result.status !== 'accepted') {
+    throw new Error(`SYNTHETIC_PRODUCT_INPUT_REJECTED:${result.code}`);
+  }
+  return result.config;
+}
+
+function admittedObservation(): Tm2AdmissionEnvironmentObservation {
+  const sessions = Object.fromEntries(
+    (['admin', 'migration', 'runtime'] as const).map((role) => [
+      role,
+      Object.freeze({
+        role,
+        sessionUser:
+          role === 'migration'
+            ? 'struinfo_tm2_migrator'
+            : `struinfo_tm2_${role}`,
+        currentUser:
+          role === 'migration'
+            ? 'struinfo_tm2_migrator'
+            : `struinfo_tm2_${role}`,
+        roleSetting: 'none',
+        databaseName: 'struinfo_tm2',
+        serverAddress: '127.0.0.1',
+        serverPort: 5432,
+        serverVersionNumber: 180_000,
+        serverEncoding: 'UTF8',
+        clientEncoding: 'UTF8',
+        timeZone: 'UTC',
+        standardConformingStrings: 'on',
+      }),
+    ]),
+  ) as Tm2AdmissionEnvironmentObservation['sessions'];
+  return Object.freeze({
+    sessions,
+    roles: Object.freeze([
+      Object.freeze({
+        role: 'admin' as const,
+        name: 'struinfo_tm2_admin',
+        canLogin: true,
+        superuser: true,
+        createRole: false,
+        createDatabase: false,
+        replication: false,
+        bypassRowLevelSecurity: false,
+      }),
+      Object.freeze({
+        role: 'migration' as const,
+        name: 'struinfo_tm2_migrator',
+        canLogin: true,
+        superuser: false,
+        createRole: false,
+        createDatabase: false,
+        replication: false,
+        bypassRowLevelSecurity: false,
+      }),
+      Object.freeze({
+        role: 'runtime' as const,
+        name: 'struinfo_tm2_runtime',
+        canLogin: true,
+        superuser: false,
+        createRole: false,
+        createDatabase: false,
+        replication: false,
+        bypassRowLevelSecurity: false,
+      }),
+    ]),
+    directMembershipCount: 0,
+    databaseOwner: 'struinfo_tm2_admin',
+    runtimeOwnedNonTemporarySchemaCount: 0,
+    runtimeOwnedProjectObjectCount: 0,
+    runtimeSetRoleCount: 0,
+    projectSchemaCount: 0,
+  });
+}
+
+function admissionDependencies(
+  inspectEnvironment: Tm2AdmissionDependencies['inspectEnvironment'],
+): Tm2AdmissionDependencies {
+  return {
+    decodeProductConfig: acceptedFromInput,
+    inspectEnvironment,
+  };
+}
+
+function formalSyntheticEnvironment() {
+  return {
+    STRUIINFO_TM2_ADMIN_DATABASE_URL:
+      'postgres://struinfo_tm2_admin:a@127.0.0.1/struinfo_tm2',
+    STRUIINFO_TM2_MIGRATION_DATABASE_URL:
+      'postgres://struinfo_tm2_migrator:b@127.0.0.1/struinfo_tm2',
+    STRUIINFO_TM2_RUNTIME_DATABASE_URL:
+      'postgres://struinfo_tm2_runtime:c@127.0.0.1/struinfo_tm2',
+  };
 }
 
 describe('Test-owned PostgreSQL TM2 environment oracle', () => {
@@ -242,18 +373,31 @@ describe('Test-owned PostgreSQL TM2 environment oracle', () => {
 
   it('accepts both schemes, all local host forms, and the inclusive port bounds', () => {
     const vectors = [
-      'postgres://struinfo_tm2_admin:x@127.0.0.1:1/struinfo_tm2',
-      'postgresql://struinfo_tm2_admin:x@localhost:65535/struinfo_tm2',
-      'postgres://struinfo_tm2_admin:x@[::1]/struinfo_tm2',
+      {
+        url: 'postgres://struinfo_tm2_admin:x@127.0.0.1:1/struinfo_tm2',
+        authorityHost: '127.0.0.1',
+        pgHost: '127.0.0.1',
+      },
+      {
+        url: 'postgresql://struinfo_tm2_admin:x@localhost:65535/struinfo_tm2',
+        authorityHost: 'localhost',
+        pgHost: 'localhost',
+      },
+      {
+        url: 'postgres://struinfo_tm2_admin:x@[::1]/struinfo_tm2',
+        authorityHost: '[::1]',
+        pgHost: '::1',
+      },
     ];
     for (const vector of vectors) {
-      expect(decodeTm2Url('admin', vector).status).toBe('accepted');
+      const result = decodeTm2Url('admin', vector.url);
+      expect(result.status).toBe('accepted');
+      if (result.status === 'accepted') {
+        expect(result.authorityHost).toBe(vector.authorityHost);
+        expect(result.config.host).toBe(vector.pgHost);
+      }
     }
-    const ipv6 = decodeTm2Url('admin', vectors[2]);
-    expect(ipv6.status).toBe('accepted');
-    if (ipv6.status === 'accepted') {
-      expect(ipv6.config.host).toBe('::1');
-    }
+    expect(isIP(vectors[2]?.pgHost ?? '')).toBe(6);
   });
 
   it('removes every case form of PG variables while preserving a sentinel', () => {
@@ -289,6 +433,182 @@ describe('Test-owned PostgreSQL TM2 environment oracle', () => {
       '127.0.0.1:5432:struinfo_tm2:struinfo_tm2_migrator:synthetic-poison-password',
     );
     expect(line).not.toContain(config.password);
+  });
+
+  it('serializes the IPv6 pgpass endpoint from the unbracketed driver host', () => {
+    const result = decodeTm2Url(
+      'runtime',
+      'postgres://struinfo_tm2_runtime:synthetic%40secret@[::1]/struinfo_tm2',
+    );
+    expect(result.status).toBe('accepted');
+    if (result.status === 'accepted') {
+      expect(result.authorityHost).toBe('[::1]');
+      expect(result.config.host).toBe('::1');
+      expect(isIP(result.config.host)).toBe(6);
+      const fields = parsePgPassLine(createPoisonPgPassLine(result.config));
+      expect(fields).toEqual([
+        '::1',
+        '5432',
+        'struinfo_tm2',
+        'struinfo_tm2_runtime',
+        'synthetic-poison-password',
+      ]);
+      expect(fields[0]).toBe(result.config.host);
+    }
+  });
+});
+
+describe('Test-owned PostgreSQL TM2 admission outcome channel', () => {
+  it('classifies a syntax-valid unreachable endpoint as NOT_READY with exit 2', async () => {
+    const outcome = await runTm2AdmissionPreflight(
+      formalSyntheticEnvironment(),
+      admissionDependencies(() =>
+        Promise.reject(
+          new Tm2AdmissionProbeError(
+            'tm2_connection_unavailable',
+            'STRUIINFO_TM2_ADMIN_DATABASE_URL',
+          ),
+        ),
+      ),
+    );
+    expect(outcome).toEqual({
+      status: 'not_ready',
+      code: 'tm2_connection_unavailable',
+      variable: 'STRUIINFO_TM2_ADMIN_DATABASE_URL',
+    });
+    expect(classifyTm2HarnessOutcome(outcome)).toMatchObject({
+      exitCode: 2,
+      outcome: 'not_ready',
+    });
+  });
+
+  it('classifies PostgreSQL version and session/role admission drift as NOT_READY', async () => {
+    const oldVersion = admittedObservation();
+    const versionOutcome = await runTm2AdmissionPreflight(
+      formalSyntheticEnvironment(),
+      admissionDependencies(() =>
+        Promise.resolve({
+          ...oldVersion,
+          sessions: {
+            ...oldVersion.sessions,
+            runtime: {
+              ...oldVersion.sessions.runtime,
+              serverVersionNumber: 170_000,
+            },
+          },
+        }),
+      ),
+    );
+    expect(versionOutcome).toMatchObject({
+      status: 'not_ready',
+      code: 'tm2_server_version',
+      variable: 'STRUIINFO_TM2_RUNTIME_DATABASE_URL',
+    });
+
+    const wrongSession = admittedObservation();
+    const sessionOutcome = await runTm2AdmissionPreflight(
+      formalSyntheticEnvironment(),
+      admissionDependencies(() =>
+        Promise.resolve({
+          ...wrongSession,
+          sessions: {
+            ...wrongSession.sessions,
+            migration: {
+              ...wrongSession.sessions.migration,
+              currentUser: 'synthetic_wrong_role',
+            },
+          },
+        }),
+      ),
+    );
+    expect(sessionOutcome).toMatchObject({
+      status: 'not_ready',
+      code: 'tm2_session_identity',
+      variable: 'STRUIINFO_TM2_MIGRATION_DATABASE_URL',
+    });
+
+    const wrongOwnership = admittedObservation();
+    const ownershipOutcome = await runTm2AdmissionPreflight(
+      formalSyntheticEnvironment(),
+      admissionDependencies(() =>
+        Promise.resolve({
+          ...wrongOwnership,
+          runtimeOwnedProjectObjectCount: 1,
+        }),
+      ),
+    );
+    expect(ownershipOutcome).toMatchObject({
+      status: 'not_ready',
+      code: 'tm2_runtime_ownership',
+    });
+  });
+
+  it('keeps admitted mandatory failure as FAIL and success as PASS', async () => {
+    const admission = await runTm2AdmissionPreflight(
+      formalSyntheticEnvironment(),
+      admissionDependencies(() => Promise.resolve(admittedObservation())),
+    );
+    expect(admission).toEqual({
+      status: 'admitted',
+      code: 'tm2_environment_admitted',
+    });
+    expect(
+      classifyTm2HarnessOutcome(admission, {exitCode: 1, signal: null}),
+    ).toEqual({
+      exitCode: 1,
+      event: 'postgres_tm2_failed',
+      outcome: 'failed',
+      code: 'tm2_mandatory_failure',
+    });
+    expect(
+      classifyTm2HarnessOutcome(admission, {exitCode: 0, signal: null}),
+    ).toEqual({
+      exitCode: 0,
+      event: 'postgres_tm2_complete',
+      outcome: 'pass',
+    });
+  });
+
+  it('classifies product decoder disagreement as candidate FAIL', async () => {
+    const environment = formalSyntheticEnvironment();
+    environment.STRUIINFO_TM2_RUNTIME_DATABASE_URL += '?sslmode=disable';
+    const outcome = await runTm2AdmissionPreflight(environment, {
+      decodeProductConfig(role, input) {
+        if (role === 'runtime') {
+          return accepted('runtime').config;
+        }
+        return acceptedFromInput(role, input);
+      },
+      inspectEnvironment() {
+        return Promise.resolve(admittedObservation());
+      },
+    });
+    expect(outcome).toEqual({
+      status: 'failed',
+      code: 'tm2_product_accepted_prohibited_url',
+    });
+    expect(classifyTm2HarnessOutcome(outcome).exitCode).toBe(1);
+  });
+
+  it('emits only closed safe admission records when probes throw sensitive text', async () => {
+    const sensitiveCanary = 'synthetic-sensitive-probe-text';
+    const outcome = await runTm2AdmissionPreflight(
+      formalSyntheticEnvironment(),
+      admissionDependencies(() => Promise.reject(new Error(sensitiveCanary))),
+    );
+    const encoded = JSON.stringify(outcome);
+    expect(outcome).toEqual({
+      status: 'not_ready',
+      code: 'tm2_environment_probe_unavailable',
+    });
+    expect(encoded).not.toContain(sensitiveCanary);
+    expect(encoded).not.toContain('sensitive-probe');
+    expect(decodeTm2AdmissionChannel(encoded)).toEqual(outcome);
+    expect(
+      decodeTm2AdmissionChannel(
+        `${encoded.slice(0, -1)},"unexpected":"sensitive-probe"}`,
+      ),
+    ).toBeUndefined();
   });
 });
 
