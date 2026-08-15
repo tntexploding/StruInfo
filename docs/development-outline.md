@@ -1,7 +1,7 @@
 # StruInfo 开发大纲
 
-- 状态：基础架构、M0-S、切片 0、来源证据、确定性 Markdown、人工分类/准入与首个人工知识写入纯逻辑边界已完成；准备确定性检索
-- 最近更新：2026-08-14
+- 状态：基础架构、M0-S、切片 0、来源证据、确定性 Markdown、人工分类/准入、首个人工知识写入与确定性检索纯逻辑边界已完成；准备真实 PostgreSQL 适配
+- 最近更新：2026-08-15
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
 - 基础 ADR：[ADR 0001](adr/0001-typescript-modular-monolith.md)、
@@ -35,7 +35,7 @@ M0-P 证明的是架构可行性，不是生产认证；任何探针候选源码
 M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁移 runner、CI、许可证记录与统一质量命令；该工程地基由 [ADR 0003](adr/0003-m0-s-engineering-foundation.md) 接受。
 自适应摄取、偏好/探索分离和策略授权知识写入由 [ADR 0004](adr/0004-adaptive-knowledge-ingestion-and-policy-authorized-writes.md) 接受。
 [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求。
-第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。外部配置/数据根、`C-SLICE-A-EVIDENCE-r2` 来源证据边界、`C-SLICE-A-MARKDOWN-r2` 确定性 Markdown 纯转换与闭合装配边界、[`C-SLICE-A-CURATION-r3`](manual-curation-contract.md) 的用户词表/独立准入边界，以及 [`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md) 的 A0 原子知识写入核心已经完成各自当前非容器 TM1。下一步实现完全不依赖 AI 的确定性检索。AI、偏好模型、综合分和自动准入随后接入，不能反向定义数据库或检索语义。
+第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。外部配置/数据根、`C-SLICE-A-EVIDENCE-r2` 来源证据边界、`C-SLICE-A-MARKDOWN-r2` 确定性 Markdown 纯转换与闭合装配边界、[`C-SLICE-A-CURATION-r3`](manual-curation-contract.md) 的用户词表/独立准入边界、[`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md) 的 A0 原子知识写入核心，以及 [`C-SLICE-B-RETRIEVAL-r3`](deterministic-knowledge-retrieval-contract.md) 的无 AI 确定性检索已经完成各自当前非容器 TM1。下一步验证真实 PostgreSQL 适配器与纯逻辑写入/检索合同的等价性。AI、偏好模型、综合分和自动准入随后接入，不能反向定义数据库或检索语义。
 
 ## 2. 为什么选择这个形态
 
@@ -672,12 +672,14 @@ PostgreSQL、事务/锁/并发、运行角色、HTTP/浏览器、检索、导出
 位于各自后续门。确定性检索现在作为紧邻子增量读取这套规范写入模型，而不是
 把全部 B1 能力和首个知识迁移一次耦合。
 
-确定性检索的首个候选边界是草案
-[`C-SLICE-B-RETRIEVAL-r3`](deterministic-knowledge-retrieval-contract.md)：
-只读取当前知识修订及其直接 Fragment 输入和当前一跳关系，提供 NFC + ASCII
-大小写折叠的精确/子串匹配、显式状态过滤、稳定 UTF-8 排序、游标和匹配原因。
-它不新增迁移、依赖或搜索投影；真实 PostgreSQL 查询下推与索引优化等待 TM2
-等价性和基准，Backend 实现等待 Maintenance 与 Test 独立合同复审。
+确定性检索合同
+[`C-SLICE-B-RETRIEVAL-r3`](deterministic-knowledge-retrieval-contract.md) 已在固定
+候选 `dfaecb622515cc640802562485e715cc7da35cc8` 上通过正式 TM1：308/308 项
+强制矩阵、324 项聚焦测试、1,135 项全仓单元测试、2 项集成测试、完整质量门
+及 631 项候选应用制品审计全部通过。该结果接受只读取当前知识修订及其直接
+Fragment 输入和当前一跳关系的 NFC + ASCII 大小写折叠精确/子串匹配、显式
+状态过滤、稳定 UTF-8 排序、游标和匹配原因。它不新增迁移、依赖或搜索投影；
+真实 PostgreSQL 查询下推、结果等价性、索引与性能仍等待 TM2 和基准。
 
 ### 切片 B1：获准资料到非 AI 知识与确定性检索
 
