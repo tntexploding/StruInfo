@@ -1,4 +1,4 @@
-import {describe, expect, it} from 'vitest';
+import {afterAll, describe, expect, it} from 'vitest';
 
 import {
   admitTm2Environment,
@@ -25,6 +25,12 @@ function requireAdmittedEnvironment(): AcceptedTm2Environment {
 }
 
 describe('PostgreSQL TM2 mandatory ledger', {concurrent: false}, () => {
+  const facade = getPostgresTm2PublicFacade();
+
+  afterAll(async () => {
+    await facade.close();
+  });
+
   it('registers exactly one execution for every mandatory row', () => {
     const audit = auditTm2MandatoryLedger();
     expect(audit).toEqual({
@@ -44,11 +50,10 @@ describe('PostgreSQL TM2 mandatory ledger', {concurrent: false}, () => {
       if (poisonRoot === undefined || poisonRoot === '') {
         throw new Error('PG_TM2_POISON_ROOT_REQUIRED');
       }
-      const evidence = await executeTm2MandatoryCase(
-        getPostgresTm2PublicFacade(),
-        row,
-        {admission, poisonRoot},
-      );
+      const evidence = await executeTm2MandatoryCase(facade, row, {
+        admission,
+        poisonRoot,
+      });
       expect(evidence.caseId).toBe(row.id);
       expect(evidence.vectorId).toBe(row.vectorId);
       expect(evidence.assertionCount).toBeGreaterThan(0);

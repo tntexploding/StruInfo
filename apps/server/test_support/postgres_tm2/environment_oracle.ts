@@ -290,6 +290,12 @@ export function decodeTm2Url(role: Tm2Role, input: unknown): Tm2UrlAdmission {
   if (authority.rawPort === '') {
     return reject(role, 'tm2_url_port');
   }
+  if (authority.rawPort !== undefined) {
+    const rawPort = Number(authority.rawPort);
+    if (!Number.isInteger(rawPort) || rawPort < 1 || rawPort > 65_535) {
+      return reject(role, 'tm2_url_port');
+    }
+  }
 
   let url: URL;
   try {
@@ -355,7 +361,7 @@ export function decodeTm2Url(role: Tm2Role, input: unknown): Tm2UrlAdmission {
     status: 'accepted',
     role,
     config: createOwnedConfig(role, {
-      host: url.hostname,
+      host: url.hostname === '[::1]' ? '::1' : url.hostname,
       port: parsedPort,
       database: database.value,
       user: username.value,

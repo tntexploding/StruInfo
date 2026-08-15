@@ -1,4 +1,4 @@
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 
 import {
   admitTm2Environment,
@@ -31,8 +31,8 @@ import {
   withTm2Deadline,
 } from '../../apps/server/test_support/postgres_tm2/concurrency_oracle.js';
 import {
+  executeTm2MandatoryCase,
   getPostgresTm2PublicFacade,
-  PostgresTm2BindingUnavailable,
 } from '../../apps/server/test_support/postgres_tm2/public_facade.js';
 
 function accepted(
@@ -249,6 +249,11 @@ describe('Test-owned PostgreSQL TM2 environment oracle', () => {
     for (const vector of vectors) {
       expect(decodeTm2Url('admin', vector).status).toBe('accepted');
     }
+    const ipv6 = decodeTm2Url('admin', vectors[2]);
+    expect(ipv6.status).toBe('accepted');
+    if (ipv6.status === 'accepted') {
+      expect(ipv6.config.host).toBe('::1');
+    }
   });
 
   it('removes every case form of PG variables while preserving a sentinel', () => {
@@ -392,19 +397,53 @@ describe('Test-owned PostgreSQL TM2 concurrency and binding seams', () => {
     ).toBe(false);
   });
 
-  it('keeps the product facade explicitly expected-red until Backend exports exist', async () => {
+  it('binds public product exports and executes non-database quality rows', async () => {
     const facade = getPostgresTm2PublicFacade();
-    expect(facade.bindingStatus).toBe('backend_binding_unavailable');
-    const row = TM2_MANDATORY_LEDGER[0];
-    if (row === undefined) {
-      throw new Error('PG_TM2_LEDGER_EMPTY');
+    expect(facade.bindingStatus).toBe('bound');
+    const environment = admitSyntheticEnvironment();
+    for (const row of TM2_MANDATORY_LEDGER.slice(0, 68)) {
+      await expect(
+        executeTm2MandatoryCase(facade, row, {
+          admission: environment,
+          poisonRoot: 'synthetic-poison-root',
+        }),
+        row.id,
+      ).resolves.toMatchObject({
+        caseId: row.id,
+        vectorId: row.vectorId,
+      });
     }
-    await expect(
-      facade.executeEnvironmentCase(row, {
-        admission: admitSyntheticEnvironment(),
-        poisonRoot: 'synthetic-poison-root',
-      }),
-    ).rejects.toBeInstanceOf(PostgresTm2BindingUnavailable);
+    vi.stubEnv(
+      'STRUIINFO_TM2_MIGRATION_DATABASE_URL',
+      'postgres://struinfo_tm2_migrator:b@127.0.0.1/struinfo_tm2',
+    );
+    vi.stubEnv(
+      'STRUIINFO_TM2_RUNTIME_DATABASE_URL',
+      'postgres://struinfo_tm2_runtime:c@127.0.0.1/struinfo_tm2',
+    );
+    for (const row of TM2_MANDATORY_LEDGER.slice(68, 98)) {
+      await expect(
+        executeTm2MandatoryCase(facade, row, {
+          admission: environment,
+          poisonRoot: 'synthetic-poison-root',
+        }),
+        row.id,
+      ).resolves.toMatchObject({caseId: row.id, vectorId: row.vectorId});
+    }
+    for (const row of [
+      ...TM2_MANDATORY_LEDGER.slice(460, 470),
+      ...TM2_MANDATORY_LEDGER.slice(480, 487),
+    ]) {
+      await expect(
+        executeTm2MandatoryCase(facade, row, {
+          admission: environment,
+          poisonRoot: 'synthetic-poison-root',
+        }),
+        row.id,
+      ).resolves.toMatchObject({caseId: row.id, vectorId: row.vectorId});
+    }
+    vi.unstubAllEnvs();
+    await facade.close();
   });
 });
 
