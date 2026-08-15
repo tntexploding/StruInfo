@@ -1,11 +1,12 @@
 # PostgreSQL Knowledge Adapter Parity Contract
 
-- Contract ID: `C-SLICE-B-POSTGRES-r2`
+- Contract ID: `C-SLICE-B-POSTGRES-r3`
 - Status: Draft for independent Maintenance and Test re-review; implementation
   is blocked until this contract is accepted
 - Date: 2026-08-15
-- Supersedes: draft `C-SLICE-B-POSTGRES-r1`; closes its URL/session-identity,
-  command-lookup, role-membership, and temporary-object ambiguities
+- Supersedes: draft `C-SLICE-B-POSTGRES-r2`; retains its URL/session-identity,
+  command-lookup, role-membership, and temporary-object closures and closes the
+  explicit-password and ambient credential-fallback ambiguity
 - Implementation baseline: `267d8cd151a36e5375143f2cc68d10ec451ecc3b`
 - Accepted curation candidate:
   `ac03c18ce568b3d2d090104bbb41727aa22afe05`
@@ -147,12 +148,13 @@ product decoder or its expected values. An accepted TM2 URL:
 - uses the exact `postgres:` or `postgresql:` scheme and a local TCP authority
   hostname that WHATWG URL normalization renders as `127.0.0.1`, `[::1]`, or
   `localhost`;
-- is byte-for-byte equal to its trimmed form and contains no raw ASCII control,
-  space, or DEL character; such bytes must be percent-encoded inside an allowed
-  component;
-- has one authority username whose percent-decoded value is the fixed role for
-  that variable;
-- has at most one authority password, which is treated only as an opaque secret;
+- is byte-for-byte equal to its trimmed form, is a Unicode-scalar sequence, and
+  contains no raw ASCII control, space, or DEL character; such bytes must be
+  percent-encoded inside an allowed component;
+- has one authority username whose decoded value is the fixed role for that
+  variable;
+- has an explicit, non-empty serialized authority password component whose
+  decoded value is also non-empty and is treated only as an opaque secret;
 - has an absent port or one decimal port in `1..65535`, with absence normalized
   to `5432`;
 - has exactly one non-empty percent-decoded database path segment whose decoded
@@ -163,15 +165,40 @@ product decoder or its expected values. An accepted TM2 URL:
 - is not a Unix-socket, multi-host, service-file, or keyword/value connection
   form.
 
+The serialized username, password, and sole database path segment returned by
+the WHATWG URL parser are decoded independently and exactly once with strict
+UTF-8 percent-decoding equivalent to `decodeURIComponent`. A literal `+`
+remains `+`; `%2B` becomes `+`; `%40` becomes `@`; and `%2525` becomes `%25`,
+not `%`. Form-urlencoding, a second decode, case conversion, and Unicode
+normalization are forbidden. A malformed percent escape, invalid UTF-8, decoded
+NUL, lone surrogate, or other non-Unicode-scalar result is rejected before any
+`pg` client or pool exists. These rules apply equally to the product decoder and
+the independent Test-owned decoder. The fixed synthetic password vector
+`synthetic%40secret` therefore projects to `synthetic@secret`.
+
 The original URL is never passed to `pg` as a string or `connectionString`.
 The decoder projects only `host`, `port`, `database`, `user`, `password`,
 `ssl: false`, the role-specific non-secret `application_name`
 `struinfo-tm2-admin`, `struinfo-tm2-migrator`, or `struinfo-tm2-runtime`, and
 the exact startup option `-c role=none -c search_path=pg_catalog` into an owned
-null-prototype configuration. No unknown field survives the projection. The
-formal TM2 child processes receive a Test-owned sanitized environment with no
-variable whose case-insensitive name begins with `PG`; they never inherit
+null-prototype configuration. `password` is an own data property containing the
+exact decoded non-empty string; it must remain the same non-null string in the
+`pg@8.22.0` connection parameters. No unknown field survives the projection.
+The formal TM2 child processes receive a Test-owned sanitized environment with
+no variable whose case-insensitive name begins with `PG`; they never inherit
 libpq or node-postgres identity, session, password, SSL, or service defaults.
+
+Formal Test proves the ambient-password boundary without reading or modifying a
+real user profile. It starts the product in Test-owned isolated home and
+application-data roots containing a matching, deliberately wrong synthetic
+`.pgpass`/`pgpass.conf` entry. The explicit URL password must remain unchanged,
+and changing or removing that poison entry must not change the projected
+configuration or admitted connection result. Missing-password, explicit-empty,
+decoded-empty, malformed-percent, invalid-UTF-8, and decoded-NUL vectors are
+rejected before connection. A password function, `PGPASSFILE`, default profile
+lookup, or any other fallback that can replace the explicit password is
+forbidden.
+
 TLS and a broader production connection grammar remain part of the later
 deployment gate rather than an implicit behavior of this local parity gate.
 
@@ -507,10 +534,11 @@ they do not use an unbounded wait or a sleep as proof of lock order.
 
 Independent Test owns a mandatory row ledger. At minimum it proves:
 
-1. closed URL projection, sanitized ambient environment, PostgreSQL 18
-   identity, exact session/current users, actual endpoint identity, UTF-8
-   configuration, distinct roles, secret non-disclosure, and fail-closed
-   environment admission;
+1. closed URL projection, exact one-pass credential decoding, a required
+   explicit non-empty password, poison-`.pgpass` isolation, sanitized ambient
+   environment, PostgreSQL 18 identity, exact session/current users, actual
+   endpoint identity, UTF-8 configuration, distinct roles, secret
+   non-disclosure, and fail-closed environment admission;
 2. real application of all four exact migrations, exact ledger rows, repeat
    no-op behavior, advisory-lock serialization, and real rollback of a synthetic
    failing migration;

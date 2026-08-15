@@ -152,7 +152,7 @@ pgvector execution, runtime grants, real advisory-lock concurrency, migration
 interruption, and Windows/Linux database parity remain pending
 `M0-S-CONTAINER-MAINT-001` or another separately admitted infrastructure fixture.
 
-Draft [`C-SLICE-B-POSTGRES-r2`](postgresql-knowledge-adapter-contract.md)
+Draft [`C-SLICE-B-POSTGRES-r3`](postgresql-knowledge-adapter-contract.md)
 defines the narrower non-container TM2 candidate for externally provisioned
 PostgreSQL 18: actual migrations `000001` through `000004`, curation/knowledge
 transactions, complete current-knowledge reads, least-privilege runtime grants,
