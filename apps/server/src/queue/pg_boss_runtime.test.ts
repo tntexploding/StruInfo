@@ -19,7 +19,8 @@ import {
   type PgBossRuntimeOptions,
 } from './pg_boss_runtime.js';
 
-const DATABASE_URL = 'postgresql://runtime:synthetic@localhost/struinfo';
+const DATABASE_URL =
+  'postgresql://struinfo_tm2_runtime:synthetic@localhost/struinfo';
 const RUNTIME_ENVIRONMENT = {
   DATABASE_URL,
   STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),

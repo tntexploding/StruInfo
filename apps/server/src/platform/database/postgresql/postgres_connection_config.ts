@@ -10,6 +10,10 @@ export type PostgresConnectionPurpose = keyof typeof POSTGRES_APPLICATION_NAMES;
 
 const DEFAULT_POSTGRES_PORT = 5_432;
 const LOCAL_HOSTS = new Set(['127.0.0.1', '[::1]', 'localhost']);
+const POSTGRES_ROLE_IDENTITIES = Object.freeze({
+  migrator: 'struinfo_tm2_migrator',
+  runtime: 'struinfo_tm2_runtime',
+} as const satisfies Record<PostgresConnectionPurpose, string>);
 
 /**
  * The only connection shape supplied to node-postgres in the local parity
@@ -100,7 +104,7 @@ export function decodePostgresConnectionUrl(
   const password = decodeComponent(parsed.password);
   const database = decodeComponent(serializedDatabase);
   if (
-    user.length === 0 ||
+    user !== POSTGRES_ROLE_IDENTITIES[purpose] ||
     password.length === 0 ||
     database.length === 0 ||
     user.includes('\u0000') ||

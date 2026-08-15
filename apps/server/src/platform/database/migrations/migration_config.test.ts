@@ -10,7 +10,7 @@ describe('parseMigrationConfig', () => {
   it.each(['postgres:', 'postgresql:'])(
     'accepts an immutable %s migration credential',
     (protocol) => {
-      const databaseUrl = `${protocol}//migration:synthetic@localhost/struinfo`;
+      const databaseUrl = `${protocol}//struinfo_tm2_migrator:synthetic@localhost/struinfo`;
       const config = parseMigrationConfig({
         STRUIINFO_MIGRATION_DATABASE_URL: databaseUrl,
       });
@@ -19,7 +19,7 @@ describe('parseMigrationConfig', () => {
         host: 'localhost',
         port: 5432,
         database: 'struinfo',
-        user: 'migration',
+        user: 'struinfo_tm2_migrator',
         password: 'synthetic',
         ssl: false,
         application_name: 'struinfo-tm2-migrator',
@@ -58,7 +58,7 @@ describe('parseMigrationConfig', () => {
     'https://migration:synthetic@localhost/struinfo',
     'postgresql:///struinfo',
     'not-a-url',
-    ' postgresql://migration:synthetic@localhost/struinfo',
+    ' postgresql://struinfo_tm2_migrator:synthetic@localhost/struinfo',
   ])('rejects the invalid migration credential %s', (databaseUrl) => {
     expect(() =>
       parseMigrationConfig({

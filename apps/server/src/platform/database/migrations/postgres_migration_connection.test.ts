@@ -9,7 +9,7 @@ import {
 } from './postgres_migration_connection.js';
 
 const DATABASE_URL =
-  'postgresql://migration:synthetic-pg-secret@localhost/struinfo';
+  'postgresql://struinfo_tm2_migrator:synthetic-pg-secret@localhost/struinfo';
 const CONNECTION = parseMigrationConfig({
   STRUIINFO_MIGRATION_DATABASE_URL: DATABASE_URL,
 }).connection;
@@ -74,7 +74,7 @@ describe('PgMigrationConnector', () => {
       host: 'localhost',
       port: 5432,
       database: 'struinfo',
-      user: 'migration',
+      user: 'struinfo_tm2_migrator',
       password: 'synthetic-pg-secret',
       ssl: false,
       application_name: 'struinfo-tm2-migrator',

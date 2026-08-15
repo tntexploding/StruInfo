@@ -53,6 +53,8 @@ import {
 } from './workspace_write_lock.js';
 
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
+const MIGRATOR_ROLE = 'struinfo_tm2_migrator';
+const RUNTIME_ROLE = 'struinfo_tm2_runtime';
 const ITEM_ID = '22222222-2222-4222-8222-222222222222';
 const ITEM_REVISION_ID = deriveKnowledgeItemRevisionId(ITEM_ID, 1);
 const RELATION_ID = '44444444-4444-4444-8444-444444444444';
@@ -154,7 +156,7 @@ describe('closed PostgreSQL connection projection', () => {
     ['single decoding', 'synthetic%2525secret', 'synthetic%25secret'],
   ])('preserves %s semantics exactly once', (_name, encoded, decoded) => {
     const config = decodePostgresConnectionUrl(
-      `postgresql://runtime:${encoded}@localhost/struinfo`,
+      `postgresql://${RUNTIME_ROLE}:${encoded}@localhost/struinfo`,
       'runtime',
     );
 
@@ -182,27 +184,92 @@ describe('closed PostgreSQL connection projection', () => {
   });
 
   it.each([
-    'postgresql://runtime@localhost/struinfo',
-    'postgresql://runtime:@localhost/struinfo',
-    'postgresql://runtime:%00@localhost/struinfo',
-    'postgresql://runtime:synthetic@example.invalid/struinfo',
-    'postgresql://runtime:synthetic@localhost/a/b',
-    'postgresql://runtime:synthetic@localhost/struinfo?ssl=true',
-    'postgresql://runtime:%ZZ@localhost/struinfo',
-    'postgresql://runtime:synthetic@localhost:/struinfo',
+    `postgresql://${RUNTIME_ROLE}@localhost/struinfo`,
+    `postgresql://${RUNTIME_ROLE}:@localhost/struinfo`,
+    `postgresql://${RUNTIME_ROLE}:%00@localhost/struinfo`,
+    `postgresql://${RUNTIME_ROLE}:synthetic@example.invalid/struinfo`,
+    `postgresql://${RUNTIME_ROLE}:synthetic@localhost/a/b`,
+    `postgresql://${RUNTIME_ROLE}:synthetic@localhost/struinfo?ssl=true`,
+    `postgresql://${RUNTIME_ROLE}:%ZZ@localhost/struinfo`,
+    `postgresql://${RUNTIME_ROLE}:synthetic@localhost:/struinfo`,
   ])('rejects %s before any pg factory is involved', (value) => {
     expect(() => decodePostgresConnectionUrl(value, 'runtime')).toThrow(
       PostgresConnectionConfigError,
     );
   });
 
-  it('projects the fixed migrator application identity', () => {
-    const config = decodePostgresConnectionUrl(
-      'postgresql://migrator:synthetic@localhost/struinfo',
-      'migrator',
-    );
+  it.each([
+    ['runtime', RUNTIME_ROLE, 'struinfo-tm2-runtime'],
+    ['migrator', MIGRATOR_ROLE, 'struinfo-tm2-migrator'],
+  ] as const)(
+    'accepts the exact %s role identity',
+    (purpose, role, applicationName) => {
+      const config = decodePostgresConnectionUrl(
+        `postgresql://${role}:synthetic@localhost/struinfo`,
+        purpose,
+      );
 
-    expect(config.application_name).toBe('struinfo-tm2-migrator');
+      expect(config.user).toBe(role);
+      expect(config.application_name).toBe(applicationName);
+    },
+  );
+
+  it.each([
+    ['runtime', 'struinfo_tm2_%72untime', RUNTIME_ROLE],
+    ['migrator', 'struinfo_tm2_%6Digrator', MIGRATOR_ROLE],
+  ] as const)(
+    'accepts a once-decoded exact %s role identity',
+    (purpose, encodedRole, expectedRole) => {
+      const config = decodePostgresConnectionUrl(
+        `postgresql://${encodedRole}:synthetic@localhost/struinfo`,
+        purpose,
+      );
+
+      expect(config.user).toBe(expectedRole);
+    },
+  );
+
+  it.each([
+    ['runtime', 'synthetic_runtime'],
+    ['migrator', 'synthetic_migrator'],
+    ['runtime', MIGRATOR_ROLE],
+    ['migrator', RUNTIME_ROLE],
+    ['runtime', 'struinfo_tm2_%52untime'],
+    ['migrator', 'struinfo_tm2_%4Digrator'],
+  ] as const)(
+    'rejects a non-matching decoded %s role without echoing credentials',
+    (purpose, encodedRole) => {
+      const password = 'synthetic-private-password';
+      const input = `postgresql://${encodedRole}:${password}@localhost/struinfo`;
+      let failure: unknown;
+
+      try {
+        decodePostgresConnectionUrl(input, purpose);
+      } catch (error) {
+        failure = error;
+      }
+
+      expect(failure).toBeInstanceOf(PostgresConnectionConfigError);
+      expect(String(failure)).not.toContain(input);
+      expect(String(failure)).not.toContain(encodedRole);
+      expect(String(failure)).not.toContain(password);
+    },
+  );
+
+  it('owns the decoded configuration independently of later input changes', () => {
+    const source = {
+      url: `postgresql://${RUNTIME_ROLE}:synthetic@localhost/struinfo`,
+    };
+    const config = decodePostgresConnectionUrl(source.url, 'runtime');
+
+    source.url = `postgresql://${MIGRATOR_ROLE}:changed@example.invalid/changed`;
+
+    expect(config).toMatchObject({
+      host: 'localhost',
+      database: 'struinfo',
+      user: RUNTIME_ROLE,
+      password: 'synthetic',
+    });
   });
 });
 

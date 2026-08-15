@@ -24,7 +24,8 @@ import type {
 import type {HealthListenerFactory} from '../transport/nest_health_listener.js';
 import {startRoleRuntime} from './start_role_runtime.js';
 
-const DATABASE_URL = 'postgresql://runtime:synthetic@localhost/struinfo';
+const DATABASE_URL =
+  'postgresql://struinfo_tm2_runtime:synthetic@localhost/struinfo';
 const RUNTIME_ENVIRONMENT = {
   DATABASE_URL,
   STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),
