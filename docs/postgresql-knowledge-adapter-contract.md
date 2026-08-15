@@ -275,19 +275,33 @@ application-owned pool.
 ### Write transaction envelope
 
 Curation and knowledge commands use explicit PostgreSQL transactions at
-`READ COMMITTED`. Both first acquire the same transaction-scoped advisory lock:
+`READ COMMITTED`. Both first derive the same versioned workspace lock key in
+application code. Given an already validated canonical workspace UUID `W`:
+
+1. encode the exact UTF-8 text
+   `struinfo:workspace-write-lock:v1:${W}`;
+2. compute its SHA-256 digest with the Node.js standard library;
+3. interpret digest bytes 0 through 7 as an unsigned big-endian 64-bit integer
+   `U`;
+4. set `K = U - 2^64` when `U >= 2^63`, otherwise set `K = U`; and
+5. pass the signed integer `K` to `pg` as its base-10 string representation,
+   never through a JavaScript `number`.
+
+The transaction then acquires the documented transaction-scoped advisory lock:
 
 ```sql
-SELECT pg_advisory_xact_lock(
-  hashtextextended($1::text, 6004514729447278159::bigint)
-)
+SELECT pg_advisory_xact_lock($1::bigint)
 ```
 
-`$1` is the already validated canonical workspace UUID and the fixed seed is
-the unsigned ASCII bytes `STRUINFO` interpreted as a positive signed bigint.
-A 64-bit hash collision may conservatively serialize two workspaces but cannot
-allow two commands in one workspace to escape serialization. The adapter then
-uses an ordinary workspace-scoped `SELECT` to prove the workspace exists.
+For the synthetic workspace `11111111-1111-4111-8111-111111111111`, the exact
+lock-name digest is
+`5a8f5bbb1115b7a070f4dbacc772b36b22141bd0900a271b1b3de14c4aac54f2`;
+its first eight bytes are `5a8f5bbb1115b7a0` and `K` is
+`6525535244086785952`. TM2 independently reproduces this known answer without
+importing the product helper. A 64-bit hash collision may conservatively
+serialize two workspaces but cannot allow two commands in one workspace to
+escape serialization. The adapter then uses an ordinary workspace-scoped
+`SELECT` to prove the workspace exists.
 
 This freezes the exact lock protocol that the upstream contracts deferred to
 TM2. It preserves their required workspace-first serialization without granting
@@ -299,8 +313,8 @@ concurrency tests and measured need.
 Every transaction:
 
 1. begins on one acquired runtime client;
-2. acquires the fixed workspace advisory lock, then fails safely if the exact
-   workspace row does not exist;
+2. derives and acquires the versioned workspace advisory lock, then fails
+   safely if the exact workspace row does not exist;
 3. performs the command-key lookup before optimistic revision checks;
 4. acquires any additional existing identity locks in the fixed order below;
 5. loads and maps one closed snapshot accepted by the corresponding pure
