@@ -682,7 +682,7 @@ Fragment 输入和当前一跳关系的 NFC + ASCII 大小写折叠精确/子串
 真实 PostgreSQL 查询下推、结果等价性、索引与性能仍等待 TM2 和基准。
 
 下一持久化增量以草案
-[`C-SLICE-B-POSTGRES-r2`](postgresql-knowledge-adapter-contract.md) 收敛真实
+[`C-SLICE-B-POSTGRES-r3`](postgresql-knowledge-adapter-contract.md) 收敛真实
 PostgreSQL 18 的首个 TM2：实际执行 `000001`–`000004`，验证迁移/运行角色分离、
 最小权限、A0 分类与知识写事务、当前知识完整加载和纯逻辑结果等价性。首版检索
 适配器使用一致只读事务加载完整当前工作区后调用已验收评估器，不提前重写 Unicode
