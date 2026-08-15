@@ -9,7 +9,8 @@ import {
   type ProcessRole,
 } from './runtime_config.js';
 
-const DATABASE_URL = 'postgresql://runtime:synthetic@127.0.0.1/struinfo';
+const DATABASE_URL =
+  'postgresql://struinfo_tm2_runtime:synthetic@127.0.0.1/struinfo';
 const DATA_ROOT = join(tmpdir(), 'struinfo-synthetic-data');
 const RUNTIME_ENVIRONMENT = {DATABASE_URL, STRUIINFO_DATA_ROOT: DATA_ROOT};
 
@@ -23,7 +24,7 @@ describe('parseRuntimeConfig', () => {
         host: '127.0.0.1',
         port: 5432,
         database: 'struinfo',
-        user: 'runtime',
+        user: 'struinfo_tm2_runtime',
         password: 'synthetic',
         ssl: false,
         application_name: 'struinfo-tm2-runtime',
@@ -58,7 +59,8 @@ describe('parseRuntimeConfig', () => {
 
   it('accepts explicit valid values and inclusive boundaries', () => {
     const config = parseRuntimeConfig('worker', {
-      DATABASE_URL: 'postgres://runtime:synthetic@localhost/database',
+      DATABASE_URL:
+        'postgres://struinfo_tm2_runtime:synthetic@localhost/database',
       STRUIINFO_DATA_ROOT: DATA_ROOT,
       STRUIINFO_HOST: 'localhost',
       STRUIINFO_PORT: '1',

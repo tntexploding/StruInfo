@@ -18,7 +18,8 @@ import {
 } from './external_runtime_config.js';
 import {ConfigurationError} from './runtime_config.js';
 
-const DATABASE_URL = 'postgresql://runtime:synthetic@127.0.0.1/struinfo';
+const DATABASE_URL =
+  'postgresql://struinfo_tm2_runtime:synthetic@127.0.0.1/struinfo';
 const temporaryRoots: string[] = [];
 
 interface RuntimeFixture {
@@ -53,7 +54,7 @@ describe('loadRuntimeConfig', () => {
       database: {
         host: '127.0.0.1',
         database: 'struinfo',
-        user: 'runtime',
+        user: 'struinfo_tm2_runtime',
       },
       dataRoot: realpathSync(fixture.dataRoot),
       port: 3200,

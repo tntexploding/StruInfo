@@ -83,6 +83,26 @@ describe('BoundedDatabaseReadinessCheck', () => {
 });
 
 describe('RuntimeDatabase', () => {
+  it.each(['synthetic_runtime', 'struinfo_tm2_migrator'])(
+    'rejects non-runtime role %s before invoking the pool factory',
+    (role) => {
+      const poolFactory: DatabasePoolFactory = vi.fn(() => {
+        throw new Error('pool factory must remain unreachable');
+      });
+
+      expect(() => {
+        const config = parseRuntimeConfig('api', {
+          DATABASE_URL: `postgresql://${role}:synthetic-private-password@localhost/struinfo`,
+          STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),
+        });
+        createRuntimeDatabase(config, new ImmediateDeadline(), poolFactory);
+      }).toThrow(
+        'DATABASE_URL must be a valid local PostgreSQL connection URL',
+      );
+      expect(poolFactory).not.toHaveBeenCalled();
+    },
+  );
+
   it('sets bounded driver timeouts and closes the pool idempotently', async () => {
     const query = vi.fn(() => Promise.resolve({rows: [], rowCount: 0}));
     const end = vi.fn(() => Promise.resolve());
@@ -93,7 +113,8 @@ describe('RuntimeDatabase', () => {
     };
     let poolConfig: Parameters<DatabasePoolFactory>[0] | undefined;
     const config = parseRuntimeConfig('api', {
-      DATABASE_URL: 'postgresql://runtime:synthetic@localhost/struinfo',
+      DATABASE_URL:
+        'postgresql://struinfo_tm2_runtime:synthetic@localhost/struinfo',
       STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),
     });
     const database = createRuntimeDatabase(
@@ -113,7 +134,7 @@ describe('RuntimeDatabase', () => {
       host: 'localhost',
       port: 5432,
       database: 'struinfo',
-      user: 'runtime',
+      user: 'struinfo_tm2_runtime',
       password: 'synthetic',
       ssl: false,
       application_name: 'struinfo-tm2-runtime',

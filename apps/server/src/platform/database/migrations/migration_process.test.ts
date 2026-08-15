@@ -1,6 +1,6 @@
 import {TextEncoder} from 'node:util';
 
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 
 import type {MigrationFileSystem} from './migration_files.js';
 import {
@@ -16,17 +16,18 @@ import {
   READ_MIGRATION_LEDGER_SQL,
   RELEASE_MIGRATION_LOCK_SQL,
 } from './migration_runner.js';
-import type {
-  MigrationConnection,
-  MigrationConnector,
-  MigrationRow,
+import {
+  PgMigrationConnector,
+  type MigrationConnection,
+  type MigrationConnector,
+  type MigrationRow,
 } from './postgres_migration_connection.js';
 import type {PostgresConnectionConfig} from '../postgresql/postgres_connection_config.js';
 
 const MIGRATION_URL =
-  'postgresql://migration:synthetic-migration-secret@localhost/struinfo';
+  'postgresql://struinfo_tm2_migrator:synthetic-migration-secret@localhost/struinfo';
 const ORDINARY_URL =
-  'postgresql://runtime:synthetic-runtime-secret@localhost/struinfo';
+  'postgresql://struinfo_tm2_runtime:synthetic-runtime-secret@localhost/struinfo';
 const MIGRATION_SQL =
   "SELECT 'synthetic-private-sql-content-知识' AS migration_value;";
 
@@ -123,6 +124,39 @@ function environment(
 }
 
 describe('runMigrationProcess', () => {
+  it.each(['synthetic_migrator', 'struinfo_tm2_runtime'])(
+    'rejects non-migrator role %s before invoking the client factory',
+    async (role) => {
+      const fileSystem = new SingleFileSystem();
+      const sink = new RecordingSink();
+      const exitDecision = new RecordingExitDecision();
+      const clientFactory = vi.fn(() => {
+        throw new Error('client factory must remain unreachable');
+      });
+
+      const outcome = await runMigrationProcess({
+        environment: environment(
+          `postgresql://${role}:synthetic-private-password@localhost/struinfo`,
+        ),
+        migrationRoots: ['synthetic-root'],
+        fileSystem,
+        connector: new PgMigrationConnector(clientFactory),
+        logger: new JsonMigrationLogger(sink),
+        exitDecision,
+      });
+
+      expect(outcome).toBe('failed');
+      expect(exitDecision.codes).toEqual([1]);
+      expect(fileSystem.directoryReads).toBe(0);
+      expect(clientFactory).not.toHaveBeenCalled();
+      expect(sink.lines).toEqual([
+        '{"event":"migration_credential_invalid","outcome":"failed"}',
+      ]);
+      expect(sink.lines.join('\n')).not.toContain(role);
+      expect(sink.lines.join('\n')).not.toContain('synthetic-private-password');
+    },
+  );
+
   it('fails closed before filesystem or database access without a migration credential', async () => {
     const fileSystem = new SingleFileSystem();
     const connection = new ProcessConnection();
@@ -170,7 +204,7 @@ describe('runMigrationProcess', () => {
     expect(connector.connections).toHaveLength(1);
     expect(connector.connections[0]).toMatchObject({
       host: 'localhost',
-      user: 'migration',
+      user: 'struinfo_tm2_migrator',
       password: 'synthetic-migration-secret',
       database: 'struinfo',
     });

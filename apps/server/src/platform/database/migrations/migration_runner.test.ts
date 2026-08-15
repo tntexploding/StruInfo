@@ -23,7 +23,7 @@ import type {
 } from './postgres_migration_connection.js';
 
 const DATABASE_URL =
-  'postgresql://migration:synthetic-secret@localhost/struinfo';
+  'postgresql://struinfo_tm2_migrator:synthetic-secret@localhost/struinfo';
 const MIGRATION_CONFIG = parseMigrationConfig({
   STRUIINFO_MIGRATION_DATABASE_URL: DATABASE_URL,
 });

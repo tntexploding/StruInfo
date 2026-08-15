@@ -42,7 +42,8 @@ describe('ordinary runtime migration boundary', () => {
   });
 
   it('keeps runtime SQL read-only and pg-boss automatic DDL disabled', () => {
-    const databaseUrl = 'postgresql://runtime:synthetic@localhost/struinfo';
+    const databaseUrl =
+      'postgresql://struinfo_tm2_runtime:synthetic@localhost/struinfo';
     const options = createPgBossOptions(
       parseRuntimeConfig('worker', {
         DATABASE_URL: databaseUrl,
