@@ -1,19 +1,22 @@
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import type {ConstructorOptions} from 'pg-boss';
 import {describe, expect, it, vi} from 'vitest';
 
 import {
   parseRuntimeConfig,
   type ProcessRole,
 } from '../config/runtime_config.js';
+import type {PostgresPoolBoundary} from '../platform/database/postgresql/postgres_pool.js';
 import {
+  createPgBossDatabaseAdapter,
   createPgBossOptions,
+  PgBossDatabaseError,
   PgBossRuntime,
   roleUsesPgBoss,
   type PgBossClient,
   type PgBossFactory,
+  type PgBossRuntimeOptions,
 } from './pg_boss_runtime.js';
 
 const DATABASE_URL = 'postgresql://runtime:synthetic@localhost/struinfo';
@@ -21,6 +24,7 @@ const RUNTIME_ENVIRONMENT = {
   DATABASE_URL,
   STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),
 };
+const POOL = createFakePool();
 
 describe('createPgBossOptions', () => {
   it.each([
@@ -32,10 +36,11 @@ describe('createPgBossOptions', () => {
     (role, schedule, supervise) => {
       const options = createPgBossOptions(
         parseRuntimeConfig(role, RUNTIME_ENVIRONMENT),
+        POOL,
       );
 
-      expect(options).toEqual({
-        connectionString: DATABASE_URL,
+      expect(typeof options.db.executeSql).toBe('function');
+      expect(options).toMatchObject({
         schema: 'pgboss',
         migrate: false,
         createSchema: false,
@@ -46,6 +51,8 @@ describe('createPgBossOptions', () => {
       });
       expect(options.migrate).toBe(false);
       expect(options.createSchema).toBe(false);
+      expect(options).not.toHaveProperty('connectionString');
+      expect(options).not.toHaveProperty('password');
     },
   );
 
@@ -55,13 +62,44 @@ describe('createPgBossOptions', () => {
     expect(roleUsesPgBoss('worker')).toBe(true);
     expect(roleUsesPgBoss('all')).toBe(true);
   });
+
+  it('delegates through the shared pool and removes driver failure detail', async () => {
+    const query = vi.fn();
+    const pool: PostgresPoolBoundary = {
+      query(sql, parameters) {
+        query(sql, parameters);
+        return Promise.resolve({rows: [], rowCount: 0});
+      },
+      connect: () => Promise.reject(new Error('unexpected acquisition')),
+      end: () => Promise.resolve(),
+    };
+    const database = createPgBossDatabaseAdapter(pool);
+
+    await expect(
+      database.executeSql('SELECT $1::text', ['synthetic']),
+    ).resolves.toEqual({rows: []});
+    expect(query).toHaveBeenCalledExactlyOnceWith('SELECT $1::text', [
+      'synthetic',
+    ]);
+
+    const failed = createPgBossDatabaseAdapter({
+      ...pool,
+      query: () => Promise.reject(new Error('synthetic private detail')),
+    });
+    await expect(failed.executeSql('SELECT 1')).rejects.toEqual(
+      new PgBossDatabaseError(),
+    );
+    await expect(failed.executeSql('SELECT 1')).rejects.not.toThrow(
+      /private|synthetic/iu,
+    );
+  });
 });
 
 describe('PgBossRuntime', () => {
   it('starts with frozen runtime permissions and stops only once', async () => {
     const start = vi.fn(() => Promise.resolve());
     const stop = vi.fn(() => Promise.resolve());
-    let receivedOptions: ConstructorOptions | undefined;
+    let receivedOptions: PgBossRuntimeOptions | undefined;
     const factory: PgBossFactory = {
       create: (options) => {
         receivedOptions = options;
@@ -70,6 +108,7 @@ describe('PgBossRuntime', () => {
     };
     const config = createPgBossOptions(
       parseRuntimeConfig('worker', RUNTIME_ENVIRONMENT),
+      POOL,
     );
 
     const runtime = await PgBossRuntime.start({
@@ -109,6 +148,7 @@ describe('PgBossRuntime', () => {
         factory,
         config: createPgBossOptions(
           parseRuntimeConfig('scheduler', RUNTIME_ENVIRONMENT),
+          POOL,
         ),
         shutdownTimeoutMs: 2000,
       }),
@@ -120,3 +160,11 @@ describe('PgBossRuntime', () => {
     });
   });
 });
+
+function createFakePool(): PostgresPoolBoundary {
+  return {
+    query: () => Promise.resolve({rows: [], rowCount: 0}),
+    connect: () => Promise.reject(new Error('unexpected acquisition')),
+    end: () => Promise.resolve(),
+  };
+}

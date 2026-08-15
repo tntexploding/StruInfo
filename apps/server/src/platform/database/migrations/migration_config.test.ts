@@ -15,7 +15,17 @@ describe('parseMigrationConfig', () => {
         STRUIINFO_MIGRATION_DATABASE_URL: databaseUrl,
       });
 
-      expect(config).toEqual({databaseUrl});
+      expect(config.connection).toEqual({
+        host: 'localhost',
+        port: 5432,
+        database: 'struinfo',
+        user: 'migration',
+        password: 'synthetic',
+        ssl: false,
+        application_name: 'struinfo-tm2-migrator',
+        options: '-c role=none -c search_path=pg_catalog',
+      });
+      expect(Object.getPrototypeOf(config.connection)).toBeNull();
       expect(Object.isFrozen(config)).toBe(true);
     },
   );

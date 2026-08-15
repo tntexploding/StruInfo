@@ -8,6 +8,13 @@ import {describe, expect, it} from 'vitest';
 import {parseRuntimeConfig} from '../../../config/runtime_config.js';
 import {DATABASE_READINESS_SQL} from '../../../database/database_readiness.js';
 import {createPgBossOptions} from '../../../queue/pg_boss_runtime.js';
+import type {PostgresPoolBoundary} from '../postgresql/postgres_pool.js';
+
+const SYNTHETIC_POOL: PostgresPoolBoundary = {
+  query: () => Promise.resolve({rows: [], rowCount: 0}),
+  connect: () => Promise.reject(new Error('unexpected acquisition')),
+  end: () => Promise.resolve(),
+};
 
 const RUNTIME_SOURCE_URLS = [
   new URL('../../../entrypoints/api.ts', import.meta.url),
@@ -41,6 +48,7 @@ describe('ordinary runtime migration boundary', () => {
         DATABASE_URL: databaseUrl,
         STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),
       }),
+      SYNTHETIC_POOL,
     );
 
     expect(DATABASE_READINESS_SQL).toBe('SELECT 1 AS ready');

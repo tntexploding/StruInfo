@@ -6,6 +6,7 @@ import {
 } from 'pg';
 
 import {MigrationFailure} from './migration_log.js';
+import type {PostgresConnectionConfig} from '../postgresql/postgres_connection_config.js';
 
 export type MigrationRow = Readonly<Record<string, unknown>>;
 
@@ -18,7 +19,9 @@ export interface MigrationConnection {
 }
 
 export interface MigrationConnector {
-  connect(databaseUrl: string): Promise<MigrationConnection>;
+  connect(
+    config: Readonly<PostgresConnectionConfig>,
+  ): Promise<MigrationConnection>;
 }
 
 export interface PgClientBoundary {
@@ -43,11 +46,10 @@ export class PgMigrationConnector implements MigrationConnector {
     this.#clientFactory = clientFactory;
   }
 
-  public async connect(databaseUrl: string): Promise<MigrationConnection> {
-    const client = this.#clientFactory({
-      connectionString: databaseUrl,
-      application_name: 'struinfo-migrate',
-    });
+  public async connect(
+    config: Readonly<PostgresConnectionConfig>,
+  ): Promise<MigrationConnection> {
+    const client = this.#clientFactory(config);
     try {
       await client.connect();
     } catch {

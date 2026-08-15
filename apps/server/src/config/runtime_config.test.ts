@@ -19,7 +19,16 @@ describe('parseRuntimeConfig', () => {
 
     expect(config).toEqual({
       role: 'api',
-      databaseUrl: DATABASE_URL,
+      database: {
+        host: '127.0.0.1',
+        port: 5432,
+        database: 'struinfo',
+        user: 'runtime',
+        password: 'synthetic',
+        ssl: false,
+        application_name: 'struinfo-tm2-runtime',
+        options: '-c role=none -c search_path=pg_catalog',
+      },
       dataRoot: DATA_ROOT,
       host: '127.0.0.1',
       port: 3000,
@@ -31,6 +40,7 @@ describe('parseRuntimeConfig', () => {
     });
     expect(Object.isFrozen(config)).toBe(true);
     expect(Object.getPrototypeOf(config)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(config.database)).toBeNull();
   });
 
   it.each([
@@ -48,7 +58,7 @@ describe('parseRuntimeConfig', () => {
 
   it('accepts explicit valid values and inclusive boundaries', () => {
     const config = parseRuntimeConfig('worker', {
-      DATABASE_URL: 'postgres://runtime@localhost/database',
+      DATABASE_URL: 'postgres://runtime:synthetic@localhost/database',
       STRUIINFO_DATA_ROOT: DATA_ROOT,
       STRUIINFO_HOST: 'localhost',
       STRUIINFO_PORT: '1',
@@ -78,7 +88,7 @@ describe('parseRuntimeConfig', () => {
   it('rejects a missing database URL', () => {
     expect(() =>
       parseRuntimeConfig('api', {STRUIINFO_DATA_ROOT: DATA_ROOT}),
-    ).toThrow(new ConfigurationError('DATABASE_URL is required.'));
+    ).toThrow('DATABASE_URL must be a valid local PostgreSQL connection URL');
   });
 
   it('requires an absolute external data root', () => {
@@ -103,7 +113,7 @@ describe('parseRuntimeConfig', () => {
     );
 
     expect(error.message).toBe(
-      'DATABASE_URL must be a valid PostgreSQL connection URL.',
+      'DATABASE_URL must be a valid local PostgreSQL connection URL with explicit credentials.',
     );
     expect(error.message).not.toContain(injectedSecret);
   });

@@ -7,10 +7,8 @@ import {
   parseRuntimeConfig,
   type ProcessRole,
 } from '../config/runtime_config.js';
-import type {
-  DatabasePool,
-  DatabasePoolFactory,
-} from '../database/database_readiness.js';
+import type {DatabasePoolFactory} from '../database/database_readiness.js';
+import type {PostgresPoolBoundary} from '../platform/database/postgresql/postgres_pool.js';
 import type {OperationalHealthService} from '../health/operational_health.js';
 import type {
   ExitDecision,
@@ -41,9 +39,7 @@ describe('startRoleRuntime', () => {
   ] satisfies readonly [ProcessRole, number, boolean][])(
     'composes an independent %s process without real network dependencies',
     async (role, expectedPort, expectsQueue) => {
-      const query = vi.fn(() => Promise.resolve({rows: [{ready: 1}]}));
-      const end = vi.fn(() => Promise.resolve());
-      const databasePool: DatabasePool = {query, end};
+      const {pool: databasePool, end} = createDatabasePool();
       const databasePoolFactory: DatabasePoolFactory = () => databasePool;
       const queueStart = vi.fn(() => Promise.resolve());
       const queueStop = vi.fn(() => Promise.resolve());
@@ -118,11 +114,7 @@ describe('startRoleRuntime', () => {
   );
 
   it('cleans every acquired resource when late startup wiring fails', async () => {
-    const end = vi.fn(() => Promise.resolve());
-    const databasePool: DatabasePool = {
-      query: vi.fn(() => Promise.resolve({rows: []})),
-      end,
-    };
+    const {pool: databasePool, end} = createDatabasePool();
     const queueStop = vi.fn(() => Promise.resolve());
     const pgBossFactory: PgBossFactory = {
       create: () => ({
@@ -212,4 +204,23 @@ function createStorageServices(): Readonly<StorageServices> {
       read: () => Promise.reject(new Error('unexpected Blob read')),
     },
   });
+}
+
+function createDatabasePool(): Readonly<{
+  pool: PostgresPoolBoundary;
+  end: ReturnType<typeof vi.fn<() => Promise<void>>>;
+}> {
+  const end = vi.fn(() => Promise.resolve());
+  const query = vi.fn();
+  return {
+    end,
+    pool: {
+      query() {
+        query();
+        return Promise.resolve({rows: [], rowCount: 0});
+      },
+      connect: () => Promise.reject(new Error('unexpected acquisition')),
+      end,
+    },
+  };
 }

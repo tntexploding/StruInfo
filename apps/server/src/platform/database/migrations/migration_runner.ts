@@ -70,7 +70,7 @@ export async function executeMigrations(options: {
 
   let connection: MigrationConnection;
   try {
-    connection = await options.connector.connect(options.config.databaseUrl);
+    connection = await options.connector.connect(options.config.connection);
   } catch (error) {
     throw toMigrationFailure(error, {
       event: 'migration_connection_failed',

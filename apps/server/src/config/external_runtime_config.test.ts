@@ -50,7 +50,11 @@ describe('loadRuntimeConfig', () => {
 
     expect(config).toMatchObject({
       role: 'api',
-      databaseUrl: DATABASE_URL,
+      database: {
+        host: '127.0.0.1',
+        database: 'struinfo',
+        user: 'runtime',
+      },
       dataRoot: realpathSync(fixture.dataRoot),
       port: 3200,
       logLevel: 'warn',

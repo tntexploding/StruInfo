@@ -2,6 +2,7 @@ import type {ClientConfig, FieldDef, QueryResult, QueryResultRow} from 'pg';
 import {describe, expect, it} from 'vitest';
 
 import {MigrationFailure} from './migration_log.js';
+import {parseMigrationConfig} from './migration_config.js';
 import {
   PgMigrationConnector,
   type PgClientBoundary,
@@ -9,6 +10,9 @@ import {
 
 const DATABASE_URL =
   'postgresql://migration:synthetic-pg-secret@localhost/struinfo';
+const CONNECTION = parseMigrationConfig({
+  STRUIINFO_MIGRATION_DATABASE_URL: DATABASE_URL,
+}).connection;
 
 class SyntheticPgClient implements PgClientBoundary {
   public connectCalls = 0;
@@ -61,14 +65,20 @@ describe('PgMigrationConnector', () => {
       return client;
     });
 
-    const connection = await connector.connect(DATABASE_URL);
+    const connection = await connector.connect(CONNECTION);
     const rows = await connection.query('SELECT $1::integer AS synthetic', [7]);
     await connection.close();
     await connection.close();
 
     expect(receivedConfig).toEqual({
-      connectionString: DATABASE_URL,
-      application_name: 'struinfo-migrate',
+      host: 'localhost',
+      port: 5432,
+      database: 'struinfo',
+      user: 'migration',
+      password: 'synthetic-pg-secret',
+      ssl: false,
+      application_name: 'struinfo-tm2-migrator',
+      options: '-c role=none -c search_path=pg_catalog',
     });
     expect(client.connectCalls).toBe(1);
     expect(client.queryCalls).toEqual([
@@ -85,7 +95,7 @@ describe('PgMigrationConnector', () => {
     let failure: unknown;
 
     try {
-      await connector.connect(DATABASE_URL);
+      await connector.connect(CONNECTION);
     } catch (error) {
       failure = error;
     }
@@ -106,7 +116,7 @@ describe('PgMigrationConnector', () => {
     client.endFails = true;
 
     await expect(
-      new PgMigrationConnector(() => client).connect(DATABASE_URL),
+      new PgMigrationConnector(() => client).connect(CONNECTION),
     ).rejects.toMatchObject({
       record: {event: 'migration_connection_failed', outcome: 'failed'},
     });
