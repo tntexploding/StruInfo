@@ -5,6 +5,7 @@ import {types} from 'node:util';
 import type {Client as PgClient, ClientConfig, QueryResultRow} from 'pg';
 
 import {
+  isTm2NativeError,
   runTm2AdmissionPreflight,
   Tm2AdmissionProbeError,
   type Tm2AdmissionConnectionConfigs,
@@ -222,8 +223,7 @@ function isOperationalConnectionErrorMember(
     return false;
   }
   if (
-    typeof error !== 'object' ||
-    error === null ||
+    !isTm2NativeError(error) ||
     depth > TM2_OPERATIONAL_ERROR_MAX_DEPTH ||
     traversal.seen.has(error)
   ) {
@@ -238,9 +238,6 @@ function isOperationalConnectionErrorMember(
       readClosedAggregateMembers(errorsDescriptor.value, traversal, depth) !==
         undefined
     );
-  }
-  if (!(error instanceof Error)) {
-    return false;
   }
   const ownKeys = Reflect.ownKeys(error);
   if (ownKeys.some((key) => typeof key === 'symbol')) {
@@ -529,7 +526,9 @@ export async function runTm2AdmissionChild(
     },
     isProductConfigError(error) {
       return (
-        !types.isProxy(error) && error instanceof PostgresConnectionConfigError
+        !types.isProxy(error) &&
+        isTm2NativeError(error) &&
+        error instanceof PostgresConnectionConfigError
       );
     },
     async inspectEnvironment(_admission, configs) {

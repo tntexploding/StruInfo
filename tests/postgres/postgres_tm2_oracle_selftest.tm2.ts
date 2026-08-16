@@ -1,5 +1,6 @@
 import {spawn} from 'node:child_process';
 import {isIP} from 'node:net';
+import {types} from 'node:util';
 
 import {describe, expect, it, vi} from 'vitest';
 
@@ -222,7 +223,11 @@ function admissionDependencies(
   return {
     decodeProductConfig: acceptedFromInput,
     isProductConfigError(error) {
-      return error instanceof PostgresConnectionConfigError;
+      return (
+        !types.isProxy(error) &&
+        isNativeErrorOracle(error) &&
+        error instanceof PostgresConnectionConfigError
+      );
     },
     async inspectEnvironment(admission, configs) {
       return Object.freeze({
@@ -585,6 +590,44 @@ function syntheticOperationalError(code = 'ECONNREFUSED'): Error {
   return error;
 }
 
+function createPrototypeForgery(prototype: object): object {
+  const target: object = {};
+  Object.setPrototypeOf(target, prototype);
+  return target;
+}
+
+interface TestErrorConstructorWithIdentity extends ErrorConstructor {
+  isError(value: unknown): value is Error;
+}
+
+function isNativeErrorOracle(value: unknown): value is Error {
+  return (Error as TestErrorConstructorWithIdentity).isError(value);
+}
+
+function createTrapCountingProxy<T extends object>(
+  target: T,
+  recordTrap: () => void,
+): T {
+  return new Proxy(target, {
+    get(): unknown {
+      recordTrap();
+      return undefined;
+    },
+    getOwnPropertyDescriptor(candidate, key) {
+      recordTrap();
+      return Reflect.getOwnPropertyDescriptor(candidate, key);
+    },
+    getPrototypeOf(): object | null {
+      recordTrap();
+      return null;
+    },
+    ownKeys(): (string | symbol)[] {
+      recordTrap();
+      return [];
+    },
+  });
+}
+
 describe('Test-owned PostgreSQL TM2 environment oracle', () => {
   it('decodes each frozen password exactly once', () => {
     for (const vector of TM2_PASSWORD_KNOWN_ANSWERS) {
@@ -933,6 +976,46 @@ describe('Test-owned PostgreSQL TM2 admission outcome channel', () => {
     expect(trapCalls).toBe(0);
   });
 
+  it('rejects prototype-forged Error identities before descriptors, getters, or proxy traps', () => {
+    const forged = createPrototypeForgery(Error.prototype);
+    Object.defineProperty(forged, 'code', {
+      value: 'ECONNREFUSED',
+      enumerable: true,
+    });
+    expect(isNativeErrorOracle(forged)).toBe(false);
+    expect(isTm2OperationalConnectionError(forged)).toBe(false);
+
+    let getterCalls = 0;
+    const accessorForgery = createPrototypeForgery(Error.prototype);
+    Object.defineProperty(accessorForgery, 'code', {
+      get() {
+        getterCalls += 1;
+        return 'ECONNREFUSED';
+      },
+      enumerable: true,
+    });
+    expect(isTm2OperationalConnectionError(accessorForgery)).toBe(false);
+    expect(getterCalls).toBe(0);
+
+    let trapCalls = 0;
+    const proxiedForgery = createTrapCountingProxy(forged, () => {
+      trapCalls += 1;
+    });
+    expect(isTm2OperationalConnectionError(proxiedForgery)).toBe(false);
+    expect(trapCalls).toBe(0);
+
+    class SyntheticNativeOperationalError extends Error {}
+    const nativeSubclass = new SyntheticNativeOperationalError(
+      'synthetic-redacted',
+    );
+    Object.defineProperty(nativeSubclass, 'code', {
+      value: 'ECONNREFUSED',
+      enumerable: true,
+    });
+    expect(isNativeErrorOracle(nativeSubclass)).toBe(true);
+    expect(isTm2OperationalConnectionError(nativeSubclass)).toBe(true);
+  });
+
   it('decodes AggregateError members descriptor-first and never trusts its top-level code', () => {
     const topLevelShortcut = new AggregateError([
       syntheticOperationalError('UNKNOWN'),
@@ -976,6 +1059,33 @@ describe('Test-owned PostgreSQL TM2 admission outcome channel', () => {
     });
     expect(isTm2OperationalConnectionError(accessorAggregate)).toBe(false);
     expect(elementGetterCalls).toBe(0);
+  });
+
+  it('rejects prototype-forged AggregateError identities before member access or proxy traps', () => {
+    const forged = createPrototypeForgery(AggregateError.prototype);
+    Object.defineProperty(forged, 'errors', {
+      value: [syntheticOperationalError()],
+    });
+    expect(isNativeErrorOracle(forged)).toBe(false);
+    expect(isTm2OperationalConnectionError(forged)).toBe(false);
+
+    let getterCalls = 0;
+    const accessorForgery = createPrototypeForgery(AggregateError.prototype);
+    Object.defineProperty(accessorForgery, 'errors', {
+      get() {
+        getterCalls += 1;
+        return [syntheticOperationalError()];
+      },
+    });
+    expect(isTm2OperationalConnectionError(accessorForgery)).toBe(false);
+    expect(getterCalls).toBe(0);
+
+    let trapCalls = 0;
+    const proxiedForgery = createTrapCountingProxy(forged, () => {
+      trapCalls += 1;
+    });
+    expect(isTm2OperationalConnectionError(proxiedForgery)).toBe(false);
+    expect(trapCalls).toBe(0);
   });
 
   it('rejects hostile AggregateError containers and members with zero proxy traps', () => {
@@ -1101,6 +1211,82 @@ describe('Test-owned PostgreSQL TM2 admission outcome channel', () => {
     });
   });
 
+  it('accepts only branded native admission probe errors and freezes classification', async () => {
+    const forged = createPrototypeForgery(Tm2AdmissionProbeError.prototype);
+    Object.defineProperty(forged, 'code', {
+      value: 'tm2_connection_unavailable',
+      configurable: true,
+      writable: true,
+    });
+    Object.defineProperty(forged, 'variable', {
+      value: 'STRUIINFO_TM2_ADMIN_DATABASE_URL',
+      configurable: true,
+      writable: true,
+    });
+    expect(isNativeErrorOracle(forged)).toBe(false);
+    const forgedOutcome = await runTm2AdmissionPreflight(
+      formalSyntheticEnvironment(),
+      admissionDependencies(() => rejectUnknown(forged)),
+    );
+    expect(forgedOutcome).toEqual({
+      status: 'failed',
+      code: 'tm2_admission_probe_failure',
+    });
+    Reflect.set(forged, 'code', 'tm2_environment_probe_unavailable');
+    expect(forgedOutcome).toEqual({
+      status: 'failed',
+      code: 'tm2_admission_probe_failure',
+    });
+
+    const nativeButUnbranded = new Error('synthetic-redacted');
+    Object.setPrototypeOf(nativeButUnbranded, Tm2AdmissionProbeError.prototype);
+    Object.defineProperty(nativeButUnbranded, 'code', {
+      value: 'tm2_connection_unavailable',
+    });
+    Object.defineProperty(nativeButUnbranded, 'variable', {
+      value: 'STRUIINFO_TM2_ADMIN_DATABASE_URL',
+    });
+    expect(isNativeErrorOracle(nativeButUnbranded)).toBe(true);
+    await expect(
+      runTm2AdmissionPreflight(
+        formalSyntheticEnvironment(),
+        admissionDependencies(() => rejectUnknown(nativeButUnbranded)),
+      ),
+    ).resolves.toEqual({
+      status: 'failed',
+      code: 'tm2_admission_probe_failure',
+    });
+
+    let trapCalls = 0;
+    const proxiedForgery = createTrapCountingProxy(forged, () => {
+      trapCalls += 1;
+    });
+    const proxyOutcome = await runTm2AdmissionPreflight(
+      formalSyntheticEnvironment(),
+      admissionDependencies(() => rejectUnknown(proxiedForgery)),
+    );
+    expect(proxyOutcome).toEqual({
+      status: 'failed',
+      code: 'tm2_admission_probe_failure',
+    });
+    expect(trapCalls).toBe(0);
+
+    const genuine = new Tm2AdmissionProbeError(
+      'tm2_connection_unavailable',
+      'STRUIINFO_TM2_ADMIN_DATABASE_URL',
+    );
+    expect(isNativeErrorOracle(genuine)).toBe(true);
+    const genuineOutcome = await runTm2AdmissionPreflight(
+      formalSyntheticEnvironment(),
+      admissionDependencies(() => Promise.reject(genuine)),
+    );
+    expect(genuineOutcome).toEqual({
+      status: 'not_ready',
+      code: 'tm2_connection_unavailable',
+      variable: 'STRUIINFO_TM2_ADMIN_DATABASE_URL',
+    });
+  });
+
   it('classifies PostgreSQL version and session/role admission drift as NOT_READY', async () => {
     const oldVersion = admittedObservation();
     const versionOutcome = await runTm2AdmissionPreflight(
@@ -1207,7 +1393,11 @@ describe('Test-owned PostgreSQL TM2 admission outcome channel', () => {
         return acceptedFromInput(role, input);
       },
       isProductConfigError(error) {
-        return error instanceof PostgresConnectionConfigError;
+        return (
+          !types.isProxy(error) &&
+          isNativeErrorOracle(error) &&
+          error instanceof PostgresConnectionConfigError
+        );
       },
       inspectEnvironment() {
         return Promise.resolve({observation: admittedObservation()});
@@ -1233,6 +1423,61 @@ describe('Test-owned PostgreSQL TM2 admission outcome channel', () => {
       variable: 'STRUIINFO_TM2_RUNTIME_DATABASE_URL',
     });
     expect(classifyTm2HarnessOutcome(outcome).exitCode).toBe(2);
+  });
+
+  it('rejects prototype-forged product configuration errors without invoking the predicate or proxy traps', async () => {
+    const environment = formalSyntheticEnvironment();
+    environment.STRUIINFO_TM2_RUNTIME_DATABASE_URL += '?sslmode=disable';
+    const forged = createPrototypeForgery(
+      PostgresConnectionConfigError.prototype,
+    );
+    expect(isNativeErrorOracle(forged)).toBe(false);
+    let predicateCalls = 0;
+    const dependencies = admissionDependencies(() =>
+      Promise.resolve(admittedObservation()),
+    );
+    const forgedOutcome = await runTm2AdmissionPreflight(environment, {
+      ...dependencies,
+      decodeProductConfig(role, input) {
+        if (role === 'runtime') {
+          return throwUnknown(forged);
+        }
+        return dependencies.decodeProductConfig(role, input);
+      },
+      isProductConfigError(error) {
+        predicateCalls += 1;
+        return dependencies.isProductConfigError(error);
+      },
+    });
+    expect(forgedOutcome).toEqual({
+      status: 'failed',
+      code: 'tm2_product_decoder_failure',
+    });
+    expect(predicateCalls).toBe(0);
+    Reflect.set(forged, 'syntheticMutation', true);
+    expect(forgedOutcome).toEqual({
+      status: 'failed',
+      code: 'tm2_product_decoder_failure',
+    });
+
+    let trapCalls = 0;
+    const proxiedForgery = createTrapCountingProxy(forged, () => {
+      trapCalls += 1;
+    });
+    const proxyOutcome = await runTm2AdmissionPreflight(environment, {
+      ...dependencies,
+      decodeProductConfig(role, input) {
+        if (role === 'runtime') {
+          return throwUnknown(proxiedForgery);
+        }
+        return dependencies.decodeProductConfig(role, input);
+      },
+    });
+    expect(proxyOutcome).toEqual({
+      status: 'failed',
+      code: 'tm2_product_decoder_failure',
+    });
+    expect(trapCalls).toBe(0);
   });
 
   it('fails closed when a prohibited URL triggers a TypeError', async () => {

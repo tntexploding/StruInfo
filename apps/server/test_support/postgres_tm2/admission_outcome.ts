@@ -15,6 +15,16 @@ import {
 type Tm2EnvironmentVariable = (typeof TM2_URL_ENVIRONMENT_NAMES)[number];
 type ProductRole = Exclude<Tm2Role, 'admin'>;
 
+const TM2_ADMISSION_PROBE_ERROR_BRAND = new WeakSet<object>();
+
+interface ErrorConstructorWithIdentity extends ErrorConstructor {
+  isError(value: unknown): value is Error;
+}
+
+export function isTm2NativeError(value: unknown): value is Error {
+  return (Error as ErrorConstructorWithIdentity).isError(value);
+}
+
 export type Tm2EnvironmentNotReadyCode =
   | Tm2AdmissionCode
   | 'tm2_endpoint_mismatch'
@@ -140,6 +150,7 @@ export class Tm2AdmissionProbeError extends Error {
     this.name = 'Tm2AdmissionProbeError';
     this.code = code;
     this.variable = variable;
+    TM2_ADMISSION_PROBE_ERROR_BRAND.add(this);
   }
 }
 
@@ -255,6 +266,9 @@ function readsAsProductConfigError(
   dependencies: Tm2AdmissionDependencies,
   error: unknown,
 ): boolean {
+  if (types.isProxy(error) || !isTm2NativeError(error)) {
+    return false;
+  }
   try {
     return dependencies.isProductConfigError(error);
   } catch {
@@ -278,7 +292,11 @@ function readClosedAdmissionProbeError(error: unknown):
       readonly variable: Tm2EnvironmentVariable | undefined;
     }
   | undefined {
-  if (types.isProxy(error) || !(error instanceof Tm2AdmissionProbeError)) {
+  if (
+    types.isProxy(error) ||
+    !isTm2NativeError(error) ||
+    !TM2_ADMISSION_PROBE_ERROR_BRAND.has(error)
+  ) {
     return undefined;
   }
   const codeDescriptor = Object.getOwnPropertyDescriptor(error, 'code');
