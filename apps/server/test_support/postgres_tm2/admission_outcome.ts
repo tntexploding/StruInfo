@@ -1,3 +1,5 @@
+import {types} from 'node:util';
+
 import {
   admitTm2Environment,
   auditClosedPgConfig,
@@ -47,6 +49,7 @@ export type Tm2AdmissionFailureCode =
   | 'tm2_mandatory_failure'
   | 'tm2_mandatory_child_timeout'
   | 'tm2_mandatory_child_termination_failure'
+  | 'tm2_mandatory_report_invalid'
   | 'tm2_harness_failure';
 
 export interface Tm2AdmittedOutcome {
@@ -111,13 +114,17 @@ export interface Tm2AdmissionConnectionConfigs {
   readonly runtime: Readonly<Tm2PgConfig>;
 }
 
+export interface Tm2AdmissionEnvironmentInspection {
+  readonly observation: unknown;
+}
+
 export interface Tm2AdmissionDependencies {
   decodeProductConfig(role: ProductRole, input: unknown): unknown;
   isProductConfigError(error: unknown): boolean;
   inspectEnvironment(
     admission: AcceptedTm2Environment,
     configs: Tm2AdmissionConnectionConfigs,
-  ): Promise<Tm2AdmissionEnvironmentObservation>;
+  ): Promise<Tm2AdmissionEnvironmentInspection>;
 }
 
 export class Tm2AdmissionProbeError extends Error {
@@ -207,6 +214,7 @@ const FAILURE_CODES = new Set<Tm2AdmissionFailureCode>([
   'tm2_mandatory_failure',
   'tm2_mandatory_child_timeout',
   'tm2_mandatory_child_termination_failure',
+  'tm2_mandatory_report_invalid',
   'tm2_harness_failure',
 ]);
 
@@ -254,10 +262,57 @@ function readsAsProductConfigError(
   }
 }
 
+function isTm2EnvironmentVariable(
+  value: unknown,
+): value is Tm2EnvironmentVariable {
+  return (
+    typeof value === 'string' &&
+    TM2_URL_ENVIRONMENT_NAMES.some((name) => name === value)
+  );
+}
+
+function readClosedAdmissionProbeError(error: unknown):
+  | {
+      readonly code:
+        'tm2_connection_unavailable' | 'tm2_environment_probe_unavailable';
+      readonly variable: Tm2EnvironmentVariable | undefined;
+    }
+  | undefined {
+  if (types.isProxy(error) || !(error instanceof Tm2AdmissionProbeError)) {
+    return undefined;
+  }
+  const codeDescriptor = Object.getOwnPropertyDescriptor(error, 'code');
+  const variableDescriptor = Object.getOwnPropertyDescriptor(error, 'variable');
+  if (
+    codeDescriptor === undefined ||
+    !('value' in codeDescriptor) ||
+    variableDescriptor === undefined ||
+    !('value' in variableDescriptor)
+  ) {
+    return undefined;
+  }
+  const code: unknown = codeDescriptor.value;
+  const variable: unknown = variableDescriptor.value;
+  if (
+    (code !== 'tm2_connection_unavailable' &&
+      code !== 'tm2_environment_probe_unavailable') ||
+    (variable !== undefined && !isTm2EnvironmentVariable(variable))
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    code,
+    variable,
+  });
+}
+
 function readClosedDataRecord(
   value: unknown,
   expectedKeys: readonly string[],
 ): ReadonlyMap<string, unknown> | undefined {
+  if (types.isProxy(value)) {
+    return undefined;
+  }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return undefined;
   }
@@ -266,17 +321,21 @@ function readClosedDataRecord(
     return undefined;
   }
   const keys = Reflect.ownKeys(value);
+  const expected = new Set(expectedKeys);
   if (
-    keys.some((key) => typeof key !== 'string') ||
-    JSON.stringify([...keys].sort()) !==
-      JSON.stringify([...expectedKeys].sort())
+    keys.length !== expected.size ||
+    keys.some((key) => typeof key !== 'string' || !expected.has(key))
   ) {
     return undefined;
   }
   const fields = new Map<string, unknown>();
   for (const key of expectedKeys) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
-    if (descriptor === undefined || !('value' in descriptor)) {
+    if (
+      descriptor === undefined ||
+      !('value' in descriptor) ||
+      descriptor.enumerable !== true
+    ) {
       return undefined;
     }
     fields.set(key, descriptor.value);
@@ -285,6 +344,9 @@ function readClosedDataRecord(
 }
 
 function readDenseArray(value: unknown): readonly unknown[] | undefined {
+  if (types.isProxy(value)) {
+    return undefined;
+  }
   if (
     !Array.isArray(value) ||
     Object.getPrototypeOf(value) !== Array.prototype
@@ -304,22 +366,64 @@ function readDenseArray(value: unknown): readonly unknown[] | undefined {
   const result: unknown[] = [];
   for (let index = 0; index < lengthDescriptor.value; index += 1) {
     const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-    if (descriptor === undefined || !('value' in descriptor)) {
+    if (
+      descriptor === undefined ||
+      !('value' in descriptor) ||
+      descriptor.enumerable !== true
+    ) {
       return undefined;
     }
     result.push(descriptor.value);
   }
-  if (Reflect.ownKeys(value).length !== result.length + 1) {
+  const expectedKeys = new Set<string>([
+    'length',
+    ...Array.from({length: result.length}, (_, index) => String(index)),
+  ]);
+  const ownKeys = Reflect.ownKeys(value);
+  if (
+    ownKeys.length !== expectedKeys.size ||
+    ownKeys.some((key) => typeof key !== 'string' || !expectedKeys.has(key))
+  ) {
     return undefined;
   }
-  return result;
+  return Object.freeze(result);
 }
 
 function isFiniteInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value);
+  return (
+    !types.isProxy(value) &&
+    typeof value === 'number' &&
+    Number.isSafeInteger(value)
+  );
 }
 
-function isSessionObservation(value: unknown, role: Tm2Role): boolean {
+function isClosedString(value: unknown): value is string {
+  return !types.isProxy(value) && typeof value === 'string';
+}
+
+function isClosedBoolean(value: unknown): value is boolean {
+  return !types.isProxy(value) && typeof value === 'boolean';
+}
+
+function createOwnedRecord<T extends object>(
+  entries: readonly (readonly [keyof T & string, unknown])[],
+): T {
+  const target = Object.create(null) as Record<string, unknown>;
+  for (const [key, value] of entries) {
+    Object.defineProperty(target, key, {
+      value,
+      enumerable: true,
+      configurable: false,
+      writable: false,
+    });
+  }
+  return Object.freeze(target) as T;
+}
+
+function decodeSessionObservation(
+  value: unknown,
+  role: Tm2Role,
+): Tm2AdmissionSessionObservation | undefined {
   const fields = readClosedDataRecord(value, [
     'role',
     'sessionUser',
@@ -335,27 +439,62 @@ function isSessionObservation(value: unknown, role: Tm2Role): boolean {
     'standardConformingStrings',
   ]);
   if (fields === undefined) {
-    return false;
+    return undefined;
   }
+  const observedRole = fields.get('role');
+  const sessionUser = fields.get('sessionUser');
+  const currentUser = fields.get('currentUser');
+  const roleSetting = fields.get('roleSetting');
+  const databaseName = fields.get('databaseName');
   const serverAddress = fields.get('serverAddress');
   const serverPort = fields.get('serverPort');
-  return (
-    fields.get('role') === role &&
-    typeof fields.get('sessionUser') === 'string' &&
-    typeof fields.get('currentUser') === 'string' &&
-    typeof fields.get('roleSetting') === 'string' &&
-    typeof fields.get('databaseName') === 'string' &&
-    (serverAddress === null || typeof serverAddress === 'string') &&
-    (serverPort === null || isFiniteInteger(serverPort)) &&
-    isFiniteInteger(fields.get('serverVersionNumber')) &&
-    typeof fields.get('serverEncoding') === 'string' &&
-    typeof fields.get('clientEncoding') === 'string' &&
-    typeof fields.get('timeZone') === 'string' &&
-    typeof fields.get('standardConformingStrings') === 'string'
-  );
+  const serverVersionNumber = fields.get('serverVersionNumber');
+  const serverEncoding = fields.get('serverEncoding');
+  const clientEncoding = fields.get('clientEncoding');
+  const timeZone = fields.get('timeZone');
+  const standardConformingStrings = fields.get('standardConformingStrings');
+  if (
+    types.isProxy(observedRole) ||
+    observedRole !== role ||
+    !isClosedString(sessionUser) ||
+    !isClosedString(currentUser) ||
+    !isClosedString(roleSetting) ||
+    !isClosedString(databaseName) ||
+    !(
+      (!types.isProxy(serverAddress) && serverAddress === null) ||
+      isClosedString(serverAddress)
+    ) ||
+    !(
+      (!types.isProxy(serverPort) && serverPort === null) ||
+      isFiniteInteger(serverPort)
+    ) ||
+    !isFiniteInteger(serverVersionNumber) ||
+    !isClosedString(serverEncoding) ||
+    !isClosedString(clientEncoding) ||
+    !isClosedString(timeZone) ||
+    !isClosedString(standardConformingStrings)
+  ) {
+    return undefined;
+  }
+  return createOwnedRecord<Tm2AdmissionSessionObservation>([
+    ['role', role],
+    ['sessionUser', sessionUser],
+    ['currentUser', currentUser],
+    ['roleSetting', roleSetting],
+    ['databaseName', databaseName],
+    ['serverAddress', serverAddress],
+    ['serverPort', serverPort],
+    ['serverVersionNumber', serverVersionNumber],
+    ['serverEncoding', serverEncoding],
+    ['clientEncoding', clientEncoding],
+    ['timeZone', timeZone],
+    ['standardConformingStrings', standardConformingStrings],
+  ]);
 }
 
-function isRoleObservation(value: unknown): boolean {
+function decodeRoleObservation(
+  value: unknown,
+): Tm2AdmissionRoleObservation | undefined {
   const fields = readClosedDataRecord(value, [
     'role',
     'name',
@@ -367,27 +506,44 @@ function isRoleObservation(value: unknown): boolean {
     'bypassRowLevelSecurity',
   ]);
   if (fields === undefined) {
-    return false;
+    return undefined;
   }
-  return (
-    (fields.get('role') === 'admin' ||
-      fields.get('role') === 'migration' ||
-      fields.get('role') === 'runtime') &&
-    typeof fields.get('name') === 'string' &&
-    [
-      'canLogin',
-      'superuser',
-      'createRole',
-      'createDatabase',
-      'replication',
-      'bypassRowLevelSecurity',
-    ].every((key) => typeof fields.get(key) === 'boolean')
-  );
+  const role = fields.get('role');
+  const name = fields.get('name');
+  const canLogin = fields.get('canLogin');
+  const superuser = fields.get('superuser');
+  const createRole = fields.get('createRole');
+  const createDatabase = fields.get('createDatabase');
+  const replication = fields.get('replication');
+  const bypassRowLevelSecurity = fields.get('bypassRowLevelSecurity');
+  if (
+    types.isProxy(role) ||
+    (role !== 'admin' && role !== 'migration' && role !== 'runtime') ||
+    !isClosedString(name) ||
+    !isClosedBoolean(canLogin) ||
+    !isClosedBoolean(superuser) ||
+    !isClosedBoolean(createRole) ||
+    !isClosedBoolean(createDatabase) ||
+    !isClosedBoolean(replication) ||
+    !isClosedBoolean(bypassRowLevelSecurity)
+  ) {
+    return undefined;
+  }
+  return createOwnedRecord<Tm2AdmissionRoleObservation>([
+    ['role', role],
+    ['name', name],
+    ['canLogin', canLogin],
+    ['superuser', superuser],
+    ['createRole', createRole],
+    ['createDatabase', createDatabase],
+    ['replication', replication],
+    ['bypassRowLevelSecurity', bypassRowLevelSecurity],
+  ]);
 }
 
-function isClosedEnvironmentObservation(
+export function decodeClosedTm2EnvironmentObservation(
   value: unknown,
-): value is Tm2AdmissionEnvironmentObservation {
+): Tm2AdmissionEnvironmentObservation | undefined {
   const fields = readClosedDataRecord(value, [
     'sessions',
     'roles',
@@ -399,7 +555,7 @@ function isClosedEnvironmentObservation(
     'projectSchemaCount',
   ]);
   if (fields === undefined) {
-    return false;
+    return undefined;
   }
   const sessions = readClosedDataRecord(fields.get('sessions'), [
     'admin',
@@ -408,28 +564,73 @@ function isClosedEnvironmentObservation(
   ]);
   const roles = readDenseArray(fields.get('roles'));
   if (sessions === undefined || roles === undefined) {
-    return false;
+    return undefined;
   }
+  const adminSession = decodeSessionObservation(sessions.get('admin'), 'admin');
+  const migrationSession = decodeSessionObservation(
+    sessions.get('migration'),
+    'migration',
+  );
+  const runtimeSession = decodeSessionObservation(
+    sessions.get('runtime'),
+    'runtime',
+  );
+  const ownedRoles: Tm2AdmissionRoleObservation[] = [];
+  for (const roleValue of roles) {
+    const role = decodeRoleObservation(roleValue);
+    if (role === undefined) {
+      return undefined;
+    }
+    ownedRoles.push(role);
+  }
+  const databaseOwner = fields.get('databaseOwner');
   if (
-    roles.length !== 3 ||
-    !isSessionObservation(sessions.get('admin'), 'admin') ||
-    !isSessionObservation(sessions.get('migration'), 'migration') ||
-    !isSessionObservation(sessions.get('runtime'), 'runtime') ||
-    !roles.every(isRoleObservation) ||
-    typeof fields.get('databaseOwner') !== 'string'
+    ownedRoles.length !== 3 ||
+    adminSession === undefined ||
+    migrationSession === undefined ||
+    runtimeSession === undefined ||
+    !isClosedString(databaseOwner)
   ) {
-    return false;
+    return undefined;
   }
-  return [
+  const countKeys = [
     'directMembershipCount',
     'runtimeOwnedNonTemporarySchemaCount',
     'runtimeOwnedProjectObjectCount',
     'runtimeSetRoleCount',
     'projectSchemaCount',
-  ].every((key) => {
+  ] as const;
+  const counts = new Map<string, number>();
+  for (const key of countKeys) {
     const count = fields.get(key);
-    return isFiniteInteger(count) && count >= 0;
-  });
+    if (!isFiniteInteger(count) || count < 0) {
+      return undefined;
+    }
+    counts.set(key, count);
+  }
+  return createOwnedRecord<Tm2AdmissionEnvironmentObservation>([
+    [
+      'sessions',
+      createOwnedRecord<Tm2AdmissionEnvironmentObservation['sessions']>([
+        ['admin', adminSession],
+        ['migration', migrationSession],
+        ['runtime', runtimeSession],
+      ]),
+    ],
+    ['roles', Object.freeze(ownedRoles)],
+    ['directMembershipCount', counts.get('directMembershipCount')],
+    ['databaseOwner', databaseOwner],
+    [
+      'runtimeOwnedNonTemporarySchemaCount',
+      counts.get('runtimeOwnedNonTemporarySchemaCount'),
+    ],
+    [
+      'runtimeOwnedProjectObjectCount',
+      counts.get('runtimeOwnedProjectObjectCount'),
+    ],
+    ['runtimeSetRoleCount', counts.get('runtimeSetRoleCount')],
+    ['projectSchemaCount', counts.get('projectSchemaCount')],
+  ]);
 }
 
 function isExactProductConfig(
@@ -437,6 +638,7 @@ function isExactProductConfig(
   observed: unknown,
 ): observed is Tm2PgConfig {
   if (
+    types.isProxy(observed) ||
     auditClosedPgConfig(observed).length !== 0 ||
     typeof observed !== 'object' ||
     observed === null ||
@@ -620,24 +822,32 @@ export async function runTm2AdmissionPreflight(
     return failed('tm2_product_config_projection_mismatch');
   }
 
-  let observation: Tm2AdmissionEnvironmentObservation;
+  let inspection: Tm2AdmissionEnvironmentInspection;
   try {
-    observation = await dependencies.inspectEnvironment(admission, {
+    inspection = await dependencies.inspectEnvironment(admission, {
       admin: admission.admin.config,
       migration,
       runtime,
     });
   } catch (error) {
-    if (error instanceof Tm2AdmissionProbeError) {
-      return notReady(error.code, error.variable);
+    const probeError = readClosedAdmissionProbeError(error);
+    if (probeError !== undefined) {
+      return notReady(probeError.code, probeError.variable);
     }
     return failed('tm2_admission_probe_failure');
   }
   try {
-    if (!isClosedEnvironmentObservation(observation)) {
+    const inspectionFields = readClosedDataRecord(inspection, ['observation']);
+    if (inspectionFields === undefined) {
       return failed('tm2_admission_probe_failure');
     }
-    return classifyEnvironmentObservation(admission, observation);
+    const ownedObservation = decodeClosedTm2EnvironmentObservation(
+      inspectionFields.get('observation'),
+    );
+    if (ownedObservation === undefined) {
+      return failed('tm2_admission_probe_failure');
+    }
+    return classifyEnvironmentObservation(admission, ownedObservation);
   } catch {
     return failed('tm2_admission_probe_failure');
   }
@@ -646,6 +856,7 @@ export async function runTm2AdmissionPreflight(
 export function classifyTm2HarnessOutcome(
   admission: Tm2AdmissionPreflightOutcome,
   child?: Tm2ChildProcessObservation,
+  verifiedMandatoryCount?: number,
 ): Tm2HarnessOutcome {
   if (admission.status === 'not_ready') {
     return Object.freeze({
@@ -675,6 +886,14 @@ export function classifyTm2HarnessOutcome(
     });
   }
   if (child.exitCode === 0 && child.signal === null) {
+    if (verifiedMandatoryCount !== 488) {
+      return Object.freeze({
+        exitCode: 1,
+        event: 'postgres_tm2_failed',
+        outcome: 'failed',
+        code: 'tm2_mandatory_report_invalid',
+      });
+    }
     return Object.freeze({
       exitCode: 0,
       event: 'postgres_tm2_complete',

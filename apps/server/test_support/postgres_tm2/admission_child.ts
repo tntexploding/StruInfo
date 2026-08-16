@@ -1,5 +1,6 @@
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
+import {types} from 'node:util';
 
 import type {Client as PgClient, ClientConfig, QueryResultRow} from 'pg';
 
@@ -79,6 +80,9 @@ const OPERATIONAL_CONNECTION_ERROR_CODES = new Set([
   'ETIMEDOUT',
 ]);
 
+export const TM2_OPERATIONAL_ERROR_MAX_DEPTH = 16;
+export const TM2_OPERATIONAL_ERROR_MAX_MEMBERS = 256;
+
 const SESSION_IDENTITY_SQL = `SELECT
   session_user::text AS session_user,
   current_user::text AS current_user,
@@ -147,36 +151,119 @@ function asClientConfig(config: Readonly<Tm2PgConfig>): ClientConfig {
   return config;
 }
 
-function ownOperationalErrorCode(error: unknown): string | undefined {
-  if (!(error instanceof Error)) {
-    return undefined;
-  }
-  const descriptor = Object.getOwnPropertyDescriptor(error, 'code');
-  return descriptor !== undefined &&
-    'value' in descriptor &&
-    typeof descriptor.value === 'string'
-    ? descriptor.value
-    : undefined;
+interface OperationalErrorTraversal {
+  readonly seen: WeakSet<object>;
+  remainingMembers: number;
 }
 
-export function isTm2OperationalConnectionError(error: unknown): boolean {
-  const code = ownOperationalErrorCode(error);
-  if (code !== undefined) {
-    return OPERATIONAL_CONNECTION_ERROR_CODES.has(code);
+function readClosedAggregateMembers(
+  value: unknown,
+  traversal: OperationalErrorTraversal,
+  depth: number,
+): readonly unknown[] | undefined {
+  if (types.isProxy(value)) {
+    return undefined;
   }
-  if (!(error instanceof AggregateError)) {
+  if (
+    !Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Array.prototype
+  ) {
+    return undefined;
+  }
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, 'length');
+  if (
+    lengthDescriptor === undefined ||
+    !('value' in lengthDescriptor) ||
+    typeof lengthDescriptor.value !== 'number' ||
+    !Number.isSafeInteger(lengthDescriptor.value) ||
+    lengthDescriptor.value <= 0 ||
+    lengthDescriptor.value > traversal.remainingMembers
+  ) {
+    return undefined;
+  }
+  const length = lengthDescriptor.value;
+  const expectedKeys = new Set<string>([
+    'length',
+    ...Array.from({length}, (_, index) => String(index)),
+  ]);
+  const ownKeys = Reflect.ownKeys(value);
+  if (
+    ownKeys.length !== expectedKeys.size ||
+    ownKeys.some((key) => typeof key !== 'string' || !expectedKeys.has(key))
+  ) {
+    return undefined;
+  }
+  traversal.remainingMembers -= length;
+  const owned: unknown[] = [];
+  for (let index = 0; index < length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (descriptor === undefined || !('value' in descriptor)) {
+      return undefined;
+    }
+    owned.push(descriptor.value);
+  }
+  if (
+    owned.some(
+      (member) =>
+        !isOperationalConnectionErrorMember(member, traversal, depth + 1),
+    )
+  ) {
+    return undefined;
+  }
+  return Object.freeze(owned);
+}
+
+function isOperationalConnectionErrorMember(
+  error: unknown,
+  traversal: OperationalErrorTraversal,
+  depth: number,
+): boolean {
+  if (types.isProxy(error)) {
     return false;
   }
-  const descriptor = Object.getOwnPropertyDescriptor(error, 'errors');
   if (
-    descriptor === undefined ||
-    !('value' in descriptor) ||
-    !Array.isArray(descriptor.value) ||
-    descriptor.value.length === 0
+    typeof error !== 'object' ||
+    error === null ||
+    depth > TM2_OPERATIONAL_ERROR_MAX_DEPTH ||
+    traversal.seen.has(error)
   ) {
     return false;
   }
-  return descriptor.value.every(isTm2OperationalConnectionError);
+  traversal.seen.add(error);
+  if (error instanceof AggregateError) {
+    const errorsDescriptor = Object.getOwnPropertyDescriptor(error, 'errors');
+    return (
+      errorsDescriptor !== undefined &&
+      'value' in errorsDescriptor &&
+      readClosedAggregateMembers(errorsDescriptor.value, traversal, depth) !==
+        undefined
+    );
+  }
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const ownKeys = Reflect.ownKeys(error);
+  if (ownKeys.some((key) => typeof key === 'symbol')) {
+    return false;
+  }
+  const codeDescriptor = Object.getOwnPropertyDescriptor(error, 'code');
+  return (
+    codeDescriptor !== undefined &&
+    'value' in codeDescriptor &&
+    typeof codeDescriptor.value === 'string' &&
+    OPERATIONAL_CONNECTION_ERROR_CODES.has(codeDescriptor.value)
+  );
+}
+
+export function isTm2OperationalConnectionError(error: unknown): boolean {
+  return isOperationalConnectionErrorMember(
+    error,
+    {
+      seen: new WeakSet<object>(),
+      remainingMembers: TM2_OPERATIONAL_ERROR_MAX_MEMBERS,
+    },
+    0,
+  );
 }
 
 async function environmentQuery<Row extends QueryResultRow>(
@@ -441,10 +528,14 @@ export async function runTm2AdmissionChild(
       );
     },
     isProductConfigError(error) {
-      return error instanceof PostgresConnectionConfigError;
+      return (
+        !types.isProxy(error) && error instanceof PostgresConnectionConfigError
+      );
     },
     async inspectEnvironment(_admission, configs) {
-      return await inspectEnvironment(Client, configs);
+      return Object.freeze({
+        observation: await inspectEnvironment(Client, configs),
+      });
     },
   });
 }

@@ -1,3 +1,4 @@
+import {spawn} from 'node:child_process';
 import {isIP} from 'node:net';
 
 import {describe, expect, it, vi} from 'vitest';
@@ -6,16 +7,23 @@ import {PostgresConnectionConfigError} from '../../apps/server/src/platform/data
 
 import {
   classifyTm2HarnessOutcome,
+  decodeClosedTm2EnvironmentObservation,
   decodeTm2AdmissionChannel,
   runTm2AdmissionPreflight,
   Tm2AdmissionProbeError,
   type Tm2AdmissionDependencies,
   type Tm2AdmissionEnvironmentObservation,
 } from '../../apps/server/test_support/postgres_tm2/admission_outcome.js';
-import {isTm2OperationalConnectionError} from '../../apps/server/test_support/postgres_tm2/admission_child.js';
 import {
+  isTm2OperationalConnectionError,
+  TM2_OPERATIONAL_ERROR_MAX_DEPTH,
+  TM2_OPERATIONAL_ERROR_MAX_MEMBERS,
+} from '../../apps/server/test_support/postgres_tm2/admission_child.js';
+import {
+  createTm2ChildProcessPort,
   failureCodeForBoundedChild,
   runTm2BoundedChild,
+  SYSTEM_TM2_DEADLINE,
   TM2_ADMISSION_CHILD_DEADLINE_MS,
   TM2_CHILD_REAP_DEADLINE_MS,
   TM2_MANDATORY_CHILD_DEADLINE_MS,
@@ -40,6 +48,16 @@ import {
   TM2_FAMILIES,
   TM2_MANDATORY_LEDGER,
 } from '../../apps/server/test_support/postgres_tm2/mandatory_ledger.js';
+import {
+  auditTm2MandatoryExecution,
+  auditTm2MandatoryReportSource,
+  normalizeTm2ReportSuitePath,
+  readAndAuditTm2MandatoryReport,
+  TM2_MANDATORY_REPORT_MAX_BYTES,
+  TM2_MANDATORY_SUITE_PATH,
+  TM2_SELFTEST_SUITE_PATH,
+  type Tm2MandatoryReportIo,
+} from '../../apps/server/test_support/postgres_tm2/mandatory_report_oracle.js';
 import {
   auditCatalogSummary,
   TM2_BUSINESS_TABLES,
@@ -183,15 +201,34 @@ function admittedObservation(): Tm2AdmissionEnvironmentObservation {
   });
 }
 
+type DeepMutable<T> = T extends readonly (infer Item)[]
+  ? DeepMutable<Item>[]
+  : T extends object
+    ? {-readonly [Key in keyof T]: DeepMutable<T[Key]>}
+    : T;
+
+function mutableAdmittedObservation(): DeepMutable<Tm2AdmissionEnvironmentObservation> {
+  return structuredClone(
+    admittedObservation(),
+  ) as DeepMutable<Tm2AdmissionEnvironmentObservation>;
+}
+
 function admissionDependencies(
-  inspectEnvironment: Tm2AdmissionDependencies['inspectEnvironment'],
+  inspectEnvironment: (
+    admission: Parameters<Tm2AdmissionDependencies['inspectEnvironment']>[0],
+    configs: Parameters<Tm2AdmissionDependencies['inspectEnvironment']>[1],
+  ) => Promise<Tm2AdmissionEnvironmentObservation>,
 ): Tm2AdmissionDependencies {
   return {
     decodeProductConfig: acceptedFromInput,
     isProductConfigError(error) {
       return error instanceof PostgresConnectionConfigError;
     },
-    inspectEnvironment,
+    async inspectEnvironment(admission, configs) {
+      return Object.freeze({
+        observation: await inspectEnvironment(admission, configs),
+      });
+    },
   };
 }
 
@@ -222,11 +259,13 @@ async function rejectUnknown(value: unknown): Promise<never> {
 
 class FakeDeadline implements Tm2DeadlinePort {
   readonly scheduledDelays: number[] = [];
+  readonly cancelledDelays: number[] = [];
   readonly #entries = new Map<
     object,
     {readonly delayMs: number; readonly callback: () => void}
   >();
   #nextId = 0;
+  public cancelThrows = false;
 
   public schedule(delayMs: number, callback: () => void): object {
     const handle = Object.freeze({id: this.#nextId});
@@ -237,7 +276,14 @@ class FakeDeadline implements Tm2DeadlinePort {
   }
 
   public cancel(handle: object): void {
+    const entry = this.#entries.get(handle);
+    if (entry !== undefined) {
+      this.cancelledDelays.push(entry.delayMs);
+    }
     this.#entries.delete(handle);
+    if (this.cancelThrows) {
+      throw new Error('SYNTHETIC_DEADLINE_CANCEL_FAILURE');
+    }
   }
 
   public fire(delayMs: number): void {
@@ -258,18 +304,31 @@ class FakeDeadline implements Tm2DeadlinePort {
 
 class FakeChild implements Tm2ChildProcessPort {
   readonly killCalls: NodeJS.Signals[] = [];
+  readonly cleanupCalls: string[] = [];
   readonly #errorListeners = new Set<(error: unknown) => void>();
   readonly #closeListeners = new Set<
     (exitCode: number | null, signal: NodeJS.Signals | null) => void
   >();
   public killResult = true;
+  public killThrows = false;
+  public closeDuringKill = false;
+  public offErrorThrows = false;
+  public offCloseThrows = false;
+  public destroyStdinThrows = false;
+  public destroyStdoutThrows = false;
+  public destroyStderrThrows = false;
+  public unrefThrows = false;
 
   public onError(listener: (error: unknown) => void): void {
     this.#errorListeners.add(listener);
   }
 
   public offError(listener: (error: unknown) => void): void {
+    this.cleanupCalls.push('offError');
     this.#errorListeners.delete(listener);
+    if (this.offErrorThrows) {
+      throw new Error('SYNTHETIC_OFF_ERROR_FAILURE');
+    }
   }
 
   public onClose(
@@ -281,12 +340,50 @@ class FakeChild implements Tm2ChildProcessPort {
   public offClose(
     listener: (exitCode: number | null, signal: NodeJS.Signals | null) => void,
   ): void {
+    this.cleanupCalls.push('offClose');
     this.#closeListeners.delete(listener);
+    if (this.offCloseThrows) {
+      throw new Error('SYNTHETIC_OFF_CLOSE_FAILURE');
+    }
   }
 
   public kill(signal: NodeJS.Signals): boolean {
     this.killCalls.push(signal);
+    if (this.closeDuringKill) {
+      this.emitClose(null, 'SIGKILL');
+    }
+    if (this.killThrows) {
+      throw new Error('SYNTHETIC_KILL_FAILURE');
+    }
     return this.killResult;
+  }
+
+  public destroyStdin(): void {
+    this.cleanupCalls.push('destroyStdin');
+    if (this.destroyStdinThrows) {
+      throw new Error('SYNTHETIC_STDIN_DESTROY_FAILURE');
+    }
+  }
+
+  public destroyStdout(): void {
+    this.cleanupCalls.push('destroyStdout');
+    if (this.destroyStdoutThrows) {
+      throw new Error('SYNTHETIC_STDOUT_DESTROY_FAILURE');
+    }
+  }
+
+  public destroyStderr(): void {
+    this.cleanupCalls.push('destroyStderr');
+    if (this.destroyStderrThrows) {
+      throw new Error('SYNTHETIC_STDERR_DESTROY_FAILURE');
+    }
+  }
+
+  public unref(): void {
+    this.cleanupCalls.push('unref');
+    if (this.unrefThrows) {
+      throw new Error('SYNTHETIC_UNREF_FAILURE');
+    }
   }
 
   public emitError(error: unknown): void {
@@ -311,7 +408,10 @@ class FakeChild implements Tm2ChildProcessPort {
 
 class FakeOutput implements Tm2ChildOutputPort {
   readonly stops: boolean[] = [];
+  public destroyCalls = 0;
   public value = 'synthetic-child-output';
+  public stopThrows = false;
+  public destroyThrows = false;
   #stopped = false;
 
   public append(value: string): void {
@@ -326,7 +426,163 @@ class FakeOutput implements Tm2ChildOutputPort {
     if (discard) {
       this.value = '';
     }
+    if (this.stopThrows) {
+      throw new Error('SYNTHETIC_OUTPUT_STOP_FAILURE');
+    }
   }
+
+  public destroy(): void {
+    this.destroyCalls += 1;
+    if (this.destroyThrows) {
+      throw new Error('SYNTHETIC_OUTPUT_DESTROY_FAILURE');
+    }
+  }
+}
+
+interface SyntheticJsonAssertion {
+  ancestorTitles: string[];
+  failureMessages: string[];
+  fullName: string;
+  meta: Record<string, never>;
+  status: string;
+  tags: string[];
+  title: string;
+}
+
+interface SyntheticJsonSuite {
+  assertionResults: SyntheticJsonAssertion[];
+  endTime: number;
+  message: string;
+  name: string;
+  startTime: number;
+  status: string;
+}
+
+interface SyntheticJsonReport {
+  numFailedTests: number;
+  numFailedTestSuites: number;
+  numPassedTests: number;
+  numPassedTestSuites: number;
+  numPendingTests: number;
+  numPendingTestSuites: number;
+  numTodoTests: number;
+  numTotalTests: number;
+  numTotalTestSuites: number;
+  snapshot: Readonly<Record<string, unknown>>;
+  startTime: number;
+  success: boolean;
+  testResults: SyntheticJsonSuite[];
+}
+
+function syntheticAssertion(
+  title: string,
+  status = 'passed',
+): SyntheticJsonAssertion {
+  return {
+    ancestorTitles: ['Synthetic PostgreSQL TM2 suite'],
+    failureMessages: status === 'passed' ? [] : ['synthetic-redacted'],
+    fullName: `Synthetic PostgreSQL TM2 suite ${title}`,
+    meta: {},
+    status,
+    tags: [],
+    title,
+  };
+}
+
+function createSyntheticMandatoryReport(
+  repositoryRoot = '/synthetic/repository',
+): SyntheticJsonReport {
+  const separator = repositoryRoot.includes('\\') ? '\\' : '/';
+  const withRoot = (relative: string): string =>
+    `${repositoryRoot}${separator}${relative.replaceAll('/', separator)}`;
+  const mandatoryAssertions = Array.from({length: 488}, (_, index) => {
+    const id = `PG-TM2-${String(index + 1).padStart(3, '0')}`;
+    return syntheticAssertion(`${id} synthetic-vector-${String(index + 1)}`);
+  });
+  const selftestAssertions = [syntheticAssertion('synthetic oracle selftest')];
+  const testResults: SyntheticJsonSuite[] = [
+    {
+      assertionResults: mandatoryAssertions,
+      endTime: 2,
+      message: '',
+      name: withRoot(TM2_MANDATORY_SUITE_PATH),
+      startTime: 1,
+      status: 'passed',
+    },
+    {
+      assertionResults: selftestAssertions,
+      endTime: 2,
+      message: '',
+      name: withRoot(TM2_SELFTEST_SUITE_PATH),
+      startTime: 1,
+      status: 'passed',
+    },
+  ];
+  return {
+    numFailedTests: 0,
+    numFailedTestSuites: 0,
+    numPassedTests: 489,
+    numPassedTestSuites: 2,
+    numPendingTests: 0,
+    numPendingTestSuites: 0,
+    numTodoTests: 0,
+    numTotalTests: 489,
+    numTotalTestSuites: 2,
+    snapshot: {
+      added: 0,
+      didUpdate: false,
+      failure: false,
+      filesAdded: 0,
+      filesRemoved: 0,
+      filesRemovedList: [],
+      filesUnmatched: 0,
+      filesUpdated: 0,
+      matched: 0,
+      total: 0,
+      unchecked: 0,
+      uncheckedKeysByFile: [],
+      unmatched: 0,
+      updated: 0,
+    },
+    startTime: 1,
+    success: true,
+    testResults,
+  };
+}
+
+function refreshSyntheticReportCounts(report: SyntheticJsonReport): void {
+  const assertions = report.testResults.reduce(
+    (count, suite) => count + suite.assertionResults.length,
+    0,
+  );
+  report.numTotalTests = assertions;
+  report.numPassedTests = report.testResults.reduce(
+    (count, suite) =>
+      count +
+      suite.assertionResults.filter(
+        (assertion) => assertion.status === 'passed',
+      ).length,
+    0,
+  );
+  report.numFailedTests = assertions - report.numPassedTests;
+  report.numTotalTestSuites = report.testResults.length;
+  report.numPassedTestSuites = report.testResults.filter(
+    (suite) => suite.status === 'passed',
+  ).length;
+  report.numFailedTestSuites =
+    report.numTotalTestSuites - report.numPassedTestSuites;
+  report.success =
+    report.numFailedTests === 0 && report.numFailedTestSuites === 0;
+}
+
+function syntheticOperationalError(code = 'ECONNREFUSED'): Error {
+  const error = new Error('synthetic-redacted');
+  Object.defineProperty(error, 'code', {
+    value: code,
+    enumerable: true,
+    configurable: true,
+  });
+  return error;
 }
 
 describe('Test-owned PostgreSQL TM2 environment oracle', () => {
@@ -607,6 +863,7 @@ describe('Test-owned PostgreSQL TM2 admission outcome channel', () => {
       'tm2_mandatory_child_failure',
       'tm2_mandatory_child_timeout',
       'tm2_mandatory_child_termination_failure',
+      'tm2_mandatory_report_invalid',
       'tm2_harness_failure',
     ] as const;
     for (const code of codes) {
@@ -621,26 +878,204 @@ describe('Test-owned PostgreSQL TM2 admission outcome channel', () => {
     ).toBeUndefined();
   });
 
-  it('recognizes operational connection failures only by a closed own code', () => {
-    const operational = new Error('synthetic-redacted');
-    Object.defineProperty(operational, 'code', {
+  it('accepts only closed own operational codes without invoking accessors or proxies', () => {
+    expect(isTm2OperationalConnectionError(syntheticOperationalError())).toBe(
+      true,
+    );
+    expect(
+      isTm2OperationalConnectionError(syntheticOperationalError('UNKNOWN')),
+    ).toBe(false);
+
+    const inherited = new Error('synthetic-redacted');
+    const inheritedPrototype = Object.create(Error.prototype) as object;
+    Object.defineProperty(inheritedPrototype, 'code', {
       value: 'ECONNREFUSED',
       enumerable: true,
     });
-    const serverUnavailable = new Error('synthetic-redacted');
-    Object.defineProperty(serverUnavailable, 'code', {
-      value: '57P03',
+    Object.setPrototypeOf(inherited, inheritedPrototype);
+    expect(isTm2OperationalConnectionError(inherited)).toBe(false);
+
+    let getterCalls = 0;
+    const accessor = new Error('synthetic-redacted');
+    Object.defineProperty(accessor, 'code', {
+      get() {
+        getterCalls += 1;
+        return 'ECONNREFUSED';
+      },
       enumerable: true,
     });
-    expect(isTm2OperationalConnectionError(operational)).toBe(true);
-    expect(isTm2OperationalConnectionError(serverUnavailable)).toBe(true);
-    expect(isTm2OperationalConnectionError(new Error('ECONNREFUSED'))).toBe(
-      false,
+    expect(isTm2OperationalConnectionError(accessor)).toBe(false);
+    expect(getterCalls).toBe(0);
+
+    let trapCalls = 0;
+    const proxied = new Proxy(syntheticOperationalError(), {
+      get(target, key, receiver) {
+        trapCalls += 1;
+        void target;
+        void key;
+        void receiver;
+        return undefined;
+      },
+      getOwnPropertyDescriptor(target, key) {
+        trapCalls += 1;
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+      getPrototypeOf(target) {
+        trapCalls += 1;
+        return Reflect.getPrototypeOf(target);
+      },
+      ownKeys(target) {
+        trapCalls += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    expect(isTm2OperationalConnectionError(proxied)).toBe(false);
+    expect(trapCalls).toBe(0);
+  });
+
+  it('decodes AggregateError members descriptor-first and never trusts its top-level code', () => {
+    const topLevelShortcut = new AggregateError([
+      syntheticOperationalError('UNKNOWN'),
+    ]);
+    Object.defineProperty(topLevelShortcut, 'code', {
+      value: 'ECONNREFUSED',
+      enumerable: true,
+    });
+    expect(isTm2OperationalConnectionError(topLevelShortcut)).toBe(false);
+
+    const allOperational = new AggregateError([
+      syntheticOperationalError('ECONNREFUSED'),
+      syntheticOperationalError('57P03'),
+    ]);
+    expect(isTm2OperationalConnectionError(allOperational)).toBe(true);
+    expect(
+      isTm2OperationalConnectionError(
+        new AggregateError([
+          syntheticOperationalError(),
+          syntheticOperationalError('UNKNOWN'),
+        ]),
+      ),
+    ).toBe(false);
+
+    let elementGetterCalls = 0;
+    const accessorElements: unknown[] = [];
+    Object.defineProperty(accessorElements, '0', {
+      get() {
+        elementGetterCalls += 1;
+        return syntheticOperationalError();
+      },
+      enumerable: true,
+      configurable: true,
+    });
+    accessorElements.length = 1;
+    const accessorAggregate = new AggregateError([]);
+    Object.defineProperty(accessorAggregate, 'errors', {
+      value: accessorElements,
+      enumerable: false,
+      configurable: true,
+    });
+    expect(isTm2OperationalConnectionError(accessorAggregate)).toBe(false);
+    expect(elementGetterCalls).toBe(0);
+  });
+
+  it('rejects hostile AggregateError containers and members with zero proxy traps', () => {
+    let arrayTrapCalls = 0;
+    const proxiedArray = new Proxy([syntheticOperationalError()], {
+      get(target, key, receiver) {
+        arrayTrapCalls += 1;
+        void target;
+        void key;
+        void receiver;
+        return undefined;
+      },
+      getOwnPropertyDescriptor(target, key) {
+        arrayTrapCalls += 1;
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+      getPrototypeOf(target) {
+        arrayTrapCalls += 1;
+        return Reflect.getPrototypeOf(target);
+      },
+      ownKeys(target) {
+        arrayTrapCalls += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    const proxiedErrors = new AggregateError([]);
+    Object.defineProperty(proxiedErrors, 'errors', {value: proxiedArray});
+    expect(isTm2OperationalConnectionError(proxiedErrors)).toBe(false);
+    expect(arrayTrapCalls).toBe(0);
+
+    let memberTrapCalls = 0;
+    const proxiedMember = new Proxy(syntheticOperationalError(), {
+      get(target, key, receiver) {
+        memberTrapCalls += 1;
+        void target;
+        void key;
+        void receiver;
+        return undefined;
+      },
+      getOwnPropertyDescriptor(target, key) {
+        memberTrapCalls += 1;
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+      getPrototypeOf(target) {
+        memberTrapCalls += 1;
+        return Reflect.getPrototypeOf(target);
+      },
+      ownKeys(target) {
+        memberTrapCalls += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+    expect(
+      isTm2OperationalConnectionError(new AggregateError([proxiedMember])),
+    ).toBe(false);
+    expect(memberTrapCalls).toBe(0);
+
+    const sparse = new Array<unknown>(2);
+    sparse[0] = syntheticOperationalError();
+    const sparseAggregate = new AggregateError([]);
+    Object.defineProperty(sparseAggregate, 'errors', {value: sparse});
+    expect(isTm2OperationalConnectionError(sparseAggregate)).toBe(false);
+
+    const extra = [syntheticOperationalError()];
+    Object.defineProperty(extra, 'extra', {value: true, enumerable: true});
+    const extraAggregate = new AggregateError([]);
+    Object.defineProperty(extraAggregate, 'errors', {value: extra});
+    expect(isTm2OperationalConnectionError(extraAggregate)).toBe(false);
+
+    const symbol = [syntheticOperationalError()];
+    Object.defineProperty(symbol, Symbol('synthetic'), {value: true});
+    const symbolAggregate = new AggregateError([]);
+    Object.defineProperty(symbolAggregate, 'errors', {value: symbol});
+    expect(isTm2OperationalConnectionError(symbolAggregate)).toBe(false);
+  });
+
+  it('bounds AggregateError cycles, nesting depth, and total members', () => {
+    const selfCycle = new AggregateError([]);
+    Object.defineProperty(selfCycle, 'errors', {value: [selfCycle]});
+    expect(isTm2OperationalConnectionError(selfCycle)).toBe(false);
+
+    const first = new AggregateError([]);
+    const second = new AggregateError([]);
+    Object.defineProperty(first, 'errors', {value: [second]});
+    Object.defineProperty(second, 'errors', {value: [first]});
+    expect(isTm2OperationalConnectionError(first)).toBe(false);
+
+    let nested: unknown = syntheticOperationalError();
+    for (let depth = 0; depth <= TM2_OPERATIONAL_ERROR_MAX_DEPTH; depth += 1) {
+      nested = new AggregateError([nested]);
+    }
+    expect(isTm2OperationalConnectionError(nested)).toBe(false);
+
+    const overBudget = Array.from(
+      {length: TM2_OPERATIONAL_ERROR_MAX_MEMBERS + 1},
+      () => syntheticOperationalError(),
     );
-    expect(isTm2OperationalConnectionError(new TypeError('ECONNREFUSED'))).toBe(
-      false,
-    );
-    expect(isTm2OperationalConnectionError('ECONNREFUSED')).toBe(false);
+    expect(
+      isTm2OperationalConnectionError(new AggregateError(overBudget)),
+    ).toBe(false);
   });
 
   it('classifies a syntax-valid unreachable endpoint as NOT_READY with exit 2', async () => {
@@ -747,6 +1182,14 @@ describe('Test-owned PostgreSQL TM2 admission outcome channel', () => {
     expect(
       classifyTm2HarnessOutcome(admission, {exitCode: 0, signal: null}),
     ).toEqual({
+      exitCode: 1,
+      event: 'postgres_tm2_failed',
+      outcome: 'failed',
+      code: 'tm2_mandatory_report_invalid',
+    });
+    expect(
+      classifyTm2HarnessOutcome(admission, {exitCode: 0, signal: null}, 488),
+    ).toEqual({
       exitCode: 0,
       event: 'postgres_tm2_complete',
       outcome: 'pass',
@@ -767,7 +1210,7 @@ describe('Test-owned PostgreSQL TM2 admission outcome channel', () => {
         return error instanceof PostgresConnectionConfigError;
       },
       inspectEnvironment() {
-        return Promise.resolve(admittedObservation());
+        return Promise.resolve({observation: admittedObservation()});
       },
     });
     expect(outcome).toEqual({
@@ -885,6 +1328,190 @@ describe('Test-owned PostgreSQL TM2 admission outcome channel', () => {
       ),
     ).toBeUndefined();
   });
+
+  it('rejects proxied environment observations at every container with zero traps', async () => {
+    const locations = ['root', 'sessions', 'session', 'roles', 'role'] as const;
+    for (const location of locations) {
+      const source = mutableAdmittedObservation();
+      let traps = 0;
+      const proxied = <T extends object>(target: T): T =>
+        new Proxy(target, {
+          get(candidate, key, receiver) {
+            traps += 1;
+            void candidate;
+            void key;
+            void receiver;
+            return undefined;
+          },
+          getOwnPropertyDescriptor(candidate, key) {
+            traps += 1;
+            return Reflect.getOwnPropertyDescriptor(candidate, key);
+          },
+          getPrototypeOf(candidate) {
+            traps += 1;
+            return Reflect.getPrototypeOf(candidate);
+          },
+          ownKeys(candidate) {
+            traps += 1;
+            return Reflect.ownKeys(candidate);
+          },
+        });
+      let hostile: Tm2AdmissionEnvironmentObservation;
+      switch (location) {
+        case 'root':
+          hostile = proxied(source);
+          break;
+        case 'sessions':
+          hostile = {...source, sessions: proxied(source.sessions)};
+          break;
+        case 'session':
+          hostile = {
+            ...source,
+            sessions: {
+              ...source.sessions,
+              runtime: proxied(source.sessions.runtime),
+            },
+          };
+          break;
+        case 'roles':
+          hostile = {...source, roles: proxied([...source.roles])};
+          break;
+        case 'role': {
+          const firstRole = source.roles[0];
+          if (firstRole === undefined) {
+            throw new Error('SYNTHETIC_ROLE_OBSERVATION_MISSING');
+          }
+          hostile = {
+            ...source,
+            roles: [proxied(firstRole), ...source.roles.slice(1)],
+          };
+          break;
+        }
+      }
+      const dependencies =
+        location === 'root'
+          ? {
+              ...admissionDependencies(() =>
+                Promise.resolve(admittedObservation()),
+              ),
+              inspectEnvironment: () => Promise.resolve({observation: hostile}),
+            }
+          : admissionDependencies(() => Promise.resolve(hostile));
+      const outcome = await runTm2AdmissionPreflight(
+        formalSyntheticEnvironment(),
+        dependencies,
+      );
+      expect(outcome, location).toEqual({
+        status: 'failed',
+        code: 'tm2_admission_probe_failure',
+      });
+      expect(traps, location).toBe(0);
+    }
+  });
+
+  it('rejects observation accessors, sparse arrays, symbols, and extra keys without invocation', async () => {
+    let getterCalls = 0;
+    const accessor = mutableAdmittedObservation();
+    Object.defineProperty(accessor, 'projectSchemaCount', {
+      get() {
+        getterCalls += 1;
+        return 0;
+      },
+      enumerable: true,
+      configurable: true,
+    });
+    const sparse = mutableAdmittedObservation();
+    const sparseRoles = new Array<
+      Tm2AdmissionEnvironmentObservation['roles'][number]
+    >(3);
+    const firstSparseRole = sparse.roles[0];
+    const thirdSparseRole = sparse.roles[2];
+    if (firstSparseRole === undefined || thirdSparseRole === undefined) {
+      throw new Error('SYNTHETIC_ROLE_OBSERVATION_MISSING');
+    }
+    sparseRoles[0] = firstSparseRole;
+    sparseRoles[2] = thirdSparseRole;
+    sparse.roles = sparseRoles;
+
+    const withSymbol = mutableAdmittedObservation();
+    Object.defineProperty(withSymbol.sessions, Symbol('synthetic'), {
+      value: true,
+    });
+    const withExtra =
+      mutableAdmittedObservation() as DeepMutable<Tm2AdmissionEnvironmentObservation> & {
+        syntheticExtra?: boolean;
+      };
+    withExtra.syntheticExtra = true;
+
+    for (const observation of [accessor, sparse, withSymbol, withExtra]) {
+      const outcome = await runTm2AdmissionPreflight(
+        formalSyntheticEnvironment(),
+        admissionDependencies(() => Promise.resolve(observation)),
+      );
+      expect(outcome).toEqual({
+        status: 'failed',
+        code: 'tm2_admission_probe_failure',
+      });
+    }
+    expect(getterCalls).toBe(0);
+  });
+
+  it('projects a valid observation into owned frozen data without inherited setter calls', async () => {
+    const source = mutableAdmittedObservation();
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      'databaseOwner',
+    );
+    let setterCalls = 0;
+    Object.defineProperty(Object.prototype, 'databaseOwner', {
+      set() {
+        setterCalls += 1;
+      },
+      configurable: true,
+    });
+    try {
+      const owned = decodeClosedTm2EnvironmentObservation(source);
+      expect(owned).toBeDefined();
+      expect(Object.getPrototypeOf(owned)).toBeNull();
+      expect(Object.getPrototypeOf(owned?.sessions)).toBeNull();
+      expect(Object.isFrozen(owned)).toBe(true);
+      expect(Object.isFrozen(owned?.roles)).toBe(true);
+      expect(setterCalls).toBe(0);
+
+      source.databaseOwner = 'synthetic_mutated_owner';
+      source.sessions.runtime.currentUser = 'synthetic_mutated_runtime';
+      const firstRole = source.roles[0];
+      if (firstRole === undefined) {
+        throw new Error('SYNTHETIC_ROLE_OBSERVATION_MISSING');
+      }
+      source.roles[0] = {...firstRole, canLogin: false};
+      expect(owned?.databaseOwner).toBe('struinfo_tm2_admin');
+      expect(owned?.sessions.runtime.currentUser).toBe('struinfo_tm2_runtime');
+      expect(owned?.roles[0]?.canLogin).toBe(true);
+
+      const outcome = await runTm2AdmissionPreflight(
+        formalSyntheticEnvironment(),
+        admissionDependencies(() =>
+          Promise.resolve(mutableAdmittedObservation()),
+        ),
+      );
+      expect(outcome).toEqual({
+        status: 'admitted',
+        code: 'tm2_environment_admitted',
+      });
+    } finally {
+      if (originalDescriptor === undefined) {
+        delete (Object.prototype as {databaseOwner?: unknown}).databaseOwner;
+      } else {
+        Object.defineProperty(
+          Object.prototype,
+          'databaseOwner',
+          originalDescriptor,
+        );
+      }
+    }
+    expect(setterCalls).toBe(0);
+  });
 });
 
 describe('Test-owned PostgreSQL TM2 bounded child seam', () => {
@@ -914,6 +1541,8 @@ describe('Test-owned PostgreSQL TM2 bounded child seam', () => {
       status: 'completed',
       exitCode: 0,
       signal: null,
+      confirmedClosed: true,
+      safeToDeleteTaskRoot: true,
     });
     expect(child.killCalls).toEqual([]);
     expect(child.listenerCount).toBe(0);
@@ -934,7 +1563,11 @@ describe('Test-owned PostgreSQL TM2 bounded child seam', () => {
     });
     child.emitError(new Error('synthetic-sensitive-child-error'));
     const result = await resultPromise;
-    expect(result).toEqual({status: 'spawn_failed'});
+    expect(result).toEqual({
+      status: 'spawn_failed',
+      confirmedClosed: false,
+      safeToDeleteTaskRoot: true,
+    });
     if (result.status !== 'completed') {
       const code = failureCodeForBoundedChild('admission', result);
       expect(code).toBe('tm2_admission_child_failure');
@@ -964,7 +1597,11 @@ describe('Test-owned PostgreSQL TM2 bounded child seam', () => {
     expect(deadline.scheduledDelays).toEqual([60_000, 10_000]);
     child.emitClose(null, 'SIGKILL');
     const result = await resultPromise;
-    expect(result).toEqual({status: 'timed_out'});
+    expect(result).toEqual({
+      status: 'timed_out',
+      confirmedClosed: true,
+      safeToDeleteTaskRoot: true,
+    });
     if (result.status !== 'completed') {
       const code = failureCodeForBoundedChild('admission', result);
       expect(code).toBe('tm2_admission_child_timeout');
@@ -992,7 +1629,11 @@ describe('Test-owned PostgreSQL TM2 bounded child seam', () => {
     deadline.fire(TM2_MANDATORY_CHILD_DEADLINE_MS);
     child.emitClose(null, 'SIGKILL');
     const result = await resultPromise;
-    expect(result).toEqual({status: 'timed_out'});
+    expect(result).toEqual({
+      status: 'timed_out',
+      confirmedClosed: true,
+      safeToDeleteTaskRoot: true,
+    });
     if (result.status !== 'completed') {
       const code = failureCodeForBoundedChild('mandatory', result);
       expect(code).toBe('tm2_mandatory_child_timeout');
@@ -1019,7 +1660,11 @@ describe('Test-owned PostgreSQL TM2 bounded child seam', () => {
     deadline.fire(TM2_ADMISSION_CHILD_DEADLINE_MS);
     deadline.fire(TM2_CHILD_REAP_DEADLINE_MS);
     const result = await resultPromise;
-    expect(result).toEqual({status: 'termination_failed'});
+    expect(result).toEqual({
+      status: 'termination_failed',
+      confirmedClosed: false,
+      safeToDeleteTaskRoot: false,
+    });
     if (result.status !== 'completed') {
       expect(failureCodeForBoundedChild('admission', result)).toBe(
         'tm2_admission_child_termination_failure',
@@ -1044,13 +1689,42 @@ describe('Test-owned PostgreSQL TM2 bounded child seam', () => {
     deadline.fire(TM2_MANDATORY_CHILD_DEADLINE_MS);
     child.emitClose(null, 'SIGKILL');
     const result = await resultPromise;
-    expect(result).toEqual({status: 'termination_failed'});
+    expect(result).toEqual({
+      status: 'termination_failed',
+      confirmedClosed: true,
+      safeToDeleteTaskRoot: true,
+    });
     if (result.status !== 'completed') {
       expect(failureCodeForBoundedChild('mandatory', result)).toBe(
         'tm2_mandatory_child_termination_failure',
       );
     }
     expect(child.killCalls).toEqual(['SIGKILL']);
+    expect(child.listenerCount).toBe(0);
+    expect(deadline.activeCount).toBe(0);
+  });
+
+  it('detaches when kill returns false and the child never closes', async () => {
+    const child = new FakeChild();
+    child.killResult = false;
+    const deadline = new FakeDeadline();
+    const output = new FakeOutput();
+    const resultPromise = runTm2BoundedChild({
+      child,
+      deadline,
+      deadlineMs: TM2_MANDATORY_CHILD_DEADLINE_MS,
+      reapDeadlineMs: TM2_CHILD_REAP_DEADLINE_MS,
+      output,
+    });
+    deadline.fire(TM2_MANDATORY_CHILD_DEADLINE_MS);
+    deadline.fire(TM2_CHILD_REAP_DEADLINE_MS);
+    await expect(resultPromise).resolves.toEqual({
+      status: 'termination_failed',
+      confirmedClosed: false,
+      safeToDeleteTaskRoot: false,
+    });
+    expect(child.killCalls).toEqual(['SIGKILL']);
+    expect(child.cleanupCalls).toContain('unref');
     expect(child.listenerCount).toBe(0);
     expect(deadline.activeCount).toBe(0);
   });
@@ -1071,7 +1745,11 @@ describe('Test-owned PostgreSQL TM2 bounded child seam', () => {
     const result = await resultPromise;
     output.append('synthetic-late-report');
     child.emitClose(0, null);
-    expect(result).toEqual({status: 'timed_out'});
+    expect(result).toEqual({
+      status: 'timed_out',
+      confirmedClosed: true,
+      safeToDeleteTaskRoot: true,
+    });
     if (result.status !== 'completed') {
       expect(failureCodeForBoundedChild('mandatory', result)).toBe(
         'tm2_mandatory_child_timeout',
@@ -1081,6 +1759,434 @@ describe('Test-owned PostgreSQL TM2 bounded child seam', () => {
     expect(deadline.activeCount).toBe(0);
     expect(output.stops).toEqual([true]);
     expect(output.value).toBe('');
+  });
+
+  it('records a timeout-period error but waits for confirmed close before settling', async () => {
+    const child = new FakeChild();
+    const deadline = new FakeDeadline();
+    const output = new FakeOutput();
+    let settled = false;
+    const resultPromise = runTm2BoundedChild({
+      child,
+      deadline,
+      deadlineMs: TM2_ADMISSION_CHILD_DEADLINE_MS,
+      reapDeadlineMs: TM2_CHILD_REAP_DEADLINE_MS,
+      output,
+    }).then((result) => {
+      settled = true;
+      return result;
+    });
+    deadline.fire(TM2_ADMISSION_CHILD_DEADLINE_MS);
+    child.emitError(new Error('synthetic-redacted'));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    child.emitClose(null, 'SIGKILL');
+    await expect(resultPromise).resolves.toEqual({
+      status: 'termination_failed',
+      confirmedClosed: true,
+      safeToDeleteTaskRoot: true,
+    });
+  });
+
+  it('detaches after reap failure and marks the task root unsafe to delete', async () => {
+    const child = new FakeChild();
+    const deadline = new FakeDeadline();
+    const output = new FakeOutput();
+    const resultPromise = runTm2BoundedChild({
+      child,
+      deadline,
+      deadlineMs: TM2_MANDATORY_CHILD_DEADLINE_MS,
+      reapDeadlineMs: TM2_CHILD_REAP_DEADLINE_MS,
+      output,
+    });
+    deadline.fire(TM2_MANDATORY_CHILD_DEADLINE_MS);
+    child.emitError(new Error('synthetic-redacted'));
+    deadline.fire(TM2_CHILD_REAP_DEADLINE_MS);
+    const result = await resultPromise;
+    expect(result).toEqual({
+      status: 'termination_failed',
+      confirmedClosed: false,
+      safeToDeleteTaskRoot: false,
+    });
+    expect(child.cleanupCalls).toEqual(
+      expect.arrayContaining([
+        'destroyStdin',
+        'destroyStdout',
+        'destroyStderr',
+        'offError',
+        'offClose',
+        'unref',
+      ]),
+    );
+    expect(output.destroyCalls).toBe(1);
+    child.emitClose(0, null);
+    expect(result.safeToDeleteTaskRoot).toBe(false);
+  });
+
+  it('handles kill false, kill throw, and synchronous close without a double settlement', async () => {
+    const scenarios = [
+      {killResult: false, killThrows: false, closeDuringKill: false},
+      {killResult: true, killThrows: true, closeDuringKill: false},
+      {killResult: true, killThrows: false, closeDuringKill: true},
+    ] as const;
+    for (const scenario of scenarios) {
+      const child = new FakeChild();
+      child.killResult = scenario.killResult;
+      child.killThrows = scenario.killThrows;
+      child.closeDuringKill = scenario.closeDuringKill;
+      const deadline = new FakeDeadline();
+      const output = new FakeOutput();
+      const resultPromise = runTm2BoundedChild({
+        child,
+        deadline,
+        deadlineMs: TM2_ADMISSION_CHILD_DEADLINE_MS,
+        reapDeadlineMs: TM2_CHILD_REAP_DEADLINE_MS,
+        output,
+      });
+      deadline.fire(TM2_ADMISSION_CHILD_DEADLINE_MS);
+      if (!scenario.closeDuringKill) {
+        child.emitClose(null, 'SIGKILL');
+      }
+      const result = await resultPromise;
+      expect(result.confirmedClosed).toBe(true);
+      expect(result.safeToDeleteTaskRoot).toBe(true);
+      expect(result.status).toBe(
+        scenario.closeDuringKill ? 'timed_out' : 'termination_failed',
+      );
+      child.emitClose(0, null);
+      expect(child.listenerCount).toBe(0);
+      expect(deadline.activeCount).toBe(0);
+    }
+  });
+
+  it('attempts every reap cleanup independently when several cleanup operations throw', async () => {
+    const child = new FakeChild();
+    child.offErrorThrows = true;
+    child.offCloseThrows = true;
+    child.destroyStdinThrows = true;
+    child.destroyStdoutThrows = true;
+    child.destroyStderrThrows = true;
+    child.unrefThrows = true;
+    const deadline = new FakeDeadline();
+    deadline.cancelThrows = true;
+    const output = new FakeOutput();
+    output.stopThrows = true;
+    output.destroyThrows = true;
+    const resultPromise = runTm2BoundedChild({
+      child,
+      deadline,
+      deadlineMs: TM2_ADMISSION_CHILD_DEADLINE_MS,
+      reapDeadlineMs: TM2_CHILD_REAP_DEADLINE_MS,
+      output,
+    });
+    deadline.fire(TM2_ADMISSION_CHILD_DEADLINE_MS);
+    deadline.fire(TM2_CHILD_REAP_DEADLINE_MS);
+    await expect(resultPromise).resolves.toEqual({
+      status: 'termination_failed',
+      confirmedClosed: false,
+      safeToDeleteTaskRoot: false,
+    });
+    expect(output.stops).toEqual([true]);
+    expect(output.destroyCalls).toBe(1);
+    expect(child.cleanupCalls).toEqual(
+      expect.arrayContaining([
+        'destroyStdin',
+        'destroyStdout',
+        'destroyStderr',
+        'offError',
+        'offClose',
+        'unref',
+      ]),
+    );
+    expect(child.listenerCount).toBe(0);
+    expect(deadline.activeCount).toBe(0);
+  });
+
+  it('kills and observes close for a real short-lived Node helper child', async () => {
+    const child = spawn(
+      process.execPath,
+      ['-e', 'setInterval(() => undefined, 1000)'],
+      {stdio: 'ignore', windowsHide: true},
+    );
+    const result = await runTm2BoundedChild({
+      child: createTm2ChildProcessPort(child),
+      deadline: SYSTEM_TM2_DEADLINE,
+      deadlineMs: 50,
+      reapDeadlineMs: 2_000,
+      output: {
+        stop(): void {
+          return;
+        },
+        destroy(): void {
+          return;
+        },
+      },
+    });
+    expect(result).toEqual({
+      status: 'timed_out',
+      confirmedClosed: true,
+      safeToDeleteTaskRoot: true,
+    });
+    expect(child.killed).toBe(true);
+  });
+});
+
+describe('Test-owned PostgreSQL TM2 mandatory report oracle', () => {
+  it('accepts exactly 488 passed mandatory IDs and normalizes Windows and Unix suite paths', () => {
+    for (const root of ['/synthetic/repository', 'C:\\synthetic\\repository']) {
+      const report = createSyntheticMandatoryReport(root);
+      expect(
+        auditTm2MandatoryReportSource(JSON.stringify(report), root),
+      ).toEqual({status: 'valid', mandatoryCount: 488});
+    }
+    expect(
+      normalizeTm2ReportSuitePath(
+        'C:\\synthetic\\repository\\tests\\postgres\\postgres_tm2_mandatory.tm2.ts',
+        'C:\\synthetic\\repository',
+      ),
+    ).toBe(TM2_MANDATORY_SUITE_PATH);
+    expect(
+      normalizeTm2ReportSuitePath(
+        '/synthetic/repository/tests/postgres/postgres_tm2_mandatory.tm2.ts',
+        '/synthetic/repository',
+      ),
+    ).toBe(TM2_MANDATORY_SUITE_PATH);
+  });
+
+  it('rejects 487 rows, duplicate IDs, and unexpected IDs', () => {
+    const missing = createSyntheticMandatoryReport();
+    missing.testResults[0]?.assertionResults.pop();
+    refreshSyntheticReportCounts(missing);
+
+    const duplicate = createSyntheticMandatoryReport();
+    const duplicateAssertion = duplicate.testResults[0]?.assertionResults[487];
+    if (duplicateAssertion === undefined) {
+      throw new Error('SYNTHETIC_REPORT_ASSERTION_MISSING');
+    }
+    duplicateAssertion.title = 'PG-TM2-001 synthetic-duplicate';
+    duplicateAssertion.fullName =
+      'Synthetic PostgreSQL TM2 suite PG-TM2-001 synthetic-duplicate';
+
+    const unexpected = createSyntheticMandatoryReport();
+    const unexpectedAssertion =
+      unexpected.testResults[0]?.assertionResults[487];
+    if (unexpectedAssertion === undefined) {
+      throw new Error('SYNTHETIC_REPORT_ASSERTION_MISSING');
+    }
+    unexpectedAssertion.title = 'PG-TM2-489 synthetic-unexpected';
+    unexpectedAssertion.fullName =
+      'Synthetic PostgreSQL TM2 suite PG-TM2-489 synthetic-unexpected';
+
+    for (const report of [missing, duplicate, unexpected]) {
+      expect(
+        auditTm2MandatoryReportSource(
+          JSON.stringify(report),
+          '/synthetic/repository',
+        ),
+      ).toEqual({status: 'invalid'});
+    }
+  });
+
+  it('rejects a longer numeric suffix that masquerades as a mandatory ID', () => {
+    const report = createSyntheticMandatoryReport();
+    const assertion = report.testResults[0]?.assertionResults[0];
+    if (assertion === undefined) {
+      throw new Error('SYNTHETIC_REPORT_ASSERTION_MISSING');
+    }
+    assertion.title = 'PG-TM2-0010 synthetic-masquerade';
+    assertion.fullName =
+      'Synthetic PostgreSQL TM2 suite PG-TM2-0010 synthetic-masquerade';
+    expect(
+      auditTm2MandatoryReportSource(
+        JSON.stringify(report),
+        '/synthetic/repository',
+      ),
+    ).toEqual({status: 'invalid'});
+  });
+
+  it('rejects missing, duplicate, selftest-only, and path-masquerading mandatory suites', () => {
+    const missing = createSyntheticMandatoryReport();
+    missing.testResults = missing.testResults.slice(1);
+    refreshSyntheticReportCounts(missing);
+
+    const duplicate = createSyntheticMandatoryReport();
+    const mandatorySuite = duplicate.testResults[0];
+    if (mandatorySuite === undefined) {
+      throw new Error('SYNTHETIC_REPORT_SUITE_MISSING');
+    }
+    duplicate.testResults.push(structuredClone(mandatorySuite));
+    refreshSyntheticReportCounts(duplicate);
+
+    const masquerading = createSyntheticMandatoryReport();
+    const masqueradingSuite = masquerading.testResults[0];
+    if (masqueradingSuite === undefined) {
+      throw new Error('SYNTHETIC_REPORT_SUITE_MISSING');
+    }
+    masqueradingSuite.name =
+      '/synthetic/repository/other/tests/postgres/postgres_tm2_mandatory.tm2.ts';
+
+    for (const report of [missing, duplicate, masquerading]) {
+      expect(
+        auditTm2MandatoryReportSource(
+          JSON.stringify(report),
+          '/synthetic/repository',
+        ),
+      ).toEqual({status: 'invalid'});
+    }
+  });
+
+  it('rejects every non-passed status and assertions with zero or two mandatory IDs', () => {
+    for (const status of [
+      'skipped',
+      'pending',
+      'todo',
+      'disabled',
+      'failed',
+      'synthetic-unknown',
+    ]) {
+      const report = createSyntheticMandatoryReport();
+      const assertion = report.testResults[0]?.assertionResults[0];
+      if (assertion === undefined) {
+        throw new Error('SYNTHETIC_REPORT_ASSERTION_MISSING');
+      }
+      assertion.status = status;
+      refreshSyntheticReportCounts(report);
+      expect(
+        auditTm2MandatoryReportSource(
+          JSON.stringify(report),
+          '/synthetic/repository',
+        ),
+        status,
+      ).toEqual({status: 'invalid'});
+    }
+
+    const zero = createSyntheticMandatoryReport();
+    const zeroAssertion = zero.testResults[0]?.assertionResults[0];
+    if (zeroAssertion === undefined) {
+      throw new Error('SYNTHETIC_REPORT_ASSERTION_MISSING');
+    }
+    zeroAssertion.title = 'synthetic-no-id';
+    zeroAssertion.fullName = 'Synthetic PostgreSQL TM2 suite synthetic-no-id';
+
+    const two = createSyntheticMandatoryReport();
+    const twoAssertion = two.testResults[0]?.assertionResults[0];
+    if (twoAssertion === undefined) {
+      throw new Error('SYNTHETIC_REPORT_ASSERTION_MISSING');
+    }
+    twoAssertion.title = 'PG-TM2-001 PG-TM2-002 synthetic-two-ids';
+    twoAssertion.fullName =
+      'Synthetic PostgreSQL TM2 suite PG-TM2-001 PG-TM2-002 synthetic-two-ids';
+
+    for (const report of [zero, two]) {
+      expect(
+        auditTm2MandatoryReportSource(
+          JSON.stringify(report),
+          '/synthetic/repository',
+        ),
+      ).toEqual({status: 'invalid'});
+    }
+  });
+
+  it('fails closed on malformed, missing, oversized, and schema-open reports', async () => {
+    expect(auditTm2MandatoryReportSource('{', '/synthetic/repository')).toEqual(
+      {status: 'invalid'},
+    );
+
+    const schemaOpen =
+      createSyntheticMandatoryReport() as SyntheticJsonReport & {
+        syntheticExtra?: boolean;
+      };
+    schemaOpen.syntheticExtra = true;
+    expect(
+      auditTm2MandatoryReportSource(
+        JSON.stringify(schemaOpen),
+        '/synthetic/repository',
+      ),
+    ).toEqual({status: 'invalid'});
+
+    const missingRead = vi.fn<() => Promise<Uint8Array>>();
+    const missingIo: Tm2MandatoryReportIo = {
+      stat: () => Promise.reject(new Error('SYNTHETIC_MISSING_REPORT')),
+      read: missingRead,
+    };
+    await expect(
+      readAndAuditTm2MandatoryReport(
+        'synthetic-report.json',
+        '/synthetic/repository',
+        missingIo,
+      ),
+    ).resolves.toEqual({status: 'invalid'});
+    expect(missingRead).not.toHaveBeenCalled();
+
+    const oversizedRead = vi.fn<() => Promise<Uint8Array>>();
+    const oversizedIo: Tm2MandatoryReportIo = {
+      stat: () =>
+        Promise.resolve({
+          size: TM2_MANDATORY_REPORT_MAX_BYTES + 1,
+          isFile: () => true,
+        }),
+      read: oversizedRead,
+    };
+    await expect(
+      readAndAuditTm2MandatoryReport(
+        'synthetic-report.json',
+        '/synthetic/repository',
+        oversizedIo,
+      ),
+    ).resolves.toEqual({status: 'invalid'});
+    expect(oversizedRead).not.toHaveBeenCalled();
+  });
+
+  it('never reads a report after timeout or nonzero child completion', async () => {
+    const reader = vi.fn(() =>
+      Promise.resolve({
+        status: 'valid' as const,
+        mandatoryCount: 488,
+      }),
+    );
+    const timeout = await auditTm2MandatoryExecution(
+      {
+        status: 'timed_out',
+        confirmedClosed: true,
+        safeToDeleteTaskRoot: true,
+      },
+      reader,
+    );
+    expect(timeout).toEqual({
+      status: 'child_not_completed',
+      reportRead: false,
+    });
+    expect(reader).not.toHaveBeenCalled();
+
+    const failed = await auditTm2MandatoryExecution(
+      {
+        status: 'completed',
+        exitCode: 1,
+        signal: null,
+        confirmedClosed: true,
+        safeToDeleteTaskRoot: true,
+      },
+      reader,
+    );
+    expect(failed).toEqual({status: 'child_failed', reportRead: false});
+    expect(reader).not.toHaveBeenCalled();
+
+    const valid = await auditTm2MandatoryExecution(
+      {
+        status: 'completed',
+        exitCode: 0,
+        signal: null,
+        confirmedClosed: true,
+        safeToDeleteTaskRoot: true,
+      },
+      reader,
+    );
+    expect(valid).toEqual({
+      status: 'valid',
+      mandatoryCount: 488,
+      reportRead: true,
+    });
+    expect(reader).toHaveBeenCalledTimes(1);
   });
 });
 
