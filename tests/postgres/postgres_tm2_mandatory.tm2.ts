@@ -4,10 +4,7 @@ import {
   admitTm2Environment,
   type AcceptedTm2Environment,
 } from '../../apps/server/test_support/postgres_tm2/environment_oracle.js';
-import {
-  auditTm2MandatoryLedger,
-  TM2_MANDATORY_LEDGER,
-} from '../../apps/server/test_support/postgres_tm2/mandatory_ledger.js';
+import {TM2_MANDATORY_LEDGER} from '../../apps/server/test_support/postgres_tm2/mandatory_ledger.js';
 import {
   executeTm2MandatoryCase,
   getPostgresTm2PublicFacade,
@@ -29,18 +26,6 @@ describe('PostgreSQL TM2 mandatory ledger', {concurrent: false}, () => {
 
   afterAll(async () => {
     await facade.close();
-  });
-
-  it('registers exactly one execution for every mandatory row', () => {
-    const audit = auditTm2MandatoryLedger();
-    expect(audit).toEqual({
-      total: 488,
-      unique: 488,
-      missing: [],
-      duplicate: [],
-      unexpected: [],
-      familyCount: 24,
-    });
   });
 
   for (const row of TM2_MANDATORY_LEDGER) {

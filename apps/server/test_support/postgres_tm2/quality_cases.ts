@@ -23,6 +23,7 @@ const OWNED_SCAN_FILES = Object.freeze([
   'apps/server/test_support/postgres_tm2/environment_cases.ts',
   'apps/server/test_support/postgres_tm2/environment_oracle.ts',
   'apps/server/test_support/postgres_tm2/mandatory_ledger.ts',
+  'apps/server/test_support/postgres_tm2/mandatory_report_oracle.ts',
   'apps/server/test_support/postgres_tm2/public_facade.ts',
   'apps/server/test_support/postgres_tm2/quality_cases.ts',
   'apps/server/test_support/postgres_tm2/retrieval_snapshot_cases.ts',
