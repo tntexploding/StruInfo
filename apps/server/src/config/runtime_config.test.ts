@@ -12,7 +12,12 @@ import {
 const DATABASE_URL =
   'postgresql://struinfo_tm2_runtime:synthetic@127.0.0.1/struinfo';
 const DATA_ROOT = join(tmpdir(), 'struinfo-synthetic-data');
-const RUNTIME_ENVIRONMENT = {DATABASE_URL, STRUIINFO_DATA_ROOT: DATA_ROOT};
+const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
+const RUNTIME_ENVIRONMENT = {
+  DATABASE_URL,
+  STRUIINFO_DATA_ROOT: DATA_ROOT,
+  STRUIINFO_WORKSPACE_ID: WORKSPACE_ID,
+};
 
 describe('parseRuntimeConfig', () => {
   it('parses defaults once into a frozen ordinary object', () => {
@@ -30,6 +35,7 @@ describe('parseRuntimeConfig', () => {
         application_name: 'struinfo-tm2-runtime',
         options: '-c role=none -c search_path=pg_catalog',
       },
+      workspaceId: WORKSPACE_ID,
       dataRoot: DATA_ROOT,
       host: '127.0.0.1',
       port: 3000,
@@ -62,6 +68,7 @@ describe('parseRuntimeConfig', () => {
       DATABASE_URL:
         'postgres://struinfo_tm2_runtime:synthetic@localhost/database',
       STRUIINFO_DATA_ROOT: DATA_ROOT,
+      STRUIINFO_WORKSPACE_ID: WORKSPACE_ID,
       STRUIINFO_HOST: 'localhost',
       STRUIINFO_PORT: '1',
       STRUIINFO_HEALTH_HOST: '::1',
@@ -82,6 +89,7 @@ describe('parseRuntimeConfig', () => {
       parseRuntimeConfig('api', {
         DATABASE_URL,
         STRUIINFO_DATA_ROOT: DATA_ROOT,
+        STRUIINFO_WORKSPACE_ID: WORKSPACE_ID,
         STRUIINFO_SHUTDOWN_TIMEOUT_MS: '1000',
       }).shutdownTimeoutMs,
     ).toBe(1000);
@@ -105,12 +113,32 @@ describe('parseRuntimeConfig', () => {
     ).toThrow('STRUIINFO_DATA_ROOT must be an absolute filesystem path.');
   });
 
+  it('requires a canonical external workspace selector', () => {
+    expect(() =>
+      parseRuntimeConfig('api', {
+        DATABASE_URL,
+        STRUIINFO_DATA_ROOT: DATA_ROOT,
+      }),
+    ).toThrow(
+      new ConfigurationError(
+        'STRUIINFO_WORKSPACE_ID must be a canonical lowercase UUID.',
+      ),
+    );
+    expect(() =>
+      parseRuntimeConfig('api', {
+        ...RUNTIME_ENVIRONMENT,
+        STRUIINFO_WORKSPACE_ID: 'AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA',
+      }),
+    ).toThrow('STRUIINFO_WORKSPACE_ID');
+  });
+
   it('rejects an invalid database URL without echoing it', () => {
     const injectedSecret = 'not-a-url-with-synthetic-password';
     const error = captureConfigurationError(() =>
       parseRuntimeConfig('api', {
         DATABASE_URL: injectedSecret,
         STRUIINFO_DATA_ROOT: DATA_ROOT,
+        STRUIINFO_WORKSPACE_ID: WORKSPACE_ID,
       }),
     );
 
@@ -147,6 +175,7 @@ describe('parseRuntimeConfig', () => {
       parseRuntimeConfig('api', {
         DATABASE_URL,
         STRUIINFO_DATA_ROOT: DATA_ROOT,
+        STRUIINFO_WORKSPACE_ID: WORKSPACE_ID,
         STRUIINFO_LOG_LEVEL: 'trace',
       }),
     ).toThrow('STRUIINFO_LOG_LEVEL');

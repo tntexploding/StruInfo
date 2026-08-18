@@ -524,6 +524,9 @@ describe('write adapter traces', () => {
       fragmentDerivations: [SECOND_FRAGMENT_ID],
       knowledgeDerivations: [],
     });
+    expect(snapshot.fragments.every((fragment) => fragment.isPrivate)).toBe(
+      true,
+    );
     expect(Object.isFrozen(snapshot.revisions[0]?.provenance)).toBe(true);
   });
 
@@ -606,8 +609,13 @@ describe('retrieval adapter', () => {
       },
     ]);
     expect(snapshot.revisions[0]).not.toHaveProperty('body');
+    expect(snapshot.revisions[0]?.isPrivate).toBe(true);
     expect(snapshot.relationRevisions[0]?.value).not.toHaveProperty(
       'qualifier',
+    );
+    expect(snapshot.relationRevisions[0]?.isPrivate).toBe(true);
+    expect(client.calls.slice(1, 6).map(({parameters}) => parameters)).toEqual(
+      Array.from({length: 5}, () => [WORKSPACE_ID, false]),
     );
     expect(Object.isFrozen(snapshot)).toBe(true);
     expect(Object.isFrozen(snapshot.fragmentInputs)).toBe(true);
@@ -726,12 +734,13 @@ function knowledgeMappingResponse(sql: string): Response {
           review_state: 'confirmed',
           title: 'Synthetic title',
           body: null,
+          is_private: false,
         },
       ],
       rowCount: 1,
     };
   }
-  if (sql.includes('FROM struinfo.fragment\nWHERE')) {
+  if (sql.includes('FROM struinfo.fragment AS f')) {
     return {
       rows: [FRAGMENT_ID, SECOND_FRAGMENT_ID].map((fragmentId) => ({
         workspace_id: WORKSPACE_ID,
@@ -739,6 +748,7 @@ function knowledgeMappingResponse(sql: string): Response {
         snapshot_id: SNAPSHOT_ID,
         fragment_id: fragmentId,
         selected_text_sha256: 'a'.repeat(64),
+        is_private: true,
       })),
       rowCount: 2,
     };
@@ -798,6 +808,7 @@ function retrievalResponse(sql: string): Response {
           review_state: 'withdrawn',
           title: 'Synthetic title',
           body: null,
+          is_private: true,
         },
       ],
       rowCount: 1,
@@ -851,6 +862,7 @@ function retrievalResponse(sql: string): Response {
           epistemic_role: 'summary',
           review_state: 'rejected',
           qualifier: null,
+          is_private: true,
         },
       ],
       rowCount: 1,

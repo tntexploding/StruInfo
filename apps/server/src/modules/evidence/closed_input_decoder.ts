@@ -212,7 +212,7 @@ function decodeResource(value: unknown, path: string): ResourceInput {
   const record = inspectRecord(
     value,
     ['workspaceId', 'resourceId', 'resourceKind', 'sourceKey'],
-    ['canonicalUri'],
+    ['canonicalUri', 'isPrivate'],
     path,
   );
   const canonicalUri = optionalString(
@@ -220,6 +220,7 @@ function decodeResource(value: unknown, path: string): ResourceInput {
     'canonicalUri',
     `${path}.canonicalUri`,
   );
+  const isPrivate = optionalBoolean(record, 'isPrivate', `${path}.isPrivate`);
   return {
     workspaceId: requiredString(record, 'workspaceId', `${path}.workspaceId`),
     resourceId: requiredString(record, 'resourceId', `${path}.resourceId`),
@@ -230,6 +231,7 @@ function decodeResource(value: unknown, path: string): ResourceInput {
     ) as ResourceInput['resourceKind'],
     sourceKey: requiredString(record, 'sourceKey', `${path}.sourceKey`),
     ...(canonicalUri === undefined ? {} : {canonicalUri}),
+    ...(isPrivate === true ? {isPrivate: true as const} : {}),
   };
 }
 
@@ -1045,6 +1047,21 @@ function requiredBoolean(
   path: string,
 ): boolean {
   const value = requiredValue(record, key, path);
+  if (typeof value !== 'boolean') {
+    throw new ClosedInputDecodeError('invalid_shape', path);
+  }
+  return value;
+}
+
+function optionalBoolean(
+  record: InspectedRecord,
+  key: string,
+  path: string,
+): boolean | undefined {
+  const value = optionalValue(record, key);
+  if (value === undefined) {
+    return undefined;
+  }
   if (typeof value !== 'boolean') {
     throw new ClosedInputDecodeError('invalid_shape', path);
   }

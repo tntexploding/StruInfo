@@ -16,6 +16,7 @@ import {
 export const WORKSPACE_BUNDLE_FORMAT = 'struinfo.workspace-bundle';
 export const WORKSPACE_BUNDLE_VERSION = 1;
 export const DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_BYTES = 16 * 1024 * 1024;
+export const DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES = 1_000_000;
 
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const SHA256_DIGEST_PATTERN = /^[a-f0-9]{64}$/u;
@@ -119,6 +120,7 @@ export interface ImportedWorkspaceBundle {
 
 export interface WorkspaceBundleOptions {
   readonly maximumBytes?: number;
+  readonly maximumValues?: number;
 }
 
 export function writeWorkspaceBundle(
@@ -130,23 +132,31 @@ export function writeWorkspaceBundle(
     throw schemaInvalid();
   }
   const maximumBytes = parseMaximumBytes(options.maximumBytes);
+  const maximumValues = parseMaximumValues(options.maximumValues);
   validateWorkspaceId(request.workspaceId);
   validateTimestamp(request.exportedAt);
   const registry = createCodecRegistry(codecs);
-  const sections = normalizeSectionsForWrite(request.sections, registry);
+  const sections = normalizeSectionsForWrite(
+    request.sections,
+    registry,
+    maximumValues,
+  );
   const blobReferences = normalizeBlobReferences(request.blobReferences);
-  const envelope = normalizeJsonValue({
-    blobReferences,
-    exportedAt: request.exportedAt,
-    format: WORKSPACE_BUNDLE_FORMAT,
-    secretHandling: 'excluded',
-    sections,
-    version: WORKSPACE_BUNDLE_VERSION,
-    workspaceId: request.workspaceId,
-  });
+  const envelope = normalizeJsonValue(
+    {
+      blobReferences,
+      exportedAt: request.exportedAt,
+      format: WORKSPACE_BUNDLE_FORMAT,
+      secretHandling: 'excluded',
+      sections,
+      version: WORKSPACE_BUNDLE_VERSION,
+      workspaceId: request.workspaceId,
+    },
+    {maximumValues},
+  );
   assertNoSecretMaterial(envelope);
   try {
-    return encodeCanonicalJson(envelope, maximumBytes);
+    return encodeCanonicalJson(envelope, maximumBytes, {maximumValues});
   } catch (error) {
     throw mapCanonicalJsonError(error);
   }
@@ -158,9 +168,10 @@ export function readWorkspaceBundle(
   options: Readonly<WorkspaceBundleOptions> = {},
 ): Readonly<ImportedWorkspaceBundle> {
   const maximumBytes = parseMaximumBytes(options.maximumBytes);
+  const maximumValues = parseMaximumValues(options.maximumValues);
   let decoded: JsonValue;
   try {
-    decoded = decodeCanonicalJson(input, maximumBytes);
+    decoded = decodeCanonicalJson(input, maximumBytes, {maximumValues});
   } catch (error) {
     throw mapCanonicalJsonError(error);
   }
@@ -205,6 +216,7 @@ export function readWorkspaceBundle(
 function normalizeSectionsForWrite(
   sections: readonly WorkspaceBundleSectionInput[],
   registry: ReadonlyMap<string, Readonly<WorkspaceBundleSectionCodec>>,
+  maximumValues: number,
 ): readonly JsonValue[] {
   if (!isReadonlyArray(sections)) {
     throw schemaInvalid();
@@ -220,7 +232,9 @@ function normalizeSectionsForWrite(
     }
     let payload: JsonValue;
     try {
-      payload = normalizeJsonValue(codec.encode(section.value));
+      payload = normalizeJsonValue(codec.encode(section.value), {
+        maximumValues,
+      });
     } catch (error) {
       if (error instanceof WorkspaceBundleError) {
         throw error;
@@ -396,6 +410,17 @@ function parseMaximumBytes(value: number | undefined): number {
     );
   }
   return maximumBytes;
+}
+
+function parseMaximumValues(value: number | undefined): number {
+  const maximumValues = value ?? DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES;
+  if (!Number.isSafeInteger(maximumValues) || maximumValues < 1) {
+    throw new WorkspaceBundleError(
+      'input_invalid',
+      'The workspace bundle value limit is invalid.',
+    );
+  }
+  return maximumValues;
 }
 
 function assertNoSecretMaterial(value: JsonValue): void {

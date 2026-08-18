@@ -92,7 +92,7 @@ ORDER BY item_id`;
 const READ_REVISIONS_SQL = `SELECT
   workspace_id::text, item_id::text, revision_number, revision_id::text,
   previous_revision_id::text, knowledge_kind, epistemic_role, review_state,
-  title, body
+  title, body, is_private
 FROM struinfo.knowledge_revision
 WHERE workspace_id = $1 AND item_id = ANY($2::uuid[])
 ORDER BY item_id, revision_number`;
@@ -106,16 +106,18 @@ ORDER BY relation_id`;
 const READ_RELATION_REVISIONS_SQL = `SELECT
   workspace_id::text, relation_id::text, revision_number, revision_id::text,
   previous_revision_id::text, subject_item_id::text, relation_type_key,
-  object_item_id::text, epistemic_role, review_state, qualifier
+  object_item_id::text, epistemic_role, review_state, qualifier, is_private
 FROM struinfo.knowledge_relation_revision
 WHERE workspace_id = $1 AND relation_id = ANY($2::uuid[])
 ORDER BY relation_id, revision_number`;
 const READ_FRAGMENTS_SQL = `SELECT
-  workspace_id::text, resource_id::text, snapshot_id::text,
-  fragment_id::text, selected_text_sha256
-FROM struinfo.fragment
-WHERE workspace_id = $1 AND fragment_id = ANY($2::uuid[])
-ORDER BY fragment_id`;
+  f.workspace_id::text, f.resource_id::text, f.snapshot_id::text,
+  f.fragment_id::text, f.selected_text_sha256, r.is_private
+FROM struinfo.fragment AS f
+JOIN struinfo.resource AS r
+  ON r.workspace_id = f.workspace_id AND r.resource_id = f.resource_id
+WHERE f.workspace_id = $1 AND f.fragment_id = ANY($2::uuid[])
+ORDER BY f.fragment_id`;
 const READ_CURATION_AUTHORIZATION_SQL = `SELECT
   t.workspace_id::text, t.target_id::text, t.target_kind,
   t.resource_id::text, t.snapshot_id::text, t.fragment_id::text,
@@ -271,15 +273,13 @@ WHERE workspace_id = $1 AND fragment_id = $2`;
     stored: Row,
   ): Promise<ManualKnowledgeRepositorySnapshot> {
     const changeSet = mapChangeSet(stored);
-    const [operations, events] = await Promise.all([
-      this.#client.query<Row>(READ_CHANGE_OPERATIONS_SQL, [
-        workspaceId,
-        changeSet.changeSetId,
-      ]),
-      this.#client.query<Row>(READ_CHANGE_EVENT_SQL, [
-        workspaceId,
-        changeSet.changeSetId,
-      ]),
+    const operations = await this.#client.query<Row>(
+      READ_CHANGE_OPERATIONS_SQL,
+      [workspaceId, changeSet.changeSetId],
+    );
+    const events = await this.#client.query<Row>(READ_CHANGE_EVENT_SQL, [
+      workspaceId,
+      changeSet.changeSetId,
     ]);
     return Object.freeze({
       curationTargets: Object.freeze([]),
@@ -307,58 +307,50 @@ WHERE workspace_id = $1 AND fragment_id = $2`;
       ...query.primaryRelationIds,
       ...query.historicalRelationRevisions.map((row) => row.relationId),
     ]);
-    const [
-      fragments,
-      items,
-      rawRevisions,
-      relations,
-      rawRelationRevisions,
-      itemFragments,
-      itemItems,
-      itemRelations,
-      relationFragments,
-      relationItems,
-      relationRelations,
-    ] = await Promise.all([
-      this.#client.query<Row>(READ_FRAGMENTS_SQL, [
-        query.workspaceId,
-        query.fragmentIds,
-      ]),
-      this.#client.query<Row>(READ_ITEMS_SQL, [query.workspaceId, itemIds]),
-      this.#client.query<Row>(READ_REVISIONS_SQL, [query.workspaceId, itemIds]),
-      this.#client.query<Row>(READ_RELATIONS_SQL, [
-        query.workspaceId,
-        relationIds,
-      ]),
-      this.#client.query<Row>(READ_RELATION_REVISIONS_SQL, [
-        query.workspaceId,
-        relationIds,
-      ]),
-      this.#client.query<Row>(READ_ITEM_FRAGMENT_INPUTS_SQL, [
-        query.workspaceId,
-        itemIds,
-      ]),
-      this.#client.query<Row>(READ_ITEM_ITEM_INPUTS_SQL, [
-        query.workspaceId,
-        itemIds,
-      ]),
-      this.#client.query<Row>(READ_ITEM_RELATION_INPUTS_SQL, [
-        query.workspaceId,
-        itemIds,
-      ]),
-      this.#client.query<Row>(READ_RELATION_FRAGMENT_INPUTS_SQL, [
-        query.workspaceId,
-        relationIds,
-      ]),
-      this.#client.query<Row>(READ_RELATION_ITEM_INPUTS_SQL, [
-        query.workspaceId,
-        relationIds,
-      ]),
-      this.#client.query<Row>(READ_RELATION_RELATION_INPUTS_SQL, [
-        query.workspaceId,
-        relationIds,
-      ]),
+    const fragments = await this.#client.query<Row>(READ_FRAGMENTS_SQL, [
+      query.workspaceId,
+      query.fragmentIds,
     ]);
+    const items = await this.#client.query<Row>(READ_ITEMS_SQL, [
+      query.workspaceId,
+      itemIds,
+    ]);
+    const rawRevisions = await this.#client.query<Row>(READ_REVISIONS_SQL, [
+      query.workspaceId,
+      itemIds,
+    ]);
+    const relations = await this.#client.query<Row>(READ_RELATIONS_SQL, [
+      query.workspaceId,
+      relationIds,
+    ]);
+    const rawRelationRevisions = await this.#client.query<Row>(
+      READ_RELATION_REVISIONS_SQL,
+      [query.workspaceId, relationIds],
+    );
+    const itemFragments = await this.#client.query<Row>(
+      READ_ITEM_FRAGMENT_INPUTS_SQL,
+      [query.workspaceId, itemIds],
+    );
+    const itemItems = await this.#client.query<Row>(READ_ITEM_ITEM_INPUTS_SQL, [
+      query.workspaceId,
+      itemIds,
+    ]);
+    const itemRelations = await this.#client.query<Row>(
+      READ_ITEM_RELATION_INPUTS_SQL,
+      [query.workspaceId, itemIds],
+    );
+    const relationFragments = await this.#client.query<Row>(
+      READ_RELATION_FRAGMENT_INPUTS_SQL,
+      [query.workspaceId, relationIds],
+    );
+    const relationItems = await this.#client.query<Row>(
+      READ_RELATION_ITEM_INPUTS_SQL,
+      [query.workspaceId, relationIds],
+    );
+    const relationRelations = await this.#client.query<Row>(
+      READ_RELATION_RELATION_INPUTS_SQL,
+      [query.workspaceId, relationIds],
+    );
     const mappedItems = items.rows.map(mapItem);
     const mappedRelations = relations.rows.map(mapRelation);
     const itemRevisionKeys = new Set(
@@ -552,8 +544,8 @@ VALUES ($1, $2, $3, $4)`,
   public insertKnowledgeRevision(row: KnowledgeRevisionInsert): Promise<void> {
     return this.#insert(
       `INSERT INTO struinfo.knowledge_revision
-(workspace_id, item_id, revision_id, revision_number, knowledge_kind, epistemic_role, review_state, title, body, change_set_id, operation_index, previous_revision_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+(workspace_id, item_id, revision_id, revision_number, knowledge_kind, epistemic_role, review_state, title, body, change_set_id, operation_index, previous_revision_id, is_private)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
         row.workspaceId,
         row.itemId,
@@ -567,6 +559,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
         row.changeSetId,
         row.operationIndex,
         row.previousRevisionId ?? null,
+        row.isPrivate === true,
       ],
     );
   }
@@ -613,8 +606,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7)`,
   ): Promise<void> {
     return this.#insert(
       `INSERT INTO struinfo.knowledge_relation_revision
-(workspace_id, relation_id, revision_id, revision_number, subject_item_id, relation_type_key, object_item_id, epistemic_role, review_state, qualifier, change_set_id, operation_index, previous_revision_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+(workspace_id, relation_id, revision_id, revision_number, subject_item_id, relation_type_key, object_item_id, epistemic_role, review_state, qualifier, change_set_id, operation_index, previous_revision_id, is_private)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         row.workspaceId,
         row.relationId,
@@ -629,6 +622,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
         row.changeSetId,
         row.operationIndex,
         row.previousRevisionId ?? null,
+        row.isPrivate === true,
       ],
     );
   }
@@ -903,12 +897,14 @@ function mapRelation(row: Row) {
   });
 }
 function mapFragment(row: Row) {
+  const isPrivate = postgresBoolean(row.is_private);
   return Object.freeze({
     workspaceId: canonicalUuid(row.workspace_id),
     resourceId: canonicalUuid(row.resource_id),
     snapshotId: canonicalUuid(row.snapshot_id),
     fragmentId: canonicalUuid(row.fragment_id),
     selectedTextSha256: sha256(row.selected_text_sha256),
+    ...(isPrivate ? {isPrivate: true as const} : {}),
   });
 }
 
@@ -927,6 +923,7 @@ function mapItemRevision(
       ? undefined
       : canonicalUuid(row.previous_revision_id);
   const body = optionalText(row.body);
+  const isPrivate = postgresBoolean(row.is_private);
   return Object.freeze({
     workspaceId,
     itemId,
@@ -950,6 +947,7 @@ function mapItemRevision(
       itemRows,
       relationRows,
     ),
+    ...(isPrivate ? {isPrivate: true as const} : {}),
   });
 }
 
@@ -968,6 +966,7 @@ function mapRelationRevision(
       ? undefined
       : canonicalUuid(row.previous_revision_id);
   const qualifier = optionalText(row.qualifier);
+  const isPrivate = postgresBoolean(row.is_private);
   return Object.freeze({
     workspaceId,
     relationId,
@@ -997,7 +996,13 @@ function mapRelationRevision(
       itemRows,
       relationRows,
     ),
+    ...(isPrivate ? {isPrivate: true as const} : {}),
   });
+}
+
+function postgresBoolean(value: unknown): boolean {
+  if (typeof value !== 'boolean') throw new PostgresAdapterError();
+  return value;
 }
 
 function provenanceFor(

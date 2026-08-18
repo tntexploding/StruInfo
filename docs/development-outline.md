@@ -1,7 +1,7 @@
 # StruInfo 开发大纲
 
-- 状态：基础架构、M0-S、切片 0、来源证据、确定性 Markdown、人工分类/准入、首个人工知识写入与确定性检索纯逻辑边界已完成；准备真实 PostgreSQL 适配
-- 最近更新：2026-08-15
+- 状态：M1C-USE-2 已完成；当前继续真实人工判断与找回
+- 最近更新：2026-08-17
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
 - 基础 ADR：[ADR 0001](adr/0001-typescript-modular-monolith.md)、
@@ -35,7 +35,7 @@ M0-P 证明的是架构可行性，不是生产认证；任何探针候选源码
 M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁移 runner、CI、许可证记录与统一质量命令；该工程地基由 [ADR 0003](adr/0003-m0-s-engineering-foundation.md) 接受。
 自适应摄取、偏好/探索分离和策略授权知识写入由 [ADR 0004](adr/0004-adaptive-knowledge-ingestion-and-policy-authorized-writes.md) 接受。
 [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求。
-第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。外部配置/数据根、`C-SLICE-A-EVIDENCE-r2` 来源证据边界、`C-SLICE-A-MARKDOWN-r2` 确定性 Markdown 纯转换与闭合装配边界、[`C-SLICE-A-CURATION-r3`](manual-curation-contract.md) 的用户词表/独立准入边界、[`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md) 的 A0 原子知识写入核心，以及 [`C-SLICE-B-RETRIEVAL-r3`](deterministic-knowledge-retrieval-contract.md) 的无 AI 确定性检索已经完成各自当前非容器 TM1。下一步验证真实 PostgreSQL 适配器与纯逻辑写入/检索合同的等价性。AI、偏好模型、综合分和自动准入随后接入，不能反向定义数据库或检索语义。
+第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。外部配置/数据根、`C-SLICE-A-EVIDENCE-r2` 来源证据边界、`C-SLICE-A-MARKDOWN-r2` 确定性 Markdown 纯转换与闭合装配边界、[`C-SLICE-A-CURATION-r3`](manual-curation-contract.md) 的用户词表/独立准入边界、[`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md) 的 A0 原子知识写入核心，以及 [`C-SLICE-B-RETRIEVAL-r3`](deterministic-knowledge-retrieval-contract.md) 的无 AI 确定性检索已经完成各自 TM1；这些模块及 PostgreSQL adapters 已在 M1C 中形成真实纵向闭环。固定十期现已导入真实 PostgreSQL，并通过最小领域 Bundle 完成空库恢复；持久化 `nodeKind` 读模型又把 2,639 个证据 Fragment 重建为 345 个可逐条处理的审核单元。快速审核工作台已经把有用/有趣五档评分、处理动作、关键词与联系意图分开，并支持提交后自动前进、持久化回看和包体外个人快捷标记。下一步继续由维护者提交真实判断与找回任务；AI、偏好模型、综合分和自动准入随后接入，不能反向定义数据库或检索语义。
 
 ## 2. 为什么选择这个形态
 
@@ -288,7 +288,7 @@ Blob 边界只接受通过 intrinsic brand 检查的普通字节视图，并立�
 大型正文和媒体优先保留为 Blob 引用，不能通过反复嵌套 base64 形成不可读的 current-version 工件。
 writer contract 与边界测试必须证明每个成功输出都能由相同版本的公开 reader 往返读取；若确定性 encoder 与精确 preflight 已提供同等保证，运行时不要求为每次写入重复解析。
 
-切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload，信封使用 16 MiB 默认预算的规范 UTF-8 JSON，只携带 Blob 身份并固定 `secretHandling=excluded`。合成往返证明用户类别、信源和保存查询可作为数据变化且不会携带内部秘密；正式领域分区、数据库一致性快照、Blob 包和 `exports/` 原子落盘随对应切片实现。
+切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload，信封使用 16 MiB 默认预算的规范 UTF-8 JSON，只携带 Blob 身份并固定 `secretHandling=excluded`。M1C-EXPAND 又实现 `struinfo.m1c-domain.v1`：在一致只读事务中导出当前 36 张领域表，核验全部 Blob 引用，在外部 `exports/` 原子落盘，并把同一 `workspaceId` 恢复到空数据库。Blob 字节归档、跨工作区克隆、非空目标合并和生产灾难恢复仍是独立后续能力。
 
 Linux 单机部署可先使用受备份保护的持久卷。
 需要多机或对象存储服务时，再增加 S3 兼容适配器；迁移不能改变 Resource、Snapshot 或 Citation ID。
@@ -433,6 +433,8 @@ QQbot 继续作为独立项目。
 
 启动时必须把运行配置和所有数据根解析为规范绝对路径，并拒绝 Git 工作树、源码目录、安装目录及其子目录。仓库相对路径不得成为个人数据的隐式回退。开发配置只能指向外部数据根；仓库内只保留没有真实值的 schema 与占位示例。
 
+相同构建产物必须能通过包体外配置和稳定工作区身份打开不同资料集。首版采用受控重启或重新创建 composition root 即可：先完整验证候选配置、数据库、数据根和工作区，再激活新 adapters；失败时不允许部分切换。工作区 Bundle 只作为经过领域 codec 验证的数据导入/导出载体，不能作为源码模块、构建资源或直接在线数据库。
+
 ### 11.2 Linux 正式部署
 
 第一种正式形态是单台 Linux 主机上的容器化部署：
@@ -495,6 +497,8 @@ docs/
 
 个人知识、分类、偏好、信源、规则、保存查询、提示覆盖、快照、媒体、导出、备份和实际运行配置不属于仓库布局。它们位于工作区数据库或显式外部数据根；`.gitignore` 只是事故防护，不能把仓库内忽略目录当作正式数据位置。
 
+模块只通过公共 schema、命令和 repository/Blob 端口接触这些数据。任何业务模块都不得导入用户“记忆文件”、依赖仓库相对个人路径，或要求通过修改常量、fixture、迁移 seed 和前端 mock 来切换用户资料。
+
 文件与标识符遵循 Google TypeScript Style Guide，包括 UTF-8、ES 模块、ASCII 标识符和 Google 命名规则。
 框架生成的默认命名与 Google 文件名规则冲突时，以记录在 ADR 中且由工具统一执行的项目规则为准。
 
@@ -509,8 +513,8 @@ docs/
 | 格式 | Prettier，配置固定且不手工争论等价格式 |
 | 静态检查 | ESLint + typescript-eslint 类型感知规则 + 模块边界规则 |
 | 单元/集成 | Vitest；时钟、网络、模型和随机值均可注入 |
-| 浏览器 E2E | Playwright npm 包与真实命令先进入地基；Chromium/FFmpeg/winldd 下载、强制 E2E 与浏览器 CI 等待 `M0-S-BROWSER-MAINT-001` |
-| 数据库 | 只提交前向迁移；先建立首方 runner 与角色合同和合成边界，真实 PostgreSQL/pgvector 容器执行等待 `M0-S-CONTAINER-MAINT-001` |
+| 浏览器 E2E | Playwright npm 包与真实命令先进入地基；浏览器制品和强制浏览器 CI 等待发布准入，M1C 可先运行本机浏览器 smoke |
+| 数据库 | 只提交前向迁移；首方 runner 与角色合同已经建立；生产等价容器和数据库 CI 等待部署准入，M1C 可使用 disposable PostgreSQL 18 |
 | API 契约 | OpenAPI 快照与兼容性测试；事件使用版本化 JSON Schema |
 | 依赖 | 精确锁定、`pnpm audit`、许可证审查和发行前 SPDX SBOM |
 
@@ -533,7 +537,7 @@ pnpm db:migrate
 `format:check → lint → typecheck → test → test:integration → build`
 失败即停；不能依赖已登录浏览器、实时网站或真实 AI 供应商。
 `pnpm test:e2e` 必须是真实、无空测试放行的命令，但在浏览器制品准入前不进入 `verify` 或 CI 必需门。
-数据库真实集成同样不能用跳过或合成结果冒充，必须等待独立容器/基础设施准入。
+正式 TM2 或数据库 CI 不能用跳过或合成结果冒充；M1C 可以在明确标记为本地功能验证的 disposable PostgreSQL 18 上立即运行真实 smoke，而不等待容器/发布认证。两类结果分别报告。
 
 ## 14. 测试策略
 
@@ -578,7 +582,7 @@ import -> snapshot -> document nodes/fragments/media
        -> commit -> deterministic search -> retrieve evidence -> correct/reprocess
 ```
 
-首个纵向 E2E 不配置 AI、Embedding 或外部模型凭据。测试重复导入、重复授权、策略暂停、并发变更、进程重启、引用不匹配、补偿修订和 Windows 休眠后的后续每周补跑；AI 切片另加超时、无效提案和供应商禁用场景。
+首个纵向 E2E 不配置 AI、Embedding 或外部模型凭据，只要求一条成功路径、重复导入无副作用、搜索返回出处以及一次纠错或撤回。重复授权、引用不匹配和补偿修订使用聚焦测试；并发、进程重启、Windows 休眠、策略暂停和每周补跑在启用相应运行能力后验证，不组成 M1C 的联合门。AI 切片另加超时、无效提案和供应商禁用场景。
 日报、Webhook 和 QQbot 在对应后续切片使用独立 E2E，不作为知识核心成功的替代证据。
 真实外部模型只做显式启用的 smoke test，不进入默认 CI。
 
@@ -586,12 +590,12 @@ import -> snapshot -> document nodes/fragments/media
 
 进入相应功能前必须完成：
 
-- 首个个人数据写入前：外部配置 schema、规范路径 containment、包体内容清单及工作区/Blob 联合备份合同；
-- 首个浏览器切片前：本地会话认证、写操作 CSRF、WS 认证与 Origin/工作区授权；
+- M1C 功能验证只使用 disposable 或用户明确指定的测试工作区；首次保存不可替代的个人数据前，再完成工作区/Blob 联合备份与恢复验证；
+- M1C 浏览器只监听回环地址，使用同源写请求和最小本地会话保护；WS 认证只在引入 WS 时完成，非本机监听和账户体系属于部署门；
 - 任意 URL 抓取前：SSRF 威胁模型、DNS/跳转复查、内网阻断、大小和超时限制；
 - 外部 AI 前：按工作区配置的数据外发策略、最小输入、日志脱敏和删除策略；
 - 自动知识提交前：动作级授权、策略版本/有效期、试运行、预算、暂停、补偿修订和审计；
-- 保存第三方全文或图片前：来源授权、保留期限、删除规则和再分发边界；
+- 将第三方全文或图片打包、共享或再分发前：来源授权、保留期限、删除规则和再分发边界；用户从包体外导入到私人测试工作区不把该内容加入仓库或发布物；
 - 公网部署前：公网身份策略、TLS、速率限制、秘密管理、备份和恢复演练；
 - Webhook 前：签名、轮换、防重放、幂等和死信处置；
 - 本地桥接前：出站连接、能力级授权、路径边界、撤销和审计；
@@ -600,6 +604,23 @@ import -> snapshot -> document nodes/fragments/media
 任何自动化都需要预算、超时、并发上限、暂停开关、审计和回滚路径。
 
 ## 16. 实施顺序
+
+### 当前执行主线：M1C 可运行核心闭环
+
+本节以前的准备门、切片 0、A 和 B1 记录保留为已完成资产与历史范围，不再要求对其合同或测试框架继续做无产品影响的完善。当前只推进以下纵向顺序：
+
+1. Evidence PostgreSQL repository 与 Markdown 导入编排（已完成）；
+2. 一次真实 PostgreSQL 18 迁移和 Evidence 读写 smoke（已完成）；
+3. 导入、证据、人工审核、知识变更和搜索的最小 HTTP 用例（已完成）；
+4. 资料/证据、快速审核、知识维护、搜索/出处四个网页工作区（已完成）；
+5. 一份周刊、三个代表性条目的端到端闭环（已完成）；
+6. 闭环通过后扩到十期并加入最小领域导出/恢复（已完成）；
+7. 从持久化 Evidence 读模型恢复 section 审核队列、进度和精确原文联动（已完成）；
+8. 用首批真实判断重构快速审核工作台，分离评分、动作、词条和联系意图（已完成）；
+9. 把评分明确为五档、压缩桌面视口，并把可增删快捷标记保存到包体外工作区偏好文件（已完成）；
+10. 由维护者继续提交真实判断和找回任务，只修复该过程暴露的材料性产品问题。
+
+既有完整加载检索对首批数据是接受实现。SQL 查询下推、索引、`pg_trgm`、复杂认证、容器/Linux 认证、正式 TM2 报告、别名、集合、树、AI 和偏好学习只有在使用它们前或真实指标证明必要时才进入工作，不是 M1C 阻断项。阻断分类以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
 
 ### 准备门：基础架构（已完成）
 
@@ -613,7 +634,7 @@ import -> snapshot -> document nodes/fragments/media
 
 M0-S 工程地基已于 2026-08-10 完成：工具链、目录、最小运行角色、数据库迁移合同与首方 runner、CI、精确依赖记录和统一质量门均已落地，并通过 Windows/Linux 固定候选复验与材料性关闭审查。
 该结果允许进入真实场景冻结与首个产品切片，不允许复用探针候选或宣称生产就绪。
-浏览器与容器制品按独立准入任务关闭后，才把真实 E2E 和 PostgreSQL/pgvector 执行加入必需门；首轮地基不得把它们表示为已通过。
+浏览器与容器制品认证仍是发布和相应环境的独立门，但不阻止在本机回环地址和 disposable PostgreSQL 18 上运行 M1C 功能 smoke 与纵向 E2E。未执行的正式门必须如实记录为未签发，不能被合成测试冒充为通过。
 
 ### 16.1 M0-P 架构验证结论
 
@@ -655,7 +676,7 @@ M0-P 的测试数量和候选实现不构成生产质量证明。
 
 退出条件：满足路线图阶段 1；每个条目和图片都能稳定返回原始上下文，重复导入和标注不产生重复副作用。
 
-2026-08-11 进展：`C-SLICE-A-EVIDENCE-r2` 的 `000002` 迁移、闭合输入、来源/快照/文档结构/Fragment/媒体纯逻辑校验和静态 SQL 合同已在提交 `c50ad35e07b2f1b64cd938b0417d4b6bd7c231aa` 上通过完整 TM1（27/27）。这接受的是非浏览器、非容器的模块与静态边界；PostgreSQL 实际解析、catalog、事务、并发和运行角色仍等待具名基础设施准入，不得表示为通过。
+2026-08-11 进展：`C-SLICE-A-EVIDENCE-r2` 的 `000002` 迁移、闭合输入、来源/快照/文档结构/Fragment/媒体纯逻辑校验和静态 SQL 合同已在提交 `c50ad35e07b2f1b64cd938b0417d4b6bd7c231aa` 上通过完整 TM1（27/27）。该候选本身没有证明 PostgreSQL 实际解析、catalog、事务、并发或运行角色；M1C 将补充直接服务于纵向产品路径的实际数据库功能 smoke，正式基础设施认证仍单独报告。
 
 切片 A 的 [`C-SLICE-A-MARKDOWN-r2`](deterministic-markdown-structure-contract.md) 实现已在提交 `7a27c2d63c64c13a2e933bdcc90ce13f98fbfaf2` 上通过正式固定候选 TM1（128/128 项强制矩阵、23/23 项精确错误矩阵）。它接受确定性 CommonMark 解析、独立周刊 profile、来源字节到现有 DocumentNode/Fragment/Media 引用的纯装配边界和有界资源预检。阶段 0 的本地解析脚本仍是不可复用工件；正式实现不得读取 `.agents/stage-0`，真实 Markdown 继续留在包体外数据根，tracked 测试只使用合成且无价值的结构 fixture。
 
@@ -679,15 +700,25 @@ PostgreSQL、事务/锁/并发、运行角色、HTTP/浏览器、检索、导出
 及 631 项候选应用制品审计全部通过。该结果接受只读取当前知识修订及其直接
 Fragment 输入和当前一跳关系的 NFC + ASCII 大小写折叠精确/子串匹配、显式
 状态过滤、稳定 UTF-8 排序、游标和匹配原因。它不新增迁移、依赖或搜索投影；
-真实 PostgreSQL 查询下推、结果等价性、索引与性能仍等待 TM2 和基准。
+正式 PostgreSQL adapter parity、查询下推、索引与性能认证仍未签发；现有 complete-load adapter 直接用于 M1C，并在真实语料出现问题后再优化。
 
-下一持久化增量以草案
-[`C-SLICE-B-POSTGRES-r3`](postgresql-knowledge-adapter-contract.md) 收敛真实
-PostgreSQL 18 的首个 TM2：实际执行 `000001`–`000004`，验证迁移/运行角色分离、
-最小权限、A0 分类与知识写事务、当前知识完整加载和纯逻辑结果等价性。首版检索
-适配器使用一致只读事务加载完整当前工作区后调用已验收评估器，不提前重写 Unicode
-匹配、排序或分页 SQL。Compose、镜像、Linux、查询下推、索引与性能继续等待各自
-具名门；Backend 实现须等待 Maintenance 与 Test 独立合同复审。
+[`C-SLICE-B-POSTGRES-r3`](postgresql-knowledge-adapter-contract.md) 已用于实现共享
+pool、事务、工作区锁以及 Curation、Knowledge、Retrieval repository adapters。
+首版检索适配器继续在一致只读事务中加载完整当前工作区，再调用已验收的纯逻辑
+评估器。生产范围复审未发现材料性产品问题；正式 TM2 未签发和 Test-owned harness
+强化不再阻止 M1C 使用这些适配器完成真实功能 smoke。
+
+2026-08-16 的 `M1C-PERSIST` 增加了 Evidence repository、Markdown/Blob 导入用例与
+`000005_create_evidence_capture_command.sql`。项目迁移 runner 已在 disposable
+PostgreSQL 18 上实际应用五份迁移并验证二次 `noop`；两个外部合成工作区完成首次
+写入、幂等重放、同键异内容冲突、重建连接后的重放和 Blob 根隔离。该结果只声明
+当前产品路径的功能 smoke，不替代正式 TM2、生产最小权限或容器/Linux 认证。
+
+同日完成的 `M1C-API` 与 `M1C-WEB` 把导入、证据读取、人工审核、知识变更和
+确定性检索接到同一个回环 HTTP 监听器，并提供资料/证据、快速审核、知识维护、搜索/出处
+四个浏览器工作区。真实浏览器连接 disposable PostgreSQL 18 的合成功能流已完成
+导入、Fragment 拆分、人工准入、知识项与关系提交、文本/来源/一跳关系搜索和精确
+Fragment 回溯；该结果是产品功能证据，不替代正式 TM2、部署认证或真实周刊验收。
 
 ### 切片 B1：获准资料到非 AI 知识与确定性检索
 
@@ -702,6 +733,8 @@ PostgreSQL 18 的首个 TM2：实际执行 `000001`–`000004`，验证迁移/�
 - 来源、文档、词表、分类、知识、引用、变更集和冲突的版本化工作区导出。
 
 退出条件：不配置 AI 或 Embedding 时满足产品需求中的 MVP-0A 验收场景；规范投影可重建，个人数据不进入仓库或构建物。
+
+B1 按两步交付：M1C 先使用知识项、关系、精确引用、Framework 类型修订和现有确定性检索完成可运行闭环；Alias、ConflictCase、Collection、TreePlacement、SavedView、完整时间搜索与领域导出恢复随后按真实需求补充。后者不再组成第一次网页可用的联合前置门。
 
 ### 切片 B2：AI 提案与检索增强
 

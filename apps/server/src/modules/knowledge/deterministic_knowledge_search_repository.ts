@@ -1,3 +1,5 @@
+import {createHash} from 'node:crypto';
+
 import {
   decodeDeterministicKnowledgeSearchContext,
   decodeDeterministicKnowledgeSearchRequest,
@@ -19,13 +21,19 @@ import {digestDeterministicKnowledgeSearchQuery} from './deterministic_knowledge
 export interface DeterministicKnowledgeSearchRepositoryPort {
   loadCurrentKnowledgeSearchSnapshot(
     effectiveWorkspaceId: string,
+    options?: Readonly<DeterministicKnowledgeSearchExecutionOptions>,
   ): Promise<unknown>;
+}
+
+export interface DeterministicKnowledgeSearchExecutionOptions {
+  readonly includePrivate?: boolean;
 }
 
 export async function executeDeterministicKnowledgeSearch(
   repository: DeterministicKnowledgeSearchRepositoryPort,
   contextInput: unknown,
   requestInput: unknown,
+  options: Readonly<DeterministicKnowledgeSearchExecutionOptions> = {},
 ): Promise<DeterministicKnowledgeSearchResult> {
   let context;
   let request;
@@ -33,7 +41,10 @@ export async function executeDeterministicKnowledgeSearch(
   try {
     context = decodeDeterministicKnowledgeSearchContext(contextInput);
     request = decodeDeterministicKnowledgeSearchRequest(requestInput);
-    querySha256 = digestDeterministicKnowledgeSearchQuery(request);
+    querySha256 = privacyScopedQueryDigest(
+      digestDeterministicKnowledgeSearchQuery(request),
+      options.includePrivate === true,
+    );
     if (
       request.page.after !== undefined &&
       request.page.after.querySha256 !== querySha256
@@ -54,6 +65,7 @@ export async function executeDeterministicKnowledgeSearch(
   try {
     snapshotInput = await repository.loadCurrentKnowledgeSearchSnapshot(
       context.effectiveWorkspaceId,
+      Object.freeze({includePrivate: options.includePrivate === true}),
     );
   } catch {
     return failedKnowledgeSearchResult('repository_failed');
@@ -66,6 +78,7 @@ export async function executeDeterministicKnowledgeSearch(
       request,
       snapshot,
       querySha256,
+      options.includePrivate === true,
     );
   } catch (error) {
     if (error instanceof KnowledgeSearchRepositorySnapshotFault) {
@@ -73,6 +86,17 @@ export async function executeDeterministicKnowledgeSearch(
     }
     throw error;
   }
+}
+
+function privacyScopedQueryDigest(
+  publicQuerySha256: string,
+  includePrivate: boolean,
+): string {
+  if (!includePrivate) return publicQuerySha256;
+  return createHash('sha256')
+    .update('struinfo.private-search.v1\u0000', 'utf8')
+    .update(publicQuerySha256, 'utf8')
+    .digest('hex');
 }
 
 function issueFromInputFault(

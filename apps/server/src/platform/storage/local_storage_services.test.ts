@@ -24,6 +24,9 @@ describe('createLocalStorageServices', () => {
     const identity = await services.blobStore.put(bytes);
 
     await expect(services.blobStore.read(identity)).resolves.toEqual(bytes);
+    await expect(
+      services.reviewPreferences.load('11111111-1111-4111-8111-111111111111'),
+    ).resolves.toMatchObject({quickTags: []});
     expect(Object.isFrozen(services)).toBe(true);
   });
 });

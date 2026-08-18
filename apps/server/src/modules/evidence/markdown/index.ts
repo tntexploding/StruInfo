@@ -37,5 +37,12 @@ export {
   deriveMediaUsageId,
 } from './markdown_identity.js';
 export {materializeMarkdownEvidence} from './markdown_materializer.js';
+export {
+  importMarkdownEvidence,
+  type ImportMarkdownEvidenceInput,
+  type ImportMarkdownEvidenceResult,
+  type MarkdownImportDependencies,
+  type MarkdownSnapshotMetadata,
+} from './markdown_import.js';
 export {parseMarkdownStructure} from './markdown_parser.js';
 export {computeMarkdownStructureSha256} from './markdown_projection.js';

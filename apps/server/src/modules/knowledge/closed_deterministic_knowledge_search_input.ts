@@ -953,15 +953,18 @@ class RepositorySnapshotDecoder {
     return this.stateRecord(
       input,
       ['workspaceId', 'itemId', 'revision', 'revisionId', 'value'],
-      [],
-      (record) =>
-        defineOwnedRecord({
+      ['isPrivate'],
+      (record) => {
+        const isPrivate = this.optionalPrivacy(record, 'isPrivate');
+        return defineOwnedRecord({
           workspaceId: this.uuid(this.required(record, 'workspaceId')),
           itemId: this.uuid(this.required(record, 'itemId')),
           revision: this.revisionNumber(this.required(record, 'revision')),
           revisionId: this.uuid(this.required(record, 'revisionId')),
           value: this.itemValue(this.required(record, 'value')),
-        }),
+          ...(isPrivate === true ? {isPrivate: true as const} : {}),
+        });
+      },
     );
   }
 
@@ -1036,15 +1039,18 @@ class RepositorySnapshotDecoder {
     return this.stateRecord(
       input,
       ['workspaceId', 'relationId', 'revision', 'revisionId', 'value'],
-      [],
-      (record) =>
-        defineOwnedRecord({
+      ['isPrivate'],
+      (record) => {
+        const isPrivate = this.optionalPrivacy(record, 'isPrivate');
+        return defineOwnedRecord({
           workspaceId: this.uuid(this.required(record, 'workspaceId')),
           relationId: this.uuid(this.required(record, 'relationId')),
           revision: this.revisionNumber(this.required(record, 'revision')),
           revisionId: this.uuid(this.required(record, 'revisionId')),
           value: this.relationValue(this.required(record, 'value')),
-        }),
+          ...(isPrivate === true ? {isPrivate: true as const} : {}),
+        });
+      },
     );
   }
 
@@ -1175,6 +1181,18 @@ class RepositorySnapshotDecoder {
       throw new KnowledgeSearchRepositorySnapshotFault();
     }
     return input;
+  }
+
+  private optionalPrivacy(
+    record: DescriptorRecord,
+    key: string,
+  ): true | undefined {
+    if (!this.inspector.has(record, key)) return undefined;
+    const value = this.required(record, key);
+    if (typeof value !== 'boolean') {
+      throw new KnowledgeSearchRepositorySnapshotFault();
+    }
+    return value ? true : undefined;
   }
 
   private knowledgeKind(input: unknown): KnowledgeKind {

@@ -1,7 +1,10 @@
 import {defineConfig} from '@playwright/test';
 
-const liveBaseUrl = 'http://127.0.0.1:4173';
-const mockBaseUrl = 'http://127.0.0.1:4174';
+const configuredPort = process.env.STRUIINFO_E2E_PORT ?? '4173';
+if (!/^\d{1,5}$/u.test(configuredPort)) {
+  throw new Error('STRUIINFO_E2E_PORT must be a numeric TCP port.');
+}
+const liveBaseUrl = `http://127.0.0.1:${configuredPort}`;
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -17,45 +20,24 @@ export default defineConfig({
   use: {
     baseURL: liveBaseUrl,
     browserName: 'chromium',
+    channel: 'chrome',
     trace: 'retain-on-failure',
     actionTimeout: 5_000,
     navigationTimeout: 10_000,
   },
   projects: [
     {
-      name: 'live-runtime',
-      testMatch: '**/operational-health-shell.spec.ts',
+      name: 'm1c-product-shell',
+      testMatch: '**/m1c-product-workspaces.spec.ts',
       use: {baseURL: liveBaseUrl},
     },
-    {
-      name: 'mock-runtime',
-      testMatch: '**/operational-health-mock.spec.ts',
-      use: {baseURL: mockBaseUrl},
-    },
   ],
-  webServer: [
-    {
-      command:
-        'node node_modules/vite/bin/vite.js apps/web --host 127.0.0.1 --port 4173 --strictPort',
-      env: {
-        VITE_STRUIINFO_API_BASE_URL:
-          'http://127.0.0.1:4173/__struinfo-e2e-api/',
-      },
-      url: liveBaseUrl,
-      reuseExistingServer: false,
-      timeout: 60_000,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    },
-    {
-      command:
-        'node node_modules/vite/bin/vite.js apps/web --host 127.0.0.1 --port 4174 --strictPort',
-      env: {VITE_STRUIINFO_API_BASE_URL: ''},
-      url: mockBaseUrl,
-      reuseExistingServer: false,
-      timeout: 60_000,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    },
-  ],
+  webServer: {
+    command: `node node_modules/vite/bin/vite.js apps/web --host 127.0.0.1 --port ${configuredPort} --strictPort`,
+    url: liveBaseUrl,
+    reuseExistingServer: true,
+    timeout: 60_000,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  },
 });

@@ -28,7 +28,7 @@ afterEach(() => {
 });
 
 describe('initializeLocalDataRoot', () => {
-  it('creates the four fixed external data areas and returns canonical paths', async () => {
+  it('creates the five fixed external data areas and returns canonical paths', async () => {
     const root = createTemporaryRoot();
 
     const layout = await initializeLocalDataRoot(root);

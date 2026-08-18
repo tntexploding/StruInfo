@@ -94,6 +94,7 @@ describe('RuntimeDatabase', () => {
         const config = parseRuntimeConfig('api', {
           DATABASE_URL: `postgresql://${role}:synthetic-private-password@localhost/struinfo`,
           STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),
+          STRUIINFO_WORKSPACE_ID: '11111111-1111-4111-8111-111111111111',
         });
         createRuntimeDatabase(config, new ImmediateDeadline(), poolFactory);
       }).toThrow(
@@ -116,6 +117,7 @@ describe('RuntimeDatabase', () => {
       DATABASE_URL:
         'postgresql://struinfo_tm2_runtime:synthetic@localhost/struinfo',
       STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),
+      STRUIINFO_WORKSPACE_ID: '11111111-1111-4111-8111-111111111111',
     });
     const database = createRuntimeDatabase(
       config,

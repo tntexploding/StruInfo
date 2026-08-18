@@ -51,6 +51,32 @@ const SYNTHETIC_CODEC: WorkspaceBundleSectionCodec = {
 };
 
 describe('workspace bundle contract', () => {
+  it('admits a domain-scale section above the generic 100,000-value default', () => {
+    const largeCodec: WorkspaceBundleSectionCodec = {
+      type: 'synthetic.large-domain',
+      version: 1,
+      encode: (value) => value,
+      decode: (value) => value,
+    };
+    const values = Array.from({length: 120_000}, () => 0);
+
+    const bytes = writeWorkspaceBundle(
+      {
+        workspaceId: WORKSPACE_ID,
+        exportedAt: EXPORTED_AT,
+        sections: [
+          {type: largeCodec.type, version: largeCodec.version, value: values},
+        ],
+        blobReferences: [],
+      },
+      [largeCodec],
+    );
+
+    expect(readWorkspaceBundle(bytes, [largeCodec]).sections[0]?.value).toEqual(
+      values,
+    );
+  });
+
   it('round-trips synthetic personal settings while excluding runtime secrets', () => {
     const state: SyntheticInternalState = {
       portable: {

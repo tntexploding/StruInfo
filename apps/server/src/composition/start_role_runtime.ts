@@ -43,8 +43,11 @@ import {
   NestHealthListenerFactory,
   type HealthListenerFactory,
 } from '../transport/nest_health_listener.js';
+import {M1cApiService} from '../transport/m1c_api_service.js';
+import {M1cWorkspaceTransfer} from '../workspace_transfer/m1c_workspace_transfer.js';
 
 export interface StartedRoleRuntime {
+  readonly workspaceId: string;
   readonly resources: readonly RuntimeResource[];
   readonly storage: Readonly<StorageServices>;
   readonly repositories: Readonly<PostgresKnowledgeRepositorySet>;
@@ -98,9 +101,29 @@ export async function startRoleRuntime(
   const listenerFactory =
     dependencies.healthListenerFactory ?? new NestHealthListenerFactory();
   const address = listenerAddress(config);
+  const api =
+    config.role === 'api' || config.role === 'all'
+      ? new M1cApiService({
+          workspaceId: config.workspaceId,
+          blobStore: storage.blobStore,
+          reviewPreferences: storage.reviewPreferences,
+          evidenceRepository: repositories.evidence,
+          evidenceReadRepository: repositories.evidenceRead,
+          curationRepository: repositories.curation,
+          curationReadRepository: repositories.curationRead,
+          knowledgeRepository: repositories.knowledge,
+          retrievalRepository: repositories.retrieval,
+          workspaceTransfer: new M1cWorkspaceTransfer({
+            repository: repositories.workspaceTransfer,
+            blobStore: storage.blobStore,
+            fileStore: storage.workspaceBundleFiles,
+          }),
+        })
+      : undefined;
   starters.push(() =>
     listenerFactory.start({
       health,
+      ...(api === undefined ? {} : {api}),
       host: address.host,
       port: address.port,
     }),
@@ -126,6 +149,7 @@ export async function startRoleRuntime(
       listener_port: address.port,
     });
     return {
+      workspaceId: config.workspaceId,
       resources,
       storage,
       repositories,

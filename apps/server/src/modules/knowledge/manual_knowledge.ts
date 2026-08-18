@@ -69,13 +69,14 @@ interface ResolvedOperation {
   readonly outcome?: 'applied' | 'unchanged';
   readonly resultingRevision?: number;
   readonly resultingRevisionId?: string;
+  readonly isPrivate?: boolean;
 }
 
 type CompletedOperation = ResolvedOperation &
   Required<
     Pick<
       ResolvedOperation,
-      'outcome' | 'resultingRevision' | 'resultingRevisionId'
+      'outcome' | 'resultingRevision' | 'resultingRevisionId' | 'isPrivate'
     >
   >;
 
@@ -159,7 +160,7 @@ function planNewCommand(
   resolveHistoricalInputs(request, maps);
   resolveRelationEndpoints(request, maps);
   validateOperationSemantics(context, request, state, maps, resolved);
-  const completed = calculateOperationOutcomes(resolved);
+  const completed = calculateOperationOutcomes(resolved, maps);
   return createPlan(
     context,
     request,
@@ -579,9 +580,26 @@ function validateSourceExcerpt(
 
 function calculateOperationOutcomes(
   resolved: readonly ResolvedOperation[],
+  maps: ResolutionMaps,
 ): readonly CompletedOperation[] {
+  const itemPrivacy = new Map<string, boolean>();
+  for (const entry of resolved) {
+    if (entry.operation.kind !== 'put_item') continue;
+    itemPrivacy.set(
+      entry.operation.itemId,
+      entry.currentRevision?.isPrivate === true ||
+        provenanceIsPrivate(entry.operation, maps),
+    );
+  }
   return resolved.map((entry) => {
     const operation = entry.operation;
+    const isPrivate =
+      operation.kind === 'put_item'
+        ? (itemPrivacy.get(operation.itemId) ?? false)
+        : entry.currentRelationRevision?.isPrivate === true ||
+          provenanceIsPrivate(operation, maps) ||
+          itemIsPrivate(operation.value.subjectItemId, maps, itemPrivacy) ||
+          itemIsPrivate(operation.value.objectItemId, maps, itemPrivacy);
     const unchanged =
       operation.kind === 'put_item'
         ? entry.currentRevision !== undefined &&
@@ -589,7 +607,8 @@ function calculateOperationOutcomes(
           equalProvenance(
             entry.currentRevision.provenance,
             operation.provenance,
-          )
+          ) &&
+          (entry.currentRevision.isPrivate === true) === isPrivate
         : entry.currentRelationRevision !== undefined &&
           equalRelationValue(
             entry.currentRelationRevision.value,
@@ -598,7 +617,8 @@ function calculateOperationOutcomes(
           equalProvenance(
             entry.currentRelationRevision.provenance,
             operation.provenance,
-          );
+          ) &&
+          (entry.currentRelationRevision.isPrivate === true) === isPrivate;
     const currentRevision =
       operation.kind === 'put_item'
         ? entry.currentItem?.currentRevision
@@ -628,8 +648,49 @@ function calculateOperationOutcomes(
       outcome: unchanged ? 'unchanged' : 'applied',
       resultingRevision,
       resultingRevisionId,
+      isPrivate,
     });
   });
+}
+
+function provenanceIsPrivate(
+  operation: ManualKnowledgeOperation,
+  maps: ResolutionMaps,
+): boolean {
+  for (const fragmentId of [
+    ...operation.provenance.citations,
+    ...operation.provenance.fragmentDerivations,
+  ]) {
+    if (maps.fragments.get(fragmentId)?.isPrivate === true) return true;
+  }
+  for (const reference of operation.provenance.knowledgeDerivations) {
+    if (
+      reference.kind === 'item'
+        ? maps.revisions.get(revisionKey(reference.itemId, reference.revision))
+            ?.isPrivate === true
+        : maps.relationRevisions.get(
+            revisionKey(reference.relationId, reference.revision),
+          )?.isPrivate === true
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function itemIsPrivate(
+  itemId: string,
+  maps: ResolutionMaps,
+  commandPrivacy: ReadonlyMap<string, boolean>,
+): boolean {
+  const planned = commandPrivacy.get(itemId);
+  if (planned !== undefined) return planned;
+  const item = maps.items.get(itemId);
+  if (item === undefined) return false;
+  return (
+    maps.revisions.get(revisionKey(itemId, item.currentRevision))?.isPrivate ===
+    true
+  );
 }
 
 function createPlan(
@@ -716,6 +777,7 @@ function createPlan(
           ? {}
           : {previousRevisionId: entry.currentItem.currentRevisionId}),
         value: operation.value,
+        ...(entry.isPrivate ? {isPrivate: true as const} : {}),
       });
       knowledgeRevisionFragmentInputs.push(
         ...createItemFragmentRows(
@@ -761,6 +823,7 @@ function createPlan(
           ? {}
           : {previousRevisionId: entry.currentRelation.currentRevisionId}),
         value: operation.value,
+        ...(entry.isPrivate ? {isPrivate: true as const} : {}),
       });
       relationRevisionFragmentInputs.push(
         ...createRelationFragmentRows(

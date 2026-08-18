@@ -20,6 +20,8 @@ import {ConfigurationError} from './runtime_config.js';
 
 const DATABASE_URL =
   'postgresql://struinfo_tm2_runtime:synthetic@127.0.0.1/struinfo';
+const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
+const SECOND_WORKSPACE_ID = '22222222-2222-4222-8222-222222222222';
 const temporaryRoots: string[] = [];
 
 interface RuntimeFixture {
@@ -56,11 +58,43 @@ describe('loadRuntimeConfig', () => {
         database: 'struinfo',
         user: 'struinfo_tm2_runtime',
       },
+      workspaceId: WORKSPACE_ID,
       dataRoot: realpathSync(fixture.dataRoot),
       port: 3200,
       logLevel: 'warn',
     });
     expect(Object.isFrozen(config)).toBe(true);
+  });
+
+  it('reopens two external workspaces without changing application code or mixing data roots', () => {
+    const first = createRuntimeFixture();
+    const second = createRuntimeFixture();
+    writeRuntimeConfig(first.configPath, first.dataRoot, [], WORKSPACE_ID);
+    writeRuntimeConfig(
+      second.configPath,
+      second.dataRoot,
+      [],
+      SECOND_WORKSPACE_ID,
+    );
+
+    const firstConfig = loadRuntimeConfig('api', runtimeEnvironment(first));
+    const secondConfig = loadRuntimeConfig('api', runtimeEnvironment(second));
+    const reopenedFirst = loadRuntimeConfig('api', runtimeEnvironment(first));
+
+    expect(firstConfig).toMatchObject({
+      workspaceId: WORKSPACE_ID,
+      dataRoot: realpathSync(first.dataRoot),
+    });
+    expect(secondConfig).toMatchObject({
+      workspaceId: SECOND_WORKSPACE_ID,
+      dataRoot: realpathSync(second.dataRoot),
+    });
+    expect(reopenedFirst).toMatchObject({
+      workspaceId: WORKSPACE_ID,
+      dataRoot: realpathSync(first.dataRoot),
+    });
+    expect(firstConfig.dataRoot).not.toBe(secondConfig.dataRoot);
+    expect(firstConfig.workspaceId).not.toBe(secondConfig.workspaceId);
   });
 
   it('requires an absolute external configuration file path', () => {
@@ -256,12 +290,14 @@ function writeRuntimeConfig(
   configPath: string,
   dataRoot: string,
   additionalLines: readonly string[] = [],
+  workspaceId: string = WORKSPACE_ID,
 ): void {
   const portableDataRoot = dataRoot.replaceAll('\\', '/');
   writeFileSync(
     configPath,
     [
       `STRUIINFO_DATA_ROOT=${JSON.stringify(portableDataRoot)}`,
+      `STRUIINFO_WORKSPACE_ID=${workspaceId}`,
       ...additionalLines,
       '',
     ].join('\n'),

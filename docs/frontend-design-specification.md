@@ -1,7 +1,7 @@
 # StruInfo Frontend Design Specification
 
 - Status: Project frontend baseline
-- Version: 1.1
+- Version: 1.2
 - Effective date: 2026-08-10
 - Scope: StruInfo web application design, implementation, and review
 
@@ -40,6 +40,7 @@ The fixed design contract is:
 | Visual family            | `struinfo-industrial`, an original black/white/cyan industrial information system                            |
 | Full-product depth       | `complex / 3`: multi-zone shell and complete shared component treatment                                      |
 | M0-S depth               | `moderate / 2`: recognizable shell and states without fake product data                                      |
+| M1C depth                | `complex / 3`: four task workspaces plus a contextual provenance dossier                                     |
 | Primary evidence pattern | Black edge shell, cyan active rule, indexed sections, precise provenance dossier                             |
 | Primary user question    | What is worth retaining or exploring, what knowledge changed, what supports it, and what can I control next? |
 
@@ -251,6 +252,42 @@ The M0-S screen uses `moderate / 2` depth: one edge shell, one quiet blueprint
 rule or grid layer, indexed metadata, restrained reveal, and complete responsive
 states.
 It does not need the full long-term navigation or a synthetic dashboard.
+
+### 5.4 M1C product workspace profile
+
+M1C releases four real task workspaces: materials/evidence, rapid manual
+review, advanced knowledge maintenance, and deterministic search/source return. The built Web
+application uses the same loopback listener as the narrow product API and MUST
+continue to expose AI as unavailable until an admitted adapter is configured.
+
+The right provenance dossier MUST preserve Snapshot identity, Fragment line
+range, exact selected text, and digest. A search source match opens its exact
+`fragmentId`, not merely the first Fragment in the same Snapshot. Review keeps
+information density, current interest, serendipity, noise/marketing, and source
+reliability separate. Search keeps text, source, state and one-hop relation
+reasons visible rather than collapsing them into an opaque score.
+
+Privacy-document interaction is explicit and local to the action being taken:
+
+- Markdown intake MUST offer an unchecked “作为隐私文档录入” control beside
+  the source/import fields, before the submit action;
+- search MUST default to the public scope and expose a separately labelled
+  unchecked “查询隐私文档” control; a previous result or page transition MUST
+  NOT silently broaden a later query;
+- privacy state MUST use a text label or badge in addition to color, and every
+  returned private item, relation reason and full-document result MUST remain
+  visibly marked;
+- complete private documents MUST appear in a distinct result section and open
+  only through an action that preserves the explicit privacy scope; they MUST
+  NOT be blended into ordinary knowledge cards or silently opened by a public
+  source match; and
+- metadata needed to identify and deliberately select a private Snapshot MAY be
+  visible in the materials list, but its full text, excerpts, derived entries
+  and relation content MUST remain hidden until the explicit control is active.
+
+This first local-product control communicates a visibility boundary, not
+encryption or multi-user authorization. The interface MUST NOT make stronger
+security claims than the implemented storage and local-runtime model.
 
 ## 6. Design Tokens
 
@@ -494,6 +531,73 @@ Negative feedback SHOULD distinguish `已经知道`, `质量低`, `来源不可�
 `暂时不需要`, `不感兴趣`, and `陌生但值得探索` so preference learning does
 not treat every rejection as permanent topic exclusion.
 
+The rapid-review route MUST optimize one-fragment-at-a-time decisions. Its
+desktop reading order is: a narrow queue/paginator; the Fragment body above its
+manual evaluation; deterministic keyword candidates above relation-intent
+editing. On narrow screens these regions become one document-order column.
+Queue counts belong in the page header instead of consuming a separate metric
+dashboard.
+
+`有用程度` is the review UI projection of `information_density`, while
+`有趣程度` writes `current_interest`. They MUST remain independent sliders and
+MUST NOT be combined into an opaque preference score. The selected
+`IntakeAction` is also independent: scores MAY produce a visible recommendation
+for `完整处理`, `拆分`, or `压缩`, but only the user's explicit submit chooses the
+action. Submit advances to the next pending Fragment; previous/next navigation
+MUST reconstruct persisted decisions, assessments, reasons, and vocabulary
+assignments rather than preserve unsaved accidental state.
+
+The submitted action is an audit-time inclination, not a mandatory downstream
+knowledge shape. The review page MUST show a separate derived processing plan:
+short Fragments normally become one item, while a real split requires sufficient
+length and internal structure. A workspace-owned classification rule MAY suggest
+a generic `KnowledgeKind` such as `work`; the actual classification label remains
+external user data and MUST NOT be hard-coded as a product literal.
+
+Both sliders expose exactly five visible positions, labelled `1` through `5`
+from `很低` to `很高`; the wire value remains the accepted `0..4` assessment
+score. The review workspace MUST grow to its content and use the product
+workspace's normal vertical scrolling; it MUST NOT lock the route to one
+viewport or clip lower panels. The queue may remain sticky and long Fragment
+text may scroll inside its reading region, but evaluation, keyword, relation,
+previous, and submit controls must remain reachable through ordinary page
+scrolling. Reducing readable type or pointer targets is not an acceptable way
+to increase density.
+
+Keyword suggestions in the no-AI path are deterministic, visibly editable
+candidates. Users can add and remove their own quick markers. The quick-marker
+bar is stored in the selected workspace's external personal-preferences file,
+is not exported as application code or a domain Bundle, and contains no
+hard-coded default vocabulary. Choosing a marker classifies the current
+Fragment; removing it from the shortcut bar does not rewrite existing reviews.
+A user-visible master switch MUST disable automatic keyword insertion without
+removing manually entered or already persisted terms. Link destinations, URL
+paths, and attachment filenames MUST be excluded from automatic candidates by
+default; a semantic link label may remain a candidate. The user may explicitly
+allow URL hosts and maintain exact exclusion terms. These controls are stored
+with the selected external workspace preferences and MUST NOT become source
+constants, Git data, migration seeds, or domain-Bundle content.
+Failure to load that optional UI-preference endpoint MUST NOT disable manual
+classification. The page keeps an explicitly session-only quick-marker and
+automatic-filter fallback, visibly states that it will not persist, and still
+allows the current Fragment to create and assign user-confirmed vocabulary.
+A confirmed keyword or quick marker becomes a term in the active external
+workspace only after a user action. Before a formal knowledge item exists,
+`自动候选`, `仅手动联系`, `不建立联系`, and explicit target directives express
+future processing intent, not a committed `KnowledgeRelation`. The UI MUST
+state this distinction.
+
+Knowledge maintenance MUST provide a compact vocabulary workbench. Case-only
+duplicates can migrate current assignments to one retained term and retire the
+other; user-confirmed cross-language equivalents become alias rules; related or
+containing terms stay explicit hints unless the user confirms a merge. History is
+never deleted. These rules live with external review preferences, while formal
+knowledge relations still require the normal knowledge-change command.
+
+The `KnowledgeChangeSet` editor is an advanced knowledge-maintenance surface.
+It MUST NOT appear as a required control in every Fragment review or block the
+rapid submit-and-advance loop.
+
 ### 9.3 Evidence drawer
 
 The drawer SHOULD contain these ordered regions when data exists:
@@ -730,9 +834,12 @@ Before frontend handoff, record:
 - console and runtime-error result;
 - token usage and absence of unreviewed asset or dependency additions.
 
-Browser screenshots, automated accessibility scans, and real interaction runs
-remain visibly pending until the browser artifact gate is admitted.
-Static or unit evidence MUST NOT be described as a browser PASS.
+M1C has local real-browser functional evidence at desktop, `390px`, and `320px`,
+including keyboard-first focus, responsive bounds, source return and a real
+PostgreSQL-backed synthetic vertical flow. This is not production browser,
+container/Linux or distribution certification. Static or unit evidence alone
+MUST NOT be described as a browser PASS, and later release gates must record
+their own browser/runtime identity.
 
 ### 15.2 Design review output
 
