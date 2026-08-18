@@ -78,6 +78,8 @@ async function routeM1cApi(
   let persistedNote: string | undefined;
   let persistedUsefulness = 2;
   let persistedInterest = 2;
+  let queuedKnowledgeWritten = false;
+  let queuedKnowledgeTitle = 'DOCX Editor';
   let reviewQuickTags: readonly string[] = ['实用工具'];
   let automaticKeywords = {
     enabled: true,
@@ -142,7 +144,6 @@ async function routeM1cApi(
                   targetId: '88888888-8888-4888-8888-888888888888',
                   currentVersion: 1,
                   kind: 'fragment',
-                  snapshotId: SNAPSHOT_ID,
                   fragmentId: FRAGMENT_ID,
                 },
               ]
@@ -291,6 +292,20 @@ async function routeM1cApi(
       curationReviewed = true;
       json = {status: 'applied', receipt: {outcome: 'applied'}};
     } else if (path === '/api/v1/knowledge/change-sets' && method === 'POST') {
+      const body = route.request().postDataJSON() as {
+        readonly request?: {
+          readonly authorization?: {readonly kind?: unknown};
+          readonly operations?: readonly Readonly<{
+            itemId?: unknown;
+            value?: Readonly<{title?: unknown}>;
+          }>[];
+        };
+      };
+      if (body.request?.authorization?.kind === 'eligible_target') {
+        queuedKnowledgeWritten = true;
+        const title = body.request.operations?.[0]?.value?.title;
+        if (typeof title === 'string') queuedKnowledgeTitle = title;
+      }
       json = {status: 'applied', receipt: {outcome: 'applied'}};
     } else if (
       path === '/api/v1/workspace-bundles/export' &&
@@ -318,8 +333,56 @@ async function routeM1cApi(
     } else if (path === '/api/v1/search') {
       const searchBody = route.request().postDataJSON() as {
         readonly includePrivate?: boolean;
+        readonly request?: Readonly<{
+          text?: unknown;
+          filters?: Readonly<{
+            source?: Readonly<{kind?: unknown; snapshotId?: unknown}>;
+          }>;
+          page?: Readonly<{limit?: unknown}>;
+        }>;
       };
       const includePrivate = searchBody.includePrivate === true;
+      const source = searchBody.request?.filters?.source;
+      const isQueueCoverageRequest =
+        searchBody.request?.text === undefined &&
+        searchBody.request?.page?.limit === 100 &&
+        source?.kind === 'snapshot' &&
+        source.snapshotId === SNAPSHOT_ID;
+      const searchItems =
+        isQueueCoverageRequest && !queuedKnowledgeWritten
+          ? []
+          : [
+              {
+                itemId: ITEM_ID,
+                revision: 1,
+                revisionId: REVISION_ID,
+                value: {
+                  knowledgeKind: 'concept',
+                  epistemicRole: 'source_claim',
+                  reviewState: 'confirmed',
+                  title: isQueueCoverageRequest
+                    ? queuedKnowledgeTitle
+                    : '确定性检索保留来源',
+                  body: '合成知识正文。',
+                },
+                matchRank: isQueueCoverageRequest ? 4 : 1,
+                textMatches: isQueueCoverageRequest
+                  ? []
+                  : [{field: 'title', kind: 'substring', rank: 1}],
+                sourceMatches: [
+                  {
+                    inputKind: 'citation',
+                    inputOrdinal: 0,
+                    resourceId: RESOURCE_ID,
+                    snapshotId: SNAPSHOT_ID,
+                    fragmentId: FRAGMENT_ID,
+                  },
+                ],
+                relationMatchCount: 0,
+                relationMatches: [],
+                relationMatchesTruncated: false,
+              },
+            ];
       json = {
         status: 'ok',
         querySha256: '6'.repeat(64),
@@ -340,35 +403,8 @@ async function routeM1cApi(
               },
             ]
           : [],
-        totalCount: 1,
-        items: [
-          {
-            itemId: ITEM_ID,
-            revision: 1,
-            revisionId: REVISION_ID,
-            value: {
-              knowledgeKind: 'concept',
-              epistemicRole: 'source_claim',
-              reviewState: 'confirmed',
-              title: '确定性检索保留来源',
-              body: '合成知识正文。',
-            },
-            matchRank: 1,
-            textMatches: [{field: 'title', kind: 'substring', rank: 1}],
-            sourceMatches: [
-              {
-                inputKind: 'citation',
-                inputOrdinal: 0,
-                resourceId: RESOURCE_ID,
-                snapshotId: SNAPSHOT_ID,
-                fragmentId: FRAGMENT_ID,
-              },
-            ],
-            relationMatchCount: 0,
-            relationMatches: [],
-            relationMatchesTruncated: false,
-          },
-        ],
+        totalCount: searchItems.length,
+        items: searchItems,
       };
     } else {
       await route.fulfill({
@@ -705,6 +741,7 @@ test.describe('M1C product workspaces', () => {
 
     await page.getByRole('button', {name: '关闭来源档案'}).click();
     await page.getByRole('button', {name: '知识维护', exact: true}).click();
+    await page.getByText('高级拆分、修订与关系编辑', {exact: true}).click();
     const editor = page.locator(
       '.operation-editor:not(.operation-editor--relation)',
     );
@@ -731,6 +768,79 @@ test.describe('M1C product workspaces', () => {
         },
       }),
     ]);
+  });
+
+  test('turns an eligible reviewed Fragment into searchable knowledge and advances', async ({
+    page,
+  }) => {
+    const posts = new Map<string, unknown>();
+    await page.setViewportSize({width: 1440, height: 900});
+    await openProduct(page, (path, body) => posts.set(path, body));
+
+    await page.getByRole('button', {name: '查看证据', exact: true}).click();
+    await page.getByRole('button', {name: '关闭来源档案'}).click();
+    await page.getByRole('button', {name: '审核', exact: true}).click();
+    await page.getByRole('radio', {name: '完整处理'}).check();
+    await page
+      .getByRole('button', {name: '完成本条并继续'})
+      .scrollIntoViewIfNeeded();
+    await page.getByRole('button', {name: '完成本条并继续'}).click();
+    await expect(page.getByText('1/2', {exact: true})).toBeVisible();
+
+    await page.getByRole('button', {name: '知识维护', exact: true}).click();
+    await expect(
+      page.getByRole('heading', {name: '审核转知识', exact: true}),
+    ).toBeVisible();
+    const knowledgeQueue = page.getByRole('region', {name: '审核转知识'});
+    await expect(page.getByText('检索状态已同步', {exact: true})).toBeVisible();
+    await expect(knowledgeQueue.getByLabel('知识标题')).toHaveValue(
+      'DOCX Editor',
+    );
+    await expect(knowledgeQueue.getByLabel('正式知识正文')).toHaveValue(
+      /github\.com\/eigenpal\/docx-editor/u,
+    );
+    await knowledgeQueue.getByLabel('知识标题').fill('DOCX Editor · 正式知识');
+    await knowledgeQueue.getByLabel('知识类型').selectOption('resource');
+    await knowledgeQueue.getByRole('button', {name: '写入知识并继续'}).click();
+
+    await expect(page.getByText('已写入正式知识并可检索')).toBeVisible();
+    await expect(page.getByText('该 Fragment 已形成正式知识')).toBeVisible();
+    await expect(
+      page.getByText(/DOCX Editor · 正式知识 · 修订 1/u),
+    ).toBeVisible();
+    expect(posts.get('/api/v1/knowledge/change-sets')).toMatchObject({
+      request: {
+        authorization: {
+          kind: 'eligible_target',
+          target: {kind: 'fragment', fragmentId: FRAGMENT_ID},
+          expectedDecisionRevision: 1,
+        },
+        operations: [
+          expect.objectContaining({
+            kind: 'put_item',
+            expectedRevision: 0,
+            value: expect.objectContaining({
+              knowledgeKind: 'resource',
+              epistemicRole: 'summary',
+              reviewState: 'confirmed',
+              title: 'DOCX Editor · 正式知识',
+            }),
+            provenance: {
+              citations: [],
+              fragmentDerivations: [FRAGMENT_ID],
+              knowledgeDerivations: [],
+            },
+          }),
+        ],
+      },
+    });
+
+    await page.setViewportSize({width: 390, height: 800});
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > window.innerWidth,
+      ),
+    ).toBe(false);
   });
 
   test('keeps manual classification available when personal preferences are unavailable', async ({

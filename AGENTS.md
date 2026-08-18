@@ -81,6 +81,14 @@ removing a shortcut does not rewrite existing terms or review decisions. This
 small file-backed UI preference is intentionally separate from Git, the
 application package, PostgreSQL domain state, and workspace Bundles.
 
+M1C-USE-6 closes the ordinary post-review product path without adding another
+protocol: the knowledge workspace rebuilds an eligible Fragment queue from
+current curation state, lets the owner confirm a short knowledge item, submits
+through the accepted knowledge command, then reads it back through
+source-scoped deterministic search before advancing. Structured multi-item
+splits and typed relations remain in the secondary advanced editor. Personal
+vocabulary rules remain external; no source text or preference enters Git.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2
