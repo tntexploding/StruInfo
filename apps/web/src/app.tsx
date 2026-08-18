@@ -214,6 +214,42 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const selectEvidenceForKnowledge = useCallback(
+    async (
+      snapshotId: string,
+      includePrivate: boolean,
+    ): Promise<ActionFeedback> => {
+      try {
+        const response = await apiClient.loadEvidenceSnapshot(snapshotId, {
+          includePrivate,
+        });
+        if (response.body.status !== 'ok') {
+          return {
+            kind: 'error',
+            title: '无法选择审核来源',
+            detail: '该 Snapshot 不存在于当前工作区，或隐私查看未被明确启用。',
+          };
+        }
+        setSelectedEvidence(response.body.snapshot);
+        return {
+          kind: 'success',
+          title: '审核来源已切换',
+          detail: '正在核对这份文档已经形成的正式知识。',
+        };
+      } catch {
+        return connectionFeedback(
+          '无法读取所选 Snapshot；当前正式知识没有被修改。',
+        );
+      }
+    },
+    [apiClient],
+  );
+
+  const searchKnowledge = useCallback(
+    (body: unknown) => apiClient.search(body),
+    [apiClient],
+  );
+
   function closeEvidence() {
     setEvidencePanel({status: 'closed'});
     const target = evidenceReturnTarget.current;
@@ -420,11 +456,16 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           reviewPreferences={reviewPreferences}
           onApplyCuration={applyCuration}
           onApplyKnowledge={applyKnowledge}
+          onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
+            void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
+          }
           onPutTerm={putTerm}
           onRefresh={() => {
             void refreshCuration();
             void refreshReviewPreferences();
           }}
+          onSearch={searchKnowledge}
+          onSelectEvidence={selectEvidenceForKnowledge}
           onSaveReviewPreferences={saveReviewPreferences}
         />
       ) : null}
@@ -434,7 +475,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onOpenEvidence={(snapshotId, target, fragmentId, includePrivate) =>
             void openEvidence(snapshotId, target, fragmentId, includePrivate)
           }
-          onSearch={(body) => apiClient.search(body)}
+          onSearch={searchKnowledge}
         />
       ) : null}
     </ProductAppShell>

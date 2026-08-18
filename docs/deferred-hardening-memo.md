@@ -75,8 +75,9 @@ condition is met or new evidence demonstrates reachable material product impact.
 - Owner: Test tooling
 - Status: Deferred hardening
 - Scope: Playwright-owned Vite process cleanup on the current Windows host
-- Evidence: All six configured browser scenarios completed and reported PASS,
-  including the persisted review queue and five responsive widths, but the
+- Evidence: All nine configured browser scenarios completed and reported PASS,
+  including the persisted review queue, reviewed-Fragment-to-searchable-knowledge
+  handoff, privacy gate, and responsive bounds, but the
   Playwright parent did not exit after its Vite listener had stopped. A separate
   bounded browser run closed normally and confirmed the same queue layout and
   interaction without horizontal overflow.

@@ -267,6 +267,17 @@ information density, current interest, serendipity, noise/marketing, and source
 reliability separate. Search keeps text, source, state and one-hop relation
 reasons visible rather than collapsing them into an opaque score.
 
+The knowledge workspace MUST make the routine post-review path primary. For a
+selected Snapshot it reconstructs eligible reviewed Fragments, distinguishes
+pending entries from entries already returned by source-scoped deterministic
+search, and lets the user confirm an editable title, body, knowledge kind,
+epistemic role, and review state before writing. A successful write is followed
+by a search read-back and queue advance. Multi-item splits, revisions, and
+typed relations remain available in a secondary advanced editor; the term
+“change set” alone MUST NOT be the primary user-facing explanation. A search
+refresh failure after a successful commit MUST NOT be presented as a failed
+write or invite an accidental duplicate command.
+
 Privacy-document interaction is explicit and local to the action being taken:
 
 - Markdown intake MUST offer an unchecked “作为隐私文档录入” control beside

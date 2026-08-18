@@ -58,6 +58,30 @@ const REVIEW_EVIDENCE: Readonly<EvidenceSnapshot> = Object.freeze({
   ],
 });
 
+const REVIEWED_CURATION: Readonly<CurationState> = Object.freeze({
+  terms: [],
+  assignments: [],
+  assessments: [],
+  targets: [
+    {
+      workspaceId: '11111111-1111-4111-8111-111111111111',
+      targetId: '66666666-6666-4666-8666-666666666666',
+      currentVersion: 1,
+      kind: 'fragment' as const,
+      fragmentId: '55555555-5555-4555-8555-555555555555',
+    },
+  ],
+  decisions: [
+    {
+      decisionId: '77777777-7777-4777-8777-777777777777',
+      targetId: '66666666-6666-4666-8666-666666666666',
+      currentRevision: 1,
+      currentRevisionId: '88888888-8888-4888-8888-888888888888',
+      value: {action: 'full' as const, reasonCodes: []},
+    },
+  ],
+});
+
 describe('M1C product workspaces', () => {
   it('renders a visible recovery surface instead of an empty application root', () => {
     const markup = renderToStaticMarkup(<ApplicationFailureFallback />);
@@ -147,7 +171,7 @@ describe('M1C product workspaces', () => {
     );
     const knowledge = renderToStaticMarkup(
       <KnowledgeWorkspace
-        curation={{status: 'ready', value: EMPTY_CURATION}}
+        curation={{status: 'ready', value: REVIEWED_CURATION}}
         evidence={REVIEW_EVIDENCE}
         snapshots={[REVIEW_EVIDENCE]}
         reviewPreferences={{
@@ -170,10 +194,25 @@ describe('M1C product workspaces', () => {
         onApplyKnowledge={() =>
           Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
         }
+        onOpenEvidence={() => undefined}
         onPutTerm={() =>
           Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
         }
         onRefresh={() => undefined}
+        onSearch={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {
+              status: 'ok',
+              querySha256: '0'.repeat(64),
+              totalCount: 0,
+              items: [],
+            },
+          })
+        }
+        onSelectEvidence={() =>
+          Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
+        }
         onSaveReviewPreferences={() =>
           Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
         }
@@ -203,7 +242,11 @@ describe('M1C product workspaces', () => {
     expect(review).toContain('自动排除词');
     expect(review).toContain('拒绝本条与其他条目建立联系');
     expect(review).not.toContain('知识变更集');
-    expect(knowledge).toContain('知识变更集');
+    expect(knowledge).toContain('审核转知识');
+    expect(knowledge).toContain('写入后立即用同一搜索边界回读');
+    expect(knowledge).toContain('写入知识并继续');
+    expect(knowledge).toContain('查看精确原文');
+    expect(knowledge).toContain('高级拆分、修订与关系编辑');
     expect(knowledge).toContain('词表整理');
     expect(knowledge).toContain('添加拆分项');
     expect(knowledge).toContain('最高权限人工编辑');

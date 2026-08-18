@@ -72,6 +72,7 @@ interface EligibleAuthorization {
 export interface KnowledgeChangeEditorProps {
   readonly curation?: Readonly<CurationState> | undefined;
   readonly evidence?: Readonly<EvidenceSnapshot> | undefined;
+  readonly initialAuthorizationKey?: string | undefined;
   readonly onApply: (body: unknown) => Promise<ActionFeedback>;
   readonly targetOptions: readonly Readonly<ReviewTargetOption>[];
   readonly vocabularyPreferences?:
@@ -81,6 +82,7 @@ export interface KnowledgeChangeEditorProps {
 export function KnowledgeChangeEditor({
   curation,
   evidence,
+  initialAuthorizationKey,
   onApply,
   targetOptions,
   vocabularyPreferences,
@@ -94,7 +96,9 @@ export function KnowledgeChangeEditor({
     () => findEligibleAuthorizations(curation, targetOptions),
     [curation, targetOptions],
   );
-  const [authorizationKey, setAuthorizationKey] = useState('manual_edit');
+  const [authorizationKey, setAuthorizationKey] = useState(
+    initialAuthorizationKey ?? 'manual_edit',
+  );
   const [items, setItems] = useState<readonly KnowledgeItemDraft[]>(() => [
     createKnowledgeItemDraft(),
   ]);
