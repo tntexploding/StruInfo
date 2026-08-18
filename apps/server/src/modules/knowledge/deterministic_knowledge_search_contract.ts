@@ -135,6 +135,7 @@ export interface KnowledgeSearchRelationMatch {
   readonly epistemicRole: Exclude<EpistemicRole, 'source_excerpt'>;
   readonly reviewState: KnowledgeReviewState;
   readonly qualifier?: string;
+  readonly isPrivate?: true;
 }
 
 export interface DeterministicKnowledgeSearchItem {
@@ -148,6 +149,7 @@ export interface DeterministicKnowledgeSearchItem {
   readonly relationMatchCount: number;
   readonly relationMatches: readonly KnowledgeSearchRelationMatch[];
   readonly relationMatchesTruncated: boolean;
+  readonly isPrivate?: true;
 }
 
 export type DeterministicKnowledgeSearchResult =
@@ -188,6 +190,7 @@ export interface KnowledgeSearchRevisionState {
   readonly revision: number;
   readonly revisionId: string;
   readonly value: Readonly<KnowledgeItemRevisionValue>;
+  readonly isPrivate?: true;
 }
 
 export interface KnowledgeSearchFragmentInputState {
@@ -218,6 +221,7 @@ export interface KnowledgeSearchRelationRevisionState {
   readonly revision: number;
   readonly revisionId: string;
   readonly value: Readonly<KnowledgeRelationRevisionValue>;
+  readonly isPrivate?: true;
 }
 
 export type KnowledgeSearchIssueCode =

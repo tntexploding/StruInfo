@@ -12,7 +12,7 @@
 当前候选内容只包括：
 
 - 编译后的服务端模块、迁移和服务端 package manifest；
-- Vite 生成的前端 HTML、JavaScript、CSS 和前端 package manifest；
+- Vite 生成的前端 HTML、JavaScript、CSS、项目原创 favicon 和前端 package manifest；
 - 版本化 OpenAPI、JSON Schema 和 contracts package manifest；
 - README、第三方声明、npm 依赖许可证材料和 npm SPDX SBOM。
 

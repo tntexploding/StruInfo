@@ -1,6 +1,6 @@
 # Source Evidence Storage Contract
 
-- Status: Frozen implementation contract
+- Status: Frozen contract; M1C repository and import use case implemented
 - Contract: `C-SLICE-A-EVIDENCE-r2`
 - Date: 2026-08-11
 - Scope: First PostgreSQL schema and application boundary for source evidence
@@ -14,6 +14,13 @@ PostgreSQL execution has passed.
 Revision 2 changes only the application validation contract for portable
 Resource source keys. It does not change the PostgreSQL schema, migration bytes,
 or any other revision 1 semantic.
+
+Implementation note (2026-08-16): M1C implements this graph through a public
+Evidence repository port and PostgreSQL adapter. Forward migration
+`000005_create_evidence_capture_command.sql` adds only the durable
+`(workspace_id, command_idempotency_key) → request_sha256` receipt needed for
+restart-safe import replay; it does not alter `000002` or store source bytes.
+Raw and normalized bytes remain in the external content-addressed Blob store.
 
 ## Scope
 
@@ -338,7 +345,8 @@ content remains a conflict.
 The repository implementation commits that graph atomically or returns a stable
 validation, conflict, or persistence failure. No source or AI adapter receives
 table access. This contract revision freezes storage semantics, not a public
-HTTP shape; HTTP work waits for a separately frozen API contract.
+HTTP shape; M1C defines the minimal HTTP use cases above this port without
+changing the storage contract or introducing another direct table-writing path.
 
 ## Verification boundary
 
@@ -356,6 +364,14 @@ replacement gate) is accepted, real integration coverage must include fresh
 apply, upgrade from migration 000001, repeated no-op migration, cross-workspace
 negative references, duplicate/equal versus conflicting identities, parent and
 range constraints, transaction rollback, and runtime-role mutation limits.
+
+The M1C functional smoke has now established a deliberately narrower real
+PostgreSQL fact: PostgreSQL 18 accepted exact migrations `000001`–`000005`, the
+runner's second invocation was a no-op, and the application adapter committed,
+replayed, rejected a changed same-key command, and reopened two isolated
+synthetic workspaces. This is product-path evidence only. It does not certify
+the complete catalog, least-privilege, concurrency, container/Linux, or formal
+TM2 matrix described above.
 
 ## References
 

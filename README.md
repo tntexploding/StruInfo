@@ -4,8 +4,8 @@ StruInfo 是一个来源可追溯、AI 可增强的个人知识摄取与维护�
 
 长期形态仍是在线个人信息枢纽；日报/周报、QQbot、公共外部 API 和云端部署是知识核心稳定后的交互与运行层，不是首个产品闭环。
 
-基础技术架构已于 2026-08-08 通过 M0-P 评审，非浏览器、非容器的 M0-S 工程地基已于 2026-08-10 完成并由 ADR 正式接受。
-这不表示已经生产就绪；浏览器与容器制品、真实 PostgreSQL、项目发布许可证和真实使用场景仍有独立后续门。
+基础技术架构、M0-S 工程地基、来源/Markdown/人工审核/知识/确定性检索领域核心、五份前向迁移、首批 PostgreSQL adapters、本机产品 HTTP 和三个浏览器工作区已经具备。
+一份固定周刊已经在真实 PostgreSQL 18 和本机网页上完成代表性纵向验证；随后固定十期均通过正式导入器，并完成最小领域 Bundle 的外部导出与空库恢复。这不表示已经生产就绪，正式环境认证与发布门随后处理。
 首个信源已确定为[阮一峰科技周刊](https://github.com/ruanyf/weekly)。产品侧先验证：
 
 > 固定周刊语料 → 保存来源与文档结构 → 独立分类与准入 → 手工/确定性拆分、连接和重组 → 版本化知识变更 → 无 AI 网页搜索、纠错与导出 → 可选 AI 增强
@@ -17,13 +17,14 @@ StruInfo 是一个来源可追溯、AI 可增强的个人知识摄取与维护�
 - [开发大纲与架构提案](docs/development-outline.md)
 - [知识核心与个人数据边界](docs/knowledge-core-architecture.md)
 - [包体外运行配置与数据根](docs/runtime-configuration.md)
+- [M1C 本地产品 HTTP 接口](docs/m1c-local-http-api.md)
 - [工作区 Bundle 合同](docs/workspace-bundle-contract.md)
 - [候选应用制品边界](docs/application-artifact-boundary.md)
 - [确定性 Markdown 结构合同](docs/deterministic-markdown-structure-contract.md)
 - [人工分类与准入合同](docs/manual-curation-contract.md)
 - [人工知识核心合同（固定候选 TM1 已通过）](docs/manual-knowledge-core-contract.md)
 - [确定性知识检索合同（固定候选 TM1 已通过）](docs/deterministic-knowledge-retrieval-contract.md)
-- [PostgreSQL 知识适配与等价性合同（草案复审中）](docs/postgresql-knowledge-adapter-contract.md)
+- [PostgreSQL 知识适配与等价性合同](docs/postgresql-knowledge-adapter-contract.md)
 - [阶段 0 首批语料与行为冻结](docs/stage-0-corpus-freeze.md)
 - [真实样本采集模板](docs/sample-intake-template.md)
 - [历史需求归档](docs/archive/product-requirements-v0.1.md)
@@ -31,6 +32,7 @@ StruInfo 是一个来源可追溯、AI 可增强的个人知识摄取与维护�
 ## 工程治理
 
 - [开发规范](docs/development-standards.md)
+- [延期强化备忘](docs/deferred-hardening-memo.md)
 - [开源与第三方依赖策略](docs/open-source-policy.md)
 - [贡献与审查流程](CONTRIBUTING.md)
 - [决策日志](docs/decision-log.md)
@@ -40,10 +42,12 @@ StruInfo 是一个来源可追溯、AI 可增强的个人知识摄取与维护�
 项目已接受 TypeScript 模块化单体与 PostgreSQL/不可变 Blob 的基础方向，但尚未选择发布许可证。
 M0-P 探针代码只作为架构证据，不直接复用为生产实现。
 
+仓库和应用包只保存协议、迁移、代码与合成示例。实际资料、知识、偏好、词表、提示覆盖、快照、媒体、导出、备份和运行配置全部位于包体外；同一构建通过受控更换外部配置或重新打开工作区完成资料集切换，不需要修改代码或把“记忆文件”加入 Git。
+
 完整本地质量门使用 `corepack pnpm run verify`，其中包含格式、Lint、类型、测试、构建和候选应用制品审计。
 
 ## 当前最重要的下一步
 
-第 398–407 期周刊已固定到同一上游提交，并形成 345 个内容单元、图片引用和证据定位清单。版本化关系知识模型与无 AI 操作合同已经接受；切片 0 的包体外配置、数据区域、本地 Blob、候选包内容清单和合成工作区 Bundle/秘密排除合同已经完成。`Workspace → Resource → Snapshot → DocumentNode/Fragment → MediaAsset` 的来源证据迁移与闭合纯逻辑边界已经通过固定候选 TM1。[`C-SLICE-A-MARKDOWN-r2`](docs/deterministic-markdown-structure-contract.md) 的纯 CommonMark 解析、周刊 profile、规范定位、ID 无关结构哈希和 Evidence 装配已在提交 `7a27c2d63c64c13a2e933bdcc90ce13f98fbfaf2` 上通过正式固定候选 TM1。[`C-SLICE-A-CURATION-r3`](docs/manual-curation-contract.md) 的用户词表、内容分类、独立 `IntakeDecision`/`Assessment`、A0 人工命令、幂等回放和静态迁移边界已在提交 `ac03c18ce568b3d2d090104bbb41727aa22afe05` 上通过正式固定候选 TM1。[`C-SLICE-B-KNOWLEDGE-r3`](docs/manual-knowledge-core-contract.md) 的 A0 授权、原子 `KnowledgeChangeSet`、稳定知识项/关系、不可变修订、精确来源和静态迁移边界已在提交 `f18c0346910de824ef20d074d88744c446946025` 上通过正式固定候选 TM1。[`C-SLICE-B-RETRIEVAL-r3`](docs/deterministic-knowledge-retrieval-contract.md) 的当前知识文本、来源、状态和一跳关系确定性检索已在提交 `dfaecb622515cc640802562485e715cc7da35cc8` 上通过正式固定候选 TM1。下一步草案 [`C-SLICE-B-POSTGRES-r3`](docs/postgresql-knowledge-adapter-contract.md) 验证真实 PostgreSQL 18 迁移、最小权限、写事务、数据加载完整性及其与纯逻辑合同的结果等价性；偏好模型、综合分、阈值和自动准入继续后移，不阻塞知识数据库核心。
-AI 拆分、关系建议、语义检索和偏好学习随后接入同一套提案与正式命令边界。
-真实 PostgreSQL 执行、浏览器运行时和容器制品仍处于各自具名准入门之后；当前 TM1 结论不代表这些门已经通过。
+`M1C-PERSIST`、`M1C-API`、`M1C-WEB`、`M1C-VERTICAL`、`M1C-EXPAND` 和首个真实使用增量 `M1C-USE-1` 均已完成：同一回环监听器提供资料/证据、审核/知识编辑、搜索/出处三个工作区，工作区与 Blob 根仍由包体外配置选择。固定 `ruanyf/weekly` issue 405 已在真实浏览器和 disposable PostgreSQL 18 上完成代表性审核、知识项/关系、Framework 重组、撤回修订和精确原文回溯；固定 398–407 期又通过正式导入器写入 10 个 Snapshot、2,639 个正式 Fragment。网页现在从持久化 `DocumentNode.nodeKind` 精确重建 345 个 section 审核单元，显示当前来源进度、逐条前进并可直接打开精确原文，而不是让用户在全部 Fragment 中手工寻找目标。
+
+当前 36 张领域表可以导出为包体外 Bundle，并在同一 Workspace ID 的空数据库中恢复；Blob 仍由外部内容寻址数据根单独保管。下一步由维护者直接从该队列提交首批真实判断并执行找回任务，只实现过程中出现的材料性产品阻碍，不预先建设批处理或偏好模型。正式 TM2 harness、容器/Linux/发布认证、查询下推和索引、复杂知识视图、AI 与偏好学习继续独立排期；未完成的正式门会如实记录，但不阻塞产品主线。

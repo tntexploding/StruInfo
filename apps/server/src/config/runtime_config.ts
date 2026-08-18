@@ -13,6 +13,7 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 export interface RuntimeConfig {
   readonly role: ProcessRole;
   readonly database: Readonly<PostgresConnectionConfig>;
+  readonly workspaceId: string;
   readonly dataRoot: string;
   readonly host: string;
   readonly port: number;
@@ -41,6 +42,8 @@ const MAX_SHUTDOWN_TIMEOUT_MS = 60_000;
 const MIN_PORT = 1;
 const MAX_PORT = 65_535;
 const LOG_LEVELS = new Set<LogLevel>(['debug', 'info', 'warn', 'error']);
+const CANONICAL_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 export function parseRuntimeConfig(
   role: ProcessRole,
@@ -48,6 +51,7 @@ export function parseRuntimeConfig(
 ): Readonly<RuntimeConfig> {
   const database = parseDatabaseConfig(environment.DATABASE_URL);
   const dataRoot = parseDataRoot(environment.STRUIINFO_DATA_ROOT);
+  const workspaceId = parseWorkspaceId(environment.STRUIINFO_WORKSPACE_ID);
   const host = parseHost('STRUIINFO_HOST', environment.STRUIINFO_HOST);
   const port = parseInteger(
     'STRUIINFO_PORT',
@@ -79,6 +83,7 @@ export function parseRuntimeConfig(
   return Object.freeze({
     role,
     database,
+    workspaceId,
     dataRoot,
     host,
     port,
@@ -88,6 +93,15 @@ export function parseRuntimeConfig(
     shutdownTimeoutMs,
     logLevel,
   });
+}
+
+function parseWorkspaceId(value: string | undefined): string {
+  if (value === undefined || !CANONICAL_UUID_PATTERN.test(value)) {
+    throw new ConfigurationError(
+      'STRUIINFO_WORKSPACE_ID must be a canonical lowercase UUID.',
+    );
+  }
+  return value;
 }
 
 function parseDataRoot(value: string | undefined): string {

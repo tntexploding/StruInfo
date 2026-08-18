@@ -751,9 +751,10 @@ class ClosedDecoder {
         'fragmentId',
         'selectedTextSha256',
       ],
-      [],
-      (record) =>
-        defineRecord({
+      ['isPrivate'],
+      (record) => {
+        const isPrivate = this.optionalStatePrivacy(record, 'isPrivate');
+        return defineRecord({
           workspaceId: this.stateUuid(this.required(record, 'workspaceId')),
           resourceId: this.stateUuid(this.required(record, 'resourceId')),
           snapshotId: this.stateUuid(this.required(record, 'snapshotId')),
@@ -761,7 +762,9 @@ class ClosedDecoder {
           selectedTextSha256: this.stateSha256(
             this.required(record, 'selectedTextSha256'),
           ),
-        }),
+          ...(isPrivate === true ? {isPrivate: true as const} : {}),
+        });
+      },
     );
   }
 
@@ -795,9 +798,10 @@ class ClosedDecoder {
         'value',
         'provenance',
       ],
-      ['previousRevisionId'],
+      ['previousRevisionId', 'isPrivate'],
       (record) => {
         const hasPrevious = this.has(record, 'previousRevisionId');
+        const isPrivate = this.optionalStatePrivacy(record, 'isPrivate');
         return defineRecord({
           workspaceId: this.stateUuid(this.required(record, 'workspaceId')),
           itemId: this.stateUuid(this.required(record, 'itemId')),
@@ -814,6 +818,7 @@ class ClosedDecoder {
               }),
           value: this.stateItemValue(this.required(record, 'value')),
           provenance: this.stateProvenance(this.required(record, 'provenance')),
+          ...(isPrivate === true ? {isPrivate: true as const} : {}),
         });
       },
     );
@@ -865,9 +870,10 @@ class ClosedDecoder {
         'value',
         'provenance',
       ],
-      ['previousRevisionId'],
+      ['previousRevisionId', 'isPrivate'],
       (record) => {
         const hasPrevious = this.has(record, 'previousRevisionId');
+        const isPrivate = this.optionalStatePrivacy(record, 'isPrivate');
         return defineRecord({
           workspaceId: this.stateUuid(this.required(record, 'workspaceId')),
           relationId: this.stateUuid(this.required(record, 'relationId')),
@@ -884,6 +890,7 @@ class ClosedDecoder {
               }),
           value: this.stateRelationValue(this.required(record, 'value')),
           provenance: this.stateProvenance(this.required(record, 'provenance')),
+          ...(isPrivate === true ? {isPrivate: true as const} : {}),
         });
       },
     );
@@ -1613,6 +1620,16 @@ class ClosedDecoder {
       throw stateFault();
     }
     return input;
+  }
+
+  private optionalStatePrivacy(
+    record: DescriptorRecord,
+    key: string,
+  ): true | undefined {
+    if (!this.has(record, key)) return undefined;
+    const value = this.required(record, key);
+    if (typeof value !== 'boolean') throw stateFault();
+    return value ? true : undefined;
   }
 
   private stateBoundedIndex(input: unknown): KnowledgeBoundedIndex {

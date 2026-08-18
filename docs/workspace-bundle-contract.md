@@ -1,7 +1,7 @@
 # StruInfo 工作区 Bundle 合同
 
-- 状态：切片 0 已实现的 v1 信封与合成往返合同
-- 最近更新：2026-08-11
+- 状态：v1 信封与 M1C 领域导出/空工作区恢复已实现
+- 最近更新：2026-08-16
 - 对应决策：[ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md)、
   [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、
   [ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)
@@ -9,8 +9,9 @@
 
 ## 1. 当前合同解决什么
 
-工作区 bundle v1 是个人工作区元数据的可移植、版本化字节信封。
-它先固定导出/导入共同需要的编码、预算、分区版本、Blob 引用和秘密排除边界，不在知识表尚未建立时虚构 vocabulary、source、knowledge 或 view 的最终字段。
+工作区 bundle v1 是个人工作区领域状态的可移植、版本化字节信封。
+它固定导出/导入共同需要的编码、预算、分区版本、Blob 引用和秘密排除边界；
+M1C 已为当前 Evidence、Curation 与 Knowledge 表注册一个闭合领域分区。
 
 信封包含：
 
@@ -26,6 +27,8 @@
 
 当前默认完整信封上限为 16 MiB。
 大型正文、快照和媒体继续使用 Blob 引用，不能通过 bundle 反复嵌套 base64。
+M1C 领域分区允许最多 1,000,000 个规范 JSON value，以容纳十期首批语料；
+通用规范 JSON 编码器的默认 100,000-value 边界不变，其他调用者不会被静默放宽。
 
 ## 2. 分区 Codec
 
@@ -40,6 +43,16 @@ Writer 只调用已注册 codec，把模块状态转换为普通 JSON 数据；R
 
 信封 JSON Schema 只描述公共信封。
 `payload` 的具体 schema 由所注册分区合同拥有；这不是允许任意 JSON 直接成为 PostgreSQL 规范事实。
+
+当前正式分区为 `struinfo.m1c-domain` version `1`，其 payload schema 为
+`struinfo.m1c-domain.v1`。它以固定依赖顺序显式列出六份当前迁移中的 36 张
+workspace-scoped 领域表、每张表允许的列和普通 JSON scalar 行；未知表、未知列、
+非规范工作区身份或非 scalar 数据一律拒绝。它不序列化内部 repository 对象、SQL、
+配置、凭据或任意扩展 JSON。
+
+`000006` 只为既有三张表增加隐私事实，因此表数仍为 36。当前 codec 会携带
+`resource.is_private`、`knowledge_revision.is_private` 和
+`knowledge_relation_revision.is_private`，从而在恢复后保留默认隐藏与传播结果。
 
 ## 3. 规范字节编码
 
@@ -68,15 +81,49 @@ Writer 先生成完整包络并测量最终字节数；只有不超过预算的�
 该检查是高置信事故防护，不是通用 DLP。
 秘密可能被隐藏在任意备注文本中，因此领域 codec、授权、导出选项和人工审查仍是主要边界。
 
-## 5. 当前未实现的部分
+## 5. 数据交换与工作区切换边界
 
-合成 codec 测试已经证明个人类别、信源、保存查询和 credential reference 可以往返，而内部数据库密码和模型 key 不进入字节。
-当前尚未实现：
+Bundle 是包体外、用户拥有的可移植数据文件，不是仓库资源、构建输入、可执行配置、JavaScript/TypeScript 模块或在线数据库文件。真实 Bundle 不得进入 Git、测试 fixture、安装包或镜像；tracked 测试只能使用合成且无个人价值的字节。
 
-- PostgreSQL 工作区读取与事务一致性快照；
-- vocabulary、source、evidence、knowledge、curation、view 和 audit 的正式分区 codec；
-- Blob 字节打包、引用完整性遍历和跨工作区授权；
-- `exports/` 下的命名、原子落盘、下载与导入应用用例；
-- 完整备份、恢复、迁移与垃圾回收联动。
+应用不得直接把 Bundle 挂载为可变工作区。Reader 完整验证信封和领域分区、同一
+`workspaceId` 及全部 Blob 引用后，M1C repository 在一个事务中把精确状态恢复到
+尚不存在该工作区的数据库；所有可延迟外键在提交时统一核验。恢复不接受非空目标，
+也不执行覆盖或合并。失败的导入不得半途切换当前工作区，也不得让 PostgreSQL 状态
+引用数据根中不存在或摘要不符的字节。
 
-这些能力随对应知识模块实现，不改变 v1 信封的秘密排除和规范编码规则；若确需破坏信封语义，必须发布新格式版本。
+用户可以通过以下任一方式更换资料集，而无需修改代码或重新构建：
+
+- 受控关闭当前工作区后，用包体外配置打开另一个已有 `workspaceId`；
+- 把外部 Bundle 导入新的或明确选择的工作区，成功后再打开它；
+- 从同版本备份恢复 PostgreSQL 与 Blob 后，按稳定 `workspaceId` 重新打开。
+
+首版允许进程重启或 composition root 重新创建，不要求监视文件并实时热替换。工作区切换和 Bundle 导入必须是显式用户动作；复制或替换一个文件不能绕过 schema、权限、引用和事务校验。
+
+## 6. M1C 已实现的传输路径
+
+M1C-EXPAND 已实现：
+
+- 在 `REPEATABLE READ READ ONLY` 事务中读取当前 36 张领域表；
+- 由 `struinfo.m1c-domain.v1` codec 逐表、逐列闭合验证并规范排序；
+- 遍历 `evidence_blob` 得到精确 SHA-256 Blob manifest，并在导出与恢复两侧读取和核验；
+- 在外部数据根 `exports/` 下以临时文件、flush、原子 rename 写入安全文件名；
+- 只向同一稳定 `workspaceId` 的空目标执行一次事务恢复，保留已有命令 receipt、修订和幂等身份；
+- 通过本机 HTTP 与资料工作区提供“导出当前工作区”和“按 Bundle 文件名恢复”操作。
+
+固定 398–407 期的真实功能 smoke 生成约 3.76 MiB 的 Bundle，引用 10 个外部 Blob；
+恢复后的 36 表规范投影逐行相同，确定性搜索结果相同，重复导入仍返回 `existing`。
+原始 Markdown、Blob 字节、临时数据库和 Bundle 文件均位于仓库之外。
+
+## 7. 当前明确限制
+
+该路径是可运行核心恢复，不是完整灾难恢复或跨工作区克隆：
+
+- Bundle 只携带 Blob 身份，不携带正文或媒体字节；操作者必须单独备份并提供同一内容寻址 Blob 根；
+- 隐私文档的完整原始/规范化备份同样只通过 Blob 身份引用；仅保存 Bundle 而未保存对应外部 Blob 根，不能恢复其全文；
+- 只恢复同一 `workspaceId`，不重映射 UUID，也不克隆成另一工作区；
+- 只接受空目标，不合并、覆盖或部分更新已有工作区；
+- 当前分区只覆盖六份迁移已经实现的 Evidence、Curation、Knowledge、隐私可见性事实和命令历史，不虚构尚未实现的 preference、policy、saved view、job、outbox 或 AI 运行表；
+- 不替代 PostgreSQL 集群备份、Blob 保留/垃圾回收、加密归档、增量备份、跨版本升级或发布恢复演练。
+
+后续只有真实恢复需求证明必要时，才增加 Blob archive、跨工作区克隆、合并策略或新
+领域分区；破坏信封语义的变化必须发布新格式版本。

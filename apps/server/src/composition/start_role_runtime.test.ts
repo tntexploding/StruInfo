@@ -22,6 +22,7 @@ import type {
   StorageServicesFactory,
 } from '../storage/storage_services.js';
 import type {HealthListenerFactory} from '../transport/nest_health_listener.js';
+import type {M1cApiServicePort} from '../transport/m1c_api_service.js';
 import {startRoleRuntime} from './start_role_runtime.js';
 
 const DATABASE_URL =
@@ -29,6 +30,7 @@ const DATABASE_URL =
 const RUNTIME_ENVIRONMENT = {
   DATABASE_URL,
   STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),
+  STRUIINFO_WORKSPACE_ID: '11111111-1111-4111-8111-111111111111',
 };
 
 describe('startRoleRuntime', () => {
@@ -54,6 +56,7 @@ describe('startRoleRuntime', () => {
       let listenerOptions:
         | Readonly<{
             health: OperationalHealthService;
+            api?: M1cApiServicePort;
             host: string;
             port: number;
           }>
@@ -89,8 +92,14 @@ describe('startRoleRuntime', () => {
         RUNTIME_ENVIRONMENT.STRUIINFO_DATA_ROOT,
       );
       expect(runtime.storage).toBe(storage);
+      expect(runtime.workspaceId).toBe(
+        RUNTIME_ENVIRONMENT.STRUIINFO_WORKSPACE_ID,
+      );
       expect(listenerOptions?.host).toBe('127.0.0.1');
       expect(listenerOptions?.port).toBe(expectedPort);
+      expect(listenerOptions?.api === undefined).toBe(
+        role !== 'api' && role !== 'all',
+      );
       await expect(listenerOptions?.health.ready()).resolves.toMatchObject({
         statusCode: 200,
         body: {role, status: 'ready', checks: {database: 'ready'}},
@@ -203,6 +212,14 @@ function createStorageServices(): Readonly<StorageServices> {
     blobStore: {
       put: () => Promise.reject(new Error('unexpected Blob write')),
       read: () => Promise.reject(new Error('unexpected Blob read')),
+    },
+    reviewPreferences: {
+      load: () => Promise.reject(new Error('unexpected preferences read')),
+      save: () => Promise.reject(new Error('unexpected preferences write')),
+    },
+    workspaceBundleFiles: {
+      write: () => Promise.reject(new Error('unexpected Bundle write')),
+      read: () => Promise.reject(new Error('unexpected Bundle read')),
     },
   });
 }

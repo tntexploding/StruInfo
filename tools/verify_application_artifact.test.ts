@@ -14,6 +14,7 @@ const REQUIRED_PATHS = [
   'apps/server/migrations/000001_create_application_schema.sql',
   'apps/server/package.json',
   'apps/web/dist/assets/index-synthetic.css',
+  'apps/web/dist/favicon.svg',
   'apps/web/dist/index.html',
   'apps/web/package.json',
   'docs/dependencies/licenses/npm/example@1.0.0/LICENSE',

@@ -1,15 +1,15 @@
 # Database Migrations and Roles
 
-- Status: M0-S operator contract; first-party runner implemented with synthetic
-  boundary coverage
+- Status: First-party runner and six forward migrations implemented; the M1C
+  `000001`–`000006` PostgreSQL 18 functional smoke passed
 - Contract: `C-M0-S-r2`
 - Database direction: PostgreSQL 18 with separate migration and runtime
   credentials
 
 This document defines the operator and code boundary for forward migrations. It
 does not contain role-creation SQL or passwords. The first-party runner and first
-project-owned migration are implemented; real PostgreSQL execution remains
-pending the separately admitted infrastructure gate.
+project-owned migrations are implemented. Formal runtime-grant and deployment
+certification remains pending the separately admitted infrastructure gate.
 
 ## Role boundary
 
@@ -36,6 +36,11 @@ The separately executed runner uses these tracked paths:
 apps/server/src/entrypoints/migrate.ts
 apps/server/src/platform/database/migrations/**
 apps/server/migrations/000001_create_application_schema.sql
+apps/server/migrations/000002_create_source_evidence_schema.sql
+apps/server/migrations/000003_create_manual_curation_schema.sql
+apps/server/migrations/000004_create_manual_knowledge_core.sql
+apps/server/migrations/000005_create_evidence_capture_command.sql
+apps/server/migrations/000006_add_private_document_visibility.sql
 ```
 
 The runner is first-party code over the already admitted `pg@8.22.0` driver.
@@ -107,8 +112,41 @@ authorize search projections, aliases, collections, AI, transport, event
 delivery/consumers, roles, grants, background work, personal seeds, or by itself
 make a real PostgreSQL claim.
 
+`000005_create_evidence_capture_command.sql` is a narrow M1C forward addition.
+It creates only `struinfo.evidence_capture_command`, keyed by workspace and
+command idempotency key, and stores the canonical request SHA-256 needed to
+distinguish equal replay from changed same-key input after restart. It contains
+no source body, personal value, seed, role, grant, trigger, task, or mutable
+receipt payload, and does not modify accepted migration bytes `000001`–`000004`.
+
+`000006_add_private_document_visibility.sql` is the privacy-document increment.
+It adds one immutable visibility fact to each relevant layer:
+
+- `struinfo.resource.is_private` identifies an explicitly private source;
+- `struinfo.knowledge_revision.is_private` records the propagated privacy of an
+  immutable knowledge revision; and
+- `struinfo.knowledge_relation_revision.is_private` records the propagated
+  privacy of an immutable relation revision.
+
+All three columns are `boolean NOT NULL DEFAULT false`, so existing workspaces
+remain public by default. The migration adds no table, role, grant, seed,
+personal value, body text, trigger, policy engine, or encryption claim. Full
+private-document raw and normalized bytes continue to use the external Blob
+store already referenced by Evidence rows. Runtime roles need INSERT authority
+for the two new revision columns and the Resource column through the existing
+typed repository paths; ordinary runtime still receives no migration or DDL
+authority.
+
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.
+
+The application runtime does write the separate business command ledger in
+`struinfo.evidence_capture_command`. An M1C runtime therefore needs the DML
+privileges required by the Evidence, Curation, and Knowledge repository ports;
+it still must not receive migration-ledger or DDL authority. The 2026-08-16
+functional smoke used an explicitly disposable synthetic role with DML grants.
+Production least-privilege grant automation remains a later operator deliverable
+and the broad smoke grant must not be copied as a production recipe.
 
 ## Operator sequence
 
@@ -152,9 +190,21 @@ pgvector execution, runtime grants, real advisory-lock concurrency, migration
 interruption, and Windows/Linux database parity remain pending
 `M0-S-CONTAINER-MAINT-001` or another separately admitted infrastructure fixture.
 
+Separately from that formal certification, the M1C functional smoke has now run
+the first-party runner against PostgreSQL 18, applied `000001`–`000005`, observed
+a second-run no-op, and completed two isolated workspace Evidence imports. This
+does not claim production grant, container, Linux, or full TM2 parity.
+An additional disposable PostgreSQL 18 run applied `000001`–`000006` from an
+empty database and exercised private/public import, external raw and normalized
+Blob reads, private item and endpoint-relation propagation, default exclusion,
+explicit private retrieval, and separate full-document return. The functional
+run used synthetic smoke privileges and therefore does not claim the formal
+least-privilege runtime-grant, Linux, container-release, or full TM2 gate.
+
 Draft [`C-SLICE-B-POSTGRES-r3`](postgresql-knowledge-adapter-contract.md)
 defines the narrower non-container TM2 candidate for externally provisioned
-PostgreSQL 18: actual migrations `000001` through `000004`, curation/knowledge
+PostgreSQL 18: its historical candidate covered migrations `000001` through
+`000004`, curation/knowledge
 transactions, complete current-knowledge reads, least-privilege runtime grants,
 and parity with the accepted pure boundaries. Its implementation remains
 blocked until independent Maintenance and Test contract review. Compose,

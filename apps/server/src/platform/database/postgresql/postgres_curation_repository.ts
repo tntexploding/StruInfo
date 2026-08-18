@@ -291,18 +291,27 @@ WHERE workspace_id = $1 AND fragment_id = $2`;
     commandRows: readonly Row[],
     targetIds: readonly string[],
   ): Promise<ManualCurationRepositorySnapshot> {
-    const [terms, targets, assignments, decisions, reasons, assessments] =
-      await Promise.all([
-        this.#client.query<Row>(READ_TERMS_SQL, [workspaceId]),
-        this.#client.query<Row>(READ_TARGETS_SQL, [workspaceId, targetIds]),
-        this.#client.query<Row>(READ_ASSIGNMENTS_SQL, [workspaceId, targetIds]),
-        this.#client.query<Row>(READ_DECISIONS_SQL, [workspaceId, targetIds]),
-        this.#client.query<Row>(READ_DECISION_REASONS_SQL, [
-          workspaceId,
-          targetIds,
-        ]),
-        this.#client.query<Row>(READ_ASSESSMENTS_SQL, [workspaceId, targetIds]),
-      ]);
+    const terms = await this.#client.query<Row>(READ_TERMS_SQL, [workspaceId]);
+    const targets = await this.#client.query<Row>(READ_TARGETS_SQL, [
+      workspaceId,
+      targetIds,
+    ]);
+    const assignments = await this.#client.query<Row>(READ_ASSIGNMENTS_SQL, [
+      workspaceId,
+      targetIds,
+    ]);
+    const decisions = await this.#client.query<Row>(READ_DECISIONS_SQL, [
+      workspaceId,
+      targetIds,
+    ]);
+    const reasons = await this.#client.query<Row>(READ_DECISION_REASONS_SQL, [
+      workspaceId,
+      targetIds,
+    ]);
+    const assessments = await this.#client.query<Row>(READ_ASSESSMENTS_SQL, [
+      workspaceId,
+      targetIds,
+    ]);
     const mappedTerms = terms.rows.map(mapTerm);
     const mappedTargets = targets.rows.map(mapTarget);
     const mappedAssignments = assignments.rows.map(mapAssignment);

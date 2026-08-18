@@ -72,6 +72,8 @@ export interface ResourceInput {
   readonly resourceKind: ResourceKind;
   readonly sourceKey: string;
   readonly canonicalUri?: string;
+  /** Present only when this resource belongs to the private-document scope. */
+  readonly isPrivate?: true;
 }
 
 export interface GitResourceInput {

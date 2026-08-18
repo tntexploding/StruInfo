@@ -6,6 +6,7 @@ export const LOCAL_DATA_AREA_NAMES = [
   'uploads',
   'exports',
   'backups',
+  'preferences',
 ] as const;
 
 export type LocalDataAreaName = (typeof LOCAL_DATA_AREA_NAMES)[number];
@@ -39,6 +40,7 @@ export async function initializeLocalDataRoot(
     uploads: await ensurePrivateSubdirectory(root, 'uploads'),
     exports: await ensurePrivateSubdirectory(root, 'exports'),
     backups: await ensurePrivateSubdirectory(root, 'backups'),
+    preferences: await ensurePrivateSubdirectory(root, 'preferences'),
   });
   return Object.freeze({root, areaRoots});
 }

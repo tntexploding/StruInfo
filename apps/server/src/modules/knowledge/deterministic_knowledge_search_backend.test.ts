@@ -20,6 +20,7 @@ interface ItemFixture {
   readonly revision?: number;
   readonly title: string;
   readonly body?: string;
+  readonly isPrivate?: boolean;
   readonly knowledgeKind?:
     | 'entity'
     | 'concept'
@@ -57,6 +58,7 @@ interface RelationFixture {
     | 'rejected'
     | 'withdrawn';
   readonly qualifier?: string;
+  readonly isPrivate?: boolean;
 }
 
 interface FragmentInputFixture {
@@ -419,6 +421,51 @@ describe('deterministic knowledge search semantics', () => {
     expect(okItems(second)).toHaveLength(1);
   });
 
+  it('excludes private items and their relations until privacy search is explicit', async () => {
+    const publicItemId = uuid(351);
+    const privateItemId = uuid(352);
+    const state = snapshot(
+      [
+        {itemId: publicItemId, title: 'public'},
+        {itemId: privateItemId, title: 'private', isPrivate: true},
+      ],
+      [],
+      [
+        {
+          relationId: uuid(353),
+          subjectItemId: publicItemId,
+          objectItemId: privateItemId,
+          relationTypeKey: 'synthetic:private-link',
+        },
+      ],
+    );
+    const relationRequest = request({
+      relation: {
+        kind: 'connected_to',
+        anchorItemId: publicItemId,
+        direction: 'outgoing',
+        relationTypeKeys: [],
+        reviewStates: [],
+      },
+    });
+
+    const publicOnly = await execute(state, relationRequest);
+    expect(publicOnly).toMatchObject({status: 'ok', totalCount: 0, items: []});
+
+    const withPrivate = await execute(state, relationRequest, true);
+    expect(withPrivate.status).toBe('ok');
+    if (withPrivate.status !== 'ok') return;
+    expect(withPrivate.totalCount).toBe(1);
+    expect(withPrivate.items[0]).toMatchObject({
+      itemId: privateItemId,
+      isPrivate: true,
+      relationMatches: [{relationId: uuid(353), isPrivate: true}],
+    });
+    expect(withPrivate.querySha256).not.toBe(
+      digestDeterministicKnowledgeSearchQuery(relationRequest),
+    );
+  });
+
   it('returns a successful zero-match result and hides absent anchors', async () => {
     const state = snapshot([{itemId: uuid(401), title: 'alpha'}]);
     const noText = await execute(
@@ -590,7 +637,9 @@ describe('closed input, repository, and complexity boundaries', () => {
       requestValue,
     );
     expect(successLoad).toHaveBeenCalledTimes(1);
-    expect(successLoad).toHaveBeenCalledWith(WORKSPACE_ID);
+    expect(successLoad).toHaveBeenCalledWith(WORKSPACE_ID, {
+      includePrivate: false,
+    });
 
     const failed = await executeDeterministicKnowledgeSearch(
       {
@@ -743,6 +792,7 @@ function snapshot(
       title: fixture.title,
       ...(fixture.body === undefined ? {} : {body: fixture.body}),
     },
+    ...(fixture.isPrivate === true ? {isPrivate: true as const} : {}),
   }));
   const fragmentInputs = [...fragmentFixtures]
     .sort((left, right) => {
@@ -802,6 +852,7 @@ function snapshot(
         ? {}
         : {qualifier: fixture.qualifier}),
     },
+    ...(fixture.isPrivate === true ? {isPrivate: true as const} : {}),
   }));
   return {items, revisions, fragmentInputs, relations, relationRevisions};
 }
@@ -809,6 +860,7 @@ function snapshot(
 async function execute(
   state: DeterministicKnowledgeSearchSnapshot,
   requestValue: DeterministicKnowledgeSearchRequest,
+  includePrivate = false,
 ): Promise<DeterministicKnowledgeSearchResult> {
   const repository: DeterministicKnowledgeSearchRepositoryPort = {
     loadCurrentKnowledgeSearchSnapshot() {
@@ -819,6 +871,7 @@ async function execute(
     repository,
     context(),
     requestValue,
+    {includePrivate},
   );
 }
 

@@ -38,11 +38,20 @@ interface NormalizationState {
   nodesVisited: number;
 }
 
-export function normalizeJsonValue(value: unknown): JsonValue {
+export interface CanonicalJsonLimits {
+  readonly maximumDepth?: number;
+  readonly maximumValues?: number;
+}
+
+export function normalizeJsonValue(
+  value: unknown,
+  limits: Readonly<CanonicalJsonLimits> = {},
+): JsonValue {
+  const parsedLimits = parseLimits(limits);
   return normalizeValue(value, 0, {
     ancestors: new WeakSet<object>(),
-    maximumDepth: DEFAULT_MAXIMUM_DEPTH,
-    maximumNodes: DEFAULT_MAXIMUM_NODES,
+    maximumDepth: parsedLimits.maximumDepth,
+    maximumNodes: parsedLimits.maximumValues,
     nodesVisited: 0,
   });
 }
@@ -50,9 +59,10 @@ export function normalizeJsonValue(value: unknown): JsonValue {
 export function encodeCanonicalJson(
   value: unknown,
   maximumBytes: number,
+  limits: Readonly<CanonicalJsonLimits> = {},
 ): Uint8Array {
   validateMaximumBytes(maximumBytes);
-  const normalized = normalizeJsonValue(value);
+  const normalized = normalizeJsonValue(value, limits);
   const encoded = new TextEncoder().encode(`${JSON.stringify(normalized)}\n`);
   if (encoded.byteLength > maximumBytes) {
     throw new CanonicalJsonError(
@@ -66,6 +76,7 @@ export function encodeCanonicalJson(
 export function decodeCanonicalJson(
   input: Uint8Array,
   maximumBytes: number,
+  limits: Readonly<CanonicalJsonLimits> = {},
 ): JsonValue {
   let ownedBytes: Uint8Array;
   try {
@@ -93,8 +104,8 @@ export function decodeCanonicalJson(
       'Canonical JSON syntax is invalid.',
     );
   }
-  const normalized = normalizeJsonValue(parsed);
-  const canonicalBytes = encodeCanonicalJson(normalized, maximumBytes);
+  const normalized = normalizeJsonValue(parsed, limits);
+  const canonicalBytes = encodeCanonicalJson(normalized, maximumBytes, limits);
   if (!equalBytes(ownedBytes, canonicalBytes)) {
     throw new CanonicalJsonError(
       'non_canonical',
@@ -255,6 +266,25 @@ function validateMaximumBytes(maximumBytes: number): void {
       'The canonical JSON byte limit is invalid.',
     );
   }
+}
+
+function parseLimits(
+  limits: Readonly<CanonicalJsonLimits>,
+): Readonly<{maximumDepth: number; maximumValues: number}> {
+  const maximumDepth = limits.maximumDepth ?? DEFAULT_MAXIMUM_DEPTH;
+  const maximumValues = limits.maximumValues ?? DEFAULT_MAXIMUM_NODES;
+  if (
+    !Number.isSafeInteger(maximumDepth) ||
+    maximumDepth < 0 ||
+    !Number.isSafeInteger(maximumValues) ||
+    maximumValues < 1
+  ) {
+    throw new CanonicalJsonError(
+      'input_invalid',
+      'The canonical JSON structural limits are invalid.',
+    );
+  }
+  return Object.freeze({maximumDepth, maximumValues});
 }
 
 function mapOwnedByteError(error: unknown): CanonicalJsonError {

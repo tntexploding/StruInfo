@@ -356,6 +356,7 @@ export interface KnowledgeFragmentState {
   readonly snapshotId: string;
   readonly fragmentId: string;
   readonly selectedTextSha256: string;
+  readonly isPrivate?: true;
 }
 
 export interface KnowledgeItemState {
@@ -373,6 +374,7 @@ export interface KnowledgeRevisionState {
   readonly previousRevisionId?: string;
   readonly value: Readonly<KnowledgeItemRevisionValue>;
   readonly provenance: Readonly<KnowledgeProvenanceInput>;
+  readonly isPrivate?: true;
 }
 
 export interface KnowledgeRelationState {
@@ -393,6 +395,7 @@ export interface KnowledgeRelationRevisionState {
   readonly previousRevisionId?: string;
   readonly value: Readonly<KnowledgeRelationRevisionValue>;
   readonly provenance: Readonly<KnowledgeProvenanceInput>;
+  readonly isPrivate?: true;
 }
 
 export interface StoredKnowledgeChangeSetState {
@@ -449,6 +452,7 @@ export interface KnowledgeRevisionInsert {
   readonly value: Readonly<KnowledgeItemRevisionValue>;
   readonly changeSetId: string;
   readonly operationIndex: KnowledgeBoundedIndex;
+  readonly isPrivate?: true;
 }
 
 export type KnowledgeRelationIdentityInsert = KnowledgeRelationState;
@@ -462,6 +466,7 @@ export interface KnowledgeRelationRevisionInsert {
   readonly value: Readonly<KnowledgeRelationRevisionValue>;
   readonly changeSetId: string;
   readonly operationIndex: KnowledgeBoundedIndex;
+  readonly isPrivate?: true;
 }
 
 export type KnowledgeRevisionFragmentInputKind = 'citation' | 'derivation';

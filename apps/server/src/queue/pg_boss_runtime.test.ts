@@ -24,6 +24,7 @@ const DATABASE_URL =
 const RUNTIME_ENVIRONMENT = {
   DATABASE_URL,
   STRUIINFO_DATA_ROOT: join(tmpdir(), 'struinfo-synthetic-data'),
+  STRUIINFO_WORKSPACE_ID: '11111111-1111-4111-8111-111111111111',
 };
 const POOL = createFakePool();
 

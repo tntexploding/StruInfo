@@ -175,6 +175,50 @@ describe('manual knowledge item behavior', () => {
     },
   );
 
+  it('propagates private evidence into items and relations without AI', () => {
+    const privateItemPlan = preparedPlan(
+      prepareApplyManualKnowledgeChangeSet(
+        manualContext('synthetic.knowledge.private-item'),
+        manualRequest([itemOperation()]),
+        repositoryState({
+          fragments: [fragmentRow(FRAGMENT, SOURCE_TEXT, SNAPSHOT, true)],
+        }),
+      ),
+    );
+    expect(privateItemPlan.itemRevisionInserts[0]).toMatchObject({
+      itemId: ITEM_A,
+      isPrivate: true,
+    });
+
+    const itemA = existingItemRows(
+      ITEM_A,
+      1,
+      itemValue({title: 'private-endpoint'}),
+      provenance({citations: [FRAGMENT]}),
+    );
+    const itemB = existingItemRows(
+      ITEM_B,
+      1,
+      itemValue({title: 'public-endpoint'}),
+      provenance({citations: [FRAGMENT]}),
+    );
+    const relationPlan = preparedPlan(
+      prepareApplyManualKnowledgeChangeSet(
+        manualContext('synthetic.knowledge.private-relation'),
+        manualRequest([relationOperation()]),
+        repositoryState({
+          fragments: [fragmentRow()],
+          items: [itemA.item, itemB.item],
+          revisions: [{...itemA.revision, isPrivate: true}, itemB.revision],
+        }),
+      ),
+    );
+    expect(relationPlan.relationRevisionInserts[0]).toMatchObject({
+      relationId: RELATION_A,
+      isPrivate: true,
+    });
+  });
+
   it('revises, withdraws, and reactivates through append-only revisions', () => {
     const baseProvenance = provenance({citations: [FRAGMENT]});
     const existingValue = itemValue({title: 'synthetic-before'});
@@ -1379,6 +1423,7 @@ function fragmentRow(
   fragmentId = FRAGMENT,
   text = SOURCE_TEXT,
   snapshotId = SNAPSHOT,
+  isPrivate = false,
 ): ManualKnowledgeRepositorySnapshot['fragments'][number] {
   return {
     workspaceId: WORKSPACE,
@@ -1386,6 +1431,7 @@ function fragmentRow(
     snapshotId,
     fragmentId,
     selectedTextSha256: sha256(text),
+    ...(isPrivate ? {isPrivate: true as const} : {}),
   };
 }
 

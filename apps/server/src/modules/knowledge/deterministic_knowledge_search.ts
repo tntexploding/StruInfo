@@ -58,14 +58,17 @@ export function evaluateDeterministicKnowledgeSearch(
   request: DeterministicKnowledgeSearchRequest,
   snapshot: DeterministicKnowledgeSearchSnapshot,
   querySha256: string,
+  includePrivate = false,
 ): DeterministicKnowledgeSearchResult {
+  validateAndIndexSnapshot(context.effectiveWorkspaceId, snapshot);
+  const visibleSnapshot = privacyScopedSnapshot(snapshot, includePrivate);
   const indexes = validateAndIndexSnapshot(
     context.effectiveWorkspaceId,
-    snapshot,
+    visibleSnapshot,
   );
   const relationMatchesByItem = buildRelationMatches(
     request,
-    snapshot,
+    visibleSnapshot,
     indexes,
   );
   const candidates: SearchCandidate[] = [];
@@ -73,7 +76,7 @@ export function evaluateDeterministicKnowledgeSearch(
   const roleFilter = new Set(request.filters.epistemicRoles);
   const stateFilter = new Set(request.filters.reviewStates);
 
-  for (const item of snapshot.items) {
+  for (const item of visibleSnapshot.items) {
     const revision = indexes.revisionsByItem.get(item.itemId);
     if (revision === undefined) {
       throw repositorySnapshotFault();
@@ -134,6 +137,76 @@ export function evaluateDeterministicKnowledgeSearch(
       ...(nextCursor === undefined ? {} : {nextCursor}),
     }),
   );
+}
+
+function privacyScopedSnapshot(
+  snapshot: Readonly<DeterministicKnowledgeSearchSnapshot>,
+  includePrivate: boolean,
+): DeterministicKnowledgeSearchSnapshot {
+  const privateItemIds = new Set(
+    snapshot.revisions
+      .filter((revision) => revision.isPrivate === true)
+      .map((revision) => revision.itemId),
+  );
+  const relationRevisionById = new Map(
+    snapshot.relationRevisions.map((revision) => [
+      revision.relationId,
+      revision,
+    ]),
+  );
+  const relationPrivacy = new Map(
+    snapshot.relations.map((relation) => {
+      const revision = relationRevisionById.get(relation.relationId);
+      return [
+        relation.relationId,
+        revision?.isPrivate === true ||
+          privateItemIds.has(relation.subjectItemId) ||
+          privateItemIds.has(relation.objectItemId),
+      ] as const;
+    }),
+  );
+
+  if (includePrivate) {
+    return {
+      ...snapshot,
+      relationRevisions: snapshot.relationRevisions.map((revision) =>
+        relationPrivacy.get(revision.relationId) === true
+          ? {...revision, isPrivate: true as const}
+          : revision,
+      ),
+    };
+  }
+
+  const visibleItemIds = new Set(
+    snapshot.items
+      .filter((item) => !privateItemIds.has(item.itemId))
+      .map((item) => item.itemId),
+  );
+  const visibleRelationIds = new Set(
+    snapshot.relations
+      .filter(
+        (relation) =>
+          relationPrivacy.get(relation.relationId) !== true &&
+          visibleItemIds.has(relation.subjectItemId) &&
+          visibleItemIds.has(relation.objectItemId),
+      )
+      .map((relation) => relation.relationId),
+  );
+  return {
+    items: snapshot.items.filter((item) => visibleItemIds.has(item.itemId)),
+    revisions: snapshot.revisions.filter((revision) =>
+      visibleItemIds.has(revision.itemId),
+    ),
+    fragmentInputs: snapshot.fragmentInputs.filter((input) =>
+      visibleItemIds.has(input.itemId),
+    ),
+    relations: snapshot.relations.filter((relation) =>
+      visibleRelationIds.has(relation.relationId),
+    ),
+    relationRevisions: snapshot.relationRevisions.filter((revision) =>
+      visibleRelationIds.has(revision.relationId),
+    ),
+  };
 }
 
 export function rejectedKnowledgeSearchResult(
@@ -405,6 +478,7 @@ function addRelationMatch(
       relationTypeKey: relation.relationTypeKey,
       epistemicRole: revision.value.epistemicRole,
       reviewState: revision.value.reviewState,
+      ...(revision.isPrivate === true ? {isPrivate: true as const} : {}),
       ...(!Object.hasOwn(revision.value, 'qualifier')
         ? {}
         : {qualifier: revision.value.qualifier}),
@@ -530,6 +604,9 @@ function materializeItem(
     relationMatchesTruncated:
       candidate.relationMatches.length >
       KNOWLEDGE_SEARCH_LIMITS.relationMatches,
+    ...(candidate.revision.isPrivate === true
+      ? {isPrivate: true as const}
+      : {}),
   });
 }
 
@@ -556,6 +633,7 @@ function copyRelationMatch(
     relationTypeKey: match.relationTypeKey,
     epistemicRole: match.epistemicRole,
     reviewState: match.reviewState,
+    ...(match.isPrivate === true ? {isPrivate: true as const} : {}),
     ...(!Object.hasOwn(match, 'qualifier') ? {} : {qualifier: match.qualifier}),
   });
 }
