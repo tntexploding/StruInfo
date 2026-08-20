@@ -146,6 +146,55 @@ export class M1cApiController {
     writeLocalApiResponse(response, await this.#service.search(body));
   }
 
+  @Post('entries/materialize')
+  public async materializeInformationEntries(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.materializeInformationEntries(body),
+    );
+  }
+
+  @Get('entries')
+  public async informationEntries(
+    @Query('snapshotId') snapshotId: string | undefined,
+    @Query('includePrivate') includePrivate: string | undefined,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.listInformationEntries(
+        snapshotId,
+        parseOptionalBooleanQuery(includePrivate),
+      ),
+    );
+  }
+
+  @Put('entries/:entryId')
+  public async reviseInformationEntry(
+    @Param('entryId') entryId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.reviseInformationEntry(entryId, body),
+    );
+  }
+
+  @Post('entries/search')
+  public async searchInformationEntries(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.searchInformationEntries(body),
+    );
+  }
+
   @Post('workspace-bundles/export')
   public async exportWorkspaceBundle(@Res() response: Response): Promise<void> {
     writeLocalApiResponse(
@@ -188,4 +237,14 @@ export function writeLocalApiResponse(
   response.setHeader('Cache-Control', LOCAL_API_CACHE_CONTROL);
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.end(JSON.stringify(result.body));
+}
+
+function parseOptionalBooleanQuery(value: string | undefined): unknown {
+  return value === undefined
+    ? false
+    : value === 'true'
+      ? true
+      : value === 'false'
+        ? false
+        : value;
 }

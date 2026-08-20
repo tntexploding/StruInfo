@@ -14,12 +14,18 @@ const NAVIGATION: readonly Readonly<{
   {section: 'materials', index: '01', label: '材料', microLabel: 'EVIDENCE'},
   {section: 'review', index: '02', label: '审核', microLabel: 'REVIEW'},
   {
-    section: 'knowledge',
+    section: 'entries',
     index: '03',
-    label: '知识维护',
+    label: '条目',
+    microLabel: 'ENTRIES',
+  },
+  {
+    section: 'knowledge',
+    index: '04',
+    label: '知识',
     microLabel: 'KNOWLEDGE',
   },
-  {section: 'search', index: '04', label: '搜索', microLabel: 'RETRIEVAL'},
+  {section: 'search', index: '05', label: '搜索', microLabel: 'RETRIEVAL'},
 ];
 
 export interface ProductAppShellProps {
@@ -54,7 +60,7 @@ export function ProductAppShell({
             <span className="primary-rail__mark" aria-hidden="true">
               SI
             </span>
-            <span className="primary-rail__edition">M1C</span>
+            <span className="primary-rail__edition">M1D</span>
           </div>
           <nav className="primary-navigation" aria-label="产品工作区">
             {NAVIGATION.map((item) => (

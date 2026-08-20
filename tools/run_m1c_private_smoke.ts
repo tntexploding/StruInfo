@@ -63,6 +63,7 @@ async function main(): Promise<void> {
       knowledgeRepository: repositories.knowledge,
       knowledgeReadRepository: repositories.knowledgeRead,
       retrievalRepository: repositories.retrieval,
+      informationEntryRepository: repositories.informationEntries,
       workspaceTransfer: new M1cWorkspaceTransfer({
         repository: repositories.workspaceTransfer,
         blobStore: storage.blobStore,

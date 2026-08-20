@@ -7,6 +7,19 @@ import {
 } from '../modules/curation/index.js';
 import type {ManualCurationReadRepositoryPort} from '../modules/curation/manual_curation_read_repository.js';
 import {
+  ENTRY_DOMAIN_KEYWORDS,
+  ENTRY_TYPE_KEYWORDS,
+  deriveInformationEntryRevisionId,
+  prepareManualEntryRevision,
+  prepareSplitInformationEntries,
+  searchCurrentInformationEntries,
+  type EntryDomainKeyword,
+  type EntryTypeKeyword,
+  type InformationEntryRepositoryPort,
+  type InformationEntrySearchRequest,
+  type MaterializedEvidenceSnapshot,
+} from '../modules/entries/index.js';
+import {
   importMarkdownEvidence,
   type EvidenceReadRepositoryPort,
   type EvidenceRepositoryPort,
@@ -50,6 +63,7 @@ export interface M1cApiServiceDependencies {
   readonly knowledgeRepository: ManualKnowledgeRepositoryPort;
   readonly knowledgeReadRepository: ManualKnowledgeReadRepositoryPort;
   readonly retrievalRepository: DeterministicKnowledgeSearchRepositoryPort;
+  readonly informationEntryRepository: InformationEntryRepositoryPort;
   readonly workspaceTransfer: M1cWorkspaceTransferPort;
 }
 
@@ -77,6 +91,16 @@ export interface M1cApiServicePort {
     includePrivate?: unknown,
   ): Promise<M1cHttpResult>;
   search(body: unknown): Promise<M1cHttpResult>;
+  materializeInformationEntries(body: unknown): Promise<M1cHttpResult>;
+  listInformationEntries(
+    snapshotId?: unknown,
+    includePrivate?: unknown,
+  ): Promise<M1cHttpResult>;
+  reviseInformationEntry(
+    entryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult>;
+  searchInformationEntries(body: unknown): Promise<M1cHttpResult>;
   exportWorkspaceBundle(): Promise<M1cHttpResult>;
   restoreWorkspaceBundle(body: unknown): Promise<M1cHttpResult>;
 }
@@ -99,6 +123,7 @@ export class M1cApiService implements M1cApiServicePort {
         'manual_curation',
         'manual_knowledge',
         'deterministic_search',
+        'information_entries',
         'private_documents',
         'review_preferences',
         'workspace_bundle_export',
@@ -360,6 +385,181 @@ export class M1cApiService implements M1cApiServicePort {
     return httpResult(result.status === 'failed' ? 503 : 422, result);
   }
 
+  public async materializeInformationEntries(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (
+      !isRecord(body) ||
+      typeof body.snapshotId !== 'string' ||
+      !CANONICAL_UUID.test(body.snapshotId)
+    ) {
+      return inputFailure('body.snapshotId');
+    }
+    if (body.chunkMode !== undefined && body.chunkMode !== 'split') {
+      return inputFailure('body.chunkMode');
+    }
+    const includePrivate = body.includePrivate ?? false;
+    if (typeof includePrivate !== 'boolean') {
+      return inputFailure('body.includePrivate');
+    }
+    const snapshotId = body.snapshotId;
+    try {
+      const snapshot =
+        await this.#dependencies.evidenceReadRepository.loadSnapshot(
+          this.#dependencies.workspaceId,
+          snapshotId,
+        );
+      if (
+        snapshot === undefined ||
+        (snapshot.isPrivate === true && !includePrivate)
+      ) {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'snapshot_not_found'}),
+        });
+      }
+      const materialized = (await materializeEvidenceSnapshot(
+        snapshot,
+        this.#dependencies.blobStore,
+      )) as Readonly<MaterializedEvidenceSnapshot>;
+      const entries = prepareSplitInformationEntries(materialized);
+      if (entries.length === 0) {
+        return httpResult(422, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'entry_sections_not_found'}),
+        });
+      }
+      const persisted =
+        await this.#dependencies.informationEntryRepository.materializeEntries(
+          entries,
+        );
+      const current =
+        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          includePrivate,
+        );
+      const entryIds = new Set(entries.map((entry) => entry.entryId));
+      return httpResult(persisted.outcome === 'created' ? 201 : 200, {
+        status: persisted.outcome,
+        snapshotId,
+        createdCount: persisted.createdCount,
+        entries: Object.freeze(
+          current.filter((entry) => entryIds.has(entry.entryId)),
+        ),
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async listInformationEntries(
+    snapshotId?: unknown,
+    includePrivate: unknown = false,
+  ): Promise<M1cHttpResult> {
+    if (
+      snapshotId !== undefined &&
+      (typeof snapshotId !== 'string' || !CANONICAL_UUID.test(snapshotId))
+    ) {
+      return inputFailure('query.snapshotId');
+    }
+    if (typeof includePrivate !== 'boolean') {
+      return inputFailure('query.includePrivate');
+    }
+    try {
+      const entries =
+        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          includePrivate,
+        );
+      const selected =
+        snapshotId === undefined
+          ? entries
+          : entries.filter((entry) => entry.snapshotId === snapshotId);
+      return httpResult(200, {
+        status: 'ok',
+        totalCount: selected.length,
+        entries: Object.freeze(selected),
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async reviseInformationEntry(
+    entryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
+    const input = decodeEntryRevisionBody(body);
+    if (input === undefined) return inputFailure('body');
+    try {
+      const entries =
+        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          input.includePrivate,
+        );
+      const current = entries.find((entry) => entry.entryId === entryId);
+      if (current === undefined) {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'information_entry_not_found'}),
+        });
+      }
+      const value = prepareManualEntryRevision(current, input.annotation);
+      if (value === undefined) return inputFailure('body.annotation');
+      const outcome =
+        await this.#dependencies.informationEntryRepository.reviseEntry({
+          workspaceId: this.#dependencies.workspaceId,
+          entryId,
+          expectedRevision: input.expectedRevision,
+          revisionId: deriveInformationEntryRevisionId(
+            entryId,
+            input.expectedRevision + 1,
+          ),
+          value,
+        });
+      if (outcome === 'not_found') {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'information_entry_not_found'}),
+        });
+      }
+      if (outcome === 'stale') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'stale_entry_revision'}),
+        });
+      }
+      const refreshed =
+        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          input.includePrivate,
+        );
+      return httpResult(200, {
+        status: outcome,
+        entry: refreshed.find((entry) => entry.entryId === entryId),
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async searchInformationEntries(body: unknown): Promise<M1cHttpResult> {
+    const request = decodeEntrySearchBody(body);
+    if (request === undefined) return inputFailure('body');
+    try {
+      const entries =
+        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          request.includePrivate,
+        );
+      const result = searchCurrentInformationEntries(entries, request);
+      return httpResult(200, {status: 'ok', ...result});
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
   public async exportWorkspaceBundle(): Promise<M1cHttpResult> {
     try {
       const summary =
@@ -568,6 +768,124 @@ function mapMarkdownImportBody(
   return Object.freeze(
     candidate as unknown as Readonly<ImportMarkdownEvidenceInput>,
   );
+}
+
+function decodeEntryRevisionBody(body: unknown):
+  | Readonly<{
+      expectedRevision: number;
+      includePrivate: boolean;
+      annotation: Readonly<{
+        body: string;
+        contentKeywords: readonly string[];
+        typeKeyword: EntryTypeKeyword;
+        typeCustomName?: string;
+        domains: readonly Readonly<{
+          keyword: EntryDomainKeyword;
+          customName?: string;
+        }>[];
+      }>;
+    }>
+  | undefined {
+  if (!isRecord(body) || !isRecord(body.annotation)) return undefined;
+  if (
+    typeof body.expectedRevision !== 'number' ||
+    !Number.isSafeInteger(body.expectedRevision) ||
+    body.expectedRevision < 1 ||
+    typeof (body.includePrivate ?? false) !== 'boolean'
+  ) {
+    return undefined;
+  }
+  const annotation = body.annotation;
+  if (
+    typeof annotation.body !== 'string' ||
+    !Array.isArray(annotation.contentKeywords) ||
+    !annotation.contentKeywords.every((value) => typeof value === 'string') ||
+    typeof annotation.typeKeyword !== 'string' ||
+    !ENTRY_TYPE_KEYWORDS.includes(annotation.typeKeyword as EntryTypeKeyword) ||
+    (annotation.typeCustomName !== undefined &&
+      typeof annotation.typeCustomName !== 'string') ||
+    !Array.isArray(annotation.domains)
+  ) {
+    return undefined;
+  }
+  const domains = annotation.domains.flatMap((value) => {
+    if (
+      !isRecord(value) ||
+      typeof value.keyword !== 'string' ||
+      !ENTRY_DOMAIN_KEYWORDS.includes(value.keyword as EntryDomainKeyword) ||
+      (value.customName !== undefined && typeof value.customName !== 'string')
+    ) {
+      return [];
+    }
+    return [
+      Object.freeze({
+        keyword: value.keyword as EntryDomainKeyword,
+        ...(value.customName === undefined
+          ? {}
+          : {customName: value.customName}),
+      }),
+    ];
+  });
+  if (domains.length !== annotation.domains.length) return undefined;
+  return Object.freeze({
+    expectedRevision: body.expectedRevision,
+    includePrivate: (body.includePrivate ?? false) as boolean,
+    annotation: Object.freeze({
+      body: annotation.body,
+      contentKeywords: Object.freeze([
+        ...annotation.contentKeywords,
+      ] as string[]),
+      typeKeyword: annotation.typeKeyword as EntryTypeKeyword,
+      ...(annotation.typeCustomName === undefined
+        ? {}
+        : {typeCustomName: annotation.typeCustomName}),
+      domains: Object.freeze(domains),
+    }),
+  });
+}
+
+function decodeEntrySearchBody(
+  body: unknown,
+): Readonly<InformationEntrySearchRequest> | undefined {
+  if (!isRecord(body)) return undefined;
+  const textValue = body.text ?? undefined;
+  const snapshotId = body.snapshotId ?? undefined;
+  const typeKeyword = body.typeKeyword ?? undefined;
+  const domainKeyword = body.domainKeyword ?? undefined;
+  const includePrivate = body.includePrivate ?? false;
+  const limit = body.limit ?? 100;
+  if (
+    (textValue !== undefined && typeof textValue !== 'string') ||
+    (snapshotId !== undefined &&
+      (typeof snapshotId !== 'string' || !CANONICAL_UUID.test(snapshotId))) ||
+    (typeKeyword !== undefined &&
+      (typeof typeKeyword !== 'string' ||
+        !ENTRY_TYPE_KEYWORDS.includes(typeKeyword as EntryTypeKeyword))) ||
+    (domainKeyword !== undefined &&
+      (typeof domainKeyword !== 'string' ||
+        !ENTRY_DOMAIN_KEYWORDS.includes(
+          domainKeyword as EntryDomainKeyword,
+        ))) ||
+    typeof includePrivate !== 'boolean' ||
+    typeof limit !== 'number' ||
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > 100
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    ...(textValue === undefined ? {} : {text: textValue}),
+    ...(snapshotId === undefined ? {} : {snapshotId}),
+    ...(typeKeyword === undefined
+      ? {}
+      : {typeKeyword: typeKeyword as EntryTypeKeyword}),
+    ...(domainKeyword === undefined
+      ? {}
+      : {domainKeyword: domainKeyword as EntryDomainKeyword}),
+    includePrivate,
+    limit,
+  });
 }
 
 function commandEnvelope(body: unknown): Readonly<{

@@ -123,6 +123,18 @@ source evidence through the existing local HTTP/Web application. Do not rewrite
 existing M1C knowledge or turn AI, vectors, formal TM2, or test-harness hardening
 into an Entry prerequisite.
 
+M1D-1 now implements that first Entry slice. Forward migration `000008` adds
+stable Entry identities, append-only revisions, exact Fragment inputs,
+independent content/type/domain keywords and lineage. The typed PostgreSQL
+repository, four workspace-fixed local API operations and the fifth Web
+workspace support split materialization, manual revision, privacy-aware current
+reads and deterministic text/keyword search with exact source return. The
+non-container full quality gate passed; applying the migration to a selected
+external workspace and the later Entry-aware Bundle extension remain ordinary
+product increments, not reasons to reopen historical test-harness hardening.
+The next main-line increment is M1D-2 document-level tag aggregation and
+Document ↔ Entry navigation.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

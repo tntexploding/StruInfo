@@ -4,6 +4,10 @@ import type {
   DomainCommandResponse,
   EvidenceSnapshot,
   EvidenceSnapshotSummary,
+  InformationEntryListResponse,
+  InformationEntryMaterializeResponse,
+  InformationEntryRevisionResponse,
+  InformationEntrySearchResponse,
   KnowledgeItemReadResponse,
   KnowledgeSearchResponse,
   M1cHttpResponse,
@@ -79,6 +83,23 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<KnowledgeSearchResponse>>;
+  materializeInformationEntries(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryMaterializeResponse>>;
+  listInformationEntries(
+    snapshotId?: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryListResponse>>;
+  reviseInformationEntry(
+    entryId: string,
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryRevisionResponse>>;
+  searchInformationEntries(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntrySearchResponse>>;
   exportWorkspaceBundle(
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<WorkspaceBundleTransferResponse>>;
@@ -115,6 +136,10 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     applyKnowledgeChangeSet: reject,
     loadKnowledgeItem: reject,
     search: reject,
+    materializeInformationEntries: reject,
+    listInformationEntries: reject,
+    reviseInformationEntry: reject,
+    searchInformationEntries: reject,
     exportWorkspaceBundle: reject,
     restoreWorkspaceBundle: reject,
   });
@@ -194,6 +219,29 @@ export function createM1cApiClient(
       ),
     search: (body, options) =>
       post<KnowledgeSearchResponse>('api/v1/search', body, options),
+    materializeInformationEntries: (body, options) =>
+      post<InformationEntryMaterializeResponse>(
+        'api/v1/entries/materialize',
+        body,
+        options,
+      ),
+    listInformationEntries: (snapshotId, options) =>
+      get<InformationEntryListResponse>(
+        `api/v1/entries${entryQuery(snapshotId, options?.includePrivate === true)}`,
+        options,
+      ),
+    reviseInformationEntry: (entryId, body, options) =>
+      put<InformationEntryRevisionResponse>(
+        `api/v1/entries/${encodeURIComponent(entryId)}`,
+        body,
+        options,
+      ),
+    searchInformationEntries: (body, options) =>
+      post<InformationEntrySearchResponse>(
+        'api/v1/entries/search',
+        body,
+        options,
+      ),
     exportWorkspaceBundle: (options) =>
       post<WorkspaceBundleTransferResponse>(
         'api/v1/workspace-bundles/export',
@@ -208,6 +256,17 @@ export function createM1cApiClient(
       ),
   };
   return Object.freeze(client);
+}
+
+function entryQuery(
+  snapshotId: string | undefined,
+  includePrivate: boolean,
+): string {
+  const parameters = new URLSearchParams();
+  if (snapshotId !== undefined) parameters.set('snapshotId', snapshotId);
+  if (includePrivate) parameters.set('includePrivate', 'true');
+  const value = parameters.toString();
+  return value === '' ? '' : `?${value}`;
 }
 
 async function request<T>(

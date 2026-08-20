@@ -33,6 +33,13 @@ export {
 } from './postgres_evidence_read_repository.js';
 export {PostgresManualKnowledgeRepository} from './postgres_knowledge_repository.js';
 export {
+  PostgresInformationEntryRepository,
+  READ_CURRENT_INFORMATION_ENTRIES_SQL,
+  READ_CURRENT_INFORMATION_ENTRY_DOMAINS_SQL,
+  READ_CURRENT_INFORMATION_ENTRY_INPUTS_SQL,
+  READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_SQL,
+} from './postgres_information_entry_repository.js';
+export {
   createNodePostgresPool,
   type PostgresClientBoundary,
   type PostgresPoolBoundary,

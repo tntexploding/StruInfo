@@ -2860,6 +2860,149 @@ button {
   font-size: var(--si-text-xs);
 }
 
+.entry-command-panel,
+.entry-result-list,
+.entry-editor {
+  position: relative;
+  padding: var(--si-space-7);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: color-mix(in srgb, var(--si-color-surface-1), transparent 6%);
+}
+
+.entry-command-panel,
+.entry-editor {
+  border-inline-start: var(--si-space-1) solid var(--si-color-signal);
+}
+
+.entry-search-form {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1.4fr) repeat(3, minmax(10rem, 0.7fr));
+  align-items: end;
+  gap: var(--si-space-5);
+  margin-block-start: var(--si-space-6);
+}
+
+.entry-private-toggle {
+  align-self: center;
+}
+
+.entry-command-actions {
+  grid-column: span 3;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--si-space-3);
+}
+
+.entry-loading,
+.entry-state,
+.entry-workbench {
+  margin-block-start: var(--si-space-7);
+}
+
+.entry-loading {
+  padding: var(--si-space-7);
+  border-inline-start: var(--si-space-1) solid var(--si-color-signal);
+  background: var(--si-color-surface-1);
+  color: var(--si-color-text-secondary);
+}
+
+.entry-workbench {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.32fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--si-space-6);
+}
+
+.entry-result-list {
+  padding: var(--si-space-0);
+  border-inline-start: var(--si-rule-thin) solid var(--si-color-border-default);
+}
+
+.entry-result-list > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-block-size: var(--si-space-9);
+  padding-inline: var(--si-space-5);
+  border-block-end: var(--si-rule-thin) solid var(--si-color-border-default);
+  color: var(--si-color-text-muted);
+  font-family: var(--si-font-mono);
+  font-size: var(--si-text-xs);
+  letter-spacing: 0.1em;
+}
+
+.entry-result-list ol {
+  max-block-size: 52rem;
+  overflow: auto;
+  list-style: none;
+}
+
+.entry-result-list li + li {
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.entry-result-list button {
+  inline-size: 100%;
+  display: grid;
+  grid-template-columns: var(--si-space-8) minmax(0, 1fr);
+  gap: var(--si-space-3);
+  padding: var(--si-space-4) var(--si-space-5);
+  border: 0;
+  border-inline-start: var(--si-space-1) solid transparent;
+  background: transparent;
+  color: var(--si-color-text-primary);
+  text-align: start;
+}
+
+.entry-result-list button:hover,
+.entry-result-list button[data-active='true'] {
+  border-inline-start-color: var(--si-color-signal);
+  background: var(--si-color-bg-shell);
+}
+
+.entry-result-list button > span:last-child {
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--si-space-1);
+}
+
+.entry-result-list button strong,
+.entry-result-list button small,
+.entry-result-list button em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-result-list button small,
+.entry-result-list button em {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-xs);
+  font-style: normal;
+}
+
+.entry-result-list button em {
+  color: var(--si-color-signal);
+}
+
+.entry-result-list__order {
+  color: var(--si-color-text-muted);
+  font-family: var(--si-font-mono);
+  font-size: var(--si-text-xs);
+}
+
+.entry-editor-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--si-space-5);
+  margin-block-start: var(--si-space-6);
+}
+
+.entry-domain-field {
+  display: contents;
+}
+
 @media (max-width: 74.9375rem) {
   .evidence-rail {
     position: fixed;
@@ -2887,6 +3030,14 @@ button {
 
   .reviewed-knowledge-queue__workbench {
     grid-template-columns: minmax(12rem, 0.28fr) minmax(0, 1fr);
+  }
+
+  .entry-search-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .entry-command-actions {
+    grid-column: span 2;
   }
 }
 
@@ -3242,6 +3393,32 @@ button {
 
   .reviewed-knowledge-queue__list {
     max-block-size: 20rem;
+  }
+
+  .entry-command-panel,
+  .entry-result-list,
+  .entry-editor {
+    padding: var(--si-space-5);
+  }
+
+  .entry-search-form,
+  .entry-editor-form,
+  .entry-workbench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .entry-command-actions {
+    grid-column: 1;
+    flex-direction: column;
+  }
+
+  .entry-command-actions .primary-action,
+  .entry-command-actions .secondary-action {
+    inline-size: 100%;
+  }
+
+  .entry-result-list ol {
+    max-block-size: 22rem;
   }
 
   .review-submit-bar,

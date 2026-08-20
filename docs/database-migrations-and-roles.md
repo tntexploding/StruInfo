@@ -1,6 +1,6 @@
 # Database Migrations and Roles
 
-- Status: First-party runner and seven forward migrations implemented; the M1C
+- Status: First-party runner and eight forward migrations implemented; the M1C
   `000001`–`000006` PostgreSQL 18 functional smoke passed
 - Contract: `C-M0-S-r2`
 - Database direction: PostgreSQL 18 with separate migration and runtime
@@ -42,6 +42,7 @@ apps/server/migrations/000004_create_manual_knowledge_core.sql
 apps/server/migrations/000005_create_evidence_capture_command.sql
 apps/server/migrations/000006_add_private_document_visibility.sql
 apps/server/migrations/000007_add_other_knowledge_kind.sql
+apps/server/migrations/000008_create_information_entry_core.sql
 ```
 
 The runner is first-party code over the already admitted `pg@8.22.0` driver.
@@ -144,6 +145,18 @@ store `other`; all previously accepted values remain valid and no existing row i
 rewritten. Entity, framework and work are merged only in presentation and search
 filtering, not by destructive data migration. The runtime DML and role boundary do
 not change.
+
+`000008_create_information_entry_core.sql` is the additive Entry-first document
+processing increment accepted by ADR 0007. It adds stable Entry identities,
+append-only revisions, exact Fragment inputs, independent content/type/domain
+keywords and future split/merge lineage. Entry bodies remain bound to one
+Snapshot and privacy is stored on every revision so ordinary reads can exclude
+private content before matching. The migration does not seed a user's documents,
+keywords or preferences, does not rewrite M1C Knowledge rows, and does not add a
+new database extension or AI dependency. The ordinary runtime needs the typed
+SELECT/INSERT and current-pointer UPDATE authority used by the Entry repository;
+it still must not receive migration-ledger, generic DDL, historical UPDATE or
+DELETE authority.
 
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.

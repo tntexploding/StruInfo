@@ -83,6 +83,66 @@ describe('M1cApiClient', () => {
     );
   });
 
+  it('uses narrow Entry materialize, list, revision, and search routes', async () => {
+    const requests: Readonly<{
+      url: string;
+      method: string | undefined;
+      body?: string;
+    }>[] = [];
+    const client = createM1cApiClient(
+      'http://127.0.0.1:3000/',
+      (input, init) => {
+        requests.push({
+          url: requestUrl(input),
+          method: init?.method,
+          ...(typeof init?.body === 'string' ? {body: init.body} : {}),
+        });
+        return Promise.resolve(
+          new Response(JSON.stringify({status: 'ok', items: []}), {
+            headers: {'content-type': 'application/json'},
+          }),
+        );
+      },
+    );
+
+    await client.materializeInformationEntries({
+      snapshotId: 'synthetic-snapshot',
+      chunkMode: 'split',
+    });
+    await client.listInformationEntries('synthetic/id', {
+      includePrivate: true,
+    });
+    await client.reviseInformationEntry('synthetic/id', {
+      expectedRevision: 1,
+    });
+    await client.searchInformationEntries({text: 'synthetic'});
+
+    expect(requests).toEqual([
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/materialize',
+        method: 'POST',
+        body: JSON.stringify({
+          snapshotId: 'synthetic-snapshot',
+          chunkMode: 'split',
+        }),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries?snapshotId=synthetic%2Fid&includePrivate=true',
+        method: 'GET',
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/synthetic%2Fid',
+        method: 'PUT',
+        body: JSON.stringify({expectedRevision: 1}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/search',
+        method: 'POST',
+        body: JSON.stringify({text: 'synthetic'}),
+      },
+    ]);
+  });
+
   it('uses dedicated export and restore routes without exposing filesystem paths', async () => {
     const requests: Readonly<{url: string; body: unknown}>[] = [];
     const client = createM1cApiClient(

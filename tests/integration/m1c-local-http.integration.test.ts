@@ -151,6 +151,14 @@ function stubApi(
     loadKnowledgeItem: () =>
       Promise.resolve(result(404, {status: 'not_found'})),
     search: () => Promise.resolve(result(200, {status: 'ok'})),
+    materializeInformationEntries: () =>
+      Promise.resolve(result(201, {status: 'created'})),
+    listInformationEntries: () =>
+      Promise.resolve(result(200, {status: 'ok', entries: []})),
+    reviseInformationEntry: () =>
+      Promise.resolve(result(200, {status: 'applied'})),
+    searchInformationEntries: () =>
+      Promise.resolve(result(200, {status: 'ok', entries: []})),
     exportWorkspaceBundle: () =>
       Promise.resolve(result(201, {status: 'exported'})),
     restoreWorkspaceBundle: () =>
