@@ -4,7 +4,9 @@
 - Date: 2026-08-10
 - Decision owners: Project owner and maintainers
 - Supersedes:
-- Superseded by:
+- Superseded by: [ADR 0007](0007-information-entry-first-document-processing.md)
+  for the primary product-layer document unit and routine retrieval path;
+  this ADR remains authoritative for formal semantic knowledge
 
 ## Context and Constraints
 

@@ -26,6 +26,7 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0004](0004-adaptive-knowledge-ingestion-and-policy-authorized-writes.md) | Accepted | Adaptive knowledge ingestion, separated exploration policy, and policy-authorized formal writes |
 | [0005](0005-versioned-knowledge-core-and-ai-optional-operations.md) | Accepted | Versioned relational knowledge core and complete AI-optional operations |
 | [0006](0006-external-configuration-and-personal-data-isolation.md) | Accepted | External runtime configuration and isolation of all personal data from source and packages |
+| [0007](0007-information-entry-first-document-processing.md) | Accepted | InformationEntry-first document processing, annotation, association, and retrieval while preserving formal knowledge |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -36,3 +37,7 @@ preference/exploration, and progressive-automation requirements.
 The personal-data isolation boundary was accepted on 2026-08-10 by explicit
 owner requirement. ADR 0005 now fixes the canonical versioned knowledge model,
 including deterministic fuzzy and associative retrieval without AI.
+ADR 0007 partially supersedes ADR 0005 only at the product workflow layer:
+ordinary document material now becomes searchable `InformationEntry` records
+before optional formal semantic knowledge, while ADR 0005 remains the formal
+knowledge model.

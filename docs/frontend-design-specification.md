@@ -41,6 +41,7 @@ The fixed design contract is:
 | Full-product depth       | `complex / 3`: multi-zone shell and complete shared component treatment                                      |
 | M0-S depth               | `moderate / 2`: recognizable shell and states without fake product data                                      |
 | M1C depth                | `complex / 3`: four task workspaces plus a contextual provenance dossier                                     |
+| M1D depth                | `complex / 3`: Entry annotation/search workspace inside the existing product shell                           |
 | Primary evidence pattern | Black edge shell, cyan active rule, indexed sections, precise provenance dossier                             |
 | Primary user question    | What is worth retaining or exploring, what knowledge changed, what supports it, and what can I control next? |
 
@@ -184,6 +185,17 @@ Fixed weekly source document
   -> optional AI proposal through the same change-set boundary
 ```
 
+After the M1C checkpoint, the routine document path is redirected by ADR 0007:
+
+```text
+captured Snapshot and Fragment evidence
+  -> InformationEntry
+  -> content / type / domain keyword editing
+  -> document context and selective related entries
+  -> deterministic Entry search and exact source return
+  -> optional formal KnowledgeItem or typed relation when deeper semantics help
+```
+
 Scheduled acquisition, Daily and Weekly Briefs, QQbot, public integration APIs,
 Knowledge Graph canvas, complete Timeline, and mixed online query are later
 modules unless a tracked milestone explicitly releases them.
@@ -315,6 +327,42 @@ Privacy-document interaction is explicit and local to the action being taken:
 This first local-product control communicates a visibility boundary, not
 encryption or multi-user authorization. The interface MUST NOT make stronger
 security claims than the implemented storage and local-runtime model.
+
+### 5.5 M1D Entry workspace profile
+
+M1D adds Entry browsing, annotation, and search to the existing shell. It MUST
+not relabel an Entry as formal knowledge or force the advanced knowledge editor
+into the routine path.
+
+The first vertical slice has one clear task: select an existing document,
+materialize or open its current Entries, edit the three keyword dimensions, and
+search the saved result with an exact source route. The screen MUST expose:
+
+- Snapshot/document identity and Entry order;
+- current Entry body and precise evidence location;
+- editable free content keywords;
+- exactly one type keyword;
+- one primary domain and at most two secondary domains;
+- explicit save state and actionable failure state;
+- deterministic body/keyword match reasons; and
+- an optional, clearly secondary route to formal knowledge maintenance.
+
+Type and domain choices are system protocol values and use concise Chinese
+labels. A selected `其他` value reveals a dimension-specific custom-name field;
+the UI MUST NOT reuse one custom value between type and domain. Actual content
+keywords and custom names come from the active workspace and MUST NOT be
+compiled into frontend fixtures or defaults.
+
+Privacy remains action-scoped. Ordinary Entry lists, counts, suggestions,
+related-item sections, and search exclude private content. The user must
+explicitly enable `查询隐私文档` for the current view before any private Entry or
+association becomes visible, and the expanded scope must remain visibly marked.
+
+The minimal slice may omit document-tag aggregation and automatic association
+scoring, but it MUST present those absent capabilities honestly instead of
+fabricating candidates, counts, or AI activity. At 320/390/768/1024/1440 widths,
+Entry body, keyword controls, save action, search results, and source return must
+remain reachable through normal document scrolling and keyboard order.
 
 ## 6. Design Tokens
 

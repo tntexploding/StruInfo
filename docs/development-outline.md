@@ -1,7 +1,7 @@
 # StruInfo 开发大纲
 
-- 状态：M1C-USE-2 已完成；当前继续真实人工判断与找回
-- 最近更新：2026-08-17
+- 状态：M1C 已冻结；当前执行 M1D Entry-first 文档处理与检索纵向切片
+- 最近更新：2026-08-20
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
 - 基础 ADR：[ADR 0001](adr/0001-typescript-modular-monolith.md)、
@@ -9,7 +9,8 @@
   [ADR 0003](adr/0003-m0-s-engineering-foundation.md)、
   [ADR 0004](adr/0004-adaptive-knowledge-ingestion-and-policy-authorized-writes.md)、
   [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、
-  [ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)
+  [ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、
+  [ADR 0007](adr/0007-information-entry-first-document-processing.md)
 
 ## 1. 结论
 
@@ -34,8 +35,8 @@ StruInfo 首版采用“单仓库、模块化单体、多运行角色”架构�
 M0-P 证明的是架构可行性，不是生产认证；任何探针候选源码都不得直接复制到生产树。
 M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁移 runner、CI、许可证记录与统一质量命令；该工程地基由 [ADR 0003](adr/0003-m0-s-engineering-foundation.md) 接受。
 自适应摄取、偏好/探索分离和策略授权知识写入由 [ADR 0004](adr/0004-adaptive-knowledge-ingestion-and-policy-authorized-writes.md) 接受。
-[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求。
-第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。外部配置/数据根、`C-SLICE-A-EVIDENCE-r2` 来源证据边界、`C-SLICE-A-MARKDOWN-r2` 确定性 Markdown 纯转换与闭合装配边界、[`C-SLICE-A-CURATION-r3`](manual-curation-contract.md) 的用户词表/独立准入边界、[`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md) 的 A0 原子知识写入核心，以及 [`C-SLICE-B-RETRIEVAL-r3`](deterministic-knowledge-retrieval-contract.md) 的无 AI 确定性检索已经完成各自 TM1；这些模块及 PostgreSQL adapters 已在 M1C 中形成真实纵向闭环。固定十期现已导入真实 PostgreSQL，并通过最小领域 Bundle 完成空库恢复；持久化 `nodeKind` 读模型又把 2,639 个证据 Fragment 重建为 345 个可逐条处理的审核单元。快速审核工作台已经把有用/有趣五档评分、处理动作、关键词与联系意图分开，并支持提交后自动前进、持久化回看和包体外个人快捷标记。下一步继续由维护者提交真实判断与找回任务；AI、偏好模型、综合分和自动准入随后接入，不能反向定义数据库或检索语义。
+[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化正式知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求；[ADR 0007](adr/0007-information-entry-first-document-processing.md) 把普通文档主线重定向为 Entry-first，同时保留正式知识层。
+第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。外部配置/数据根、Evidence、Markdown、Curation、Knowledge 和 Retrieval 已在 M1C 中形成真实纵向闭环；固定十期现已导入真实 PostgreSQL，并通过最小领域 Bundle 完成空库恢复。直接使用证明短 Fragment 不应全部先经过正式知识表单。M1D 因此复用现有证据、隐私、HTTP/Web 和 PostgreSQL 资产，新增稳定 Entry、不变修订、三维关键词和确定性 Entry 搜索；AI、偏好模型、综合分和自动准入随后接入，不能反向定义 Entry 或正式知识语义。
 
 ## 2. 为什么选择这个形态
 
@@ -90,20 +91,20 @@ flowchart LR
 
 ## 4. 核心工程原则
 
-1. 来源、快照、处理提案与正式知识分层保存；AI 产物只是处理提案的一种来源。
+1. 来源、快照、文档结构、InformationEntry、处理提案与正式知识分层保存；AI 产物只是处理提案的一种来源。
 2. 领域规则不依赖 NestJS、数据库、模型供应商、文件路径或 QQ API。
 3. 模块只能通过公开应用接口协作，不能跨模块直接改表。
 4. HTTP 是命令与查询的权威接口；WebSocket 只是可丢失的实时视图。
 5. 任务与事件按可能重复执行设计，副作用由幂等键和唯一约束保护。
 6. 索引、向量和树视图都是可重建派生物，不是知识真相源。
 7. 外部网页、模型输出和媒体文件都是不可信输入。
-8. 先在无 AI 条件下完成一个真实信源的证据、分类、准入、知识形成和网页检索闭环，再接 AI、偏好、更多格式、报告、连接器和自治能力。
+8. 先在无 AI 条件下完成一个真实信源的证据、Entry 标注/关联/搜索和可选正式知识闭环，再接 AI、偏好、更多格式、报告、连接器和自治能力。
 9. 工作区身份属于资源键、查询、缓存、幂等与事件边界，不能只靠调用方记得过滤。
 10. 外部 JSON 使用标准兼容的运行时 schema 和原始字节级重复成员检查；任意程序对象不能绕过数据边界。
 11. 成功写出的状态、导出和证据工件必须能被同版本公开 reader 读回；资源预算包含完整编码包络。
 12. WebSocket 是可恢复投影；快照、重放截止点和事件尾流必须来自一致且可核验的读取模型。
 13. 内容分类、准入动作、知识类型、认知角色、审核状态和操作来源是独立维度，不能用一个标签或状态替代。
-14. 稳定知识项、不可变修订、引用、派生和版本化关系构成规范事实；树、布局、搜索索引、向量和 AI 摘要均可重建。
+14. 稳定 Entry 与正式知识身份、不可变修订、引用、派生和版本化用户控制构成规范事实；自动关联基础分、树、布局、搜索索引、向量和 AI 摘要均可重建。
 15. 应用安装物不携带任何个人知识、类别、偏好、信源或真实配置；所有个人数据根必须位于仓库和安装目录之外。
 
 ## 5. 模块边界
@@ -113,6 +114,7 @@ flowchart LR
 | `access` | 用户、工作区、会话、权限和策略 | 把单用户假设写成无工作区的数据模型 |
 | `sources` | Watch、Endpoint、Git/网页/API/文件入口、抓取计划、游标和来源适配器 | 直接产生正式知识或扩大采集范围 |
 | `evidence` | Resource、Snapshot、DocumentNode、Fragment、MediaAsset/Usage、Blob 元数据和证据定位 | 覆盖不可变快照或把解析结构冒充正式知识 |
+| `entries` | InformationEntry/Revision、证据输入、内容/类型/领域关键词、文档标签、AssociationProjection/Override | 重写 Snapshot/Fragment；把可能相关关联冒充正式 KnowledgeRelation；保存个人默认词表到代码 |
 | `curation` | 证据目标上的 VocabularyTerm/ContentClassification、IntakeDecision、Assessment、用户反馈、PreferenceProfile、ExplorationPolicy 和 AutomationPolicy | 把内容分类、准入动作、兴趣、探索价值和事实可靠性压成一个字段或分数；直接修改证据或正式知识 |
 | `processing` | Operation、可选处理计划、确定性/AI/OCR 运行、KnowledgeChangeProposal 和插件编排 | 直接创建或更新 KnowledgeRevision |
 | `knowledge` | 正式知识目标上的分类指派、Candidate、KnowledgeChangeSet、KnowledgeItem/Revision/Alias、Citation、Derivation、Relation/Revision、Collection/Placement、SavedView、ConflictCase 和授权提交 | 让模型、来源或传输适配器直接改知识表，或用复制正文实现重组 |
@@ -135,6 +137,10 @@ Watch / Endpoint / ManualInput
   -> immutable Snapshot
   -> DocumentNode + Fragment + MediaAsset/Usage
   -> ContentClassification + independent IntakeDecision
+  -> InformationEntry + immutable EntryRevision
+  -> content / type / domain keyword assignments
+  -> deterministic Entry search + optional association projection/override
+  -> optional formalization when stable semantic knowledge is useful
   -> user command / deterministic parser / declarative rule / import / AI proposal
   -> KnowledgeChangeSet
   -> user command or versioned policy authorization
@@ -143,7 +149,7 @@ Watch / Endpoint / ManualInput
   -> transactional outbox event
 ```
 
-来源适配器的终点是 `Snapshot`，不是 `KnowledgeItem`。
+来源适配器的终点是 `Snapshot`，不是 `InformationEntry` 或 `KnowledgeItem`。
 证据解析器可以创建文档结构、片段和媒体用途提案，但不能把它们直接声明为正式知识。
 内容分类只回答“这是什么”，`IntakeDecision` 只回答“如何处理”；分类为“小说”不能自动推断准入动作。
 人工命令、确定性解析器、规则、导入器与 AI 可以产生相同的规范变更形状。AI 的终点是带证据、处理计划和模型身份的 `KnowledgeChangeProposal`；模型适配器不能写知识表。
@@ -156,10 +162,11 @@ Watch / Endpoint / ManualInput
 
 ```text
 query request
-  -> typed filters and exact/alias matching
-  -> Chinese substring / pg_trgm retrieval
-  -> bounded relation traversal
-  -> revisions + fragments + deterministic match reasons
+  -> Entry keyword/source/document/privacy filters
+  -> Entry exact/Unicode substring/local fuzzy retrieval
+  -> bounded Entry association traversal
+  -> optional formal knowledge filters and relation traversal
+  -> Entry/knowledge revisions + fragments + deterministic match reasons
   -> optional vector recall
   -> optional live evidence capture
   -> optional AI synthesis
@@ -605,22 +612,18 @@ import -> snapshot -> document nodes/fragments/media
 
 ## 16. 实施顺序
 
-### 当前执行主线：M1C 可运行核心闭环
+### 当前执行主线：M1D Entry 网络
 
-本节以前的准备门、切片 0、A 和 B1 记录保留为已完成资产与历史范围，不再要求对其合同或测试框架继续做无产品影响的完善。当前只推进以下纵向顺序：
+本节以前的准备门、切片 0、A、B1 和 M1C 记录保留为已完成资产与历史范围，不再要求对其合同或测试框架继续做无产品影响的完善。当前只推进以下纵向顺序：
 
-1. Evidence PostgreSQL repository 与 Markdown 导入编排（已完成）；
-2. 一次真实 PostgreSQL 18 迁移和 Evidence 读写 smoke（已完成）；
-3. 导入、证据、人工审核、知识变更和搜索的最小 HTTP 用例（已完成）；
-4. 资料/证据、快速审核、知识维护、搜索/出处四个网页工作区（已完成）；
-5. 一份周刊、三个代表性条目的端到端闭环（已完成）；
-6. 闭环通过后扩到十期并加入最小领域导出/恢复（已完成）；
-7. 从持久化 Evidence 读模型恢复 section 审核队列、进度和精确原文联动（已完成）；
-8. 用首批真实判断重构快速审核工作台，分离评分、动作、词条和联系意图（已完成）；
-9. 把评分明确为五档、压缩桌面视口，并把可增删快捷标记保存到包体外工作区偏好文件（已完成）；
-10. 由维护者继续提交真实判断和找回任务，只修复该过程暴露的材料性产品问题。
+1. 冻结 M1C-USE-9，并用 ADR 0007 固定 Entry、Fragment、KnowledgeItem 的兼容边界（已完成）；
+2. 新增 `000008` 和 `entries` 模块，从已有 Snapshot 幂等生成稳定 Entry/不可变修订；
+3. 通过现有本地 HTTP/Web 编辑内容、类型、主/副领域关键词；
+4. 按正文和三类关键词搜索当前 Entry，返回精确 Snapshot/Fragment 来源并保持隐私默认隐藏；
+5. 在真实工作区可用后加入文档标签聚合、选择性关联基础分和人工 override；
+6. 只有实际延迟或找回缺口出现时再加入 `pg_trgm`、中文词项投影、查询下推和额外索引。
 
-既有完整加载检索对首批数据是接受实现。SQL 查询下推、索引、`pg_trgm`、复杂认证、容器/Linux 认证、正式 TM2 报告、别名、集合、树、AI 和偏好学习只有在使用它们前或真实指标证明必要时才进入工作，不是 M1C 阻断项。阻断分类以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
+既有 M1C 正式知识检索继续作为兼容路径。复杂认证、容器/Linux 认证、正式 TM2 报告、AI、RAG、向量和偏好学习只有在使用它们前进入工作，不是 M1D 阻断项。阻断分类以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
 
 ### 准备门：基础架构（已完成）
 
