@@ -194,6 +194,9 @@ describe('M1C product workspaces', () => {
         onApplyKnowledge={() =>
           Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
         }
+        onLoadKnowledgeItem={() =>
+          Promise.resolve({statusCode: 404, body: {status: 'not_found'}})
+        }
         onOpenEvidence={() => undefined}
         onPutTerm={() =>
           Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
@@ -245,6 +248,10 @@ describe('M1C product workspaces', () => {
     expect(knowledge).toContain('审核转知识');
     expect(knowledge).toContain('写入后立即用同一搜索边界回读');
     expect(knowledge).toContain('写入知识并继续');
+    expect(knowledge).toContain('返回上一条');
+    expect(knowledge).toContain('内容如何形成');
+    expect(knowledge).toContain('来源原文所述');
+    expect(knowledge).toContain('内容直接来自原文陈述，不加入新的归纳');
     expect(knowledge).toContain('查看精确原文');
     expect(knowledge).toContain('高级拆分、修订与关系编辑');
     expect(knowledge).toContain('词表整理');
@@ -274,6 +281,7 @@ describe('M1C product workspaces', () => {
     expect(markup).toContain('确定性查询');
     expect(markup).toContain('查询隐私文档');
     expect(markup).toContain('直接来源');
+    expect(markup).toContain('形成方式');
     expect(markup).toContain('一跳关系锚点 Item ID');
     expect(markup).toContain('留空可浏览当前知识');
     expect(markup).toContain('可复现排序 · 非 AI');

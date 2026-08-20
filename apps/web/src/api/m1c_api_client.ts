@@ -4,6 +4,7 @@ import type {
   DomainCommandResponse,
   EvidenceSnapshot,
   EvidenceSnapshotSummary,
+  KnowledgeItemReadResponse,
   KnowledgeSearchResponse,
   M1cHttpResponse,
   MarkdownImportResponse,
@@ -70,6 +71,10 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<DomainCommandResponse>>;
+  loadKnowledgeItem(
+    itemId: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<KnowledgeItemReadResponse>>;
   search(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -108,6 +113,7 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     putCurationTerm: reject,
     applyCuration: reject,
     applyKnowledgeChangeSet: reject,
+    loadKnowledgeItem: reject,
     search: reject,
     exportWorkspaceBundle: reject,
     restoreWorkspaceBundle: reject,
@@ -179,6 +185,11 @@ export function createM1cApiClient(
       post<DomainCommandResponse>(
         'api/v1/knowledge/change-sets',
         body,
+        options,
+      ),
+    loadKnowledgeItem: (itemId, options) =>
+      get<KnowledgeItemReadResponse>(
+        `api/v1/knowledge/items/${encodeURIComponent(itemId)}${options?.includePrivate === true ? '?includePrivate=true' : ''}`,
         options,
       ),
     search: (body, options) =>

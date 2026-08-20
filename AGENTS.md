@@ -89,6 +89,28 @@ source-scoped deterministic search before advancing. Structured multi-item
 splits and typed relations remain in the secondary advanced editor. Personal
 vocabulary rules remain external; no source text or preference enters Git.
 
+M1C-USE-7 presents the internal `EpistemicRole` as the plain-language question
+“内容如何形成” and adds previous-entry navigation beside the routine knowledge
+write action. Knowledge created by the quick queue in the current page session
+can be corrected through a new immutable revision using the same stable item
+identity; older or structurally complex knowledge continues through the
+advanced editor when its full provenance cannot be reconstructed safely.
+
+M1C-USE-8 adds a narrow current-item read boundary for that advanced revision
+path. Choosing “在高级编辑器中修改” loads the selected item's stable identity,
+current revision, value, privacy fact, Fragment citations/derivations, and
+historical knowledge derivations before editing. Saving still goes through the
+accepted append-only knowledge command; a search result alone must never be
+treated as a complete provenance record.
+
+M1C-USE-9 simplifies only the owner-facing knowledge-write taxonomy while the
+broader knowledge framework remains under discussion. New writes offer concept,
+viewpoint, event, method, resource, and other; the stored `assertion` value is
+labelled as viewpoint, while legacy entity/framework/work rows remain unchanged
+and are presented and searched as resources. The seventh forward migration adds
+the genuine `other` value without rewriting existing revisions. New source-backed
+items default to “来源原文所述”; review-state behavior is intentionally unchanged.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

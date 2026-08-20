@@ -19,7 +19,7 @@ describe('review processing plan', () => {
   it('treats a configured work as a source-backed work item', () => {
     expect(
       deriveReviewProcessingPlan('condense', 'synthetic media', 'work'),
-    ).toMatchObject({kind: 'single_item', label: '作品类单项'});
+    ).toMatchObject({kind: 'single_item', label: '资源类单项'});
   });
 
   it('only recommends splitting when length and structure both justify it', () => {

@@ -63,11 +63,16 @@ export function deriveReviewProcessingPlan(
   }
 
   const length = Array.from(selectedText).length;
-  if (preferredKind === 'work') {
+  if (
+    preferredKind === 'entity' ||
+    preferredKind === 'framework' ||
+    preferredKind === 'resource' ||
+    preferredKind === 'work'
+  ) {
     return Object.freeze({
       kind: 'single_item',
-      label: '作品类单项',
-      detail: '作为一个作品条目保留来源与媒体引用，不按介绍文字机械拆分。',
+      label: '资源类单项',
+      detail: '作为一个资源条目保留来源与媒体引用，不按介绍文字机械拆分。',
     });
   }
   if (length <= SHORT_FRAGMENT_CODE_POINTS) {

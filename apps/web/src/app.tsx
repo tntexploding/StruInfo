@@ -456,6 +456,9 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           reviewPreferences={reviewPreferences}
           onApplyCuration={applyCuration}
           onApplyKnowledge={applyKnowledge}
+          onLoadKnowledgeItem={(itemId, includePrivate) =>
+            apiClient.loadKnowledgeItem(itemId, {includePrivate})
+          }
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
             void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
           }

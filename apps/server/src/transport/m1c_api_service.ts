@@ -19,6 +19,7 @@ import {
   searchKeyV1,
   type DeterministicKnowledgeSearchRequest,
   type DeterministicKnowledgeSearchRepositoryPort,
+  type ManualKnowledgeReadRepositoryPort,
   type ManualKnowledgeRepositoryPort,
 } from '../modules/knowledge/index.js';
 import type {BlobStore} from '../storage/blob_store.js';
@@ -47,6 +48,7 @@ export interface M1cApiServiceDependencies {
   readonly curationRepository: ManualCurationRepositoryPort;
   readonly curationReadRepository: ManualCurationReadRepositoryPort;
   readonly knowledgeRepository: ManualKnowledgeRepositoryPort;
+  readonly knowledgeReadRepository: ManualKnowledgeReadRepositoryPort;
   readonly retrievalRepository: DeterministicKnowledgeSearchRepositoryPort;
   readonly workspaceTransfer: M1cWorkspaceTransferPort;
 }
@@ -70,6 +72,10 @@ export interface M1cApiServicePort {
   putCurationTerm(body: unknown): Promise<M1cHttpResult>;
   applyCuration(body: unknown): Promise<M1cHttpResult>;
   applyKnowledgeChangeSet(body: unknown): Promise<M1cHttpResult>;
+  loadKnowledgeItem(
+    itemId: string,
+    includePrivate?: unknown,
+  ): Promise<M1cHttpResult>;
   search(body: unknown): Promise<M1cHttpResult>;
   exportWorkspaceBundle(): Promise<M1cHttpResult>;
   restoreWorkspaceBundle(body: unknown): Promise<M1cHttpResult>;
@@ -269,6 +275,53 @@ export class M1cApiService implements M1cApiServicePort {
       envelope.request,
     );
     return httpResult(statusForDomainResult(result), result);
+  }
+
+  public async loadKnowledgeItem(
+    itemId: string,
+    includePrivate: unknown = false,
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(itemId)) {
+      return inputFailure('path.itemId');
+    }
+    if (typeof includePrivate !== 'boolean') {
+      return inputFailure('query.includePrivate');
+    }
+    try {
+      const item =
+        await this.#dependencies.knowledgeReadRepository.loadCurrentKnowledgeItem(
+          this.#dependencies.workspaceId,
+          itemId,
+        );
+      if (item === undefined) {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'knowledge_item_not_found'}),
+        });
+      }
+      if (item.isPrivate === true && !includePrivate) {
+        return httpResult(403, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'private_content_requires_opt_in',
+            path: 'query.includePrivate',
+          }),
+        });
+      }
+      return httpResult(200, {
+        status: 'ok',
+        item: Object.freeze({
+          itemId: item.itemId,
+          revision: item.revision,
+          revisionId: item.revisionId,
+          value: item.value,
+          provenance: item.provenance,
+          ...(item.isPrivate === true ? {isPrivate: true as const} : {}),
+        }),
+      });
+    } catch {
+      return repositoryFailure();
+    }
   }
 
   public async search(body: unknown): Promise<M1cHttpResult> {

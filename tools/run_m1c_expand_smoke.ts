@@ -263,7 +263,7 @@ async function migrate(databaseUrl: string): Promise<void> {
     connector: new PgMigrationConnector(),
     logger,
   });
-  assertEqual(result.appliedVersions.length, 6, 'migration count');
+  assertEqual(result.appliedVersions.length, 7, 'migration count');
 }
 
 async function importFixedSources(

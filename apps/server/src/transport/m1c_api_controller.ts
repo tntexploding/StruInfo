@@ -117,6 +117,27 @@ export class M1cApiController {
     );
   }
 
+  @Get('knowledge/items/:itemId')
+  public async knowledgeItem(
+    @Param('itemId') itemId: string,
+    @Query('includePrivate') includePrivate: string | undefined,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.loadKnowledgeItem(
+        itemId,
+        includePrivate === undefined
+          ? false
+          : includePrivate === 'true'
+            ? true
+            : includePrivate === 'false'
+              ? false
+              : includePrivate,
+      ),
+    );
+  }
+
   @Post('search')
   public async search(
     @Body() body: unknown,
