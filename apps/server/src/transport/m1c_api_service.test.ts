@@ -11,6 +11,7 @@ import type {
   EvidenceCaptureRepositoryRequest,
   EvidenceRepositoryPort,
 } from '../modules/evidence/index.js';
+import type {InformationEntryMaterializeRow} from '../modules/entries/index.js';
 import type {ManualKnowledgeRepositoryPort} from '../modules/knowledge/index.js';
 import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
 import {
@@ -338,6 +339,126 @@ describe('M1cApiService', () => {
         },
       },
     });
+  });
+
+  it('materializes a source-bound Entry and requires privacy opt-in before returning it', async () => {
+    const blobs = new MemoryBlobStore();
+    const selectedText = '## Synthetic Entry\n\nPrivate source body.';
+    const identity = await blobs.put(new TextEncoder().encode(selectedText));
+    let materialized: readonly Readonly<InformationEntryMaterializeRow>[] = [];
+    const materializeEntries = vi.fn(
+      (entries: readonly Readonly<InformationEntryMaterializeRow>[]) => {
+        materialized = entries;
+        return Promise.resolve({
+          outcome: 'created' as const,
+          createdCount: entries.length,
+        });
+      },
+    );
+    const loadCurrentEntries = vi.fn(
+      (_workspaceId: string, includePrivate: boolean) =>
+        Promise.resolve(
+          includePrivate
+            ? materialized.map((entry) => ({
+                workspaceId: entry.workspaceId,
+                entryId: entry.entryId,
+                resourceId: entry.resourceId,
+                snapshotId: entry.snapshotId,
+                revision: 1,
+                revisionId: entry.revisionId,
+                sourceKey: 'manual:private-entry',
+                capturedAt: '2040-01-02T03:04:05.000Z',
+                value: entry.value,
+              }))
+            : [],
+        ),
+    );
+    const service = createService({
+      blobStore: blobs,
+      evidenceReadRepository: {
+        listSnapshots: () => Promise.resolve([]),
+        loadSnapshot: () =>
+          Promise.resolve({
+            workspaceId: WORKSPACE_ID,
+            snapshotId: SNAPSHOT_ID,
+            resourceId: RESOURCE_ID,
+            resourceKind: 'manual_text',
+            sourceKey: 'manual:private-entry',
+            capturedAt: '2040-01-02T03:04:05.000Z',
+            fragmentCount: 1,
+            rawSha256: identity.digest,
+            canonicalContentSha256: identity.digest,
+            canonicalizationVersion: 'utf8-lf-v1',
+            isPrivate: true,
+            structures: [
+              {
+                structureId: STRUCTURE_ID,
+                parserName: 'struinfo-commonmark',
+                parserVersion: '1',
+                textNormalizationVersion: 'utf8-lf-v1',
+                structureSha256: 'b'.repeat(64),
+                textBlob: identity,
+                fragments: [
+                  {
+                    fragmentId: FRAGMENT_ID,
+                    structureId: STRUCTURE_ID,
+                    nodeId: NODE_ID,
+                    nodeKind: 'section',
+                    codePointRange: {
+                      start: 0,
+                      end: Array.from(selectedText).length,
+                    },
+                    lineRange: {start: 1, end: 3},
+                    selectedTextSha256: createHash('sha256')
+                      .update(selectedText)
+                      .digest('hex'),
+                  },
+                ],
+              },
+            ],
+          }),
+      },
+      informationEntryRepository: {
+        materializeEntries,
+        reviseEntry: () => Promise.resolve('not_found'),
+        loadCurrentEntries,
+      },
+    });
+
+    await expect(
+      service.materializeInformationEntries({
+        snapshotId: SNAPSHOT_ID,
+        chunkMode: 'split',
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 404,
+      body: {status: 'not_found'},
+    });
+    await expect(
+      service.materializeInformationEntries({
+        snapshotId: SNAPSHOT_ID,
+        chunkMode: 'split',
+        includePrivate: true,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 201,
+      body: {
+        status: 'created',
+        createdCount: 1,
+        entries: [
+          {
+            sourceKey: 'manual:private-entry',
+            value: {
+              titlePath: 'Synthetic Entry',
+              isPrivate: true,
+              fragmentIds: [FRAGMENT_ID],
+            },
+          },
+        ],
+      },
+    });
+    expect(materializeEntries).toHaveBeenCalledTimes(1);
+    expect(loadCurrentEntries).toHaveBeenCalledWith(WORKSPACE_ID, true);
   });
 
   it('requires explicit privacy opt-in for full documents and private search', async () => {
@@ -730,6 +851,12 @@ function createService(
           relations: [],
           relationRevisions: [],
         }),
+    },
+    informationEntryRepository: {
+      materializeEntries: () =>
+        Promise.resolve({outcome: 'existing', createdCount: 0}),
+      reviseEntry: () => Promise.resolve('not_found'),
+      loadCurrentEntries: () => Promise.resolve([]),
     },
     workspaceTransfer: {
       exportWorkspace: () =>

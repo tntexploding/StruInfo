@@ -190,6 +190,120 @@ export interface EvidenceSnapshot extends EvidenceSnapshotSummary {
   readonly structures: readonly Readonly<EvidenceStructure>[];
 }
 
+export const ENTRY_TYPE_KEYWORDS = [
+  'factual_material',
+  'knowledge_explanation',
+  'operating_guideline',
+  'investigation_analysis',
+  'argument',
+  'personal_experience',
+  'interactive_collaboration',
+  'public_communication',
+  'literary_creation',
+  'other',
+] as const;
+
+export const ENTRY_DOMAIN_KEYWORDS = [
+  'mathematics_formal',
+  'nature_environment',
+  'engineering_computing',
+  'life_health',
+  'society_public_affairs',
+  'economy_business',
+  'law_policy_governance',
+  'humanities_history',
+  'language_education',
+  'culture_arts',
+  'daily_life',
+  'other',
+] as const;
+
+export type EntryTypeKeyword = (typeof ENTRY_TYPE_KEYWORDS)[number];
+export type EntryDomainKeyword = (typeof ENTRY_DOMAIN_KEYWORDS)[number];
+
+export interface InformationEntryContentKeyword {
+  readonly displayValue: string;
+  readonly normalizedValue: string;
+  readonly origin: 'manual' | 'rule' | 'ai';
+  readonly originVersion: string;
+}
+
+export interface InformationEntryDomainAssignment {
+  readonly keyword: EntryDomainKeyword;
+  readonly customName?: string;
+  readonly origin: 'manual' | 'rule' | 'ai';
+  readonly originVersion: string;
+}
+
+export interface InformationEntry {
+  readonly workspaceId: string;
+  readonly entryId: string;
+  readonly resourceId: string;
+  readonly snapshotId: string;
+  readonly revision: number;
+  readonly revisionId: string;
+  readonly sourceKey: string;
+  readonly canonicalUri?: string;
+  readonly capturedAt: string;
+  readonly value: Readonly<{
+    documentOrder: number;
+    titlePath: string;
+    body: string;
+    bodySha256: string;
+    chunkMode: 'split' | 'whole';
+    splitRuleVersion: string;
+    isPrivate: boolean;
+    typeKeyword?: EntryTypeKeyword;
+    typeCustomName?: string;
+    contentKeywords: readonly Readonly<InformationEntryContentKeyword>[];
+    domains: readonly Readonly<InformationEntryDomainAssignment>[];
+    fragmentIds: readonly string[];
+  }>;
+}
+
+export type InformationEntryMaterializeResponse =
+  | Readonly<{
+      status: 'created' | 'existing';
+      snapshotId: string;
+      createdCount: number;
+      entries: readonly Readonly<InformationEntry>[];
+    }>
+  | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
+  | DomainFailure;
+
+export type InformationEntryListResponse =
+  | Readonly<{
+      status: 'ok';
+      totalCount: number;
+      entries: readonly Readonly<InformationEntry>[];
+    }>
+  | DomainFailure;
+
+export type InformationEntryRevisionResponse =
+  | Readonly<{
+      status: 'applied' | 'unchanged';
+      entry?: Readonly<InformationEntry>;
+    }>
+  | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
+  | DomainFailure;
+
+export type InformationEntrySearchResponse =
+  | Readonly<{
+      status: 'ok';
+      totalCount: number;
+      items: readonly Readonly<{
+        entry: Readonly<InformationEntry>;
+        matchReasons: readonly (
+          | 'title'
+          | 'body'
+          | 'content_keyword'
+          | 'type_keyword'
+          | 'domain_keyword'
+        )[];
+      }>[];
+    }>
+  | DomainFailure;
+
 export interface CurationTarget {
   readonly workspaceId: string;
   readonly targetId: string;

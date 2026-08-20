@@ -1,7 +1,7 @@
 # StruInfo 产品需求
 
-- 状态：M1C 可运行知识闭环已冻结；当前采用 Entry-first 文档处理与检索主线，正式知识作为可选深化层
-- 最近更新：2026-08-20
+- 状态：M1D-1 Entry-first 最小闭环已实现；正式知识保留为可选深化层
+- 最近更新：2026-08-21
 - 目的：定义“来源可追溯、AI 可增强且无 AI 仍完整可用的个人知识摄取与维护系统”的产品边界和首个验证切片
 - 历史基线：[产品需求 v0.1](archive/product-requirements-v0.1.md)
 - 文档条目处理细则：[文档条目处理准则](document-entry-processing-guidelines.md)

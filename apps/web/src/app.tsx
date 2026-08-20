@@ -4,6 +4,9 @@ import type {
   CurationState,
   DomainCommandResponse,
   EvidenceSnapshotSummary,
+  InformationEntryMaterializeResponse,
+  InformationEntryRevisionResponse,
+  InformationEntrySearchResponse,
   KnowledgeSearchResponse,
   M1cHttpResponse,
   MarkdownImportResponse,
@@ -27,6 +30,7 @@ import type {HealthTransportMode} from './health/health_runtime.js';
 import {useOperationalHealth} from './health/use_operational_health.js';
 import {MaterialsWorkspace} from './workspaces/materials_workspace.js';
 import {KnowledgeWorkspace} from './workspaces/knowledge_workspace.js';
+import {InformationEntryWorkspace} from './workspaces/information_entry_workspace.js';
 import {ReviewWorkspace} from './workspaces/review_workspace.js';
 import {SearchWorkspace} from './workspaces/search_workspace.js';
 
@@ -250,6 +254,29 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const materializeInformationEntries = useCallback(
+    (
+      body: unknown,
+    ): Promise<M1cHttpResponse<InformationEntryMaterializeResponse>> =>
+      apiClient.materializeInformationEntries(body),
+    [apiClient],
+  );
+
+  const reviseInformationEntry = useCallback(
+    (
+      entryId: string,
+      body: unknown,
+    ): Promise<M1cHttpResponse<InformationEntryRevisionResponse>> =>
+      apiClient.reviseInformationEntry(entryId, body),
+    [apiClient],
+  );
+
+  const searchInformationEntries = useCallback(
+    (body: unknown): Promise<M1cHttpResponse<InformationEntrySearchResponse>> =>
+      apiClient.searchInformationEntries(body),
+    [apiClient],
+  );
+
   function closeEvidence() {
     setEvidencePanel({status: 'closed'});
     const target = evidenceReturnTarget.current;
@@ -446,6 +473,17 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
             void refreshCuration();
             void refreshReviewPreferences();
           }}
+        />
+      ) : null}
+      {activeSection === 'entries' ? (
+        <InformationEntryWorkspace
+          snapshots={snapshotValues}
+          onMaterialize={materializeInformationEntries}
+          onRevise={reviseInformationEntry}
+          onSearch={searchInformationEntries}
+          onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
+            void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
+          }
         />
       ) : null}
       {activeSection === 'knowledge' ? (

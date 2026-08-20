@@ -4,6 +4,7 @@ import {describe, expect, it} from 'vitest';
 import type {CurationState, EvidenceSnapshot} from '../api/m1c_api_contract.js';
 import {READY_HEALTH_FIXTURE} from '../health/mock_health_client.js';
 import {MaterialsWorkspace} from '../workspaces/materials_workspace.js';
+import {InformationEntryWorkspace} from '../workspaces/information_entry_workspace.js';
 import {KnowledgeWorkspace} from '../workspaces/knowledge_workspace.js';
 import {ReviewWorkspace} from '../workspaces/review_workspace.js';
 import {SearchWorkspace} from '../workspaces/search_workspace.js';
@@ -91,7 +92,7 @@ describe('M1C product workspaces', () => {
     expect(markup).toContain('role="alert"');
   });
 
-  it('renders the four real product routes without claiming AI capability', () => {
+  it('renders the five real product routes without claiming AI capability', () => {
     const markup = renderToStaticMarkup(
       <ProductAppShell
         activeSection="materials"
@@ -111,13 +112,54 @@ describe('M1C product workspaces', () => {
 
     expect(markup).toContain('材料');
     expect(markup).toContain('审核');
-    expect(markup).toContain('知识维护');
+    expect(markup).toContain('条目');
+    expect(markup).toContain('知识');
     expect(markup).toContain('搜索');
     expect(markup).toContain('<dd>未启用</dd>');
     expect(markup).toContain('NON-AI CORE · MANUAL AUTHORITY');
     expect(markup.match(/<h1/g)).toHaveLength(1);
     expect(markup).toContain('href="#main-workspace"');
     expect(markup).toContain('aria-current="page"');
+  });
+
+  it('renders the Entry-first build, filter, privacy, and source controls', () => {
+    const markup = renderToStaticMarkup(
+      <InformationEntryWorkspace
+        snapshots={[REVIEW_EVIDENCE]}
+        onMaterialize={() =>
+          Promise.resolve({
+            statusCode: 201,
+            body: {
+              status: 'created',
+              snapshotId: REVIEW_EVIDENCE.snapshotId,
+              createdCount: 1,
+              entries: [],
+            },
+          })
+        }
+        onRevise={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {status: 'unchanged'},
+          })
+        }
+        onSearch={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {status: 'ok', totalCount: 0, items: []},
+          })
+        }
+        onOpenEvidence={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('文档条目');
+    expect(markup).toContain('按结构生成条目');
+    expect(markup).toContain('正文或关键词');
+    expect(markup).toContain('类型关键词');
+    expect(markup).toContain('领域关键词');
+    expect(markup).toContain('查询隐私文档');
+    expect(markup).toContain('来源绑定 · 无需 AI');
   });
 
   it('renders rapid review separately from advanced knowledge maintenance', () => {
