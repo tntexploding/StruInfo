@@ -10,6 +10,7 @@ export const KNOWLEDGE_KINDS = [
   'framework',
   'resource',
   'work',
+  'other',
 ] as const;
 
 export const EPISTEMIC_ROLES = [

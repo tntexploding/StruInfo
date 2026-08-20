@@ -3,11 +3,9 @@ import type {SyntheticEvent} from 'react';
 
 import {
   EPISTEMIC_ROLES,
-  KNOWLEDGE_KINDS,
   KNOWLEDGE_REVIEW_STATES,
   type EpistemicRole,
   type EvidenceSnapshotSummary,
-  type KnowledgeKind,
   type KnowledgeReviewState,
   type KnowledgeSearchCursor,
   type KnowledgeSearchItem,
@@ -20,6 +18,11 @@ import {
   KNOWLEDGE_KIND_LABELS,
   REVIEW_STATE_LABELS,
 } from '../components/product_labels.js';
+import {
+  KNOWLEDGE_WRITE_KINDS,
+  knowledgeKindsForSearch,
+  type KnowledgeWriteKind,
+} from './knowledge_kind_options.js';
 
 type SearchViewState =
   | Readonly<{status: 'idle'}>
@@ -54,7 +57,9 @@ export function SearchWorkspace({
   const [mode, setMode] = useState<'exact' | 'substring'>('substring');
   const [titleField, setTitleField] = useState(true);
   const [bodyField, setBodyField] = useState(true);
-  const [knowledgeKind, setKnowledgeKind] = useState<'' | KnowledgeKind>('');
+  const [knowledgeKind, setKnowledgeKind] = useState<'' | KnowledgeWriteKind>(
+    '',
+  );
   const [epistemicRole, setEpistemicRole] = useState<'' | EpistemicRole>('');
   const [reviewState, setReviewState] = useState<'' | KnowledgeReviewState>('');
   const [sourceSnapshotId, setSourceSnapshotId] = useState('');
@@ -137,7 +142,7 @@ export function SearchWorkspace({
     const request = {
       ...(query.trim() === '' ? {} : {text: {value: query, mode, fields}}),
       filters: {
-        knowledgeKinds: knowledgeKind === '' ? [] : [knowledgeKind],
+        knowledgeKinds: knowledgeKindsForSearch(knowledgeKind),
         epistemicRoles: epistemicRole === '' ? [] : [epistemicRole],
         reviewStates: reviewState === '' ? [] : [reviewState],
         source:
@@ -251,12 +256,12 @@ export function SearchWorkspace({
                 value={knowledgeKind}
                 onChange={(event) => {
                   setKnowledgeKind(
-                    event.currentTarget.value as '' | KnowledgeKind,
+                    event.currentTarget.value as '' | KnowledgeWriteKind,
                   );
                 }}
               >
                 <option value="">全部类型</option>
-                {KNOWLEDGE_KINDS.map((kind) => (
+                {KNOWLEDGE_WRITE_KINDS.map((kind) => (
                   <option key={kind} value={kind}>
                     {KNOWLEDGE_KIND_LABELS[kind]}
                   </option>
@@ -264,7 +269,7 @@ export function SearchWorkspace({
               </select>
             </label>
             <label className="field">
-              <span>认识论角色</span>
+              <span>形成方式</span>
               <select
                 value={epistemicRole}
                 onChange={(event) => {
@@ -273,7 +278,7 @@ export function SearchWorkspace({
                   );
                 }}
               >
-                <option value="">全部角色</option>
+                <option value="">全部形成方式</option>
                 {EPISTEMIC_ROLES.map((role) => (
                   <option key={role} value={role}>
                     {EPISTEMIC_ROLE_LABELS[role]}
@@ -395,7 +400,7 @@ function SearchResults({
         <div className="empty-state">
           <p className="section-index">READY / NO QUERY</p>
           <h2 id="search-results-title">输入文本或直接浏览</h2>
-          <p>结果会保留匹配原因、认识论角色、审核状态与直接来源。</p>
+          <p>结果会保留匹配原因、形成方式、审核状态与直接来源。</p>
         </div>
       </section>
     );

@@ -112,6 +112,7 @@ export async function startRoleRuntime(
           curationRepository: repositories.curation,
           curationReadRepository: repositories.curationRead,
           knowledgeRepository: repositories.knowledge,
+          knowledgeReadRepository: repositories.knowledgeRead,
           retrievalRepository: repositories.retrieval,
           workspaceTransfer: new M1cWorkspaceTransfer({
             repository: repositories.workspaceTransfer,

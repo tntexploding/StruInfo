@@ -1,6 +1,6 @@
 # Database Migrations and Roles
 
-- Status: First-party runner and six forward migrations implemented; the M1C
+- Status: First-party runner and seven forward migrations implemented; the M1C
   `000001`–`000006` PostgreSQL 18 functional smoke passed
 - Contract: `C-M0-S-r2`
 - Database direction: PostgreSQL 18 with separate migration and runtime
@@ -41,6 +41,7 @@ apps/server/migrations/000003_create_manual_curation_schema.sql
 apps/server/migrations/000004_create_manual_knowledge_core.sql
 apps/server/migrations/000005_create_evidence_capture_command.sql
 apps/server/migrations/000006_add_private_document_visibility.sql
+apps/server/migrations/000007_add_other_knowledge_kind.sql
 ```
 
 The runner is first-party code over the already admitted `pg@8.22.0` driver.
@@ -136,6 +137,13 @@ store already referenced by Evidence rows. Runtime roles need INSERT authority
 for the two new revision columns and the Resource column through the existing
 typed repository paths; ordinary runtime still receives no migration or DDL
 authority.
+
+`000007_add_other_knowledge_kind.sql` is the owner-facing taxonomy compatibility
+increment. It replaces only `knowledge_revision_kind_ck` so future revisions may
+store `other`; all previously accepted values remain valid and no existing row is
+rewritten. Entity, framework and work are merged only in presentation and search
+filtering, not by destructive data migration. The runtime DML and role boundary do
+not change.
 
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.

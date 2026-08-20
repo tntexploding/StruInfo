@@ -4,6 +4,9 @@ import type {
   CurationState,
   EvidenceSnapshot,
   EvidenceSnapshotSummary,
+  KnowledgeItemEditState,
+  KnowledgeItemReadResponse,
+  M1cHttpResponse,
   ReviewPreferencesResponse,
   ReviewPreferencesWrite,
 } from '../api/m1c_api_contract.js';
@@ -19,6 +22,10 @@ export interface KnowledgeWorkspaceProps {
   readonly evidence?: Readonly<EvidenceSnapshot> | undefined;
   readonly onApplyKnowledge: (body: unknown) => Promise<ActionFeedback>;
   readonly onApplyCuration: (body: unknown) => Promise<ActionFeedback>;
+  readonly onLoadKnowledgeItem: (
+    itemId: string,
+    includePrivate: boolean,
+  ) => Promise<M1cHttpResponse<KnowledgeItemReadResponse>>;
   readonly onOpenEvidence: (
     snapshotId: string,
     fragmentId: string,
@@ -43,6 +50,7 @@ export function KnowledgeWorkspace({
   evidence,
   onApplyCuration,
   onApplyKnowledge,
+  onLoadKnowledgeItem,
   onOpenEvidence,
   onPutTerm,
   onRefresh,
@@ -52,7 +60,10 @@ export function KnowledgeWorkspace({
   reviewPreferences,
   snapshots,
 }: KnowledgeWorkspaceProps) {
-  const [advancedTargetKey, setAdvancedTargetKey] = useState<string>();
+  const [advancedSelection, setAdvancedSelection] =
+    useState<
+      Readonly<{targetId: string; item?: Readonly<KnowledgeItemEditState>}>
+    >();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const targetOptions = useMemo(
     () => createReviewTargetOptions(snapshots, evidence),
@@ -87,11 +98,15 @@ export function KnowledgeWorkspace({
           snapshots={snapshots}
           vocabularyPreferences={reviewPreferences.value.vocabulary}
           onApplyKnowledge={onApplyKnowledge}
+          onLoadKnowledgeItem={onLoadKnowledgeItem}
           onOpenEvidence={onOpenEvidence}
           onSearch={onSearch}
           onSelectEvidence={onSelectEvidence}
-          onUseAdvancedEditor={(targetId) => {
-            setAdvancedTargetKey(targetId);
+          onUseAdvancedEditor={(targetId, item) => {
+            setAdvancedSelection({
+              targetId,
+              ...(item === undefined ? {} : {item}),
+            });
             setAdvancedOpen(true);
             globalThis.setTimeout(() => {
               globalThis.document
@@ -146,10 +161,15 @@ export function KnowledgeWorkspace({
             仅在需要拆成多项、修订已有知识或建立类型化关系时使用；普通短条目使用上方队列即可。
           </p>
           <KnowledgeChangeEditor
-            key={advancedTargetKey ?? 'manual-edit'}
+            key={
+              advancedSelection === undefined
+                ? 'manual-edit'
+                : `${advancedSelection.targetId}:${advancedSelection.item?.itemId ?? 'new'}:${advancedSelection.item?.revision.toString() ?? '0'}`
+            }
             curation={curation.status === 'ready' ? curation.value : undefined}
             evidence={evidence}
-            initialAuthorizationKey={advancedTargetKey}
+            initialAuthorizationKey={advancedSelection?.targetId}
+            initialItem={advancedSelection?.item}
             onApply={onApplyKnowledge}
             targetOptions={targetOptions}
             vocabularyPreferences={

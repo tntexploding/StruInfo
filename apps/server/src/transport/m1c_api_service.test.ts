@@ -30,6 +30,9 @@ const STRUCTURE_ID = '00000000-0000-4000-8000-000000000004';
 const NODE_ID = '00000000-0000-4000-8000-000000000005';
 const FRAGMENT_ID = '00000000-0000-4000-8000-000000000006';
 const TERM_ID = '00000000-0000-4000-8000-000000000007';
+const ITEM_ID = '00000000-0000-4000-8000-000000000008';
+const REVISION_ID = '00000000-0000-4000-8000-000000000009';
+const DERIVED_ITEM_ID = '00000000-0000-4000-8000-00000000000a';
 
 class MemoryBlobStore implements BlobStore {
   readonly #values = new Map<string, Uint8Array>();
@@ -447,6 +450,104 @@ describe('M1cApiService', () => {
     });
   });
 
+  it('loads the complete current knowledge item for revision editing', async () => {
+    const loadCurrentKnowledgeItem = vi.fn(() =>
+      Promise.resolve({
+        workspaceId: WORKSPACE_ID,
+        itemId: ITEM_ID,
+        revision: 3,
+        revisionId: REVISION_ID,
+        value: {
+          knowledgeKind: 'method' as const,
+          epistemicRole: 'summary' as const,
+          reviewState: 'confirmed' as const,
+          title: 'Synthetic existing judgment',
+          body: 'Existing body retained for editing.',
+        },
+        provenance: {
+          citations: [FRAGMENT_ID],
+          fragmentDerivations: [],
+          knowledgeDerivations: [
+            {kind: 'item' as const, itemId: DERIVED_ITEM_ID, revision: 2},
+          ],
+        },
+      }),
+    );
+    const service = createService({
+      knowledgeReadRepository: {loadCurrentKnowledgeItem},
+    });
+
+    await expect(service.loadKnowledgeItem(ITEM_ID)).resolves.toEqual({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        item: {
+          itemId: ITEM_ID,
+          revision: 3,
+          revisionId: REVISION_ID,
+          value: {
+            knowledgeKind: 'method',
+            epistemicRole: 'summary',
+            reviewState: 'confirmed',
+            title: 'Synthetic existing judgment',
+            body: 'Existing body retained for editing.',
+          },
+          provenance: {
+            citations: [FRAGMENT_ID],
+            fragmentDerivations: [],
+            knowledgeDerivations: [
+              {kind: 'item', itemId: DERIVED_ITEM_ID, revision: 2},
+            ],
+          },
+        },
+      },
+    });
+    expect(loadCurrentKnowledgeItem).toHaveBeenCalledExactlyOnceWith(
+      WORKSPACE_ID,
+      ITEM_ID,
+    );
+  });
+
+  it('requires an explicit opt-in before loading a private knowledge item', async () => {
+    const service = createService({
+      knowledgeReadRepository: {
+        loadCurrentKnowledgeItem: () =>
+          Promise.resolve({
+            workspaceId: WORKSPACE_ID,
+            itemId: ITEM_ID,
+            revision: 1,
+            revisionId: REVISION_ID,
+            value: {
+              knowledgeKind: 'assertion',
+              epistemicRole: 'source_claim',
+              reviewState: 'confirmed',
+              title: 'Synthetic private judgment',
+            },
+            provenance: {
+              citations: [FRAGMENT_ID],
+              fragmentDerivations: [],
+              knowledgeDerivations: [],
+            },
+            isPrivate: true,
+          }),
+      },
+    });
+
+    await expect(service.loadKnowledgeItem(ITEM_ID)).resolves.toMatchObject({
+      statusCode: 403,
+      body: {
+        status: 'rejected',
+        issue: {code: 'private_content_requires_opt_in'},
+      },
+    });
+    await expect(
+      service.loadKnowledgeItem(ITEM_ID, true),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'ok', item: {itemId: ITEM_ID, isPrivate: true}},
+    });
+  });
+
   it('injects the workspace and command key into a manual term command', async () => {
     let query: unknown;
     const transaction = {
@@ -617,6 +718,9 @@ function createService(
       runCommandTransaction: () =>
         Promise.reject(new Error('Unexpected knowledge command.')),
     } as ManualKnowledgeRepositoryPort,
+    knowledgeReadRepository: {
+      loadCurrentKnowledgeItem: () => Promise.resolve(undefined),
+    },
     retrievalRepository: {
       loadCurrentKnowledgeSearchSnapshot: () =>
         Promise.resolve({

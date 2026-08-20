@@ -14,6 +14,7 @@ import type {
 } from '../api/m1c_api_contract.js';
 import type {ReviewProcessingPlan} from './review_processing_plan.js';
 import {deriveReviewProcessingPlan} from './review_processing_plan.js';
+import {knowledgeKindForNewWrite} from './knowledge_kind_options.js';
 import {
   createReviewQueueCandidates,
   createReviewTargetOptions,
@@ -149,14 +150,22 @@ export function nextPendingKnowledgeKey(
   );
 }
 
+export function previousKnowledgeKey(
+  entries: readonly Readonly<ReviewedKnowledgeQueueEntry>[],
+  currentKey: string,
+): string | undefined {
+  const currentIndex = entries.findIndex((entry) => entry.key === currentKey);
+  return currentIndex > 0 ? entries[currentIndex - 1]?.key : undefined;
+}
+
 export function createQuickKnowledgeDraft(
   entry: Readonly<ReviewedKnowledgeQueueEntry>,
 ): Readonly<QuickKnowledgeDraft> {
   return Object.freeze({
     title: fragmentKnowledgeTitle(entry.fragment.selectedText),
     body: entry.fragment.selectedText,
-    knowledgeKind: entry.suggestedKnowledgeKind ?? 'concept',
-    epistemicRole: 'summary',
+    knowledgeKind: knowledgeKindForNewWrite(entry.suggestedKnowledgeKind),
+    epistemicRole: 'source_claim',
     reviewState: 'confirmed',
   });
 }
@@ -164,7 +173,11 @@ export function createQuickKnowledgeDraft(
 export function createQuickKnowledgeCommand(
   entry: Readonly<ReviewedKnowledgeQueueEntry>,
   draft: Readonly<QuickKnowledgeDraft>,
-  identities: Readonly<{commandIdempotencyKey: string; itemId: string}>,
+  identities: Readonly<{
+    commandIdempotencyKey: string;
+    itemId: string;
+    expectedRevision?: number;
+  }>,
 ): Readonly<Record<string, unknown>> {
   const fragmentId = entry.fragment.fragmentId;
   return Object.freeze({
@@ -179,7 +192,7 @@ export function createQuickKnowledgeCommand(
         {
           kind: 'put_item',
           itemId: identities.itemId,
-          expectedRevision: 0,
+          expectedRevision: identities.expectedRevision ?? 0,
           value: {
             knowledgeKind: draft.knowledgeKind,
             epistemicRole: draft.epistemicRole,

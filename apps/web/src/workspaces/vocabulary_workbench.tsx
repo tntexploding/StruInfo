@@ -2,7 +2,6 @@ import {useMemo, useState} from 'react';
 import type {SyntheticEvent} from 'react';
 
 import {
-  KNOWLEDGE_KINDS,
   type CurationState,
   type KnowledgeKind,
   type ReviewPreferencesResponse,
@@ -12,6 +11,7 @@ import {ActionNotice} from '../components/action_notice.js';
 import {createCommandKey} from '../components/client_identity.js';
 import {KNOWLEDGE_KIND_LABELS} from '../components/product_labels.js';
 import type {ActionFeedback} from '../components/product_types.js';
+import {KNOWLEDGE_WRITE_KINDS} from './knowledge_kind_options.js';
 import {
   normalizeReviewKeyword,
   reviewKeywordIdentity,
@@ -63,7 +63,7 @@ export function VocabularyWorkbench({
     activeTerms[0]?.termId ?? '',
   );
   const [action, setAction] = useState<ReconciliationAction>('alias');
-  const [knowledgeKind, setKnowledgeKind] = useState<KnowledgeKind>('work');
+  const [knowledgeKind, setKnowledgeKind] = useState<KnowledgeKind>('resource');
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<ActionFeedback>();
@@ -325,7 +325,7 @@ export function VocabularyWorkbench({
                 setKnowledgeKind(event.currentTarget.value as KnowledgeKind);
               }}
             >
-              {KNOWLEDGE_KINDS.map((kind) => (
+              {KNOWLEDGE_WRITE_KINDS.map((kind) => (
                 <option key={kind} value={kind}>
                   {KNOWLEDGE_KIND_LABELS[kind]}
                 </option>

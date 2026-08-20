@@ -3,15 +3,17 @@ import type {SyntheticEvent} from 'react';
 
 import {
   EPISTEMIC_ROLES,
-  KNOWLEDGE_KINDS,
   KNOWLEDGE_REVIEW_STATES,
   type CurationState,
   type EpistemicRole,
   type EvidenceSnapshot,
   type EvidenceSnapshotSummary,
   type KnowledgeKind,
+  type KnowledgeItemEditState,
+  type KnowledgeItemReadResponse,
   type KnowledgeReviewState,
   type KnowledgeSearchItem,
+  type M1cHttpResponse,
   type ReviewVocabularyPreferences,
 } from '../api/m1c_api_contract.js';
 import {ActionNotice} from '../components/action_notice.js';
@@ -20,12 +22,14 @@ import {
   createCommandKey,
 } from '../components/client_identity.js';
 import {
+  EPISTEMIC_ROLE_DESCRIPTIONS,
   EPISTEMIC_ROLE_LABELS,
   INTAKE_ACTION_LABELS,
   KNOWLEDGE_KIND_LABELS,
   REVIEW_STATE_LABELS,
 } from '../components/product_labels.js';
 import type {ActionFeedback} from '../components/product_types.js';
+import {KNOWLEDGE_WRITE_KINDS} from './knowledge_kind_options.js';
 import {
   createQuickKnowledgeCommand,
   createQuickKnowledgeDraft,
@@ -34,6 +38,7 @@ import {
   fragmentKnowledgeTitle,
   loadSnapshotKnowledgeItems,
   nextPendingKnowledgeKey,
+  previousKnowledgeKey,
   type KnowledgeSearchTransport,
   type QuickKnowledgeDraft,
 } from './reviewed_knowledge_queue_model.js';
@@ -49,10 +54,20 @@ type CoverageState =
 
 const IDLE_COVERAGE: CoverageState = Object.freeze({status: 'idle'});
 
+interface SessionKnowledgeRevision {
+  readonly itemId: string;
+  readonly revision: number;
+  readonly draft: Readonly<QuickKnowledgeDraft>;
+}
+
 export interface ReviewedKnowledgeQueueProps {
   readonly curation: Readonly<CurationState>;
   readonly evidence?: Readonly<EvidenceSnapshot> | undefined;
   readonly onApplyKnowledge: (body: unknown) => Promise<ActionFeedback>;
+  readonly onLoadKnowledgeItem: (
+    itemId: string,
+    includePrivate: boolean,
+  ) => Promise<M1cHttpResponse<KnowledgeItemReadResponse>>;
   readonly onOpenEvidence: (
     snapshotId: string,
     fragmentId: string,
@@ -63,7 +78,10 @@ export interface ReviewedKnowledgeQueueProps {
     snapshotId: string,
     includePrivate: boolean,
   ) => Promise<ActionFeedback>;
-  readonly onUseAdvancedEditor: (targetId: string) => void;
+  readonly onUseAdvancedEditor: (
+    targetId: string,
+    item?: Readonly<KnowledgeItemEditState>,
+  ) => void;
   readonly snapshots: readonly Readonly<EvidenceSnapshotSummary>[];
   readonly vocabularyPreferences: Readonly<ReviewVocabularyPreferences>;
 }
@@ -72,6 +90,7 @@ export function ReviewedKnowledgeQueue({
   curation,
   evidence,
   onApplyKnowledge,
+  onLoadKnowledgeItem,
   onOpenEvidence,
   onSearch,
   onSelectEvidence,
@@ -86,7 +105,12 @@ export function ReviewedKnowledgeQueue({
   const [skippedKeys, setSkippedKeys] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  const [sessionKnowledgeByEntry, setSessionKnowledgeByEntry] = useState<
+    ReadonlyMap<string, Readonly<SessionKnowledgeRevision>>
+  >(() => new Map());
   const [submitting, setSubmitting] = useState(false);
+  const [loadingKnowledgeItemId, setLoadingKnowledgeItemId] =
+    useState<string>();
   const [selectingSource, setSelectingSource] = useState(false);
   const [feedback, setFeedback] = useState<ActionFeedback>();
   const [privateScopeSnapshotId, setPrivateScopeSnapshotId] =
@@ -153,12 +177,17 @@ export function ReviewedKnowledgeQueue({
   const selectedEntry = entries.find(
     (entry) => entry.key === effectiveSelectedKey,
   );
+  const selectedSessionKnowledge =
+    selectedEntry === undefined
+      ? undefined
+      : sessionKnowledgeByEntry.get(selectedEntry.key);
   const draft =
     selectedEntry === undefined
       ? undefined
       : draftState?.key === selectedEntry.key
         ? draftState.value
-        : createQuickKnowledgeDraft(selectedEntry);
+        : (selectedSessionKnowledge?.draft ??
+          createQuickKnowledgeDraft(selectedEntry));
   const formalizedCount = entries.filter(
     (entry) => entry.formalItems.length > 0,
   ).length;
@@ -167,6 +196,14 @@ export function ReviewedKnowledgeQueue({
   const requiresAdvancedEditor =
     selectedEntry?.processingPlan.kind === 'split_items' ||
     (draft !== undefined && Array.from(draft.body).length > 20_000);
+  const canEditInQuickQueue =
+    selectedEntry !== undefined &&
+    (selectedEntry.formalItems.length === 0 ||
+      selectedSessionKnowledge !== undefined);
+  const previousKey =
+    selectedEntry === undefined
+      ? undefined
+      : previousKnowledgeKey(entries, selectedEntry.key);
 
   function selectEntry(key: string) {
     setSelectedKey(key);
@@ -197,15 +234,67 @@ export function ReviewedKnowledgeQueue({
         setSelectedKey(undefined);
         setDraftState(undefined);
         setSkippedKeys(new Set());
+        setSessionKnowledgeByEntry(new Map());
       }
     } finally {
       setSelectingSource(false);
     }
   }
 
+  async function openExistingItemInAdvanced(
+    item: Readonly<KnowledgeSearchItem>,
+  ) {
+    if (selectedEntry === undefined) return;
+    setLoadingKnowledgeItemId(item.itemId);
+    setFeedback(undefined);
+    try {
+      const response = await onLoadKnowledgeItem(
+        item.itemId,
+        item.isPrivate === true || evidence?.isPrivate === true,
+      );
+      if (response.body.status === 'ok') {
+        onUseAdvancedEditor(selectedEntry.targetId, response.body.item);
+        return;
+      }
+      setFeedback({
+        kind: 'error',
+        title: '无法读取已有判断',
+        detail:
+          'issue' in response.body
+            ? response.body.issue.code
+            : 'knowledge_item_not_found',
+      });
+    } catch {
+      setFeedback({
+        kind: 'error',
+        title: '本地接口不可达',
+        detail: '无法读取当前知识修订；高级编辑器尚未打开。',
+      });
+    } finally {
+      setLoadingKnowledgeItemId(undefined);
+    }
+  }
+
+  async function openSelectedEntryInAdvanced() {
+    if (selectedEntry === undefined) return;
+    const formalItem =
+      selectedEntry.formalItems.find(
+        (item) => item.itemId === selectedSessionKnowledge?.itemId,
+      ) ?? selectedEntry.formalItems[0];
+    if (formalItem === undefined) {
+      onUseAdvancedEditor(selectedEntry.targetId);
+      return;
+    }
+    await openExistingItemInAdvanced(formalItem);
+  }
+
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (selectedEntry === undefined || draft === undefined) return;
+    if (!canEditInQuickQueue) {
+      await openSelectedEntryInAdvanced();
+      return;
+    }
     if (draft.title.trim() === '') {
       setFeedback({
         kind: 'error',
@@ -215,16 +304,19 @@ export function ReviewedKnowledgeQueue({
       return;
     }
     if (requiresAdvancedEditor) {
-      onUseAdvancedEditor(selectedEntry.targetId);
+      await openSelectedEntryInAdvanced();
       return;
     }
     setSubmitting(true);
     setFeedback(undefined);
+    const itemId = selectedSessionKnowledge?.itemId ?? createClientUuid();
+    const expectedRevision = selectedSessionKnowledge?.revision ?? 0;
     try {
       const result = await onApplyKnowledge(
         createQuickKnowledgeCommand(selectedEntry, draft, {
           commandIdempotencyKey: createCommandKey('reviewed-knowledge'),
-          itemId: createClientUuid(),
+          itemId,
+          expectedRevision,
         }),
       );
       if (result.kind === 'error') {
@@ -242,6 +334,21 @@ export function ReviewedKnowledgeQueue({
           snapshotId: evidence.snapshotId,
           items: refreshedItems,
         });
+        const refreshedItem = refreshedItems.find(
+          (item) => item.itemId === itemId,
+        );
+        if (refreshedItem === undefined) {
+          throw new Error('written_knowledge_readback_missing');
+        }
+        setSessionKnowledgeByEntry((current) => {
+          const next = new Map(current);
+          next.set(selectedEntry.key, {
+            itemId,
+            revision: refreshedItem.revision,
+            draft: Object.freeze({...draft}),
+          });
+          return next;
+        });
         const refreshedEntries = createReviewedKnowledgeQueue(
           curation,
           evidence,
@@ -258,8 +365,14 @@ export function ReviewedKnowledgeQueue({
         setDraftState(undefined);
         setFeedback({
           kind: 'success',
-          title: '已写入正式知识并可检索',
-          detail: '当前修订已由来源检索重新读出；队列已前进到下一项。',
+          title:
+            expectedRevision === 0
+              ? '已写入正式知识并可检索'
+              : '修改已保存并可检索',
+          detail:
+            expectedRevision === 0
+              ? '当前修订已由来源检索重新读出；队列已前进到下一项。'
+              : '修改结果已由来源检索重新读出；发生变化时会追加修订，旧修订仍保留。',
         });
       } catch {
         setFeedback({
@@ -368,6 +481,7 @@ export function ReviewedKnowledgeQueue({
                 );
                 setSelectedKey(undefined);
                 setDraftState(undefined);
+                setSessionKnowledgeByEntry(new Map());
               }}
             />
             <span>处理并检索这份隐私文档</span>
@@ -487,20 +601,42 @@ export function ReviewedKnowledgeQueue({
               ) : null}
 
               {selectedEntry.formalItems.length > 0 ? (
-                <div
-                  className="reviewed-knowledge-editor__complete"
-                  role="status"
-                >
+                <div className="reviewed-knowledge-editor__complete">
                   <strong>该 Fragment 已形成正式知识</strong>
                   <ul>
                     {selectedEntry.formalItems.map((item) => (
                       <li key={item.itemId}>
-                        {item.value.title} · 修订 {item.revision}
+                        <span>
+                          {item.value.title} · 修订 {item.revision}
+                        </span>
+                        <button
+                          className="text-action"
+                          type="button"
+                          disabled={loadingKnowledgeItemId !== undefined}
+                          onClick={() => {
+                            void openExistingItemInAdvanced(item);
+                          }}
+                        >
+                          {loadingKnowledgeItemId === item.itemId
+                            ? '正在读取…'
+                            : '在高级编辑器中修改'}
+                        </button>
                       </li>
                     ))}
                   </ul>
+                  {selectedSessionKnowledge !== undefined ? (
+                    <small>
+                      可在下方修改；保存会创建新修订，不会覆盖旧修订。
+                    </small>
+                  ) : (
+                    <small>
+                      这项不是本次页面会话创建的；如需修改，请使用高级编辑器保留完整来源链。
+                    </small>
+                  )}
                 </div>
-              ) : (
+              ) : null}
+
+              {canEditInQuickQueue ? (
                 <>
                   <div className="reviewed-knowledge-editor__fields">
                     <label className="field field--full">
@@ -525,7 +661,7 @@ export function ReviewedKnowledgeQueue({
                           });
                         }}
                       >
-                        {KNOWLEDGE_KINDS.map((kind) => (
+                        {KNOWLEDGE_WRITE_KINDS.map((kind) => (
                           <option key={kind} value={kind}>
                             {KNOWLEDGE_KIND_LABELS[kind]}
                           </option>
@@ -533,7 +669,7 @@ export function ReviewedKnowledgeQueue({
                       </select>
                     </label>
                     <label className="field">
-                      <span>内容角色</span>
+                      <span>内容如何形成</span>
                       <select
                         value={draft.epistemicRole}
                         onChange={(event) => {
@@ -549,6 +685,9 @@ export function ReviewedKnowledgeQueue({
                           </option>
                         ))}
                       </select>
+                      <small>
+                        {EPISTEMIC_ROLE_DESCRIPTIONS[draft.epistemicRole]}
+                      </small>
                     </label>
                     <label className="field">
                       <span>知识状态</span>
@@ -592,6 +731,16 @@ export function ReviewedKnowledgeQueue({
 
                   <div className="reviewed-knowledge-editor__actions">
                     <button
+                      className="secondary-action"
+                      type="button"
+                      disabled={previousKey === undefined}
+                      onClick={() => {
+                        if (previousKey !== undefined) selectEntry(previousKey);
+                      }}
+                    >
+                      返回上一条
+                    </button>
+                    <button
                       className="text-action"
                       type="button"
                       onClick={skipCurrent}
@@ -602,7 +751,7 @@ export function ReviewedKnowledgeQueue({
                       className="secondary-action"
                       type="button"
                       onClick={() => {
-                        onUseAdvancedEditor(selectedEntry.targetId);
+                        void openSelectedEntryInAdvanced();
                       }}
                     >
                       高级拆分 / 建立关系
@@ -616,10 +765,41 @@ export function ReviewedKnowledgeQueue({
                         ? '正在写入并验证…'
                         : requiresAdvancedEditor
                           ? '进入高级拆分'
-                          : '写入知识并继续'}
+                          : selectedSessionKnowledge === undefined
+                            ? '写入知识并继续'
+                            : '保存修改并继续'}
                     </button>
                   </div>
                 </>
+              ) : (
+                <div className="reviewed-knowledge-editor__actions">
+                  <button
+                    className="secondary-action"
+                    type="button"
+                    disabled={previousKey === undefined}
+                    onClick={() => {
+                      if (previousKey !== undefined) selectEntry(previousKey);
+                    }}
+                  >
+                    返回上一条
+                  </button>
+                  <button
+                    className="primary-action"
+                    type="button"
+                    disabled={loadingKnowledgeItemId !== undefined}
+                    onClick={() => {
+                      const item = selectedEntry.formalItems[0];
+                      if (item !== undefined) {
+                        void openExistingItemInAdvanced(item);
+                      }
+                    }}
+                  >
+                    {loadingKnowledgeItemId ===
+                    selectedEntry.formalItems[0]?.itemId
+                      ? '正在读取已有判断…'
+                      : '在高级编辑器中修改'}
+                  </button>
+                </div>
               )}
               <ActionNotice feedback={feedback} />
             </form>

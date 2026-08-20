@@ -64,6 +64,25 @@ describe('M1cApiClient', () => {
     );
   });
 
+  it('loads the current knowledge revision through one encoded path segment', async () => {
+    let requestedUrl = '';
+    const client = createM1cApiClient('https://localhost:3000', (input) => {
+      requestedUrl = requestUrl(input);
+      return Promise.resolve(
+        new Response(JSON.stringify({status: 'not_found'}), {
+          status: 404,
+          headers: {'content-type': 'application/json'},
+        }),
+      );
+    });
+
+    await client.loadKnowledgeItem('synthetic/id', {includePrivate: true});
+
+    expect(requestedUrl).toBe(
+      'https://localhost:3000/api/v1/knowledge/items/synthetic%2Fid?includePrivate=true',
+    );
+  });
+
   it('uses dedicated export and restore routes without exposing filesystem paths', async () => {
     const requests: Readonly<{url: string; body: unknown}>[] = [];
     const client = createM1cApiClient(

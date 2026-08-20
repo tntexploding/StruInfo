@@ -530,6 +530,40 @@ describe('write adapter traces', () => {
     expect(Object.isFrozen(snapshot.revisions[0]?.provenance)).toBe(true);
   });
 
+  it('loads one complete current knowledge revision for editing', async () => {
+    const client = new FakeClient(knowledgeMappingResponse);
+    const repository = new PostgresManualKnowledgeRepository(
+      new FakePool(client),
+    );
+
+    const item = await repository.loadCurrentKnowledgeItem(
+      WORKSPACE_ID,
+      ITEM_ID,
+    );
+
+    expect(item).toEqual({
+      workspaceId: WORKSPACE_ID,
+      itemId: ITEM_ID,
+      revision: 1,
+      revisionId: ITEM_REVISION_ID,
+      value: {
+        knowledgeKind: 'concept',
+        epistemicRole: 'summary',
+        reviewState: 'confirmed',
+        title: 'Synthetic title',
+      },
+      provenance: {
+        citations: [FRAGMENT_ID],
+        fragmentDerivations: [SECOND_FRAGMENT_ID],
+        knowledgeDerivations: [],
+      },
+    });
+    expect(client.calls[0]?.sql).toBe(BEGIN_REPEATABLE_READ_ONLY_SQL);
+    expect(client.calls[1]?.parameters).toEqual([WORKSPACE_ID, [ITEM_ID]]);
+    expect(client.calls.at(-1)?.sql).toBe(COMMIT_TRANSACTION_SQL);
+    expect(client.releaseCalls).toBe(1);
+  });
+
   it('turns a zero-row current-pointer CAS into rollback', async () => {
     const client = new FakeClient(() => ({rowCount: 0}));
     const repository = new PostgresManualCurationRepository(

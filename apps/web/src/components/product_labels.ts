@@ -8,21 +8,31 @@ import type {
 } from '../api/m1c_api_contract.js';
 
 export const KNOWLEDGE_KIND_LABELS: Readonly<Record<KnowledgeKind, string>> = {
-  entity: '实体',
+  entity: '资源',
   concept: '概念',
-  assertion: '论断',
+  assertion: '观点',
   event: '事件',
   method: '方法',
-  framework: '框架',
+  framework: '资源',
   resource: '资源',
-  work: '作品',
+  work: '资源',
+  other: '其他',
 };
 
 export const EPISTEMIC_ROLE_LABELS: Readonly<Record<EpistemicRole, string>> = {
-  source_claim: '来源主张',
-  summary: '人工摘要',
-  inference: '人工推论',
-  user_assertion: '用户断言',
+  source_claim: '来源原文所述',
+  summary: '从来源整理',
+  inference: '根据来源推断',
+  user_assertion: '用户补充判断',
+};
+
+export const EPISTEMIC_ROLE_DESCRIPTIONS: Readonly<
+  Record<EpistemicRole, string>
+> = {
+  source_claim: '内容直接来自原文陈述，不加入新的归纳。',
+  summary: '对来源内容进行压缩、改写或归纳。',
+  inference: '依据来源进一步得出结论，原文未必直接说出。',
+  user_assertion: '由你补充的判断、经验或观点。',
 };
 
 export const REVIEW_STATE_LABELS: Readonly<

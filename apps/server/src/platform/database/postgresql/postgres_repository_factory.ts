@@ -6,6 +6,7 @@ import type {ManualCurationRepositoryPort} from '../../../modules/curation/index
 import type {ManualCurationReadRepositoryPort} from '../../../modules/curation/manual_curation_read_repository.js';
 import type {
   DeterministicKnowledgeSearchRepositoryPort,
+  ManualKnowledgeReadRepositoryPort,
   ManualKnowledgeRepositoryPort,
 } from '../../../modules/knowledge/index.js';
 import type {M1cDomainTransferRepositoryPort} from '../../../workspace_transfer/m1c_workspace_transfer.js';
@@ -25,6 +26,7 @@ export interface PostgresKnowledgeRepositorySet {
   readonly curation: ManualCurationRepositoryPort;
   readonly curationRead: ManualCurationReadRepositoryPort;
   readonly knowledge: ManualKnowledgeRepositoryPort;
+  readonly knowledgeRead: ManualKnowledgeReadRepositoryPort;
   readonly retrieval: DeterministicKnowledgeSearchRepositoryPort;
   readonly workspaceTransfer: M1cDomainTransferRepositoryPort;
 }
@@ -32,12 +34,14 @@ export interface PostgresKnowledgeRepositorySet {
 export function createPostgresKnowledgeRepositories(
   pool: PostgresPoolBoundary,
 ): Readonly<PostgresKnowledgeRepositorySet> {
+  const knowledge = new PostgresManualKnowledgeRepository(pool);
   return Object.freeze({
     evidence: new PostgresEvidenceRepository(pool),
     evidenceRead: new PostgresEvidenceReadRepository(pool),
     curation: new PostgresManualCurationRepository(pool),
     curationRead: new PostgresManualCurationReadRepository(pool),
-    knowledge: new PostgresManualKnowledgeRepository(pool),
+    knowledge,
+    knowledgeRead: knowledge,
     retrieval: new PostgresDeterministicKnowledgeSearchRepository(pool),
     workspaceTransfer: new PostgresM1cDomainTransferRepository(pool),
   });

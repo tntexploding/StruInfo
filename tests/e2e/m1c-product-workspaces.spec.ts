@@ -80,6 +80,17 @@ async function routeM1cApi(
   let persistedInterest = 2;
   let queuedKnowledgeWritten = false;
   let queuedKnowledgeTitle = 'DOCX Editor';
+  let queuedKnowledgeItemId = ITEM_ID;
+  let queuedKnowledgeRevision = 1;
+  let queuedKnowledgeKind = 'concept';
+  let queuedKnowledgeRole = 'source_claim';
+  let queuedKnowledgeState = 'confirmed';
+  let queuedKnowledgeBody = '合成知识正文。';
+  let queuedKnowledgeProvenance: Readonly<Record<string, unknown>> = {
+    citations: [FRAGMENT_ID],
+    fragmentDerivations: [],
+    knowledgeDerivations: [],
+  };
   let reviewQuickTags: readonly string[] = ['实用工具'];
   let automaticKeywords = {
     enabled: true,
@@ -297,16 +308,66 @@ async function routeM1cApi(
           readonly authorization?: {readonly kind?: unknown};
           readonly operations?: readonly Readonly<{
             itemId?: unknown;
-            value?: Readonly<{title?: unknown}>;
+            expectedRevision?: unknown;
+            value?: Readonly<{
+              title?: unknown;
+              body?: unknown;
+              knowledgeKind?: unknown;
+              epistemicRole?: unknown;
+              reviewState?: unknown;
+            }>;
+            provenance?: Readonly<Record<string, unknown>>;
           }>[];
         };
       };
       if (body.request?.authorization?.kind === 'eligible_target') {
         queuedKnowledgeWritten = true;
-        const title = body.request.operations?.[0]?.value?.title;
-        if (typeof title === 'string') queuedKnowledgeTitle = title;
+        const operation = body.request.operations?.[0];
+        const value = operation?.value;
+        if (typeof value?.title === 'string')
+          queuedKnowledgeTitle = value.title;
+        if (typeof value?.body === 'string') queuedKnowledgeBody = value.body;
+        if (typeof value?.knowledgeKind === 'string') {
+          queuedKnowledgeKind = value.knowledgeKind;
+        }
+        if (typeof value?.epistemicRole === 'string') {
+          queuedKnowledgeRole = value.epistemicRole;
+        }
+        if (typeof value?.reviewState === 'string') {
+          queuedKnowledgeState = value.reviewState;
+        }
+        if (operation?.provenance !== undefined) {
+          queuedKnowledgeProvenance = operation.provenance;
+        }
+        if (typeof operation?.itemId === 'string') {
+          queuedKnowledgeItemId = operation.itemId;
+        }
+        if (typeof operation?.expectedRevision === 'number') {
+          queuedKnowledgeRevision = operation.expectedRevision + 1;
+        }
       }
       json = {status: 'applied', receipt: {outcome: 'applied'}};
+    } else if (
+      path === `/api/v1/knowledge/items/${queuedKnowledgeItemId}` &&
+      method === 'GET' &&
+      queuedKnowledgeWritten
+    ) {
+      json = {
+        status: 'ok',
+        item: {
+          itemId: queuedKnowledgeItemId,
+          revision: queuedKnowledgeRevision,
+          revisionId: REVISION_ID,
+          value: {
+            knowledgeKind: queuedKnowledgeKind,
+            epistemicRole: queuedKnowledgeRole,
+            reviewState: queuedKnowledgeState,
+            title: queuedKnowledgeTitle,
+            body: queuedKnowledgeBody,
+          },
+          provenance: queuedKnowledgeProvenance,
+        },
+      };
     } else if (
       path === '/api/v1/workspace-bundles/export' &&
       method === 'POST'
@@ -353,8 +414,10 @@ async function routeM1cApi(
           ? []
           : [
               {
-                itemId: ITEM_ID,
-                revision: 1,
+                itemId: isQueueCoverageRequest
+                  ? queuedKnowledgeItemId
+                  : ITEM_ID,
+                revision: isQueueCoverageRequest ? queuedKnowledgeRevision : 1,
                 revisionId: REVISION_ID,
                 value: {
                   knowledgeKind: 'concept',
@@ -799,6 +862,15 @@ test.describe('M1C product workspaces', () => {
     await expect(knowledgeQueue.getByLabel('正式知识正文')).toHaveValue(
       /github\.com\/eigenpal\/docx-editor/u,
     );
+    await expect(knowledgeQueue.getByLabel('内容如何形成')).toHaveValue(
+      'source_claim',
+    );
+    await expect(
+      knowledgeQueue.getByText('内容直接来自原文陈述，不加入新的归纳。'),
+    ).toBeVisible();
+    await expect(
+      knowledgeQueue.getByRole('button', {name: '返回上一条'}),
+    ).toBeDisabled();
     await knowledgeQueue.getByLabel('知识标题').fill('DOCX Editor · 正式知识');
     await knowledgeQueue.getByLabel('知识类型').selectOption('resource');
     await knowledgeQueue.getByRole('button', {name: '写入知识并继续'}).click();
@@ -808,7 +880,12 @@ test.describe('M1C product workspaces', () => {
     await expect(
       page.getByText(/DOCX Editor · 正式知识 · 修订 1/u),
     ).toBeVisible();
-    expect(posts.get('/api/v1/knowledge/change-sets')).toMatchObject({
+    const firstKnowledgeWrite = posts.get('/api/v1/knowledge/change-sets') as {
+      readonly request: {
+        readonly operations: readonly Readonly<{itemId?: unknown}>[];
+      };
+    };
+    expect(firstKnowledgeWrite).toMatchObject({
       request: {
         authorization: {
           kind: 'eligible_target',
@@ -821,19 +898,74 @@ test.describe('M1C product workspaces', () => {
             expectedRevision: 0,
             value: expect.objectContaining({
               knowledgeKind: 'resource',
-              epistemicRole: 'summary',
+              epistemicRole: 'source_claim',
               reviewState: 'confirmed',
               title: 'DOCX Editor · 正式知识',
             }),
             provenance: {
-              citations: [],
-              fragmentDerivations: [FRAGMENT_ID],
+              citations: [FRAGMENT_ID],
+              fragmentDerivations: [],
               knowledgeDerivations: [],
             },
           }),
         ],
       },
     });
+    const writtenItemId = firstKnowledgeWrite.request.operations[0]?.itemId;
+    if (typeof writtenItemId !== 'string') {
+      throw new Error('missing quick-queue item identity');
+    }
+
+    await knowledgeQueue
+      .getByLabel('知识标题')
+      .fill('DOCX Editor · 修订后的知识');
+    await knowledgeQueue.getByRole('button', {name: '保存修改并继续'}).click();
+    await expect(page.getByText('修改已保存并可检索')).toBeVisible();
+    await expect(
+      page.getByText(/DOCX Editor · 修订后的知识 · 修订 2/u),
+    ).toBeVisible();
+    expect(posts.get('/api/v1/knowledge/change-sets')).toMatchObject({
+      request: {
+        operations: [
+          expect.objectContaining({
+            itemId: writtenItemId,
+            expectedRevision: 1,
+            value: expect.objectContaining({
+              title: 'DOCX Editor · 修订后的知识',
+            }),
+          }),
+        ],
+      },
+    });
+
+    await knowledgeQueue
+      .getByRole('button', {name: '在高级编辑器中修改'})
+      .click();
+    const advancedEditor = page.locator('#advanced-knowledge-editor');
+    await expect(advancedEditor).toHaveAttribute('open', '');
+    await expect(
+      advancedEditor.getByText('正在修改已有判断：DOCX Editor · 修订后的知识'),
+    ).toBeVisible();
+    await expect(advancedEditor.getByLabel('标题')).toHaveValue(
+      'DOCX Editor · 修订后的知识',
+    );
+    await expect(advancedEditor.getByLabel('知识类型')).toHaveValue('resource');
+    await expect(advancedEditor.getByLabel('内容如何形成')).toHaveValue(
+      'source_claim',
+    );
+    await expect(advancedEditor.getByLabel('审核状态')).toHaveValue(
+      'confirmed',
+    );
+    await expect(advancedEditor.getByLabel('预期现有修订')).toHaveValue('2');
+    await expect(advancedEditor.getByLabel('Item ID')).toHaveValue(
+      writtenItemId,
+    );
+    await expect(advancedEditor.getByLabel('正文（可选）')).toHaveValue(
+      /github\.com\/eigenpal\/docx-editor/u,
+    );
+    await expect(
+      advancedEditor.getByText('已保留 1 个逐字引用、0 个来源派生。'),
+    ).toBeVisible();
 
     await page.setViewportSize({width: 390, height: 800});
     expect(

@@ -15,6 +15,7 @@ import {
   fragmentKnowledgeTitle,
   loadSnapshotKnowledgeItems,
   nextPendingKnowledgeKey,
+  previousKnowledgeKey,
 } from './reviewed_knowledge_queue_model.js';
 
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
@@ -34,7 +35,7 @@ describe('reviewed Fragment to formal knowledge queue', () => {
     const preferences: Readonly<ReviewVocabularyPreferences> = {
       aliases: [],
       links: [],
-      knowledgeKinds: [{keyword: '合成工具', knowledgeKind: 'resource'}],
+      knowledgeKinds: [{keyword: '合成工具', knowledgeKind: 'work'}],
     };
 
     const entries = createReviewedKnowledgeQueue(
@@ -53,14 +54,14 @@ describe('reviewed Fragment to formal knowledge queue', () => {
       action: 'full',
       expectedDecisionRevision: 2,
       keywords: ['合成工具'],
-      suggestedKnowledgeKind: 'resource',
-      processingPlan: {kind: 'single_item', label: '短条目单项'},
+      suggestedKnowledgeKind: 'work',
+      processingPlan: {kind: 'single_item', label: '资源类单项'},
       formalItems: [],
     });
     expect(createQuickKnowledgeDraft(entry)).toMatchObject({
       title: '合成工具',
       knowledgeKind: 'resource',
-      epistemicRole: 'summary',
+      epistemicRole: 'source_claim',
       reviewState: 'confirmed',
     });
   });
@@ -83,6 +84,10 @@ describe('reviewed Fragment to formal knowledge queue', () => {
     expect(nextPendingKnowledgeKey(entries, FIRST_TARGET_ID)).toBe(
       SECOND_TARGET_ID,
     );
+    expect(previousKnowledgeKey(entries, SECOND_TARGET_ID)).toBe(
+      FIRST_TARGET_ID,
+    );
+    expect(previousKnowledgeKey(entries, FIRST_TARGET_ID)).toBeUndefined();
   });
 
   it('extracts a semantic title without preserving the Markdown destination URL', () => {
@@ -149,6 +154,24 @@ describe('reviewed Fragment to formal knowledge queue', () => {
               fragmentDerivations: [],
               knowledgeDerivations: [],
             },
+          },
+        ],
+      },
+    });
+
+    expect(
+      createQuickKnowledgeCommand(entry, draft, {
+        commandIdempotencyKey: 'synthetic-revision-command',
+        itemId: '88888888-8888-4888-8888-888888888888',
+        expectedRevision: 3,
+      }),
+    ).toMatchObject({
+      request: {
+        operations: [
+          {
+            kind: 'put_item',
+            itemId: '88888888-8888-4888-8888-888888888888',
+            expectedRevision: 3,
           },
         ],
       },

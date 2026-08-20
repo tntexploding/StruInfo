@@ -271,9 +271,25 @@ The knowledge workspace MUST make the routine post-review path primary. For a
 selected Snapshot it reconstructs eligible reviewed Fragments, distinguishes
 pending entries from entries already returned by source-scoped deterministic
 search, and lets the user confirm an editable title, body, knowledge kind,
-epistemic role, and review state before writing. A successful write is followed
-by a search read-back and queue advance. Multi-item splits, revisions, and
-typed relations remain available in a secondary advanced editor; the term
+epistemic role, and review state before writing. The protocol term
+`EpistemicRole` MUST be presented as the plain-language question “内容如何形成”:
+source text, a summary organized from the source, an inference based on the
+source, or a user-supplied judgment. A new source-backed item defaults to source
+text while keeping the other choices available. New-write knowledge kinds are
+limited to concept, viewpoint, event, method, resource, and other. The stored
+`assertion` kind is labelled viewpoint; legacy entity, framework, and work kinds
+remain unchanged but are displayed and filtered as resources. A successful write is followed by a search
+read-back and queue advance. The action row MUST also offer a visible route to
+the previous entry. An item created in the current queue session may be edited
+there by appending a new immutable revision; an older or structurally complex
+item routes to the advanced editor. Choosing “在高级编辑器中修改” MUST first
+load that selected item's current stable identity, revision, value, privacy
+fact, Fragment inputs, and historical knowledge derivations through the public
+workspace-scoped read boundary. The editor MUST visibly identify the loaded
+revision and preserve those inputs until the user explicitly replaces them; it
+MUST NOT infer complete provenance from a search result or open a blank draft.
+Multi-item splits and typed relations remain available in that secondary
+advanced editor; the term
 “change set” alone MUST NOT be the primary user-facing explanation. A search
 refresh failure after a successful commit MUST NOT be presented as a failed
 write or invite an accidental duplicate command.

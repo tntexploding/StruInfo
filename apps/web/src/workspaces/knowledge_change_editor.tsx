@@ -3,11 +3,12 @@ import type {SyntheticEvent} from 'react';
 
 import {
   EPISTEMIC_ROLES,
-  KNOWLEDGE_KINDS,
   KNOWLEDGE_REVIEW_STATES,
   type CurationState,
   type EpistemicRole,
   type EvidenceSnapshot,
+  type KnowledgeItemEditState,
+  type KnowledgeItemEpistemicRole,
   type KnowledgeKind,
   type KnowledgeReviewState,
   type ReviewVocabularyPreferences,
@@ -18,12 +19,18 @@ import {
   createCommandKey,
 } from '../components/client_identity.js';
 import {
+  EPISTEMIC_ROLE_DESCRIPTIONS,
   EPISTEMIC_ROLE_LABELS,
   INTAKE_ACTION_LABELS,
   KNOWLEDGE_KIND_LABELS,
   REVIEW_STATE_LABELS,
 } from '../components/product_labels.js';
 import type {ActionFeedback} from '../components/product_types.js';
+import {
+  isLegacyResourceKnowledgeKind,
+  KNOWLEDGE_WRITE_KINDS,
+  knowledgeKindForNewWrite,
+} from './knowledge_kind_options.js';
 import type {ReviewTargetOption} from './review_queue_model.js';
 import {preferredKnowledgeKind} from './review_vocabulary.js';
 
@@ -32,13 +39,20 @@ interface KnowledgeItemDraft {
   readonly itemId: string;
   readonly expectedRevision: number;
   readonly knowledgeKind: KnowledgeKind;
-  readonly epistemicRole: EpistemicRole;
+  readonly epistemicRole: KnowledgeItemEpistemicRole;
   readonly reviewState: KnowledgeReviewState;
   readonly title: string;
   readonly body: string;
   readonly fragmentId: string;
+  readonly retainedCitations: readonly string[];
+  readonly retainedFragmentDerivations: readonly string[];
   readonly knowledgeDerivationsText: string;
 }
+
+const KNOWLEDGE_ITEM_EPISTEMIC_ROLES = [
+  ...EPISTEMIC_ROLES,
+  'source_excerpt',
+] as const;
 
 interface KnowledgeRelationDraft {
   readonly draftId: string;
@@ -73,6 +87,7 @@ export interface KnowledgeChangeEditorProps {
   readonly curation?: Readonly<CurationState> | undefined;
   readonly evidence?: Readonly<EvidenceSnapshot> | undefined;
   readonly initialAuthorizationKey?: string | undefined;
+  readonly initialItem?: Readonly<KnowledgeItemEditState> | undefined;
   readonly onApply: (body: unknown) => Promise<ActionFeedback>;
   readonly targetOptions: readonly Readonly<ReviewTargetOption>[];
   readonly vocabularyPreferences?:
@@ -83,6 +98,7 @@ export function KnowledgeChangeEditor({
   curation,
   evidence,
   initialAuthorizationKey,
+  initialItem,
   onApply,
   targetOptions,
   vocabularyPreferences,
@@ -100,7 +116,7 @@ export function KnowledgeChangeEditor({
     initialAuthorizationKey ?? 'manual_edit',
   );
   const [items, setItems] = useState<readonly KnowledgeItemDraft[]>(() => [
-    createKnowledgeItemDraft(),
+    createKnowledgeItemDraft(initialItem),
   ]);
   const [relations, setRelations] = useState<readonly KnowledgeRelationDraft[]>(
     [],
@@ -167,11 +183,7 @@ export function KnowledgeChangeEditor({
             title: item.title,
             ...(item.body.trim() === '' ? {} : {body: item.body}),
           },
-          provenance: provenanceFor(
-            item.epistemicRole,
-            item.fragmentId,
-            item.knowledgeDerivationsText,
-          ),
+          provenance: provenanceForItem(item),
         })),
         ...relations.map((relation) => ({
           kind: 'put_relation',
@@ -265,6 +277,18 @@ export function KnowledgeChangeEditor({
         </small>
       </label>
 
+      {initialItem !== undefined ? (
+        <div className="knowledge-review-prefill" role="status">
+          <div>
+            <strong>正在修改已有判断：{initialItem.value.title}</strong>
+            <span>
+              已加载当前修订 {initialItem.revision}
+              、正文、状态与完整来源链；提交会新增修订，不会覆盖历史。
+            </span>
+          </div>
+        </div>
+      ) : null}
+
       {selectedFragment !== undefined ? (
         <div className="knowledge-review-prefill">
           <div>
@@ -288,12 +312,14 @@ export function KnowledgeChangeEditor({
                     ...(suggestedKnowledgeKind === undefined
                       ? {}
                       : {knowledgeKind: suggestedKnowledgeKind}),
-                    epistemicRole: 'summary',
+                    epistemicRole: 'source_claim',
                     title: fragmentTitle(selectedFragment.selectedText),
                     body: Array.from(selectedFragment.selectedText)
                       .slice(0, 20_000)
                       .join(''),
                     fragmentId: selectedFragment.fragmentId,
+                    retainedCitations: [],
+                    retainedFragmentDerivations: [],
                   },
                   ...current.slice(1),
                 ];
@@ -433,7 +459,7 @@ function KnowledgeItemFields({
       <legend>知识项 {String(index + 1).padStart(2, '0')}</legend>
       <div className="operation-editor__tools">
         <span className="origin-label origin-label--manual">
-          {EPISTEMIC_ROLE_LABELS[item.epistemicRole]}
+          {knowledgeItemRoleLabel(item.epistemicRole)}
         </span>
         {canRemove ? (
           <button
@@ -466,7 +492,10 @@ function KnowledgeItemFields({
             });
           }}
         >
-          {KNOWLEDGE_KINDS.map((kind) => (
+          {isLegacyResourceKnowledgeKind(item.knowledgeKind) ? (
+            <option value={item.knowledgeKind}>资源（保留已有分类）</option>
+          ) : null}
+          {KNOWLEDGE_WRITE_KINDS.map((kind) => (
             <option key={kind} value={kind}>
               {KNOWLEDGE_KIND_LABELS[kind]}
             </option>
@@ -474,21 +503,31 @@ function KnowledgeItemFields({
         </select>
       </label>
       <label className="field">
-        <span>认识论角色</span>
+        <span>内容如何形成</span>
         <select
           value={item.epistemicRole}
           onChange={(event) => {
             onChange({
-              epistemicRole: event.currentTarget.value as EpistemicRole,
+              epistemicRole: event.currentTarget
+                .value as KnowledgeItemEpistemicRole,
             });
           }}
         >
-          {EPISTEMIC_ROLES.map((role) => (
-            <option key={role} value={role} disabled={fragments.length === 0}>
-              {EPISTEMIC_ROLE_LABELS[role]}
+          {KNOWLEDGE_ITEM_EPISTEMIC_ROLES.map((role) => (
+            <option
+              key={role}
+              value={role}
+              disabled={
+                role === 'source_excerpt' &&
+                fragments.length === 0 &&
+                item.retainedCitations.length === 0
+              }
+            >
+              {knowledgeItemRoleLabel(role)}
             </option>
           ))}
         </select>
+        <small>{knowledgeItemRoleDescription(item.epistemicRole)}</small>
       </label>
       <label className="field">
         <span>审核状态</span>
@@ -524,17 +563,53 @@ function KnowledgeItemFields({
         <select
           value={item.fragmentId}
           onChange={(event) => {
-            onChange({fragmentId: event.currentTarget.value});
+            onChange({
+              fragmentId: event.currentTarget.value,
+              retainedCitations: [],
+              retainedFragmentDerivations: [],
+            });
           }}
         >
-          <option value="">无直接 Fragment（可使用已有修订来源）</option>
+          <option value="">
+            {item.retainedCitations.length +
+              item.retainedFragmentDerivations.length >
+            0
+              ? '保留已加载的完整 Fragment 来源链'
+              : '无直接 Fragment（可使用已有修订来源）'}
+          </option>
           {fragments.map((fragment, fragmentIndex) => (
             <option key={fragment.fragmentId} value={fragment.fragmentId}>
               {`Fragment ${String(fragmentIndex + 1)} · ${compactExcerpt(fragment.selectedText)}`}
             </option>
           ))}
         </select>
+        {item.retainedCitations.length +
+          item.retainedFragmentDerivations.length >
+        0 ? (
+          <small>
+            已保留 {item.retainedCitations.length.toString()} 个逐字引用、
+            {item.retainedFragmentDerivations.length.toString()}{' '}
+            个来源派生。选择新的 Fragment 会明确替换这组来源。
+          </small>
+        ) : null}
       </label>
+      {item.retainedCitations.length + item.retainedFragmentDerivations.length >
+      0 ? (
+        <div className="field--full">
+          <button
+            className="text-action text-action--danger"
+            type="button"
+            onClick={() => {
+              onChange({
+                retainedCitations: [],
+                retainedFragmentDerivations: [],
+              });
+            }}
+          >
+            清除已加载的 Fragment 来源
+          </button>
+        </div>
+      ) : null}
       <label className="field field--full">
         <span>已有知识修订来源（可选）</span>
         <textarea
@@ -654,7 +729,7 @@ function KnowledgeRelationFields({
         </select>
       </label>
       <label className="field">
-        <span>认识论角色</span>
+        <span>关系如何形成</span>
         <select
           value={relation.epistemicRole}
           onChange={(event) => {
@@ -669,6 +744,7 @@ function KnowledgeRelationFields({
             </option>
           ))}
         </select>
+        <small>{EPISTEMIC_ROLE_DESCRIPTIONS[relation.epistemicRole]}</small>
       </label>
       <label className="field">
         <span>审核状态</span>
@@ -785,6 +861,26 @@ function provenanceFor(
   };
 }
 
+function provenanceForItem(item: Readonly<KnowledgeItemDraft>) {
+  const keepsExistingFragments =
+    item.retainedCitations.length + item.retainedFragmentDerivations.length > 0;
+  return {
+    citations: keepsExistingFragments
+      ? item.retainedCitations
+      : isSourceTextRole(item.epistemicRole) && item.fragmentId !== ''
+        ? [item.fragmentId]
+        : [],
+    fragmentDerivations: keepsExistingFragments
+      ? item.retainedFragmentDerivations
+      : !isSourceTextRole(item.epistemicRole) && item.fragmentId !== ''
+        ? [item.fragmentId]
+        : [],
+    knowledgeDerivations: parseKnowledgeDerivations(
+      item.knowledgeDerivationsText,
+    ).values,
+  };
+}
+
 function validateDraft(
   items: readonly Readonly<KnowledgeItemDraft>[],
   relations: readonly Readonly<KnowledgeRelationDraft>[],
@@ -798,13 +894,32 @@ function validateDraft(
     if (derivations.error !== undefined) {
       return `知识项 ${String(index + 1)} 的已有修订来源无效：${derivations.error}`;
     }
-    if (item.fragmentId === '' && derivations.values.length === 0) {
+    const provenance = provenanceForItem(item);
+    const fragmentInputCount =
+      provenance.citations.length + provenance.fragmentDerivations.length;
+    if (fragmentInputCount === 0 && derivations.values.length === 0) {
       return `知识项 ${String(index + 1)} 需要 Fragment 或已有知识修订来源。`;
     }
-    if (item.epistemicRole === 'source_claim' && item.fragmentId === '') {
-      return `知识项 ${String(index + 1)} 的“来源主张”必须选择 Fragment。`;
+    if (item.epistemicRole === 'source_claim' && fragmentInputCount === 0) {
+      return `知识项 ${String(index + 1)} 的“来源原文所述”必须选择 Fragment。`;
     }
-    if (derivations.values.length + (item.fragmentId === '' ? 0 : 1) > 64) {
+    if (
+      item.epistemicRole === 'inference' &&
+      provenance.fragmentDerivations.length === 0 &&
+      derivations.values.length === 0
+    ) {
+      return `知识项 ${String(index + 1)} 的“根据来源推断”不能只保留逐字引用。`;
+    }
+    if (
+      item.epistemicRole === 'source_excerpt' &&
+      (provenance.citations.length !== 1 ||
+        provenance.fragmentDerivations.length !== 0 ||
+        derivations.values.length !== 0 ||
+        item.body === '')
+    ) {
+      return `知识项 ${String(index + 1)} 的“原文逐字摘录”需要一个引用、原文正文且不能包含其他派生来源。`;
+    }
+    if (derivations.values.length + fragmentInputCount > 64) {
       return `知识项 ${String(index + 1)} 的来源数量超过 64。`;
     }
   }
@@ -828,7 +943,7 @@ function validateDraft(
       relation.epistemicRole === 'source_claim' &&
       relation.fragmentId === ''
     ) {
-      return `关系 ${String(index + 1)} 的“来源主张”必须选择 Fragment。`;
+      return `关系 ${String(index + 1)} 的“来源原文所述”必须选择 Fragment。`;
     }
     if (derivations.values.length + (relation.fragmentId === '' ? 0 : 1) > 64) {
       return `关系 ${String(index + 1)} 的来源数量超过 64。`;
@@ -837,17 +952,41 @@ function validateDraft(
   return undefined;
 }
 
-function createKnowledgeItemDraft(): KnowledgeItemDraft {
+function createKnowledgeItemDraft(
+  initialItem?: Readonly<KnowledgeItemEditState>,
+): KnowledgeItemDraft {
+  if (initialItem !== undefined) {
+    return {
+      draftId: createClientUuid(),
+      itemId: initialItem.itemId,
+      expectedRevision: initialItem.revision,
+      knowledgeKind: initialItem.value.knowledgeKind,
+      epistemicRole: initialItem.value.epistemicRole,
+      reviewState: initialItem.value.reviewState,
+      title: initialItem.value.title,
+      body: initialItem.value.body ?? '',
+      fragmentId: '',
+      retainedCitations: Object.freeze([...initialItem.provenance.citations]),
+      retainedFragmentDerivations: Object.freeze([
+        ...initialItem.provenance.fragmentDerivations,
+      ]),
+      knowledgeDerivationsText: formatKnowledgeDerivations(
+        initialItem.provenance.knowledgeDerivations,
+      ),
+    };
+  }
   return {
     draftId: createClientUuid(),
     itemId: createClientUuid(),
     expectedRevision: 0,
-    knowledgeKind: 'concept',
-    epistemicRole: 'user_assertion',
+    knowledgeKind: knowledgeKindForNewWrite(undefined),
+    epistemicRole: 'source_claim',
     reviewState: 'confirmed',
     title: '',
     body: '',
     fragmentId: '',
+    retainedCitations: [],
+    retainedFragmentDerivations: [],
     knowledgeDerivationsText: '',
   };
 }
@@ -868,6 +1007,36 @@ function createKnowledgeRelationDraft(
     fragmentId: '',
     knowledgeDerivationsText: '',
   };
+}
+
+function formatKnowledgeDerivations(
+  derivations: readonly FormalKnowledgeDerivation[],
+): string {
+  return derivations
+    .map((derivation) =>
+      derivation.kind === 'item'
+        ? `item:${derivation.itemId}@${derivation.revision.toString()}`
+        : `relation:${derivation.relationId}@${derivation.revision.toString()}`,
+    )
+    .join('\n');
+}
+
+function isSourceTextRole(role: KnowledgeItemEpistemicRole): boolean {
+  return role === 'source_claim' || role === 'source_excerpt';
+}
+
+function knowledgeItemRoleLabel(role: KnowledgeItemEpistemicRole): string {
+  return role === 'source_excerpt'
+    ? '原文逐字摘录'
+    : EPISTEMIC_ROLE_LABELS[role];
+}
+
+function knowledgeItemRoleDescription(
+  role: KnowledgeItemEpistemicRole,
+): string {
+  return role === 'source_excerpt'
+    ? '正文与一个来源 Fragment 完全一致，用于保留可核对的逐字摘录。'
+    : EPISTEMIC_ROLE_DESCRIPTIONS[role];
 }
 
 const DERIVATION_PATTERN =

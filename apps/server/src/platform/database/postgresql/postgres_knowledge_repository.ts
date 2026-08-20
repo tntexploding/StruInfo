@@ -14,8 +14,10 @@ import {
   type KnowledgeRevisionFragmentInputInsert,
   type KnowledgeRevisionItemInputInsert,
   type KnowledgeRevisionRelationInputInsert,
+  type KnowledgeRevisionState,
   type LockedManualKnowledgeSnapshotQuery,
   type ManualKnowledgeRepositoryPort,
+  type ManualKnowledgeReadRepositoryPort,
   type ManualKnowledgeRepositorySnapshot,
   type ManualKnowledgeTransactionPort,
   type RelationRevisionFragmentInputInsert,
@@ -173,7 +175,9 @@ ORDER BY relation_id, revision_number, input_ordinal`;
 
 type Row = Readonly<Record<string, unknown>>;
 
-export class PostgresManualKnowledgeRepository implements ManualKnowledgeRepositoryPort {
+export class PostgresManualKnowledgeRepository
+  implements ManualKnowledgeRepositoryPort, ManualKnowledgeReadRepositoryPort
+{
   readonly #pool: PostgresPoolBoundary;
 
   public constructor(pool: PostgresPoolBoundary) {
@@ -185,6 +189,56 @@ export class PostgresManualKnowledgeRepository implements ManualKnowledgeReposit
   ): Promise<Value> {
     return runPostgresTransaction(this.#pool, 'read_committed', (client) =>
       work(new PostgresManualKnowledgeTransaction(client)),
+    );
+  }
+
+  public loadCurrentKnowledgeItem(
+    workspaceId: string,
+    itemId: string,
+  ): Promise<Readonly<KnowledgeRevisionState> | undefined> {
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const items = await client.query<Row>(READ_ITEMS_SQL, [
+          workspaceId,
+          [itemId],
+        ]);
+        if (items.rows.length > 1) throw new PostgresAdapterError();
+        const itemRow = items.rows[0];
+        if (itemRow === undefined) return undefined;
+        const item = mapItem(itemRow);
+        const [revisions, fragments, itemInputs, relationInputs] =
+          await Promise.all([
+            client.query<Row>(READ_REVISIONS_SQL, [workspaceId, [itemId]]),
+            client.query<Row>(READ_ITEM_FRAGMENT_INPUTS_SQL, [
+              workspaceId,
+              [itemId],
+            ]),
+            client.query<Row>(READ_ITEM_ITEM_INPUTS_SQL, [
+              workspaceId,
+              [itemId],
+            ]),
+            client.query<Row>(READ_ITEM_RELATION_INPUTS_SQL, [
+              workspaceId,
+              [itemId],
+            ]),
+          ]);
+        const currentRows = revisions.rows.filter(
+          (row) =>
+            integer(row.revision_number, 1) === item.currentRevision &&
+            canonicalUuid(row.revision_id) === item.currentRevisionId,
+        );
+        if (currentRows.length !== 1) throw new PostgresAdapterError();
+        const currentRow = currentRows[0];
+        if (currentRow === undefined) throw new PostgresAdapterError();
+        return mapItemRevision(
+          currentRow,
+          fragments.rows,
+          itemInputs.rows,
+          relationInputs.rows,
+        );
+      },
     );
   }
 }

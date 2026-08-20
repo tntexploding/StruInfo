@@ -7,6 +7,7 @@ export const KNOWLEDGE_KINDS = [
   'framework',
   'resource',
   'work',
+  'other',
 ] as const;
 
 export const EPISTEMIC_ROLES = [
@@ -59,6 +60,7 @@ export const ASSESSMENT_DIMENSIONS = [
 
 export type KnowledgeKind = (typeof KNOWLEDGE_KINDS)[number];
 export type EpistemicRole = (typeof EPISTEMIC_ROLES)[number];
+export type KnowledgeItemEpistemicRole = EpistemicRole | 'source_excerpt';
 export type KnowledgeReviewState = (typeof KNOWLEDGE_REVIEW_STATES)[number];
 export type IntakeAction = (typeof INTAKE_ACTIONS)[number];
 export type IntakeReason = (typeof INTAKE_REASONS)[number];
@@ -272,7 +274,7 @@ export interface KnowledgeSearchItem {
   readonly revisionId: string;
   readonly value: Readonly<{
     knowledgeKind: KnowledgeKind;
-    epistemicRole: EpistemicRole | 'source_excerpt';
+    epistemicRole: KnowledgeItemEpistemicRole;
     reviewState: KnowledgeReviewState;
     title: string;
     body?: string;
@@ -332,6 +334,33 @@ export interface DomainIssue {
 export type DomainFailure =
   | Readonly<{status: 'rejected'; issue: Readonly<DomainIssue>}>
   | Readonly<{status: 'failed'; issue: Readonly<DomainIssue>}>;
+
+export interface KnowledgeItemEditState {
+  readonly itemId: string;
+  readonly revision: number;
+  readonly revisionId: string;
+  readonly value: Readonly<{
+    knowledgeKind: KnowledgeKind;
+    epistemicRole: KnowledgeItemEpistemicRole;
+    reviewState: KnowledgeReviewState;
+    title: string;
+    body?: string;
+  }>;
+  readonly provenance: Readonly<{
+    citations: readonly string[];
+    fragmentDerivations: readonly string[];
+    knowledgeDerivations: readonly Readonly<
+      | {kind: 'item'; itemId: string; revision: number}
+      | {kind: 'relation'; relationId: string; revision: number}
+    >[];
+  }>;
+  readonly isPrivate?: true;
+}
+
+export type KnowledgeItemReadResponse =
+  | Readonly<{status: 'ok'; item: Readonly<KnowledgeItemEditState>}>
+  | Readonly<{status: 'not_found'; issue?: Readonly<DomainIssue>}>
+  | DomainFailure;
 
 export type DomainCommandResponse =
   | Readonly<{

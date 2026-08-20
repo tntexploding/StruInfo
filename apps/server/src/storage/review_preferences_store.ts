@@ -18,6 +18,7 @@ export const REVIEW_PREFERRED_KNOWLEDGE_KINDS = [
   'framework',
   'resource',
   'work',
+  'other',
 ] as const;
 
 export type ReviewVocabularyLinkKind =
