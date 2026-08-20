@@ -1,11 +1,11 @@
 # Contributing to StruInfo
 
 StruInfo has accepted its foundational development outline and architecture
-decisions. M0-S and the first pure domain slices are complete; implementation
-now follows the `M1C` runnable vertical main line in the roadmap. An accepted
-ADR does not bypass a reachable product, dependency, or release obligation, but
-deferred hardening and test-tooling certification do not block unrelated product
-work.
+decisions. M1C is the frozen runnable compatibility baseline; implementation
+now follows the `M1D` InformationEntry-first vertical main line in the roadmap.
+An accepted ADR does not bypass a reachable product, dependency, or release
+obligation, but deferred hardening and test-tooling certification do not block
+unrelated product work.
 
 ## Sources of Truth
 

@@ -111,6 +111,18 @@ and are presented and searched as resources. The seventh forward migration adds
 the genuine `other` value without rewriting existing revisions. New source-backed
 items default to “来源原文所述”; review-state behavior is intentionally unchanged.
 
+M1C is now frozen as the runnable compatibility baseline. ADR 0007 redirects the
+active product main line to M1D: a canonical `InformationEntry` layer between
+immutable Snapshot/Fragment evidence and optional formal KnowledgeItem records.
+Entry is the ordinary document annotation, association, and retrieval unit;
+formal knowledge remains available for stable semantic identities, claims,
+synthesis, and typed relations. M1D begins with additive migration `000008` and
+one narrow vertical slice that materializes Entries from existing Snapshots,
+edits content/type/domain keywords, searches them without AI, and returns exact
+source evidence through the existing local HTTP/Web application. Do not rewrite
+existing M1C knowledge or turn AI, vectors, formal TM2, or test-harness hardening
+into an Entry prerequisite.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2
