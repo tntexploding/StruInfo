@@ -33,6 +33,7 @@ export interface MaterializedEvidenceFragment {
 
 export interface MaterializedEvidenceStructure {
   readonly structureId: string;
+  readonly normalizedText?: string;
   readonly fragments: readonly Readonly<MaterializedEvidenceFragment>[];
 }
 

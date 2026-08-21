@@ -40,6 +40,11 @@ export {
   READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_SQL,
 } from './postgres_information_entry_repository.js';
 export {
+  PostgresInformationDocumentTagRepository,
+  READ_CURRENT_INFORMATION_DOCUMENT_TAGS_SQL,
+  READ_CURRENT_INFORMATION_DOCUMENT_TAG_VALUES_SQL,
+} from './postgres_information_document_tag_repository.js';
+export {
   createNodePostgresPool,
   type PostgresClientBoundary,
   type PostgresPoolBoundary,

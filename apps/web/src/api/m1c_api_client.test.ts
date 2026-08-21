@@ -83,7 +83,7 @@ describe('M1cApiClient', () => {
     );
   });
 
-  it('uses narrow Entry materialize, list, revision, and search routes', async () => {
+  it('uses narrow Entry, Document navigation, and document-tag routes', async () => {
     const requests: Readonly<{
       url: string;
       method: string | undefined;
@@ -116,6 +116,14 @@ describe('M1cApiClient', () => {
       expectedRevision: 1,
     });
     await client.searchInformationEntries({text: 'synthetic'});
+    await client.listInformationEntryDocuments({includePrivate: true});
+    await client.aggregateInformationDocumentTags('synthetic/id', {
+      expectedRevision: 0,
+    });
+    await client.reviseInformationDocumentTags('synthetic/id', {
+      expectedRevision: 1,
+      tags: ['synthetic'],
+    });
 
     expect(requests).toEqual([
       {
@@ -139,6 +147,23 @@ describe('M1cApiClient', () => {
         url: 'http://127.0.0.1:3000/api/v1/entries/search',
         method: 'POST',
         body: JSON.stringify({text: 'synthetic'}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entry-documents?includePrivate=true',
+        method: 'GET',
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entry-documents/synthetic%2Fid/tags/aggregate',
+        method: 'POST',
+        body: JSON.stringify({expectedRevision: 0}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entry-documents/synthetic%2Fid/tags',
+        method: 'PUT',
+        body: JSON.stringify({
+          expectedRevision: 1,
+          tags: ['synthetic'],
+        }),
       },
     ]);
   });

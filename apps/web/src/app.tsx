@@ -5,8 +5,10 @@ import type {
   DomainCommandResponse,
   EvidenceSnapshotSummary,
   InformationEntryMaterializeResponse,
+  InformationEntryDocumentListResponse,
   InformationEntryRevisionResponse,
   InformationEntrySearchResponse,
+  InformationDocumentTagWriteResponse,
   KnowledgeSearchResponse,
   M1cHttpResponse,
   MarkdownImportResponse,
@@ -277,6 +279,32 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const listInformationEntryDocuments = useCallback(
+    (
+      includePrivate: boolean,
+    ): Promise<M1cHttpResponse<InformationEntryDocumentListResponse>> =>
+      apiClient.listInformationEntryDocuments({includePrivate}),
+    [apiClient],
+  );
+
+  const aggregateInformationDocumentTags = useCallback(
+    (
+      snapshotId: string,
+      body: unknown,
+    ): Promise<M1cHttpResponse<InformationDocumentTagWriteResponse>> =>
+      apiClient.aggregateInformationDocumentTags(snapshotId, body),
+    [apiClient],
+  );
+
+  const reviseInformationDocumentTags = useCallback(
+    (
+      snapshotId: string,
+      body: unknown,
+    ): Promise<M1cHttpResponse<InformationDocumentTagWriteResponse>> =>
+      apiClient.reviseInformationDocumentTags(snapshotId, body),
+    [apiClient],
+  );
+
   function closeEvidence() {
     setEvidencePanel({status: 'closed'});
     const target = evidenceReturnTarget.current;
@@ -478,8 +506,11 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       {activeSection === 'entries' ? (
         <InformationEntryWorkspace
           snapshots={snapshotValues}
+          onListDocuments={listInformationEntryDocuments}
           onMaterialize={materializeInformationEntries}
+          onAggregateDocumentTags={aggregateInformationDocumentTags}
           onRevise={reviseInformationEntry}
+          onReviseDocumentTags={reviseInformationDocumentTags}
           onSearch={searchInformationEntries}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
             void openEvidence(snapshotId, undefined, fragmentId, includePrivate)

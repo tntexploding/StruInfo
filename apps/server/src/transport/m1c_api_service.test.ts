@@ -11,7 +11,12 @@ import type {
   EvidenceCaptureRepositoryRequest,
   EvidenceRepositoryPort,
 } from '../modules/evidence/index.js';
-import type {InformationEntryMaterializeRow} from '../modules/entries/index.js';
+import type {
+  CurrentInformationDocumentTags,
+  CurrentInformationEntry,
+  InformationDocumentTagWrite,
+  InformationEntryMaterializeRow,
+} from '../modules/entries/index.js';
 import type {ManualKnowledgeRepositoryPort} from '../modules/knowledge/index.js';
 import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
 import {
@@ -552,6 +557,180 @@ describe('M1cApiService', () => {
     });
   });
 
+  it('aggregates versioned Document tags and exposes Document to Entry navigation counts', async () => {
+    const blobs = new MemoryBlobStore();
+    const normalizedText = 'PostgreSQL PostgreSQL and TypeScript\n';
+    const identity = await blobs.put(new TextEncoder().encode(normalizedText));
+    const snapshot = Object.freeze({
+      workspaceId: WORKSPACE_ID,
+      snapshotId: SNAPSHOT_ID,
+      resourceId: RESOURCE_ID,
+      resourceKind: 'manual_text' as const,
+      sourceKey: 'manual:document-tags',
+      capturedAt: '2040-01-02T03:04:05.000Z',
+      fragmentCount: 0,
+      rawSha256: identity.digest,
+      canonicalContentSha256: identity.digest,
+      canonicalizationVersion: 'utf8-lf-v1',
+      structures: Object.freeze([
+        Object.freeze({
+          structureId: STRUCTURE_ID,
+          parserName: 'struinfo-commonmark',
+          parserVersion: '1',
+          textNormalizationVersion: 'utf8-lf-v1',
+          structureSha256: 'b'.repeat(64),
+          textBlob: identity,
+          fragments: Object.freeze([]),
+        }),
+      ]),
+    });
+    const entry: Readonly<CurrentInformationEntry> = Object.freeze({
+      workspaceId: WORKSPACE_ID,
+      entryId: '00000000-0000-4000-8000-000000000011',
+      resourceId: RESOURCE_ID,
+      snapshotId: SNAPSHOT_ID,
+      revision: 2,
+      revisionId: '00000000-0000-4000-8000-000000000012',
+      sourceKey: snapshot.sourceKey,
+      capturedAt: snapshot.capturedAt,
+      value: Object.freeze({
+        documentOrder: 0,
+        titlePath: 'Synthetic database note',
+        body: normalizedText,
+        bodySha256: identity.digest,
+        chunkMode: 'split' as const,
+        splitRuleVersion: 'struinfo.entry-split.section.v1',
+        isPrivate: false,
+        typeKeyword: 'knowledge_explanation' as const,
+        contentKeywords: Object.freeze([
+          Object.freeze({
+            displayValue: 'PostgreSQL',
+            normalizedValue: 'postgresql',
+            origin: 'manual' as const,
+            originVersion: 'manual-entry-editor.v1',
+          }),
+          Object.freeze({
+            displayValue: 'TypeScript',
+            normalizedValue: 'typescript',
+            origin: 'manual' as const,
+            originVersion: 'manual-entry-editor.v1',
+          }),
+        ]),
+        domains: Object.freeze([
+          Object.freeze({
+            keyword: 'engineering_computing' as const,
+            origin: 'manual' as const,
+            originVersion: 'manual-entry-editor.v1',
+          }),
+        ]),
+        fragmentIds: Object.freeze([]),
+      }),
+    });
+    let currentTags: Readonly<CurrentInformationDocumentTags> | undefined;
+    const writeDocumentTags = vi.fn(
+      (write: Readonly<InformationDocumentTagWrite>) => {
+        currentTags = Object.freeze({
+          workspaceId: write.workspaceId,
+          resourceId: write.resourceId,
+          snapshotId: write.snapshotId,
+          revision: write.expectedRevision + 1,
+          revisionId: write.revisionId,
+          value: write.value,
+        });
+        return Promise.resolve('applied' as const);
+      },
+    );
+    const service = createService({
+      blobStore: blobs,
+      evidenceReadRepository: {
+        listSnapshots: () => Promise.resolve([snapshot]),
+        loadSnapshot: () => Promise.resolve(snapshot),
+      },
+      informationEntryRepository: {
+        materializeEntries: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        reviseEntry: () => Promise.resolve('not_found'),
+        loadCurrentEntries: () => Promise.resolve([entry]),
+      },
+      informationDocumentTagRepository: {
+        writeDocumentTags,
+        loadCurrentDocumentTags: () =>
+          Promise.resolve(currentTags === undefined ? [] : [currentTags]),
+      },
+    });
+
+    await expect(
+      service.aggregateInformationDocumentTags(SNAPSHOT_ID, {
+        expectedRevision: 0,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'applied',
+        documentTags: {
+          revision: 1,
+          value: {
+            revisionKind: 'aggregate',
+            entryCount: 1,
+            tags: [
+              {
+                displayValue: 'PostgreSQL',
+                fullTextOccurrences: 2,
+                entryCoverageCount: 1,
+              },
+              {
+                displayValue: 'TypeScript',
+                fullTextOccurrences: 1,
+                entryCoverageCount: 1,
+              },
+            ],
+          },
+        },
+      },
+    });
+    await expect(
+      service.listInformationEntryDocuments(),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        documents: [
+          {
+            snapshotId: SNAPSHOT_ID,
+            entryCount: 1,
+            annotatedEntryCount: 1,
+            currentTags: {revision: 1},
+          },
+        ],
+      },
+    });
+    await expect(
+      service.reviseInformationDocumentTags(SNAPSHOT_ID, {
+        expectedRevision: 1,
+        tags: ['Database systems'],
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'applied',
+        documentTags: {
+          revision: 2,
+          value: {
+            revisionKind: 'manual',
+            tags: [
+              {
+                displayValue: 'Database systems',
+                fullTextOccurrences: 0,
+                entryCoverageCount: 0,
+              },
+            ],
+          },
+        },
+      },
+    });
+    expect(writeDocumentTags).toHaveBeenCalledTimes(2);
+  });
+
   it('reports an unavailable private-document read without throwing', async () => {
     const service = createService({
       evidenceReadRepository: {
@@ -857,6 +1036,10 @@ function createService(
         Promise.resolve({outcome: 'existing', createdCount: 0}),
       reviseEntry: () => Promise.resolve('not_found'),
       loadCurrentEntries: () => Promise.resolve([]),
+    },
+    informationDocumentTagRepository: {
+      writeDocumentTags: () => Promise.resolve('stale'),
+      loadCurrentDocumentTags: () => Promise.resolve([]),
     },
     workspaceTransfer: {
       exportWorkspace: () =>

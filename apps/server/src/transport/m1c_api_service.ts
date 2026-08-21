@@ -9,12 +9,17 @@ import type {ManualCurationReadRepositoryPort} from '../modules/curation/manual_
 import {
   ENTRY_DOMAIN_KEYWORDS,
   ENTRY_TYPE_KEYWORDS,
+  deriveInformationDocumentTagRevisionId,
   deriveInformationEntryRevisionId,
+  prepareAggregatedInformationDocumentTags,
+  prepareManualInformationDocumentTags,
   prepareManualEntryRevision,
   prepareSplitInformationEntries,
   searchCurrentInformationEntries,
   type EntryDomainKeyword,
   type EntryTypeKeyword,
+  type InformationDocumentTagRepositoryPort,
+  type InformationEntryDocumentView,
   type InformationEntryRepositoryPort,
   type InformationEntrySearchRequest,
   type MaterializedEvidenceSnapshot,
@@ -64,6 +69,7 @@ export interface M1cApiServiceDependencies {
   readonly knowledgeReadRepository: ManualKnowledgeReadRepositoryPort;
   readonly retrievalRepository: DeterministicKnowledgeSearchRepositoryPort;
   readonly informationEntryRepository: InformationEntryRepositoryPort;
+  readonly informationDocumentTagRepository: InformationDocumentTagRepositoryPort;
   readonly workspaceTransfer: M1cWorkspaceTransferPort;
 }
 
@@ -101,6 +107,17 @@ export interface M1cApiServicePort {
     body: unknown,
   ): Promise<M1cHttpResult>;
   searchInformationEntries(body: unknown): Promise<M1cHttpResult>;
+  listInformationEntryDocuments(
+    includePrivate?: unknown,
+  ): Promise<M1cHttpResult>;
+  aggregateInformationDocumentTags(
+    snapshotId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult>;
+  reviseInformationDocumentTags(
+    snapshotId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult>;
   exportWorkspaceBundle(): Promise<M1cHttpResult>;
   restoreWorkspaceBundle(body: unknown): Promise<M1cHttpResult>;
 }
@@ -124,6 +141,7 @@ export class M1cApiService implements M1cApiServicePort {
         'manual_knowledge',
         'deterministic_search',
         'information_entries',
+        'information_document_tags',
         'private_documents',
         'review_preferences',
         'workspace_bundle_export',
@@ -560,6 +578,174 @@ export class M1cApiService implements M1cApiServicePort {
     }
   }
 
+  public async listInformationEntryDocuments(
+    includePrivate: unknown = false,
+  ): Promise<M1cHttpResult> {
+    if (typeof includePrivate !== 'boolean') {
+      return inputFailure('query.includePrivate');
+    }
+    try {
+      const [snapshots, entries, currentTags] = await Promise.all([
+        this.#dependencies.evidenceReadRepository.listSnapshots(
+          this.#dependencies.workspaceId,
+        ),
+        this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          includePrivate,
+        ),
+        this.#dependencies.informationDocumentTagRepository.loadCurrentDocumentTags(
+          this.#dependencies.workspaceId,
+          includePrivate,
+        ),
+      ]);
+      const documents = snapshots
+        .filter((snapshot) => includePrivate || snapshot.isPrivate !== true)
+        .map((snapshot): Readonly<InformationEntryDocumentView> => {
+          const documentEntries = entries.filter(
+            (entry) => entry.snapshotId === snapshot.snapshotId,
+          );
+          const tags = currentTags.find(
+            (candidate) => candidate.snapshotId === snapshot.snapshotId,
+          );
+          if (tags !== undefined && tags.resourceId !== snapshot.resourceId) {
+            throw new Error('Document tag source identity mismatch.');
+          }
+          return Object.freeze({
+            ...snapshot,
+            entryCount: documentEntries.length,
+            annotatedEntryCount: documentEntries.filter(
+              (entry) =>
+                entry.value.contentKeywords.length > 0 ||
+                entry.value.typeKeyword !== undefined ||
+                entry.value.domains.length > 0,
+            ).length,
+            ...(tags === undefined ? {} : {currentTags: tags}),
+          });
+        });
+      return httpResult(200, {
+        status: 'ok',
+        totalCount: documents.length,
+        documents: Object.freeze(documents),
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async aggregateInformationDocumentTags(
+    snapshotId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const input = decodeDocumentTagWriteBody(body, false);
+    if (!CANONICAL_UUID.test(snapshotId)) {
+      return inputFailure('path.snapshotId');
+    }
+    if (input === undefined) return inputFailure('body');
+    return this.#writeInformationDocumentTags(snapshotId, input);
+  }
+
+  public async reviseInformationDocumentTags(
+    snapshotId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const input = decodeDocumentTagWriteBody(body, true);
+    if (!CANONICAL_UUID.test(snapshotId)) {
+      return inputFailure('path.snapshotId');
+    }
+    if (input === undefined) return inputFailure('body');
+    return this.#writeInformationDocumentTags(snapshotId, input);
+  }
+
+  async #writeInformationDocumentTags(
+    snapshotId: string,
+    input: Readonly<{
+      expectedRevision: number;
+      includePrivate: boolean;
+      tags?: readonly string[];
+    }>,
+  ): Promise<M1cHttpResult> {
+    try {
+      const snapshot =
+        await this.#dependencies.evidenceReadRepository.loadSnapshot(
+          this.#dependencies.workspaceId,
+          snapshotId,
+        );
+      if (
+        snapshot === undefined ||
+        (snapshot.isPrivate === true && !input.includePrivate)
+      ) {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'snapshot_not_found'}),
+        });
+      }
+      const materialized = (await materializeEvidenceSnapshot(
+        snapshot,
+        this.#dependencies.blobStore,
+      )) as Readonly<MaterializedEvidenceSnapshot>;
+      const normalizedText = materialized.structures[0]?.normalizedText;
+      if (normalizedText === undefined) {
+        return httpResult(422, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'document_text_not_found'}),
+        });
+      }
+      const entries = (
+        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          input.includePrivate,
+        )
+      ).filter((entry) => entry.snapshotId === snapshotId);
+      const aggregationInput = Object.freeze({
+        normalizedText,
+        isPrivate: snapshot.isPrivate === true,
+        entries: Object.freeze(entries),
+      });
+      const value =
+        input.tags === undefined
+          ? prepareAggregatedInformationDocumentTags(aggregationInput)
+          : prepareManualInformationDocumentTags(aggregationInput, input.tags);
+      if (value === undefined) return inputFailure('body.tags');
+      const outcome =
+        await this.#dependencies.informationDocumentTagRepository.writeDocumentTags(
+          {
+            workspaceId: this.#dependencies.workspaceId,
+            resourceId: snapshot.resourceId,
+            snapshotId,
+            expectedRevision: input.expectedRevision,
+            revisionId: deriveInformationDocumentTagRevisionId(
+              snapshotId,
+              input.expectedRevision + 1,
+            ),
+            value,
+          },
+        );
+      if (outcome === 'stale') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'stale_document_tag_revision'}),
+        });
+      }
+      const current =
+        await this.#dependencies.informationDocumentTagRepository.loadCurrentDocumentTags(
+          this.#dependencies.workspaceId,
+          input.includePrivate,
+        );
+      const documentTags = current.find(
+        (candidate) => candidate.snapshotId === snapshotId,
+      );
+      if (documentTags === undefined) {
+        throw new Error('Committed document tags were not readable.');
+      }
+      return httpResult(200, {
+        status: outcome,
+        documentTags,
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
   public async exportWorkspaceBundle(): Promise<M1cHttpResult> {
     try {
       const summary =
@@ -885,6 +1071,47 @@ function decodeEntrySearchBody(
       : {domainKeyword: domainKeyword as EntryDomainKeyword}),
     includePrivate,
     limit,
+  });
+}
+
+function decodeDocumentTagWriteBody(
+  body: unknown,
+  requireTags: boolean,
+):
+  | Readonly<{
+      expectedRevision: number;
+      includePrivate: boolean;
+      tags?: readonly string[];
+    }>
+  | undefined {
+  if (!isRecord(body)) return undefined;
+  const includePrivate = body.includePrivate ?? false;
+  if (
+    typeof body.expectedRevision !== 'number' ||
+    !Number.isSafeInteger(body.expectedRevision) ||
+    body.expectedRevision < 0 ||
+    body.expectedRevision > 2_147_483_647 ||
+    typeof includePrivate !== 'boolean'
+  ) {
+    return undefined;
+  }
+  if (!requireTags) {
+    if (body.tags !== undefined) return undefined;
+    return Object.freeze({
+      expectedRevision: body.expectedRevision,
+      includePrivate,
+    });
+  }
+  if (
+    !Array.isArray(body.tags) ||
+    !body.tags.every((value) => typeof value === 'string')
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    expectedRevision: body.expectedRevision,
+    includePrivate,
+    tags: Object.freeze([...body.tags] as string[]),
   });
 }
 

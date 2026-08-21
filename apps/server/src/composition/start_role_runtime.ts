@@ -115,6 +115,8 @@ export async function startRoleRuntime(
           knowledgeReadRepository: repositories.knowledgeRead,
           retrievalRepository: repositories.retrieval,
           informationEntryRepository: repositories.informationEntries,
+          informationDocumentTagRepository:
+            repositories.informationDocumentTags,
           workspaceTransfer: new M1cWorkspaceTransfer({
             repository: repositories.workspaceTransfer,
             blobStore: storage.blobStore,

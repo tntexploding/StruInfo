@@ -126,6 +126,22 @@ describe('M1C product workspaces', () => {
     const markup = renderToStaticMarkup(
       <InformationEntryWorkspace
         snapshots={[REVIEW_EVIDENCE]}
+        onListDocuments={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {
+              status: 'ok',
+              totalCount: 1,
+              documents: [
+                {
+                  ...REVIEW_EVIDENCE,
+                  entryCount: 0,
+                  annotatedEntryCount: 0,
+                },
+              ],
+            },
+          })
+        }
         onMaterialize={() =>
           Promise.resolve({
             statusCode: 201,
@@ -143,6 +159,18 @@ describe('M1C product workspaces', () => {
             body: {status: 'unchanged'},
           })
         }
+        onAggregateDocumentTags={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {status: 'unchanged'},
+          })
+        }
+        onReviseDocumentTags={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {status: 'unchanged'},
+          })
+        }
         onSearch={() =>
           Promise.resolve({
             statusCode: 200,
@@ -154,6 +182,7 @@ describe('M1C product workspaces', () => {
     );
 
     expect(markup).toContain('文档条目');
+    expect(markup).toContain('来源文档导航');
     expect(markup).toContain('按结构生成条目');
     expect(markup).toContain('正文或关键词');
     expect(markup).toContain('类型关键词');

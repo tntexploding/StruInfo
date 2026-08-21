@@ -7,7 +7,10 @@ import {
   type EntryDomainKeyword,
   type EntryTypeKeyword,
   type EvidenceSnapshotSummary,
+  type InformationDocumentTagWriteResponse,
   type InformationEntry,
+  type InformationEntryDocumentListResponse,
+  type InformationEntryDocumentView,
   type InformationEntryMaterializeResponse,
   type InformationEntryRevisionResponse,
   type InformationEntrySearchResponse,
@@ -52,6 +55,14 @@ type EntryViewState =
     }>
   | Readonly<{status: 'error'; message: string}>;
 
+type DocumentViewState =
+  | Readonly<{status: 'loading'}>
+  | Readonly<{
+      status: 'ready';
+      response: Extract<InformationEntryDocumentListResponse, {status: 'ok'}>;
+    }>
+  | Readonly<{status: 'error'; message: string}>;
+
 export interface InformationEntryWorkspaceProps {
   readonly snapshots: readonly Readonly<EvidenceSnapshotSummary>[];
   readonly onMaterialize: (
@@ -64,6 +75,17 @@ export interface InformationEntryWorkspaceProps {
   readonly onSearch: (
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationEntrySearchResponse>>;
+  readonly onListDocuments: (
+    includePrivate: boolean,
+  ) => Promise<M1cHttpResponse<InformationEntryDocumentListResponse>>;
+  readonly onAggregateDocumentTags: (
+    snapshotId: string,
+    body: unknown,
+  ) => Promise<M1cHttpResponse<InformationDocumentTagWriteResponse>>;
+  readonly onReviseDocumentTags: (
+    snapshotId: string,
+    body: unknown,
+  ) => Promise<M1cHttpResponse<InformationDocumentTagWriteResponse>>;
   readonly onOpenEvidence: (
     snapshotId: string,
     fragmentId: string | undefined,
@@ -73,9 +95,12 @@ export interface InformationEntryWorkspaceProps {
 
 export function InformationEntryWorkspace({
   snapshots,
+  onAggregateDocumentTags,
+  onListDocuments,
   onMaterialize,
   onOpenEvidence,
   onRevise,
+  onReviseDocumentTags,
   onSearch,
 }: InformationEntryWorkspaceProps) {
   const [query, setQuery] = useState('');
@@ -86,9 +111,32 @@ export function InformationEntryWorkspace({
   );
   const [includePrivate, setIncludePrivate] = useState(false);
   const [view, setView] = useState<EntryViewState>({status: 'loading'});
+  const [documentView, setDocumentView] = useState<DocumentViewState>({
+    status: 'loading',
+  });
   const [selectedEntryId, setSelectedEntryId] = useState<string>();
   const [feedback, setFeedback] = useState<ActionFeedback>();
   const [materializing, setMaterializing] = useState(false);
+
+  const refreshDocuments = useCallback(async () => {
+    setDocumentView({status: 'loading'});
+    try {
+      const response = await onListDocuments(includePrivate);
+      if (response.body.status !== 'ok') {
+        setDocumentView({
+          status: 'error',
+          message: describeFailure(response.body),
+        });
+        return;
+      }
+      setDocumentView({status: 'ready', response: response.body});
+    } catch {
+      setDocumentView({
+        status: 'error',
+        message: '无法读取 Document 聚合视图；现有 Entry 没有被修改。',
+      });
+    }
+  }, [includePrivate, onListDocuments]);
 
   const executeSearch = useCallback(async () => {
     setView({status: 'loading'});
@@ -126,12 +174,23 @@ export function InformationEntryWorkspace({
     globalThis.queueMicrotask(() => void executeSearch());
   }, [executeSearch]);
 
+  useEffect(() => {
+    globalThis.queueMicrotask(() => void refreshDocuments());
+  }, [refreshDocuments]);
+
   const selectedEntry = useMemo(() => {
     if (view.status !== 'ready') return undefined;
     return view.response.items.find(
       (item) => item.entry.entryId === selectedEntryId,
     )?.entry;
   }, [selectedEntryId, view]);
+
+  const selectedDocument = useMemo(() => {
+    if (documentView.status !== 'ready' || snapshotId === '') return undefined;
+    return documentView.response.documents.find(
+      (document) => document.snapshotId === snapshotId,
+    );
+  }, [documentView, snapshotId]);
 
   async function materialize() {
     if (snapshotId === '' || materializing) {
@@ -173,6 +232,7 @@ export function InformationEntryWorkspace({
             : '幂等重试没有创建重复条目或修订。',
       });
       await executeSearch();
+      await refreshDocuments();
     } catch {
       setFeedback({
         kind: 'error',
@@ -205,6 +265,16 @@ export function InformationEntryWorkspace({
           来源绑定 · 无需 AI
         </span>
       </header>
+
+      <InformationDocumentNavigator
+        state={documentView}
+        selectedSnapshotId={snapshotId}
+        onSelect={(nextSnapshotId) => {
+          setFeedback(undefined);
+          setSnapshotId(nextSnapshotId);
+        }}
+        onRetry={() => void refreshDocuments()}
+      />
 
       <section
         className="entry-command-panel"
@@ -317,6 +387,27 @@ export function InformationEntryWorkspace({
         <ActionNotice feedback={feedback} />
       </section>
 
+      {selectedDocument === undefined ? null : (
+        <InformationDocumentPanel
+          key={`${selectedDocument.snapshotId}:${selectedDocument.currentTags?.revision.toString() ?? '0'}`}
+          document={selectedDocument}
+          includePrivate={includePrivate}
+          onOpenDocument={() => {
+            onOpenEvidence(
+              selectedDocument.snapshotId,
+              undefined,
+              selectedDocument.isPrivate === true,
+            );
+          }}
+          onAggregate={onAggregateDocumentTags}
+          onRevise={onReviseDocumentTags}
+          onChanged={async (nextFeedback) => {
+            setFeedback(nextFeedback);
+            await refreshDocuments();
+          }}
+        />
+      )}
+
       {view.status === 'loading' ? (
         <div className="entry-loading" role="status">
           正在读取当前条目…
@@ -387,10 +478,14 @@ export function InformationEntryWorkspace({
               entry={selectedEntry}
               includePrivate={includePrivate}
               onOpenEvidence={onOpenEvidence}
+              onLocateDocument={() => {
+                setSnapshotId(selectedEntry.snapshotId);
+              }}
               onRevise={onRevise}
               onSaved={async (nextFeedback) => {
                 setFeedback(nextFeedback);
                 await executeSearch();
+                await refreshDocuments();
               }}
             />
           )}
@@ -400,16 +495,307 @@ export function InformationEntryWorkspace({
   );
 }
 
+function InformationDocumentNavigator({
+  onRetry,
+  onSelect,
+  selectedSnapshotId,
+  state,
+}: {
+  readonly onRetry: () => void;
+  readonly onSelect: (snapshotId: string) => void;
+  readonly selectedSnapshotId: string;
+  readonly state: DocumentViewState;
+}) {
+  return (
+    <section
+      className="entry-document-navigator"
+      aria-labelledby="entry-document-navigator-title"
+    >
+      <header className="console-heading">
+        <div>
+          <p className="section-index">DOCUMENT / ENTRY MAP</p>
+          <h2 id="entry-document-navigator-title">来源文档导航</h2>
+        </div>
+        <span className="record-count">
+          {state.status === 'ready'
+            ? `${state.response.totalCount.toString()} 份`
+            : '读取中'}
+        </span>
+      </header>
+      {state.status === 'error' ? (
+        <div className="entry-document-navigator__error" role="alert">
+          <span>{state.message}</span>
+          <button className="text-action" type="button" onClick={onRetry}>
+            重试
+          </button>
+        </div>
+      ) : state.status === 'loading' ? (
+        <p className="entry-document-navigator__loading" role="status">
+          正在汇总 Document 与 Entry…
+        </p>
+      ) : (
+        <div className="entry-document-navigator__rail">
+          <button
+            type="button"
+            aria-pressed={selectedSnapshotId === ''}
+            data-active={selectedSnapshotId === ''}
+            onClick={() => {
+              onSelect('');
+            }}
+          >
+            <strong>全部文档</strong>
+            <small>
+              {state.response.documents
+                .reduce((sum, document) => sum + document.entryCount, 0)
+                .toString()}{' '}
+              Entries
+            </small>
+          </button>
+          {state.response.documents.map((document) => (
+            <button
+              key={document.snapshotId}
+              type="button"
+              aria-pressed={selectedSnapshotId === document.snapshotId}
+              data-active={selectedSnapshotId === document.snapshotId}
+              onClick={() => {
+                onSelect(document.snapshotId);
+              }}
+            >
+              <strong>{document.sourceKey}</strong>
+              <small>
+                {document.entryCount.toString()} Entries ·{' '}
+                {(document.currentTags?.value.tags.length ?? 0).toString()} 标签
+                {document.isPrivate === true ? ' · 私密' : ''}
+              </small>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function InformationDocumentPanel({
+  document,
+  includePrivate,
+  onAggregate,
+  onChanged,
+  onOpenDocument,
+  onRevise,
+}: {
+  readonly document: Readonly<InformationEntryDocumentView>;
+  readonly includePrivate: boolean;
+  readonly onAggregate: InformationEntryWorkspaceProps['onAggregateDocumentTags'];
+  readonly onChanged: (feedback: ActionFeedback) => Promise<void>;
+  readonly onOpenDocument: () => void;
+  readonly onRevise: InformationEntryWorkspaceProps['onReviseDocumentTags'];
+}) {
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [tagsText, setTagsText] = useState(
+    document.currentTags?.value.tags
+      .map((tag) => tag.displayValue)
+      .join('，') ?? '',
+  );
+  const [localFeedback, setLocalFeedback] = useState<ActionFeedback>();
+  const expectedRevision = document.currentTags?.revision ?? 0;
+
+  async function aggregate() {
+    if (busy) return;
+    setBusy(true);
+    setLocalFeedback(undefined);
+    try {
+      const response = await onAggregate(document.snapshotId, {
+        expectedRevision,
+        includePrivate,
+      });
+      if (
+        response.body.status !== 'applied' &&
+        response.body.status !== 'unchanged'
+      ) {
+        setLocalFeedback({
+          kind: 'error',
+          title: '文档标签没有更新',
+          detail: describeFailure(response.body),
+        });
+        return;
+      }
+      await onChanged({
+        kind: 'success',
+        title:
+          response.body.status === 'applied'
+            ? '文档标签已重新聚合'
+            : '聚合结果没有变化',
+        detail: '全文命中频次决定主顺序，Entry 关键词覆盖率作为辅助证据。',
+      });
+    } catch {
+      setLocalFeedback({
+        kind: 'error',
+        title: '本地接口不可达',
+        detail: '没有创建标签修订；Document 与 Entry 保持不变。',
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function save(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    const tags = tagsText
+      .split(/[，,\n]/u)
+      .map((value) => value.trim())
+      .filter((value) => value !== '');
+    setBusy(true);
+    setLocalFeedback(undefined);
+    try {
+      const response = await onRevise(document.snapshotId, {
+        expectedRevision,
+        includePrivate,
+        tags,
+      });
+      if (
+        response.body.status !== 'applied' &&
+        response.body.status !== 'unchanged'
+      ) {
+        setLocalFeedback({
+          kind: 'error',
+          title: '人工标签没有保存',
+          detail: describeFailure(response.body),
+        });
+        return;
+      }
+      setEditing(false);
+      await onChanged({
+        kind: 'success',
+        title:
+          response.body.status === 'applied'
+            ? '人工标签修订已保存'
+            : '人工标签没有变化',
+        detail: '这次修改独立成版；后续重新聚合也必须由用户明确触发。',
+      });
+    } catch {
+      setLocalFeedback({
+        kind: 'error',
+        title: '本地接口不可达',
+        detail: '没有创建人工标签修订。',
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section
+      className="entry-document-panel"
+      aria-labelledby="entry-document-panel-title"
+    >
+      <header className="console-heading">
+        <div>
+          <p className="section-index">CURRENT DOCUMENT</p>
+          <h2 id="entry-document-panel-title">{document.sourceKey}</h2>
+          <p>
+            {document.entryCount.toString()} 个 Entry ·{' '}
+            {document.annotatedEntryCount.toString()} 个已标注
+            {document.currentTags === undefined
+              ? ' · 尚无文档标签'
+              : ` · 标签修订 r${document.currentTags.revision.toString()}`}
+          </p>
+        </div>
+        <button
+          className="secondary-action"
+          type="button"
+          onClick={onOpenDocument}
+        >
+          查看完整 Document
+        </button>
+      </header>
+      <div className="entry-document-panel__body">
+        <div>
+          <div className="entry-document-tags" aria-label="当前文档标签">
+            {(document.currentTags?.value.tags.length ?? 0) === 0 ? (
+              <span className="entry-document-tags__empty">
+                标注 Entry 的内容关键词后，可按全文倾向聚合文档标签。
+              </span>
+            ) : (
+              document.currentTags?.value.tags.map((tag) => (
+                <span key={tag.normalizedValue} className="entry-document-tag">
+                  <strong>{tag.displayValue}</strong>
+                  <small>
+                    全文 {tag.fullTextOccurrences.toString()} · Entry{' '}
+                    {tag.entryCoverageCount.toString()}/
+                    {document.currentTags?.value.entryCount.toString()}
+                  </small>
+                </span>
+              ))
+            )}
+          </div>
+          <p className="entry-document-panel__rule">
+            {document.currentTags === undefined
+              ? '尚未执行聚合'
+              : `${document.currentTags.value.revisionKind === 'manual' ? '人工修订' : '确定性聚合'} · ${document.currentTags.value.ruleVersion}`}
+          </p>
+        </div>
+        <div className="entry-document-panel__actions">
+          <button
+            className="secondary-action"
+            type="button"
+            disabled={busy}
+            onClick={() => void aggregate()}
+          >
+            {busy ? '处理中…' : '按全文重新聚合'}
+          </button>
+          <button
+            className="secondary-action"
+            type="button"
+            onClick={() => {
+              setEditing((current) => !current);
+            }}
+          >
+            {editing ? '取消编辑' : '人工编辑标签'}
+          </button>
+        </div>
+      </div>
+      {editing ? (
+        <form
+          className="entry-document-tag-editor"
+          onSubmit={(event) => {
+            void save(event);
+          }}
+        >
+          <label className="field field--full">
+            <span>文档标签（逗号或换行分隔）</span>
+            <textarea
+              rows={3}
+              value={tagsText}
+              onChange={(event) => {
+                setTagsText(event.currentTarget.value);
+              }}
+              placeholder="留空并保存可清除当前文档标签"
+            />
+          </label>
+          <button className="primary-action" type="submit" disabled={busy}>
+            保存标签修订
+          </button>
+        </form>
+      ) : null}
+      <ActionNotice feedback={localFeedback} />
+    </section>
+  );
+}
+
 function InformationEntryEditor({
   entry,
   includePrivate,
   onOpenEvidence,
+  onLocateDocument,
   onRevise,
   onSaved,
 }: {
   readonly entry: Readonly<InformationEntry>;
   readonly includePrivate: boolean;
   readonly onOpenEvidence: InformationEntryWorkspaceProps['onOpenEvidence'];
+  readonly onLocateDocument: () => void;
   readonly onRevise: InformationEntryWorkspaceProps['onRevise'];
   readonly onSaved: (feedback: ActionFeedback) => Promise<void>;
 }) {
@@ -547,19 +933,28 @@ function InformationEntryEditor({
             {entry.value.titlePath || '未命名条目'}
           </h2>
         </div>
-        <button
-          className="secondary-action"
-          type="button"
-          onClick={() => {
-            onOpenEvidence(
-              entry.snapshotId,
-              entry.value.fragmentIds[0],
-              entry.value.isPrivate,
-            );
-          }}
-        >
-          查看精确来源
-        </button>
+        <div className="entry-editor__document-actions">
+          <button
+            className="secondary-action"
+            type="button"
+            onClick={onLocateDocument}
+          >
+            返回所属 Document
+          </button>
+          <button
+            className="secondary-action"
+            type="button"
+            onClick={() => {
+              onOpenEvidence(
+                entry.snapshotId,
+                entry.value.fragmentIds[0],
+                entry.value.isPrivate,
+              );
+            }}
+          >
+            查看精确来源
+          </button>
+        </div>
       </header>
       <form
         className="entry-editor-form"

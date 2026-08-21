@@ -5,9 +5,11 @@ import type {
   EvidenceSnapshot,
   EvidenceSnapshotSummary,
   InformationEntryListResponse,
+  InformationEntryDocumentListResponse,
   InformationEntryMaterializeResponse,
   InformationEntryRevisionResponse,
   InformationEntrySearchResponse,
+  InformationDocumentTagWriteResponse,
   KnowledgeItemReadResponse,
   KnowledgeSearchResponse,
   M1cHttpResponse,
@@ -100,6 +102,19 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntrySearchResponse>>;
+  listInformationEntryDocuments(
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryDocumentListResponse>>;
+  aggregateInformationDocumentTags(
+    snapshotId: string,
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationDocumentTagWriteResponse>>;
+  reviseInformationDocumentTags(
+    snapshotId: string,
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationDocumentTagWriteResponse>>;
   exportWorkspaceBundle(
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<WorkspaceBundleTransferResponse>>;
@@ -140,6 +155,9 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     listInformationEntries: reject,
     reviseInformationEntry: reject,
     searchInformationEntries: reject,
+    listInformationEntryDocuments: reject,
+    aggregateInformationDocumentTags: reject,
+    reviseInformationDocumentTags: reject,
     exportWorkspaceBundle: reject,
     restoreWorkspaceBundle: reject,
   });
@@ -242,6 +260,23 @@ export function createM1cApiClient(
         body,
         options,
       ),
+    listInformationEntryDocuments: (options) =>
+      get<InformationEntryDocumentListResponse>(
+        `api/v1/entry-documents${privateOnlyQuery(options?.includePrivate === true)}`,
+        options,
+      ),
+    aggregateInformationDocumentTags: (snapshotId, body, options) =>
+      post<InformationDocumentTagWriteResponse>(
+        `api/v1/entry-documents/${encodeURIComponent(snapshotId)}/tags/aggregate`,
+        body,
+        options,
+      ),
+    reviseInformationDocumentTags: (snapshotId, body, options) =>
+      put<InformationDocumentTagWriteResponse>(
+        `api/v1/entry-documents/${encodeURIComponent(snapshotId)}/tags`,
+        body,
+        options,
+      ),
     exportWorkspaceBundle: (options) =>
       post<WorkspaceBundleTransferResponse>(
         'api/v1/workspace-bundles/export',
@@ -267,6 +302,10 @@ function entryQuery(
   if (includePrivate) parameters.set('includePrivate', 'true');
   const value = parameters.toString();
   return value === '' ? '' : `?${value}`;
+}
+
+function privateOnlyQuery(includePrivate: boolean): string {
+  return includePrivate ? '?includePrivate=true' : '';
 }
 
 async function request<T>(
