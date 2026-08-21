@@ -3,11 +3,17 @@ import {
   M1C_DOMAIN_BUNDLE_SCHEMA,
   M1C_DOMAIN_TABLES,
   normalizeM1cDomainSnapshot,
-  type M1cDomainSnapshot,
 } from '../../../workspace_transfer/m1c_domain_bundle.js';
+import {
+  assertM1dEntryWorkspace,
+  M1D_ENTRY_BUNDLE_SCHEMA,
+  M1D_ENTRY_TABLES,
+  normalizeM1dEntrySnapshot,
+} from '../../../workspace_transfer/m1d_entry_bundle.js';
 import {
   type M1cDomainTransferRepositoryPort,
   M1cDomainTransferRepositoryError,
+  type M1cWorkspaceTransferSnapshot,
 } from '../../../workspace_transfer/m1c_workspace_transfer.js';
 
 import type {
@@ -36,46 +42,48 @@ export class PostgresM1cDomainTransferRepository implements M1cDomainTransferRep
 
   public async exportWorkspace(
     effectiveWorkspaceId: string,
-  ): Promise<Readonly<M1cDomainSnapshot>> {
+  ): Promise<Readonly<M1cWorkspaceTransferSnapshot>> {
     const workspaceId = canonicalUuid(effectiveWorkspaceId);
-    let rawTables: readonly Readonly<{
-      name: string;
-      rows: readonly unknown[];
-    }>[];
+    let rawSnapshot: Readonly<{
+      domainTables: readonly RawTableSnapshot[];
+      entryTables: readonly RawTableSnapshot[];
+    }>;
     try {
-      rawTables = await runPostgresTransaction(
+      rawSnapshot = await runPostgresTransaction(
         this.#pool,
         'repeatable_read_only',
         async (client) => {
-          const tables = [];
-          for (const descriptor of M1C_DOMAIN_TABLES) {
-            const result = await client.query<Readonly<{row_payload: unknown}>>(
-              selectTableSql(descriptor.name),
-              [workspaceId],
-            );
-            tables.push(
-              Object.freeze({
-                name: descriptor.name,
-                rows: Object.freeze(result.rows.map((row) => row.row_payload)),
-              }),
-            );
-          }
-          return Object.freeze(tables);
+          const domainTables = await readTables(
+            client,
+            workspaceId,
+            M1C_DOMAIN_TABLES,
+          );
+          const entryTables = await readTables(
+            client,
+            workspaceId,
+            M1D_ENTRY_TABLES,
+          );
+          return Object.freeze({domainTables, entryTables});
         },
       );
     } catch {
       throw new M1cDomainTransferRepositoryError('repository_failed');
     }
-    if (rawTables[0]?.rows.length !== 1) {
+    if (rawSnapshot.domainTables[0]?.rows.length !== 1) {
       throw new M1cDomainTransferRepositoryError('workspace_not_found');
     }
     try {
-      const snapshot = normalizeM1cDomainSnapshot({
+      const domain = normalizeM1cDomainSnapshot({
         schemaVersion: M1C_DOMAIN_BUNDLE_SCHEMA,
-        tables: rawTables,
+        tables: rawSnapshot.domainTables,
       });
-      assertM1cDomainWorkspace(snapshot, workspaceId);
-      return snapshot;
+      const entries = normalizeM1dEntrySnapshot({
+        schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
+        tables: rawSnapshot.entryTables,
+      });
+      assertM1cDomainWorkspace(domain, workspaceId);
+      assertM1dEntryWorkspace(entries, workspaceId);
+      return Object.freeze({domain, entries});
     } catch {
       throw new M1cDomainTransferRepositoryError('repository_failed');
     }
@@ -83,13 +91,16 @@ export class PostgresM1cDomainTransferRepository implements M1cDomainTransferRep
 
   public async restoreEmptyWorkspace(
     effectiveWorkspaceId: string,
-    snapshotInput: Readonly<M1cDomainSnapshot>,
+    snapshotInput: Readonly<M1cWorkspaceTransferSnapshot>,
   ): Promise<void> {
     const workspaceId = canonicalUuid(effectiveWorkspaceId);
-    let snapshot: Readonly<M1cDomainSnapshot>;
+    let snapshot: Readonly<M1cWorkspaceTransferSnapshot>;
     try {
-      snapshot = normalizeM1cDomainSnapshot(snapshotInput);
-      assertM1cDomainWorkspace(snapshot, workspaceId);
+      const domain = normalizeM1cDomainSnapshot(snapshotInput.domain);
+      const entries = normalizeM1dEntrySnapshot(snapshotInput.entries);
+      assertM1cDomainWorkspace(domain, workspaceId);
+      assertM1dEntryWorkspace(entries, workspaceId);
+      snapshot = Object.freeze({domain, entries});
     } catch {
       throw new M1cDomainTransferRepositoryError('repository_failed');
     }
@@ -113,7 +124,7 @@ export class PostgresM1cDomainTransferRepository implements M1cDomainTransferRep
 async function restoreInTransaction(
   client: PostgresClientBoundary,
   workspaceId: string,
-  snapshot: Readonly<M1cDomainSnapshot>,
+  snapshot: Readonly<M1cWorkspaceTransferSnapshot>,
 ): Promise<boolean> {
   await client.query(ACQUIRE_WORKSPACE_TRANSFER_LOCK_SQL, [
     deriveWorkspaceWriteLockKey(workspaceId),
@@ -124,13 +135,42 @@ async function restoreInTransaction(
   );
   if (existing.rows.length !== 0) return false;
   await client.query(DEFER_WORKSPACE_RESTORE_CONSTRAINTS_SQL);
-  for (const tableSnapshot of snapshot.tables) {
+  for (const tableSnapshot of [
+    ...snapshot.domain.tables,
+    ...snapshot.entries.tables,
+  ]) {
     if (tableSnapshot.rows.length === 0) continue;
     await client.query<Row>(insertTableSql(tableSnapshot.name), [
       JSON.stringify(tableSnapshot.rows),
     ]);
   }
   return true;
+}
+
+interface RawTableSnapshot {
+  readonly name: string;
+  readonly rows: readonly unknown[];
+}
+
+async function readTables(
+  client: PostgresClientBoundary,
+  workspaceId: string,
+  descriptors: readonly Readonly<{name: string}>[],
+): Promise<readonly Readonly<RawTableSnapshot>[]> {
+  const tables: Readonly<RawTableSnapshot>[] = [];
+  for (const descriptor of descriptors) {
+    const result = await client.query<Readonly<{row_payload: unknown}>>(
+      selectTableSql(descriptor.name),
+      [workspaceId],
+    );
+    tables.push(
+      Object.freeze({
+        name: descriptor.name,
+        rows: Object.freeze(result.rows.map((row) => row.row_payload)),
+      }),
+    );
+  }
+  return Object.freeze(tables);
 }
 
 function selectTableSql(tableName: string): string {

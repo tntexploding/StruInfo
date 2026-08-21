@@ -12,6 +12,16 @@ import {
   type M1cDomainSnapshot,
 } from './m1c_domain_bundle.js';
 import {
+  assertM1dEntryWorkspace,
+  createEmptyM1dEntrySnapshot,
+  M1D_ENTRY_BUNDLE_CODEC,
+  M1D_ENTRY_BUNDLE_SECTION_TYPE,
+  M1D_ENTRY_BUNDLE_SECTION_VERSION,
+  m1dEntryTableCounts,
+  normalizeM1dEntrySnapshot,
+  type M1dEntrySnapshot,
+} from './m1d_entry_bundle.js';
+import {
   readWorkspaceBundle,
   WorkspaceBundleError,
   writeWorkspaceBundle,
@@ -22,11 +32,18 @@ import {
 } from './workspace_bundle_file_store.js';
 
 export interface M1cDomainTransferRepositoryPort {
-  exportWorkspace(workspaceId: string): Promise<Readonly<M1cDomainSnapshot>>;
+  exportWorkspace(
+    workspaceId: string,
+  ): Promise<Readonly<M1cWorkspaceTransferSnapshot>>;
   restoreEmptyWorkspace(
     workspaceId: string,
-    snapshot: Readonly<M1cDomainSnapshot>,
+    snapshot: Readonly<M1cWorkspaceTransferSnapshot>,
   ): Promise<void>;
+}
+
+export interface M1cWorkspaceTransferSnapshot {
+  readonly domain: Readonly<M1cDomainSnapshot>;
+  readonly entries: Readonly<M1dEntrySnapshot>;
 }
 
 export type M1cDomainTransferRepositoryErrorCode =
@@ -97,16 +114,16 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
   public async exportWorkspace(
     workspaceId: string,
   ): Promise<Readonly<M1cWorkspaceTransferSummary>> {
-    let snapshot: Readonly<M1cDomainSnapshot>;
+    let snapshot: Readonly<M1cWorkspaceTransferSnapshot>;
     try {
-      snapshot = normalizeM1cDomainSnapshot(
+      snapshot = normalizeTransferSnapshot(
         await this.#dependencies.repository.exportWorkspace(workspaceId),
+        workspaceId,
       );
-      assertM1cDomainWorkspace(snapshot, workspaceId);
     } catch (error) {
       throw mapRepositoryError(error);
     }
-    const references = m1cDomainBlobReferences(snapshot);
+    const references = m1cDomainBlobReferences(snapshot.domain);
     await verifyBlobReferences(this.#dependencies.blobStore, references);
     const exportedAt = (this.#dependencies.now ?? defaultNow)();
     let bytes: Uint8Array;
@@ -119,12 +136,17 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
             {
               type: M1C_DOMAIN_BUNDLE_SECTION_TYPE,
               version: M1C_DOMAIN_BUNDLE_SECTION_VERSION,
-              value: snapshot,
+              value: snapshot.domain,
+            },
+            {
+              type: M1D_ENTRY_BUNDLE_SECTION_TYPE,
+              version: M1D_ENTRY_BUNDLE_SECTION_VERSION,
+              value: snapshot.entries,
             },
           ],
           blobReferences: references,
         },
-        [M1C_DOMAIN_BUNDLE_CODEC],
+        [M1C_DOMAIN_BUNDLE_CODEC, M1D_ENTRY_BUNDLE_CODEC],
       );
     } catch {
       throw new M1cWorkspaceTransferError('bundle_invalid');
@@ -140,7 +162,7 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
         byteLength: stored.byteLength,
         sha256: stored.sha256,
         blobCount: references.length,
-        tableCounts: m1cDomainTableCounts(snapshot),
+        tableCounts: transferTableCounts(snapshot),
       });
     } catch {
       throw new M1cWorkspaceTransferError('storage_failed');
@@ -164,24 +186,36 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
       throw new M1cWorkspaceTransferError('storage_failed');
     }
 
-    let snapshot: Readonly<M1cDomainSnapshot>;
+    let snapshot: Readonly<M1cWorkspaceTransferSnapshot>;
     let references;
     try {
-      const bundle = readWorkspaceBundle(bytes, [M1C_DOMAIN_BUNDLE_CODEC]);
+      const bundle = readWorkspaceBundle(bytes, [
+        M1C_DOMAIN_BUNDLE_CODEC,
+        M1D_ENTRY_BUNDLE_CODEC,
+      ]);
       if (bundle.workspaceId !== workspaceId) {
         throw new M1cWorkspaceTransferError('workspace_mismatch');
       }
-      const section = bundle.sections[0];
-      if (
-        bundle.sections.length !== 1 ||
-        section?.type !== M1C_DOMAIN_BUNDLE_SECTION_TYPE ||
-        section.version !== M1C_DOMAIN_BUNDLE_SECTION_VERSION
-      ) {
+      const domainSection = bundle.sections.find(
+        (section) => section.type === M1C_DOMAIN_BUNDLE_SECTION_TYPE,
+      );
+      const entrySection = bundle.sections.find(
+        (section) => section.type === M1D_ENTRY_BUNDLE_SECTION_TYPE,
+      );
+      if (domainSection === undefined || bundle.sections.length > 2) {
         throw new M1cWorkspaceTransferError('bundle_invalid');
       }
-      snapshot = normalizeM1cDomainSnapshot(section.value);
-      assertM1cDomainWorkspace(snapshot, workspaceId);
-      references = m1cDomainBlobReferences(snapshot);
+      snapshot = normalizeTransferSnapshot(
+        {
+          domain: normalizeM1cDomainSnapshot(domainSection.value),
+          entries:
+            entrySection === undefined
+              ? createEmptyM1dEntrySnapshot()
+              : normalizeM1dEntrySnapshot(entrySection.value),
+        },
+        workspaceId,
+      );
+      references = m1cDomainBlobReferences(snapshot.domain);
       if (!sameBlobReferences(references, bundle.blobReferences)) {
         throw new M1cWorkspaceTransferError('bundle_invalid');
       }
@@ -206,9 +240,29 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
       fileName,
       byteLength: bytes.byteLength,
       blobCount: references.length,
-      tableCounts: m1cDomainTableCounts(snapshot),
+      tableCounts: transferTableCounts(snapshot),
     });
   }
+}
+
+function normalizeTransferSnapshot(
+  value: Readonly<M1cWorkspaceTransferSnapshot>,
+  workspaceId: string,
+): Readonly<M1cWorkspaceTransferSnapshot> {
+  const domain = normalizeM1cDomainSnapshot(value.domain);
+  const entries = normalizeM1dEntrySnapshot(value.entries);
+  assertM1cDomainWorkspace(domain, workspaceId);
+  assertM1dEntryWorkspace(entries, workspaceId);
+  return Object.freeze({domain, entries});
+}
+
+function transferTableCounts(
+  snapshot: Readonly<M1cWorkspaceTransferSnapshot>,
+): Readonly<Record<string, number>> {
+  return Object.freeze({
+    ...m1cDomainTableCounts(snapshot.domain),
+    ...m1dEntryTableCounts(snapshot.entries),
+  });
 }
 
 function sameBlobReferences(
@@ -283,5 +337,15 @@ export function createEmptyM1cDomainSnapshot(
           ? [{workspace_id: workspaceId, created_at: createdAt}]
           : [],
     })),
+  });
+}
+
+export function createEmptyM1cWorkspaceTransferSnapshot(
+  workspaceId: string,
+  createdAt: string,
+): M1cWorkspaceTransferSnapshot {
+  return Object.freeze({
+    domain: createEmptyM1cDomainSnapshot(workspaceId, createdAt),
+    entries: createEmptyM1dEntrySnapshot(),
   });
 }

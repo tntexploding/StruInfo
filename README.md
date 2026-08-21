@@ -50,4 +50,4 @@ M0-P 探针代码只作为架构证据，不直接复用为生产实现。
 
 `M1C-PERSIST`、`M1C-API`、`M1C-WEB`、`M1C-VERTICAL`、`M1C-EXPAND`、`M1C-PRIVATE` 和 `M1C-USE-1`–`6` 均已完成：同一回环监听器提供资料/证据、快速审核、知识维护、搜索/出处四个工作区，工作区与 Blob 根仍由包体外配置选择。固定 `ruanyf/weekly` issue 405 已在真实浏览器和 disposable PostgreSQL 18 上完成代表性审核、知识项/关系、Framework 重组、撤回修订和精确原文回溯；固定 398–407 期又通过正式导入器写入 10 个 Snapshot、2,639 个正式 Fragment。网页从持久化 `DocumentNode.nodeKind` 精确重建 345 个 section 审核单元，并把已审核且准入的条目组成“审核转知识”队列；短条目可直接确认后写入，成功后由来源过滤搜索回读并自动前进，复杂拆分与关系仍进入高级编辑器。
 
-当前 36 张领域表可以导出为包体外 Bundle，并在同一 Workspace ID 的空数据库中恢复；Blob 仍由外部内容寻址数据根单独保管。下一步由维护者直接搜索、修订和关联这些真实知识，只实现使用过程中出现的材料性产品阻碍，不预先建设批处理或偏好模型。正式 TM2 harness、容器/Linux/发布认证、查询下推和索引、复杂知识视图、AI 与偏好学习继续独立排期；未完成的正式门会如实记录，但不阻塞产品主线。
+M1D-1/M1D-2 已把 `InformationEntry`、文档标签和 Document ↔ Entry 导航接入同一本地应用；所选外部工作区已应用 `000008`/`000009`，issue 398 可生成 34 个来源绑定 Entry。当前 45 张工作区表可通过 `struinfo.m1c-domain.v1` 与 `struinfo.m1d-entry.v1` 两个分区导出到包体外 Bundle，并在同一 Workspace ID 的空数据库中原子恢复；旧的 36 表 Bundle 仍可恢复为空 Entry 状态。Blob 字节和个人 UI 偏好继续由外部数据根单独保管。下一步是 M1D-3 的选择性 Entry 关联，只实现真实使用需要的候选、评分和人工覆盖；正式 TM2、容器/Linux/发布认证、查询下推和索引、AI 与偏好学习继续独立排期，不阻塞产品主线。
