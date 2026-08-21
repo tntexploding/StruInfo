@@ -1,6 +1,15 @@
 import {describe, expect, it, vi} from 'vitest';
 
-import {createEmptyM1cDomainSnapshot} from '../../../workspace_transfer/m1c_workspace_transfer.js';
+import {M1C_DOMAIN_TABLES} from '../../../workspace_transfer/m1c_domain_bundle.js';
+import {
+  M1D_ENTRY_BUNDLE_SCHEMA,
+  M1D_ENTRY_TABLES,
+  normalizeM1dEntrySnapshot,
+} from '../../../workspace_transfer/m1d_entry_bundle.js';
+import {
+  createEmptyM1cWorkspaceTransferSnapshot,
+  type M1cWorkspaceTransferSnapshot,
+} from '../../../workspace_transfer/m1c_workspace_transfer.js';
 import type {
   PostgresClientBoundary,
   PostgresPoolBoundary,
@@ -28,8 +37,14 @@ describe('PostgresM1cDomainTransferRepository', () => {
 
     const snapshot = await repository.exportWorkspace(WORKSPACE_ID);
 
-    expect(snapshot.tables).toHaveLength(36);
-    expect(snapshot.tables[0]).toMatchObject({name: 'workspace'});
+    expect(snapshot.domain.tables).toHaveLength(M1C_DOMAIN_TABLES.length);
+    expect(snapshot.entries.tables).toHaveLength(M1D_ENTRY_TABLES.length);
+    expect(snapshot.domain.tables[0]).toMatchObject({name: 'workspace'});
+    expect(statements).toContainEqual(
+      expect.stringContaining(
+        'FROM struinfo.information_document_tag_value AS t',
+      ),
+    );
     expect(statements[0]).toBe(
       'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY',
     );
@@ -42,7 +57,10 @@ describe('PostgresM1cDomainTransferRepository', () => {
       sql === READ_WORKSPACE_FOR_TRANSFER_SQL ? rows([]) : rows([]),
     );
     const repository = new PostgresM1cDomainTransferRepository(pool);
-    const snapshot = createEmptyM1cDomainSnapshot(WORKSPACE_ID, CREATED_AT);
+    const snapshot = createEmptyM1cWorkspaceTransferSnapshot(
+      WORKSPACE_ID,
+      CREATED_AT,
+    );
 
     await repository.restoreEmptyWorkspace(WORKSPACE_ID, snapshot);
 
@@ -53,7 +71,7 @@ describe('PostgresM1cDomainTransferRepository', () => {
       ),
     );
     expect(parameters).toContainEqual([
-      JSON.stringify(snapshot.tables[0]?.rows),
+      JSON.stringify(snapshot.domain.tables[0]?.rows),
     ]);
     expect(statements.at(-1)).toBe('COMMIT');
   });
@@ -69,12 +87,66 @@ describe('PostgresM1cDomainTransferRepository', () => {
     await expect(
       repository.restoreEmptyWorkspace(
         WORKSPACE_ID,
-        createEmptyM1cDomainSnapshot(WORKSPACE_ID, CREATED_AT),
+        createEmptyM1cWorkspaceTransferSnapshot(WORKSPACE_ID, CREATED_AT),
       ),
     ).rejects.toEqual(expect.objectContaining({code: 'workspace_not_empty'}));
     expect(statements.some((sql) => sql.startsWith('INSERT INTO'))).toBe(false);
   });
+
+  it('rolls back M1C and M1D rows together when Entry restore fails', async () => {
+    const {pool, statements} = createPool((sql) => {
+      if (sql === READ_WORKSPACE_FOR_TRANSFER_SQL) return rows([]);
+      if (sql.startsWith('INSERT INTO struinfo.information_entry ')) {
+        throw new Error('synthetic Entry restore failure');
+      }
+      return rows([]);
+    });
+    const repository = new PostgresM1cDomainTransferRepository(pool);
+
+    await expect(
+      repository.restoreEmptyWorkspace(
+        WORKSPACE_ID,
+        snapshotWithEntry(WORKSPACE_ID, CREATED_AT),
+      ),
+    ).rejects.toMatchObject({code: 'repository_failed'});
+
+    expect(statements).toContainEqual(
+      expect.stringContaining('INSERT INTO struinfo.workspace '),
+    );
+    expect(statements).toContainEqual(
+      expect.stringContaining('INSERT INTO struinfo.information_entry '),
+    );
+    expect(statements.at(-1)).toBe('ROLLBACK');
+  });
 });
+
+function snapshotWithEntry(
+  workspaceId: string,
+  createdAt: string,
+): M1cWorkspaceTransferSnapshot {
+  const empty = createEmptyM1cWorkspaceTransferSnapshot(workspaceId, createdAt);
+  const entries = normalizeM1dEntrySnapshot({
+    schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
+    tables: M1D_ENTRY_TABLES.map((descriptor) => ({
+      name: descriptor.name,
+      rows:
+        descriptor.name === 'information_entry'
+          ? [
+              {
+                workspace_id: workspaceId,
+                entry_id: '33333333-3333-4333-8333-333333333333',
+                resource_id: '44444444-4444-4444-8444-444444444444',
+                snapshot_id: '55555555-5555-4555-8555-555555555555',
+                current_revision: 1,
+                current_revision_id: '66666666-6666-4666-8666-666666666666',
+                created_at: createdAt,
+              },
+            ]
+          : [],
+    })),
+  });
+  return Object.freeze({domain: empty.domain, entries});
+}
 
 function createPool(
   resolveQuery: (

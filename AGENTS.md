@@ -128,18 +128,21 @@ stable Entry identities, append-only revisions, exact Fragment inputs,
 independent content/type/domain keywords and lineage. The typed PostgreSQL
 repository, four workspace-fixed local API operations and the fifth Web
 workspace support split materialization, manual revision, privacy-aware current
-reads and deterministic text/keyword search with exact source return. The
-non-container full quality gate passed; applying the migration to a selected
-external workspace and the later Entry-aware Bundle extension remain ordinary
-product increments, not reasons to reopen historical test-harness hardening.
+reads and deterministic text/keyword search with exact source return.
 M1D-2 now adds forward migration `000009` and a versioned Document-tag projection
 bound to the canonical Snapshot. Deterministic aggregation ranks current Entry
 keyword candidates by full-document occurrence first and Entry coverage second;
 manual edits append their own revision. The local API and Entry workspace provide
 Document ↔ Entry navigation, transparent per-tag evidence metrics and full-source
-return while preserving explicit privacy opt-in. The next main-line increment is
-M1D-3 selective Entry association with rebuildable scores and durable manual
-overrides; do not add AI, vectors or speculative search infrastructure first.
+return while preserving explicit privacy opt-in. M1D-2 closure applied `000008`
+and `000009` to the selected external workspace, materialized issue 398 into 34
+Entries, and extended the same external Workspace Bundle with a separate
+`struinfo.m1d-entry.v1` section. New exports now atomically carry all 45 current
+workspace tables while old one-section M1C Bundles remain readable as an empty
+Entry state; Blob bytes and personal UI preferences remain external. The next
+main-line increment is M1D-3 selective Entry association with rebuildable scores
+and durable manual overrides; do not add AI, vectors or speculative search
+infrastructure first.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable

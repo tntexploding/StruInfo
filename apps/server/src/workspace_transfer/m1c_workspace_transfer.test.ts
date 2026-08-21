@@ -4,16 +4,27 @@ import {describe, expect, it, vi} from 'vitest';
 
 import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
 import {
+  M1C_DOMAIN_BUNDLE_CODEC,
   M1C_DOMAIN_BUNDLE_SCHEMA,
+  M1C_DOMAIN_BUNDLE_SECTION_TYPE,
+  M1C_DOMAIN_BUNDLE_SECTION_VERSION,
   M1C_DOMAIN_TABLES,
   m1cDomainBlobReferences,
   normalizeM1cDomainSnapshot,
   type M1cDomainSnapshot,
 } from './m1c_domain_bundle.js';
 import {
+  M1D_ENTRY_BUNDLE_SCHEMA,
+  M1D_ENTRY_TABLES,
+  normalizeM1dEntrySnapshot,
+} from './m1d_entry_bundle.js';
+import {
+  type M1cDomainTransferRepositoryPort,
   M1cDomainTransferRepositoryError,
   M1cWorkspaceTransfer,
+  type M1cWorkspaceTransferSnapshot,
 } from './m1c_workspace_transfer.js';
+import {writeWorkspaceBundle} from './workspace_bundle.js';
 import type {
   StoredWorkspaceBundleFile,
   WorkspaceBundleFileStore,
@@ -34,7 +45,13 @@ describe('M1C workspace transfer', () => {
     const snapshot = syntheticSnapshot();
     const fileStore = new MemoryBundleFileStore();
     const blobStore = new MemoryBlobStore(BLOB_IDENTITY, BLOB_BYTES);
-    const restoreEmptyWorkspace = vi.fn(() => Promise.resolve());
+    const restoreEmptyWorkspace = vi.fn<
+      M1cDomainTransferRepositoryPort['restoreEmptyWorkspace']
+    >((workspaceId, restoredSnapshot) => {
+      expect(workspaceId).toBe(WORKSPACE_ID);
+      expect(restoredSnapshot.entries.tables).toHaveLength(9);
+      return Promise.resolve();
+    });
     const transfer = new M1cWorkspaceTransfer({
       repository: {
         exportWorkspace: () => Promise.resolve(snapshot),
@@ -54,15 +71,26 @@ describe('M1C workspace transfer', () => {
 
     expect(exported).toMatchObject({
       blobCount: 1,
-      tableCounts: {workspace: 1, evidence_blob: 1},
+      tableCounts: {
+        workspace: 1,
+        evidence_blob: 1,
+        information_entry: 1,
+      },
     });
     expect(new TextDecoder().decode(storedBytes)).not.toContain(
       'synthetic external Blob bytes',
     );
+    expect(new TextDecoder().decode(storedBytes)).toContain(
+      'struinfo.m1d-entry',
+    );
     expect(restored).toMatchObject({
       fileName: exported.fileName,
       blobCount: 1,
-      tableCounts: {workspace: 1, evidence_blob: 1},
+      tableCounts: {
+        workspace: 1,
+        evidence_blob: 1,
+        information_entry: 1,
+      },
     });
     expect(restoreEmptyWorkspace).toHaveBeenCalledExactlyOnceWith(
       WORKSPACE_ID,
@@ -73,7 +101,13 @@ describe('M1C workspace transfer', () => {
   it('rejects cross-workspace restore before repository writes', async () => {
     const snapshot = syntheticSnapshot();
     const fileStore = new MemoryBundleFileStore();
-    const restoreEmptyWorkspace = vi.fn(() => Promise.resolve());
+    const restoreEmptyWorkspace = vi.fn<
+      M1cDomainTransferRepositoryPort['restoreEmptyWorkspace']
+    >((workspaceId, restoredSnapshot) => {
+      expect(workspaceId).toBe(WORKSPACE_ID);
+      expect(restoredSnapshot.domain.tables).toHaveLength(36);
+      return Promise.resolve();
+    });
     const transfer = new M1cWorkspaceTransfer({
       repository: {
         exportWorkspace: () => Promise.resolve(snapshot),
@@ -89,6 +123,60 @@ describe('M1C workspace transfer', () => {
       transfer.restoreWorkspace(OTHER_WORKSPACE_ID, exported.fileName),
     ).rejects.toMatchObject({code: 'workspace_mismatch'});
     expect(restoreEmptyWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('restores a legacy one-section M1C Bundle with an empty Entry section', async () => {
+    const snapshot = syntheticSnapshot();
+    const fileStore = new MemoryBundleFileStore();
+    let restoredSnapshot: Readonly<M1cWorkspaceTransferSnapshot> | undefined;
+    const restoreEmptyWorkspace = vi.fn(
+      (
+        workspaceId: string,
+        snapshotInput: Readonly<M1cWorkspaceTransferSnapshot>,
+      ) => {
+        expect(workspaceId).toBe(WORKSPACE_ID);
+        restoredSnapshot = snapshotInput;
+        return Promise.resolve();
+      },
+    );
+    const bytes = writeWorkspaceBundle(
+      {
+        workspaceId: WORKSPACE_ID,
+        exportedAt: CREATED_AT,
+        sections: [
+          {
+            type: M1C_DOMAIN_BUNDLE_SECTION_TYPE,
+            version: M1C_DOMAIN_BUNDLE_SECTION_VERSION,
+            value: snapshot.domain,
+          },
+        ],
+        blobReferences: [BLOB_IDENTITY],
+      },
+      [M1C_DOMAIN_BUNDLE_CODEC],
+    );
+    const stored = await fileStore.write(WORKSPACE_ID, CREATED_AT, bytes);
+    const transfer = new M1cWorkspaceTransfer({
+      repository: {
+        exportWorkspace: () => Promise.resolve(snapshot),
+        restoreEmptyWorkspace,
+      },
+      blobStore: new MemoryBlobStore(BLOB_IDENTITY, BLOB_BYTES),
+      fileStore,
+    });
+
+    const restored = await transfer.restoreWorkspace(
+      WORKSPACE_ID,
+      stored.fileName,
+    );
+
+    expect(restored.tableCounts.information_entry).toBe(0);
+    expect(restoreEmptyWorkspace).toHaveBeenCalledOnce();
+    expect(restoredSnapshot).toBeDefined();
+    expect(
+      restoredSnapshot?.entries.tables.every(
+        (table) => table.rows.length === 0,
+      ),
+    ).toBe(true);
   });
 
   it('keeps missing Blobs and non-empty targets as visible failures', async () => {
@@ -130,8 +218,8 @@ describe('M1C workspace transfer', () => {
 
   it('rejects table drift and derives the exact Blob manifest', () => {
     const snapshot = syntheticSnapshot();
-    expect(m1cDomainBlobReferences(snapshot)).toEqual([BLOB_IDENTITY]);
-    const raw = JSON.parse(JSON.stringify(snapshot)) as {
+    expect(m1cDomainBlobReferences(snapshot.domain)).toEqual([BLOB_IDENTITY]);
+    const raw = JSON.parse(JSON.stringify(snapshot.domain)) as {
       tables: {name: string; rows: Record<string, unknown>[]}[];
     };
     const firstTable = raw.tables[0];
@@ -144,8 +232,8 @@ describe('M1C workspace transfer', () => {
   });
 });
 
-function syntheticSnapshot(): M1cDomainSnapshot {
-  return normalizeM1cDomainSnapshot({
+function syntheticSnapshot(): M1cWorkspaceTransferSnapshot {
+  const domain: M1cDomainSnapshot = normalizeM1cDomainSnapshot({
     schemaVersion: M1C_DOMAIN_BUNDLE_SCHEMA,
     tables: M1C_DOMAIN_TABLES.map((descriptor) => ({
       name: descriptor.name,
@@ -169,6 +257,27 @@ function syntheticSnapshot(): M1cDomainSnapshot {
             : [],
     })),
   });
+  const entries = normalizeM1dEntrySnapshot({
+    schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
+    tables: M1D_ENTRY_TABLES.map((descriptor) => ({
+      name: descriptor.name,
+      rows:
+        descriptor.name === 'information_entry'
+          ? [
+              {
+                workspace_id: WORKSPACE_ID,
+                entry_id: '44444444-4444-4444-8444-444444444444',
+                resource_id: '55555555-5555-4555-8555-555555555555',
+                snapshot_id: '66666666-6666-4666-8666-666666666666',
+                current_revision: 1,
+                current_revision_id: '77777777-7777-4777-8777-777777777777',
+                created_at: CREATED_AT,
+              },
+            ]
+          : [],
+    })),
+  });
+  return Object.freeze({domain, entries});
 }
 
 class MemoryBlobStore implements BlobStore {

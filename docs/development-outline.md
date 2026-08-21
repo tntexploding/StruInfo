@@ -295,7 +295,7 @@ Blob 边界只接受通过 intrinsic brand 检查的普通字节视图，并立�
 大型正文和媒体优先保留为 Blob 引用，不能通过反复嵌套 base64 形成不可读的 current-version 工件。
 writer contract 与边界测试必须证明每个成功输出都能由相同版本的公开 reader 往返读取；若确定性 encoder 与精确 preflight 已提供同等保证，运行时不要求为每次写入重复解析。
 
-切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload，信封使用 16 MiB 默认预算的规范 UTF-8 JSON，只携带 Blob 身份并固定 `secretHandling=excluded`。M1C-EXPAND 又实现 `struinfo.m1c-domain.v1`：在一致只读事务中导出当前 36 张领域表，核验全部 Blob 引用，在外部 `exports/` 原子落盘，并把同一 `workspaceId` 恢复到空数据库。Blob 字节归档、跨工作区克隆、非空目标合并和生产灾难恢复仍是独立后续能力。
+切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload，信封使用 16 MiB 默认预算的规范 UTF-8 JSON，只携带 Blob 身份并固定 `secretHandling=excluded`。M1C-EXPAND 实现 `struinfo.m1c-domain.v1` 的 36 表一致导出和空库恢复；M1D-2 又增加 `struinfo.m1d-entry.v1`，在同一一致只读事务和原子恢复中携带 6 张 Entry 表与 3 张文档标签表。新 Bundle 共覆盖 45 张工作区表，旧 M1C 单分区文件继续解码为空 Entry 状态；所有文件仍只落到外部 `exports/`。Blob 字节归档、跨工作区克隆、非空目标合并和生产灾难恢复仍是独立后续能力。
 
 Linux 单机部署可先使用受备份保护的持久卷。
 需要多机或对象存储服务时，再增加 S3 兼容适配器；迁移不能改变 Resource、Snapshot 或 Citation ID。
@@ -621,7 +621,8 @@ import -> snapshot -> document nodes/fragments/media
 3. 通过现有本地 HTTP/Web 编辑内容、类型、主/副领域关键词（已完成）；
 4. 按正文和三类关键词搜索当前 Entry，返回精确 Snapshot/Fragment 来源并保持隐私默认隐藏（已完成）；
 5. 通过 `000009`、确定性全文/Entry 覆盖规则和现有本地 Web 完成版本化文档标签、人工
-   标签修订及 Document ↔ Entry 双向导航（已完成）；
+   标签修订及 Document ↔ Entry 双向导航；把 9 张 M1D 表加入独立 Bundle 分区，并在
+   所选外部工作区和一次性空数据库证明迁移、导出、恢复与精确来源一致（已完成）；
 6. 加入索引缩小后的选择性关联候选、可重建基础分和不会被重算覆盖的人工 override（当前）；
 7. 只有实际延迟或找回缺口出现时再加入 `pg_trgm`、中文词项投影、查询下推和额外索引。
 
