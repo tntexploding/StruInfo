@@ -159,6 +159,12 @@ function stubApi(
       Promise.resolve(result(200, {status: 'applied'})),
     searchInformationEntries: () =>
       Promise.resolve(result(200, {status: 'ok', entries: []})),
+    listInformationEntryDocuments: () =>
+      Promise.resolve(result(200, {status: 'ok', documents: []})),
+    aggregateInformationDocumentTags: () =>
+      Promise.resolve(result(200, {status: 'applied'})),
+    reviseInformationDocumentTags: () =>
+      Promise.resolve(result(200, {status: 'applied'})),
     exportWorkspaceBundle: () =>
       Promise.resolve(result(201, {status: 'exported'})),
     restoreWorkspaceBundle: () =>

@@ -494,7 +494,7 @@ async function openProduct(
 }
 
 test.describe('M1C product workspaces', () => {
-  test('exposes the four manual-first workspaces without fabricated AI state', async ({
+  test('exposes the five manual-first workspaces without fabricated AI state', async ({
     page,
   }) => {
     await openProduct(page);
@@ -506,7 +506,10 @@ test.describe('M1C product workspaces', () => {
       page.getByRole('button', {name: '审核', exact: true}),
     ).toBeVisible();
     await expect(
-      page.getByRole('button', {name: '知识维护', exact: true}),
+      page.getByRole('button', {name: '条目', exact: true}),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', {name: '知识', exact: true}),
     ).toBeVisible();
     await expect(
       page.getByRole('button', {name: '搜索', exact: true}),
@@ -757,7 +760,7 @@ test.describe('M1C product workspaces', () => {
     ).toBe(1);
   });
 
-  test('submits fixed Git provenance and a Framework derived from existing revisions', async ({
+  test('submits fixed Git provenance and a Resource derived from existing revisions', async ({
     page,
   }) => {
     const posts = new Map<string, unknown>();
@@ -803,13 +806,13 @@ test.describe('M1C product workspaces', () => {
     ]);
 
     await page.getByRole('button', {name: '关闭来源档案'}).click();
-    await page.getByRole('button', {name: '知识维护', exact: true}).click();
+    await page.getByRole('button', {name: '知识', exact: true}).click();
     await page.getByText('高级拆分、修订与关系编辑', {exact: true}).click();
     const editor = page.locator(
       '.operation-editor:not(.operation-editor--relation)',
     );
-    await editor.locator('input').first().fill('Synthetic framework');
-    await editor.locator('select').nth(0).selectOption('framework');
+    await editor.locator('input').first().fill('Synthetic resource');
+    await editor.locator('select').nth(0).selectOption('resource');
     await editor.locator('select').nth(1).selectOption('inference');
     await editor.locator('select').nth(2).selectOption('pending_review');
     await editor.locator('textarea').nth(0).fill(`item:${ITEM_ID}@1`);
@@ -823,7 +826,7 @@ test.describe('M1C product workspaces', () => {
     expect(knowledgeBody.request.operations).toEqual([
       expect.objectContaining({
         kind: 'put_item',
-        value: expect.objectContaining({knowledgeKind: 'framework'}),
+        value: expect.objectContaining({knowledgeKind: 'resource'}),
         provenance: {
           citations: [],
           fragmentDerivations: [],
@@ -850,7 +853,7 @@ test.describe('M1C product workspaces', () => {
     await page.getByRole('button', {name: '完成本条并继续'}).click();
     await expect(page.getByText('1/2', {exact: true})).toBeVisible();
 
-    await page.getByRole('button', {name: '知识维护', exact: true}).click();
+    await page.getByRole('button', {name: '知识', exact: true}).click();
     await expect(
       page.getByRole('heading', {name: '审核转知识', exact: true}),
     ).toBeVisible();

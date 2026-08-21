@@ -43,6 +43,7 @@ apps/server/migrations/000005_create_evidence_capture_command.sql
 apps/server/migrations/000006_add_private_document_visibility.sql
 apps/server/migrations/000007_add_other_knowledge_kind.sql
 apps/server/migrations/000008_create_information_entry_core.sql
+apps/server/migrations/000009_create_information_document_tags.sql
 ```
 
 The runner is first-party code over the already admitted `pg@8.22.0` driver.
@@ -157,6 +158,15 @@ new database extension or AI dependency. The ordinary runtime needs the typed
 SELECT/INSERT and current-pointer UPDATE authority used by the Entry repository;
 it still must not receive migration-ledger, generic DDL, historical UPDATE or
 DELETE authority.
+
+`000009_create_information_document_tags.sql` adds only the versioned aggregate
+view owned by M1D-2: one tag-set identity per canonical Snapshot, immutable tag
+revisions, and ordered tag values carrying full-text occurrence and current-Entry
+coverage counts. A manual edit is a separate revision kind; it does not rewrite
+Entry keywords or source evidence. The migration stores no document bytes,
+personal vocabulary, preference, seed, AI output, JSON payload, trigger, role, or
+grant. Ordinary runtime access remains limited to typed SELECT/INSERT and the
+single current-pointer UPDATE used by the Document-tag repository.
 
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.

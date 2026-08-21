@@ -2861,6 +2861,8 @@ button {
 }
 
 .entry-command-panel,
+.entry-document-navigator,
+.entry-document-panel,
 .entry-result-list,
 .entry-editor {
   position: relative;
@@ -2870,8 +2872,140 @@ button {
 }
 
 .entry-command-panel,
+.entry-document-panel,
 .entry-editor {
   border-inline-start: var(--si-space-1) solid var(--si-color-signal);
+}
+
+.entry-document-navigator {
+  margin-block-end: var(--si-space-6);
+  padding-block-end: var(--si-space-5);
+}
+
+.entry-document-navigator__rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(15rem, 0.25fr);
+  gap: var(--si-space-3);
+  margin-block-start: var(--si-space-5);
+  padding-block-end: var(--si-space-2);
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.entry-document-navigator__rail button {
+  min-block-size: 4.75rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--si-space-2);
+  padding: var(--si-space-4);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  border-block-start: var(--si-space-1) solid transparent;
+  background: var(--si-color-bg-shell);
+  color: var(--si-color-text-primary);
+  text-align: start;
+}
+
+.entry-document-navigator__rail button:hover,
+.entry-document-navigator__rail button[data-active='true'] {
+  border-block-start-color: var(--si-color-signal);
+  background: var(--si-color-surface-2);
+}
+
+.entry-document-navigator__rail strong,
+.entry-document-navigator__rail small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entry-document-navigator__rail small,
+.entry-document-navigator__loading,
+.entry-document-navigator__error {
+  color: var(--si-color-text-muted);
+  font-family: var(--si-font-mono);
+  font-size: var(--si-text-xs);
+}
+
+.entry-document-navigator__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--si-space-4);
+  margin-block-start: var(--si-space-5);
+}
+
+.entry-document-navigator__loading {
+  margin-block-start: var(--si-space-5);
+}
+
+.entry-document-panel {
+  margin-block-start: var(--si-space-7);
+}
+
+.entry-document-panel .console-heading > div:first-child {
+  min-inline-size: 0;
+}
+
+.entry-document-panel .console-heading h2,
+.entry-document-panel .console-heading p {
+  overflow-wrap: anywhere;
+}
+
+.entry-document-panel__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--si-space-6);
+  margin-block-start: var(--si-space-6);
+}
+
+.entry-document-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--si-space-3);
+}
+
+.entry-document-tag {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--si-space-3);
+  padding: var(--si-space-2) var(--si-space-3);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  border-inline-start: var(--si-space-1) solid var(--si-color-signal);
+  background: var(--si-color-bg-shell);
+}
+
+.entry-document-tag small,
+.entry-document-tags__empty,
+.entry-document-panel__rule {
+  color: var(--si-color-text-muted);
+  font-family: var(--si-font-mono);
+  font-size: var(--si-text-xs);
+}
+
+.entry-document-panel__rule {
+  margin-block-start: var(--si-space-4);
+  overflow-wrap: anywhere;
+}
+
+.entry-document-panel__actions,
+.entry-editor__document-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--si-space-3);
+}
+
+.entry-document-tag-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--si-space-4);
+  margin-block-start: var(--si-space-6);
+  padding-block-start: var(--si-space-5);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
 }
 
 .entry-search-form {
@@ -3396,12 +3530,16 @@ button {
   }
 
   .entry-command-panel,
+  .entry-document-navigator,
+  .entry-document-panel,
   .entry-result-list,
   .entry-editor {
     padding: var(--si-space-5);
   }
 
   .entry-search-form,
+  .entry-document-panel__body,
+  .entry-document-tag-editor,
   .entry-editor-form,
   .entry-workbench {
     grid-template-columns: minmax(0, 1fr);
@@ -3419,6 +3557,17 @@ button {
 
   .entry-result-list ol {
     max-block-size: 22rem;
+  }
+
+  .entry-document-panel__actions,
+  .entry-editor__document-actions {
+    justify-content: stretch;
+  }
+
+  .entry-document-panel__actions .secondary-action,
+  .entry-editor__document-actions .secondary-action,
+  .entry-document-tag-editor .primary-action {
+    inline-size: 100%;
   }
 
   .review-submit-bar,

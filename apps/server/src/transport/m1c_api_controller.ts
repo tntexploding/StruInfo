@@ -195,6 +195,43 @@ export class M1cApiController {
     );
   }
 
+  @Get('entry-documents')
+  public async informationEntryDocuments(
+    @Query('includePrivate') includePrivate: string | undefined,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.listInformationEntryDocuments(
+        parseOptionalBooleanQuery(includePrivate),
+      ),
+    );
+  }
+
+  @Post('entry-documents/:snapshotId/tags/aggregate')
+  public async aggregateInformationDocumentTags(
+    @Param('snapshotId') snapshotId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.aggregateInformationDocumentTags(snapshotId, body),
+    );
+  }
+
+  @Put('entry-documents/:snapshotId/tags')
+  public async reviseInformationDocumentTags(
+    @Param('snapshotId') snapshotId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.reviseInformationDocumentTags(snapshotId, body),
+    );
+  }
+
   @Post('workspace-bundles/export')
   public async exportWorkspaceBundle(@Res() response: Response): Promise<void> {
     writeLocalApiResponse(

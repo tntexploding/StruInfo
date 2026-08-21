@@ -261,6 +261,51 @@ export interface InformationEntry {
   }>;
 }
 
+export interface InformationDocumentTag {
+  readonly displayValue: string;
+  readonly normalizedValue: string;
+  readonly origin: 'aggregate' | 'manual';
+  readonly fullTextOccurrences: number;
+  readonly entryCoverageCount: number;
+}
+
+export interface CurrentInformationDocumentTags {
+  readonly workspaceId: string;
+  readonly resourceId: string;
+  readonly snapshotId: string;
+  readonly revision: number;
+  readonly revisionId: string;
+  readonly value: Readonly<{
+    revisionKind: 'aggregate' | 'manual';
+    ruleVersion: string;
+    isPrivate: boolean;
+    entryCount: number;
+    tags: readonly Readonly<InformationDocumentTag>[];
+  }>;
+}
+
+export interface InformationEntryDocumentView extends EvidenceSnapshotSummary {
+  readonly entryCount: number;
+  readonly annotatedEntryCount: number;
+  readonly currentTags?: Readonly<CurrentInformationDocumentTags>;
+}
+
+export type InformationEntryDocumentListResponse =
+  | Readonly<{
+      status: 'ok';
+      totalCount: number;
+      documents: readonly Readonly<InformationEntryDocumentView>[];
+    }>
+  | DomainFailure;
+
+export type InformationDocumentTagWriteResponse =
+  | Readonly<{
+      status: 'applied' | 'unchanged';
+      documentTags?: Readonly<CurrentInformationDocumentTags>;
+    }>
+  | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
+  | DomainFailure;
+
 export type InformationEntryMaterializeResponse =
   | Readonly<{
       status: 'created' | 'existing';

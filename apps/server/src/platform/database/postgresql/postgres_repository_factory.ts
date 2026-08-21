@@ -11,6 +11,7 @@ import type {
 } from '../../../modules/knowledge/index.js';
 import type {M1cDomainTransferRepositoryPort} from '../../../workspace_transfer/m1c_workspace_transfer.js';
 import type {InformationEntryRepositoryPort} from '../../../modules/entries/index.js';
+import type {InformationDocumentTagRepositoryPort} from '../../../modules/entries/index.js';
 
 import {PostgresManualCurationRepository} from './postgres_curation_repository.js';
 import {PostgresManualCurationReadRepository} from './postgres_curation_read_repository.js';
@@ -21,6 +22,7 @@ import type {PostgresPoolBoundary} from './postgres_pool.js';
 import {PostgresDeterministicKnowledgeSearchRepository} from './postgres_retrieval_repository.js';
 import {PostgresM1cDomainTransferRepository} from './postgres_workspace_transfer_repository.js';
 import {PostgresInformationEntryRepository} from './postgres_information_entry_repository.js';
+import {PostgresInformationDocumentTagRepository} from './postgres_information_document_tag_repository.js';
 
 export interface PostgresKnowledgeRepositorySet {
   readonly evidence: EvidenceRepositoryPort;
@@ -31,6 +33,7 @@ export interface PostgresKnowledgeRepositorySet {
   readonly knowledgeRead: ManualKnowledgeReadRepositoryPort;
   readonly retrieval: DeterministicKnowledgeSearchRepositoryPort;
   readonly informationEntries: InformationEntryRepositoryPort;
+  readonly informationDocumentTags: InformationDocumentTagRepositoryPort;
   readonly workspaceTransfer: M1cDomainTransferRepositoryPort;
 }
 
@@ -47,6 +50,7 @@ export function createPostgresKnowledgeRepositories(
     knowledgeRead: knowledge,
     retrieval: new PostgresDeterministicKnowledgeSearchRepository(pool),
     informationEntries: new PostgresInformationEntryRepository(pool),
+    informationDocumentTags: new PostgresInformationDocumentTagRepository(pool),
     workspaceTransfer: new PostgresM1cDomainTransferRepository(pool),
   });
 }

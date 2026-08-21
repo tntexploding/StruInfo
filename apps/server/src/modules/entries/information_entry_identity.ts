@@ -33,7 +33,7 @@ export function informationEntryBodySha256(body: string): string {
   return createHash('sha256').update(body, 'utf8').digest('hex');
 }
 
-function deriveUuidV5(namespace: string, name: string): string {
+export function deriveUuidV5(namespace: string, name: string): string {
   if (!UUID_PATTERN.test(namespace)) {
     throw new Error('Information Entry UUID namespace is invalid.');
   }

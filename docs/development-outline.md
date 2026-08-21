@@ -620,8 +620,10 @@ import -> snapshot -> document nodes/fragments/media
 2. 新增 `000008` 和 `entries` 模块，从已有 Snapshot 幂等生成稳定 Entry/不可变修订（已完成）；
 3. 通过现有本地 HTTP/Web 编辑内容、类型、主/副领域关键词（已完成）；
 4. 按正文和三类关键词搜索当前 Entry，返回精确 Snapshot/Fragment 来源并保持隐私默认隐藏（已完成）；
-5. 加入文档标签聚合、选择性关联基础分和人工 override（当前）；
-6. 只有实际延迟或找回缺口出现时再加入 `pg_trgm`、中文词项投影、查询下推和额外索引。
+5. 通过 `000009`、确定性全文/Entry 覆盖规则和现有本地 Web 完成版本化文档标签、人工
+   标签修订及 Document ↔ Entry 双向导航（已完成）；
+6. 加入索引缩小后的选择性关联候选、可重建基础分和不会被重算覆盖的人工 override（当前）；
+7. 只有实际延迟或找回缺口出现时再加入 `pg_trgm`、中文词项投影、查询下推和额外索引。
 
 既有 M1C 正式知识检索继续作为兼容路径。复杂认证、容器/Linux 认证、正式 TM2 报告、AI、RAG、向量和偏好学习只有在使用它们前进入工作，不是 M1D 阻断项。阻断分类以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
 
