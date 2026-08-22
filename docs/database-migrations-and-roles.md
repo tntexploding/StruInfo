@@ -1,6 +1,6 @@
 # Database Migrations and Roles
 
-- Status: First-party runner and eight forward migrations implemented; the M1C
+- Status: First-party runner and ten forward migrations implemented; the M1C
   `000001`–`000006` PostgreSQL 18 functional smoke passed
 - Contract: `C-M0-S-r2`
 - Database direction: PostgreSQL 18 with separate migration and runtime
@@ -44,6 +44,7 @@ apps/server/migrations/000006_add_private_document_visibility.sql
 apps/server/migrations/000007_add_other_knowledge_kind.sql
 apps/server/migrations/000008_create_information_entry_core.sql
 apps/server/migrations/000009_create_information_document_tags.sql
+apps/server/migrations/000010_create_information_entry_associations.sql
 ```
 
 The runner is first-party code over the already admitted `pg@8.22.0` driver.
@@ -167,6 +168,19 @@ Entry keywords or source evidence. The migration stores no document bytes,
 personal vocabulary, preference, seed, AI output, JSON payload, trigger, role, or
 grant. Ordinary runtime access remains limited to typed SELECT/INSERT and the
 single current-pointer UPDATE used by the Document-tag repository.
+
+`000010_create_information_entry_associations.sql` adds M1D-3 selective
+association state without changing Entry or formal Knowledge identities. The
+rebuildable projection stores an ordered Entry pair, both endpoint revision
+identities, separate content/type/domain scores, the versioned policy identity,
+candidate basis and rank. Independent override identities and append-only
+override revisions record enhance, weaken, block and restore decisions; a
+projection rebuild never deletes or rewrites that manual history. Ordinary
+runtime access is limited to typed SELECT, scoped projection replacement,
+override-revision INSERT and the override current-pointer UPDATE. The migration
+stores no source bytes, personal vocabulary, seed, AI output, vector, extension,
+JSON payload, trigger, role or grant, and it does not create a formal
+`KnowledgeRelation`.
 
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.

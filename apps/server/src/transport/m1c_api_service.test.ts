@@ -15,6 +15,8 @@ import type {
   CurrentInformationDocumentTags,
   CurrentInformationEntry,
   InformationDocumentTagWrite,
+  InformationEntryAssociationOverrideWrite,
+  InformationEntryAssociationProjection,
   InformationEntryMaterializeRow,
 } from '../modules/entries/index.js';
 import type {ManualKnowledgeRepositoryPort} from '../modules/knowledge/index.js';
@@ -464,6 +466,142 @@ describe('M1cApiService', () => {
     });
     expect(materializeEntries).toHaveBeenCalledTimes(1);
     expect(loadCurrentEntries).toHaveBeenCalledWith(WORKSPACE_ID, true);
+  });
+
+  it('rebuilds selective Entry associations and preserves a separate manual override command', async () => {
+    const entryLowId = '00000000-0000-4000-8000-000000000011';
+    const entryHighId = '00000000-0000-4000-8000-000000000013';
+    const sharedValue = Object.freeze({
+      documentOrder: 0,
+      body: 'PostgreSQL transaction notes',
+      bodySha256: 'a'.repeat(64),
+      chunkMode: 'split' as const,
+      splitRuleVersion: 'struinfo.entry-split.section.v1',
+      isPrivate: false,
+      typeKeyword: 'knowledge_explanation' as const,
+      contentKeywords: Object.freeze([
+        Object.freeze({
+          displayValue: 'PostgreSQL',
+          normalizedValue: 'postgresql',
+          origin: 'manual' as const,
+          originVersion: 'manual-entry-editor.v1',
+        }),
+      ]),
+      domains: Object.freeze([
+        Object.freeze({
+          keyword: 'engineering_computing' as const,
+          origin: 'manual' as const,
+          originVersion: 'manual-entry-editor.v1',
+        }),
+      ]),
+      fragmentIds: Object.freeze([FRAGMENT_ID]),
+    });
+    const entries: readonly Readonly<CurrentInformationEntry>[] = [
+      Object.freeze({
+        workspaceId: WORKSPACE_ID,
+        entryId: entryLowId,
+        resourceId: RESOURCE_ID,
+        snapshotId: SNAPSHOT_ID,
+        revision: 1,
+        revisionId: '00000000-0000-4000-8000-000000000012',
+        sourceKey: 'manual:association-a',
+        capturedAt: '2040-01-02T03:04:05.000Z',
+        value: Object.freeze({...sharedValue, titlePath: 'Transaction A'}),
+      }),
+      Object.freeze({
+        workspaceId: WORKSPACE_ID,
+        entryId: entryHighId,
+        resourceId: RESOURCE_ID,
+        snapshotId: SNAPSHOT_ID,
+        revision: 1,
+        revisionId: '00000000-0000-4000-8000-000000000014',
+        sourceKey: 'manual:association-b',
+        capturedAt: '2040-01-02T03:04:06.000Z',
+        value: Object.freeze({...sharedValue, titlePath: 'Transaction B'}),
+      }),
+    ];
+    let projections: readonly Readonly<InformationEntryAssociationProjection>[] =
+      [];
+    let overrideWrite:
+      Readonly<InformationEntryAssociationOverrideWrite> | undefined;
+    const replaceAssociationProjections = vi.fn(
+      (
+        workspaceId: string,
+        next: readonly Readonly<InformationEntryAssociationProjection>[],
+        includePrivate: boolean,
+      ) => {
+        expect(workspaceId).toBe(WORKSPACE_ID);
+        expect(includePrivate).toBe(false);
+        projections = next;
+        return Promise.resolve(next.length);
+      },
+    );
+    const writeAssociationOverride = vi.fn(
+      (write: Readonly<InformationEntryAssociationOverrideWrite>) => {
+        overrideWrite = write;
+        return Promise.resolve('applied' as const);
+      },
+    );
+    const service = createService({
+      informationEntryRepository: {
+        materializeEntries: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        reviseEntry: () => Promise.resolve('not_found'),
+        loadCurrentEntries: () => Promise.resolve(entries),
+      },
+      informationEntryAssociationRepository: {
+        replaceAssociationProjections,
+        loadAssociationSnapshot: () =>
+          Promise.resolve({projections, overrides: []}),
+        writeAssociationOverride,
+      },
+    });
+
+    await expect(
+      service.rebuildInformationEntryAssociations({includePrivate: false}),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'rebuilt',
+        entryCount: 2,
+        projectedCount: 1,
+        policy: {version: 'struinfo.entry-association.local-index.v1'},
+      },
+    });
+    await expect(
+      service.listInformationEntryAssociations(entryLowId),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        totalCount: 1,
+        associations: [
+          {
+            relatedEntry: {entryId: entryHighId},
+            effectiveScore: 10_000,
+            isBlocked: false,
+          },
+        ],
+      },
+    });
+    await expect(
+      service.reviseInformationEntryAssociation(entryLowId, entryHighId, {
+        expectedRevision: 0,
+        action: 'block',
+        includePrivate: false,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'applied'},
+    });
+    expect(overrideWrite).toMatchObject({
+      workspaceId: WORKSPACE_ID,
+      entryLowId,
+      entryHighId,
+      expectedRevision: 0,
+      includePrivate: false,
+      value: {action: 'block', manualAdjustment: 0, isBlocked: true},
+    });
   });
 
   it('requires explicit privacy opt-in for full documents and private search', async () => {
@@ -1040,6 +1178,13 @@ function createService(
     informationDocumentTagRepository: {
       writeDocumentTags: () => Promise.resolve('stale'),
       loadCurrentDocumentTags: () => Promise.resolve([]),
+    },
+    informationEntryAssociationRepository: {
+      replaceAssociationProjections: (_workspaceId, projections) =>
+        Promise.resolve(projections.length),
+      loadAssociationSnapshot: () =>
+        Promise.resolve({projections: [], overrides: []}),
+      writeAssociationOverride: () => Promise.resolve('not_found'),
     },
     workspaceTransfer: {
       exportWorkspace: () =>

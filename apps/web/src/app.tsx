@@ -4,6 +4,9 @@ import type {
   CurationState,
   DomainCommandResponse,
   EvidenceSnapshotSummary,
+  InformationEntryAssociationListResponse,
+  InformationEntryAssociationOverrideResponse,
+  InformationEntryAssociationRebuildResponse,
   InformationEntryMaterializeResponse,
   InformationEntryDocumentListResponse,
   InformationEntryRevisionResponse,
@@ -279,6 +282,37 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const rebuildInformationEntryAssociations = useCallback(
+    (
+      body: unknown,
+    ): Promise<M1cHttpResponse<InformationEntryAssociationRebuildResponse>> =>
+      apiClient.rebuildInformationEntryAssociations(body),
+    [apiClient],
+  );
+
+  const listInformationEntryAssociations = useCallback(
+    (
+      entryId: string,
+      includePrivate: boolean,
+    ): Promise<M1cHttpResponse<InformationEntryAssociationListResponse>> =>
+      apiClient.listInformationEntryAssociations(entryId, {includePrivate}),
+    [apiClient],
+  );
+
+  const reviseInformationEntryAssociation = useCallback(
+    (
+      entryId: string,
+      relatedEntryId: string,
+      body: unknown,
+    ): Promise<M1cHttpResponse<InformationEntryAssociationOverrideResponse>> =>
+      apiClient.reviseInformationEntryAssociation(
+        entryId,
+        relatedEntryId,
+        body,
+      ),
+    [apiClient],
+  );
+
   const listInformationEntryDocuments = useCallback(
     (
       includePrivate: boolean,
@@ -506,8 +540,11 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       {activeSection === 'entries' ? (
         <InformationEntryWorkspace
           snapshots={snapshotValues}
+          onListAssociations={listInformationEntryAssociations}
           onListDocuments={listInformationEntryDocuments}
           onMaterialize={materializeInformationEntries}
+          onRebuildAssociations={rebuildInformationEntryAssociations}
+          onReviseAssociation={reviseInformationEntryAssociation}
           onAggregateDocumentTags={aggregateInformationDocumentTags}
           onRevise={reviseInformationEntry}
           onReviseDocumentTags={reviseInformationDocumentTags}

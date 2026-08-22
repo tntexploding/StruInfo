@@ -116,6 +116,15 @@ describe('M1cApiClient', () => {
       expectedRevision: 1,
     });
     await client.searchInformationEntries({text: 'synthetic'});
+    await client.rebuildInformationEntryAssociations({includePrivate: true});
+    await client.listInformationEntryAssociations('synthetic/entry', {
+      includePrivate: true,
+    });
+    await client.reviseInformationEntryAssociation(
+      'synthetic/entry',
+      'related/id',
+      {expectedRevision: 0, action: 'block', includePrivate: true},
+    );
     await client.listInformationEntryDocuments({includePrivate: true});
     await client.aggregateInformationDocumentTags('synthetic/id', {
       expectedRevision: 0,
@@ -147,6 +156,24 @@ describe('M1cApiClient', () => {
         url: 'http://127.0.0.1:3000/api/v1/entries/search',
         method: 'POST',
         body: JSON.stringify({text: 'synthetic'}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/associations/rebuild',
+        method: 'POST',
+        body: JSON.stringify({includePrivate: true}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/synthetic%2Fentry/associations?includePrivate=true',
+        method: 'GET',
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/synthetic%2Fentry/associations/related%2Fid',
+        method: 'PUT',
+        body: JSON.stringify({
+          expectedRevision: 0,
+          action: 'block',
+          includePrivate: true,
+        }),
       },
       {
         url: 'http://127.0.0.1:3000/api/v1/entry-documents?includePrivate=true',

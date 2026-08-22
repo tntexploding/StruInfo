@@ -159,6 +159,48 @@ describe('M1C product workspaces', () => {
             body: {status: 'unchanged'},
           })
         }
+        onRebuildAssociations={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {
+              status: 'rebuilt',
+              entryCount: 0,
+              projectedCount: 0,
+              policy: {
+                version: 'synthetic-v1',
+                contentWeight: 65,
+                typeWeight: 15,
+                domainWeight: 20,
+                threshold: 1100,
+                candidateLimit: 12,
+                adjustmentStep: 1500,
+              },
+            },
+          })
+        }
+        onListAssociations={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {
+              status: 'ok',
+              entryId: 'synthetic-entry',
+              totalCount: 0,
+              policy: {
+                version: 'synthetic-v1',
+                contentWeight: 65,
+                typeWeight: 15,
+                domainWeight: 20,
+                threshold: 1100,
+                candidateLimit: 12,
+                adjustmentStep: 1500,
+              },
+              associations: [],
+            },
+          })
+        }
+        onReviseAssociation={() =>
+          Promise.resolve({statusCode: 200, body: {status: 'unchanged'}})
+        }
         onAggregateDocumentTags={() =>
           Promise.resolve({
             statusCode: 200,

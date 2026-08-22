@@ -159,6 +159,12 @@ function stubApi(
       Promise.resolve(result(200, {status: 'applied'})),
     searchInformationEntries: () =>
       Promise.resolve(result(200, {status: 'ok', entries: []})),
+    rebuildInformationEntryAssociations: () =>
+      Promise.resolve(result(200, {status: 'rebuilt'})),
+    listInformationEntryAssociations: () =>
+      Promise.resolve(result(200, {status: 'ok', associations: []})),
+    reviseInformationEntryAssociation: () =>
+      Promise.resolve(result(200, {status: 'applied'})),
     listInformationEntryDocuments: () =>
       Promise.resolve(result(200, {status: 'ok', documents: []})),
     aggregateInformationDocumentTags: () =>

@@ -45,6 +45,11 @@ export {
   READ_CURRENT_INFORMATION_DOCUMENT_TAG_VALUES_SQL,
 } from './postgres_information_document_tag_repository.js';
 export {
+  PostgresInformationEntryAssociationRepository,
+  READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL,
+  READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL,
+} from './postgres_information_entry_association_repository.js';
+export {
   createNodePostgresPool,
   type PostgresClientBoundary,
   type PostgresPoolBoundary,

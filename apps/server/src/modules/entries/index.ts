@@ -6,3 +6,7 @@ export * from './information_document_tag.js';
 export * from './information_document_tag_contract.js';
 export * from './information_document_tag_identity.js';
 export * from './information_document_tag_repository.js';
+export * from './information_entry_association.js';
+export * from './information_entry_association_contract.js';
+export * from './information_entry_association_identity.js';
+export * from './information_entry_association_repository.js';

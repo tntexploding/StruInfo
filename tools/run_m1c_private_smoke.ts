@@ -65,6 +65,8 @@ async function main(): Promise<void> {
       retrievalRepository: repositories.retrieval,
       informationEntryRepository: repositories.informationEntries,
       informationDocumentTagRepository: repositories.informationDocumentTags,
+      informationEntryAssociationRepository:
+        repositories.informationEntryAssociations,
       workspaceTransfer: new M1cWorkspaceTransfer({
         repository: repositories.workspaceTransfer,
         blobStore: storage.blobStore,
