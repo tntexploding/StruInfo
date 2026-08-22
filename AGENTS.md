@@ -152,9 +152,20 @@ workspace, 34 issue-398 Entries deterministically produce 7 association pairs
 covering 6 Entries; browser use confirmed the same result. These candidates are
 navigation aids, not formal semantic relations. Association state is deliberately
 not yet part of the M1D Bundle section; M1D-5 owns that additive transfer work.
-The next main-line increment is M1D-4 complete Entry search and bounded
-neighborhood traversal. Do not add AI, vectors, `pg_trgm`, or speculative search
-infrastructure before real usage demonstrates the need.
+M1D-4 now completes explainable Entry search without a new migration or search
+service. One query-bound cursor combines text, exact content/source keys,
+Snapshot, type/custom type, domain/custom domain and primary/secondary scope,
+chunk mode, published/captured time, privacy and optional one- or two-hop
+association traversal. Privacy is applied before counting, candidate selection,
+traversal, ordering and pagination; blocked associations are never traversed.
+Each result reports its structural filters, text match reasons and bounded path.
+The selected external workspace returned all 34 issue-398 Entries in stable
+20/14 pages, exposed a five-Entry two-hop neighborhood after rebuilding the
+seven existing projections, and averaged 17.23 ms over 20 sequential public
+searches. Browser checks passed at 320, 390, 768, 1024 and 1440 CSS pixels. This
+workload does not justify AI, vectors, `pg_trgm`, query pushdown or speculative
+indexes. The next main-line increment is M1D-5 Bundle coverage for association
+state plus explicit conversion and direct use of the remaining Snapshots.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable

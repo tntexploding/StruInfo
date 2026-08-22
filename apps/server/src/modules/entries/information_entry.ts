@@ -7,10 +7,7 @@ import {
   type EntryDomainKeyword,
   type EntryTypeKeyword,
   type InformationEntryMaterializeRow,
-  type InformationEntryMatchReason,
   type InformationEntryRevisionValue,
-  type InformationEntrySearchRequest,
-  type InformationEntrySearchResult,
 } from './information_entry_contract.js';
 import {
   deriveInformationEntryId,
@@ -129,46 +126,6 @@ export function prepareManualEntryRevision(
     contentKeywords,
     domains,
     fragmentIds: current.value.fragmentIds,
-  });
-}
-
-export function searchCurrentInformationEntries(
-  entries: readonly Readonly<CurrentInformationEntry>[],
-  request: Readonly<InformationEntrySearchRequest>,
-): Readonly<InformationEntrySearchResult> {
-  const query =
-    request.text === undefined ? '' : informationEntrySearchKey(request.text);
-  const matches = entries.flatMap((entry) => {
-    if (!request.includePrivate && entry.value.isPrivate) return [];
-    if (
-      request.snapshotId !== undefined &&
-      entry.snapshotId !== request.snapshotId
-    ) {
-      return [];
-    }
-    if (
-      request.typeKeyword !== undefined &&
-      entry.value.typeKeyword !== request.typeKeyword
-    ) {
-      return [];
-    }
-    if (
-      request.domainKeyword !== undefined &&
-      !entry.value.domains.some(
-        (domain) => domain.keyword === request.domainKeyword,
-      )
-    ) {
-      return [];
-    }
-    const reasons = matchReasons(entry, query);
-    return query !== '' && reasons.length === 0
-      ? []
-      : [Object.freeze({entry, matchReasons: Object.freeze(reasons)})];
-  });
-  matches.sort(compareSearchItems);
-  return Object.freeze({
-    totalCount: matches.length,
-    items: Object.freeze(matches.slice(0, request.limit)),
   });
 }
 
@@ -296,66 +253,4 @@ function deriveTitlePath(body: string): string {
   return Array.from(line.replace(/^#{1,6}\s+/u, ''))
     .slice(0, 200)
     .join('');
-}
-
-function matchReasons(
-  entry: Readonly<CurrentInformationEntry>,
-  query: string,
-): InformationEntryMatchReason[] {
-  if (query === '') return [];
-  const reasons: InformationEntryMatchReason[] = [];
-  if (informationEntrySearchKey(entry.value.titlePath).includes(query)) {
-    reasons.push('title');
-  }
-  if (informationEntrySearchKey(entry.value.body).includes(query)) {
-    reasons.push('body');
-  }
-  if (
-    entry.value.contentKeywords.some((keyword) =>
-      keyword.normalizedValue.includes(query),
-    )
-  ) {
-    reasons.push('content_keyword');
-  }
-  if (
-    entry.value.typeKeyword !== undefined &&
-    informationEntrySearchKey(
-      entry.value.typeCustomName ?? entry.value.typeKeyword,
-    ).includes(query)
-  ) {
-    reasons.push('type_keyword');
-  }
-  if (
-    entry.value.domains.some((domain) =>
-      informationEntrySearchKey(domain.customName ?? domain.keyword).includes(
-        query,
-      ),
-    )
-  ) {
-    reasons.push('domain_keyword');
-  }
-  return reasons;
-}
-
-function compareSearchItems(
-  left: Readonly<{
-    entry: Readonly<CurrentInformationEntry>;
-    matchReasons: readonly InformationEntryMatchReason[];
-  }>,
-  right: Readonly<{
-    entry: Readonly<CurrentInformationEntry>;
-    matchReasons: readonly InformationEntryMatchReason[];
-  }>,
-): number {
-  if (left.matchReasons.length !== right.matchReasons.length) {
-    return right.matchReasons.length - left.matchReasons.length;
-  }
-  const sourceOrder = right.entry.capturedAt.localeCompare(
-    left.entry.capturedAt,
-  );
-  if (sourceOrder !== 0) return sourceOrder;
-  if (left.entry.value.documentOrder !== right.entry.value.documentOrder) {
-    return left.entry.value.documentOrder - right.entry.value.documentOrder;
-  }
-  return left.entry.entryId.localeCompare(right.entry.entryId);
 }

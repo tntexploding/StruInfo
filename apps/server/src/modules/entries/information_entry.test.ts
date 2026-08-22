@@ -5,8 +5,8 @@ import {
   informationEntrySearchKey,
   prepareManualEntryRevision,
   prepareSplitInformationEntries,
-  searchCurrentInformationEntries,
 } from './information_entry.js';
+import {searchCurrentInformationEntries} from './information_entry_search.js';
 
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 const RESOURCE_ID = '22222222-2222-4222-8222-222222222222';

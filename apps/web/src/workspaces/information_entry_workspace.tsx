@@ -17,10 +17,15 @@ import {
   type InformationEntryDocumentView,
   type InformationEntryMaterializeResponse,
   type InformationEntryRevisionResponse,
+  type InformationEntrySearchCursor,
   type InformationEntrySearchResponse,
   type M1cHttpResponse,
 } from '../api/m1c_api_contract.js';
 import {ActionNotice} from '../components/action_notice.js';
+import {
+  InformationEntryAdvancedSearchFields,
+  type EntryAdvancedSearchFilters,
+} from './information_entry_search_controls.js';
 import type {ActionFeedback} from '../components/product_types.js';
 
 const TYPE_LABELS: Readonly<Record<EntryTypeKeyword, string>> = {
@@ -35,6 +40,19 @@ const TYPE_LABELS: Readonly<Record<EntryTypeKeyword, string>> = {
   literary_creation: '文学创作',
   other: '其他',
 };
+
+const EMPTY_ENTRY_ADVANCED_SEARCH_FILTERS: Readonly<EntryAdvancedSearchFilters> =
+  Object.freeze({
+    contentKeyword: '',
+    sourceKey: '',
+    typeCustomName: '',
+    domainCustomName: '',
+    domainScope: 'any',
+    chunkMode: '',
+    timeField: 'published',
+    timeFrom: '',
+    timeTo: '',
+  });
 
 const DOMAIN_LABELS: Readonly<Record<EntryDomainKeyword, string>> = {
   mathematics_formal: '数理与形式系统',
@@ -128,6 +146,9 @@ export function InformationEntryWorkspace({
   const [domainKeyword, setDomainKeyword] = useState<'' | EntryDomainKeyword>(
     '',
   );
+  const [advancedFilters, setAdvancedFilters] = useState<
+    Readonly<EntryAdvancedSearchFilters>
+  >(EMPTY_ENTRY_ADVANCED_SEARCH_FILTERS);
   const [includePrivate, setIncludePrivate] = useState(false);
   const [view, setView] = useState<EntryViewState>({status: 'loading'});
   const [documentView, setDocumentView] = useState<DocumentViewState>({
@@ -136,6 +157,10 @@ export function InformationEntryWorkspace({
   const [selectedEntryId, setSelectedEntryId] = useState<string>();
   const [feedback, setFeedback] = useState<ActionFeedback>();
   const [materializing, setMaterializing] = useState(false);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageCursors, setPageCursors] = useState<
+    readonly (Readonly<InformationEntrySearchCursor> | undefined)[]
+  >(Object.freeze([undefined]));
 
   const refreshDocuments = useCallback(async () => {
     setDocumentView({status: 'loading'});
@@ -157,40 +182,96 @@ export function InformationEntryWorkspace({
     }
   }, [includePrivate, onListDocuments]);
 
-  const executeSearch = useCallback(async () => {
-    setView({status: 'loading'});
-    try {
-      const response = await onSearch({
-        ...(query.trim() === '' ? {} : {text: query.trim()}),
-        ...(snapshotId === '' ? {} : {snapshotId}),
-        ...(typeKeyword === '' ? {} : {typeKeyword}),
-        ...(domainKeyword === '' ? {} : {domainKeyword}),
-        includePrivate,
-        limit: 100,
-      });
-      if (response.body.status !== 'ok') {
-        setView({status: 'error', message: describeFailure(response.body)});
-        return;
+  const executeSearch = useCallback(
+    async (after?: Readonly<InformationEntrySearchCursor>) => {
+      setView({status: 'loading'});
+      try {
+        const response = await onSearch({
+          ...(query.trim() === '' ? {} : {text: query.trim()}),
+          ...(advancedFilters.contentKeyword.trim() === ''
+            ? {}
+            : {contentKeyword: advancedFilters.contentKeyword.trim()}),
+          ...(advancedFilters.sourceKey.trim() === ''
+            ? {}
+            : {sourceKey: advancedFilters.sourceKey.trim()}),
+          ...(snapshotId === '' ? {} : {snapshotId}),
+          ...(typeKeyword === '' ? {} : {typeKeyword}),
+          ...(typeKeyword !== 'other' ||
+          advancedFilters.typeCustomName.trim() === ''
+            ? {}
+            : {typeCustomName: advancedFilters.typeCustomName.trim()}),
+          ...(domainKeyword === '' ? {} : {domainKeyword}),
+          ...(domainKeyword !== 'other' ||
+          advancedFilters.domainCustomName.trim() === ''
+            ? {}
+            : {domainCustomName: advancedFilters.domainCustomName.trim()}),
+          domainScope:
+            domainKeyword === '' ? 'any' : advancedFilters.domainScope,
+          ...(advancedFilters.chunkMode === ''
+            ? {}
+            : {chunkMode: advancedFilters.chunkMode}),
+          ...(advancedFilters.timeFrom === '' && advancedFilters.timeTo === ''
+            ? {}
+            : {
+                time: {
+                  field: advancedFilters.timeField,
+                  ...(advancedFilters.timeFrom === ''
+                    ? {}
+                    : {from: advancedFilters.timeFrom}),
+                  ...(advancedFilters.timeTo === ''
+                    ? {}
+                    : {to: advancedFilters.timeTo}),
+                },
+              }),
+          ...(advancedFilters.association === undefined
+            ? {}
+            : {
+                association: {
+                  entryId: advancedFilters.association.entryId,
+                  maximumDepth: advancedFilters.association.maximumDepth,
+                  minimumScore: advancedFilters.association.minimumScore,
+                },
+              }),
+          includePrivate,
+          limit: 20,
+          ...(after === undefined ? {} : {after}),
+        });
+        if (response.body.status !== 'ok') {
+          setView({status: 'error', message: describeFailure(response.body)});
+          return;
+        }
+        setView({status: 'ready', response: response.body});
+        setSelectedEntryId((current) =>
+          response.body.status === 'ok' &&
+          response.body.items.some((item) => item.entry.entryId === current)
+            ? current
+            : response.body.status === 'ok'
+              ? response.body.items[0]?.entry.entryId
+              : undefined,
+        );
+      } catch {
+        setView({
+          status: 'error',
+          message: '本地 Entry 接口当前不可达；现有条目没有被修改。',
+        });
       }
-      setView({status: 'ready', response: response.body});
-      setSelectedEntryId((current) =>
-        response.body.status === 'ok' &&
-        response.body.items.some((item) => item.entry.entryId === current)
-          ? current
-          : response.body.status === 'ok'
-            ? response.body.items[0]?.entry.entryId
-            : undefined,
-      );
-    } catch {
-      setView({
-        status: 'error',
-        message: '本地 Entry 接口当前不可达；现有条目没有被修改。',
-      });
-    }
-  }, [domainKeyword, includePrivate, onSearch, query, snapshotId, typeKeyword]);
-
+    },
+    [
+      advancedFilters,
+      domainKeyword,
+      includePrivate,
+      onSearch,
+      query,
+      snapshotId,
+      typeKeyword,
+    ],
+  );
   useEffect(() => {
-    globalThis.queueMicrotask(() => void executeSearch());
+    globalThis.queueMicrotask(() => {
+      setPageIndex(0);
+      setPageCursors(Object.freeze([undefined]));
+      void executeSearch();
+    });
   }, [executeSearch]);
 
   useEffect(() => {
@@ -266,7 +347,42 @@ export function InformationEntryWorkspace({
   function submitSearch(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     setFeedback(undefined);
+    setPageIndex(0);
+    setPageCursors(Object.freeze([undefined]));
     void executeSearch();
+  }
+
+  function showNextPage() {
+    if (view.status !== 'ready' || view.response.nextCursor === undefined) {
+      return;
+    }
+    const nextCursor = view.response.nextCursor;
+    const nextPageIndex = pageIndex + 1;
+    setPageCursors((current) =>
+      Object.freeze([
+        ...current.slice(0, nextPageIndex),
+        Object.freeze(nextCursor),
+      ]),
+    );
+    setPageIndex(nextPageIndex);
+    void executeSearch(nextCursor);
+  }
+
+  function showPreviousPage() {
+    if (pageIndex === 0) return;
+    const previousPageIndex = pageIndex - 1;
+    const previousCursor = pageCursors[previousPageIndex];
+    setPageIndex(previousPageIndex);
+    void executeSearch(previousCursor);
+  }
+
+  function clearSearchFilters() {
+    setQuery('');
+    setSnapshotId('');
+    setTypeKeyword('');
+    setDomainKeyword('');
+    setAdvancedFilters(EMPTY_ENTRY_ADVANCED_SEARCH_FILTERS);
+    setIncludePrivate(false);
   }
 
   return (
@@ -277,7 +393,7 @@ export function InformationEntryWorkspace({
           <h1>文档条目</h1>
           <p>
             从不可变 Snapshot 生成轻量
-            Entry，编辑内容、类型和领域关键词，再按正文、关键词与来源找回。
+            Entry，编辑内容、类型和领域关键词，再按正文、来源、时间与有限关联找回。
           </p>
         </div>
         <span className="origin-label origin-label--deterministic">
@@ -379,6 +495,13 @@ export function InformationEntryWorkspace({
               ))}
             </select>
           </label>
+          <InformationEntryAdvancedSearchFields
+            snapshots={snapshots}
+            typeKeyword={typeKeyword}
+            domainKeyword={domainKeyword}
+            filters={advancedFilters}
+            onChange={setAdvancedFilters}
+          />
           <label className="privacy-query-toggle entry-private-toggle">
             <input
               type="checkbox"
@@ -390,6 +513,13 @@ export function InformationEntryWorkspace({
             查询隐私文档
           </label>
           <div className="entry-command-actions">
+            <button
+              className="secondary-action"
+              type="button"
+              onClick={clearSearchFilters}
+            >
+              清除筛选
+            </button>
             <button
               className="secondary-action"
               type="button"
@@ -459,36 +589,70 @@ export function InformationEntryWorkspace({
               <strong>{view.response.totalCount.toString()}</strong>
             </header>
             <ol>
-              {view.response.items.map(({entry, matchReasons}) => (
-                <li key={entry.entryId}>
-                  <button
-                    type="button"
-                    data-active={entry.entryId === selectedEntryId}
-                    onClick={() => {
-                      setSelectedEntryId(entry.entryId);
-                    }}
-                  >
-                    <span className="entry-result-list__order">
-                      {(entry.value.documentOrder + 1)
-                        .toString()
-                        .padStart(2, '0')}
-                    </span>
-                    <span>
-                      <strong>{entry.value.titlePath || '未命名条目'}</strong>
-                      <small>
-                        {entry.sourceKey} · r{entry.revision.toString()}
-                        {entry.value.isPrivate ? ' · 私密' : ''}
-                      </small>
-                      {matchReasons.length > 0 ? (
-                        <em>
-                          {matchReasons.map(matchReasonLabel).join(' / ')}
-                        </em>
-                      ) : null}
-                    </span>
-                  </button>
-                </li>
-              ))}
+              {view.response.items.map(
+                ({association, entry, filterReasons, matchReasons}) => (
+                  <li key={entry.entryId}>
+                    <button
+                      type="button"
+                      data-active={entry.entryId === selectedEntryId}
+                      onClick={() => {
+                        setSelectedEntryId(entry.entryId);
+                      }}
+                    >
+                      <span className="entry-result-list__order">
+                        {(entry.value.documentOrder + 1)
+                          .toString()
+                          .padStart(2, '0')}
+                      </span>
+                      <span>
+                        <strong>{entry.value.titlePath || '未命名条目'}</strong>
+                        <small>
+                          {entry.sourceKey} · r{entry.revision.toString()}
+                          {entry.value.isPrivate ? ' · 私密' : ''}
+                        </small>
+                        {matchReasons.length > 0 ? (
+                          <em>
+                            命中：
+                            {matchReasons.map(matchReasonLabel).join(' / ')}
+                          </em>
+                        ) : null}
+                        {filterReasons.length > 0 ? (
+                          <em className="entry-result-list__filters">
+                            筛选：
+                            {filterReasons.map(filterReasonLabel).join(' / ')}
+                          </em>
+                        ) : null}
+                        {association === undefined ? null : (
+                          <em className="entry-result-list__association">
+                            {association.depth.toString()} 跳 · 路径最低分{' '}
+                            {scorePercentage(association.effectiveScore)}%
+                          </em>
+                        )}
+                      </span>
+                    </button>
+                  </li>
+                ),
+              )}
             </ol>
+            <footer className="entry-pagination" aria-label="Entry 结果分页">
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={pageIndex === 0}
+                onClick={showPreviousPage}
+              >
+                上一页
+              </button>
+              <span>第 {(pageIndex + 1).toString()} 页 · 每页最多 20 条</span>
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={view.response.nextCursor === undefined}
+                onClick={showNextPage}
+              >
+                下一页
+              </button>
+            </footer>
           </section>
 
           {selectedEntry === undefined ? null : (
@@ -516,6 +680,25 @@ export function InformationEntryWorkspace({
                 onOpenEvidence={onOpenEvidence}
                 onRebuild={onRebuildAssociations}
                 onRevise={onReviseAssociation}
+                onSearchNeighborhood={() => {
+                  setAdvancedFilters((current) =>
+                    Object.freeze({
+                      ...current,
+                      association: Object.freeze({
+                        entryId: selectedEntry.entryId,
+                        label: selectedEntry.value.titlePath || '未命名条目',
+                        maximumDepth: 2,
+                        minimumScore: 0,
+                      }),
+                    }),
+                  );
+                  setFeedback({
+                    kind: 'success',
+                    title: '已设为关联搜索起点',
+                    detail:
+                      '当前搜索将展示最多两跳的有限邻域，并逐条说明路径与最低关联分。',
+                  });
+                }}
               />
             </div>
           )}
@@ -1111,6 +1294,7 @@ function InformationEntryAssociationPanel({
   onOpenEvidence,
   onRebuild,
   onRevise,
+  onSearchNeighborhood,
 }: {
   readonly entry: Readonly<InformationEntry>;
   readonly includePrivate: boolean;
@@ -1118,6 +1302,7 @@ function InformationEntryAssociationPanel({
   readonly onOpenEvidence: InformationEntryWorkspaceProps['onOpenEvidence'];
   readonly onRebuild: InformationEntryWorkspaceProps['onRebuildAssociations'];
   readonly onRevise: InformationEntryWorkspaceProps['onReviseAssociation'];
+  readonly onSearchNeighborhood: () => void;
 }) {
   const [view, setView] = useState<AssociationViewState>({status: 'loading'});
   const [feedback, setFeedback] = useState<ActionFeedback>();
@@ -1242,14 +1427,23 @@ function InformationEntryAssociationPanel({
             ? '当前明确包含隐私 Entry；任一私密端点都只在本次范围内显示。'
             : '当前为普通范围，隐私 Entry 及涉及它们的关联均已排除。'}
         </p>
-        <button
-          className="secondary-action"
-          type="button"
-          disabled={rebuilding}
-          onClick={() => void rebuild()}
-        >
-          {rebuilding ? '正在重建…' : '重建当前范围关联'}
-        </button>
+        <div className="entry-association-toolbar__actions">
+          <button
+            className="secondary-action"
+            type="button"
+            onClick={onSearchNeighborhood}
+          >
+            从此条目展开
+          </button>
+          <button
+            className="secondary-action"
+            type="button"
+            disabled={rebuilding}
+            onClick={() => void rebuild()}
+          >
+            {rebuilding ? '正在重建…' : '重建当前范围关联'}
+          </button>
+        </div>
       </div>
       <ActionNotice feedback={feedback} />
 
@@ -1509,6 +1703,31 @@ function matchReasonLabel(value: string): string {
       return '类型';
     case 'domain_keyword':
       return '领域';
+    default:
+      return value;
+  }
+}
+
+function filterReasonLabel(value: string): string {
+  switch (value) {
+    case 'content_keyword':
+      return '内容词';
+    case 'source':
+      return '来源';
+    case 'document':
+      return '文档';
+    case 'type':
+      return '类型';
+    case 'domain':
+      return '领域';
+    case 'chunk_mode':
+      return '拆分方式';
+    case 'published_time':
+      return '发布日期';
+    case 'captured_time':
+      return '采集时间';
+    case 'private_scope':
+      return '隐私范围';
     default:
       return value;
   }

@@ -36,7 +36,8 @@ export const READ_CURRENT_INFORMATION_ENTRIES_SQL = `SELECT
   e.snapshot_id::text, e.current_revision, e.current_revision_id::text,
   r.document_order, r.title_path, r.body, r.body_sha256, r.chunk_mode,
   r.split_rule_version, r.is_private, r.type_keyword, r.type_custom_name,
-  source.source_key, source.canonical_uri, snapshot.captured_at
+  source.source_key, source.canonical_uri, snapshot.captured_at,
+  snapshot.published_at
 FROM struinfo.information_entry AS e
 JOIN struinfo.information_entry_revision AS r
   ON r.workspace_id = e.workspace_id
@@ -453,6 +454,7 @@ function mapCurrentEntry(
   const entryId = canonicalUuid(row.entry_id);
   const revision = integer(row.current_revision, 1);
   const canonicalUri = optionalText(row.canonical_uri);
+  const publishedAt = optionalTimestamp(row.published_at);
   return Object.freeze({
     workspaceId: canonicalUuid(row.workspace_id),
     entryId,
@@ -463,6 +465,7 @@ function mapCurrentEntry(
     sourceKey: text(row.source_key),
     ...(canonicalUri === undefined ? {} : {canonicalUri}),
     capturedAt: timestamp(row.captured_at),
+    ...(publishedAt === undefined ? {} : {publishedAt}),
     value: mapRevisionValue(
       row,
       inputRows.filter(
@@ -556,6 +559,10 @@ function sameRevisionValue(
   right: Readonly<InformationEntryRevisionValue>,
 ): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function optionalTimestamp(value: unknown): string | undefined {
+  return value === null ? undefined : timestamp(value);
 }
 
 function timestamp(value: unknown): string {
