@@ -230,6 +230,8 @@ describe('M1C product workspaces', () => {
 
     expect(markup).toContain('文档条目');
     expect(markup).toContain('来源文档导航');
+    expect(markup).toContain('批量构建文档条目');
+    expect(markup).toContain('构建所选文档');
     expect(markup).toContain('按结构生成条目');
     expect(markup).toContain('正文或关键词');
     expect(markup).toContain('类型关键词');

@@ -2,6 +2,11 @@ import {describe, expect, it, vi} from 'vitest';
 
 import {M1C_DOMAIN_TABLES} from '../../../workspace_transfer/m1c_domain_bundle.js';
 import {
+  M1D_ASSOCIATION_BUNDLE_SCHEMA,
+  M1D_ASSOCIATION_TABLES,
+  normalizeM1dAssociationSnapshot,
+} from '../../../workspace_transfer/m1d_association_bundle.js';
+import {
   M1D_ENTRY_BUNDLE_SCHEMA,
   M1D_ENTRY_TABLES,
   normalizeM1dEntrySnapshot,
@@ -39,10 +44,18 @@ describe('PostgresM1cDomainTransferRepository', () => {
 
     expect(snapshot.domain.tables).toHaveLength(M1C_DOMAIN_TABLES.length);
     expect(snapshot.entries.tables).toHaveLength(M1D_ENTRY_TABLES.length);
+    expect(snapshot.associations.tables).toHaveLength(
+      M1D_ASSOCIATION_TABLES.length,
+    );
     expect(snapshot.domain.tables[0]).toMatchObject({name: 'workspace'});
     expect(statements).toContainEqual(
       expect.stringContaining(
         'FROM struinfo.information_document_tag_value AS t',
+      ),
+    );
+    expect(statements).toContainEqual(
+      expect.stringContaining(
+        'FROM struinfo.information_entry_association_override_revision AS t',
       ),
     );
     expect(statements[0]).toBe(
@@ -93,11 +106,15 @@ describe('PostgresM1cDomainTransferRepository', () => {
     expect(statements.some((sql) => sql.startsWith('INSERT INTO'))).toBe(false);
   });
 
-  it('rolls back M1C and M1D rows together when Entry restore fails', async () => {
+  it('rolls back domain, Entry, and association rows together', async () => {
     const {pool, statements} = createPool((sql) => {
       if (sql === READ_WORKSPACE_FOR_TRANSFER_SQL) return rows([]);
-      if (sql.startsWith('INSERT INTO struinfo.information_entry ')) {
-        throw new Error('synthetic Entry restore failure');
+      if (
+        sql.startsWith(
+          'INSERT INTO struinfo.information_entry_association_projection ',
+        )
+      ) {
+        throw new Error('synthetic association restore failure');
       }
       return rows([]);
     });
@@ -106,7 +123,7 @@ describe('PostgresM1cDomainTransferRepository', () => {
     await expect(
       repository.restoreEmptyWorkspace(
         WORKSPACE_ID,
-        snapshotWithEntry(WORKSPACE_ID, CREATED_AT),
+        snapshotWithAssociation(WORKSPACE_ID, CREATED_AT),
       ),
     ).rejects.toMatchObject({code: 'repository_failed'});
 
@@ -115,6 +132,11 @@ describe('PostgresM1cDomainTransferRepository', () => {
     );
     expect(statements).toContainEqual(
       expect.stringContaining('INSERT INTO struinfo.information_entry '),
+    );
+    expect(statements).toContainEqual(
+      expect.stringContaining(
+        'INSERT INTO struinfo.information_entry_association_projection ',
+      ),
     );
     expect(statements.at(-1)).toBe('ROLLBACK');
   });
@@ -145,7 +167,47 @@ function snapshotWithEntry(
           : [],
     })),
   });
-  return Object.freeze({domain: empty.domain, entries});
+  return Object.freeze({
+    domain: empty.domain,
+    entries,
+    associations: empty.associations,
+  });
+}
+
+function snapshotWithAssociation(
+  workspaceId: string,
+  createdAt: string,
+): M1cWorkspaceTransferSnapshot {
+  const base = snapshotWithEntry(workspaceId, createdAt);
+  const associations = normalizeM1dAssociationSnapshot({
+    schemaVersion: M1D_ASSOCIATION_BUNDLE_SCHEMA,
+    tables: M1D_ASSOCIATION_TABLES.map((descriptor) => ({
+      name: descriptor.name,
+      rows:
+        descriptor.name === 'information_entry_association_projection'
+          ? [
+              {
+                workspace_id: workspaceId,
+                entry_low_id: '33333333-3333-4333-8333-333333333333',
+                entry_high_id: '77777777-7777-4777-8777-777777777777',
+                entry_low_revision: 1,
+                entry_low_revision_id: '66666666-6666-4666-8666-666666666666',
+                entry_high_revision: 1,
+                entry_high_revision_id: '88888888-8888-4888-8888-888888888888',
+                content_similarity: 2500,
+                type_similarity: 10000,
+                domain_similarity: 5000,
+                base_score: 4125,
+                algorithm_version: 'synthetic-v1',
+                candidate_basis: 'content_keyword,type_keyword',
+                candidate_rank: 1,
+                generated_at: createdAt,
+              },
+            ]
+          : [],
+    })),
+  });
+  return Object.freeze({...base, associations});
 }
 
 function createPool(

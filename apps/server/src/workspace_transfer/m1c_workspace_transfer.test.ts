@@ -14,7 +14,18 @@ import {
   type M1cDomainSnapshot,
 } from './m1c_domain_bundle.js';
 import {
+  M1D_ASSOCIATION_BUNDLE_CODEC,
+  M1D_ASSOCIATION_BUNDLE_SCHEMA,
+  M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
+  M1D_ASSOCIATION_BUNDLE_SECTION_VERSION,
+  M1D_ASSOCIATION_TABLES,
+  normalizeM1dAssociationSnapshot,
+} from './m1d_association_bundle.js';
+import {
+  M1D_ENTRY_BUNDLE_CODEC,
   M1D_ENTRY_BUNDLE_SCHEMA,
+  M1D_ENTRY_BUNDLE_SECTION_TYPE,
+  M1D_ENTRY_BUNDLE_SECTION_VERSION,
   M1D_ENTRY_TABLES,
   normalizeM1dEntrySnapshot,
 } from './m1d_entry_bundle.js';
@@ -50,6 +61,7 @@ describe('M1C workspace transfer', () => {
     >((workspaceId, restoredSnapshot) => {
       expect(workspaceId).toBe(WORKSPACE_ID);
       expect(restoredSnapshot.entries.tables).toHaveLength(9);
+      expect(restoredSnapshot.associations.tables).toHaveLength(3);
       return Promise.resolve();
     });
     const transfer = new M1cWorkspaceTransfer({
@@ -74,7 +86,8 @@ describe('M1C workspace transfer', () => {
       tableCounts: {
         workspace: 1,
         evidence_blob: 1,
-        information_entry: 1,
+        information_entry: 2,
+        information_entry_association_projection: 1,
       },
     });
     expect(new TextDecoder().decode(storedBytes)).not.toContain(
@@ -83,13 +96,17 @@ describe('M1C workspace transfer', () => {
     expect(new TextDecoder().decode(storedBytes)).toContain(
       'struinfo.m1d-entry',
     );
+    expect(new TextDecoder().decode(storedBytes)).toContain(
+      'struinfo.m1d-association',
+    );
     expect(restored).toMatchObject({
       fileName: exported.fileName,
       blobCount: 1,
       tableCounts: {
         workspace: 1,
         evidence_blob: 1,
-        information_entry: 1,
+        information_entry: 2,
+        information_entry_association_projection: 1,
       },
     });
     expect(restoreEmptyWorkspace).toHaveBeenCalledExactlyOnceWith(
@@ -177,6 +194,104 @@ describe('M1C workspace transfer', () => {
         (table) => table.rows.length === 0,
       ),
     ).toBe(true);
+    expect(
+      restoredSnapshot?.associations.tables.every(
+        (table) => table.rows.length === 0,
+      ),
+    ).toBe(true);
+  });
+
+  it('restores a two-section M1D-2 Bundle with empty associations', async () => {
+    const snapshot = syntheticSnapshot();
+    const fileStore = new MemoryBundleFileStore();
+    let restoredSnapshot: Readonly<M1cWorkspaceTransferSnapshot> | undefined;
+    const bytes = writeWorkspaceBundle(
+      {
+        workspaceId: WORKSPACE_ID,
+        exportedAt: CREATED_AT,
+        sections: [
+          {
+            type: M1C_DOMAIN_BUNDLE_SECTION_TYPE,
+            version: M1C_DOMAIN_BUNDLE_SECTION_VERSION,
+            value: snapshot.domain,
+          },
+          {
+            type: M1D_ENTRY_BUNDLE_SECTION_TYPE,
+            version: M1D_ENTRY_BUNDLE_SECTION_VERSION,
+            value: snapshot.entries,
+          },
+        ],
+        blobReferences: [BLOB_IDENTITY],
+      },
+      [M1C_DOMAIN_BUNDLE_CODEC, M1D_ENTRY_BUNDLE_CODEC],
+    );
+    const stored = await fileStore.write(WORKSPACE_ID, CREATED_AT, bytes);
+    const transfer = new M1cWorkspaceTransfer({
+      repository: {
+        exportWorkspace: () => Promise.resolve(snapshot),
+        restoreEmptyWorkspace: (_workspaceId, restored) => {
+          restoredSnapshot = restored;
+          return Promise.resolve();
+        },
+      },
+      blobStore: new MemoryBlobStore(BLOB_IDENTITY, BLOB_BYTES),
+      fileStore,
+    });
+
+    const restored = await transfer.restoreWorkspace(
+      WORKSPACE_ID,
+      stored.fileName,
+    );
+
+    expect(restored.tableCounts.information_entry).toBe(2);
+    expect(restored.tableCounts.information_entry_association_projection).toBe(
+      0,
+    );
+    expect(
+      restoredSnapshot?.associations.tables.every(
+        (table) => table.rows.length === 0,
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects an Association section that omits its Entry dependency', async () => {
+    const snapshot = syntheticSnapshot();
+    const fileStore = new MemoryBundleFileStore();
+    const restoreEmptyWorkspace = vi.fn(() => Promise.resolve());
+    const bytes = writeWorkspaceBundle(
+      {
+        workspaceId: WORKSPACE_ID,
+        exportedAt: CREATED_AT,
+        sections: [
+          {
+            type: M1C_DOMAIN_BUNDLE_SECTION_TYPE,
+            version: M1C_DOMAIN_BUNDLE_SECTION_VERSION,
+            value: snapshot.domain,
+          },
+          {
+            type: M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
+            version: M1D_ASSOCIATION_BUNDLE_SECTION_VERSION,
+            value: snapshot.associations,
+          },
+        ],
+        blobReferences: [BLOB_IDENTITY],
+      },
+      [M1C_DOMAIN_BUNDLE_CODEC, M1D_ASSOCIATION_BUNDLE_CODEC],
+    );
+    const stored = await fileStore.write(WORKSPACE_ID, CREATED_AT, bytes);
+    const transfer = new M1cWorkspaceTransfer({
+      repository: {
+        exportWorkspace: () => Promise.resolve(snapshot),
+        restoreEmptyWorkspace,
+      },
+      blobStore: new MemoryBlobStore(BLOB_IDENTITY, BLOB_BYTES),
+      fileStore,
+    });
+
+    await expect(
+      transfer.restoreWorkspace(WORKSPACE_ID, stored.fileName),
+    ).rejects.toMatchObject({code: 'bundle_invalid'});
+    expect(restoreEmptyWorkspace).not.toHaveBeenCalled();
   });
 
   it('keeps missing Blobs and non-empty targets as visible failures', async () => {
@@ -273,11 +388,48 @@ function syntheticSnapshot(): M1cWorkspaceTransferSnapshot {
                 current_revision_id: '77777777-7777-4777-8777-777777777777',
                 created_at: CREATED_AT,
               },
+              {
+                workspace_id: WORKSPACE_ID,
+                entry_id: '88888888-8888-4888-8888-888888888888',
+                resource_id: '55555555-5555-4555-8555-555555555555',
+                snapshot_id: '66666666-6666-4666-8666-666666666666',
+                current_revision: 1,
+                current_revision_id: '99999999-9999-4999-8999-999999999999',
+                created_at: CREATED_AT,
+              },
             ]
           : [],
     })),
   });
-  return Object.freeze({domain, entries});
+  const associations = normalizeM1dAssociationSnapshot({
+    schemaVersion: M1D_ASSOCIATION_BUNDLE_SCHEMA,
+    tables: M1D_ASSOCIATION_TABLES.map((descriptor) => ({
+      name: descriptor.name,
+      rows:
+        descriptor.name === 'information_entry_association_projection'
+          ? [
+              {
+                workspace_id: WORKSPACE_ID,
+                entry_low_id: '44444444-4444-4444-8444-444444444444',
+                entry_high_id: '88888888-8888-4888-8888-888888888888',
+                entry_low_revision: 1,
+                entry_low_revision_id: '77777777-7777-4777-8777-777777777777',
+                entry_high_revision: 1,
+                entry_high_revision_id: '99999999-9999-4999-8999-999999999999',
+                content_similarity: 2500,
+                type_similarity: 10000,
+                domain_similarity: 5000,
+                base_score: 4125,
+                algorithm_version: 'synthetic-v1',
+                candidate_basis: 'content_keyword,type_keyword',
+                candidate_rank: 1,
+                generated_at: CREATED_AT,
+              },
+            ]
+          : [],
+    })),
+  });
+  return Object.freeze({domain, entries, associations});
 }
 
 class MemoryBlobStore implements BlobStore {

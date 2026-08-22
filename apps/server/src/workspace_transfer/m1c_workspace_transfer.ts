@@ -12,6 +12,16 @@ import {
   type M1cDomainSnapshot,
 } from './m1c_domain_bundle.js';
 import {
+  assertM1dAssociationWorkspace,
+  createEmptyM1dAssociationSnapshot,
+  M1D_ASSOCIATION_BUNDLE_CODEC,
+  M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
+  M1D_ASSOCIATION_BUNDLE_SECTION_VERSION,
+  m1dAssociationTableCounts,
+  normalizeM1dAssociationSnapshot,
+  type M1dAssociationSnapshot,
+} from './m1d_association_bundle.js';
+import {
   assertM1dEntryWorkspace,
   createEmptyM1dEntrySnapshot,
   M1D_ENTRY_BUNDLE_CODEC,
@@ -44,6 +54,7 @@ export interface M1cDomainTransferRepositoryPort {
 export interface M1cWorkspaceTransferSnapshot {
   readonly domain: Readonly<M1cDomainSnapshot>;
   readonly entries: Readonly<M1dEntrySnapshot>;
+  readonly associations: Readonly<M1dAssociationSnapshot>;
 }
 
 export type M1cDomainTransferRepositoryErrorCode =
@@ -143,10 +154,19 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
               version: M1D_ENTRY_BUNDLE_SECTION_VERSION,
               value: snapshot.entries,
             },
+            {
+              type: M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
+              version: M1D_ASSOCIATION_BUNDLE_SECTION_VERSION,
+              value: snapshot.associations,
+            },
           ],
           blobReferences: references,
         },
-        [M1C_DOMAIN_BUNDLE_CODEC, M1D_ENTRY_BUNDLE_CODEC],
+        [
+          M1C_DOMAIN_BUNDLE_CODEC,
+          M1D_ENTRY_BUNDLE_CODEC,
+          M1D_ASSOCIATION_BUNDLE_CODEC,
+        ],
       );
     } catch {
       throw new M1cWorkspaceTransferError('bundle_invalid');
@@ -192,6 +212,7 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
       const bundle = readWorkspaceBundle(bytes, [
         M1C_DOMAIN_BUNDLE_CODEC,
         M1D_ENTRY_BUNDLE_CODEC,
+        M1D_ASSOCIATION_BUNDLE_CODEC,
       ]);
       if (bundle.workspaceId !== workspaceId) {
         throw new M1cWorkspaceTransferError('workspace_mismatch');
@@ -202,7 +223,14 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
       const entrySection = bundle.sections.find(
         (section) => section.type === M1D_ENTRY_BUNDLE_SECTION_TYPE,
       );
-      if (domainSection === undefined || bundle.sections.length > 2) {
+      const associationSection = bundle.sections.find(
+        (section) => section.type === M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
+      );
+      if (
+        domainSection === undefined ||
+        bundle.sections.length > 3 ||
+        (associationSection !== undefined && entrySection === undefined)
+      ) {
         throw new M1cWorkspaceTransferError('bundle_invalid');
       }
       snapshot = normalizeTransferSnapshot(
@@ -212,6 +240,10 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
             entrySection === undefined
               ? createEmptyM1dEntrySnapshot()
               : normalizeM1dEntrySnapshot(entrySection.value),
+          associations:
+            associationSection === undefined
+              ? createEmptyM1dAssociationSnapshot()
+              : normalizeM1dAssociationSnapshot(associationSection.value),
         },
         workspaceId,
       );
@@ -251,9 +283,11 @@ function normalizeTransferSnapshot(
 ): Readonly<M1cWorkspaceTransferSnapshot> {
   const domain = normalizeM1cDomainSnapshot(value.domain);
   const entries = normalizeM1dEntrySnapshot(value.entries);
+  const associations = normalizeM1dAssociationSnapshot(value.associations);
   assertM1cDomainWorkspace(domain, workspaceId);
   assertM1dEntryWorkspace(entries, workspaceId);
-  return Object.freeze({domain, entries});
+  assertM1dAssociationWorkspace(associations, workspaceId);
+  return Object.freeze({domain, entries, associations});
 }
 
 function transferTableCounts(
@@ -262,6 +296,7 @@ function transferTableCounts(
   return Object.freeze({
     ...m1cDomainTableCounts(snapshot.domain),
     ...m1dEntryTableCounts(snapshot.entries),
+    ...m1dAssociationTableCounts(snapshot.associations),
   });
 }
 
@@ -347,5 +382,6 @@ export function createEmptyM1cWorkspaceTransferSnapshot(
   return Object.freeze({
     domain: createEmptyM1cDomainSnapshot(workspaceId, createdAt),
     entries: createEmptyM1dEntrySnapshot(),
+    associations: createEmptyM1dAssociationSnapshot(),
   });
 }
