@@ -18,6 +18,7 @@ import type {
   InformationEntryAssociationOverrideWrite,
   InformationEntryAssociationProjection,
   InformationEntryMaterializeRow,
+  InformationEntrySearchCursor,
 } from '../modules/entries/index.js';
 import type {ManualKnowledgeRepositoryPort} from '../modules/knowledge/index.js';
 import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
@@ -466,6 +467,194 @@ describe('M1cApiService', () => {
     });
     expect(materializeEntries).toHaveBeenCalledTimes(1);
     expect(loadCurrentEntries).toHaveBeenCalledWith(WORKSPACE_ID, true);
+  });
+
+  it('binds structural Entry filters, association traversal, and pagination to the public search cursor', async () => {
+    const entryAId = '00000000-0000-4000-8000-000000000011';
+    const entryBId = '00000000-0000-4000-8000-000000000013';
+    const entryCId = '00000000-0000-4000-8000-000000000015';
+    const makeEntry = (
+      entryId: string,
+      revisionId: string,
+      documentOrder: number,
+    ): Readonly<CurrentInformationEntry> =>
+      Object.freeze({
+        workspaceId: WORKSPACE_ID,
+        entryId,
+        resourceId: RESOURCE_ID,
+        snapshotId: SNAPSHOT_ID,
+        revision: 1,
+        revisionId,
+        sourceKey: 'manual:m1d4-search',
+        capturedAt: '2040-01-03T03:04:05.000Z',
+        publishedAt: '2040-01-02T00:00:00.000Z',
+        value: Object.freeze({
+          documentOrder,
+          titlePath: 'Entry ' + documentOrder.toString(),
+          body: 'PostgreSQL transaction notes',
+          bodySha256: 'a'.repeat(64),
+          chunkMode: 'split' as const,
+          splitRuleVersion: 'struinfo.entry-split.section.v1',
+          isPrivate: false,
+          typeKeyword: 'knowledge_explanation' as const,
+          contentKeywords: Object.freeze([
+            Object.freeze({
+              displayValue: 'PostgreSQL',
+              normalizedValue: 'postgresql',
+              origin: 'manual' as const,
+              originVersion: 'manual-entry-editor.v1',
+            }),
+          ]),
+          domains: Object.freeze([
+            Object.freeze({
+              keyword: 'engineering_computing' as const,
+              origin: 'manual' as const,
+              originVersion: 'manual-entry-editor.v1',
+            }),
+          ]),
+          fragmentIds: Object.freeze([FRAGMENT_ID]),
+        }),
+      });
+    const entries = Object.freeze([
+      makeEntry(entryAId, '00000000-0000-4000-8000-000000000012', 0),
+      makeEntry(entryBId, '00000000-0000-4000-8000-000000000014', 1),
+      makeEntry(entryCId, '00000000-0000-4000-8000-000000000016', 2),
+    ]);
+    const [entryA, entryB, entryC] = entries;
+    if (entryA === undefined || entryB === undefined || entryC === undefined) {
+      throw new Error('Expected three synthetic Entry fixtures.');
+    }
+    const projections: readonly Readonly<InformationEntryAssociationProjection>[] =
+      Object.freeze([
+        Object.freeze({
+          workspaceId: WORKSPACE_ID,
+          entryLowId: entryAId,
+          entryHighId: entryBId,
+          entryLowRevision: 1,
+          entryLowRevisionId: entryA.revisionId,
+          entryHighRevision: 1,
+          entryHighRevisionId: entryB.revisionId,
+          contentSimilarity: 8_000,
+          typeSimilarity: 10_000,
+          domainSimilarity: 10_000,
+          baseScore: 8_500,
+          algorithmVersion: 'struinfo.entry-association.score.v1',
+          candidateBasis: Object.freeze(['content_keyword' as const]),
+          candidateRank: 0,
+        }),
+        Object.freeze({
+          workspaceId: WORKSPACE_ID,
+          entryLowId: entryBId,
+          entryHighId: entryCId,
+          entryLowRevision: 1,
+          entryLowRevisionId: entryB.revisionId,
+          entryHighRevision: 1,
+          entryHighRevisionId: entryC.revisionId,
+          contentSimilarity: 7_000,
+          typeSimilarity: 10_000,
+          domainSimilarity: 10_000,
+          baseScore: 7_500,
+          algorithmVersion: 'struinfo.entry-association.score.v1',
+          candidateBasis: Object.freeze(['content_keyword' as const]),
+          candidateRank: 0,
+        }),
+      ]);
+    const loadAssociationSnapshot = vi.fn(() =>
+      Promise.resolve({projections, overrides: []}),
+    );
+    const service = createService({
+      informationEntryRepository: {
+        materializeEntries: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        reviseEntry: () => Promise.resolve('not_found'),
+        loadCurrentEntries: () => Promise.resolve(entries),
+      },
+      informationEntryAssociationRepository: {
+        replaceAssociationProjections: () => Promise.resolve(0),
+        loadAssociationSnapshot,
+        writeAssociationOverride: () => Promise.resolve('not_found'),
+      },
+    });
+    const request = {
+      text: '   ',
+      contentKeyword: 'PostgreSQL',
+      sourceKey: 'manual:m1d4-search',
+      snapshotId: SNAPSHOT_ID,
+      typeKeyword: 'knowledge_explanation',
+      domainKeyword: 'engineering_computing',
+      domainScope: 'primary',
+      chunkMode: 'split',
+      time: {field: 'published', from: '2040-01-01', to: '2040-01-31'},
+      association: {
+        entryId: entryAId,
+        maximumDepth: 2,
+        minimumScore: 0,
+      },
+      includePrivate: false,
+      limit: 1,
+    };
+
+    const first = await service.searchInformationEntries(request);
+    expect(first.statusCode).toBe(200);
+    expect(first.body).toMatchObject({
+      status: 'ok',
+      totalCount: 2,
+      items: [
+        {
+          entry: {entryId: entryBId},
+          filterReasons: [
+            'content_keyword',
+            'source',
+            'document',
+            'type',
+            'domain',
+            'chunk_mode',
+            'published_time',
+          ],
+          association: {depth: 1, effectiveScore: 8_500},
+        },
+      ],
+    });
+    const firstBody = first.body as Readonly<{
+      status: string;
+      nextCursor?: Readonly<InformationEntrySearchCursor>;
+    }>;
+    if (firstBody.status !== 'ok' || firstBody.nextCursor === undefined) {
+      throw new Error('Expected the first public Entry page to continue.');
+    }
+    const nextCursor = firstBody.nextCursor;
+
+    const second = await service.searchInformationEntries({
+      ...request,
+      after: nextCursor,
+    });
+    expect(second.body).toMatchObject({
+      status: 'ok',
+      totalCount: 2,
+      items: [
+        {
+          entry: {entryId: entryCId},
+          association: {depth: 2, effectiveScore: 7_500},
+        },
+      ],
+    });
+    await expect(
+      service.searchInformationEntries({
+        ...request,
+        includePrivate: true,
+        after: nextCursor,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 422,
+      body: {
+        status: 'rejected',
+        issue: {
+          code: 'invalid_entry_search_cursor',
+          path: 'body.after',
+        },
+      },
+    });
+    expect(loadAssociationSnapshot).toHaveBeenCalledTimes(3);
   });
 
   it('rebuilds selective Entry associations and preserves a separate manual override command', async () => {

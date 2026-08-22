@@ -216,7 +216,12 @@ describe('M1C product workspaces', () => {
         onSearch={() =>
           Promise.resolve({
             statusCode: 200,
-            body: {status: 'ok', totalCount: 0, items: []},
+            body: {
+              status: 'ok',
+              querySha256: 'a'.repeat(64),
+              totalCount: 0,
+              items: [],
+            },
           })
         }
         onOpenEvidence={() => undefined}

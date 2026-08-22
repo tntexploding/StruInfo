@@ -7,10 +7,12 @@ import {
 } from '../modules/curation/index.js';
 import type {ManualCurationReadRepositoryPort} from '../modules/curation/manual_curation_read_repository.js';
 import {
+  ENTRY_CHUNK_MODES,
   ENTRY_DOMAIN_KEYWORDS,
   ENTRY_TYPE_KEYWORDS,
   INFORMATION_ENTRY_ASSOCIATION_ACTIONS,
   INFORMATION_ENTRY_ASSOCIATION_POLICY,
+  InformationEntrySearchCursorError,
   buildInformationEntryAssociationProjection,
   deriveInformationDocumentTagRevisionId,
   deriveInformationEntryAssociationOverrideRevisionId,
@@ -586,14 +588,34 @@ export class M1cApiService implements M1cApiServicePort {
     const request = decodeEntrySearchBody(body);
     if (request === undefined) return inputFailure('body');
     try {
-      const entries =
-        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+      const [entries, associationSnapshot] = await Promise.all([
+        this.#dependencies.informationEntryRepository.loadCurrentEntries(
           this.#dependencies.workspaceId,
           request.includePrivate,
-        );
-      const result = searchCurrentInformationEntries(entries, request);
+        ),
+        request.association === undefined
+          ? Promise.resolve({projections: [], overrides: []})
+          : this.#dependencies.informationEntryAssociationRepository.loadAssociationSnapshot(
+              this.#dependencies.workspaceId,
+              request.includePrivate,
+            ),
+      ]);
+      const result = searchCurrentInformationEntries(
+        entries,
+        request,
+        associationSnapshot,
+      );
       return httpResult(200, {status: 'ok', ...result});
-    } catch {
+    } catch (error) {
+      if (error instanceof InformationEntrySearchCursorError) {
+        return httpResult(422, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'invalid_entry_search_cursor',
+            path: 'body.after',
+          }),
+        });
+      }
       return repositoryFailure();
     }
   }
@@ -1188,24 +1210,51 @@ function decodeEntrySearchBody(
   body: unknown,
 ): Readonly<InformationEntrySearchRequest> | undefined {
   if (!isRecord(body)) return undefined;
-  const textValue = body.text ?? undefined;
+  const textValue = optionalBoundedText(body.text, 300);
+  const contentKeyword = optionalBoundedText(body.contentKeyword, 80);
+  const sourceKey = optionalBoundedText(body.sourceKey, 2_048);
   const snapshotId = body.snapshotId ?? undefined;
   const typeKeyword = body.typeKeyword ?? undefined;
+  const typeCustomName = optionalBoundedText(body.typeCustomName, 80);
   const domainKeyword = body.domainKeyword ?? undefined;
+  const domainCustomName = optionalBoundedText(body.domainCustomName, 80);
+  const domainScope = body.domainScope ?? 'any';
+  const chunkMode = body.chunkMode ?? undefined;
   const includePrivate = body.includePrivate ?? false;
-  const limit = body.limit ?? 100;
+  const limit = body.limit ?? 25;
+  const time = decodeEntrySearchTime(body.time);
+  const association = decodeEntrySearchAssociation(body.association);
+  const after = decodeEntrySearchCursor(body.after);
   if (
-    (textValue !== undefined && typeof textValue !== 'string') ||
+    textValue === null ||
+    contentKeyword === null ||
+    sourceKey === null ||
+    typeCustomName === null ||
+    domainCustomName === null ||
     (snapshotId !== undefined &&
       (typeof snapshotId !== 'string' || !CANONICAL_UUID.test(snapshotId))) ||
     (typeKeyword !== undefined &&
       (typeof typeKeyword !== 'string' ||
         !ENTRY_TYPE_KEYWORDS.includes(typeKeyword as EntryTypeKeyword))) ||
+    (typeCustomName !== undefined && typeKeyword !== 'other') ||
+    (typeKeyword === 'other' && typeCustomName === undefined) ||
     (domainKeyword !== undefined &&
       (typeof domainKeyword !== 'string' ||
         !ENTRY_DOMAIN_KEYWORDS.includes(
           domainKeyword as EntryDomainKeyword,
         ))) ||
+    (domainScope !== 'any' &&
+      domainScope !== 'primary' &&
+      domainScope !== 'secondary') ||
+    (domainCustomName !== undefined && domainKeyword !== 'other') ||
+    (domainKeyword === 'other' && domainCustomName === undefined) ||
+    (domainKeyword === undefined && domainScope !== 'any') ||
+    (chunkMode !== undefined &&
+      (typeof chunkMode !== 'string' ||
+        !ENTRY_CHUNK_MODES.includes(chunkMode as 'split' | 'whole'))) ||
+    (body.time !== undefined && time === undefined) ||
+    (body.association !== undefined && association === undefined) ||
+    (body.after !== undefined && after === undefined) ||
     typeof includePrivate !== 'boolean' ||
     typeof limit !== 'number' ||
     !Number.isSafeInteger(limit) ||
@@ -1216,18 +1265,144 @@ function decodeEntrySearchBody(
   }
   return Object.freeze({
     ...(textValue === undefined ? {} : {text: textValue}),
+    ...(contentKeyword === undefined ? {} : {contentKeyword}),
+    ...(sourceKey === undefined ? {} : {sourceKey}),
     ...(snapshotId === undefined ? {} : {snapshotId}),
     ...(typeKeyword === undefined
       ? {}
       : {typeKeyword: typeKeyword as EntryTypeKeyword}),
+    ...(typeCustomName === undefined ? {} : {typeCustomName}),
     ...(domainKeyword === undefined
       ? {}
       : {domainKeyword: domainKeyword as EntryDomainKeyword}),
+    ...(domainCustomName === undefined ? {} : {domainCustomName}),
+    domainScope,
+    ...(chunkMode === undefined
+      ? {}
+      : {chunkMode: chunkMode as 'split' | 'whole'}),
+    ...(time === undefined ? {} : {time}),
+    ...(association === undefined ? {} : {association}),
     includePrivate,
     limit,
+    ...(after === undefined ? {} : {after}),
   });
 }
 
+function optionalBoundedText(
+  value: unknown,
+  maximumCodePoints: number,
+): string | undefined | null {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().normalize('NFC');
+  if (normalized.length === 0) return undefined;
+  return Array.from(normalized).length <= maximumCodePoints ? normalized : null;
+}
+
+function decodeEntrySearchTime(body: unknown):
+  | Readonly<{
+      field: 'published' | 'captured';
+      from?: string;
+      to?: string;
+    }>
+  | undefined {
+  if (body === undefined) return undefined;
+  if (!isRecord(body)) return undefined;
+  const from = body.from ?? undefined;
+  const to = body.to ?? undefined;
+  if (
+    (body.field !== 'published' && body.field !== 'captured') ||
+    (from !== undefined && (typeof from !== 'string' || !isIsoDate(from))) ||
+    (to !== undefined && (typeof to !== 'string' || !isIsoDate(to))) ||
+    (from === undefined && to === undefined) ||
+    (typeof from === 'string' && typeof to === 'string' && from > to)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    field: body.field,
+    ...(typeof from === 'string' ? {from} : {}),
+    ...(typeof to === 'string' ? {to} : {}),
+  });
+}
+
+function decodeEntrySearchAssociation(body: unknown):
+  | Readonly<{
+      entryId: string;
+      maximumDepth: 1 | 2;
+      minimumScore: number;
+    }>
+  | undefined {
+  if (body === undefined) return undefined;
+  if (
+    !isRecord(body) ||
+    typeof body.entryId !== 'string' ||
+    !CANONICAL_UUID.test(body.entryId) ||
+    (body.maximumDepth !== 1 && body.maximumDepth !== 2) ||
+    typeof body.minimumScore !== 'number' ||
+    !Number.isSafeInteger(body.minimumScore) ||
+    body.minimumScore < 0 ||
+    body.minimumScore > 10_000
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    entryId: body.entryId,
+    maximumDepth: body.maximumDepth,
+    minimumScore: body.minimumScore,
+  });
+}
+
+function decodeEntrySearchCursor(
+  body: unknown,
+): Readonly<NonNullable<InformationEntrySearchRequest['after']>> | undefined {
+  if (body === undefined) return undefined;
+  if (
+    !isRecord(body) ||
+    body.schemaVersion !== 1 ||
+    typeof body.querySha256 !== 'string' ||
+    !/^[0-9a-f]{64}$/u.test(body.querySha256) ||
+    typeof body.associationDepth !== 'number' ||
+    !Number.isSafeInteger(body.associationDepth) ||
+    body.associationDepth < 0 ||
+    body.associationDepth > 2 ||
+    typeof body.matchReasonCount !== 'number' ||
+    !Number.isSafeInteger(body.matchReasonCount) ||
+    body.matchReasonCount < 0 ||
+    body.matchReasonCount > 5 ||
+    typeof body.associationScore !== 'number' ||
+    !Number.isSafeInteger(body.associationScore) ||
+    body.associationScore < 0 ||
+    body.associationScore > 10_000 ||
+    typeof body.capturedAt !== 'string' ||
+    Number.isNaN(Date.parse(body.capturedAt)) ||
+    typeof body.documentOrder !== 'number' ||
+    !Number.isSafeInteger(body.documentOrder) ||
+    body.documentOrder < 0 ||
+    typeof body.entryId !== 'string' ||
+    !CANONICAL_UUID.test(body.entryId)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    schemaVersion: 1 as const,
+    querySha256: body.querySha256,
+    associationDepth: body.associationDepth,
+    matchReasonCount: body.matchReasonCount,
+    associationScore: body.associationScore,
+    capturedAt: new Date(body.capturedAt).toISOString(),
+    documentOrder: body.documentOrder,
+    entryId: body.entryId,
+  });
+}
+
+function isIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
+  const date = new Date(value + 'T00:00:00.000Z');
+  return (
+    !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+  );
+}
 function decodeInformationEntryAssociationScope(
   body: unknown,
 ): boolean | undefined {

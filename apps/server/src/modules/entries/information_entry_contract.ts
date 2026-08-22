@@ -73,6 +73,7 @@ export interface CurrentInformationEntry {
   readonly sourceKey: string;
   readonly canonicalUri?: string;
   readonly capturedAt: string;
+  readonly publishedAt?: string;
   readonly value: Readonly<InformationEntryRevisionValue>;
 }
 
@@ -95,22 +96,80 @@ export interface InformationEntryRevisionWrite {
 
 export interface InformationEntrySearchRequest {
   readonly text?: string;
+  readonly contentKeyword?: string;
+  readonly sourceKey?: string;
   readonly snapshotId?: string;
   readonly typeKeyword?: EntryTypeKeyword;
+  readonly typeCustomName?: string;
   readonly domainKeyword?: EntryDomainKeyword;
+  readonly domainCustomName?: string;
+  readonly domainScope?: 'any' | 'primary' | 'secondary';
+  readonly chunkMode?: EntryChunkMode;
+  readonly time?: Readonly<{
+    field: 'published' | 'captured';
+    from?: string;
+    to?: string;
+  }>;
+  readonly association?: Readonly<{
+    entryId: string;
+    maximumDepth: 1 | 2;
+    minimumScore: number;
+  }>;
   readonly includePrivate: boolean;
   readonly limit: number;
+  readonly after?: Readonly<InformationEntrySearchCursor>;
 }
 
 export type InformationEntryMatchReason =
   'title' | 'body' | 'content_keyword' | 'type_keyword' | 'domain_keyword';
 
+export type InformationEntryFilterReason =
+  | 'content_keyword'
+  | 'source'
+  | 'document'
+  | 'type'
+  | 'domain'
+  | 'chunk_mode'
+  | 'published_time'
+  | 'captured_time'
+  | 'private_scope';
+
+export interface InformationEntryAssociationPathStep {
+  readonly fromEntryId: string;
+  readonly toEntryId: string;
+  readonly effectiveScore: number;
+  readonly candidateBasis: readonly string[];
+  readonly manualAction?: string;
+}
+
+export interface InformationEntryAssociationMatch {
+  readonly anchorEntryId: string;
+  readonly depth: number;
+  readonly effectiveScore: number;
+  readonly path: readonly Readonly<InformationEntryAssociationPathStep>[];
+}
+
+export interface InformationEntrySearchCursor {
+  readonly schemaVersion: 1;
+  readonly querySha256: string;
+  readonly associationDepth: number;
+  readonly matchReasonCount: number;
+  readonly associationScore: number;
+  readonly capturedAt: string;
+  readonly documentOrder: number;
+  readonly entryId: string;
+}
+
 export interface InformationEntrySearchItem {
   readonly entry: Readonly<CurrentInformationEntry>;
   readonly matchReasons: readonly InformationEntryMatchReason[];
+  readonly filterReasons: readonly InformationEntryFilterReason[];
+  readonly association?: Readonly<InformationEntryAssociationMatch>;
 }
 
 export interface InformationEntrySearchResult {
+  readonly querySha256: string;
   readonly totalCount: number;
   readonly items: readonly Readonly<InformationEntrySearchItem>[];
+  readonly nextCursor?: Readonly<InformationEntrySearchCursor>;
 }

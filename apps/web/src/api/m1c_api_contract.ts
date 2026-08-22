@@ -245,6 +245,7 @@ export interface InformationEntry {
   readonly sourceKey: string;
   readonly canonicalUri?: string;
   readonly capturedAt: string;
+  readonly publishedAt?: string;
   readonly value: Readonly<{
     documentOrder: number;
     titlePath: string;
@@ -332,20 +333,58 @@ export type InformationEntryRevisionResponse =
   | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
   | DomainFailure;
 
+export type InformationEntryMatchReason =
+  'title' | 'body' | 'content_keyword' | 'type_keyword' | 'domain_keyword';
+
+export type InformationEntryFilterReason =
+  | 'content_keyword'
+  | 'source'
+  | 'document'
+  | 'type'
+  | 'domain'
+  | 'chunk_mode'
+  | 'published_time'
+  | 'captured_time'
+  | 'private_scope';
+
+export interface InformationEntryAssociationPathStep {
+  readonly fromEntryId: string;
+  readonly toEntryId: string;
+  readonly effectiveScore: number;
+  readonly candidateBasis: readonly string[];
+  readonly manualAction?: string;
+}
+
+export interface InformationEntryAssociationMatch {
+  readonly anchorEntryId: string;
+  readonly depth: number;
+  readonly effectiveScore: number;
+  readonly path: readonly Readonly<InformationEntryAssociationPathStep>[];
+}
+
+export interface InformationEntrySearchCursor {
+  readonly schemaVersion: 1;
+  readonly querySha256: string;
+  readonly associationDepth: number;
+  readonly matchReasonCount: number;
+  readonly associationScore: number;
+  readonly capturedAt: string;
+  readonly documentOrder: number;
+  readonly entryId: string;
+}
+
 export type InformationEntrySearchResponse =
   | Readonly<{
       status: 'ok';
+      querySha256: string;
       totalCount: number;
       items: readonly Readonly<{
         entry: Readonly<InformationEntry>;
-        matchReasons: readonly (
-          | 'title'
-          | 'body'
-          | 'content_keyword'
-          | 'type_keyword'
-          | 'domain_keyword'
-        )[];
+        matchReasons: readonly InformationEntryMatchReason[];
+        filterReasons: readonly InformationEntryFilterReason[];
+        association?: Readonly<InformationEntryAssociationMatch>;
       }>[];
+      nextCursor?: Readonly<InformationEntrySearchCursor>;
     }>
   | DomainFailure;
 
