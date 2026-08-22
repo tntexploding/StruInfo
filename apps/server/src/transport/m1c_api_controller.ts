@@ -195,6 +195,49 @@ export class M1cApiController {
     );
   }
 
+  @Post('entries/associations/rebuild')
+  public async rebuildInformationEntryAssociations(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.rebuildInformationEntryAssociations(body),
+    );
+  }
+
+  @Get('entries/:entryId/associations')
+  public async informationEntryAssociations(
+    @Param('entryId') entryId: string,
+    @Query('includePrivate') includePrivate: string | undefined,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.listInformationEntryAssociations(
+        entryId,
+        parseOptionalBooleanQuery(includePrivate),
+      ),
+    );
+  }
+
+  @Put('entries/:entryId/associations/:relatedEntryId')
+  public async reviseInformationEntryAssociation(
+    @Param('entryId') entryId: string,
+    @Param('relatedEntryId') relatedEntryId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.reviseInformationEntryAssociation(
+        entryId,
+        relatedEntryId,
+        body,
+      ),
+    );
+  }
+
   @Get('entry-documents')
   public async informationEntryDocuments(
     @Query('includePrivate') includePrivate: string | undefined,

@@ -108,6 +108,23 @@ condition is met or new evidence demonstrates reachable material product impact.
   requirement, or the user asks to declassify or securely delete retained
   private material.
 
+### DH-007: Serialize Legacy Entry Snapshot Reads Before pg 9
+
+- Source: M1D-3 selected-workspace PostgreSQL 18 smoke
+- Owner: Platform
+- Status: Deferred hardening
+- Scope: Existing M1D Entry and Document-tag repository snapshot loaders
+- Evidence: `pg@8.22.0` emitted its deprecation warning when pre-existing Entry
+  and Document-tag loaders submitted concurrent queries through one checked-out
+  client. The new association repository already issues its snapshot queries
+  sequentially, and the full M1D-3 rebuild and browser read completed correctly.
+- Current product impact: None observed. PostgreSQL 18 returned the correct 34
+  Entries and 7 association pairs, and no supported product operation failed or
+  returned inconsistent data. This is a future driver-compatibility cleanup, not
+  a current main-line blocker.
+- Revisit when: The repository upgrades to pg 9, the warning becomes an error,
+  or measured latency/inconsistency points to these loaders.
+
 ## Entry Template
 
 ### DH-NNN: Short Title

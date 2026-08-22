@@ -4,6 +4,9 @@ import type {
   DomainCommandResponse,
   EvidenceSnapshot,
   EvidenceSnapshotSummary,
+  InformationEntryAssociationListResponse,
+  InformationEntryAssociationOverrideResponse,
+  InformationEntryAssociationRebuildResponse,
   InformationEntryListResponse,
   InformationEntryDocumentListResponse,
   InformationEntryMaterializeResponse,
@@ -102,6 +105,20 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntrySearchResponse>>;
+  rebuildInformationEntryAssociations(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryAssociationRebuildResponse>>;
+  listInformationEntryAssociations(
+    entryId: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryAssociationListResponse>>;
+  reviseInformationEntryAssociation(
+    entryId: string,
+    relatedEntryId: string,
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryAssociationOverrideResponse>>;
   listInformationEntryDocuments(
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryDocumentListResponse>>;
@@ -155,6 +172,9 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     listInformationEntries: reject,
     reviseInformationEntry: reject,
     searchInformationEntries: reject,
+    rebuildInformationEntryAssociations: reject,
+    listInformationEntryAssociations: reject,
+    reviseInformationEntryAssociation: reject,
     listInformationEntryDocuments: reject,
     aggregateInformationDocumentTags: reject,
     reviseInformationDocumentTags: reject,
@@ -257,6 +277,28 @@ export function createM1cApiClient(
     searchInformationEntries: (body, options) =>
       post<InformationEntrySearchResponse>(
         'api/v1/entries/search',
+        body,
+        options,
+      ),
+    rebuildInformationEntryAssociations: (body, options) =>
+      post<InformationEntryAssociationRebuildResponse>(
+        'api/v1/entries/associations/rebuild',
+        body,
+        options,
+      ),
+    listInformationEntryAssociations: (entryId, options) =>
+      get<InformationEntryAssociationListResponse>(
+        `api/v1/entries/${encodeURIComponent(entryId)}/associations${privateOnlyQuery(options?.includePrivate === true)}`,
+        options,
+      ),
+    reviseInformationEntryAssociation: (
+      entryId,
+      relatedEntryId,
+      body,
+      options,
+    ) =>
+      put<InformationEntryAssociationOverrideResponse>(
+        `api/v1/entries/${encodeURIComponent(entryId)}/associations/${encodeURIComponent(relatedEntryId)}`,
         body,
         options,
       ),

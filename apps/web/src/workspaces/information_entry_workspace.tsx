@@ -7,6 +7,10 @@ import {
   type EntryDomainKeyword,
   type EntryTypeKeyword,
   type EvidenceSnapshotSummary,
+  type InformationEntryAssociationAction,
+  type InformationEntryAssociationListResponse,
+  type InformationEntryAssociationOverrideResponse,
+  type InformationEntryAssociationRebuildResponse,
   type InformationDocumentTagWriteResponse,
   type InformationEntry,
   type InformationEntryDocumentListResponse,
@@ -75,6 +79,18 @@ export interface InformationEntryWorkspaceProps {
   readonly onSearch: (
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationEntrySearchResponse>>;
+  readonly onRebuildAssociations: (
+    body: unknown,
+  ) => Promise<M1cHttpResponse<InformationEntryAssociationRebuildResponse>>;
+  readonly onListAssociations: (
+    entryId: string,
+    includePrivate: boolean,
+  ) => Promise<M1cHttpResponse<InformationEntryAssociationListResponse>>;
+  readonly onReviseAssociation: (
+    entryId: string,
+    relatedEntryId: string,
+    body: unknown,
+  ) => Promise<M1cHttpResponse<InformationEntryAssociationOverrideResponse>>;
   readonly onListDocuments: (
     includePrivate: boolean,
   ) => Promise<M1cHttpResponse<InformationEntryDocumentListResponse>>;
@@ -96,10 +112,13 @@ export interface InformationEntryWorkspaceProps {
 export function InformationEntryWorkspace({
   snapshots,
   onAggregateDocumentTags,
+  onListAssociations,
   onListDocuments,
   onMaterialize,
   onOpenEvidence,
+  onRebuildAssociations,
   onRevise,
+  onReviseAssociation,
   onReviseDocumentTags,
   onSearch,
 }: InformationEntryWorkspaceProps) {
@@ -473,21 +492,32 @@ export function InformationEntryWorkspace({
           </section>
 
           {selectedEntry === undefined ? null : (
-            <InformationEntryEditor
-              key={`${selectedEntry.entryId}:${selectedEntry.revision.toString()}`}
-              entry={selectedEntry}
-              includePrivate={includePrivate}
-              onOpenEvidence={onOpenEvidence}
-              onLocateDocument={() => {
-                setSnapshotId(selectedEntry.snapshotId);
-              }}
-              onRevise={onRevise}
-              onSaved={async (nextFeedback) => {
-                setFeedback(nextFeedback);
-                await executeSearch();
-                await refreshDocuments();
-              }}
-            />
+            <div className="entry-detail-stack">
+              <InformationEntryEditor
+                key={`${selectedEntry.entryId}:${selectedEntry.revision.toString()}`}
+                entry={selectedEntry}
+                includePrivate={includePrivate}
+                onOpenEvidence={onOpenEvidence}
+                onLocateDocument={() => {
+                  setSnapshotId(selectedEntry.snapshotId);
+                }}
+                onRevise={onRevise}
+                onSaved={async (nextFeedback) => {
+                  setFeedback(nextFeedback);
+                  await executeSearch();
+                  await refreshDocuments();
+                }}
+              />
+              <InformationEntryAssociationPanel
+                key={`${selectedEntry.entryId}:${selectedEntry.revision.toString()}:${includePrivate ? 'private' : 'public'}`}
+                entry={selectedEntry}
+                includePrivate={includePrivate}
+                onList={onListAssociations}
+                onOpenEvidence={onOpenEvidence}
+                onRebuild={onRebuildAssociations}
+                onRevise={onReviseAssociation}
+              />
+            </div>
           )}
         </div>
       )}
@@ -1063,6 +1093,358 @@ function InformationEntryEditor({
   );
 }
 
+type AssociationViewState =
+  | Readonly<{status: 'loading'}>
+  | Readonly<{
+      status: 'ready';
+      response: Extract<
+        InformationEntryAssociationListResponse,
+        {status: 'ok'}
+      >;
+    }>
+  | Readonly<{status: 'error'; message: string}>;
+
+function InformationEntryAssociationPanel({
+  entry,
+  includePrivate,
+  onList,
+  onOpenEvidence,
+  onRebuild,
+  onRevise,
+}: {
+  readonly entry: Readonly<InformationEntry>;
+  readonly includePrivate: boolean;
+  readonly onList: InformationEntryWorkspaceProps['onListAssociations'];
+  readonly onOpenEvidence: InformationEntryWorkspaceProps['onOpenEvidence'];
+  readonly onRebuild: InformationEntryWorkspaceProps['onRebuildAssociations'];
+  readonly onRevise: InformationEntryWorkspaceProps['onReviseAssociation'];
+}) {
+  const [view, setView] = useState<AssociationViewState>({status: 'loading'});
+  const [feedback, setFeedback] = useState<ActionFeedback>();
+  const [rebuilding, setRebuilding] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string>();
+
+  const refresh = useCallback(async () => {
+    setView({status: 'loading'});
+    try {
+      const response = await onList(entry.entryId, includePrivate);
+      if (response.body.status !== 'ok') {
+        setView({status: 'error', message: describeFailure(response.body)});
+        return;
+      }
+      setView({status: 'ready', response: response.body});
+    } catch {
+      setView({
+        status: 'error',
+        message: '无法读取相关内容；Entry 与人工决定没有被修改。',
+      });
+    }
+  }, [entry.entryId, includePrivate, onList]);
+
+  useEffect(() => {
+    globalThis.queueMicrotask(() => void refresh());
+  }, [refresh]);
+
+  async function rebuild() {
+    if (rebuilding) return;
+    setRebuilding(true);
+    setFeedback(undefined);
+    try {
+      const response = await onRebuild({includePrivate});
+      if (response.body.status !== 'rebuilt') {
+        setFeedback({
+          kind: 'error',
+          title: '关联没有重建',
+          detail: describeFailure(response.body),
+        });
+        return;
+      }
+      setFeedback({
+        kind: 'success',
+        title: '当前范围关联已重建',
+        detail: `${response.body.entryCount.toString()} 个 Entry 生成 ${response.body.projectedCount.toString()} 条选择性关联；人工决定保持不变。`,
+      });
+      await refresh();
+    } catch {
+      setFeedback({
+        kind: 'error',
+        title: '本地接口不可达',
+        detail: '没有替换派生关联；人工决定保持不变。',
+      });
+    } finally {
+      setRebuilding(false);
+    }
+  }
+
+  async function revise(
+    relatedEntryId: string,
+    expectedRevision: number,
+    action: InformationEntryAssociationAction,
+  ) {
+    if (updatingId !== undefined) return;
+    setUpdatingId(relatedEntryId);
+    setFeedback(undefined);
+    try {
+      const response = await onRevise(entry.entryId, relatedEntryId, {
+        expectedRevision,
+        action,
+        includePrivate,
+      });
+      if (
+        response.body.status !== 'applied' &&
+        response.body.status !== 'unchanged'
+      ) {
+        setFeedback({
+          kind: 'error',
+          title: '人工关联决定没有保存',
+          detail: describeFailure(response.body),
+        });
+        return;
+      }
+      setFeedback({
+        kind: 'success',
+        title: '人工关联决定已保存',
+        detail: `${associationActionLabel(action)}采用独立修订记录，后续重算不会覆盖。`,
+      });
+      await refresh();
+    } catch {
+      setFeedback({
+        kind: 'error',
+        title: '本地接口不可达',
+        detail: '人工关联决定没有保存。',
+      });
+    } finally {
+      setUpdatingId(undefined);
+    }
+  }
+
+  const headingId = `entry-association-title-${entry.entryId}`;
+  return (
+    <section className="entry-association-panel" aria-labelledby={headingId}>
+      <header className="console-heading">
+        <div>
+          <p className="section-index">SELECTIVE ASSOCIATION</p>
+          <h2 id={headingId}>可能相关</h2>
+          <p>
+            本地索引先缩小候选，再分别计算内容、类型与领域相似度；这不是正式语义关系。
+          </p>
+        </div>
+        <span className="record-count">
+          {view.status === 'ready'
+            ? `${view.response.totalCount.toString()} 条`
+            : '读取中'}
+        </span>
+      </header>
+
+      <div className="entry-association-toolbar">
+        <p>
+          {includePrivate
+            ? '当前明确包含隐私 Entry；任一私密端点都只在本次范围内显示。'
+            : '当前为普通范围，隐私 Entry 及涉及它们的关联均已排除。'}
+        </p>
+        <button
+          className="secondary-action"
+          type="button"
+          disabled={rebuilding}
+          onClick={() => void rebuild()}
+        >
+          {rebuilding ? '正在重建…' : '重建当前范围关联'}
+        </button>
+      </div>
+      <ActionNotice feedback={feedback} />
+
+      <div className="entry-association-state" aria-live="polite">
+        {view.status === 'loading' ? (
+          <p className="entry-association-message">正在读取相关内容…</p>
+        ) : view.status === 'error' ? (
+          <div className="entry-association-message" role="alert">
+            <p>{view.message}</p>
+            <button
+              className="text-action"
+              type="button"
+              onClick={() => void refresh()}
+            >
+              重试
+            </button>
+          </div>
+        ) : view.response.associations.length === 0 ? (
+          <div className="entry-association-message">
+            <p>当前还没有超过阈值的选择性关联。</p>
+            <small>
+              先为多个 Entry
+              设置内容、类型和领域关键词，再执行“重建当前范围关联”。
+            </small>
+          </div>
+        ) : (
+          <ul className="entry-association-list">
+            {view.response.associations.map((association) => {
+              const related = association.relatedEntry;
+              const overrideRevision = association.override?.revision ?? 0;
+              const busy = updatingId === related.entryId;
+              return (
+                <li key={related.entryId} data-blocked={association.isBlocked}>
+                  <article>
+                    <header>
+                      <div>
+                        <span className="entry-association-score">
+                          {association.isBlocked
+                            ? '已屏蔽'
+                            : `${scorePercentage(association.effectiveScore)}%`}
+                        </span>
+                        <h3>{related.value.titlePath || '未命名条目'}</h3>
+                        <small>
+                          {related.sourceKey} · r{related.revision.toString()}
+                          {related.value.isPrivate ? ' · 私密' : ''}
+                        </small>
+                      </div>
+                      <button
+                        className="text-action"
+                        type="button"
+                        onClick={() => {
+                          onOpenEvidence(
+                            related.snapshotId,
+                            related.value.fragmentIds[0],
+                            related.value.isPrivate,
+                          );
+                        }}
+                      >
+                        查看来源
+                      </button>
+                    </header>
+                    <p className="entry-association-excerpt">
+                      {excerpt(related.value.body)}
+                    </p>
+                    <dl className="entry-association-metrics">
+                      <div>
+                        <dt>内容</dt>
+                        <dd>
+                          {scorePercentage(
+                            association.projection?.contentSimilarity ?? 0,
+                          )}
+                          %
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>类型</dt>
+                        <dd>
+                          {scorePercentage(
+                            association.projection?.typeSimilarity ?? 0,
+                          )}
+                          %
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>领域</dt>
+                        <dd>
+                          {scorePercentage(
+                            association.projection?.domainSimilarity ?? 0,
+                          )}
+                          %
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>基础分</dt>
+                        <dd>
+                          {scorePercentage(
+                            association.projection?.baseScore ?? 0,
+                          )}
+                          %
+                        </dd>
+                      </div>
+                    </dl>
+                    <div
+                      className="entry-association-basis"
+                      aria-label="候选依据"
+                    >
+                      {(association.projection?.candidateBasis ?? []).map(
+                        (basis) => (
+                          <span key={basis}>
+                            {associationBasisLabel(basis)}
+                          </span>
+                        ),
+                      )}
+                      {association.override === undefined ? null : (
+                        <span data-manual="true">
+                          人工：
+                          {associationActionLabel(
+                            association.override.value.action,
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    <div className="entry-association-actions">
+                      <button
+                        className="secondary-action"
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void revise(
+                            related.entryId,
+                            overrideRevision,
+                            'enhance',
+                          )
+                        }
+                      >
+                        增强
+                      </button>
+                      <button
+                        className="secondary-action"
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void revise(
+                            related.entryId,
+                            overrideRevision,
+                            'weaken',
+                          )
+                        }
+                      >
+                        削弱
+                      </button>
+                      <button
+                        className="secondary-action"
+                        type="button"
+                        disabled={busy || association.isBlocked}
+                        onClick={() =>
+                          void revise(
+                            related.entryId,
+                            overrideRevision,
+                            'block',
+                          )
+                        }
+                      >
+                        屏蔽
+                      </button>
+                      <button
+                        className="text-action"
+                        type="button"
+                        disabled={
+                          busy ||
+                          association.override === undefined ||
+                          association.override.value.action === 'restore'
+                        }
+                        onClick={() =>
+                          void revise(
+                            related.entryId,
+                            overrideRevision,
+                            'restore',
+                          )
+                        }
+                      >
+                        恢复自动结果
+                      </button>
+                    </div>
+                  </article>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function DomainField({
   customName,
   label,
@@ -1130,6 +1512,47 @@ function matchReasonLabel(value: string): string {
     default:
       return value;
   }
+}
+
+function associationActionLabel(
+  value: InformationEntryAssociationAction,
+): string {
+  switch (value) {
+    case 'enhance':
+      return '增强';
+    case 'weaken':
+      return '削弱';
+    case 'block':
+      return '屏蔽';
+    case 'restore':
+      return '恢复自动结果';
+  }
+}
+
+function associationBasisLabel(value: string): string {
+  switch (value) {
+    case 'content_keyword':
+      return '内容词';
+    case 'text_term':
+      return '本地正文';
+    case 'type_keyword':
+      return '类型';
+    case 'domain_keyword':
+      return '领域';
+    case 'manual_override':
+      return '人工决定';
+    default:
+      return value;
+  }
+}
+
+function scorePercentage(value: number): string {
+  return (value / 100).toFixed(value % 100 === 0 ? 0 : 1);
+}
+
+function excerpt(value: string): string {
+  const normalized = value.replace(/\s+/gu, ' ').trim();
+  return normalized.length <= 180 ? normalized : `${normalized.slice(0, 177)}…`;
 }
 
 function describeFailure(value: unknown): string {

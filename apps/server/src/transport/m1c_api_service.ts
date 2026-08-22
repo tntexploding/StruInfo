@@ -9,15 +9,24 @@ import type {ManualCurationReadRepositoryPort} from '../modules/curation/manual_
 import {
   ENTRY_DOMAIN_KEYWORDS,
   ENTRY_TYPE_KEYWORDS,
+  INFORMATION_ENTRY_ASSOCIATION_ACTIONS,
+  INFORMATION_ENTRY_ASSOCIATION_POLICY,
+  buildInformationEntryAssociationProjection,
   deriveInformationDocumentTagRevisionId,
+  deriveInformationEntryAssociationOverrideRevisionId,
   deriveInformationEntryRevisionId,
+  listInformationEntryAssociations as selectInformationEntryAssociations,
+  orderedInformationEntryAssociationPair,
   prepareAggregatedInformationDocumentTags,
+  prepareInformationEntryAssociationOverride,
   prepareManualInformationDocumentTags,
   prepareManualEntryRevision,
   prepareSplitInformationEntries,
   searchCurrentInformationEntries,
   type EntryDomainKeyword,
   type EntryTypeKeyword,
+  type InformationEntryAssociationAction,
+  type InformationEntryAssociationRepositoryPort,
   type InformationDocumentTagRepositoryPort,
   type InformationEntryDocumentView,
   type InformationEntryRepositoryPort,
@@ -70,6 +79,7 @@ export interface M1cApiServiceDependencies {
   readonly retrievalRepository: DeterministicKnowledgeSearchRepositoryPort;
   readonly informationEntryRepository: InformationEntryRepositoryPort;
   readonly informationDocumentTagRepository: InformationDocumentTagRepositoryPort;
+  readonly informationEntryAssociationRepository: InformationEntryAssociationRepositoryPort;
   readonly workspaceTransfer: M1cWorkspaceTransferPort;
 }
 
@@ -107,6 +117,16 @@ export interface M1cApiServicePort {
     body: unknown,
   ): Promise<M1cHttpResult>;
   searchInformationEntries(body: unknown): Promise<M1cHttpResult>;
+  rebuildInformationEntryAssociations(body: unknown): Promise<M1cHttpResult>;
+  listInformationEntryAssociations(
+    entryId: string,
+    includePrivate?: unknown,
+  ): Promise<M1cHttpResult>;
+  reviseInformationEntryAssociation(
+    entryId: string,
+    relatedEntryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult>;
   listInformationEntryDocuments(
     includePrivate?: unknown,
   ): Promise<M1cHttpResult>;
@@ -573,6 +593,140 @@ export class M1cApiService implements M1cApiServicePort {
         );
       const result = searchCurrentInformationEntries(entries, request);
       return httpResult(200, {status: 'ok', ...result});
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async rebuildInformationEntryAssociations(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const includePrivate = decodeInformationEntryAssociationScope(body);
+    if (includePrivate === undefined) return inputFailure('body');
+    try {
+      const entries =
+        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          includePrivate,
+        );
+      const projections = buildInformationEntryAssociationProjection(entries);
+      const projectedCount =
+        await this.#dependencies.informationEntryAssociationRepository.replaceAssociationProjections(
+          this.#dependencies.workspaceId,
+          projections,
+          includePrivate,
+        );
+      return httpResult(200, {
+        status: 'rebuilt',
+        entryCount: entries.length,
+        projectedCount,
+        policy: INFORMATION_ENTRY_ASSOCIATION_POLICY,
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async listInformationEntryAssociations(
+    entryId: string,
+    includePrivate: unknown = false,
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
+    if (typeof includePrivate !== 'boolean') {
+      return inputFailure('query.includePrivate');
+    }
+    try {
+      const [entries, snapshot] = await Promise.all([
+        this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          includePrivate,
+        ),
+        this.#dependencies.informationEntryAssociationRepository.loadAssociationSnapshot(
+          this.#dependencies.workspaceId,
+          includePrivate,
+        ),
+      ]);
+      if (!entries.some((entry) => entry.entryId === entryId)) {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'information_entry_not_found'}),
+        });
+      }
+      const associations = selectInformationEntryAssociations(
+        entryId,
+        entries,
+        snapshot,
+      );
+      return httpResult(200, {
+        status: 'ok',
+        entryId,
+        totalCount: associations.length,
+        policy: INFORMATION_ENTRY_ASSOCIATION_POLICY,
+        associations,
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async reviseInformationEntryAssociation(
+    entryId: string,
+    relatedEntryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
+    if (!CANONICAL_UUID.test(relatedEntryId)) {
+      return inputFailure('path.relatedEntryId');
+    }
+    const input = decodeInformationEntryAssociationOverride(body);
+    const pair = orderedInformationEntryAssociationPair(
+      entryId,
+      relatedEntryId,
+    );
+    if (input === undefined || pair === undefined) return inputFailure('body');
+    try {
+      const entries =
+        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          input.includePrivate,
+        );
+      if (
+        !entries.some((entry) => entry.entryId === entryId) ||
+        !entries.some((entry) => entry.entryId === relatedEntryId)
+      ) {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'information_entry_not_found'}),
+        });
+      }
+      const outcome =
+        await this.#dependencies.informationEntryAssociationRepository.writeAssociationOverride(
+          {
+            workspaceId: this.#dependencies.workspaceId,
+            ...pair,
+            expectedRevision: input.expectedRevision,
+            revisionId: deriveInformationEntryAssociationOverrideRevisionId(
+              pair.entryLowId,
+              pair.entryHighId,
+              input.expectedRevision + 1,
+            ),
+            includePrivate: input.includePrivate,
+            value: prepareInformationEntryAssociationOverride(input.action),
+          },
+        );
+      if (outcome === 'not_found') {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'information_entry_not_found'}),
+        });
+      }
+      if (outcome === 'stale') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'stale_association_override_revision'}),
+        });
+      }
+      return httpResult(200, {status: outcome});
     } catch {
       return repositoryFailure();
     }
@@ -1071,6 +1225,43 @@ function decodeEntrySearchBody(
       : {domainKeyword: domainKeyword as EntryDomainKeyword}),
     includePrivate,
     limit,
+  });
+}
+
+function decodeInformationEntryAssociationScope(
+  body: unknown,
+): boolean | undefined {
+  if (!isRecord(body)) return undefined;
+  const includePrivate = body.includePrivate ?? false;
+  return typeof includePrivate === 'boolean' ? includePrivate : undefined;
+}
+
+function decodeInformationEntryAssociationOverride(body: unknown):
+  | Readonly<{
+      expectedRevision: number;
+      includePrivate: boolean;
+      action: InformationEntryAssociationAction;
+    }>
+  | undefined {
+  if (!isRecord(body)) return undefined;
+  const includePrivate = body.includePrivate ?? false;
+  if (
+    typeof body.expectedRevision !== 'number' ||
+    !Number.isSafeInteger(body.expectedRevision) ||
+    body.expectedRevision < 0 ||
+    body.expectedRevision >= 2_147_483_647 ||
+    typeof body.action !== 'string' ||
+    !INFORMATION_ENTRY_ASSOCIATION_ACTIONS.includes(
+      body.action as InformationEntryAssociationAction,
+    ) ||
+    typeof includePrivate !== 'boolean'
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    expectedRevision: body.expectedRevision,
+    includePrivate,
+    action: body.action as InformationEntryAssociationAction,
   });
 }
 

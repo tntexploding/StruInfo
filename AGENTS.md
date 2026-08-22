@@ -139,10 +139,22 @@ and `000009` to the selected external workspace, materialized issue 398 into 34
 Entries, and extended the same external Workspace Bundle with a separate
 `struinfo.m1d-entry.v1` section. New exports now atomically carry all 45 current
 workspace tables while old one-section M1C Bundles remain readable as an empty
-Entry state; Blob bytes and personal UI preferences remain external. The next
-main-line increment is M1D-3 selective Entry association with rebuildable scores
-and durable manual overrides; do not add AI, vectors or speculative search
-infrastructure first.
+Entry state; Blob bytes and personal UI preferences remain external.
+
+M1D-3 now adds forward migration `000010` and selective Entry associations.
+A versioned local policy narrows candidates through content-keyword and text
+indexes, then stores separate content/type/domain scores plus a rebuildable base
+score. Durable append-only manual overrides can enhance, weaken, block or restore
+an association and are never rewritten by projection rebuilds. The local API and
+Entry workspace expose rebuild, inspection, exact-source return and manual
+control while applying privacy scope before visibility. In the selected external
+workspace, 34 issue-398 Entries deterministically produce 7 association pairs
+covering 6 Entries; browser use confirmed the same result. These candidates are
+navigation aids, not formal semantic relations. Association state is deliberately
+not yet part of the M1D Bundle section; M1D-5 owns that additive transfer work.
+The next main-line increment is M1D-4 complete Entry search and bounded
+neighborhood traversal. Do not add AI, vectors, `pg_trgm`, or speculative search
+infrastructure before real usage demonstrates the need.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable

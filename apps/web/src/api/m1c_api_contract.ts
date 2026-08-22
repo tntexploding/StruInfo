@@ -349,6 +349,85 @@ export type InformationEntrySearchResponse =
     }>
   | DomainFailure;
 
+export type InformationEntryAssociationAction =
+  'enhance' | 'weaken' | 'block' | 'restore';
+
+export type InformationEntryAssociationBasis =
+  'content_keyword' | 'text_term' | 'type_keyword' | 'domain_keyword';
+
+export interface InformationEntryAssociationPolicy {
+  readonly version: string;
+  readonly contentWeight: number;
+  readonly typeWeight: number;
+  readonly domainWeight: number;
+  readonly threshold: number;
+  readonly candidateLimit: number;
+  readonly adjustmentStep: number;
+}
+
+export interface InformationEntryAssociationProjection {
+  readonly workspaceId: string;
+  readonly entryLowId: string;
+  readonly entryHighId: string;
+  readonly entryLowRevision: number;
+  readonly entryLowRevisionId: string;
+  readonly entryHighRevision: number;
+  readonly entryHighRevisionId: string;
+  readonly contentSimilarity: number;
+  readonly typeSimilarity: number;
+  readonly domainSimilarity: number;
+  readonly baseScore: number;
+  readonly algorithmVersion: string;
+  readonly candidateBasis: readonly InformationEntryAssociationBasis[];
+  readonly candidateRank: number;
+}
+
+export interface CurrentInformationEntryAssociationOverride {
+  readonly workspaceId: string;
+  readonly entryLowId: string;
+  readonly entryHighId: string;
+  readonly revision: number;
+  readonly revisionId: string;
+  readonly value: Readonly<{
+    action: InformationEntryAssociationAction;
+    manualAdjustment: number;
+    isBlocked: boolean;
+  }>;
+}
+
+export interface InformationEntryAssociationView {
+  readonly relatedEntry: Readonly<InformationEntry>;
+  readonly projection?: Readonly<InformationEntryAssociationProjection>;
+  readonly override?: Readonly<CurrentInformationEntryAssociationOverride>;
+  readonly effectiveScore: number;
+  readonly isBlocked: boolean;
+}
+
+export type InformationEntryAssociationRebuildResponse =
+  | Readonly<{
+      status: 'rebuilt';
+      entryCount: number;
+      projectedCount: number;
+      policy: Readonly<InformationEntryAssociationPolicy>;
+    }>
+  | DomainFailure;
+
+export type InformationEntryAssociationListResponse =
+  | Readonly<{
+      status: 'ok';
+      entryId: string;
+      totalCount: number;
+      policy: Readonly<InformationEntryAssociationPolicy>;
+      associations: readonly Readonly<InformationEntryAssociationView>[];
+    }>
+  | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
+  | DomainFailure;
+
+export type InformationEntryAssociationOverrideResponse =
+  | Readonly<{status: 'applied' | 'unchanged'}>
+  | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
+  | DomainFailure;
+
 export interface CurationTarget {
   readonly workspaceId: string;
   readonly targetId: string;

@@ -136,7 +136,7 @@ M1C-EXPAND 对固定 398–407 期生成约 3.76 MiB 的旧单分区 Bundle。M1
 - 隐私文档的完整原始/规范化备份同样只通过 Blob 身份引用；仅保存 Bundle 而未保存对应外部 Blob 根，不能恢复其全文；
 - 只恢复同一 `workspaceId`，不重映射 UUID，也不克隆成另一工作区；
 - 只接受空目标，不合并、覆盖或部分更新已有工作区；
-- 当前两个分区覆盖 `000001`–`000009` 已实现的 Evidence、Curation、Knowledge、隐私可见性、Entry、Document 标签和命令历史，不虚构尚未实现的 association、preference、policy、saved view、job、outbox 或 AI 运行表；
+- 当前两个分区覆盖 `000001`–`000009` 已实现的 Evidence、Curation、Knowledge、隐私可见性、Entry、Document 标签和命令历史；M1D-3 的 `000010` 关联投影与人工 override 已可运行但尚未进入 Bundle，恢复当前 Bundle 会得到空关联状态，M1D-5 将以独立可兼容分区补齐；不虚构 preference、policy、saved view、job、outbox 或 AI 运行表；
 - 用户快捷标记、自动标签开关与筛选仍是外部 `preferences/` 中的个人 UI 配置，不属于领域 Bundle；
 - 不替代 PostgreSQL 集群备份、Blob 保留/垃圾回收、加密归档、增量备份、跨版本升级或发布恢复演练。
 
