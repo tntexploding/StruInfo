@@ -125,6 +125,19 @@ condition is met or new evidence demonstrates reachable material product impact.
 - Revisit when: The repository upgrades to pg 9, the warning becomes an error,
   or measured latency/inconsistency points to these loaders.
 
+### DH-008: Re-run the Candidate Artifact Gate Under Pinned Node 24.18.0
+
+- Source: M1D-5 local delivery verification
+- Owner: Test tooling and release operations
+- Status: Deferred hardening
+- Scope: Candidate artifact certification only
+- Evidence: The current host provides Node 24.19.0 while the repository pins
+  24.18.0, so the required pnpm entry rejects before running the artifact verifier.
+- Current product impact: None. Typecheck, build, 1,303 unit tests, 4 integration
+  tests and 9 browser tests passed; the runtime artifact serves the completed path.
+- Revisit when: Node 24.18.0 is available or M1D becomes a release candidate;
+  then run the unchanged pinned artifact command and update its manifest normally.
+
 ## Entry Template
 
 ### DH-NNN: Short Title

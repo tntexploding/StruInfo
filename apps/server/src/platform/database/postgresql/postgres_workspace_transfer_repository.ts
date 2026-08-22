@@ -5,6 +5,12 @@ import {
   normalizeM1cDomainSnapshot,
 } from '../../../workspace_transfer/m1c_domain_bundle.js';
 import {
+  assertM1dAssociationWorkspace,
+  M1D_ASSOCIATION_BUNDLE_SCHEMA,
+  M1D_ASSOCIATION_TABLES,
+  normalizeM1dAssociationSnapshot,
+} from '../../../workspace_transfer/m1d_association_bundle.js';
+import {
   assertM1dEntryWorkspace,
   M1D_ENTRY_BUNDLE_SCHEMA,
   M1D_ENTRY_TABLES,
@@ -47,6 +53,7 @@ export class PostgresM1cDomainTransferRepository implements M1cDomainTransferRep
     let rawSnapshot: Readonly<{
       domainTables: readonly RawTableSnapshot[];
       entryTables: readonly RawTableSnapshot[];
+      associationTables: readonly RawTableSnapshot[];
     }>;
     try {
       rawSnapshot = await runPostgresTransaction(
@@ -63,7 +70,16 @@ export class PostgresM1cDomainTransferRepository implements M1cDomainTransferRep
             workspaceId,
             M1D_ENTRY_TABLES,
           );
-          return Object.freeze({domainTables, entryTables});
+          const associationTables = await readTables(
+            client,
+            workspaceId,
+            M1D_ASSOCIATION_TABLES,
+          );
+          return Object.freeze({
+            domainTables,
+            entryTables,
+            associationTables,
+          });
         },
       );
     } catch {
@@ -81,9 +97,14 @@ export class PostgresM1cDomainTransferRepository implements M1cDomainTransferRep
         schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
         tables: rawSnapshot.entryTables,
       });
+      const associations = normalizeM1dAssociationSnapshot({
+        schemaVersion: M1D_ASSOCIATION_BUNDLE_SCHEMA,
+        tables: rawSnapshot.associationTables,
+      });
       assertM1cDomainWorkspace(domain, workspaceId);
       assertM1dEntryWorkspace(entries, workspaceId);
-      return Object.freeze({domain, entries});
+      assertM1dAssociationWorkspace(associations, workspaceId);
+      return Object.freeze({domain, entries, associations});
     } catch {
       throw new M1cDomainTransferRepositoryError('repository_failed');
     }
@@ -98,9 +119,13 @@ export class PostgresM1cDomainTransferRepository implements M1cDomainTransferRep
     try {
       const domain = normalizeM1cDomainSnapshot(snapshotInput.domain);
       const entries = normalizeM1dEntrySnapshot(snapshotInput.entries);
+      const associations = normalizeM1dAssociationSnapshot(
+        snapshotInput.associations,
+      );
       assertM1cDomainWorkspace(domain, workspaceId);
       assertM1dEntryWorkspace(entries, workspaceId);
-      snapshot = Object.freeze({domain, entries});
+      assertM1dAssociationWorkspace(associations, workspaceId);
+      snapshot = Object.freeze({domain, entries, associations});
     } catch {
       throw new M1cDomainTransferRepositoryError('repository_failed');
     }
@@ -138,6 +163,7 @@ async function restoreInTransaction(
   for (const tableSnapshot of [
     ...snapshot.domain.tables,
     ...snapshot.entries.tables,
+    ...snapshot.associations.tables,
   ]) {
     if (tableSnapshot.rows.length === 0) continue;
     await client.query<Row>(insertTableSql(tableSnapshot.name), [

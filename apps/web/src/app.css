@@ -2862,6 +2862,7 @@ button {
 
 .entry-command-panel,
 .entry-document-navigator,
+.entry-batch-panel,
 .entry-document-panel,
 .entry-result-list,
 .entry-editor,
@@ -2873,6 +2874,7 @@ button {
 }
 
 .entry-command-panel,
+.entry-batch-panel,
 .entry-document-panel,
 .entry-editor,
 .entry-association-panel {
@@ -2940,6 +2942,92 @@ button {
 
 .entry-document-navigator__loading {
   margin-block-start: var(--si-space-5);
+}
+
+.entry-batch-panel {
+  margin-block-end: var(--si-space-6);
+}
+
+.entry-batch-panel__summary,
+.entry-batch-panel__state {
+  margin-block: var(--si-space-4) 0;
+  color: var(--si-color-text-muted);
+  line-height: 1.7;
+}
+
+.entry-batch-panel__fieldset {
+  min-inline-size: 0;
+  margin: var(--si-space-5) 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.entry-batch-panel__fieldset legend {
+  margin-block-end: var(--si-space-3);
+  color: var(--si-color-text-secondary);
+  font-family: var(--si-font-mono);
+  font-size: var(--si-text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.entry-batch-panel__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--si-space-3);
+}
+
+.entry-batch-panel__option {
+  min-block-size: 3.5rem;
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-3);
+  padding: var(--si-space-3) var(--si-space-4);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-bg-shell);
+  cursor: pointer;
+}
+
+.entry-batch-panel__option:has(input:checked) {
+  border-color: var(--si-color-signal);
+  background: color-mix(in srgb, var(--si-color-signal) 8%, transparent);
+}
+
+.entry-batch-panel__option input {
+  inline-size: var(--si-space-5);
+  block-size: var(--si-space-5);
+  flex: 0 0 auto;
+  accent-color: var(--si-color-signal);
+}
+
+.entry-batch-panel__option span,
+.entry-batch-panel__option strong,
+.entry-batch-panel__option small {
+  min-inline-size: 0;
+  display: block;
+}
+
+.entry-batch-panel__option strong,
+.entry-batch-panel__option small {
+  overflow-wrap: anywhere;
+}
+
+.entry-batch-panel__option small {
+  margin-block-start: var(--si-space-1);
+  color: var(--si-color-text-muted);
+  font-family: var(--si-font-mono);
+  font-size: var(--si-text-xs);
+}
+
+.entry-batch-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--si-space-3);
+  margin-block-start: var(--si-space-5);
+  padding-block-start: var(--si-space-4);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
 }
 
 .entry-document-panel {
@@ -3790,6 +3878,13 @@ button {
     flex-direction: column;
   }
 
+  .entry-batch-panel__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .entry-batch-panel__actions .primary-action,
+  .entry-batch-panel__actions .text-action,
   .entry-command-actions .primary-action,
   .entry-command-actions .secondary-action,
   .entry-search-association-filter .text-action {

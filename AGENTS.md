@@ -141,18 +141,18 @@ Entries, and extended the same external Workspace Bundle with a separate
 workspace tables while old one-section M1C Bundles remain readable as an empty
 Entry state; Blob bytes and personal UI preferences remain external.
 
-M1D-3 now adds forward migration `000010` and selective Entry associations.
-A versioned local policy narrows candidates through content-keyword and text
+M1D-3 adds forward migration `000010` and selective Entry associations. A
+versioned local policy narrows candidates through content-keyword and text
 indexes, then stores separate content/type/domain scores plus a rebuildable base
 score. Durable append-only manual overrides can enhance, weaken, block or restore
 an association and are never rewritten by projection rebuilds. The local API and
 Entry workspace expose rebuild, inspection, exact-source return and manual
 control while applying privacy scope before visibility. In the selected external
-workspace, 34 issue-398 Entries deterministically produce 7 association pairs
-covering 6 Entries; browser use confirmed the same result. These candidates are
-navigation aids, not formal semantic relations. Association state is deliberately
-not yet part of the M1D Bundle section; M1D-5 owns that additive transfer work.
-M1D-4 now completes explainable Entry search without a new migration or search
+workspace, 34 issue-398 Entries deterministically produced 7 association pairs
+covering 6 Entries. These candidates are navigation aids, not formal semantic
+relations.
+
+M1D-4 completes explainable Entry search without a new migration or search
 service. One query-bound cursor combines text, exact content/source keys,
 Snapshot, type/custom type, domain/custom domain and primary/secondary scope,
 chunk mode, published/captured time, privacy and optional one- or two-hop
@@ -164,8 +164,23 @@ The selected external workspace returned all 34 issue-398 Entries in stable
 seven existing projections, and averaged 17.23 ms over 20 sequential public
 searches. Browser checks passed at 320, 390, 768, 1024 and 1440 CSS pixels. This
 workload does not justify AI, vectors, `pg_trgm`, query pushdown or speculative
-indexes. The next main-line increment is M1D-5 Bundle coverage for association
-state plus explicit conversion and direct use of the remaining Snapshots.
+indexes.
+
+M1D-5 completes the runnable Entry-network baseline. Workspace Bundle v1 now
+adds a third backward-compatible `struinfo.m1d-association.v1` section for the
+three `000010` projection/override tables; current exports carry all 48 workspace
+tables while old one- and two-section Bundles restore missing Entry or association
+state as empty. The owner explicitly selected the remaining nine fixed Snapshots,
+materializing issues 398 through 407 into 345 current Entries and rebuilding 598
+association projections without a seed or background writer. A 5,281,365-byte,
+10-Blob-reference Bundle containing 9,385 rows restored atomically to a disposable
+empty database with exact document, Entry-search, source and association parity.
+A disposable enhance/restore override round-tripped as two append-only revisions;
+replaying onto a non-empty target returned `workspace_not_empty` without changing
+the 345 restored Entries. Blob bytes, exports and personal preferences remained
+external. The runnable M1D baseline is now complete; later work must come from
+direct owner use or an explicitly accepted M1E proposal boundary, not speculative
+AI, vectors, indexing or another certification-hardening cycle.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable

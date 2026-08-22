@@ -157,6 +157,9 @@ export function InformationEntryWorkspace({
   const [selectedEntryId, setSelectedEntryId] = useState<string>();
   const [feedback, setFeedback] = useState<ActionFeedback>();
   const [materializing, setMaterializing] = useState(false);
+  const [selectedBatchSnapshotIds, setSelectedBatchSnapshotIds] = useState<
+    readonly string[]
+  >(Object.freeze([]));
   const [pageIndex, setPageIndex] = useState(0);
   const [pageCursors, setPageCursors] = useState<
     readonly (Readonly<InformationEntrySearchCursor> | undefined)[]
@@ -292,6 +295,27 @@ export function InformationEntryWorkspace({
     );
   }, [documentView, snapshotId]);
 
+  const availableBatchDocuments = useMemo(
+    () =>
+      documentView.status === 'ready'
+        ? documentView.response.documents.filter(
+            (document) => document.entryCount === 0,
+          )
+        : Object.freeze([]),
+    [documentView],
+  );
+
+  const availableBatchSnapshotIds = useMemo(() => {
+    const availableIds = new Set(
+      availableBatchDocuments.map((document) => document.snapshotId),
+    );
+    return Object.freeze(
+      selectedBatchSnapshotIds.filter((snapshotId) =>
+        availableIds.has(snapshotId),
+      ),
+    );
+  }, [availableBatchDocuments, selectedBatchSnapshotIds]);
+
   async function materialize() {
     if (snapshotId === '' || materializing) {
       setFeedback({
@@ -342,6 +366,113 @@ export function InformationEntryWorkspace({
     } finally {
       setMaterializing(false);
     }
+  }
+
+  async function materializeBatch() {
+    if (availableBatchSnapshotIds.length === 0 || materializing) {
+      setFeedback({
+        kind: 'error',
+        title: '请选择尚未生成的文档',
+        detail: '只有明确勾选的 Snapshot 才会构建 Entry。',
+      });
+      return;
+    }
+    const selectedIds = new Set(availableBatchSnapshotIds);
+    const documents = availableBatchDocuments.filter((document) =>
+      selectedIds.has(document.snapshotId),
+    );
+    if (documents.length === 0) {
+      setSelectedBatchSnapshotIds(Object.freeze([]));
+      setFeedback({
+        kind: 'success',
+        title: '所选文档已经完成',
+        detail: '没有创建重复 Entry；可以刷新列表后继续选择。',
+      });
+      return;
+    }
+
+    setMaterializing(true);
+    setFeedback(undefined);
+    let createdDocuments = 0;
+    let existingDocuments = 0;
+    let createdEntries = 0;
+    const failedDocuments: Readonly<{
+      snapshotId: string;
+      sourceKey: string;
+    }>[] = [];
+    try {
+      for (const document of documents) {
+        try {
+          const response = await onMaterialize({
+            snapshotId: document.snapshotId,
+            chunkMode: 'split',
+            includePrivate,
+          });
+          if (response.body.status === 'created') {
+            createdDocuments += 1;
+            createdEntries += response.body.createdCount;
+          } else if (response.body.status === 'existing') {
+            existingDocuments += 1;
+          } else {
+            failedDocuments.push({
+              snapshotId: document.snapshotId,
+              sourceKey: document.sourceKey,
+            });
+          }
+        } catch {
+          failedDocuments.push({
+            snapshotId: document.snapshotId,
+            sourceKey: document.sourceKey,
+          });
+        }
+      }
+      setSelectedBatchSnapshotIds(
+        Object.freeze(failedDocuments.map((document) => document.snapshotId)),
+      );
+      setFeedback(
+        failedDocuments.length === 0
+          ? {
+              kind: 'success',
+              title: '所选文档已完成 Entry 构建',
+              detail:
+                createdDocuments.toString() +
+                ' 份新增 ' +
+                createdEntries.toString() +
+                ' 个 Entry；' +
+                existingDocuments.toString() +
+                ' 份保持既有状态。',
+            }
+          : {
+              kind: 'error',
+              title: '部分文档尚未完成',
+              detail:
+                '已完成 ' +
+                (documents.length - failedDocuments.length).toString() +
+                ' / ' +
+                documents.length.toString() +
+                ' 份；失败项仍保持选中，可安全重试：' +
+                failedDocuments
+                  .map((document) => document.sourceKey)
+                  .join('、'),
+            },
+      );
+      await executeSearch();
+      await refreshDocuments();
+    } finally {
+      setMaterializing(false);
+    }
+  }
+
+  function toggleBatchSnapshot(snapshotIdToToggle: string, selected: boolean) {
+    setSelectedBatchSnapshotIds((current) =>
+      selected
+        ? current.includes(snapshotIdToToggle)
+          ? current
+          : Object.freeze([...current, snapshotIdToToggle])
+        : Object.freeze(
+            current.filter((snapshotId) => snapshotId !== snapshotIdToToggle),
+          ),
+    );
   }
 
   function submitSearch(event: SyntheticEvent<HTMLFormElement>) {
@@ -409,6 +540,24 @@ export function InformationEntryWorkspace({
           setSnapshotId(nextSnapshotId);
         }}
         onRetry={() => void refreshDocuments()}
+      />
+
+      <InformationEntryBatchMaterializer
+        state={documentView}
+        busy={materializing}
+        selectedSnapshotIds={availableBatchSnapshotIds}
+        onClear={() => {
+          setSelectedBatchSnapshotIds(Object.freeze([]));
+        }}
+        onSelectAll={() => {
+          setSelectedBatchSnapshotIds(
+            Object.freeze(
+              availableBatchDocuments.map((document) => document.snapshotId),
+            ),
+          );
+        }}
+        onSubmit={() => void materializeBatch()}
+        onToggle={toggleBatchSnapshot}
       />
 
       <section
@@ -705,6 +854,123 @@ export function InformationEntryWorkspace({
         </div>
       )}
     </div>
+  );
+}
+
+function InformationEntryBatchMaterializer({
+  busy,
+  onClear,
+  onSelectAll,
+  onSubmit,
+  onToggle,
+  selectedSnapshotIds,
+  state,
+}: {
+  readonly busy: boolean;
+  readonly onClear: () => void;
+  readonly onSelectAll: () => void;
+  readonly onSubmit: () => void;
+  readonly onToggle: (snapshotId: string, selected: boolean) => void;
+  readonly selectedSnapshotIds: readonly string[];
+  readonly state: DocumentViewState;
+}) {
+  const documents =
+    state.status === 'ready'
+      ? state.response.documents.filter((document) => document.entryCount === 0)
+      : Object.freeze([]);
+  const selected = new Set(selectedSnapshotIds);
+
+  return (
+    <section
+      className="entry-batch-panel"
+      aria-labelledby="entry-batch-panel-title"
+    >
+      <header className="console-heading">
+        <div>
+          <p className="section-index">EXPLICIT BATCH / NO SEED</p>
+          <h2 id="entry-batch-panel-title">批量构建文档条目</h2>
+        </div>
+        <span className="record-count">
+          {state.status === 'ready'
+            ? selectedSnapshotIds.length.toString() +
+              ' / ' +
+              documents.length.toString() +
+              ' 已选'
+            : '等待文档'}
+        </span>
+      </header>
+      <p className="entry-batch-panel__summary">
+        只处理你在这里明确选择、且尚未生成 Entry 的
+        Snapshot。原始证据和正式知识不会被改写，重试也不会创建重复条目。
+      </p>
+      {state.status === 'loading' ? (
+        <p className="entry-batch-panel__state" role="status">
+          正在读取可构建文档…
+        </p>
+      ) : state.status === 'error' ? (
+        <p className="entry-batch-panel__state">
+          文档列表恢复后才能批量构建；当前数据没有被修改。
+        </p>
+      ) : documents.length === 0 ? (
+        <p className="entry-batch-panel__state">
+          当前可见文档均已有
+          Entry。隐私文档只有在本次勾选“查询隐私文档”后才会进入候选。
+        </p>
+      ) : (
+        <fieldset className="entry-batch-panel__fieldset">
+          <legend>选择要构建的来源文档</legend>
+          <div className="entry-batch-panel__list">
+            {documents.map((document) => (
+              <label
+                className="entry-batch-panel__option"
+                key={document.snapshotId}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.has(document.snapshotId)}
+                  onChange={(event) => {
+                    onToggle(document.snapshotId, event.currentTarget.checked);
+                  }}
+                />
+                <span>
+                  <strong>{document.sourceKey}</strong>
+                  <small>
+                    尚未生成
+                    {document.isPrivate === true ? ' · 私密文档' : ''}
+                  </small>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
+      <div className="entry-batch-panel__actions">
+        <button
+          className="text-action"
+          type="button"
+          onClick={onSelectAll}
+          disabled={documents.length === 0 || busy}
+        >
+          全选未生成文档
+        </button>
+        <button
+          className="text-action"
+          type="button"
+          onClick={onClear}
+          disabled={selectedSnapshotIds.length === 0 || busy}
+        >
+          清空选择
+        </button>
+        <button
+          className="primary-action"
+          type="button"
+          onClick={onSubmit}
+          disabled={selectedSnapshotIds.length === 0 || busy}
+        >
+          {busy ? '正在构建…' : '构建所选文档'}
+        </button>
+      </div>
+    </section>
   );
 }
 

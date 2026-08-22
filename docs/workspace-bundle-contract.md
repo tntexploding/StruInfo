@@ -1,7 +1,7 @@
 # StruInfo 工作区 Bundle 合同
 
-- 状态：v1 信封与 M1C/M1D 两分区、45 表导出/空工作区恢复已实现
-- 最近更新：2026-08-21
+- 状态：v1 信封与 M1C/M1D 三分区、48 表导出/空工作区恢复已实现
+- 最近更新：2026-08-22
 - 对应决策：[ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md)、
   [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、
   [ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、
@@ -12,8 +12,9 @@
 
 工作区 Bundle v1 是个人工作区领域状态的可移植、版本化字节信封。
 它固定导出/导入共同需要的编码、预算、分区版本、Blob 引用和秘密排除边界；
-M1C 为 Evidence、Curation 与 Knowledge 注册一个闭合领域分区，M1D 为 Entry 与
-Document 标签注册第二个闭合分区。两个分区在同一数据库快照中导出并在同一事务中恢复。
+M1C 为 Evidence、Curation 与 Knowledge 注册一个闭合领域分区，M1D 分别为 Entry/Document
+标签和 AssociationProjection/人工 override 注册两个闭合分区。三个分区在同一数据库
+快照中导出并在同一事务中恢复。
 
 信封包含：
 
@@ -29,7 +30,7 @@ Document 标签注册第二个闭合分区。两个分区在同一数据库快�
 
 当前默认完整信封上限为 16 MiB。
 大型正文、快照和媒体继续使用 Blob 引用，不能通过 bundle 反复嵌套 base64。
-M1C 领域分区和 M1D Entry 分区各允许最多 1,000,000 个规范 JSON value，以容纳十期首批语料；
+M1C 领域、M1D Entry 和 M1D Association 分区各允许最多 1,000,000 个规范 JSON value，以容纳十期首批语料；
 通用规范 JSON 编码器的默认 100,000-value 边界不变，其他调用者不会被静默放宽。
 
 ## 2. 分区 Codec
@@ -48,10 +49,11 @@ Writer 只调用已注册 codec，把模块状态转换为普通 JSON 数据；R
 
 当前正式分区为：
 
-| Type                  | Version | Payload schema           | 当前范围                                                                     |
-| --------------------- | ------: | ------------------------ | ---------------------------------------------------------------------------- |
-| `struinfo.m1c-domain` |     `1` | `struinfo.m1c-domain.v1` | Evidence、Curation、Knowledge 与命令历史，共 36 张表                         |
-| `struinfo.m1d-entry`  |     `1` | `struinfo.m1d-entry.v1`  | Entry、不可变修订、Fragment 输入、三维关键词/沿袭和 Document 标签，共 9 张表 |
+| Type                       | Version | Payload schema                | 当前范围                                                                     |
+| -------------------------- | ------: | ----------------------------- | ---------------------------------------------------------------------------- |
+| `struinfo.m1c-domain`      |     `1` | `struinfo.m1c-domain.v1`      | Evidence、Curation、Knowledge 与命令历史，共 36 张表                         |
+| `struinfo.m1d-entry`       |     `1` | `struinfo.m1d-entry.v1`       | Entry、不可变修订、Fragment 输入、三维关键词/沿袭和 Document 标签，共 9 张表 |
+| `struinfo.m1d-association` |     `1` | `struinfo.m1d-association.v1` | 可重建关联投影、当前人工 override 与追加式 override 修订，共 3 张表          |
 
 每个分区以固定依赖顺序显式列出允许的表、列和普通 JSON scalar 行；未知表、未知列、
 非规范工作区身份或非 scalar 数据一律拒绝。分区不序列化内部 repository 对象、SQL、
@@ -100,8 +102,9 @@ Bundle 是包体外、用户拥有的可移植数据文件，不是仓库资源�
 也不执行覆盖或合并。失败的导入不得半途切换当前工作区，也不得让 PostgreSQL 状态
 引用数据根中不存在或摘要不符的字节。
 
-Reader 继续接受只含 `struinfo.m1c-domain.v1` 的既有 Bundle，并把缺失的 M1D 分区解释为
-九张表均为空的 Entry 状态。Writer 只生成新的双分区形式；未知或重复分区仍然拒绝。
+Reader 继续接受只含 `struinfo.m1c-domain.v1` 的既有 Bundle，并把缺失的 Entry 与 Association
+分区都解释为空；也接受 M1D-2 的双分区 Bundle，并只把缺失的 3 张关联表解释为空。
+Writer 只生成新的三分区形式；未知或重复分区仍然拒绝。
 
 用户可以通过以下任一方式更换资料集，而无需修改代码或重新构建：
 
@@ -115,8 +118,9 @@ Reader 继续接受只含 `struinfo.m1c-domain.v1` 的既有 Bundle，并把缺�
 
 当前传输路径已实现：
 
-- 在 `REPEATABLE READ READ ONLY` 事务中读取当前 45 张工作区表；
-- 由 `struinfo.m1c-domain.v1` 和 `struinfo.m1d-entry.v1` codec 分别逐表、逐列闭合验证并规范排序；
+- 在 `REPEATABLE READ READ ONLY` 事务中读取当前 48 张工作区表；
+- 由 `struinfo.m1c-domain.v1`、`struinfo.m1d-entry.v1` 和
+  `struinfo.m1d-association.v1` codec 分别逐表、逐列闭合验证并规范排序；
 - 遍历 `evidence_blob` 得到精确 SHA-256 Blob manifest，并在导出与恢复两侧读取和核验；
 - 在外部数据根 `exports/` 下以临时文件、flush、原子 rename 写入安全文件名；
 - 只向同一稳定 `workspaceId` 的空目标执行一次事务恢复，保留已有命令 receipt、修订和幂等身份；
@@ -124,9 +128,14 @@ Reader 继续接受只含 `struinfo.m1c-domain.v1` 的既有 Bundle，并把缺�
 
 M1C-EXPAND 对固定 398–407 期生成约 3.76 MiB 的旧单分区 Bundle。M1D-2 收尾在所选外部
 工作区应用 `000008`/`000009`，从 issue 398 生成 34 个 Entry 和一个 Document 标签修订，
-随后生成 4,373,218-byte 的双分区 Bundle，引用同样 10 个外部 Blob。一次性空数据库恢复后，
-45 表计数、Document 列表、Entry 搜索响应和 Fragment 精确正文回溯与源工作区一致。
-原始 Markdown、Blob 字节、临时数据库和 Bundle 文件均位于仓库之外。
+随后生成 4,373,218-byte 的双分区 Bundle，引用同样 10 个外部 Blob。
+
+M1D-5 由用户显式选择其余九份 Snapshot，最终得到 345 个 Entry 和 598 个关联投影。当前
+三分区 Bundle 为 5,281,365 bytes、10 个 Blob 引用、9,385 行和 48 张表；一次性空数据库
+恢复后，10 个 Document、345 项 Entry 搜索、精确 Fragment 身份和关联结果一致。仅在
+可丢弃数据库中创建的 enhance/restore 人工 override 以 1 个当前行和 2 个追加修订完成
+导出/恢复；相同 Bundle 向非空目标重放返回 `workspace_not_empty`，恢复后的 345 个 Entry
+保持不变。原始 Markdown、Blob 字节、临时数据库和 Bundle 文件均位于仓库之外。
 
 ## 7. 当前明确限制
 
@@ -136,7 +145,7 @@ M1C-EXPAND 对固定 398–407 期生成约 3.76 MiB 的旧单分区 Bundle。M1
 - 隐私文档的完整原始/规范化备份同样只通过 Blob 身份引用；仅保存 Bundle 而未保存对应外部 Blob 根，不能恢复其全文；
 - 只恢复同一 `workspaceId`，不重映射 UUID，也不克隆成另一工作区；
 - 只接受空目标，不合并、覆盖或部分更新已有工作区；
-- 当前两个分区覆盖 `000001`–`000009` 已实现的 Evidence、Curation、Knowledge、隐私可见性、Entry、Document 标签和命令历史；M1D-3 的 `000010` 关联投影与人工 override 已可运行但尚未进入 Bundle，恢复当前 Bundle 会得到空关联状态，M1D-5 将以独立可兼容分区补齐；不虚构 preference、policy、saved view、job、outbox 或 AI 运行表；
+- 当前三个分区覆盖 `000001`–`000010` 已实现的 Evidence、Curation、Knowledge、隐私可见性、Entry、Document 标签、关联投影、人工 override 和命令历史；不虚构 preference、policy、saved view、job、outbox 或 AI 运行表；
 - 用户快捷标记、自动标签开关与筛选仍是外部 `preferences/` 中的个人 UI 配置，不属于领域 Bundle；
 - 不替代 PostgreSQL 集群备份、Blob 保留/垃圾回收、加密归档、增量备份、跨版本升级或发布恢复演练。
 

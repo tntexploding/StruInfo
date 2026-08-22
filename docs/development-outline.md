@@ -628,9 +628,10 @@ import -> snapshot -> document nodes/fragments/media
    所选外部工作区的 34 个 issue-398 Entry 确定性生成 7 个关联对（已完成）；
 7. 组合来源/时间/文档/拆分方式/隐私过滤、最多两跳的有限关联邻域、逐条解释和查询绑定的
    稳定分页；所选外部工作区和 320–1440 CSS 像素真实浏览器均已通过（M1D-4，已完成）；
-8. 为 `000010` 状态增加独立 Bundle 分区，并由用户选择其余 Snapshot 完成批量 Entry 转换
-   与直接使用（当前 M1D-5）；
-9. 只有实际延迟或找回缺口出现时再加入 `pg_trgm`、中文词项投影、查询下推和额外索引。
+8. 为 `000010` 的 3 张关联表增加独立 Bundle 分区；用户显式选择其余九份 Snapshot，完成
+   398–407 期 345 个 Entry、598 个关联投影、48 表空库恢复和人工 override 历史往返
+   （M1D-5，已完成）；
+9. 只有直接使用暴露实际延迟或找回缺口时，再加入 `pg_trgm`、中文词项投影、查询下推和额外索引。
 
 既有 M1C 正式知识检索继续作为兼容路径。复杂认证、容器/Linux 认证、正式 TM2 报告、AI、RAG、向量和偏好学习只有在使用它们前进入工作，不是 M1D 阻断项。阻断分类以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
 

@@ -1,13 +1,13 @@
 # M1C 本地产品 HTTP 接口
 
-- 状态：已实现，供 M1C 本机网页与纵向验证使用
-- 最近更新：2026-08-17
+- 状态：已实现，供 M1C/M1D 本机网页与纵向验证使用
+- 最近更新：2026-08-22
 - 稳定性：本地产品接口；不是公共或第三方集成 API
 
 ## 1. 边界
 
-M1C 的 HTTP 层只把已经接受的 Evidence、Curation、Knowledge、确定性检索和最小
-Workspace Bundle 用例接到本机网页。它不建立通用 API 平台、账户体系、Webhook、
+本地 HTTP 层只把已经接受的 Evidence、Curation、Knowledge、InformationEntry、确定性
+检索和 Workspace Bundle 用例接到本机网页。它不建立通用 API 平台、账户体系、Webhook、
 WebSocket 或后台任务协议。
 
 当前工作区由包体外运行配置中的 `STRUIINFO_WORKSPACE_ID` 选择。请求中不接收
@@ -22,21 +22,31 @@ PostgreSQL 只保存来源、摘要、定位和结构关系。接口不接受服
 
 所有产品路由位于 `/api/v1`，响应使用 `application/json` 和 `Cache-Control: no-store`。
 
-| 方法   | 路由                                     | 用途                                                                            |
-| ------ | ---------------------------------------- | ------------------------------------------------------------------------------- |
-| `GET`  | `/api/v1/workspace`                      | 当前工作区身份与已启用能力                                                      |
-| `GET`  | `/api/v1/evidence`                       | 最近 200 个 Snapshot 摘要                                                       |
-| `GET`  | `/api/v1/evidence/snapshots/:snapshotId` | Snapshot、规范正文、Fragment 定位与选中文本；隐私正文要求 `includePrivate=true` |
-| `GET`  | `/api/v1/curation`                       | 当前词表、审核目标、分类、准入决定和分维度评级                                  |
-| `GET`  | `/api/v1/preferences/review`             | 当前外部工作区的个人审核快捷标记与自动标签筛选                                  |
-| `PUT`  | `/api/v1/preferences/review`             | 整体保存当前外部工作区的个人审核快捷标记与自动标签筛选                          |
-| `POST` | `/api/v1/imports/markdown`               | Markdown/来源/Blob/结构原子导入                                                 |
-| `POST` | `/api/v1/curation/terms`                 | 创建或修订分类词条                                                              |
-| `POST` | `/api/v1/curation/apply`                 | 对 Snapshot/Fragment 提交分类、准入或评级操作                                   |
-| `POST` | `/api/v1/knowledge/change-sets`          | 提交人工知识项和关系变更集                                                      |
-| `POST` | `/api/v1/search`                         | 当前知识的确定性文本、来源、状态与一跳关系检索                                  |
-| `POST` | `/api/v1/workspace-bundles/export`       | 将当前领域状态写入外部 `exports/`                                               |
-| `POST` | `/api/v1/workspace-bundles/restore`      | 按安全文件名恢复同 ID 的空工作区                                                |
+| 方法   | 路由                                                    | 用途                                                                            |
+| ------ | ------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `GET`  | `/api/v1/workspace`                                     | 当前工作区身份与已启用能力                                                      |
+| `GET`  | `/api/v1/evidence`                                      | 最近 200 个 Snapshot 摘要                                                       |
+| `GET`  | `/api/v1/evidence/snapshots/:snapshotId`                | Snapshot、规范正文、Fragment 定位与选中文本；隐私正文要求 `includePrivate=true` |
+| `GET`  | `/api/v1/curation`                                      | 当前词表、审核目标、分类、准入决定和分维度评级                                  |
+| `GET`  | `/api/v1/preferences/review`                            | 当前外部工作区的个人审核快捷标记与自动标签筛选                                  |
+| `PUT`  | `/api/v1/preferences/review`                            | 整体保存当前外部工作区的个人审核快捷标记与自动标签筛选                          |
+| `POST` | `/api/v1/imports/markdown`                              | Markdown/来源/Blob/结构原子导入                                                 |
+| `POST` | `/api/v1/curation/terms`                                | 创建或修订分类词条                                                              |
+| `POST` | `/api/v1/curation/apply`                                | 对 Snapshot/Fragment 提交分类、准入或评级操作                                   |
+| `POST` | `/api/v1/knowledge/change-sets`                         | 提交人工知识项和关系变更集                                                      |
+| `POST` | `/api/v1/search`                                        | 当前知识的确定性文本、来源、状态与一跳关系检索                                  |
+| `POST` | `/api/v1/entries/materialize`                           | 从用户明确选择的 Snapshot 幂等生成 Entry；批量界面逐份复用该命令                |
+| `GET`  | `/api/v1/entries`                                       | 按 Snapshot 读取当前 Entry                                                      |
+| `PUT`  | `/api/v1/entries/:entryId`                              | 追加 Entry 修订                                                                 |
+| `POST` | `/api/v1/entries/search`                                | 组合正文、关键词、来源、时间、文档、隐私与有限关联路径检索                      |
+| `POST` | `/api/v1/entries/associations/rebuild`                  | 按当前 Entry 和版本化策略重建可替换关联投影                                     |
+| `GET`  | `/api/v1/entries/:entryId/associations`                 | 读取当前可见关联、分项得分和人工 override                                       |
+| `PUT`  | `/api/v1/entries/:entryId/associations/:relatedEntryId` | 追加增强、削弱、屏蔽或恢复修订                                                  |
+| `GET`  | `/api/v1/entry-documents`                               | 读取 Document、Entry 数量与当前标签投影                                         |
+| `POST` | `/api/v1/entry-documents/:snapshotId/tags/aggregate`    | 确定性聚合当前文档标签                                                          |
+| `PUT`  | `/api/v1/entry-documents/:snapshotId/tags`              | 追加人工文档标签修订                                                            |
+| `POST` | `/api/v1/workspace-bundles/export`                      | 将当前领域状态写入外部 `exports/`                                               |
+| `POST` | `/api/v1/workspace-bundles/restore`                     | 按安全文件名恢复同 ID 的空工作区                                                |
 
 健康检查继续使用 `/health/live` 和 `/health/ready`。API/`all` 角色装配产品路由；
 scheduler/worker 角色只装配健康路由。
@@ -296,7 +306,7 @@ HTTP 状态只是本地交互提示，不替代领域 receipt、issue code 或�
 - 显式隐私搜索当前在这 200 个 Snapshot 摘要内匹配完整规范化正文；超出该规模后再按真实需求加入独立分页或查询下推；
 - 当前检索仍是 PostgreSQL 一致只读事务中的工作区完整加载，不是 SQL query pushdown；
 - Bundle 请求不接受服务器路径：导出没有路径参数，恢复只接受外部 `exports/` 下的直接文件名；
-- Bundle 当前以 M1C 领域和 M1D Entry/文档标签两个闭合分区携带 45 张工作区表及 Blob 身份；旧的 36 表单分区 Bundle 仍可恢复为空 Entry 状态。它只恢复同一 `workspaceId` 的空目标；Blob 字节归档、跨工作区克隆和非空目标合并不在当前范围；
+- Bundle 当前以 M1C 领域、M1D Entry/文档标签和 M1D 关联三个闭合分区携带 48 张工作区表及 Blob 身份；旧的 36 表单分区和 45 表双分区 Bundle 仍可恢复，并把缺失状态解释为空。它只恢复同一 `workspaceId` 的空目标；Blob 字节归档、跨工作区克隆和非空目标合并不在当前范围；
 - M1C 只允许本机回环使用。公网监听、认证、TLS、限流和公共协议版本属于部署门。
 
 这些限制不会阻止第一次无 AI 产品闭环；真实数据证明需要后再加入分页、查询下推、
