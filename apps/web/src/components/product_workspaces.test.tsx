@@ -321,7 +321,26 @@ describe('M1D product workspaces', () => {
         }
       />,
     );
-    const formal = renderToStaticMarkup(<FormalKnowledgeWorkspace />);
+    const formal = renderToStaticMarkup(
+      <FormalKnowledgeWorkspace
+        onReadGraph={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {
+              status: 'ok',
+              querySha256: 'a'.repeat(64),
+              candidateTotalCount: 0,
+              candidates: [],
+              graph: null,
+            },
+          })
+        }
+        onReviseEdge={() =>
+          Promise.resolve({statusCode: 200, body: {status: 'applied'}})
+        }
+        onOpenEvidence={() => undefined}
+      />,
+    );
 
     expect(materials).toContain('保存来源 Snapshot');
     expect(materials).toContain('作为隐私文档录入');
@@ -339,7 +358,10 @@ describe('M1D product workspaces', () => {
     expect(reviewFallback).toContain('新增快捷标签');
     expect(reviewFallback).toContain('标签别名合并');
     expect(reviewFallback).toContain('会话工具');
-    expect(formal).toContain('正式知识');
-    expect(formal).toContain('当前不会写入数据');
+    expect(formal).toContain('Entry 正式关系图谱');
+    expect(formal).toContain('选择图谱中心');
+    expect(formal).toContain('打开最高匹配图谱');
+    expect(formal).toContain('关系列表');
+    expect(formal).not.toContain('当前不会写入数据');
   });
 });

@@ -1,313 +1,132 @@
-# M1C 本地产品 HTTP 接口
+# 当前本地产品 HTTP 接口
 
-- 状态：已实现，供 M1C/M1D 本机网页与纵向验证使用
-- 最近更新：2026-08-22
-- 稳定性：本地产品接口；不是公共或第三方集成 API
+- 状态：M1E-2 活动接口
+- 最近核对：2026-08-23
+- 稳定性：本机产品接口；不是公共或第三方集成 API
+- 实现真值：[当前项目状态与实现清单](current-project-state.md)
 
-## 1. 边界
+> 文件名保留 `m1c` 只是兼容命名。旧 Manual Curation、正式 Knowledge 写入/读取和旧 Knowledge 检索路由已从当前运行时删除。
 
-本地 HTTP 层只把已经接受的 Evidence、Curation、Knowledge、InformationEntry、确定性
-检索和 Workspace Bundle 用例接到本机网页。它不建立通用 API 平台、账户体系、Webhook、
-WebSocket 或后台任务协议。
+## 1. 接口边界
 
-当前工作区由包体外运行配置中的 `STRUIINFO_WORKSPACE_ID` 选择。请求中不接收
-`workspaceId`；服务端为所有领域上下文和导入实体注入当前工作区。切换资料集需要停止
-当前进程、替换包体外配置/数据根并重新打开，既不修改代码，也不把个人资料写入 Git。
+本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、Document 标签、Entry 联系、正式 Entry 图谱、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、后台 AI 任务或公共扩展 API。
 
-Markdown 正文作为 JSON 字符串提交，服务端把原始字节写入当前工作区的外部 Blob 根，
-PostgreSQL 只保存来源、摘要、定位和结构关系。接口不接受服务器文件路径，也不会把正文
-写入仓库、安装目录或日志。
+当前工作区由包体外运行配置中的 `STRUIINFO_WORKSPACE_ID` 选择。请求不能提交或切换 `workspaceId`；服务端把固定工作区注入所有领域操作。切换资料集需要停止当前进程、替换外部配置或数据根并重新启动。
 
-## 2. 路由
+Markdown 正文作为 JSON 字符串提交。原始和规范化字节写入外部内容寻址 Blob 根，PostgreSQL 只保存身份、摘要、定位和结构关系。接口不接受服务器文件路径，也不会把正文写入 Git、安装目录或日志。
 
-所有产品路由位于 `/api/v1`，响应使用 `application/json` 和 `Cache-Control: no-store`。
+所有产品路由位于 `/api/v1`，响应使用 `application/json`、`Cache-Control: no-store` 和 `X-Content-Type-Options: nosniff`。健康检查位于 `/health/live` 与 `/health/ready`。
 
-| 方法   | 路由                                                    | 用途                                                                            |
-| ------ | ------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `GET`  | `/api/v1/workspace`                                     | 当前工作区身份与已启用能力                                                      |
-| `GET`  | `/api/v1/evidence`                                      | 最近 200 个 Snapshot 摘要                                                       |
-| `GET`  | `/api/v1/evidence/snapshots/:snapshotId`                | Snapshot、规范正文、Fragment 定位与选中文本；隐私正文要求 `includePrivate=true` |
-| `GET`  | `/api/v1/curation`                                      | 当前词表、审核目标、分类、准入决定和分维度评级                                  |
-| `GET`  | `/api/v1/preferences/review`                            | 当前外部工作区的个人审核快捷标记与自动标签筛选                                  |
-| `PUT`  | `/api/v1/preferences/review`                            | 整体保存当前外部工作区的个人审核快捷标记与自动标签筛选                          |
-| `POST` | `/api/v1/imports/markdown`                              | Markdown/来源/Blob/结构原子导入                                                 |
-| `POST` | `/api/v1/curation/terms`                                | 创建或修订分类词条                                                              |
-| `POST` | `/api/v1/curation/apply`                                | 对 Snapshot/Fragment 提交分类、准入或评级操作                                   |
-| `POST` | `/api/v1/knowledge/change-sets`                         | 提交人工知识项和关系变更集                                                      |
-| `POST` | `/api/v1/search`                                        | 当前知识的确定性文本、来源、状态与一跳关系检索                                  |
-| `POST` | `/api/v1/entries/materialize`                           | 从用户明确选择的 Snapshot 幂等生成 Entry；批量界面逐份复用该命令                |
-| `GET`  | `/api/v1/entries`                                       | 按 Snapshot 读取当前 Entry                                                      |
-| `PUT`  | `/api/v1/entries/:entryId`                              | 追加 Entry 修订                                                                 |
-| `POST` | `/api/v1/entries/search`                                | 组合正文、关键词、来源、时间、文档、隐私与有限关联路径检索                      |
-| `POST` | `/api/v1/entries/associations/rebuild`                  | 按当前 Entry 和版本化策略重建可替换关联投影                                     |
-| `GET`  | `/api/v1/entries/:entryId/associations`                 | 读取当前可见关联、分项得分和人工 override                                       |
-| `PUT`  | `/api/v1/entries/:entryId/associations/:relatedEntryId` | 追加增强、削弱、屏蔽或恢复修订                                                  |
-| `GET`  | `/api/v1/entry-documents`                               | 读取 Document、Entry 数量与当前标签投影                                         |
-| `POST` | `/api/v1/entry-documents/:snapshotId/tags/aggregate`    | 确定性聚合当前文档标签                                                          |
-| `PUT`  | `/api/v1/entry-documents/:snapshotId/tags`              | 追加人工文档标签修订                                                            |
-| `POST` | `/api/v1/workspace-bundles/export`                      | 将当前领域状态写入外部 `exports/`                                               |
-| `POST` | `/api/v1/workspace-bundles/restore`                     | 按安全文件名恢复同 ID 的空工作区                                                |
+## 2. 当前活动路由
 
-健康检查继续使用 `/health/live` 和 `/health/ready`。API/`all` 角色装配产品路由；
-scheduler/worker 角色只装配健康路由。
+| 方法   | 路由                                                     | 当前用途                                                                         |
+| ------ | -------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `GET`  | `/api/v1/workspace`                                      | 返回固定工作区身份及实际启用的能力                                               |
+| `GET`  | `/api/v1/evidence`                                       | 列出当前 Evidence Snapshot 摘要                                                  |
+| `GET`  | `/api/v1/evidence/snapshots/:snapshotId`                 | 返回 Snapshot、完整规范正文、结构和 Fragment；隐私内容要求 `includePrivate=true` |
+| `GET`  | `/api/v1/preferences/review`                             | 读取外部工作区的快捷标签、自动关键词开关/过滤和别名偏好                          |
+| `PUT`  | `/api/v1/preferences/review`                             | 整体保存当前偏好文件                                                             |
+| `POST` | `/api/v1/imports/markdown`                               | 原子导入 Markdown、来源、Blob、结构和 Fragment                                   |
+| `POST` | `/api/v1/entries/materialize`                            | 从一个用户选择的 Snapshot 幂等生成 section Entry                                 |
+| `PUT`  | `/api/v1/entries/:entryId`                               | 以期望版本更新当前 Entry 成品态                                                  |
+| `POST` | `/api/v1/entries/search`                                 | 组合文本、标签、来源、时间、隐私和有限关联路径查询 Entry                         |
+| `POST` | `/api/v1/entries/associations/rebuild`                   | 按当前 Entry 与固定策略重建可替换关联投影                                        |
+| `GET`  | `/api/v1/entries/:entryId/associations`                  | 读取一个 Entry 的可见联系、分项得分和人工控制                                    |
+| `PUT`  | `/api/v1/entries/:entryId/associations/:relatedEntryId`  | 追加增强、削弱、屏蔽或恢复控制                                                   |
+| `POST` | `/api/v1/knowledge-graph/view`                           | 选择最高匹配或指定中心，并读取隐私过滤后的有界 Entry 图谱                        |
+| `PUT`  | `/api/v1/knowledge-graph/edges/:entryId/:relatedEntryId` | 修改、隐藏、恢复自动边，或创建用户关系                                           |
+| `GET`  | `/api/v1/entry-documents`                                | 读取 Document、Entry 数量和当前文档标签                                          |
+| `POST` | `/api/v1/entry-documents/:snapshotId/tags/aggregate`     | 从当前 Entry 确定性聚合文档标签                                                  |
+| `PUT`  | `/api/v1/entry-documents/:snapshotId/tags`               | 保存人工文档标签当前态                                                           |
+| `POST` | `/api/v1/workspace-bundles/export`                       | 将当前工作区个人数据写入外部 `exports/`                                          |
+| `POST` | `/api/v1/workspace-bundles/restore`                      | 从安全文件名恢复同 ID 的空工作区                                                 |
 
-API 角色同时从 `apps/web/dist` 提供构建后的单页应用，浏览器默认使用同源产品路由；
-刷新任意非 API 前端路径会回退到 `index.html`。开发时仍可用外部
-`VITE_STRUIINFO_API_BASE_URL` 指向另一个回环监听器，但该配置不是个人资料、工作区
-身份或知识内容的载体。
+API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单页应用。scheduler/worker 角色只提供健康路由；它们的存在不表示自动采集或 AI 作业已经实现。
 
-## 3. 写命令信封
+## 3. 五步主线如何调用接口
 
-Curation 与 Knowledge 写请求使用同一个轻量 HTTP 信封：
+### 3.1 导入
 
-```json
-{
-  "commandIdempotencyKey": "synthetic-command-001",
-  "request": {}
-}
-```
+`POST /imports/markdown` 接收：
 
-`request` 保持对应领域合同的原有闭合形状。服务端注入：
+- `commandIdempotencyKey`；
+- `sourceText`；
+- 带服务端固定工作区覆盖的 `resource`、`snapshot` 和 `gitObservations`；
+- 可选 `gitResource`、`profile` 与 `documentBaseUri`。
 
-```json
-{
-  "effectiveWorkspaceId": "<configured-workspace-id>",
-  "commandIdempotencyKey": "<HTTP-envelope-key>",
-  "authority": "manual_user"
-}
-```
+Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和正文前置文字映射到这些字段。相同命令可重放；同键异内容返回冲突。
 
-重复提交相同键和相同语义返回原领域的 `replayed`/`existing`；同键异内容返回冲突，
-不产生部分副作用。
+### 3.2 拆分
 
-## 4. Markdown 导入示例
+`POST /entries/materialize` 当前只接受 `snapshotId`、可选的 `chunkMode: "split"` 和 `includePrivate`。服务端读取已经导入的 CommonMark 结构，把 section 节点确定性转换为 Entry。当前没有自定义范围、全文保存修改或 AI 拆分接口。
 
-下面的值全部是合成示例。`manual_text` 不需要 Git 扩展字段：
+### 3.3 标签
 
-```json
-{
-  "commandIdempotencyKey": "synthetic-import-001",
-  "resource": {
-    "resourceId": "11111111-1111-4111-8111-111111111111",
-    "resourceKind": "manual_text",
-    "sourceKey": "manual:synthetic-note",
-    "isPrivate": true
-  },
-  "snapshot": {
-    "snapshotId": "22222222-2222-4222-8222-222222222222",
-    "resourceId": "11111111-1111-4111-8111-111111111111",
-    "capturedAt": "2040-01-02T03:04:05Z",
-    "mediaType": "text/markdown"
-  },
-  "gitObservations": [],
-  "profile": "commonmark-v1",
-  "sourceText": "# Synthetic note\n\nSynthetic body.\n"
-}
-```
+`PUT /entries/:entryId` 使用 `expectedRevision` 防止覆盖并提交：
 
-Git 文件另外提供同一 `resourceId` 的 `gitResource` 和至少一项 `gitObservations`。
-浏览器不需要生成 Blob ID、Structure ID、Node ID 或 Fragment ID；确定性导入器生成并在
-receipt 中返回这些身份。
+- Entry 正文；
+- 内容关键词；
+- 类型关键词和可选自定义类型；
+- 主/副领域关键词和可选自定义领域；
+- 可选的有用程度与有趣程度 1–5 评分；
+- 隐私 Entry 的当次 `includePrivate`。
 
-`resource.isPrivate=true` 表示这是显式隐私文档。导入器仍执行通常的结构化拆解，但同时
-把完整原始字节和完整规范化正文写入当前工作区的外部内容寻址 Blob 根。它们不会进入
-Git、应用包或 HTTP 日志。这个标记会传播到由该文档直接或间接生成的知识修订；涉及
-隐私知识端点的关系也属于隐私查询范围。首版不提供隐式解除隐私的编辑捷径。
+文档级标签通过 aggregate 接口确定性重算，或通过 tags 接口人工覆盖。快捷标签、排除词、域名策略和已确认别名由 preferences 接口写入外部偏好文件，不进入数据库迁移、Git 或应用包。
 
-## 5. 人工审核示例
+### 3.4 联系
 
-创建分类词条：
+rebuild 接口读取当前可见 Entry，按正文词项及内容/类型/领域维度生成可解释投影。逐对 PUT 只接受当前 override 版本、`includePrivate` 和 `enhance`、`weaken`、`block`、`restore` 之一。它是未来知识图谱的自动 `similarity` 边来源，但不等于经过人工核验的事实性语义断言。
 
-```json
-{
-  "commandIdempotencyKey": "synthetic-term-001",
-  "request": {
-    "termId": "33333333-3333-4333-8333-333333333333",
-    "expectedRevision": 0,
-    "value": {
-      "displayName": "Synthetic topic",
-      "lifecycle": "active"
-    }
-  }
-}
-```
+### 3.5 查询
 
-对一个 Fragment 作准入决定：
+`POST /entries/search` 当前支持：
 
-```json
-{
-  "commandIdempotencyKey": "synthetic-curation-001",
-  "request": {
-    "target": {
-      "kind": "fragment",
-      "fragmentId": "44444444-4444-4444-8444-444444444444"
-    },
-    "expectedTargetVersion": 0,
-    "operations": [
-      {
-        "kind": "set_intake_decision",
-        "action": "full",
-        "reasonCodes": ["worth_exploring"]
-      }
-    ]
-  }
-}
-```
+- 规范化文本子串；
+- 内容关键词、来源 key、Snapshot；
+- 类型、自定义类型、领域、自定义领域及主/副领域范围；
+- 整篇/拆分模式；
+- 发布或采集时间范围；
+- `includePrivate` 与 `onlyPrivate`；`onlyPrivate=true` 必须同时显式启用 `includePrivate`；
+- 指定 Entry 的一至两跳联系范围和最低分；
+- `limit` 1–100 与查询绑定排他游标 `after`。
 
-`GET /api/v1/curation` 提供后续修改所需的当前 `currentVersion`、修订号和当前状态。
-Evidence Snapshot 详情中的每个 Fragment 同时返回其持久化 DocumentNode 的
-`nodeKind`。网页以 `nodeKind=section` 重建 profile 声明的审核队列；`document` 和叶子
-Fragment 仍可作为证据或知识来源选择，但不计入当前来源的待审核总数。队列身份来自
-数据库，不依赖首次导入响应，因此重启、重开页面和 Bundle 空库恢复后保持一致。
+结果返回稳定分页、匹配原因、关联路径和 Entry 对应的精确 Fragment/Snapshot 证据。当前实现是完整加载后的确定性查询，不是 SQL query pushdown、模糊检索、向量检索、RAG 或答案生成。
 
-## 6. 个人审核偏好
+### 3.6 正式知识
 
-`GET /api/v1/preferences/review` 返回当前工作区的快捷栏与自动标签筛选：
+`POST /knowledge-graph/view` 接受可选 `query` 或 `centerEntryId`、隐私范围、1–12 个候选和 1–24 个可见邻居。未指定中心时，服务端复用确定性 Entry 匹配，把最高结果作为中心，同时返回可改选候选。隐私过滤先于中心选择、遍历、计数和返回。
 
-```json
-{
-  "status": "ok",
-  "workspaceId": "11111111-1111-4111-8111-111111111111",
-  "quickTags": ["synthetic-tool", "synthetic-reference"],
-  "automaticKeywords": {
-    "enabled": true,
-    "includeLinkDomains": false,
-    "excludedKeywords": ["synthetic-advertisement"]
-  },
-  "vocabulary": {
-    "aliases": [{"source": "Synthetic Toolkit", "canonical": "Synthetic Tool"}],
-    "links": [
-      {
-        "left": "Synthetic Tool",
-        "right": "合成工具",
-        "kind": "translation"
-      }
-    ],
-    "knowledgeKinds": [{"keyword": "Synthetic Cover", "knowledgeKind": "work"}]
-  }
-}
-```
+`PUT /knowledge-graph/edges/:entryId/:relatedEntryId` 使用 `expectedRevision` 和当前态 CAS，支持 `edit`、`block`、`restore`。`edit` 可保存 1–80 字符关系名以及双向、低 ID 指向高 ID 或高 ID 指向低 ID；无自动投影的 Entry 对会形成用户创建关系。自动边、用户编辑边和用户创建边分别标明来源。自动 `similarity` 表示确定性导航相似度，不是经核验的事实断言。
 
-`PUT /api/v1/preferences/review` 接受上述 `quickTags + automaticKeywords + vocabulary` 配置。快捷标记
-最多 24 项，精确排除词最多 64 项；每项在
-NFC 和首尾空白处理后为 1–120 个 Unicode code point，且不得重复。调用方不能提供
-`workspaceId` 或文件路径。服务把列表写入外部数据根
-`preferences/<workspaceId>.review-preferences.json`；该 UI 偏好不进入领域 Bundle。
-旧客户端只提交 `quickTags` 时使用安全的自动标签默认值；链接目标、路径和文件名在提取器
-中默认排除，只有显式开启 `includeLinkDomains` 才允许 URL host 成为候选。
-`vocabulary` 最多保存 128 条无环别名、128 条无向翻译/相关提示和 64 条
-`KnowledgeKind` 偏好；它们是外部工作区处理规则，不是正式知识关系。显式词条合并另行
-调用既有 Curation 命令迁移当前指派并退役来源词条。
-选择某个快捷标记仍通过既有 Curation 命令形成词表指派；删除快捷入口不会修改已审核条目。
-该偏好路由属于非核心 UI 配置边界：读取失败时网页必须显示非持久化状态，但仍允许本次
-页面会话维护快捷标记和自动筛选，并通过原有 Curation 命令提交手工分类。会话回退不进入
-领域数据库、Bundle、Git 或包体。
+## 4. 隐私语义
 
-## 7. 知识变更与搜索
+默认 Evidence 详情、Entry、标签、联系和查询都不披露隐私内容。隐私访问必须由当前请求显式传入 `includePrivate=true`；查询的“只看隐私”还要求 `onlyPrivate=true`。隐私参与发生在计数、候选、联系遍历、排序和分页之前。
 
-知识变更仍使用
-[`C-SLICE-B-KNOWLEDGE-r3`](manual-knowledge-core-contract.md) 的
-`authorization + operations` 形状。网页可以使用已获准 Fragment 的决定修订进行
-`eligible_target` 写入，或通过明确的 `manual_edit` 入口作最高权限人工修订。所有知识
-项、关系、出处和 revision 身份由领域核心原子处理。
+完整隐私文档目前可以通过 Evidence Snapshot 详情单独打开，但 `/entries/search` 只返回 Entry。把完整隐私文档作为独立查询结果通道仍是未完成功能，不能从现有 `onlyPrivate` 选项推导为已实现。这个边界是本地显示控制，不是加密或多用户授权。
 
-最小无文本浏览请求：
+## 5. 个人数据包
 
-```json
-{
-  "filters": {
-    "knowledgeKinds": [],
-    "epistemicRoles": [],
-    "reviewStates": [],
-    "source": {"kind": "any"},
-    "relation": {"kind": "any"}
-  },
-  "page": {"limit": 25}
-}
-```
+export 接口生成当前四分区 Bundle，包含 45 张当前工作区表、被引用的 Blob 字节和当前偏好文件。restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区；恢复在一个原子操作中完成。旧的一至三分区 Bundle 保持可读，缺失的后来分区恢复为空状态。
 
-默认请求只返回普通知识。需要同时查询隐私知识、涉及隐私端点的关系及完整隐私文档时，
-调用方必须使用显式信封：
+Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不进入 Git 或应用安装树。
 
-```json
-{
-  "includePrivate": true,
-  "request": {
-    "filters": {
-      "knowledgeKinds": [],
-      "epistemicRoles": [],
-      "reviewStates": [],
-      "source": {"kind": "any"},
-      "relation": {"kind": "any"}
-    },
-    "page": {"limit": 25}
-  }
-}
-```
+## 6. 结果与错误
 
-`includePrivate` 必须是本次请求中的布尔值；网页对应控件的固定文案是“查询隐私文档”。
-普通范围和隐私范围使用不同的查询摘要，游标不能跨范围复用。成功响应中的知识结果仍在
-`items`，完整隐私文档则单独位于 `privateDocuments`，并有独立的
-`privateDocumentTotalCount`。读取其中一个完整文档时必须调用：
+- `200`：读取、更新、重放、重建或恢复成功；
+- `201`：首次导入、首次物化或导出成功；
+- `400`：请求形状或字段无效；
+- `403`：隐私内容缺少当次显式授权；
+- `404`：当前范围内找不到对象，隐私对象在未授权范围也按不可见处理；
+- `409`：期望版本过期、幂等键冲突或恢复目标非空；
+- `422`：结构可读但业务条件不成立或游标无效；
+- `503`：repository、Blob、偏好或传输边界失败。
 
-```text
-GET /api/v1/evidence/snapshots/:snapshotId?includePrivate=true
-```
+错误响应只返回稳定 code/path，不回显正文、密码、URL 凭据、数据库 driver message 或本机个人路径。
 
-服务端会返回完整规范化正文和全部 Fragment；未显式选择时同一路由返回 `403`。Evidence
-摘要列表可以显示“隐私”元数据以便用户选择范围，但默认搜索、关系邻域和全文读取不会
-泄露其内容。该开关是本机产品的显式可见性边界，不等同于加密、多用户授权或操作系统
-访问控制。
+## 7. 当前限制
 
-搜索响应直接保留 `querySha256`、`matchRank`、`textMatches`、`sourceMatches`、
-`relationMatches`、`totalCount` 和 `nextCursor`，网页不得把出处或匹配原因压扁成不透明
-字符串。需要显示原文时，以 `sourceMatches[].snapshotId` 调用 Evidence Snapshot 路由，
-并以 `sourceMatches[].fragmentId` 直接选中对应摘录；不得默认跳到 Snapshot 的第一个
-Fragment。
-
-## 8. Workspace Bundle
-
-导出不接收路径或工作区身份：
-
-```json
-{}
-```
-
-成功响应返回服务端生成的直接文件名、最终字节数、SHA-256、Blob 引用数和逐表行数。
-恢复请求只回传这个文件名：
-
-```json
-{
-  "fileName": "11111111-1111-4111-8111-111111111111-20400102030405000-22222222-2222-4222-8222-222222222222.workspace-bundle.json"
-}
-```
-
-服务端仍以包体外配置选择的工作区为权威，并拒绝 Bundle 中不同的 `workspaceId`、非空
-目标、缺失/损坏 Blob 或越过 `exports/` 的路径。Bundle 不包含 Blob 正文字节；详见
-[工作区 Bundle 合同](workspace-bundle-contract.md)。
-
-## 9. HTTP 状态
-
-领域结果体始终保留原有 `status`/`issue`：
-
-- 创建导入和 Bundle 导出：`201`；相等重放、成功命令/查询和 Bundle 恢复：`200`；
-- 隐私正文未显式选择：`403`；
-- 资源不存在：`404`；陈旧修订或幂等冲突：`409`；
-- 请求或领域验证拒绝：`422`；
-- 数据库、Blob 或读模型不可用：`503`。
-
-HTTP 状态只是本地交互提示，不替代领域 receipt、issue code 或持久幂等语义。
-
-## 10. 当前限制
-
-- JSON body 上限为 2 MiB；Markdown 领域上限仍为 1 MiB；
-- 首版 Evidence 列表固定最多返回最近 200 个 Snapshot；
-- Evidence 详情返回规范 Markdown 正文及全部 Fragment，适合首批周刊规模；
-- 显式隐私搜索当前在这 200 个 Snapshot 摘要内匹配完整规范化正文；超出该规模后再按真实需求加入独立分页或查询下推；
-- 当前检索仍是 PostgreSQL 一致只读事务中的工作区完整加载，不是 SQL query pushdown；
-- Bundle 请求不接受服务器路径：导出没有路径参数，恢复只接受外部 `exports/` 下的直接文件名；
-- Bundle 当前以 M1C 领域、M1D Entry/文档标签和 M1D 关联三个闭合分区携带 48 张工作区表及 Blob 身份；旧的 36 表单分区和 45 表双分区 Bundle 仍可恢复，并把缺失状态解释为空。它只恢复同一 `workspaceId` 的空目标；Blob 字节归档、跨工作区克隆和非空目标合并不在当前范围；
-- M1C 只允许本机回环使用。公网监听、认证、TLS、限流和公共协议版本属于部署门。
-
-这些限制不会阻止第一次无 AI 产品闭环；真实数据证明需要后再加入分页、查询下推、
-索引或公共 API 设计。
+- JSON 请求体上限为 2 MiB，Markdown 导入上限为 1 MiB；
+- Evidence 列表当前最多返回最近 200 个 Snapshot；
+- 接口仅面向回环单用户产品，没有公开认证或 CSRF 完整边界；
+- 没有文件上传、多格式解析、抓取、订阅、AI、模糊/向量搜索或在线检索接口；
+- 当前正式知识只实现 Entry 中心关系图谱；不恢复 `/curation`、旧 `/knowledge` 写入/读取或旧 `/search` 路由，也不把历史 Knowledge 表当作当前产品入口。

@@ -14,10 +14,28 @@ export const INFORMATION_ENTRY_ASSOCIATION_BASES = [
   'domain_keyword',
 ] as const;
 
+export const INFORMATION_ENTRY_GRAPH_ORIGINS = ['association', 'user'] as const;
+
+export const INFORMATION_ENTRY_GRAPH_DIRECTIONS = [
+  'symmetric',
+  'low_to_high',
+  'high_to_low',
+] as const;
+
 export type InformationEntryAssociationAction =
   (typeof INFORMATION_ENTRY_ASSOCIATION_ACTIONS)[number];
 export type InformationEntryAssociationBasis =
   (typeof INFORMATION_ENTRY_ASSOCIATION_BASES)[number];
+export type InformationEntryGraphOrigin =
+  (typeof INFORMATION_ENTRY_GRAPH_ORIGINS)[number];
+export type InformationEntryGraphDirection =
+  (typeof INFORMATION_ENTRY_GRAPH_DIRECTIONS)[number];
+
+export interface InformationEntryGraphRelationValue {
+  readonly origin: InformationEntryGraphOrigin;
+  readonly label: string;
+  readonly direction: InformationEntryGraphDirection;
+}
 
 export interface InformationEntryAssociationPolicy {
   readonly version: string;
@@ -50,6 +68,7 @@ export interface InformationEntryAssociationOverrideValue {
   readonly action: InformationEntryAssociationAction;
   readonly manualAdjustment: number;
   readonly isBlocked: boolean;
+  readonly graph?: Readonly<InformationEntryGraphRelationValue>;
 }
 
 export interface CurrentInformationEntryAssociationOverride {
@@ -82,4 +101,26 @@ export interface InformationEntryAssociationView {
   readonly override?: Readonly<CurrentInformationEntryAssociationOverride>;
   readonly effectiveScore: number;
   readonly isBlocked: boolean;
+}
+
+export type InformationEntryGraphEdgeOrigin =
+  'automatically_calculated' | 'user_edited' | 'user_created';
+
+export interface InformationEntryGraphEdge {
+  readonly entryLowId: string;
+  readonly entryHighId: string;
+  readonly label: string;
+  readonly direction: InformationEntryGraphDirection;
+  readonly origin: InformationEntryGraphEdgeOrigin;
+  readonly effectiveScore: number;
+  readonly isBlocked: boolean;
+  readonly overrideRevision: number;
+  readonly projection?: Readonly<InformationEntryAssociationProjection>;
+}
+
+export interface InformationEntryKnowledgeGraph {
+  readonly center: Readonly<CurrentInformationEntry>;
+  readonly nodes: readonly Readonly<CurrentInformationEntry>[];
+  readonly edges: readonly Readonly<InformationEntryGraphEdge>[];
+  readonly hiddenEdges: readonly Readonly<InformationEntryGraphEdge>[];
 }

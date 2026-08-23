@@ -1,18 +1,25 @@
 # StruInfo 开发大纲
 
-- 状态：M1C 已冻结；当前执行 M1D Entry-first 文档处理与检索纵向切片
-- 最近更新：2026-08-20
+- 状态：M1E-2 Entry-first 正式关系图谱可运行基线
+- 最近更新：2026-08-23
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
+- 当前实现：[当前项目状态与实现清单](current-project-state.md)
 - 基础 ADR：[ADR 0001](adr/0001-typescript-modular-monolith.md)、
   [ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md)、
   [ADR 0003](adr/0003-m0-s-engineering-foundation.md)、
   [ADR 0004](adr/0004-adaptive-knowledge-ingestion-and-policy-authorized-writes.md)、
   [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、
   [ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、
-  [ADR 0007](adr/0007-information-entry-first-document-processing.md)
+  [ADR 0007](adr/0007-information-entry-first-document-processing.md)、
+  [ADR 0008](adr/0008-current-entry-state-and-portable-personal-data.md)、
+  [ADR 0009](adr/0009-retire-superseded-m1c-runtime.md)、
+  [ADR 0010](adr/0010-entry-centered-formal-knowledge-graph.md)、
+  [ADR 0011](adr/0011-association-derived-formal-graph-edges.md)
 
 ## 1. 结论
+
+> 本文同时保留长期目标架构和历史实施证据。判断“当前代码是否可用”时，以[当前项目状态与实现清单](current-project-state.md)为准；本文中尚无活动入口的 AI、WebSocket、旧 KnowledgeItem 编辑器、向量、报告和部署组件都是目标，不是现状。
 
 StruInfo 首版采用“单仓库、模块化单体、多运行角色”架构。
 
@@ -35,8 +42,10 @@ StruInfo 首版采用“单仓库、模块化单体、多运行角色”架构�
 M0-P 证明的是架构可行性，不是生产认证；任何探针候选源码都不得直接复制到生产树。
 M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁移 runner、CI、许可证记录与统一质量命令；该工程地基由 [ADR 0003](adr/0003-m0-s-engineering-foundation.md) 接受。
 自适应摄取、偏好/探索分离和策略授权知识写入由 [ADR 0004](adr/0004-adaptive-knowledge-ingestion-and-policy-authorized-writes.md) 接受。
-[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化正式知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求；[ADR 0007](adr/0007-information-entry-first-document-processing.md) 把普通文档主线重定向为 Entry-first，同时保留正式知识层。
-第 398–407 期阮一峰科技周刊的固定来源身份和结构清单已经建立。外部配置/数据根、Evidence、Markdown、Curation、Knowledge 和 Retrieval 已在 M1C 中形成真实纵向闭环；固定十期现已导入真实 PostgreSQL，并通过最小领域 Bundle 完成空库恢复。直接使用证明短 Fragment 不应全部先经过正式知识表单。M1D 因此复用现有证据、隐私、HTTP/Web 和 PostgreSQL 资产，新增稳定 Entry、不变修订、三维关键词和确定性 Entry 搜索；AI、偏好模型、综合分和自动准入随后接入，不能反向定义 Entry 或正式知识语义。
+[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化正式知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求；[ADR 0007](adr/0007-information-entry-first-document-processing.md) 把普通文档主线重定向为 Entry-first。ADR 0008 随后把普通 Entry、文档标签和人工联系收敛为当前成品态与可携带个人数据，ADR 0009 删除了没有活动调用方的旧 Curation/Knowledge 应用运行时。ADR 0010 将新的所有者正式知识页定义为有界中心图谱；ADR 0011 进一步允许确定性相似联系
+直接成为可编辑图谱边，并让用户编辑或 block 优先于后续重建。
+
+当前产品已经用固定 398–407 期形成 345 个 Entry 和可重建联系，并提供导入、拆分、标签、联系、查询、正式 Entry 图谱、精确来源、隐私范围与完整个人数据包。M1E-2 复用 Association 投影与 override，实现最高匹配中心、有界图/列表、用户关系命令和 Association Bundle v3。旧正式 Knowledge 表和历史数据只作兼容保留；旧高级编辑器、AI、模糊/向量检索、报告和公网部署仍未实现。
 
 ## 2. 为什么选择这个形态
 
@@ -295,7 +304,7 @@ Blob 边界只接受通过 intrinsic brand 检查的普通字节视图，并立�
 大型正文和媒体优先保留为 Blob 引用，不能通过反复嵌套 base64 形成不可读的 current-version 工件。
 writer contract 与边界测试必须证明每个成功输出都能由相同版本的公开 reader 往返读取；若确定性 encoder 与精确 preflight 已提供同等保证，运行时不要求为每次写入重复解析。
 
-切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload，信封使用 16 MiB 默认预算的规范 UTF-8 JSON，只携带 Blob 身份并固定 `secretHandling=excluded`。M1C-EXPAND 实现 `struinfo.m1c-domain.v1` 的 36 表一致导出和空库恢复；M1D-2 又增加 `struinfo.m1d-entry.v1`，在同一一致只读事务和原子恢复中携带 6 张 Entry 表与 3 张文档标签表。新 Bundle 共覆盖 45 张工作区表，旧 M1C 单分区文件继续解码为空 Entry 状态；所有文件仍只落到外部 `exports/`。Blob 字节归档、跨工作区克隆、非空目标合并和生产灾难恢复仍是独立后续能力。
+切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload。当前四分区个人数据包包含 36 表 M1C 兼容分区、7 表 Entry v2、2 表 Association v3，以及引用 Blob 字节和偏好，共覆盖 45 张当前工作区表。Association v3 携带 M1E-2 关系来源、名称和方向；v1/v2 继续可读并补为空元数据。所有文件仍只落到外部 `exports/`。跨工作区克隆、非空合并和生产灾难恢复仍是独立后续能力。
 
 Linux 单机部署可先使用受备份保护的持久卷。
 需要多机或对象存储服务时，再增加 S3 兼容适配器；迁移不能改变 Resource、Snapshot 或 Citation ID。
@@ -612,28 +621,21 @@ import -> snapshot -> document nodes/fragments/media
 
 ## 16. 实施顺序
 
-### 当前执行主线：M1D Entry 网络
+### 当前可运行主线：M1E-2 Entry 工作台与正式图谱
 
-本节以前的准备门、切片 0、A、B1 和 M1C 记录保留为已完成资产与历史范围，不再要求对其合同或测试框架继续做无产品影响的完善。当前只推进以下纵向顺序：
+本节以前的准备门、切片 0、A、B1、M1C 和 M1D 记录保留为历史证据，不再要求为没有当前产品影响的合同或测试工具反复返工。当前运行时只保留以下纵向路径：
 
-1. 冻结 M1C-USE-9，并用 ADR 0007 固定 Entry、Fragment、KnowledgeItem 的兼容边界（已完成）；
-2. 新增 `000008` 和 `entries` 模块，从已有 Snapshot 幂等生成稳定 Entry/不可变修订（已完成）；
-3. 通过现有本地 HTTP/Web 编辑内容、类型、主/副领域关键词（已完成）；
-4. 按正文和三类关键词搜索当前 Entry，返回精确 Snapshot/Fragment 来源并保持隐私默认隐藏（已完成）；
-5. 通过 `000009`、确定性全文/Entry 覆盖规则和现有本地 Web 完成版本化文档标签、人工
-   标签修订及 Document ↔ Entry 双向导航；把 9 张 M1D 表加入独立 Bundle 分区，并在
-   所选外部工作区和一次性空数据库证明迁移、导出、恢复与精确来源一致（已完成）；
-6. 通过 `000010` 加入索引缩小后的选择性关联候选、可重建内容/类型/领域/基础分和不会被
-   重算覆盖的追加式人工 override；现有本地 API/Web 已接通重建、解释、来源和人工控制，
-   所选外部工作区的 34 个 issue-398 Entry 确定性生成 7 个关联对（已完成）；
-7. 组合来源/时间/文档/拆分方式/隐私过滤、最多两跳的有限关联邻域、逐条解释和查询绑定的
-   稳定分页；所选外部工作区和 320–1440 CSS 像素真实浏览器均已通过（M1D-4，已完成）；
-8. 为 `000010` 的 3 张关联表增加独立 Bundle 分区；用户显式选择其余九份 Snapshot，完成
-   398–407 期 345 个 Entry、598 个关联投影、48 表空库恢复和人工 override 历史往返
-   （M1D-5，已完成）；
-9. 只有直接使用暴露实际延迟或找回缺口时，再加入 `pg_trgm`、中文词项投影、查询下推和额外索引。
+1. 外部配置选择工作区和数据根；
+2. Markdown/固定 Git 文件进入 Blob、Resource、Snapshot、DocumentNode 与 Fragment；
+3. 用户选择 Snapshot，把 section 确定性物化为 InformationEntry；
+4. 标签页编辑 Entry 成品态、三维标签和有用/有趣评分，并维护外部偏好；
+5. Document 标签从当前 Entry 聚合或由用户覆盖；
+6. 联系页重建可解释投影，并逐对增强、削弱、屏蔽或恢复；
+7. 查询页按文本、标签、来源、时间、隐私和最多两跳联系稳定分页，并返回精确证据；
+8. 正式知识页搜索最高匹配 Entry，组合有界自动/用户关系图谱，支持图/列表、编辑、隐藏、恢复、创建和来源回看；
+9. 个人数据包导出/恢复 45 张当前表、引用 Blob 字节、当前偏好和 Association v3 图谱元数据。
 
-既有 M1C 正式知识检索继续作为兼容路径。复杂认证、容器/Linux 认证、正式 TM2 报告、AI、RAG、向量和偏好学习只有在使用它们前进入工作，不是 M1D 阻断项。阻断分类以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
+旧 Curation、正式 Knowledge 写入/读取和旧 Knowledge 检索应用运行时已经删除；迁移与历史数据只为兼容保留。M1E-2 不恢复这些入口，而是在 Entry/Association 边界完成正式图谱。下一步来自直接使用或明确的 M1E-3；AI、RAG、向量、自动采集、容器/公网认证和历史测试框架强化都不是当前使用的前置条件。阻断分类继续以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
 
 ### 准备门：基础架构（已完成）
 

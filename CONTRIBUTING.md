@@ -1,8 +1,11 @@
 # Contributing to StruInfo
 
 StruInfo has accepted its foundational development outline and architecture
-decisions. M1C is the frozen runnable compatibility baseline; implementation
-now follows the `M1D` InformationEntry-first vertical main line in the roadmap.
+decisions. M1C remains the compatibility baseline, while M1E-1 is the cleaned
+runnable InformationEntry-first product baseline. ADR 0011 now governs the
+M1E-2 Entry-centred formal relation graph: deterministic similarity associations
+may appear as editable edges, and the next product main line is the smallest
+graph-read, user-override, Web, evidence and transfer implementation.
 An accepted ADR does not bypass a reachable product, dependency, or release
 obligation, but deferred hardening and test-tooling certification do not block
 unrelated product work.
@@ -11,6 +14,7 @@ unrelated product work.
 
 - Product behavior: `docs/product-requirements.md`
 - Delivery order and gates: `docs/roadmap.md`
+- Current implementation and unfinished work: `docs/current-project-state.md`
 - Engineering rules: `docs/development-standards.md`
 - Dependency and license review: `docs/open-source-policy.md`
 - Decision history: `docs/decision-log.md`

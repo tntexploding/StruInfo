@@ -5,6 +5,8 @@ import type {
   InformationEntryAssociationOverrideResponse,
   InformationEntryAssociationRebuildResponse,
   InformationEntryDocumentListResponse,
+  InformationEntryKnowledgeGraphEdgeWriteResponse,
+  InformationEntryKnowledgeGraphResponse,
   InformationEntryMaterializeResponse,
   InformationEntryRevisionResponse,
   InformationEntrySearchResponse,
@@ -72,6 +74,16 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntrySearchResponse>>;
+  readInformationEntryKnowledgeGraph(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryKnowledgeGraphResponse>>;
+  reviseInformationEntryKnowledgeGraphEdge(
+    entryId: string,
+    relatedEntryId: string,
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryKnowledgeGraphEdgeWriteResponse>>;
   rebuildInformationEntryAssociations(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -132,6 +144,8 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     materializeInformationEntries: reject,
     reviseInformationEntry: reject,
     searchInformationEntries: reject,
+    readInformationEntryKnowledgeGraph: reject,
+    reviseInformationEntryKnowledgeGraphEdge: reject,
     rebuildInformationEntryAssociations: reject,
     listInformationEntryAssociations: reject,
     reviseInformationEntryAssociation: reject,
@@ -210,6 +224,23 @@ export function createM1cApiClient(
     searchInformationEntries: (body, options) =>
       post<InformationEntrySearchResponse>(
         'api/v1/entries/search',
+        body,
+        options,
+      ),
+    readInformationEntryKnowledgeGraph: (body, options) =>
+      post<InformationEntryKnowledgeGraphResponse>(
+        'api/v1/knowledge-graph/view',
+        body,
+        options,
+      ),
+    reviseInformationEntryKnowledgeGraphEdge: (
+      entryId,
+      relatedEntryId,
+      body,
+      options,
+    ) =>
+      put<InformationEntryKnowledgeGraphEdgeWriteResponse>(
+        `api/v1/knowledge-graph/edges/${encodeURIComponent(entryId)}/${encodeURIComponent(relatedEntryId)}`,
         body,
         options,
       ),

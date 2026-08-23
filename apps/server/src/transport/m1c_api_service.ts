@@ -6,7 +6,10 @@ import {
   ENTRY_TYPE_KEYWORDS,
   INFORMATION_ENTRY_ASSOCIATION_ACTIONS,
   INFORMATION_ENTRY_ASSOCIATION_POLICY,
+  INFORMATION_ENTRY_GRAPH_DIRECTIONS,
+  INFORMATION_ENTRY_GRAPH_MAXIMUM_NEIGHBORS,
   InformationEntrySearchCursorError,
+  buildInformationEntryKnowledgeGraph,
   buildInformationEntryAssociationProjection,
   deriveInformationDocumentTagRevisionId,
   deriveInformationEntryAssociationOverrideRevisionId,
@@ -15,6 +18,9 @@ import {
   orderedInformationEntryAssociationPair,
   prepareAggregatedInformationDocumentTags,
   prepareInformationEntryAssociationOverride,
+  prepareInformationEntryGraphEdit,
+  prepareInformationEntryGraphRelation,
+  prepareInformationEntryGraphVisibility,
   prepareManualInformationDocumentTags,
   prepareManualEntryRevision,
   prepareSplitInformationEntries,
@@ -23,6 +29,7 @@ import {
   type EntryTypeKeyword,
   type InformationEntryAssociationAction,
   type InformationEntryAssociationRepositoryPort,
+  type InformationEntryGraphDirection,
   type InformationDocumentTagRepositoryPort,
   type InformationEntryDocumentView,
   type InformationEntryRepositoryPort,
@@ -86,6 +93,12 @@ export interface M1cApiServicePort {
     body: unknown,
   ): Promise<M1cHttpResult>;
   searchInformationEntries(body: unknown): Promise<M1cHttpResult>;
+  readInformationEntryKnowledgeGraph(body: unknown): Promise<M1cHttpResult>;
+  reviseInformationEntryKnowledgeGraphEdge(
+    entryId: string,
+    relatedEntryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult>;
   rebuildInformationEntryAssociations(body: unknown): Promise<M1cHttpResult>;
   listInformationEntryAssociations(
     entryId: string,
@@ -128,6 +141,7 @@ export class M1cApiService implements M1cApiServicePort {
         'evidence_read',
         'information_entries',
         'information_document_tags',
+        'information_entry_knowledge_graph',
         'private_documents',
         'review_preferences',
         'workspace_bundle_export',
@@ -426,6 +440,176 @@ export class M1cApiService implements M1cApiServicePort {
     }
   }
 
+  public async readInformationEntryKnowledgeGraph(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const input = decodeInformationEntryKnowledgeGraphRequest(body);
+    if (input === undefined) return inputFailure('body');
+    try {
+      const [loadedEntries, associationSnapshot] = await Promise.all([
+        this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          input.includePrivate,
+        ),
+        this.#dependencies.informationEntryAssociationRepository.loadAssociationSnapshot(
+          this.#dependencies.workspaceId,
+          input.includePrivate,
+        ),
+      ]);
+      const entries = input.onlyPrivate
+        ? loadedEntries.filter((entry) => entry.value.isPrivate)
+        : loadedEntries;
+      const searchResult = searchCurrentInformationEntries(entries, {
+        ...(input.query === undefined ? {} : {text: input.query}),
+        includePrivate: input.includePrivate,
+        onlyPrivate: input.onlyPrivate,
+        limit: input.candidateLimit,
+      });
+      const centerEntryId =
+        input.centerEntryId ?? searchResult.items[0]?.entry.entryId;
+      if (
+        input.centerEntryId !== undefined &&
+        !entries.some((entry) => entry.entryId === input.centerEntryId)
+      ) {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'information_entry_not_found'}),
+        });
+      }
+      const graph =
+        centerEntryId === undefined
+          ? undefined
+          : buildInformationEntryKnowledgeGraph(
+              centerEntryId,
+              entries,
+              associationSnapshot,
+              input.neighborLimit,
+            );
+      return httpResult(200, {
+        status: 'ok',
+        querySha256: searchResult.querySha256,
+        candidateTotalCount: searchResult.totalCount,
+        candidates: searchResult.items,
+        graph: graph ?? null,
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async reviseInformationEntryKnowledgeGraphEdge(
+    entryId: string,
+    relatedEntryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
+    if (!CANONICAL_UUID.test(relatedEntryId)) {
+      return inputFailure('path.relatedEntryId');
+    }
+    const input = decodeInformationEntryKnowledgeGraphEdgeWrite(body);
+    const pair = orderedInformationEntryAssociationPair(
+      entryId,
+      relatedEntryId,
+    );
+    if (input === undefined || pair === undefined) return inputFailure('body');
+    try {
+      const [entries, snapshot] = await Promise.all([
+        this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          input.includePrivate,
+        ),
+        this.#dependencies.informationEntryAssociationRepository.loadAssociationSnapshot(
+          this.#dependencies.workspaceId,
+          input.includePrivate,
+        ),
+      ]);
+      if (
+        !entries.some((entry) => entry.entryId === entryId) ||
+        !entries.some((entry) => entry.entryId === relatedEntryId)
+      ) {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'information_entry_not_found'}),
+        });
+      }
+      const projection = snapshot.projections.find(
+        (candidate) =>
+          candidate.entryLowId === pair.entryLowId &&
+          candidate.entryHighId === pair.entryHighId,
+      );
+      const current = snapshot.overrides.find(
+        (candidate) =>
+          candidate.entryLowId === pair.entryLowId &&
+          candidate.entryHighId === pair.entryHighId,
+      );
+      if (
+        input.operation !== 'edit' &&
+        projection === undefined &&
+        current?.value.graph === undefined
+      ) {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({
+            code: 'information_entry_graph_edge_not_found',
+          }),
+        });
+      }
+      let value;
+      if (input.operation === 'edit') {
+        const origin =
+          current?.value.graph?.origin ??
+          (projection === undefined ? 'user' : 'association');
+        const graph = prepareInformationEntryGraphRelation(
+          input.label,
+          input.direction,
+          origin,
+        );
+        if (graph === undefined) return inputFailure('body.label');
+        value = prepareInformationEntryGraphEdit(
+          current?.value,
+          projection !== undefined,
+          graph,
+        );
+      } else {
+        value = prepareInformationEntryGraphVisibility(
+          current?.value,
+          projection !== undefined,
+          input.operation === 'block',
+        );
+      }
+      const outcome =
+        await this.#dependencies.informationEntryAssociationRepository.writeAssociationOverride(
+          {
+            workspaceId: this.#dependencies.workspaceId,
+            ...pair,
+            expectedRevision: input.expectedRevision,
+            revisionId: deriveInformationEntryAssociationOverrideRevisionId(
+              pair.entryLowId,
+              pair.entryHighId,
+              input.expectedRevision + 1,
+            ),
+            includePrivate: input.includePrivate,
+            value,
+          },
+        );
+      if (outcome === 'not_found') {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'information_entry_not_found'}),
+        });
+      }
+      if (outcome === 'stale') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'stale_association_override_revision'}),
+        });
+      }
+      return httpResult(200, {status: outcome});
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
   public async rebuildInformationEntryAssociations(
     body: unknown,
   ): Promise<M1cHttpResult> {
@@ -513,11 +697,16 @@ export class M1cApiService implements M1cApiServicePort {
     );
     if (input === undefined || pair === undefined) return inputFailure('body');
     try {
-      const entries =
-        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+      const [entries, snapshot] = await Promise.all([
+        this.#dependencies.informationEntryRepository.loadCurrentEntries(
           this.#dependencies.workspaceId,
           input.includePrivate,
-        );
+        ),
+        this.#dependencies.informationEntryAssociationRepository.loadAssociationSnapshot(
+          this.#dependencies.workspaceId,
+          input.includePrivate,
+        ),
+      ]);
       if (
         !entries.some((entry) => entry.entryId === entryId) ||
         !entries.some((entry) => entry.entryId === relatedEntryId)
@@ -527,6 +716,20 @@ export class M1cApiService implements M1cApiServicePort {
           issue: Object.freeze({code: 'information_entry_not_found'}),
         });
       }
+      const current = snapshot.overrides.find(
+        (candidate) =>
+          candidate.entryLowId === pair.entryLowId &&
+          candidate.entryHighId === pair.entryHighId,
+      );
+      const scoreValue = prepareInformationEntryAssociationOverride(
+        input.action,
+      );
+      const value = Object.freeze({
+        ...scoreValue,
+        ...(current?.value.graph === undefined
+          ? {}
+          : {graph: current.value.graph}),
+      });
       const outcome =
         await this.#dependencies.informationEntryAssociationRepository.writeAssociationOverride(
           {
@@ -539,7 +742,7 @@ export class M1cApiService implements M1cApiServicePort {
               input.expectedRevision + 1,
             ),
             includePrivate: input.includePrivate,
-            value: prepareInformationEntryAssociationOverride(input.action),
+            value,
           },
         );
       if (outcome === 'not_found') {
@@ -1099,6 +1302,111 @@ function isIsoDate(value: string): boolean {
     !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
   );
 }
+function decodeInformationEntryKnowledgeGraphRequest(body: unknown):
+  | Readonly<{
+      query?: string;
+      centerEntryId?: string;
+      includePrivate: boolean;
+      onlyPrivate: boolean;
+      candidateLimit: number;
+      neighborLimit: number;
+    }>
+  | undefined {
+  if (!isRecord(body)) return undefined;
+  const query = optionalBoundedText(body.query, 300);
+  const centerEntryId = body.centerEntryId ?? undefined;
+  const includePrivate = body.includePrivate ?? false;
+  const onlyPrivate = body.onlyPrivate ?? false;
+  const candidateLimit = body.candidateLimit ?? 8;
+  const neighborLimit = body.neighborLimit ?? 12;
+  if (
+    query === null ||
+    (centerEntryId !== undefined &&
+      (typeof centerEntryId !== 'string' ||
+        !CANONICAL_UUID.test(centerEntryId))) ||
+    typeof includePrivate !== 'boolean' ||
+    typeof onlyPrivate !== 'boolean' ||
+    (onlyPrivate && !includePrivate) ||
+    typeof candidateLimit !== 'number' ||
+    !Number.isSafeInteger(candidateLimit) ||
+    candidateLimit < 1 ||
+    candidateLimit > 12 ||
+    typeof neighborLimit !== 'number' ||
+    !Number.isSafeInteger(neighborLimit) ||
+    neighborLimit < 1 ||
+    neighborLimit > INFORMATION_ENTRY_GRAPH_MAXIMUM_NEIGHBORS
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    ...(query === undefined ? {} : {query}),
+    ...(centerEntryId === undefined ? {} : {centerEntryId}),
+    includePrivate,
+    onlyPrivate,
+    candidateLimit,
+    neighborLimit,
+  });
+}
+
+function decodeInformationEntryKnowledgeGraphEdgeWrite(body: unknown):
+  | Readonly<
+      | {
+          expectedRevision: number;
+          includePrivate: boolean;
+          operation: 'edit';
+          label: string;
+          direction: InformationEntryGraphDirection;
+        }
+      | {
+          expectedRevision: number;
+          includePrivate: boolean;
+          operation: 'block' | 'restore';
+        }
+    >
+  | undefined {
+  if (!isRecord(body)) return undefined;
+  const includePrivate = body.includePrivate ?? false;
+  if (
+    typeof body.expectedRevision !== 'number' ||
+    !Number.isSafeInteger(body.expectedRevision) ||
+    body.expectedRevision < 0 ||
+    body.expectedRevision >= 2_147_483_647 ||
+    typeof includePrivate !== 'boolean'
+  ) {
+    return undefined;
+  }
+  if (body.operation === 'edit') {
+    if (
+      typeof body.label !== 'string' ||
+      typeof body.direction !== 'string' ||
+      !INFORMATION_ENTRY_GRAPH_DIRECTIONS.includes(
+        body.direction as InformationEntryGraphDirection,
+      )
+    ) {
+      return undefined;
+    }
+    return Object.freeze({
+      expectedRevision: body.expectedRevision,
+      includePrivate,
+      operation: 'edit' as const,
+      label: body.label,
+      direction: body.direction as InformationEntryGraphDirection,
+    });
+  }
+  if (
+    (body.operation !== 'block' && body.operation !== 'restore') ||
+    body.label !== undefined ||
+    body.direction !== undefined
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    expectedRevision: body.expectedRevision,
+    includePrivate,
+    operation: body.operation,
+  });
+}
+
 function decodeInformationEntryAssociationScope(
   body: unknown,
 ): boolean | undefined {

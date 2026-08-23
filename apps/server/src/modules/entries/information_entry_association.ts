@@ -206,8 +206,13 @@ export function listInformationEntryAssociations(
     const highId = projection?.entryHighId ?? override?.entryHighId;
     if (lowId === undefined || highId === undefined) continue;
     if (entryId !== lowId && entryId !== highId) continue;
-    if (projection === undefined && override?.value.action === 'restore')
+    if (
+      projection === undefined &&
+      override?.value.action === 'restore' &&
+      override.value.graph === undefined
+    ) {
       continue;
+    }
     const relatedEntry = entriesById.get(entryId === lowId ? highId : lowId);
     if (relatedEntry === undefined) continue;
     const isBlocked = override?.value.isBlocked === true;

@@ -119,6 +119,34 @@ export class M1cApiController {
     );
   }
 
+  @Post('knowledge-graph/view')
+  public async informationEntryKnowledgeGraph(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.readInformationEntryKnowledgeGraph(body),
+    );
+  }
+
+  @Put('knowledge-graph/edges/:entryId/:relatedEntryId')
+  public async reviseInformationEntryKnowledgeGraphEdge(
+    @Param('entryId') entryId: string,
+    @Param('relatedEntryId') relatedEntryId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.reviseInformationEntryKnowledgeGraphEdge(
+        entryId,
+        relatedEntryId,
+        body,
+      ),
+    );
+  }
+
   @Post('entries/associations/rebuild')
   public async rebuildInformationEntryAssociations(
     @Body() body: unknown,

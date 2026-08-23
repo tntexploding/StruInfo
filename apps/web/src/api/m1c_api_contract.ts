@@ -344,6 +344,11 @@ export interface CurrentInformationEntryAssociationOverride {
     action: InformationEntryAssociationAction;
     manualAdjustment: number;
     isBlocked: boolean;
+    graph?: Readonly<{
+      origin: 'association' | 'user';
+      label: string;
+      direction: InformationEntryGraphDirection;
+    }>;
   }>;
 }
 
@@ -354,6 +359,49 @@ export interface InformationEntryAssociationView {
   readonly effectiveScore: number;
   readonly isBlocked: boolean;
 }
+
+export type InformationEntryGraphDirection =
+  'symmetric' | 'low_to_high' | 'high_to_low';
+
+export type InformationEntryGraphEdgeOrigin =
+  'automatically_calculated' | 'user_edited' | 'user_created';
+
+export interface InformationEntryGraphEdge {
+  readonly entryLowId: string;
+  readonly entryHighId: string;
+  readonly label: string;
+  readonly direction: InformationEntryGraphDirection;
+  readonly origin: InformationEntryGraphEdgeOrigin;
+  readonly effectiveScore: number;
+  readonly isBlocked: boolean;
+  readonly overrideRevision: number;
+  readonly projection?: Readonly<InformationEntryAssociationProjection>;
+}
+
+export type InformationEntryKnowledgeGraphResponse =
+  | Readonly<{
+      status: 'ok';
+      querySha256: string;
+      candidateTotalCount: number;
+      candidates: readonly Readonly<{
+        entry: Readonly<InformationEntry>;
+        matchReasons: readonly InformationEntryMatchReason[];
+        filterReasons: readonly InformationEntryFilterReason[];
+      }>[];
+      graph: Readonly<{
+        center: Readonly<InformationEntry>;
+        nodes: readonly Readonly<InformationEntry>[];
+        edges: readonly Readonly<InformationEntryGraphEdge>[];
+        hiddenEdges: readonly Readonly<InformationEntryGraphEdge>[];
+      }> | null;
+    }>
+  | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
+  | DomainFailure;
+
+export type InformationEntryKnowledgeGraphEdgeWriteResponse =
+  | Readonly<{status: 'applied' | 'unchanged'}>
+  | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
+  | DomainFailure;
 
 export type InformationEntryAssociationRebuildResponse =
   | Readonly<{

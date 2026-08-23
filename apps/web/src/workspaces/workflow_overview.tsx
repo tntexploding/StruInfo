@@ -205,7 +205,8 @@ export function WorkflowOverview({
               </h2>
               <p>
                 Snapshot 保留证据，Entry
-                承担日常拆分、标签与联系；正式知识仍是需要时才进入的深化层。
+                承担日常拆分、标签与联系；正式知识页将用 Entry
+                组成由相似联系与用户关系共同维护的可编辑图谱。
               </p>
             </div>
           </section>

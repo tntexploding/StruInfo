@@ -42,12 +42,12 @@ Workspace Bundle v1 现在是“当前已实现的全部工作区个人数据”
 | -------------------------- | ------: | ----------------------------- | ----------------------------------------------------------------------------- |
 | `struinfo.m1c-domain`      |       1 | `struinfo.m1c-domain.v1`      | Evidence、Curation、正式 Knowledge 与命令历史，36 表                          |
 | `struinfo.m1d-entry`       |       2 | `struinfo.m1d-entry.v2`       | 当前 Entry、Fragment 输入、内容/类型/领域标签、lineage 与 Document 标签，7 表 |
-| `struinfo.m1d-association` |       2 | `struinfo.m1d-association.v2` | 可重建联系投影与当前人工控制，2 表                                            |
+| `struinfo.m1d-association` |       3 | `struinfo.m1d-association.v3` | 可重建联系投影、当前人工控制与正式图谱关系元数据，2 表                        |
 | `struinfo.personal-data`   |       1 | `struinfo.personal-data.v1`   | 引用 Blob 的完整字节与当前审核/标签个人偏好                                   |
 
 每个 codec 都使用闭合 schema，显式列出允许的字段并拒绝未知表、未知列、重复身份、跨工作区引用和错误 scalar。通用信封不会把任意 JSON 直接当作领域事实。
 
-Entry v2 和 Association v2 反映迁移 `000011` 之后的当前成品态。Entry 的 `current_revision` / `current_revision_id` 只作为乐观并发版本令牌，不再指向一张普通编辑历史表。不可变 Snapshot、Fragment 以及正式 Knowledge 修订历史仍由 M1C domain 分区原样保留。
+Entry v2 和 Association v3 反映迁移 `000011`/`000012` 之后的当前成品态。Association v3 在当前 override 上增加关系来源、名称和方向；Entry 的 `current_revision` / `current_revision_id` 只作为乐观并发版本令牌，不再指向一张普通编辑历史表。不可变 Snapshot、Fragment 以及正式 Knowledge 修订历史仍由 M1C domain 分区原样保留。
 
 ## 4. 规范编码与隐私
 
@@ -94,7 +94,7 @@ Reader 继续接受历史 Bundle：
 
 - 只含 `struinfo.m1c-domain.v1`：Entry 与联系状态按空处理；
 - 带 `struinfo.m1d-entry.v1`：只保留旧指针选中的当前 Entry/Document 标签值，转换为 v2；
-- 带 `struinfo.m1d-association.v1`：只保留当前人工控制并转换为 v2；
+- 带 `struinfo.m1d-association.v1` 或 `.v2`：保留当前人工控制并转换为 v3；缺失的图谱关系元数据为 `null`；
 - 缺少 `struinfo.personal-data.v1`：仍要求外部 Blob store 已存在全部引用字节，且不覆盖当前个人偏好。
 
 新 writer 只生成四分区形式。未知或重复分区、Association 存在但 Entry 缺失、Blob manifest 与 personal-data 字节不一致时一律拒绝。

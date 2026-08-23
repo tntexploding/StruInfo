@@ -10,8 +10,11 @@ import {
 import type {WorkspaceBundleSectionCodec} from './workspace_bundle.js';
 
 export const M1D_ASSOCIATION_BUNDLE_SECTION_TYPE = 'struinfo.m1d-association';
-export const M1D_ASSOCIATION_BUNDLE_SECTION_VERSION = 2;
-export const M1D_ASSOCIATION_BUNDLE_SCHEMA = 'struinfo.m1d-association.v2';
+export const M1D_ASSOCIATION_BUNDLE_SECTION_VERSION = 3;
+export const M1D_ASSOCIATION_BUNDLE_SCHEMA = 'struinfo.m1d-association.v3';
+export const M1D_ASSOCIATION_VERSION_TWO_BUNDLE_SECTION_VERSION = 2;
+export const M1D_ASSOCIATION_VERSION_TWO_BUNDLE_SCHEMA =
+  'struinfo.m1d-association.v2';
 export const M1D_ASSOCIATION_LEGACY_BUNDLE_SECTION_VERSION = 1;
 export const M1D_ASSOCIATION_LEGACY_BUNDLE_SCHEMA =
   'struinfo.m1d-association.v1';
@@ -66,6 +69,26 @@ export const M1D_ASSOCIATION_TABLES: readonly Readonly<M1dAssociationTableDescri
       'action',
       'manual_adjustment',
       'is_blocked',
+      'graph_origin',
+      'graph_label',
+      'graph_direction',
+      'created_at',
+      'updated_at',
+    ]),
+  ]);
+
+const VERSION_TWO_ASSOCIATION_TABLES: readonly Readonly<M1dAssociationTableDescriptor>[] =
+  Object.freeze([
+    requiredDescriptor(M1D_ASSOCIATION_TABLES, 0),
+    table('information_entry_association_override', [
+      'workspace_id',
+      'entry_low_id',
+      'entry_high_id',
+      'current_revision',
+      'current_revision_id',
+      'action',
+      'manual_adjustment',
+      'is_blocked',
       'created_at',
       'updated_at',
     ]),
@@ -102,6 +125,16 @@ export const M1D_ASSOCIATION_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     version: M1D_ASSOCIATION_BUNDLE_SECTION_VERSION,
     encode: normalizeM1dAssociationSnapshot,
     decode: normalizeM1dAssociationSnapshot,
+  });
+
+export const M1D_ASSOCIATION_VERSION_TWO_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
+    version: M1D_ASSOCIATION_VERSION_TWO_BUNDLE_SECTION_VERSION,
+    encode: normalizeVersionTwoSnapshot,
+    decode(payload: JsonValue): unknown {
+      return upgradeVersionTwoSnapshot(normalizeVersionTwoSnapshot(payload));
+    },
   });
 
 export const M1D_ASSOCIATION_LEGACY_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
@@ -152,6 +185,40 @@ export function createEmptyM1dAssociationSnapshot(): M1dAssociationSnapshot {
     tables: M1D_ASSOCIATION_TABLES.map((descriptor) => ({
       name: descriptor.name,
       rows: [],
+    })),
+  });
+}
+
+function normalizeVersionTwoSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1D_ASSOCIATION_VERSION_TWO_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1dAssociationTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1D_ASSOCIATION_VERSION_TWO_BUNDLE_SCHEMA,
+    VERSION_TWO_ASSOCIATION_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1D_ASSOCIATION_VERSION_TWO_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1dAssociationTableSnapshot>[];
+  }>;
+}
+
+function upgradeVersionTwoSnapshot(
+  legacy: ReturnType<typeof normalizeVersionTwoSnapshot>,
+): M1dAssociationSnapshot {
+  return normalizeM1dAssociationSnapshot({
+    schemaVersion: M1D_ASSOCIATION_BUNDLE_SCHEMA,
+    tables: legacy.tables.map((tableSnapshot) => ({
+      name: tableSnapshot.name,
+      rows:
+        tableSnapshot.name === 'information_entry_association_override'
+          ? tableSnapshot.rows.map((row) => ({
+              ...row,
+              graph_origin: null,
+              graph_label: null,
+              graph_direction: null,
+            }))
+          : tableSnapshot.rows,
     })),
   });
 }
@@ -212,6 +279,9 @@ function upgradeLegacySnapshot(
     return rowFor(requiredDescriptor(M1D_ASSOCIATION_TABLES, 1), {
       ...override,
       ...revision,
+      graph_origin: null,
+      graph_label: null,
+      graph_direction: null,
       created_at: requiredPrimitive(override, 'created_at'),
       updated_at: requiredPrimitive(revision, 'created_at'),
     });

@@ -1,6 +1,8 @@
 import {
   INFORMATION_ENTRY_ASSOCIATION_ACTIONS,
   INFORMATION_ENTRY_ASSOCIATION_BASES,
+  INFORMATION_ENTRY_GRAPH_DIRECTIONS,
+  INFORMATION_ENTRY_GRAPH_ORIGINS,
   type CurrentInformationEntryAssociationOverride,
   type InformationEntryAssociationOverrideOutcome,
   type InformationEntryAssociationOverrideValue,
@@ -8,6 +10,7 @@ import {
   type InformationEntryAssociationProjection,
   type InformationEntryAssociationRepositoryPort,
   type InformationEntryAssociationRepositorySnapshot,
+  type InformationEntryGraphRelationValue,
 } from '../../../modules/entries/index.js';
 
 import type {PostgresPoolBoundary} from './postgres_pool.js';
@@ -54,7 +57,8 @@ export const READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL = sql(
   'SELECT override.workspace_id::text, override.entry_low_id::text,',
   '  override.entry_high_id::text, override.current_revision,',
   '  override.current_revision_id::text, override.action,',
-  '  override.manual_adjustment, override.is_blocked',
+  '  override.manual_adjustment, override.is_blocked,',
+  '  override.graph_origin, override.graph_label, override.graph_direction',
   'FROM struinfo.information_entry_association_override AS override',
   'JOIN struinfo.information_entry AS low_entry',
   '  ON low_entry.workspace_id = override.workspace_id',
@@ -100,7 +104,7 @@ const READ_ASSOCIATION_ENDPOINTS_SQL = sql(
 
 const LOCK_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
   'SELECT current_revision, current_revision_id::text, action,',
-  '  manual_adjustment, is_blocked',
+  '  manual_adjustment, is_blocked, graph_origin, graph_label, graph_direction',
   'FROM struinfo.information_entry_association_override',
   'WHERE workspace_id = $1 AND entry_low_id = $2 AND entry_high_id = $3',
   'FOR UPDATE',
@@ -109,17 +113,18 @@ const LOCK_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
 const INSERT_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
   'INSERT INTO struinfo.information_entry_association_override (',
   '  workspace_id, entry_low_id, entry_high_id, current_revision,',
-  '  current_revision_id, action, manual_adjustment, is_blocked',
-  ') VALUES ($1, $2, $3, 1, $4, $5, $6, $7)',
+  '  current_revision_id, action, manual_adjustment, is_blocked,',
+  '  graph_origin, graph_label, graph_direction',
+  ') VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $10)',
 );
 
 const UPDATE_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
   'UPDATE struinfo.information_entry_association_override SET',
   '  current_revision = $4, current_revision_id = $5, action = $6,',
-  '  manual_adjustment = $7, is_blocked = $8,',
-  '  updated_at = CURRENT_TIMESTAMP',
+  '  manual_adjustment = $7, is_blocked = $8, graph_origin = $9,',
+  '  graph_label = $10, graph_direction = $11, updated_at = CURRENT_TIMESTAMP',
   'WHERE workspace_id = $1 AND entry_low_id = $2 AND entry_high_id = $3',
-  '  AND current_revision = $9',
+  '  AND current_revision = $12',
 );
 
 type Row = Readonly<Record<string, unknown>>;
@@ -238,6 +243,9 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
               write.value.action,
               write.value.manualAdjustment,
               write.value.isBlocked,
+              write.value.graph?.origin ?? null,
+              write.value.graph?.label ?? null,
+              write.value.graph?.direction ?? null,
             ],
           );
           expectOneAffected(inserted.rowCount);
@@ -261,6 +269,9 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
             write.value.action,
             write.value.manualAdjustment,
             write.value.isBlocked,
+            write.value.graph?.origin ?? null,
+            write.value.graph?.label ?? null,
+            write.value.graph?.direction ?? null,
             currentRevision,
           ],
         );
@@ -334,13 +345,39 @@ function mapOverrideValue(
   row: Row,
 ): Readonly<InformationEntryAssociationOverrideValue> {
   if (typeof row.is_blocked !== 'boolean') throw new PostgresAdapterError();
+  const graph = mapGraphRelationValue(row);
   const value = Object.freeze({
     action: enumValue(row.action, INFORMATION_ENTRY_ASSOCIATION_ACTIONS),
     manualAdjustment: integer(row.manual_adjustment, -10_000),
     isBlocked: row.is_blocked,
+    ...(graph === undefined ? {} : {graph}),
   });
   assertOverrideValue(value);
   return value;
+}
+
+function mapGraphRelationValue(
+  row: Row,
+): Readonly<InformationEntryGraphRelationValue> | undefined {
+  const fields = [row.graph_origin, row.graph_label, row.graph_direction];
+  if (fields.every((value) => value === null || value === undefined)) {
+    return undefined;
+  }
+  if (fields.some((value) => typeof value !== 'string')) {
+    throw new PostgresAdapterError();
+  }
+  const label = nonEmptyText(row.graph_label);
+  if (Array.from(label).length > 80 || containsControlCodePoint(label)) {
+    throw new PostgresAdapterError();
+  }
+  return Object.freeze({
+    origin: enumValue(row.graph_origin, INFORMATION_ENTRY_GRAPH_ORIGINS),
+    label,
+    direction: enumValue(
+      row.graph_direction,
+      INFORMATION_ENTRY_GRAPH_DIRECTIONS,
+    ),
+  });
 }
 
 function assertOverrideValue(
@@ -348,6 +385,18 @@ function assertOverrideValue(
 ): void {
   enumValue(value.action, INFORMATION_ENTRY_ASSOCIATION_ACTIONS);
   boundedScore(value.manualAdjustment, -10_000, 10_000);
+  if (value.graph !== undefined) {
+    enumValue(value.graph.origin, INFORMATION_ENTRY_GRAPH_ORIGINS);
+    enumValue(value.graph.direction, INFORMATION_ENTRY_GRAPH_DIRECTIONS);
+    if (
+      value.graph.label !== value.graph.label.trim().normalize('NFC') ||
+      value.graph.label.length === 0 ||
+      Array.from(value.graph.label).length > 80 ||
+      containsControlCodePoint(value.graph.label)
+    ) {
+      throw new PostgresAdapterError();
+    }
+  }
   if (
     typeof value.isBlocked !== 'boolean' ||
     (value.action === 'block') !== value.isBlocked ||
@@ -375,4 +424,11 @@ function sameOverrideValue(
   right: Readonly<InformationEntryAssociationOverrideValue>,
 ): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function containsControlCodePoint(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f);
+  });
 }
