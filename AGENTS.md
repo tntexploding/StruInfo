@@ -7,6 +7,7 @@ Detailed policy lives in the linked canonical documents.
 
 Before changing the repository, read:
 
+- `docs/current-project-state.md`
 - `docs/product-requirements.md`
 - `docs/roadmap.md`
 - `docs/knowledge-core-architecture.md`
@@ -148,8 +149,9 @@ an association and are never rewritten by projection rebuilds. The local API and
 Entry workspace expose rebuild, inspection, exact-source return and manual
 control while applying privacy scope before visibility. In the selected external
 workspace, 34 issue-398 Entries deterministically produced 7 association pairs
-covering 6 Entries. These candidates are navigation aids, not formal semantic
-relations.
+covering 6 Entries. These projections are similarity navigation signals rather than manually
+verified semantic assertions; ADR 0011 later allows them to appear as editable
+graph edges.
 
 M1D-4 completes explainable Entry search without a new migration or search
 service. One query-bound cursor combines text, exact content/source keys,
@@ -205,8 +207,9 @@ user-confirmed aliases. Intake actions, judgment reasons and manual-link intent
 are removed from the current workflow. New external personal-data packages embed
 all referenced Blob bytes and workspace preferences with database sections while
 remaining backward-readable with legacy Bundles. Entry search has public,
-include-private and private-only scopes, and a placeholder Formal Knowledge page
-follows Query pending a separately accepted product design.
+include-private and private-only scopes. M1E-2 replaces the former placeholder
+with a bounded Entry-centred Formal Knowledge graph, while preserving the same
+external data and privacy boundaries.
 
 ADR 0009 completes the cleanup. Active source MUST NOT restore imports, adapters,
 HTTP routes, frontend contracts or hidden tools from the retired Manual Curation,
@@ -214,8 +217,18 @@ formal Knowledge writer/current-item reader or deterministic Knowledge search.
 Migrations `000003`, `000004`, `000006` and `000007`, their historical rows,
 frozen contracts and legacy personal-data-package section remain for recovery.
 The old TM2 harness is an excluded historical archive with no product script and
-MUST NOT block current work. A Formal Knowledge runtime may return only after an
-accepted M1E-2 boundary.
+MUST NOT block current work. ADR 0011 now governs the M1E-2 boundary: the
+owner-facing Formal Knowledge page uses existing InformationEntry identities as
+nodes, with visible deterministic similarity associations and user-created or
+user-edited relationships as graph edges. Its simple deterministic search
+selects the highest visible Entry as centre and loads only a bounded
+neighbourhood; Query remains the exhaustive result surface. Similarity edges do
+not require per-edge confirmation, but their calculated origin remains visible
+and durable user edits or blocks override later rebuilds. M1E-2 now ships the
+public graph read/edit boundary, graph/list Web surface and Association Bundle
+v3. Migration `000012` adds only the missing current override metadata; it MUST
+NOT restore the retired M1C Knowledge runtime or portray similarity as verified
+factual assertion.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable

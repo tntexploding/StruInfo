@@ -96,6 +96,21 @@ describe('M1cApiClient', () => {
       expectedRevision: 1,
     });
     await client.searchInformationEntries({text: 'synthetic'});
+    await client.readInformationEntryKnowledgeGraph({
+      query: 'synthetic',
+      includePrivate: true,
+    });
+    await client.reviseInformationEntryKnowledgeGraphEdge(
+      'synthetic/entry',
+      'related/id',
+      {
+        expectedRevision: 0,
+        operation: 'edit',
+        label: '相关',
+        direction: 'symmetric',
+        includePrivate: true,
+      },
+    );
     await client.rebuildInformationEntryAssociations({includePrivate: true});
     await client.listInformationEntryAssociations('synthetic/entry', {
       includePrivate: true,
@@ -132,6 +147,25 @@ describe('M1cApiClient', () => {
         url: 'http://127.0.0.1:3000/api/v1/entries/search',
         method: 'POST',
         body: JSON.stringify({text: 'synthetic'}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/knowledge-graph/view',
+        method: 'POST',
+        body: JSON.stringify({
+          query: 'synthetic',
+          includePrivate: true,
+        }),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/knowledge-graph/edges/synthetic%2Fentry/related%2Fid',
+        method: 'PUT',
+        body: JSON.stringify({
+          expectedRevision: 0,
+          operation: 'edit',
+          label: '相关',
+          direction: 'symmetric',
+          includePrivate: true,
+        }),
       },
       {
         url: 'http://127.0.0.1:3000/api/v1/entries/associations/rebuild',

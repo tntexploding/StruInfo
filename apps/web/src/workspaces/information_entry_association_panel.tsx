@@ -162,7 +162,7 @@ export function InformationEntryAssociationPanel({
           <p className="section-index">SELECTIVE ASSOCIATION</p>
           <h2 id={headingId}>可能相关</h2>
           <p>
-            本地索引先缩小候选，再分别计算内容、类型与领域相似度；这不是正式语义关系。
+            本地索引先缩小候选，再分别计算内容、类型与领域相似度；它可成为自动相似图谱边，但不等于事实性语义断言。
           </p>
         </div>
         <span className="record-count">

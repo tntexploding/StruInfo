@@ -11,3 +11,4 @@ export * from './information_entry_association.js';
 export * from './information_entry_association_contract.js';
 export * from './information_entry_association_identity.js';
 export * from './information_entry_association_repository.js';
+export * from './information_entry_knowledge_graph.js';

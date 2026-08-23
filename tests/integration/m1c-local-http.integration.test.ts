@@ -147,6 +147,10 @@ function stubApi(
       Promise.resolve(result(200, {status: 'applied'})),
     searchInformationEntries: () =>
       Promise.resolve(result(200, {status: 'ok', entries: []})),
+    readInformationEntryKnowledgeGraph: () =>
+      Promise.resolve(result(200, {status: 'ok', candidates: [], graph: null})),
+    reviseInformationEntryKnowledgeGraphEdge: () =>
+      Promise.resolve(result(200, {status: 'applied'})),
     rebuildInformationEntryAssociations: () =>
       Promise.resolve(result(200, {status: 'rebuilt'})),
     listInformationEntryAssociations: () =>

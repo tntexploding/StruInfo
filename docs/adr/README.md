@@ -29,6 +29,8 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0007](0007-information-entry-first-document-processing.md) | Accepted | InformationEntry-first document processing, annotation, association, and retrieval while preserving formal knowledge |
 | [0008](0008-current-entry-state-and-portable-personal-data.md) | Accepted | Current Entry state, unified Tags review and portable personal-data packages |
 | [0009](0009-retire-superseded-m1c-runtime.md) | Accepted | Retire superseded M1C runtime while preserving migrations and external-data compatibility |
+| [0010](0010-entry-centered-formal-knowledge-graph.md) | Superseded | Centre-search and bounded-neighbourhood shape retained; edge admission superseded by ADR 0011 |
+| [0011](0011-association-derived-formal-graph-edges.md) | Accepted | Deterministic similarity associations are editable Formal Knowledge graph edges |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -46,4 +48,7 @@ knowledge model. ADR 0008 makes routine Entry editing current-state based and
 turns exports into complete personal-data packages. ADR 0009 removes the
 superseded M1C application runtime; accepted migrations and historical data
 remain compatible, while a future Formal Knowledge page requires a new product
-boundary.
+boundary. ADR 0010 accepted the Entry-centred page shape and was then partially superseded
+by ADR 0011: deterministic similarity associations may appear directly as
+formal graph edges, while visible origin and durable user edits or blocks retain
+owner authority.

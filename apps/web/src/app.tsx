@@ -5,6 +5,8 @@ import type {
   InformationEntryAssociationListResponse,
   InformationEntryAssociationOverrideResponse,
   InformationEntryAssociationRebuildResponse,
+  InformationEntryKnowledgeGraphEdgeWriteResponse,
+  InformationEntryKnowledgeGraphResponse,
   InformationEntryMaterializeResponse,
   InformationEntryDocumentListResponse,
   InformationEntryRevisionResponse,
@@ -223,6 +225,30 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
   const searchInformationEntries = useCallback(
     (body: unknown): Promise<M1cHttpResponse<InformationEntrySearchResponse>> =>
       apiClient.searchInformationEntries(body),
+    [apiClient],
+  );
+
+  const readInformationEntryKnowledgeGraph = useCallback(
+    (
+      body: unknown,
+    ): Promise<M1cHttpResponse<InformationEntryKnowledgeGraphResponse>> =>
+      apiClient.readInformationEntryKnowledgeGraph(body),
+    [apiClient],
+  );
+
+  const reviseInformationEntryKnowledgeGraphEdge = useCallback(
+    (
+      entryId: string,
+      relatedEntryId: string,
+      body: unknown,
+    ): Promise<
+      M1cHttpResponse<InformationEntryKnowledgeGraphEdgeWriteResponse>
+    > =>
+      apiClient.reviseInformationEntryKnowledgeGraphEdge(
+        entryId,
+        relatedEntryId,
+        body,
+      ),
     [apiClient],
   );
 
@@ -478,7 +504,15 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           }
         />
       ) : null}
-      {activeSection === 'knowledge' ? <FormalKnowledgeWorkspace /> : null}
+      {activeSection === 'knowledge' ? (
+        <FormalKnowledgeWorkspace
+          onReadGraph={readInformationEntryKnowledgeGraph}
+          onReviseEdge={reviseInformationEntryKnowledgeGraphEdge}
+          onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
+            void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
+          }
+        />
+      ) : null}
     </ProductAppShell>
   );
 }

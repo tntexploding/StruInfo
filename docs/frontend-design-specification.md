@@ -1,8 +1,8 @@
 # StruInfo Frontend Design Specification
 
 - Status: Project frontend baseline
-- Version: 1.3
-- Effective date: 2026-08-10
+- Version: 1.4
+- Effective date: 2026-08-23
 - Scope: StruInfo web application design, implementation, and review
 
 ## 1. Purpose and Authority
@@ -150,9 +150,7 @@ The same number SHOULD NOT be repeated in both places merely to fill space.
 
 ## 4. Phase-aware Information Architecture
 
-Current primary navigation is `总览 / 导入 / 拆分 / 标签 / 联系 / 查询`.
-A seventh `正式知识` destination is an honest reserved page, not a working
-legacy editor. Only implemented routes MAY expose controls or live metrics.
+Current working navigation is `总览 / 导入 / 拆分 / 标签 / 联系 / 查询 / 正式知识`. The seventh destination follows Query and implements the bounded Entry-centred shape and automatic/user edge rules accepted by ADR 0010/0011. It is a distinct graph workspace, not the retired KnowledgeItem editor. Only implemented routes MAY expose controls or live metrics.
 
 The active non-AI task path is:
 
@@ -163,6 +161,7 @@ external source document
   -> content / type / domain tags plus independent usefulness / interest
   -> explainable Entry associations and manual overrides
   -> privacy-scoped deterministic Entry search and exact source return
+  -> highest-match Entry centre + bounded formal graph + relation edits
 ```
 
 The former Review Queue, Knowledge Change Set editor and deterministic Knowledge
@@ -170,8 +169,10 @@ search are retired application surfaces. Their historical data and design
 records do not authorize hidden navigation or API calls.
 
 Scheduled acquisition, Daily and Weekly Briefs, QQbot, public integration APIs,
-Knowledge Graph canvas, complete Timeline, and mixed online query are later
-modules unless a tracked milestone explicitly releases them.
+a whole-workspace graph canvas, complete Timeline, and mixed online query are
+later modules unless a tracked milestone explicitly releases them. M1E-2's
+bounded centre-neighbourhood graph and editable edge sources are separately
+accepted by ADR 0010 and ADR 0011.
 
 ## 5. Application Shell
 
@@ -249,8 +250,7 @@ an admitted adapter has real run state.
 Manual Curation, the old formal Knowledge writer/current-item reader and the old
 Knowledge search are not current product capabilities. Their pages, client
 contracts and server routes MUST NOT be restored as secondary or hidden tools.
-The `正式知识` page remains a labelled placeholder until M1E-2 accepts its own
-formation, editing, relation and retrieval semantics.
+The `正式知识` page implements the graph, edge-origin and retrieval semantics accepted in ADR 0010/0011. It uses the existing Association override with only three added current metadata columns; it does not add a parallel graph store.
 
 Privacy is explicit and local to the action being taken:
 
@@ -282,7 +282,7 @@ search the saved result with an exact source route. The screen MUST expose:
 - one primary domain and at most two secondary domains;
 - explicit save state and actionable failure state;
 - deterministic body/keyword match reasons; and
-- a clearly labelled route to the reserved Formal Knowledge page without pretending that editing is implemented.
+- a clearly labelled route to the working Formal Knowledge page without mixing graph editing into routine Entry annotation.
 
 Type and domain choices are system protocol values and use concise Chinese
 labels. A selected `其他` value reveals a dimension-specific custom-name field;
@@ -303,9 +303,7 @@ remain reachable through normal document scrolling and keyboard order.
 
 ### 5.6 Current owner workflow shell
 
-The primary browser information architecture MUST use six working destinations
-in this order: `总览`, `导入`, `拆分`, `标签`, `联系`, and `查询`. A seventh
-`正式知识` item follows `查询` and remains visibly unavailable until M1E-2.
+The primary browser information architecture MUST use seven currently working destinations in this order: `总览`, `导入`, `拆分`, `标签`, `联系`, `查询`, and `正式知识`.
 The five processing workspaces form one continuous timeline; `总览` is its home
 and status surface. Retired review and Knowledge tools MUST NOT appear as
 secondary maintenance routes.
@@ -344,6 +342,54 @@ MAY become a bottom bar, but all six labels, current-page indication, primary
 action, privacy state, errors, results, and source-return controls MUST remain
 reachable without horizontal page scrolling. Pages use natural vertical
 scrolling; they MUST NOT hide unfinished controls to force a single viewport.
+
+### 5.7 M1E-2 Formal Knowledge workspace profile
+
+The Formal Knowledge workspace is a contextual graph-navigation and formal-
+relation maintenance surface. It MUST NOT duplicate the exhaustive Query result
+page or restore the retired KnowledgeItem editor.
+
+Its desktop hierarchy is:
+
+```text
+simple centre search + compact alternative matches
+bounded formal graph                    selected node / relation dossier
+```
+
+The search control uses deterministic Entry matching. The highest visible match
+becomes the centre by default, while alternative matches remain available for an
+explicit centre change. Search is subordinate to the graph task: it does not
+show the full paginated Query result set.
+
+The graph MUST:
+
+- use current InformationEntry records as nodes without copying their bodies;
+- show visible deterministic similarity associations and user-created/user-edited relations as edges;
+- display edge origin, label and direction without relying on colour;
+- load a bounded direct neighbourhood first and expand or recenter only after an
+  explicit action;
+- keep exact Snapshot/Fragment evidence one action from every node;
+- distinguish automatically calculated, user-edited and user-created edges;
+- apply public-only, include-private, or private-only scope before centre
+  selection, neighbour loading, counting, traversal, and rendering; and
+- never render the entire workspace by default.
+
+The dossier owns the selected node or edge. A node dossier shows current Entry
+content, three keyword dimensions, privacy state and exact evidence. A relation
+dossier shows both endpoints, automatic/user origin, score and explanation when
+applicable, relation label, direction, current state and the available edit,
+hide/delete, restore or create action. The page has one primary action at a
+time; graph navigation and relation editing must not compete as equal button
+clusters.
+
+A searchable list/tree mode MUST expose the same essential nodes and edges. At
+phone widths the graph and list/tree modes replace each other in the main
+surface, alternative matches become a compact disclosure, and the dossier opens
+as a drawer or routed detail. Search, centre selection, adjacent-node traversal,
+edge selection, recenter, bounded expansion and evidence return MUST be keyboard
+operable.
+
+The M1E-2 implementation uses a dedicated workspace component and stylesheet rather than routing graph behavior through Query or Associations page modes. Empty workspaces show an honest no-match state; active controls are backed by the public graph read/edit routes. The first slice remains bounded to direct neighbours and does not fabricate AI activity, full-workspace layout, facts, or unsupported graph analytics.
 
 ## 6. Design Tokens
 
@@ -607,23 +653,32 @@ Every important conclusion MUST link to its evidence.
 A weekly brief MUST NOT visually imply it is only seven daily briefs joined
 together.
 
-### 9.5 Knowledge graph
+### 9.5 Formal Knowledge graph
 
-The graph uses a dark bounded grid and restrained node colors.
-It MUST NOT resemble a decorative 3D star field.
+The graph uses a dark bounded grid and restrained node colours. It MUST NOT
+resemble a decorative 3D star field, use physics motion as semantic evidence, or
+load the whole workspace by default.
 
-Relation semantics require more than color:
+Visible edges may be deterministic similarity associations or user relationships.
+They enter the maintained graph without a per-edge confirmation queue, while
+meaning and origin require more than colour:
 
-- strong relation: solid line plus relation label;
-- weak relation: dashed line plus relation label;
-- AI inference: distinct dash or marker plus AI origin label;
-- source support: explicit source-to-claim direction;
-- conflict: visible conflict marker and accessible text.
+- every edge states whether it is automatically calculated, user-edited or
+  user-created;
+- an automatic edge exposes its `similarity` kind, score and explanation;
+- a user label is readable on selection and in the equivalent list/tree;
+- direction has an arrow, endpoint wording and accessible text; automatic
+  similarity is explicitly symmetric;
+- hidden/deleted edges are absent until the user restores them, and the UI makes
+  durable blocking distinct from temporary filtering; and
+- a future AI proposal carries an AI-origin label until the normal command or an
+  enabled versioned policy commits it.
 
-Zoom, pan, filter, focus, expand, selection, and open-evidence actions MUST be
-keyboard-operable where technically possible.
-A searchable list or tree alternative MUST expose the same essential records
-and relations to assistive technology and low-power devices.
+The highest deterministic Entry search match is the initial centre. Zoom, pan,
+filter, focus, bounded expand, recenter, selection, relation editing, and open-
+evidence actions MUST be keyboard-operable where technically possible. A
+searchable list/tree alternative MUST expose the same essential records and
+relations to assistive technology and low-power devices.
 
 ### 9.6 Timeline
 

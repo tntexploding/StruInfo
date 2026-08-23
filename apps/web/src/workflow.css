@@ -1163,24 +1163,6 @@
   gap: var(--si-space-6);
 }
 
-.formal-knowledge-placeholder {
-  min-block-size: 24rem;
-  padding: var(--si-space-8);
-  border: var(--si-rule-thin) solid var(--si-color-border-default);
-  border-inline-start: var(--si-space-1) solid var(--si-color-signal);
-  background: var(--workflow-panel);
-}
-
-.formal-knowledge-placeholder h2 {
-  margin-block: var(--si-space-3) var(--si-space-4);
-}
-
-.formal-knowledge-placeholder > p:last-child {
-  max-inline-size: 52rem;
-  color: var(--si-color-text-secondary);
-  line-height: 1.8;
-}
-
 @media (max-width: 47.9375rem), (orientation: portrait) {
   .entry-review-controls__heading,
   .entry-review-toggle-row,
