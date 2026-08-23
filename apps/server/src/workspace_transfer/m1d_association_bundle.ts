@@ -10,8 +10,11 @@ import {
 import type {WorkspaceBundleSectionCodec} from './workspace_bundle.js';
 
 export const M1D_ASSOCIATION_BUNDLE_SECTION_TYPE = 'struinfo.m1d-association';
-export const M1D_ASSOCIATION_BUNDLE_SECTION_VERSION = 1;
-export const M1D_ASSOCIATION_BUNDLE_SCHEMA = 'struinfo.m1d-association.v1';
+export const M1D_ASSOCIATION_BUNDLE_SECTION_VERSION = 2;
+export const M1D_ASSOCIATION_BUNDLE_SCHEMA = 'struinfo.m1d-association.v2';
+export const M1D_ASSOCIATION_LEGACY_BUNDLE_SECTION_VERSION = 1;
+export const M1D_ASSOCIATION_LEGACY_BUNDLE_SCHEMA =
+  'struinfo.m1d-association.v1';
 
 const ASSOCIATION_VALUE_LIMIT = 1_000_000;
 const ROW_BYTE_LIMIT = 1024 * 1024;
@@ -35,7 +38,6 @@ export interface M1dAssociationSnapshot {
   readonly tables: readonly Readonly<M1dAssociationTableSnapshot>[];
 }
 
-/** Dependency order is also the atomic restore order. */
 export const M1D_ASSOCIATION_TABLES: readonly Readonly<M1dAssociationTableDescriptor>[] =
   Object.freeze([
     table('information_entry_association_projection', [
@@ -55,6 +57,23 @@ export const M1D_ASSOCIATION_TABLES: readonly Readonly<M1dAssociationTableDescri
       'candidate_rank',
       'generated_at',
     ]),
+    table('information_entry_association_override', [
+      'workspace_id',
+      'entry_low_id',
+      'entry_high_id',
+      'current_revision',
+      'current_revision_id',
+      'action',
+      'manual_adjustment',
+      'is_blocked',
+      'created_at',
+      'updated_at',
+    ]),
+  ]);
+
+const LEGACY_ASSOCIATION_TABLES: readonly Readonly<M1dAssociationTableDescriptor>[] =
+  Object.freeze([
+    requiredDescriptor(M1D_ASSOCIATION_TABLES, 0),
     table('information_entry_association_override', [
       'workspace_id',
       'entry_low_id',
@@ -81,41 +100,28 @@ export const M1D_ASSOCIATION_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
   Object.freeze({
     type: M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
     version: M1D_ASSOCIATION_BUNDLE_SECTION_VERSION,
-    encode(value: unknown): unknown {
-      return normalizeM1dAssociationSnapshot(value);
-    },
+    encode: normalizeM1dAssociationSnapshot,
+    decode: normalizeM1dAssociationSnapshot,
+  });
+
+export const M1D_ASSOCIATION_LEGACY_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
+    version: M1D_ASSOCIATION_LEGACY_BUNDLE_SECTION_VERSION,
+    encode: normalizeLegacySnapshot,
     decode(payload: JsonValue): unknown {
-      return normalizeM1dAssociationSnapshot(payload);
+      return upgradeLegacySnapshot(normalizeLegacySnapshot(payload));
     },
   });
 
 export function normalizeM1dAssociationSnapshot(
   value: unknown,
 ): M1dAssociationSnapshot {
-  const normalized = normalizeJsonValue(value, {
-    maximumValues: ASSOCIATION_VALUE_LIMIT,
-  });
-  const record = requireClosedObject(normalized, ['schemaVersion', 'tables']);
-  if (record.schemaVersion !== M1D_ASSOCIATION_BUNDLE_SCHEMA) fail();
-  const tableValues = record.tables;
-  if (!isJsonArray(tableValues)) fail();
-  if (tableValues.length !== M1D_ASSOCIATION_TABLES.length) fail();
-
-  const tables = M1D_ASSOCIATION_TABLES.map((descriptor, index) => {
-    const candidate = tableValues[index];
-    const tableRecord = requireClosedObject(candidate, ['name', 'rows']);
-    const rowValues = tableRecord.rows;
-    if (tableRecord.name !== descriptor.name || !isJsonArray(rowValues)) {
-      fail();
-    }
-    const rows = rowValues.map((row) => normalizeRow(row, descriptor));
-    rows.sort(compareRows);
-    return Object.freeze({name: descriptor.name, rows: Object.freeze(rows)});
-  });
-  return Object.freeze({
-    schemaVersion: M1D_ASSOCIATION_BUNDLE_SCHEMA,
-    tables: Object.freeze(tables),
-  });
+  return normalizeSnapshot(
+    value,
+    M1D_ASSOCIATION_BUNDLE_SCHEMA,
+    M1D_ASSOCIATION_TABLES,
+  ) as M1dAssociationSnapshot;
 }
 
 export function assertM1dAssociationWorkspace(
@@ -148,6 +154,152 @@ export function createEmptyM1dAssociationSnapshot(): M1dAssociationSnapshot {
       rows: [],
     })),
   });
+}
+
+function normalizeLegacySnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1D_ASSOCIATION_LEGACY_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1dAssociationTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1D_ASSOCIATION_LEGACY_BUNDLE_SCHEMA,
+    LEGACY_ASSOCIATION_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1D_ASSOCIATION_LEGACY_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1dAssociationTableSnapshot>[];
+  }>;
+}
+
+function upgradeLegacySnapshot(
+  legacy: ReturnType<typeof normalizeLegacySnapshot>,
+): M1dAssociationSnapshot {
+  const tables = new Map(
+    legacy.tables.map((value) => [value.name, value.rows]),
+  );
+  const projections = requiredRows(
+    tables,
+    'information_entry_association_projection',
+  );
+  const overrides = requiredRows(
+    tables,
+    'information_entry_association_override',
+  );
+  const revisions = new Map(
+    requiredRows(tables, 'information_entry_association_override_revision').map(
+      (revision) => [
+        identityValues(
+          requiredPrimitive(revision, 'workspace_id'),
+          requiredPrimitive(revision, 'entry_low_id'),
+          requiredPrimitive(revision, 'entry_high_id'),
+          requiredPrimitive(revision, 'revision_number'),
+          requiredPrimitive(revision, 'revision_id'),
+        ),
+        revision,
+      ],
+    ),
+  );
+  const currentOverrides = overrides.map((override) => {
+    const revision = revisions.get(
+      identityValues(
+        requiredPrimitive(override, 'workspace_id'),
+        requiredPrimitive(override, 'entry_low_id'),
+        requiredPrimitive(override, 'entry_high_id'),
+        requiredPrimitive(override, 'current_revision'),
+        requiredPrimitive(override, 'current_revision_id'),
+      ),
+    );
+    if (revision === undefined) fail();
+    return rowFor(requiredDescriptor(M1D_ASSOCIATION_TABLES, 1), {
+      ...override,
+      ...revision,
+      created_at: requiredPrimitive(override, 'created_at'),
+      updated_at: requiredPrimitive(revision, 'created_at'),
+    });
+  });
+  return normalizeM1dAssociationSnapshot({
+    schemaVersion: M1D_ASSOCIATION_BUNDLE_SCHEMA,
+    tables: [
+      {
+        name: 'information_entry_association_projection',
+        rows: projections,
+      },
+      {
+        name: 'information_entry_association_override',
+        rows: currentOverrides,
+      },
+    ],
+  });
+}
+
+function normalizeSnapshot(
+  value: unknown,
+  schema: string,
+  descriptors: readonly Readonly<M1dAssociationTableDescriptor>[],
+): Readonly<{
+  schemaVersion: string;
+  tables: readonly M1dAssociationTableSnapshot[];
+}> {
+  const normalized = normalizeJsonValue(value, {
+    maximumValues: ASSOCIATION_VALUE_LIMIT,
+  });
+  const record = requireClosedObject(normalized, ['schemaVersion', 'tables']);
+  if (record.schemaVersion !== schema || !isJsonArray(record.tables)) fail();
+  const tableValues = record.tables;
+  if (tableValues.length !== descriptors.length) fail();
+  const tables = descriptors.map((descriptor, index) => {
+    const candidate = requireClosedObject(tableValues[index], ['name', 'rows']);
+    if (candidate.name !== descriptor.name || !isJsonArray(candidate.rows)) {
+      fail();
+    }
+    const rows = candidate.rows.map((row) => normalizeRow(row, descriptor));
+    rows.sort(compareRows);
+    return Object.freeze({name: descriptor.name, rows: Object.freeze(rows)});
+  });
+  return Object.freeze({schemaVersion: schema, tables: Object.freeze(tables)});
+}
+
+function requiredDescriptor(
+  descriptors: readonly Readonly<M1dAssociationTableDescriptor>[],
+  index: number,
+): Readonly<M1dAssociationTableDescriptor> {
+  const descriptor = descriptors[index];
+  if (descriptor === undefined) fail();
+  return descriptor;
+}
+
+function requiredPrimitive(
+  source: Readonly<Record<string, JsonPrimitive>>,
+  column: string,
+): JsonPrimitive {
+  if (!Object.hasOwn(source, column)) fail();
+  const value = source[column];
+  if (value === undefined) fail();
+  return value;
+}
+
+function rowFor(
+  descriptor: Readonly<M1dAssociationTableDescriptor>,
+  source: Readonly<Record<string, JsonPrimitive>>,
+): M1dAssociationRow {
+  const value = Object.create(null) as Record<string, JsonPrimitive>;
+  for (const column of descriptor.columns) {
+    if (!Object.hasOwn(source, column)) fail();
+    value[column] = requiredPrimitive(source, column);
+  }
+  return Object.freeze(value);
+}
+
+function requiredRows(
+  tables: ReadonlyMap<string, readonly M1dAssociationRow[]>,
+  name: string,
+): readonly M1dAssociationRow[] {
+  const rows = tables.get(name);
+  if (rows === undefined) fail();
+  return rows;
+}
+
+function identityValues(...values: readonly JsonPrimitive[]): string {
+  return JSON.stringify(values);
 }
 
 function table(

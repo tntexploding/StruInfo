@@ -1,8 +1,13 @@
+import {Buffer} from 'node:buffer';
 import {createHash} from 'node:crypto';
 
 import {describe, expect, it, vi} from 'vitest';
 
 import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
+import {
+  createReviewPreferences,
+  type ReviewPreferencesStore,
+} from '../storage/review_preferences_store.js';
 import {
   M1C_DOMAIN_BUNDLE_CODEC,
   M1C_DOMAIN_BUNDLE_SCHEMA,
@@ -60,8 +65,8 @@ describe('M1C workspace transfer', () => {
       M1cDomainTransferRepositoryPort['restoreEmptyWorkspace']
     >((workspaceId, restoredSnapshot) => {
       expect(workspaceId).toBe(WORKSPACE_ID);
-      expect(restoredSnapshot.entries.tables).toHaveLength(9);
-      expect(restoredSnapshot.associations.tables).toHaveLength(3);
+      expect(restoredSnapshot.entries.tables).toHaveLength(7);
+      expect(restoredSnapshot.associations.tables).toHaveLength(2);
       return Promise.resolve();
     });
     const transfer = new M1cWorkspaceTransfer({
@@ -71,6 +76,7 @@ describe('M1C workspace transfer', () => {
       },
       blobStore,
       fileStore,
+      reviewPreferences: memoryReviewPreferences(),
       now: () => CREATED_AT,
     });
 
@@ -83,6 +89,7 @@ describe('M1C workspace transfer', () => {
 
     expect(exported).toMatchObject({
       blobCount: 1,
+      personalDataIncluded: true,
       tableCounts: {
         workspace: 1,
         evidence_blob: 1,
@@ -90,9 +97,10 @@ describe('M1C workspace transfer', () => {
         information_entry_association_projection: 1,
       },
     });
-    expect(new TextDecoder().decode(storedBytes)).not.toContain(
-      'synthetic external Blob bytes',
-    );
+    const serialized = new TextDecoder().decode(storedBytes);
+    expect(serialized).not.toContain('synthetic external Blob bytes');
+    expect(serialized).toContain(Buffer.from(BLOB_BYTES).toString('base64'));
+    expect(serialized).toContain('struinfo.personal-data');
     expect(new TextDecoder().decode(storedBytes)).toContain(
       'struinfo.m1d-entry',
     );
@@ -102,6 +110,7 @@ describe('M1C workspace transfer', () => {
     expect(restored).toMatchObject({
       fileName: exported.fileName,
       blobCount: 1,
+      personalDataIncluded: true,
       tableCounts: {
         workspace: 1,
         evidence_blob: 1,
@@ -132,6 +141,7 @@ describe('M1C workspace transfer', () => {
       },
       blobStore: new MemoryBlobStore(BLOB_IDENTITY, BLOB_BYTES),
       fileStore,
+      reviewPreferences: memoryReviewPreferences(),
       now: () => CREATED_AT,
     });
     const exported = await transfer.exportWorkspace(WORKSPACE_ID);
@@ -179,6 +189,7 @@ describe('M1C workspace transfer', () => {
       },
       blobStore: new MemoryBlobStore(BLOB_IDENTITY, BLOB_BYTES),
       fileStore,
+      reviewPreferences: memoryReviewPreferences(),
     });
 
     const restored = await transfer.restoreWorkspace(
@@ -236,6 +247,7 @@ describe('M1C workspace transfer', () => {
       },
       blobStore: new MemoryBlobStore(BLOB_IDENTITY, BLOB_BYTES),
       fileStore,
+      reviewPreferences: memoryReviewPreferences(),
     });
 
     const restored = await transfer.restoreWorkspace(
@@ -286,6 +298,7 @@ describe('M1C workspace transfer', () => {
       },
       blobStore: new MemoryBlobStore(BLOB_IDENTITY, BLOB_BYTES),
       fileStore,
+      reviewPreferences: memoryReviewPreferences(),
     });
 
     await expect(
@@ -306,6 +319,7 @@ describe('M1C workspace transfer', () => {
         read: () => Promise.reject(new Error('missing')),
       },
       fileStore: new MemoryBundleFileStore(),
+      reviewPreferences: memoryReviewPreferences(),
       now: () => CREATED_AT,
     });
     await expect(
@@ -323,6 +337,7 @@ describe('M1C workspace transfer', () => {
       },
       blobStore: new MemoryBlobStore(BLOB_IDENTITY, BLOB_BYTES),
       fileStore,
+      reviewPreferences: memoryReviewPreferences(),
       now: () => CREATED_AT,
     });
     const exported = await nonEmptyTransfer.exportWorkspace(WORKSPACE_ID);
@@ -331,6 +346,91 @@ describe('M1C workspace transfer', () => {
     ).rejects.toEqual(expect.objectContaining({code: 'workspace_not_empty'}));
   });
 
+  it('does not begin database restore when personal preferences cannot be written', async () => {
+    const snapshot = syntheticSnapshot();
+    const fileStore = new MemoryBundleFileStore();
+    const blobStore = new MemoryBlobStore(BLOB_IDENTITY, BLOB_BYTES);
+    const exporter = new M1cWorkspaceTransfer({
+      repository: {
+        exportWorkspace: () => Promise.resolve(snapshot),
+        restoreEmptyWorkspace: () => Promise.resolve(),
+      },
+      blobStore,
+      fileStore,
+      reviewPreferences: memoryReviewPreferences(),
+      now: () => CREATED_AT,
+    });
+    const exported = await exporter.exportWorkspace(WORKSPACE_ID);
+    const restoreEmptyWorkspace = vi.fn(() => Promise.resolve());
+    const importer = new M1cWorkspaceTransfer({
+      repository: {
+        exportWorkspace: () => Promise.resolve(snapshot),
+        restoreEmptyWorkspace,
+      },
+      blobStore,
+      fileStore,
+      reviewPreferences: {
+        load: () =>
+          Promise.resolve(createReviewPreferences(WORKSPACE_ID, ['before'])),
+        save: () => Promise.reject(new Error('synthetic preference failure')),
+      },
+    });
+
+    await expect(
+      importer.restoreWorkspace(WORKSPACE_ID, exported.fileName),
+    ).rejects.toMatchObject({code: 'preferences_failed'});
+    expect(restoreEmptyWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('restores previous preferences when an empty-workspace restore is rejected', async () => {
+    const snapshot = syntheticSnapshot();
+    const fileStore = new MemoryBundleFileStore();
+    const blobStore = new MemoryBlobStore(BLOB_IDENTITY, BLOB_BYTES);
+    const exporter = new M1cWorkspaceTransfer({
+      repository: {
+        exportWorkspace: () => Promise.resolve(snapshot),
+        restoreEmptyWorkspace: () => Promise.resolve(),
+      },
+      blobStore,
+      fileStore,
+      reviewPreferences: memoryReviewPreferences(),
+      now: () => CREATED_AT,
+    });
+    const exported = await exporter.exportWorkspace(WORKSPACE_ID);
+    let current = createReviewPreferences(WORKSPACE_ID, ['before']);
+    const save = vi.fn<ReviewPreferencesStore['save']>(
+      (workspaceId, quickTags, automaticKeywords, vocabulary) => {
+        current = createReviewPreferences(
+          workspaceId,
+          quickTags,
+          automaticKeywords,
+          vocabulary,
+        );
+        return Promise.resolve(current);
+      },
+    );
+    const importer = new M1cWorkspaceTransfer({
+      repository: {
+        exportWorkspace: () => Promise.resolve(snapshot),
+        restoreEmptyWorkspace: () =>
+          Promise.reject(
+            new M1cDomainTransferRepositoryError('workspace_not_empty'),
+          ),
+      },
+      blobStore,
+      fileStore,
+      reviewPreferences: {
+        load: () => Promise.resolve(current),
+        save,
+      },
+    });
+
+    await expect(
+      importer.restoreWorkspace(WORKSPACE_ID, exported.fileName),
+    ).rejects.toMatchObject({code: 'workspace_not_empty'});
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(current.quickTags).toEqual(['before']);
+  });
   it('rejects table drift and derives the exact Blob manifest', () => {
     const snapshot = syntheticSnapshot();
     expect(m1cDomainBlobReferences(snapshot.domain)).toEqual([BLOB_IDENTITY]);
@@ -379,24 +479,16 @@ function syntheticSnapshot(): M1cWorkspaceTransferSnapshot {
       rows:
         descriptor.name === 'information_entry'
           ? [
-              {
-                workspace_id: WORKSPACE_ID,
-                entry_id: '44444444-4444-4444-8444-444444444444',
-                resource_id: '55555555-5555-4555-8555-555555555555',
-                snapshot_id: '66666666-6666-4666-8666-666666666666',
-                current_revision: 1,
-                current_revision_id: '77777777-7777-4777-8777-777777777777',
-                created_at: CREATED_AT,
-              },
-              {
-                workspace_id: WORKSPACE_ID,
-                entry_id: '88888888-8888-4888-8888-888888888888',
-                resource_id: '55555555-5555-4555-8555-555555555555',
-                snapshot_id: '66666666-6666-4666-8666-666666666666',
-                current_revision: 1,
-                current_revision_id: '99999999-9999-4999-8999-999999999999',
-                created_at: CREATED_AT,
-              },
+              currentEntryRow(
+                '44444444-4444-4444-8444-444444444444',
+                '77777777-7777-4777-8777-777777777777',
+                0,
+              ),
+              currentEntryRow(
+                '88888888-8888-4888-8888-888888888888',
+                '99999999-9999-4999-8999-999999999999',
+                1,
+              ),
             ]
           : [],
     })),
@@ -432,6 +524,55 @@ function syntheticSnapshot(): M1cWorkspaceTransferSnapshot {
   return Object.freeze({domain, entries, associations});
 }
 
+function currentEntryRow(
+  entryId: string,
+  revisionId: string,
+  documentOrder: number,
+) {
+  return {
+    workspace_id: WORKSPACE_ID,
+    entry_id: entryId,
+    resource_id: '55555555-5555-4555-8555-555555555555',
+    snapshot_id: '66666666-6666-4666-8666-666666666666',
+    current_revision: 1,
+    current_revision_id: revisionId,
+    document_order: documentOrder,
+    title_path: 'Entry ' + documentOrder.toString(),
+    body: 'Synthetic current Entry body.',
+    body_sha256: 'a'.repeat(64),
+    chunk_mode: 'split',
+    split_rule_version: 'synthetic-v1',
+    is_private: false,
+    type_keyword: null,
+    type_custom_name: null,
+    usefulness_score: 3,
+    interest_score: 3,
+    created_at: CREATED_AT,
+    updated_at: CREATED_AT,
+  };
+}
+
+function memoryReviewPreferences(): ReviewPreferencesStore {
+  let preferences = createReviewPreferences(WORKSPACE_ID, ['synthetic']);
+  return {
+    load(workspaceId) {
+      if (workspaceId !== WORKSPACE_ID)
+        return Promise.reject(new Error('workspace'));
+      return Promise.resolve(preferences);
+    },
+    save(workspaceId, quickTags, automaticKeywords, vocabulary) {
+      if (workspaceId !== WORKSPACE_ID)
+        return Promise.reject(new Error('workspace'));
+      preferences = createReviewPreferences(
+        workspaceId,
+        quickTags,
+        automaticKeywords,
+        vocabulary,
+      );
+      return Promise.resolve(preferences);
+    },
+  };
+}
 class MemoryBlobStore implements BlobStore {
   readonly #identity: Readonly<BlobIdentity>;
   readonly #bytes: Uint8Array;
@@ -441,8 +582,15 @@ class MemoryBlobStore implements BlobStore {
     this.#bytes = Uint8Array.from(bytes);
   }
 
-  public put(): Promise<Readonly<BlobIdentity>> {
-    return Promise.reject(new Error('unexpected Blob write'));
+  public put(bytes: Uint8Array): Promise<Readonly<BlobIdentity>> {
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    if (
+      digest !== this.#identity.digest ||
+      bytes.byteLength !== this.#identity.byteLength
+    ) {
+      return Promise.reject(new Error('unexpected Blob write'));
+    }
+    return Promise.resolve(this.#identity);
   }
 
   public read(identity: Readonly<BlobIdentity>): Promise<Uint8Array> {

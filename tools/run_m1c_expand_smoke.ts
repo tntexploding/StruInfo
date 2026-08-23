@@ -141,6 +141,7 @@ async function main(): Promise<void> {
       repository: sourceRepositories.workspaceTransfer,
       blobStore: storage.blobStore,
       fileStore: storage.workspaceBundleFiles,
+      reviewPreferences: storage.reviewPreferences,
       now: () => EXPORTED_AT,
     });
     const exported = await transfer.exportWorkspace(WORKSPACE_ID);
@@ -160,6 +161,7 @@ async function main(): Promise<void> {
       repository: restoreRepositories.workspaceTransfer,
       blobStore: storage.blobStore,
       fileStore: storage.workspaceBundleFiles,
+      reviewPreferences: storage.reviewPreferences,
       now: () => EXPORTED_AT,
     });
     const restored = await restoreTransfer.restoreWorkspace(

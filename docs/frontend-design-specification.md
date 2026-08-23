@@ -364,6 +364,50 @@ fabricating candidates, counts, or AI activity. At 320/390/768/1024/1440 widths,
 Entry body, keyword controls, save action, search results, and source return must
 remain reachable through normal document scrolling and keyboard order.
 
+### 5.6 M1D owner workflow shell
+
+The primary browser information architecture MUST use exactly six owner-facing
+workspaces in this order: `总览`, `导入`, `拆分`, `标签`, `联系`, and `查询`.
+The five processing workspaces form one visually continuous timeline; `总览`
+is its home and status surface. Historical review and formal-knowledge tools MAY
+remain as secondary maintenance routes, but MUST NOT compete with these six as
+equal primary navigation destinations.
+
+Each workspace has one dominant task and a visibly subordinate context area:
+
+- `总览` shows current external-workspace counts, the five processing stages,
+  and a separate AI progress rail. It MUST show `AI 未启用` or the absence of
+  actual run data rather than inventing a percentage, queue, or current step;
+- `导入` places source/privacy/alias/format/date and optional prefatory-text
+  fields in the dominant panel, imported-document history in a secondary panel,
+  and whole-workspace Bundle import/export in a distinct lower band;
+- `拆分` separates structure/rule controls and generated Entry order from the
+  full-text or selected-segment inspection surface. Immutable Snapshot evidence
+  MUST NOT be presented as destructively editable source data;
+- `标签` keeps Entry/Document selection beside an editor for the independent
+  content, type, and domain dimensions. Full-document and private-content views
+  require an explicit current-view control;
+- `联系` gives candidate associations and their evidence the main area, with
+  scoring-policy context and current-entry selection subordinate to it. A
+  versioned policy that has no public write boundary MUST be presented read-only;
+- `查询` gives the search input visual priority, results the main reading area,
+  and privacy, source, structural, keyword, and association scope a compact
+  settings rail. Result details and precise evidence remain one action away.
+
+A requested capability that is not backed by the current public product boundary
+MUST be labelled unavailable or pending rather than simulated. This applies in
+particular to AI progress, AI splitting/tagging/linking, fuzzy matching, and
+global association-policy writes. Deterministic and manual paths remain fully
+usable while those capabilities are absent.
+
+Desktop layouts SHOULD preserve a narrow workflow timeline, a dominant work
+surface, and at most one contextual side rail. Tablet layouts MAY stack the
+context rail below the dominant task. At phone widths the six navigation items
+MAY become a bottom bar, but all six labels, current-page indication, primary
+action, privacy state, errors, results, and source-return controls MUST remain
+reachable without horizontal page scrolling. Pages use natural vertical
+scrolling; they MUST NOT hide unfinished controls to force a single viewport.
+
 ## 6. Design Tokens
 
 All visual values MUST be reached through semantic `--si-*` custom properties

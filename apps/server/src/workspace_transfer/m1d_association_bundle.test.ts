@@ -14,16 +14,15 @@ const OTHER_WORKSPACE_ID = '22222222-2222-4222-8222-222222222222';
 const CREATED_AT = '2040-01-02T03:04:05.000Z';
 
 describe('M1D Association Bundle section', () => {
-  it('normalizes all three projection and override tables deterministically', () => {
+  it('normalizes both current projection and override tables deterministically', () => {
     const first = syntheticSnapshot(false);
     const reversed = syntheticSnapshot(true);
 
     expect(reversed).toEqual(first);
-    expect(first.tables).toHaveLength(3);
+    expect(first.tables).toHaveLength(2);
     expect(m1dAssociationTableCounts(first)).toMatchObject({
       information_entry_association_projection: 2,
       information_entry_association_override: 1,
-      information_entry_association_override_revision: 1,
     });
     expect(() => {
       assertM1dAssociationWorkspace(first, WORKSPACE_ID);
@@ -95,26 +94,14 @@ function syntheticSnapshot(reverseProjections: boolean) {
                   entry_high_id: '44444444-4444-4444-8444-444444444444',
                   current_revision: 1,
                   current_revision_id: '99999999-9999-4999-8999-999999999999',
+                  action: 'enhance',
+                  manual_adjustment: 1500,
+                  is_blocked: false,
                   created_at: CREATED_AT,
+                  updated_at: CREATED_AT,
                 },
               ]
-            : descriptor.name ===
-                'information_entry_association_override_revision'
-              ? [
-                  {
-                    workspace_id: WORKSPACE_ID,
-                    entry_low_id: '33333333-3333-4333-8333-333333333333',
-                    entry_high_id: '44444444-4444-4444-8444-444444444444',
-                    revision_number: 1,
-                    revision_id: '99999999-9999-4999-8999-999999999999',
-                    previous_revision_id: null,
-                    action: 'enhance',
-                    manual_adjustment: 1500,
-                    is_blocked: false,
-                    created_at: CREATED_AT,
-                  },
-                ]
-              : [],
+            : [],
     })),
   });
 }

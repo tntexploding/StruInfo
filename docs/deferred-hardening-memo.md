@@ -125,18 +125,39 @@ condition is met or new evidence demonstrates reachable material product impact.
 - Revisit when: The repository upgrades to pg 9, the warning becomes an error,
   or measured latency/inconsistency points to these loaders.
 
-### DH-008: Re-run the Candidate Artifact Gate Under Pinned Node 24.18.0
+### DH-008: Node Engine Admission Was Too Strict
 
 - Source: M1D-5 local delivery verification
 - Owner: Test tooling and release operations
+- Status: Closed by proportional Node engine policy on 2026-08-23
+- Scope: Repository command admission only
+- Evidence: The repository previously required exact Node 24.18.0, causing a
+  compatible Node 24.19.0 host to be rejected before verification began. Package
+  engines now recommend Node 24.18.0 or newer, while `.node-version` and CI keep
+  24.18.0 as the minimum compatibility reference. pnpm engine admission is
+  non-strict, so version guidance no longer blocks unrelated work.
+- Current product impact: None. Actual typecheck, test, build, dependency and
+  runtime incompatibilities remain visible failures.
+- Revisit when: A demonstrated runtime incompatibility requires raising the
+  recommended minimum; do not restore an exact command-entry engine gate.
+
+### DH-009: Replace the Superseded M1C Browser Scenario
+
+- Source: M1E-1 owner-flow simplification
+- Owner: Frontend test tooling
 - Status: Deferred hardening
-- Scope: Candidate artifact certification only
-- Evidence: The current host provides Node 24.19.0 while the repository pins
-  24.18.0, so the required pnpm entry rejects before running the artifact verifier.
-- Current product impact: None. Typecheck, build, 1,303 unit tests, 4 integration
-  tests and 9 browser tests passed; the runtime artifact serves the completed path.
-- Revisit when: Node 24.18.0 is available or M1D becomes a release candidate;
-  then run the unchanged pinned artifact command and update its manifest normally.
+- Scope: `tests/e2e/m1c-product-workspaces.spec.ts`
+- Evidence: The historical Playwright scenario still drives the removed Review,
+  Knowledge-change and Search workspaces. It is not imported by the application
+  and is not part of the current `verify` command. Current navigation, Tags
+  review controls, privacy scope, build and artifact boundaries are covered by
+  active unit/component tests and the production build.
+- Current product impact: None. Keeping or deleting this historical scenario does
+  not change the shipped UI, persistence model or current quality gate. It must
+  not block the M1E main line or cause restoration of deleted product screens.
+- Revisit when: A new browser fixture is defined for the current Overview,
+  Import, Split, Tags, Associations, Query and Formal Knowledge navigation; then
+  replace the historical file rather than patching its obsolete assertions.
 
 ## Entry Template
 

@@ -182,6 +182,33 @@ external. The runnable M1D baseline is now complete; later work must come from
 direct owner use or an explicitly accepted M1E proposal boundary, not speculative
 AI, vectors, indexing or another certification-hardening cycle.
 
+M1D-UI-1 restructures the owner-facing Web application without changing the
+accepted persistence or HTTP boundaries. Primary navigation is now exactly
+Overview, Import, Split, Tags, Associations and Query, shown in Chinese as
+`总览 / 导入 / 拆分 / 标签 / 联系 / 查询`. Overview reports only real external-
+workspace counts and keeps the optional five-stage AI run rail distinct; absent
+run data must never be rendered as fabricated progress. Import owns source and
+Bundle operations, Split owns structural materialization and evidence inspection,
+Tags owns Entry/Document content-type-domain annotation, Associations owns
+explainable candidates and manual overrides, and Query owns deterministic search
+with explicit privacy and source return. AI jobs, fuzzy search and global policy
+write controls remain visibly unavailable until public product boundaries exist.
+The shell is responsive through ordinary scrolling and does not move user data,
+preferences, snapshots, exports or backups into Git or the application package.
+
+ADR 0008 starts M1E-1 from direct owner feedback. Routine Entry, Document-tag,
+association-projection and association-override edits now keep one current final
+database state plus a concurrency version; immutable Snapshot/Fragment evidence
+is the original version, while formal Knowledge remains append-only. The Tags
+page is the sole routine review surface and combines five-position usefulness and
+interest scores with deterministic keywords, quick tags, exclusions and
+user-confirmed aliases. Intake actions, judgment reasons and manual-link intent
+are removed from the current workflow. New external personal-data packages embed
+all referenced Blob bytes and workspace preferences with database sections while
+remaining backward-readable with legacy Bundles. Entry search has public,
+include-private and private-only scopes, and a placeholder Formal Knowledge page
+follows Query pending a separately accepted product design.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

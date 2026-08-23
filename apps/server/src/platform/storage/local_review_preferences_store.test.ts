@@ -31,7 +31,7 @@ describe('LocalReviewPreferencesStore', () => {
         includeLinkDomains: false,
         excludedKeywords: [],
       },
-      vocabulary: {aliases: [], links: [], knowledgeKinds: []},
+      vocabulary: {aliases: []},
     });
   });
 
@@ -49,14 +49,6 @@ describe('LocalReviewPreferencesStore', () => {
       },
       {
         aliases: [{source: 'Synthetic CLI', canonical: '命令行'}],
-        links: [
-          {
-            left: 'Command Line',
-            right: '命令行',
-            kind: 'translation',
-          },
-        ],
-        knowledgeKinds: [{keyword: 'Synthetic Cover', knowledgeKind: 'work'}],
       },
     );
 
@@ -70,8 +62,6 @@ describe('LocalReviewPreferencesStore', () => {
       },
       vocabulary: {
         aliases: [{source: 'Synthetic CLI', canonical: '命令行'}],
-        links: [{left: 'Command Line', right: '命令行', kind: 'translation'}],
-        knowledgeKinds: [{keyword: 'Synthetic Cover', knowledgeKind: 'work'}],
       },
     });
     await expect(store.load(WORKSPACE_B)).resolves.toMatchObject({
@@ -96,6 +86,11 @@ describe('LocalReviewPreferencesStore', () => {
         version: 1,
         workspaceId: WORKSPACE_A,
         quickTags: ['synthetic'],
+        vocabulary: {
+          aliases: [{source: 'Legacy CLI', canonical: '命令行'}],
+          links: [{left: 'Legacy', right: '旧值', kind: 'translation'}],
+          knowledgeKinds: [{keyword: 'Legacy', knowledgeKind: 'work'}],
+        },
       }),
       'utf8',
     );
@@ -107,7 +102,9 @@ describe('LocalReviewPreferencesStore', () => {
         includeLinkDomains: false,
         excludedKeywords: [],
       },
-      vocabulary: {aliases: [], links: [], knowledgeKinds: []},
+      vocabulary: {
+        aliases: [{source: 'Legacy CLI', canonical: '命令行'}],
+      },
     });
   });
 

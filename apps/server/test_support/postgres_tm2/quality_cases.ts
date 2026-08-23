@@ -204,7 +204,7 @@ async function executeArtifactGovernanceCase(
       (entry) => entry.byteLength >= 0 && /^[0-9a-f]{64}$/u.test(entry.sha256),
     ),
     sha(packageBytes) ===
-      '1ebbca4172fdd8131f8c2c9b9fa2b87201f75984961de87fd46e05269cbe596f',
+      '81a5923fbba80292159b9d2537850d5b7fd9ebee86be501393da076ecc29b41e',
     /^[0-9a-f]{64}$/u.test(sha(lockBytes)) &&
       /^[0-9a-f]{64}$/u.test(sha(noticeBytes)),
     sha(contractBytes) ===

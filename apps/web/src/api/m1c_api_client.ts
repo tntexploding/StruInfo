@@ -1,4 +1,3 @@
-import {KNOWLEDGE_KINDS} from './m1c_api_contract.js';
 import type {
   CurationState,
   DomainCommandResponse,
@@ -453,14 +452,6 @@ function decodeReviewPreferencesResponse(
         aliases: Object.freeze(
           body.vocabulary.aliases.map((rule) => Object.freeze({...rule})),
         ),
-        links: Object.freeze(
-          body.vocabulary.links.map((rule) => Object.freeze({...rule})),
-        ),
-        knowledgeKinds: Object.freeze(
-          body.vocabulary.knowledgeKinds.map((rule) =>
-            Object.freeze({...rule}),
-          ),
-        ),
       }),
     }),
   });
@@ -468,11 +459,6 @@ function decodeReviewPreferencesResponse(
 
 function isReviewVocabularyPreferences(value: unknown): value is Readonly<{
   aliases: {source: string; canonical: string}[];
-  links: {left: string; right: string; kind: 'related' | 'translation'}[];
-  knowledgeKinds: {
-    keyword: string;
-    knowledgeKind: (typeof KNOWLEDGE_KINDS)[number];
-  }[];
 }> {
   return (
     isRecord(value) &&
@@ -482,28 +468,9 @@ function isReviewVocabularyPreferences(value: unknown): value is Readonly<{
         isRecord(rule) &&
         typeof rule.source === 'string' &&
         typeof rule.canonical === 'string',
-    ) &&
-    Array.isArray(value.links) &&
-    value.links.every(
-      (rule) =>
-        isRecord(rule) &&
-        typeof rule.left === 'string' &&
-        typeof rule.right === 'string' &&
-        (rule.kind === 'related' || rule.kind === 'translation'),
-    ) &&
-    Array.isArray(value.knowledgeKinds) &&
-    value.knowledgeKinds.every(
-      (rule) =>
-        isRecord(rule) &&
-        typeof rule.keyword === 'string' &&
-        typeof rule.knowledgeKind === 'string' &&
-        KNOWLEDGE_KINDS.includes(
-          rule.knowledgeKind as (typeof KNOWLEDGE_KINDS)[number],
-        ),
     )
   );
 }
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

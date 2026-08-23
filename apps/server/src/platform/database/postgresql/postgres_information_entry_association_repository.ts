@@ -10,10 +10,7 @@ import {
   type InformationEntryAssociationRepositorySnapshot,
 } from '../../../modules/entries/index.js';
 
-import type {
-  PostgresClientBoundary,
-  PostgresPoolBoundary,
-} from './postgres_pool.js';
+import type {PostgresPoolBoundary} from './postgres_pool.js';
 import {runPostgresTransaction} from './postgres_transaction.js';
 import {
   canonicalUuid,
@@ -25,143 +22,105 @@ import {
 } from './postgres_values.js';
 import {acquireWorkspaceWriteLock} from './workspace_write_lock.js';
 
-export const READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL = `SELECT
-  projection.workspace_id::text, projection.entry_low_id::text,
-  projection.entry_high_id::text, projection.entry_low_revision,
-  projection.entry_low_revision_id::text, projection.entry_high_revision,
-  projection.entry_high_revision_id::text, projection.content_similarity,
-  projection.type_similarity, projection.domain_similarity,
-  projection.base_score, projection.algorithm_version,
-  projection.candidate_basis, projection.candidate_rank
-FROM struinfo.information_entry_association_projection AS projection
-JOIN struinfo.information_entry AS low_entry
-  ON low_entry.workspace_id = projection.workspace_id
- AND low_entry.entry_id = projection.entry_low_id
- AND low_entry.current_revision = projection.entry_low_revision
- AND low_entry.current_revision_id = projection.entry_low_revision_id
-JOIN struinfo.information_entry_revision AS low_revision
-  ON low_revision.workspace_id = low_entry.workspace_id
- AND low_revision.entry_id = low_entry.entry_id
- AND low_revision.revision_number = low_entry.current_revision
- AND low_revision.revision_id = low_entry.current_revision_id
-JOIN struinfo.information_entry AS high_entry
-  ON high_entry.workspace_id = projection.workspace_id
- AND high_entry.entry_id = projection.entry_high_id
- AND high_entry.current_revision = projection.entry_high_revision
- AND high_entry.current_revision_id = projection.entry_high_revision_id
-JOIN struinfo.information_entry_revision AS high_revision
-  ON high_revision.workspace_id = high_entry.workspace_id
- AND high_revision.entry_id = high_entry.entry_id
- AND high_revision.revision_number = high_entry.current_revision
- AND high_revision.revision_id = high_entry.current_revision_id
-WHERE projection.workspace_id = $1
-  AND ($2::boolean OR (NOT low_revision.is_private AND NOT high_revision.is_private))
-ORDER BY projection.entry_low_id, projection.entry_high_id` as const;
+function sql(...lines: readonly string[]): string {
+  return lines.join(String.fromCharCode(10));
+}
 
-export const READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL = `SELECT
-  override.workspace_id::text, override.entry_low_id::text,
-  override.entry_high_id::text, override.current_revision,
-  override.current_revision_id::text, revision.action,
-  revision.manual_adjustment, revision.is_blocked
-FROM struinfo.information_entry_association_override AS override
-JOIN struinfo.information_entry_association_override_revision AS revision
-  ON revision.workspace_id = override.workspace_id
- AND revision.entry_low_id = override.entry_low_id
- AND revision.entry_high_id = override.entry_high_id
- AND revision.revision_number = override.current_revision
- AND revision.revision_id = override.current_revision_id
-JOIN struinfo.information_entry AS low_entry
-  ON low_entry.workspace_id = override.workspace_id
- AND low_entry.entry_id = override.entry_low_id
-JOIN struinfo.information_entry_revision AS low_revision
-  ON low_revision.workspace_id = low_entry.workspace_id
- AND low_revision.entry_id = low_entry.entry_id
- AND low_revision.revision_number = low_entry.current_revision
- AND low_revision.revision_id = low_entry.current_revision_id
-JOIN struinfo.information_entry AS high_entry
-  ON high_entry.workspace_id = override.workspace_id
- AND high_entry.entry_id = override.entry_high_id
-JOIN struinfo.information_entry_revision AS high_revision
-  ON high_revision.workspace_id = high_entry.workspace_id
- AND high_revision.entry_id = high_entry.entry_id
- AND high_revision.revision_number = high_entry.current_revision
- AND high_revision.revision_id = high_entry.current_revision_id
-WHERE override.workspace_id = $1
-  AND ($2::boolean OR (NOT low_revision.is_private AND NOT high_revision.is_private))
-ORDER BY override.entry_low_id, override.entry_high_id` as const;
+export const READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL = sql(
+  'SELECT projection.workspace_id::text, projection.entry_low_id::text,',
+  '  projection.entry_high_id::text, projection.entry_low_revision,',
+  '  projection.entry_low_revision_id::text, projection.entry_high_revision,',
+  '  projection.entry_high_revision_id::text, projection.content_similarity,',
+  '  projection.type_similarity, projection.domain_similarity,',
+  '  projection.base_score, projection.algorithm_version,',
+  '  projection.candidate_basis, projection.candidate_rank',
+  'FROM struinfo.information_entry_association_projection AS projection',
+  'JOIN struinfo.information_entry AS low_entry',
+  '  ON low_entry.workspace_id = projection.workspace_id',
+  ' AND low_entry.entry_id = projection.entry_low_id',
+  ' AND low_entry.current_revision = projection.entry_low_revision',
+  ' AND low_entry.current_revision_id = projection.entry_low_revision_id',
+  'JOIN struinfo.information_entry AS high_entry',
+  '  ON high_entry.workspace_id = projection.workspace_id',
+  ' AND high_entry.entry_id = projection.entry_high_id',
+  ' AND high_entry.current_revision = projection.entry_high_revision',
+  ' AND high_entry.current_revision_id = projection.entry_high_revision_id',
+  'WHERE projection.workspace_id = $1',
+  '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
+  'ORDER BY projection.entry_low_id, projection.entry_high_id',
+);
 
-export const DELETE_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL = `DELETE
-FROM struinfo.information_entry_association_projection AS projection
-USING struinfo.information_entry_revision AS low_revision,
-      struinfo.information_entry_revision AS high_revision
-WHERE projection.workspace_id = $1
-  AND low_revision.workspace_id = projection.workspace_id
-  AND low_revision.entry_id = projection.entry_low_id
-  AND low_revision.revision_number = projection.entry_low_revision
-  AND low_revision.revision_id = projection.entry_low_revision_id
-  AND high_revision.workspace_id = projection.workspace_id
-  AND high_revision.entry_id = projection.entry_high_id
-  AND high_revision.revision_number = projection.entry_high_revision
-  AND high_revision.revision_id = projection.entry_high_revision_id
-  AND (
-    $2::boolean
-    OR (NOT low_revision.is_private AND NOT high_revision.is_private)
-  )` as const;
+export const READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL = sql(
+  'SELECT override.workspace_id::text, override.entry_low_id::text,',
+  '  override.entry_high_id::text, override.current_revision,',
+  '  override.current_revision_id::text, override.action,',
+  '  override.manual_adjustment, override.is_blocked',
+  'FROM struinfo.information_entry_association_override AS override',
+  'JOIN struinfo.information_entry AS low_entry',
+  '  ON low_entry.workspace_id = override.workspace_id',
+  ' AND low_entry.entry_id = override.entry_low_id',
+  'JOIN struinfo.information_entry AS high_entry',
+  '  ON high_entry.workspace_id = override.workspace_id',
+  ' AND high_entry.entry_id = override.entry_high_id',
+  'WHERE override.workspace_id = $1',
+  '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
+  'ORDER BY override.entry_low_id, override.entry_high_id',
+);
 
-const INSERT_INFORMATION_ENTRY_ASSOCIATION_PROJECTION_SQL =
-  `INSERT INTO struinfo.information_entry_association_projection (
-  workspace_id, entry_low_id, entry_high_id,
-  entry_low_revision, entry_low_revision_id,
-  entry_high_revision, entry_high_revision_id,
-  content_similarity, type_similarity, domain_similarity, base_score,
-  algorithm_version, candidate_basis, candidate_rank
-) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
-)` as const;
+export const DELETE_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL = sql(
+  'DELETE FROM struinfo.information_entry_association_projection AS projection',
+  'USING struinfo.information_entry AS low_entry,',
+  '      struinfo.information_entry AS high_entry',
+  'WHERE projection.workspace_id = $1',
+  '  AND low_entry.workspace_id = projection.workspace_id',
+  '  AND low_entry.entry_id = projection.entry_low_id',
+  '  AND high_entry.workspace_id = projection.workspace_id',
+  '  AND high_entry.entry_id = projection.entry_high_id',
+  '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
+);
 
-const READ_ASSOCIATION_ENDPOINTS_SQL = `SELECT
-  entry.entry_id::text, revision.is_private
-FROM struinfo.information_entry AS entry
-JOIN struinfo.information_entry_revision AS revision
-  ON revision.workspace_id = entry.workspace_id
- AND revision.entry_id = entry.entry_id
- AND revision.revision_number = entry.current_revision
- AND revision.revision_id = entry.current_revision_id
-WHERE entry.workspace_id = $1 AND entry.entry_id IN ($2, $3)
-ORDER BY entry.entry_id` as const;
+const INSERT_INFORMATION_ENTRY_ASSOCIATION_PROJECTION_SQL = sql(
+  'INSERT INTO struinfo.information_entry_association_projection (',
+  '  workspace_id, entry_low_id, entry_high_id,',
+  '  entry_low_revision, entry_low_revision_id,',
+  '  entry_high_revision, entry_high_revision_id,',
+  '  content_similarity, type_similarity, domain_similarity, base_score,',
+  '  algorithm_version, candidate_basis, candidate_rank',
+  ') VALUES (',
+  '  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14',
+  ')',
+);
 
-const LOCK_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = `SELECT
-  override.current_revision, override.current_revision_id::text,
-  revision.action, revision.manual_adjustment, revision.is_blocked
-FROM struinfo.information_entry_association_override AS override
-JOIN struinfo.information_entry_association_override_revision AS revision
-  ON revision.workspace_id = override.workspace_id
- AND revision.entry_low_id = override.entry_low_id
- AND revision.entry_high_id = override.entry_high_id
- AND revision.revision_number = override.current_revision
- AND revision.revision_id = override.current_revision_id
-WHERE override.workspace_id = $1
-  AND override.entry_low_id = $2
-  AND override.entry_high_id = $3
-FOR UPDATE OF override` as const;
+const READ_ASSOCIATION_ENDPOINTS_SQL = sql(
+  'SELECT entry_id::text, is_private',
+  'FROM struinfo.information_entry',
+  'WHERE workspace_id = $1 AND entry_id IN ($2, $3)',
+  'ORDER BY entry_id',
+);
 
-const INSERT_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL =
-  `INSERT INTO struinfo.information_entry_association_override (
-  workspace_id, entry_low_id, entry_high_id,
-  current_revision, current_revision_id
-) VALUES ($1, $2, $3, 1, $4)` as const;
+const LOCK_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
+  'SELECT current_revision, current_revision_id::text, action,',
+  '  manual_adjustment, is_blocked',
+  'FROM struinfo.information_entry_association_override',
+  'WHERE workspace_id = $1 AND entry_low_id = $2 AND entry_high_id = $3',
+  'FOR UPDATE',
+);
 
-const INSERT_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_REVISION_SQL =
-  `INSERT INTO struinfo.information_entry_association_override_revision (
-  workspace_id, entry_low_id, entry_high_id, revision_number, revision_id,
-  previous_revision_id, action, manual_adjustment, is_blocked
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)` as const;
+const INSERT_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
+  'INSERT INTO struinfo.information_entry_association_override (',
+  '  workspace_id, entry_low_id, entry_high_id, current_revision,',
+  '  current_revision_id, action, manual_adjustment, is_blocked',
+  ') VALUES ($1, $2, $3, 1, $4, $5, $6, $7)',
+);
 
-const UPDATE_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_POINTER_SQL =
-  `UPDATE struinfo.information_entry_association_override
-SET current_revision = $4, current_revision_id = $5
-WHERE workspace_id = $1 AND entry_low_id = $2 AND entry_high_id = $3
-  AND current_revision = $6` as const;
+const UPDATE_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
+  'UPDATE struinfo.information_entry_association_override SET',
+  '  current_revision = $4, current_revision_id = $5, action = $6,',
+  '  manual_adjustment = $7, is_blocked = $8,',
+  '  updated_at = CURRENT_TIMESTAMP',
+  'WHERE workspace_id = $1 AND entry_low_id = $2 AND entry_high_id = $3',
+  '  AND current_revision = $9',
+);
 
 type Row = Readonly<Record<string, unknown>>;
 
@@ -271,19 +230,17 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
           if (write.expectedRevision !== 0) return 'stale';
           const inserted = await client.query<Row>(
             INSERT_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL,
-            [workspaceId, entryLowId, entryHighId, revisionId],
+            [
+              workspaceId,
+              entryLowId,
+              entryHighId,
+              revisionId,
+              write.value.action,
+              write.value.manualAdjustment,
+              write.value.isBlocked,
+            ],
           );
           expectOneAffected(inserted.rowCount);
-          await insertOverrideRevision(
-            client,
-            workspaceId,
-            entryLowId,
-            entryHighId,
-            1,
-            revisionId,
-            undefined,
-            write.value,
-          );
           return 'applied';
         }
         const currentRevision = integer(current.current_revision, 1);
@@ -293,24 +250,17 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
         }
         const nextRevision = currentRevision + 1;
         if (nextRevision > 2_147_483_647) throw new PostgresAdapterError();
-        await insertOverrideRevision(
-          client,
-          workspaceId,
-          entryLowId,
-          entryHighId,
-          nextRevision,
-          revisionId,
-          canonicalUuid(current.current_revision_id),
-          write.value,
-        );
         const updated = await client.query<Row>(
-          UPDATE_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_POINTER_SQL,
+          UPDATE_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL,
           [
             workspaceId,
             entryLowId,
             entryHighId,
             nextRevision,
             revisionId,
+            write.value.action,
+            write.value.manualAdjustment,
+            write.value.isBlocked,
             currentRevision,
           ],
         );
@@ -344,33 +294,6 @@ function projectionParameters(
     basis.join('+'),
     boundedScore(projection.candidateRank, 1, 2_147_483_647),
   ];
-}
-
-async function insertOverrideRevision(
-  client: PostgresClientBoundary,
-  workspaceId: string,
-  entryLowId: string,
-  entryHighId: string,
-  revision: number,
-  revisionId: string,
-  previousRevisionId: string | undefined,
-  value: Readonly<InformationEntryAssociationOverrideValue>,
-): Promise<void> {
-  const result = await client.query<Row>(
-    INSERT_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_REVISION_SQL,
-    [
-      workspaceId,
-      entryLowId,
-      entryHighId,
-      revision,
-      revisionId,
-      previousRevisionId ?? null,
-      value.action,
-      value.manualAdjustment,
-      value.isBlocked,
-    ],
-  );
-  expectOneAffected(result.rowCount);
 }
 
 function mapProjection(row: Row): InformationEntryAssociationProjection {

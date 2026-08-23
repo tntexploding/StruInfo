@@ -1,4 +1,8 @@
 import type {BlobStore} from '../storage/blob_store.js';
+import type {
+  ReviewPreferences,
+  ReviewPreferencesStore,
+} from '../storage/review_preferences_store.js';
 import {
   assertM1cDomainWorkspace,
   M1C_DOMAIN_BUNDLE_CODEC,
@@ -17,6 +21,7 @@ import {
   M1D_ASSOCIATION_BUNDLE_CODEC,
   M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
   M1D_ASSOCIATION_BUNDLE_SECTION_VERSION,
+  M1D_ASSOCIATION_LEGACY_BUNDLE_CODEC,
   m1dAssociationTableCounts,
   normalizeM1dAssociationSnapshot,
   type M1dAssociationSnapshot,
@@ -27,10 +32,19 @@ import {
   M1D_ENTRY_BUNDLE_CODEC,
   M1D_ENTRY_BUNDLE_SECTION_TYPE,
   M1D_ENTRY_BUNDLE_SECTION_VERSION,
+  M1D_ENTRY_LEGACY_BUNDLE_CODEC,
   m1dEntryTableCounts,
   normalizeM1dEntrySnapshot,
   type M1dEntrySnapshot,
 } from './m1d_entry_bundle.js';
+import {
+  PERSONAL_DATA_BUNDLE_CODEC,
+  PERSONAL_DATA_BUNDLE_SCHEMA,
+  PERSONAL_DATA_BUNDLE_SECTION_TYPE,
+  PERSONAL_DATA_BUNDLE_SECTION_VERSION,
+  normalizePersonalDataBundleSection,
+  type PersonalDataBundleSection,
+} from './personal_data_bundle.js';
 import {
   readWorkspaceBundle,
   WorkspaceBundleError,
@@ -74,6 +88,7 @@ export type M1cWorkspaceTransferErrorCode =
   | 'bundle_invalid'
   | 'bundle_not_found'
   | 'blob_unavailable'
+  | 'preferences_failed'
   | 'repository_failed'
   | 'storage_failed'
   | 'workspace_mismatch'
@@ -84,7 +99,7 @@ export class M1cWorkspaceTransferError extends Error {
   public readonly code: M1cWorkspaceTransferErrorCode;
 
   public constructor(code: M1cWorkspaceTransferErrorCode) {
-    super('The M1C workspace transfer operation failed.');
+    super('The personal workspace transfer operation failed.');
     this.name = 'M1cWorkspaceTransferError';
     this.code = code;
   }
@@ -95,6 +110,7 @@ export interface M1cWorkspaceTransferSummary {
   readonly byteLength: number;
   readonly sha256?: string;
   readonly blobCount: number;
+  readonly personalDataIncluded: boolean;
   readonly tableCounts: Readonly<Record<string, number>>;
 }
 
@@ -111,9 +127,19 @@ export interface M1cWorkspaceTransferPort {
 export interface M1cWorkspaceTransferDependencies {
   readonly repository: M1cDomainTransferRepositoryPort;
   readonly blobStore: BlobStore;
+  readonly reviewPreferences: ReviewPreferencesStore;
   readonly fileStore: WorkspaceBundleFileStore;
   readonly now?: () => string;
 }
+
+const BUNDLE_CODECS = Object.freeze([
+  M1C_DOMAIN_BUNDLE_CODEC,
+  M1D_ENTRY_LEGACY_BUNDLE_CODEC,
+  M1D_ENTRY_BUNDLE_CODEC,
+  M1D_ASSOCIATION_LEGACY_BUNDLE_CODEC,
+  M1D_ASSOCIATION_BUNDLE_CODEC,
+  PERSONAL_DATA_BUNDLE_CODEC,
+]);
 
 export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
   readonly #dependencies: Readonly<M1cWorkspaceTransferDependencies>;
@@ -135,7 +161,37 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
       throw mapRepositoryError(error);
     }
     const references = m1cDomainBlobReferences(snapshot.domain);
-    await verifyBlobReferences(this.#dependencies.blobStore, references);
+    let blobs: PersonalDataBundleSection['blobs'];
+    try {
+      blobs = await Promise.all(
+        references.map(async (identity) =>
+          Object.freeze({
+            identity,
+            bytes: await this.#dependencies.blobStore.read(identity),
+          }),
+        ),
+      );
+    } catch {
+      throw new M1cWorkspaceTransferError('blob_unavailable');
+    }
+    let reviewPreferences: PersonalDataBundleSection['reviewPreferences'];
+    try {
+      reviewPreferences =
+        await this.#dependencies.reviewPreferences.load(workspaceId);
+    } catch {
+      throw new M1cWorkspaceTransferError('preferences_failed');
+    }
+    let personalData: Readonly<PersonalDataBundleSection>;
+    try {
+      personalData = normalizePersonalDataBundleSection({
+        schemaVersion: PERSONAL_DATA_BUNDLE_SCHEMA,
+        blobs,
+        reviewPreferences,
+      });
+    } catch {
+      throw new M1cWorkspaceTransferError('bundle_invalid');
+    }
+
     const exportedAt = (this.#dependencies.now ?? defaultNow)();
     let bytes: Uint8Array;
     try {
@@ -159,18 +215,20 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
               version: M1D_ASSOCIATION_BUNDLE_SECTION_VERSION,
               value: snapshot.associations,
             },
+            {
+              type: PERSONAL_DATA_BUNDLE_SECTION_TYPE,
+              version: PERSONAL_DATA_BUNDLE_SECTION_VERSION,
+              value: personalData,
+            },
           ],
           blobReferences: references,
         },
-        [
-          M1C_DOMAIN_BUNDLE_CODEC,
-          M1D_ENTRY_BUNDLE_CODEC,
-          M1D_ASSOCIATION_BUNDLE_CODEC,
-        ],
+        BUNDLE_CODECS,
       );
     } catch {
       throw new M1cWorkspaceTransferError('bundle_invalid');
     }
+
     try {
       const stored = await this.#dependencies.fileStore.write(
         workspaceId,
@@ -182,6 +240,7 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
         byteLength: stored.byteLength,
         sha256: stored.sha256,
         blobCount: references.length,
+        personalDataIncluded: true,
         tableCounts: transferTableCounts(snapshot),
       });
     } catch {
@@ -208,12 +267,9 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
 
     let snapshot: Readonly<M1cWorkspaceTransferSnapshot>;
     let references;
+    let personalData: Readonly<PersonalDataBundleSection> | undefined;
     try {
-      const bundle = readWorkspaceBundle(bytes, [
-        M1C_DOMAIN_BUNDLE_CODEC,
-        M1D_ENTRY_BUNDLE_CODEC,
-        M1D_ASSOCIATION_BUNDLE_CODEC,
-      ]);
+      const bundle = readWorkspaceBundle(bytes, BUNDLE_CODECS);
       if (bundle.workspaceId !== workspaceId) {
         throw new M1cWorkspaceTransferError('workspace_mismatch');
       }
@@ -226,9 +282,12 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
       const associationSection = bundle.sections.find(
         (section) => section.type === M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
       );
+      const personalSection = bundle.sections.find(
+        (section) => section.type === PERSONAL_DATA_BUNDLE_SECTION_TYPE,
+      );
       if (
         domainSection === undefined ||
-        bundle.sections.length > 3 ||
+        bundle.sections.length > 4 ||
         (associationSection !== undefined && entrySection === undefined)
       ) {
         throw new M1cWorkspaceTransferError('bundle_invalid');
@@ -251,6 +310,20 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
       if (!sameBlobReferences(references, bundle.blobReferences)) {
         throw new M1cWorkspaceTransferError('bundle_invalid');
       }
+      if (personalSection !== undefined) {
+        personalData = normalizePersonalDataBundleSection(
+          personalSection.value,
+        );
+        if (
+          personalData.reviewPreferences.workspaceId !== workspaceId ||
+          !sameBlobReferences(
+            references,
+            personalData.blobs.map((blob) => blob.identity),
+          )
+        ) {
+          throw new M1cWorkspaceTransferError('bundle_invalid');
+        }
+      }
     } catch (error) {
       if (error instanceof M1cWorkspaceTransferError) throw error;
       if (error instanceof WorkspaceBundleError) {
@@ -259,19 +332,50 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
       throw new M1cWorkspaceTransferError('bundle_invalid');
     }
 
-    await verifyBlobReferences(this.#dependencies.blobStore, references);
+    if (personalData === undefined) {
+      await verifyBlobReferences(this.#dependencies.blobStore, references);
+    } else {
+      await restorePortableBlobs(this.#dependencies.blobStore, personalData);
+    }
+
+    let previousPreferences: Readonly<ReviewPreferences> | undefined;
+    if (personalData !== undefined) {
+      try {
+        previousPreferences =
+          await this.#dependencies.reviewPreferences.load(workspaceId);
+        await saveReviewPreferences(
+          this.#dependencies.reviewPreferences,
+          personalData.reviewPreferences,
+        );
+      } catch {
+        throw new M1cWorkspaceTransferError('preferences_failed');
+      }
+    }
+
     try {
       await this.#dependencies.repository.restoreEmptyWorkspace(
         workspaceId,
         snapshot,
       );
     } catch (error) {
+      if (previousPreferences !== undefined) {
+        try {
+          await saveReviewPreferences(
+            this.#dependencies.reviewPreferences,
+            previousPreferences,
+          );
+        } catch {
+          throw new M1cWorkspaceTransferError('preferences_failed');
+        }
+      }
       throw mapRepositoryError(error);
     }
+
     return Object.freeze({
       fileName,
       byteLength: bytes.byteLength,
       blobCount: references.length,
+      personalDataIncluded: personalData !== undefined,
       tableCounts: transferTableCounts(snapshot),
     });
   }
@@ -312,10 +416,16 @@ function sameBlobReferences(
     byteLength: number;
   }>[],
 ): boolean {
+  const orderedExpected = [...expected].sort((left, right) =>
+    left.digest.localeCompare(right.digest),
+  );
+  const orderedActual = [...actual].sort((left, right) =>
+    left.digest.localeCompare(right.digest),
+  );
   return (
-    expected.length === actual.length &&
-    expected.every((reference, index) => {
-      const candidate = actual[index];
+    orderedExpected.length === orderedActual.length &&
+    orderedExpected.every((reference, index) => {
+      const candidate = orderedActual[index];
       return (
         candidate?.algorithm === reference.algorithm &&
         candidate.digest === reference.digest &&
@@ -323,6 +433,33 @@ function sameBlobReferences(
       );
     })
   );
+}
+
+async function saveReviewPreferences(
+  store: ReviewPreferencesStore,
+  preferences: Readonly<ReviewPreferences>,
+): Promise<void> {
+  await store.save(
+    preferences.workspaceId,
+    preferences.quickTags,
+    preferences.automaticKeywords,
+    preferences.vocabulary,
+  );
+}
+async function restorePortableBlobs(
+  blobStore: BlobStore,
+  personalData: Readonly<PersonalDataBundleSection>,
+): Promise<void> {
+  try {
+    for (const blob of personalData.blobs) {
+      const restored = await blobStore.put(blob.bytes);
+      if (!sameBlobReferences([blob.identity], [restored])) {
+        throw new Error('Blob identity mismatch.');
+      }
+    }
+  } catch {
+    throw new M1cWorkspaceTransferError('blob_unavailable');
+  }
 }
 
 async function verifyBlobReferences(

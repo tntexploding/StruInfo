@@ -71,6 +71,7 @@ async function main(): Promise<void> {
         repository: repositories.workspaceTransfer,
         blobStore: storage.blobStore,
         fileStore: storage.workspaceBundleFiles,
+        reviewPreferences: storage.reviewPreferences,
       }),
     });
 

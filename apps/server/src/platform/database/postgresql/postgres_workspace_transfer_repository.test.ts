@@ -55,7 +55,7 @@ describe('PostgresM1cDomainTransferRepository', () => {
     );
     expect(statements).toContainEqual(
       expect.stringContaining(
-        'FROM struinfo.information_entry_association_override_revision AS t',
+        'FROM struinfo.information_entry_association_override AS t',
       ),
     );
     expect(statements[0]).toBe(
@@ -161,7 +161,19 @@ function snapshotWithEntry(
                 snapshot_id: '55555555-5555-4555-8555-555555555555',
                 current_revision: 1,
                 current_revision_id: '66666666-6666-4666-8666-666666666666',
+                document_order: 0,
+                title_path: 'Synthetic Entry',
+                body: 'Synthetic current body.',
+                body_sha256: 'a'.repeat(64),
+                chunk_mode: 'split',
+                split_rule_version: 'synthetic-v1',
+                is_private: false,
+                type_keyword: null,
+                type_custom_name: null,
+                usefulness_score: null,
+                interest_score: null,
                 created_at: createdAt,
+                updated_at: createdAt,
               },
             ]
           : [],

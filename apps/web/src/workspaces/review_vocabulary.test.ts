@@ -1,18 +1,12 @@
 import {describe, expect, it} from 'vitest';
 
-import type {VocabularyTerm} from '../api/m1c_api_contract.js';
 import {
-  buildVocabularyPairSuggestions,
   canonicalizeReviewKeyword,
-  preferredKnowledgeKind,
-  vocabularySuggestionsForKeyword,
   withVocabularyAlias,
 } from './review_vocabulary.js';
 
 const EMPTY = Object.freeze({
   aliases: Object.freeze([]),
-  links: Object.freeze([]),
-  knowledgeKinds: Object.freeze([]),
 });
 
 describe('review vocabulary reconciliation', () => {
@@ -36,34 +30,13 @@ describe('review vocabulary reconciliation', () => {
     );
   });
 
-  it('suggests containment but does not automatically merge it', () => {
-    const terms = [term('1', 'Data Tool'), term('2', 'Tool')];
+  it('deduplicates case variants by replacing an existing alias source', () => {
+    const first = withVocabularyAlias(EMPTY, 'Synthetic', 'First');
+    const replaced = withVocabularyAlias(first, 'SYNTHETIC', 'Second');
 
-    expect(vocabularySuggestionsForKeyword('Data Tool CLI', terms)).toEqual([
-      expect.objectContaining({displayName: 'Data Tool', reason: 'contains'}),
-      expect.objectContaining({displayName: 'Tool', reason: 'contains'}),
+    expect(replaced.aliases).toEqual([
+      {source: 'SYNTHETIC', canonical: 'Second'},
     ]);
-    expect(buildVocabularyPairSuggestions(terms)).toEqual([
-      expect.objectContaining({reason: 'contains'}),
-    ]);
-  });
-
-  it('maps a user-selected classification to a generic knowledge kind', () => {
-    expect(
-      preferredKnowledgeKind(['Synthetic Cover'], {
-        ...EMPTY,
-        knowledgeKinds: [{keyword: 'Synthetic Cover', knowledgeKind: 'work'}],
-      }),
-    ).toBe('work');
+    expect(canonicalizeReviewKeyword('synthetic', replaced)).toBe('Second');
   });
 });
-
-function term(termId: string, displayName: string): VocabularyTerm {
-  return {
-    workspaceId: '11111111-1111-4111-8111-111111111111',
-    termId: termId.padStart(8, '0') + '-1111-4111-8111-111111111111',
-    currentRevision: 1,
-    currentRevisionId: '22222222-2222-4222-8222-222222222222',
-    value: {displayName, lifecycle: 'active'},
-  };
-}

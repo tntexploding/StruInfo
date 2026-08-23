@@ -112,15 +112,6 @@ describe('M1cApiService', () => {
         source: string;
         canonical: string;
       }>[],
-      links: [] as readonly Readonly<{
-        left: string;
-        right: string;
-        kind: 'related' | 'translation';
-      }>[],
-      knowledgeKinds: [] as readonly Readonly<{
-        keyword: string;
-        knowledgeKind: 'work';
-      }>[],
     };
     const load = vi.fn((workspaceId: string) =>
       Promise.resolve({
@@ -165,7 +156,7 @@ describe('M1cApiService', () => {
           includeLinkDomains: false,
           excludedKeywords: [],
         },
-        vocabulary: {aliases: [], links: [], knowledgeKinds: []},
+        vocabulary: {aliases: []},
       },
     });
     await expect(
@@ -178,8 +169,6 @@ describe('M1cApiService', () => {
         },
         vocabulary: {
           aliases: [{source: 'Synthetic CLI', canonical: '工具'}],
-          links: [],
-          knowledgeKinds: [{keyword: 'Synthetic Cover', knowledgeKind: 'work'}],
         },
       }),
     ).resolves.toMatchObject({
@@ -197,8 +186,6 @@ describe('M1cApiService', () => {
       },
       {
         aliases: [{source: 'Synthetic CLI', canonical: '工具'}],
-        links: [],
-        knowledgeKinds: [{keyword: 'Synthetic Cover', knowledgeKind: 'work'}],
       },
     );
   });
@@ -594,6 +581,12 @@ describe('M1cApiService', () => {
       limit: 1,
     };
 
+    await expect(
+      service.searchInformationEntries({...request, onlyPrivate: true}),
+    ).resolves.toMatchObject({
+      statusCode: 422,
+      body: {status: 'rejected', issue: {path: 'body'}},
+    });
     const first = await service.searchInformationEntries(request);
     expect(first.statusCode).toBe(200);
     expect(first.body).toMatchObject({
@@ -1242,6 +1235,7 @@ describe('M1cApiService', () => {
       byteLength: 1234,
       sha256: 'a'.repeat(64),
       blobCount: 2,
+      personalDataIncluded: true,
       tableCounts: Object.freeze({workspace: 1, snapshot: 10}),
     });
     const exportWorkspace = vi.fn(() => Promise.resolve(summary));

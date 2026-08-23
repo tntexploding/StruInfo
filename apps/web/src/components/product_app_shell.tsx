@@ -11,21 +11,23 @@ const NAVIGATION: readonly Readonly<{
   label: string;
   microLabel: string;
 }>[] = [
-  {section: 'materials', index: '01', label: '材料', microLabel: 'EVIDENCE'},
-  {section: 'review', index: '02', label: '审核', microLabel: 'REVIEW'},
+  {section: 'overview', index: '00', label: '总览', microLabel: 'OVERVIEW'},
+  {section: 'import', index: '01', label: '导入', microLabel: 'IMPORT'},
+  {section: 'split', index: '02', label: '拆分', microLabel: 'SPLIT'},
+  {section: 'tags', index: '03', label: '标签', microLabel: 'TAG'},
   {
-    section: 'entries',
-    index: '03',
-    label: '条目',
-    microLabel: 'ENTRIES',
+    section: 'associations',
+    index: '04',
+    label: '联系',
+    microLabel: 'ASSOCIATE',
   },
+  {section: 'query', index: '05', label: '查询', microLabel: 'QUERY'},
   {
     section: 'knowledge',
-    index: '04',
-    label: '知识',
+    index: '06',
+    label: '正式知识',
     microLabel: 'KNOWLEDGE',
   },
-  {section: 'search', index: '05', label: '搜索', microLabel: 'RETRIEVAL'},
 ];
 
 export interface ProductAppShellProps {
@@ -54,47 +56,60 @@ export function ProductAppShell({
       <a className="skip-link" href="#main-workspace">
         跳至主要工作区
       </a>
-      <div className="product-shell" data-section={activeSection}>
+      <div
+        className="product-shell workflow-shell"
+        data-section={activeSection}
+      >
         <aside className="primary-rail" aria-label="主要导航">
           <div className="primary-rail__identity" aria-label="StruInfo">
             <span className="primary-rail__mark" aria-hidden="true">
               SI
             </span>
-            <span className="primary-rail__edition">M1D</span>
+            <span className="primary-rail__edition">M1D / FLOW</span>
           </div>
           <nav className="primary-navigation" aria-label="产品工作区">
-            {NAVIGATION.map((item) => (
-              <button
-                className="primary-navigation__item"
-                data-active={item.section === activeSection}
-                type="button"
-                key={item.section}
-                aria-label={item.label}
-                aria-current={
-                  item.section === activeSection ? 'page' : undefined
-                }
-                onClick={() => {
-                  onNavigate(item.section);
-                }}
-              >
-                <span className="primary-navigation__index" aria-hidden="true">
-                  {item.index}
-                </span>
-                <span className="primary-navigation__copy">
-                  <strong>{item.label}</strong>
-                  <small>{item.microLabel}</small>
-                </span>
-              </button>
-            ))}
+            <ol className="workflow-navigation__list">
+              {NAVIGATION.map((item) => (
+                <li key={item.section}>
+                  <button
+                    className="primary-navigation__item"
+                    data-active={item.section === activeSection}
+                    type="button"
+                    aria-label={item.label}
+                    aria-current={
+                      item.section === activeSection ? 'page' : undefined
+                    }
+                    onClick={() => {
+                      onNavigate(item.section);
+                    }}
+                  >
+                    <span
+                      className="primary-navigation__index"
+                      aria-hidden="true"
+                    >
+                      {item.index}
+                    </span>
+                    <span
+                      className="workflow-navigation__node"
+                      aria-hidden="true"
+                    />
+                    <span className="primary-navigation__copy">
+                      <strong>{item.label}</strong>
+                      <small>{item.microLabel}</small>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ol>
           </nav>
-          <p className="primary-rail__scope">LOCAL / ONE WORKSPACE</p>
+          <p className="primary-rail__scope">LOCAL DATA · ONE WORKSPACE</p>
         </aside>
 
         <header className="product-command-bar">
           <div className="product-lockup">
             <p className="product-lockup__name">StruInfo</p>
             <p className="product-lockup__descriptor">
-              Personal Knowledge OS · 来源可追溯的个人知识工作区
+              文档处理台 · 导入 → 拆分 → 标签 → 联系 → 查询 · 正式知识
             </p>
           </div>
           <dl className="command-status" aria-label="当前运行状态">
@@ -124,7 +139,7 @@ export function ProductAppShell({
         {evidencePanel}
 
         <footer className="product-status-strip">
-          <span>NON-AI CORE · MANUAL AUTHORITY</span>
+          <span>TRACEABLE CORE · MANUAL AUTHORITY</span>
           <span>
             {transportMode === 'mock' ? '健康检查：开发模拟' : '本机同源接口'}
           </span>

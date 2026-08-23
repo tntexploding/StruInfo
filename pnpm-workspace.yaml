@@ -4,7 +4,7 @@ packages:
 
 autoInstallPeers: false
 strictPeerDependencies: true
-engineStrict: true
+engineStrict: false
 saveExact: true
 verifyStoreIntegrity: true
 trustLockfile: false
