@@ -4,10 +4,6 @@ import type {Response} from 'express';
 import {describe, expect, it, vi} from 'vitest';
 
 import type {
-  ManualCurationRepositoryPort,
-  ManualCurationTransactionPort,
-} from '../modules/curation/index.js';
-import type {
   EvidenceCaptureRepositoryRequest,
   EvidenceRepositoryPort,
 } from '../modules/evidence/index.js';
@@ -20,7 +16,6 @@ import type {
   InformationEntryMaterializeRow,
   InformationEntrySearchCursor,
 } from '../modules/entries/index.js';
-import type {ManualKnowledgeRepositoryPort} from '../modules/knowledge/index.js';
 import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
 import {
   LOCAL_API_CACHE_CONTROL,
@@ -38,10 +33,6 @@ const SNAPSHOT_ID = '00000000-0000-4000-8000-000000000003';
 const STRUCTURE_ID = '00000000-0000-4000-8000-000000000004';
 const NODE_ID = '00000000-0000-4000-8000-000000000005';
 const FRAGMENT_ID = '00000000-0000-4000-8000-000000000006';
-const TERM_ID = '00000000-0000-4000-8000-000000000007';
-const ITEM_ID = '00000000-0000-4000-8000-000000000008';
-const REVISION_ID = '00000000-0000-4000-8000-000000000009';
-const DERIVED_ITEM_ID = '00000000-0000-4000-8000-00000000000a';
 
 class MemoryBlobStore implements BlobStore {
   readonly #values = new Map<string, Uint8Array>();
@@ -65,21 +56,11 @@ class MemoryBlobStore implements BlobStore {
 describe('M1cApiService', () => {
   it('keeps the selected external workspace authoritative for reads', async () => {
     const listSnapshots = vi.fn(() => Promise.resolve([]));
-    const loadCurrentCurationState = vi.fn(() =>
-      Promise.resolve({
-        terms: [],
-        targets: [],
-        assignments: [],
-        decisions: [],
-        assessments: [],
-      }),
-    );
     const service = createService({
       evidenceReadRepository: {
         listSnapshots,
         loadSnapshot: () => Promise.resolve(undefined),
       },
-      curationReadRepository: {loadCurrentCurationState},
     });
 
     expect(service.workspace().body).toMatchObject({
@@ -90,14 +71,7 @@ describe('M1cApiService', () => {
       statusCode: 200,
       body: {status: 'ok', snapshots: []},
     });
-    await expect(service.loadCurationState()).resolves.toMatchObject({
-      statusCode: 200,
-      body: {status: 'ok'},
-    });
     expect(listSnapshots).toHaveBeenCalledExactlyOnceWith(WORKSPACE_ID);
-    expect(loadCurrentCurationState).toHaveBeenCalledExactlyOnceWith(
-      WORKSPACE_ID,
-    );
   });
 
   it('loads and saves workspace-scoped review quick tags', async () => {
@@ -786,7 +760,7 @@ describe('M1cApiService', () => {
     });
   });
 
-  it('requires explicit privacy opt-in for full documents and private search', async () => {
+  it('requires explicit privacy opt-in for complete source documents', async () => {
     const blobs = new MemoryBlobStore();
     const normalizedText = 'Private complete document\n';
     const identity = await blobs.put(new TextEncoder().encode(normalizedText));
@@ -849,30 +823,6 @@ describe('M1cApiService', () => {
       statusCode: 200,
       body: {
         snapshot: {structures: [{normalizedText}]},
-      },
-    });
-
-    const publicSearch = await service.search(searchRequest());
-    expect(publicSearch).toMatchObject({
-      statusCode: 200,
-      body: {includePrivate: false, privateDocuments: []},
-    });
-    const privateSearch = await service.search({
-      includePrivate: true,
-      request: searchRequest(),
-    });
-    expect(privateSearch).toMatchObject({
-      statusCode: 200,
-      body: {
-        includePrivate: true,
-        privateDocumentTotalCount: 1,
-        privateDocuments: [
-          {
-            snapshotId: SNAPSHOT_ID,
-            isPrivate: true,
-            excerpt: 'Private complete document',
-          },
-        ],
       },
     });
   });
@@ -1051,184 +1001,6 @@ describe('M1cApiService', () => {
     expect(writeDocumentTags).toHaveBeenCalledTimes(2);
   });
 
-  it('reports an unavailable private-document read without throwing', async () => {
-    const service = createService({
-      evidenceReadRepository: {
-        listSnapshots: () => Promise.reject(new Error('synthetic unavailable')),
-        loadSnapshot: () => Promise.resolve(undefined),
-      },
-    });
-
-    await expect(
-      service.search({includePrivate: true, request: searchRequest()}),
-    ).resolves.toEqual({
-      statusCode: 503,
-      body: {
-        status: 'failed',
-        issue: {code: 'evidence_read_failed'},
-      },
-    });
-  });
-
-  it('loads the complete current knowledge item for revision editing', async () => {
-    const loadCurrentKnowledgeItem = vi.fn(() =>
-      Promise.resolve({
-        workspaceId: WORKSPACE_ID,
-        itemId: ITEM_ID,
-        revision: 3,
-        revisionId: REVISION_ID,
-        value: {
-          knowledgeKind: 'method' as const,
-          epistemicRole: 'summary' as const,
-          reviewState: 'confirmed' as const,
-          title: 'Synthetic existing judgment',
-          body: 'Existing body retained for editing.',
-        },
-        provenance: {
-          citations: [FRAGMENT_ID],
-          fragmentDerivations: [],
-          knowledgeDerivations: [
-            {kind: 'item' as const, itemId: DERIVED_ITEM_ID, revision: 2},
-          ],
-        },
-      }),
-    );
-    const service = createService({
-      knowledgeReadRepository: {loadCurrentKnowledgeItem},
-    });
-
-    await expect(service.loadKnowledgeItem(ITEM_ID)).resolves.toEqual({
-      statusCode: 200,
-      body: {
-        status: 'ok',
-        item: {
-          itemId: ITEM_ID,
-          revision: 3,
-          revisionId: REVISION_ID,
-          value: {
-            knowledgeKind: 'method',
-            epistemicRole: 'summary',
-            reviewState: 'confirmed',
-            title: 'Synthetic existing judgment',
-            body: 'Existing body retained for editing.',
-          },
-          provenance: {
-            citations: [FRAGMENT_ID],
-            fragmentDerivations: [],
-            knowledgeDerivations: [
-              {kind: 'item', itemId: DERIVED_ITEM_ID, revision: 2},
-            ],
-          },
-        },
-      },
-    });
-    expect(loadCurrentKnowledgeItem).toHaveBeenCalledExactlyOnceWith(
-      WORKSPACE_ID,
-      ITEM_ID,
-    );
-  });
-
-  it('requires an explicit opt-in before loading a private knowledge item', async () => {
-    const service = createService({
-      knowledgeReadRepository: {
-        loadCurrentKnowledgeItem: () =>
-          Promise.resolve({
-            workspaceId: WORKSPACE_ID,
-            itemId: ITEM_ID,
-            revision: 1,
-            revisionId: REVISION_ID,
-            value: {
-              knowledgeKind: 'assertion',
-              epistemicRole: 'source_claim',
-              reviewState: 'confirmed',
-              title: 'Synthetic private judgment',
-            },
-            provenance: {
-              citations: [FRAGMENT_ID],
-              fragmentDerivations: [],
-              knowledgeDerivations: [],
-            },
-            isPrivate: true,
-          }),
-      },
-    });
-
-    await expect(service.loadKnowledgeItem(ITEM_ID)).resolves.toMatchObject({
-      statusCode: 403,
-      body: {
-        status: 'rejected',
-        issue: {code: 'private_content_requires_opt_in'},
-      },
-    });
-    await expect(
-      service.loadKnowledgeItem(ITEM_ID, true),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {status: 'ok', item: {itemId: ITEM_ID, isPrivate: true}},
-    });
-  });
-
-  it('injects the workspace and command key into a manual term command', async () => {
-    let query: unknown;
-    const transaction = {
-      lockAndLoadTermCommandSnapshot(value: unknown) {
-        query = value;
-        return Promise.resolve(emptyCurationSnapshot());
-      },
-      insertVocabularyTerm: () => Promise.resolve(),
-      insertVocabularyTermRevision: () => Promise.resolve(),
-      compareAndSetVocabularyTermCurrent: () => Promise.resolve(),
-      insertCurationCommand: () => Promise.resolve(),
-    } as unknown as ManualCurationTransactionPort;
-    const curationRepository: ManualCurationRepositoryPort = {
-      runCommandTransaction: (work) => work(transaction),
-    };
-    const service = createService({curationRepository});
-
-    const result = await service.putCurationTerm({
-      commandIdempotencyKey: 'local-term-1',
-      request: {
-        termId: TERM_ID,
-        expectedRevision: 0,
-        value: {displayName: 'Synthetic', lifecycle: 'active'},
-      },
-    });
-
-    expect(result.statusCode).toBe(200);
-    expect(result.body).toMatchObject({status: 'applied'});
-    expect(query).toMatchObject({
-      workspaceId: WORKSPACE_ID,
-      commandIdempotencyKey: 'local-term-1',
-      termId: TERM_ID,
-    });
-  });
-
-  it('runs deterministic search through the public read port', async () => {
-    const loadCurrentKnowledgeSearchSnapshot = vi.fn(() =>
-      Promise.resolve({
-        items: [],
-        revisions: [],
-        fragmentInputs: [],
-        relations: [],
-        relationRevisions: [],
-      }),
-    );
-    const service = createService({
-      retrievalRepository: {loadCurrentKnowledgeSearchSnapshot},
-    });
-
-    const result = await service.search(searchRequest());
-
-    expect(result).toMatchObject({
-      statusCode: 200,
-      body: {status: 'ok', totalCount: 0, items: []},
-    });
-    expect(loadCurrentKnowledgeSearchSnapshot).toHaveBeenCalledExactlyOnceWith(
-      WORKSPACE_ID,
-      {includePrivate: false},
-    );
-  });
-
   it('exports and restores the selected workspace through the external Bundle boundary', async () => {
     const summary = Object.freeze({
       fileName: 'synthetic.workspace-bundle.json',
@@ -1328,30 +1100,6 @@ function createService(
       listSnapshots: () => Promise.resolve([]),
       loadSnapshot: () => Promise.resolve(undefined),
     },
-    curationRepository: {
-      runCommandTransaction: () =>
-        Promise.reject(new Error('Unexpected curation command.')),
-    },
-    curationReadRepository: {
-      loadCurrentCurationState: () => Promise.resolve(emptyCurationSnapshot()),
-    },
-    knowledgeRepository: {
-      runCommandTransaction: () =>
-        Promise.reject(new Error('Unexpected knowledge command.')),
-    } as ManualKnowledgeRepositoryPort,
-    knowledgeReadRepository: {
-      loadCurrentKnowledgeItem: () => Promise.resolve(undefined),
-    },
-    retrievalRepository: {
-      loadCurrentKnowledgeSearchSnapshot: () =>
-        Promise.resolve({
-          items: [],
-          revisions: [],
-          fragmentInputs: [],
-          relations: [],
-          relationRevisions: [],
-        }),
-    },
     informationEntryRepository: {
       materializeEntries: () =>
         Promise.resolve({outcome: 'existing', createdCount: 0}),
@@ -1378,31 +1126,6 @@ function createService(
     ...overrides,
   };
   return new M1cApiService(dependencies);
-}
-
-function emptyCurationSnapshot() {
-  return Object.freeze({
-    evidenceTargets: Object.freeze([]),
-    terms: Object.freeze([]),
-    targets: Object.freeze([]),
-    assignments: Object.freeze([]),
-    decisions: Object.freeze([]),
-    assessments: Object.freeze([]),
-    commands: Object.freeze([]),
-  });
-}
-
-function searchRequest() {
-  return {
-    filters: {
-      knowledgeKinds: [],
-      epistemicRoles: [],
-      reviewStates: [],
-      source: {kind: 'any' as const},
-      relation: {kind: 'any' as const},
-    },
-    page: {limit: 25},
-  };
 }
 
 function responseRecorder(): Readonly<{

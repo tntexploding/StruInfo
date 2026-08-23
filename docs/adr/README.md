@@ -27,6 +27,8 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0005](0005-versioned-knowledge-core-and-ai-optional-operations.md) | Accepted | Versioned relational knowledge core and complete AI-optional operations |
 | [0006](0006-external-configuration-and-personal-data-isolation.md) | Accepted | External runtime configuration and isolation of all personal data from source and packages |
 | [0007](0007-information-entry-first-document-processing.md) | Accepted | InformationEntry-first document processing, annotation, association, and retrieval while preserving formal knowledge |
+| [0008](0008-current-entry-state-and-portable-personal-data.md) | Accepted | Current Entry state, unified Tags review and portable personal-data packages |
+| [0009](0009-retire-superseded-m1c-runtime.md) | Accepted | Retire superseded M1C runtime while preserving migrations and external-data compatibility |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -40,4 +42,8 @@ including deterministic fuzzy and associative retrieval without AI.
 ADR 0007 partially supersedes ADR 0005 only at the product workflow layer:
 ordinary document material now becomes searchable `InformationEntry` records
 before optional formal semantic knowledge, while ADR 0005 remains the formal
-knowledge model.
+knowledge model. ADR 0008 makes routine Entry editing current-state based and
+turns exports into complete personal-data packages. ADR 0009 removes the
+superseded M1C application runtime; accepted migrations and historical data
+remain compatible, while a future Formal Knowledge page requires a new product
+boundary.

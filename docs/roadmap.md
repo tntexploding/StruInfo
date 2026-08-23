@@ -1,6 +1,6 @@
 # StruInfo 分阶段计划
 
-- 状态：M1E-1 当前成品态、统一标签审核、完整个人数据包与隐私限定查询已实现
+- 状态：M1E-1 当前成品态已完成，旧 M1C 应用运行时已退役
 - 最近更新：2026-08-23
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
@@ -18,9 +18,10 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 
 ## 已完成主线：M1D Entry 网络
 
-M1D 的目标是在不删除 M1C 能力的前提下，让普通文档条目无需先填写正式知识字段就能
-持久化、标注、建立可解释关联并被找回。M1D 使用现有 PostgreSQL、Blob、Snapshot、
-Fragment、隐私、HTTP 和 Web 外壳，不增加新的数据库产品、向量服务或 AI 前置条件。
+M1D 最初以兼容方式保留 M1C 数据，让普通文档条目无需先填写正式知识字段就能持久化、
+标注、建立可解释关联并被找回。M1D 使用现有 PostgreSQL、Blob、Snapshot、Fragment、
+隐私、HTTP 和 Web 外壳，不增加新的数据库产品、向量服务或 AI 前置条件。ADR 0009 随后
+删除了已无调用方的 M1C 应用运行时，但继续保留历史迁移、外部数据和个人数据包兼容。
 
 依赖顺序如下：
 
@@ -89,6 +90,11 @@ M1E-1 收尾修复已补齐 000011 关联 override 别名、旧 Curation 五档�
 联系和查询不再由一个 `mode` 大组件切换，各自只接入本页能力；迟到查询或文档读取不会覆盖更新的
 结果。这些修复不恢复已删除的处理意图、判断原因或手工联系流程。
 
+ADR 0009 完成代码收口：旧 Manual Curation、正式 Knowledge 写入/读取、旧 Knowledge
+确定性搜索及其 PostgreSQL adapter、HTTP 路由、前端协议和样式已从活动应用删除。既有
+迁移、历史表、旧数据与个人数据包分区仍保留，避免把代码清理误作用户数据删除；延期 TM2
+材料只作为历史档案保存，不再属于日常质量门。
+
 ## 下一主线：M1E-2 正式知识页面定义
 
 “正式知识”导航与诚实占位已经存在，但不会复用已删除的处理意图/判断原因，也不会自动把
@@ -100,14 +106,15 @@ M1D 明确不等待：正式 PostgreSQL TM2 harness 自证、容器/Linux 发布
 RAG、开放网络、完整知识图画布、发布许可选择、无实测影响的性能优化。AI 在 M1E 通过
 同一 Entry/正式知识提案边界加入，不拥有直接写表通道。
 
-## 已冻结基线：M1C 可运行核心闭环
+## 历史基线：M1C 可运行核心闭环（运行时已退役）
 
 2026-08-16 重新审视后，项目不再把更多合同、静态证明或测试框架强化作为下一阶段产出。过去的工作按以下方式处理：
 
-- **直接复用的核心资产**：TypeScript 模块化单体、外部配置和数据根、本地内容寻址 Blob、工作区 Bundle 信封、`000001`–`000007` 迁移、Evidence/Markdown/Curation/Knowledge/Retrieval 纯逻辑，以及 Evidence/Curation/Knowledge/Retrieval PostgreSQL repository adapter；
+- **当前直接复用的核心资产**：TypeScript 模块化单体、外部配置和数据根、本地内容寻址 Blob、个人数据包、Evidence/Markdown、InformationEntry/DocumentTag/Association 及其 PostgreSQL adapter；
+- **仅作兼容保留的资产**：`000001`–`000007` 迁移、旧 Curation/Knowledge 数据表和个人数据包旧分区；旧纯逻辑、adapter、HTTP/Web 入口与日常 TM2 命令已由 ADR 0009 删除；
 - **已经关闭的真实缺口**：十期固定周刊已通过同一导入路径，最小领域 Bundle 已完成外部落盘与空工作区恢复；持久化审核队列、隐私文档边界，以及首轮使用暴露的“评分、动作和标记混在一起且逐条操作过重”均已关闭；
-- **已经关闭的下一段操作链**：知识维护页按所选 Snapshot 重建已准入审核队列；短条目可直接确认标题、类型、形成方式和正文，写入后立即用来源过滤搜索回读并前进；底部可返回上一条，本次会话创建的知识可快速追加修订；任意既有正式知识可读取完整当前值与 provenance 后进入高级编辑器继续追加修订；长结构内容仍进入高级拆分与关系编辑；
-- **下一步真实输入**：维护者直接使用、搜索和修订由 398/399 等已审核来源形成的知识；只有真实使用暴露的关系、去重、搜索或性能缺口才进入下一增量；
+- **历史闭环证据**：旧知识维护与确定性检索曾在 M1C 纵向 smoke 中运行；该证据保留，但对应应用入口不再是当前产品能力；
+- **下一步真实输入**：维护者继续使用 345 个 Entry；正式知识只有在 M1E-2 明确形成条件、关系语义和检索用途后才重新实现；
 - **不再阻断的工作**：PostgreSQL TM2 harness 自身强化、488 项正式认证、容器/Linux/发布认证、SQL 查询下推、索引与性能优化、复杂认证、别名/树/集合、完整导出恢复、AI、偏好学习和外部接口。
 
 既有 `C-SLICE-*` 合同和 TM1 结果作为实现输入冻结。除非出现能够在当前产品路径复现的 `PRODUCT_BLOCKER`，不再为了增加 oracle 数量、覆盖不可达输入或提高测试框架自证能力修改这些合同。
@@ -243,10 +250,10 @@ ASCII 大小写折叠文本匹配、显式结构过滤、直接来源、一跳�
 索引、查询计划、HTTP/浏览器或扩展检索已经通过；这些能力保留给后续具名门。
 
 [`C-SLICE-B-POSTGRES-r3`](postgresql-knowledge-adapter-contract.md) 已指导实现
-Curation、Knowledge 与 Retrieval 的 PostgreSQL repository adapter、共享 pool、
-事务和工作区锁。生产范围复审未发现材料性产品问题；正式 PostgreSQL TM2 仍未签发，
-其 Test-owned harness 遗留项记录在延期强化备忘中。M1C 直接使用这些适配器进行
-真实功能 smoke 和纵向闭环，不再等待测试框架完成自我认证。
+旧 Curation、Knowledge 与 Retrieval 的 PostgreSQL repository adapter、共享 pool、
+事务和工作区锁。它们曾支撑 M1C 功能 smoke，但没有签发正式 TM2。ADR 0009 已删除
+这些旧 adapter 与活动命令，只保留冻结合同、迁移和 Test-owned harness 作为历史档案；
+档案不进入日常类型检查、lint 或产品脚本，也不能阻断当前 Entry 主线。
 
 ## 阶段 2A：非 AI 知识形成与确定性检索核心
 

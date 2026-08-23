@@ -88,7 +88,6 @@ describe('Markdown evidence import', () => {
     expect(result.status).toBe('created');
     if (result.status !== 'created') throw new Error('Unexpected result.');
     expect(result.fragmentIds.length).toBeGreaterThan(0);
-    expect(result.intakeTargetFragmentIds.length).toBeGreaterThan(0);
     expect(result.mediaAssetIds).toHaveLength(1);
     expect(blobs.writes).toHaveLength(2);
     expect(repository.requests).toHaveLength(1);

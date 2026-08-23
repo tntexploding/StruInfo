@@ -4,7 +4,7 @@
 - Date: 2026-08-23
 - Decision owners: Project owner and maintainers
 - Supersedes: ADR 0007's append-only storage rules for routine Entry, Document-tag, and Association-override edits
-- Superseded by:
+- Superseded by: ADR 0009 for temporary legacy-runtime retention
 
 ## Context
 

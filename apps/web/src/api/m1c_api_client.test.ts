@@ -29,14 +29,16 @@ describe('M1cApiClient', () => {
       fetchImplementation,
     );
 
-    const result = await client.search({filters: {}, page: {limit: 25}});
+    const result = await client.searchInformationEntries({text: 'synthetic'});
 
     expect(result).toEqual({
       statusCode: 422,
       body: {status: 'rejected', issue: {code: 'synthetic'}},
     });
     expect(requests).toHaveLength(1);
-    expect(requests[0]?.url).toBe('http://127.0.0.1:3000/api/v1/search');
+    expect(requests[0]?.url).toBe(
+      'http://127.0.0.1:3000/api/v1/entries/search',
+    );
     expect(requests[0]?.init).toMatchObject({
       cache: 'no-store',
       credentials: 'omit',
@@ -61,25 +63,6 @@ describe('M1cApiClient', () => {
 
     expect(requestedUrl).toBe(
       'https://localhost:3000/api/v1/evidence/snapshots/synthetic%2Fid?includePrivate=true',
-    );
-  });
-
-  it('loads the current knowledge revision through one encoded path segment', async () => {
-    let requestedUrl = '';
-    const client = createM1cApiClient('https://localhost:3000', (input) => {
-      requestedUrl = requestUrl(input);
-      return Promise.resolve(
-        new Response(JSON.stringify({status: 'not_found'}), {
-          status: 404,
-          headers: {'content-type': 'application/json'},
-        }),
-      );
-    });
-
-    await client.loadKnowledgeItem('synthetic/id', {includePrivate: true});
-
-    expect(requestedUrl).toBe(
-      'https://localhost:3000/api/v1/knowledge/items/synthetic%2Fid?includePrivate=true',
     );
   });
 
@@ -108,9 +91,6 @@ describe('M1cApiClient', () => {
     await client.materializeInformationEntries({
       snapshotId: 'synthetic-snapshot',
       chunkMode: 'split',
-    });
-    await client.listInformationEntries('synthetic/id', {
-      includePrivate: true,
     });
     await client.reviseInformationEntry('synthetic/id', {
       expectedRevision: 1,
@@ -142,10 +122,6 @@ describe('M1cApiClient', () => {
           snapshotId: 'synthetic-snapshot',
           chunkMode: 'split',
         }),
-      },
-      {
-        url: 'http://127.0.0.1:3000/api/v1/entries?snapshotId=synthetic%2Fid&includePrivate=true',
-        method: 'GET',
       },
       {
         url: 'http://127.0.0.1:3000/api/v1/entries/synthetic%2Fid',

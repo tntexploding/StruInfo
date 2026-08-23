@@ -13,15 +13,6 @@ import {
   READ_EVIDENCE_STRUCTURES_SQL,
 } from './postgres_evidence_read_repository.js';
 import {
-  PostgresManualCurationReadRepository,
-  READ_CURRENT_CURATION_ASSESSMENTS_SQL,
-  READ_CURRENT_CURATION_ASSIGNMENTS_SQL,
-  READ_CURRENT_CURATION_DECISIONS_SQL,
-  READ_CURRENT_CURATION_REASONS_SQL,
-  READ_CURRENT_CURATION_TARGETS_SQL,
-  READ_CURRENT_CURATION_TERMS_SQL,
-} from './postgres_curation_read_repository.js';
-import {
   BEGIN_REPEATABLE_READ_ONLY_SQL,
   COMMIT_TRANSACTION_SQL,
 } from './postgres_transaction.js';
@@ -32,12 +23,6 @@ const SNAPSHOT_ID = '00000000-0000-4000-8000-000000000003';
 const STRUCTURE_ID = '00000000-0000-4000-8000-000000000004';
 const NODE_ID = '00000000-0000-4000-8000-000000000005';
 const FRAGMENT_ID = '00000000-0000-4000-8000-000000000006';
-const TARGET_ID = '00000000-0000-4000-8000-000000000007';
-const TERM_ID = '00000000-0000-4000-8000-000000000008';
-const REVISION_ID = '00000000-0000-4000-8000-000000000009';
-const ASSIGNMENT_ID = '00000000-0000-4000-8000-000000000010';
-const DECISION_ID = '00000000-0000-4000-8000-000000000011';
-const ASSESSMENT_ID = '00000000-0000-4000-8000-000000000012';
 
 type Row = Readonly<Record<string, unknown>>;
 
@@ -121,103 +106,6 @@ describe('Postgres product read repositories', () => {
               lineRange: {start: 1, end: 2},
             },
           ],
-        },
-      ],
-    });
-  });
-
-  it('loads current review state without exposing historical rows', async () => {
-    const pool = createPool((sql) => {
-      if (sql === READ_CURRENT_CURATION_TERMS_SQL) {
-        return rows({
-          workspace_id: WORKSPACE_ID,
-          term_id: TERM_ID,
-          current_revision: 1,
-          current_revision_id: REVISION_ID,
-          display_name: 'Synthetic',
-          description: null,
-          parent_term_id: null,
-          lifecycle: 'active',
-        });
-      }
-      if (sql === READ_CURRENT_CURATION_TARGETS_SQL) {
-        return rows({
-          workspace_id: WORKSPACE_ID,
-          target_id: TARGET_ID,
-          target_kind: 'snapshot',
-          resource_id: RESOURCE_ID,
-          snapshot_id: SNAPSHOT_ID,
-          fragment_id: null,
-          current_version: 1,
-        });
-      }
-      if (sql === READ_CURRENT_CURATION_ASSIGNMENTS_SQL) {
-        return rows({
-          workspace_id: WORKSPACE_ID,
-          assignment_id: ASSIGNMENT_ID,
-          target_id: TARGET_ID,
-          term_id: TERM_ID,
-          current_revision: 1,
-          current_revision_id: REVISION_ID,
-          assignment_state: 'assigned',
-          term_revision_number: 1,
-          term_revision_id: REVISION_ID,
-        });
-      }
-      if (sql === READ_CURRENT_CURATION_DECISIONS_SQL) {
-        return rows({
-          workspace_id: WORKSPACE_ID,
-          decision_id: DECISION_ID,
-          target_id: TARGET_ID,
-          current_revision: 1,
-          current_revision_id: REVISION_ID,
-          intake_action: 'full',
-          note: null,
-        });
-      }
-      if (sql === READ_CURRENT_CURATION_REASONS_SQL) {
-        return rows({
-          workspace_id: WORKSPACE_ID,
-          decision_id: DECISION_ID,
-          decision_revision_id: REVISION_ID,
-          reason_ordinal: 0,
-          reason_code: 'worth_exploring',
-        });
-      }
-      if (sql === READ_CURRENT_CURATION_ASSESSMENTS_SQL) {
-        return rows({
-          workspace_id: WORKSPACE_ID,
-          assessment_id: ASSESSMENT_ID,
-          target_id: TARGET_ID,
-          dimension: 'information_density',
-          current_revision: 1,
-          current_revision_id: REVISION_ID,
-          assessment_state: 'rated',
-          score: 4,
-          note: 'Synthetic note',
-        });
-      }
-      return rows();
-    });
-
-    await expect(
-      new PostgresManualCurationReadRepository(pool).loadCurrentCurationState(
-        WORKSPACE_ID,
-      ),
-    ).resolves.toMatchObject({
-      terms: [{termId: TERM_ID, value: {displayName: 'Synthetic'}}],
-      targets: [{targetId: TARGET_ID, snapshotId: SNAPSHOT_ID}],
-      assignments: [{assignmentId: ASSIGNMENT_ID, state: 'assigned'}],
-      decisions: [
-        {
-          decisionId: DECISION_ID,
-          value: {action: 'full', reasonCodes: ['worth_exploring']},
-        },
-      ],
-      assessments: [
-        {
-          assessmentId: ASSESSMENT_ID,
-          value: {state: 'rated', score: 4, note: 'Synthetic note'},
         },
       ],
     });

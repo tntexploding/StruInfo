@@ -18,13 +18,17 @@ objective revisit condition. Deferred entries do not block implementation,
 integration, or the next product slice. Reopen one only when its revisit
 condition is met or new evidence demonstrates reachable material product impact.
 
-## Active Entries
+## Archived Entries
+
+ADR 0009 retired the old Curation/Knowledge/Retrieval runtime and removed its
+TM2 command from the active project. DH-001 through DH-003 remain only as a
+record of why that unissued harness never blocked product work.
 
 ### DH-001: Cross-Realm Aggregate Errors in the PostgreSQL TM2 Harness
 
 - Source: `M1B-PG-MAINT-R3-F001`
 - Owner: Test tooling
-- Status: Deferred hardening
+- Status: Archived by ADR 0009
 - Scope: PostgreSQL TM2 admission-error classification
 - Evidence: A native `AggregateError` created in another JavaScript realm can
   bypass the harness's same-realm member inspection when it also carries an
@@ -40,7 +44,7 @@ condition is met or new evidence demonstrates reachable material product impact.
 
 - Source: `M1B-PG-MAINT-R3-F002`
 - Owner: Test tooling
-- Status: Deferred hardening
+- Status: Archived by ADR 0009
 - Scope: Final PostgreSQL TM2 report certification
 - Evidence: The report oracle validates all 488 mandatory rows but does not yet
   require the independent self-test suite and all suite counters to be present
@@ -55,7 +59,7 @@ condition is met or new evidence demonstrates reachable material product impact.
 
 - Source: M1C-PERSIST forward migration and repository delivery
 - Owner: Test tooling and operations
-- Status: Deferred hardening
+- Status: Archived by ADR 0009
 - Scope: Formal PostgreSQL certification only
 - Evidence: The historical TM2 ledger freezes four migrations, 35 business
   tables, and a runtime grant map that deliberately forbids Evidence writes.
@@ -68,6 +72,8 @@ condition is met or new evidence demonstrates reachable material product impact.
   nor changes stored data.
 - Revisit when: Formal TM2, production least-privilege grants, database CI, or a
   distributable deployment becomes a required release gate.
+
+## Active Entries
 
 ### DH-005: Windows Playwright Web-Server Process Cleanup
 
@@ -145,19 +151,16 @@ condition is met or new evidence demonstrates reachable material product impact.
 
 - Source: M1E-1 owner-flow simplification
 - Owner: Frontend test tooling
-- Status: Deferred hardening
+- Status: Closed by ADR 0009 runtime retirement on 2026-08-23
 - Scope: `tests/e2e/m1c-product-workspaces.spec.ts`
-- Evidence: The historical Playwright scenario still drives the removed Review,
-  Knowledge-change and Search workspaces. It is not imported by the application
-  and is not part of the current `verify` command. Current navigation, Tags
-  review controls, privacy scope, build and artifact boundaries are covered by
-  active unit/component tests and the production build.
-- Current product impact: None. Keeping or deleting this historical scenario does
-  not change the shipped UI, persistence model or current quality gate. It must
-  not block the M1E main line or cause restoration of deleted product screens.
-- Revisit when: A new browser fixture is defined for the current Overview,
-  Import, Split, Tags, Associations, Query and Formal Knowledge navigation; then
-  replace the historical file rather than patching its obsolete assertions.
+- Evidence: The 1,068-line historical Review, Knowledge-change and legacy Search
+  scenario was replaced by a current browser smoke that visits Overview, Import,
+  Split, Tags, Associations, Query and the Formal Knowledge placeholder. It also
+  rejects any request to the retired Curation, Knowledge or Search routes.
+- Current product impact: The browser gate now describes the shipped Entry main
+  line and can no longer encourage restoration of deleted product screens.
+- Revisit when: Current user interaction needs deeper browser coverage; extend
+  the new Entry fixture rather than restoring M1C runtime mocks.
 
 ## Entry Template
 
