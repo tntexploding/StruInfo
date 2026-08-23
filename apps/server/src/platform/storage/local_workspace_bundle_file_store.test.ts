@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 describe('LocalWorkspaceBundleFileStore', () => {
-  it('atomically writes and reads a direct-child external Bundle', async () => {
+  it('atomically writes and reads a direct-child external personal-data file', async () => {
     const root = mkdtempSync(join(tmpdir(), 'struinfo-bundle-files-'));
     roots.push(root);
     const store = new LocalWorkspaceBundleFileStore(root);
@@ -25,7 +25,7 @@ describe('LocalWorkspaceBundleFileStore', () => {
 
     const stored = await store.write(WORKSPACE_ID, EXPORTED_AT, bytes);
 
-    expect(stored.fileName).toMatch(/\.workspace-bundle\.json$/u);
+    expect(stored.fileName).toMatch(/\.personal-data\.json$/u);
     expect(stored.byteLength).toBe(bytes.byteLength);
     await expect(store.read(stored.fileName)).resolves.toEqual(bytes);
   });
@@ -39,6 +39,9 @@ describe('LocalWorkspaceBundleFileStore', () => {
       store.read('../outside.workspace-bundle.json'),
     ).rejects.toEqual(expect.objectContaining({code: 'file_name_invalid'}));
     await expect(store.read('missing.workspace-bundle.json')).rejects.toEqual(
+      expect.objectContaining({code: 'file_not_found'}),
+    );
+    await expect(store.read('missing.personal-data.json')).rejects.toEqual(
       expect.objectContaining({code: 'file_not_found'}),
     );
   });

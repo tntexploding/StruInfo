@@ -14,12 +14,12 @@ const OTHER_WORKSPACE_ID = '22222222-2222-4222-8222-222222222222';
 const CREATED_AT = '2040-01-02T03:04:05.000Z';
 
 describe('M1D Entry Bundle section', () => {
-  it('normalizes all nine Entry and document-tag tables deterministically', () => {
+  it('normalizes all seven current Entry and document-tag tables deterministically', () => {
     const first = syntheticSnapshot(false);
     const reversed = syntheticSnapshot(true);
 
     expect(reversed).toEqual(first);
-    expect(first.tables).toHaveLength(9);
+    expect(first.tables).toHaveLength(7);
     expect(m1dEntryTableCounts(first)).toMatchObject({
       information_entry: 2,
       information_document_tag_set: 1,
@@ -62,14 +62,14 @@ describe('M1D Entry Bundle section', () => {
       tables: M1D_ENTRY_TABLES.map((descriptor) => ({
         name: descriptor.name,
         rows:
-          descriptor.name === 'information_entry_revision'
+          descriptor.name === 'information_entry'
             ? [
-                entryRevisionRow(
+                entryRow(
                   '33333333-3333-4333-8333-333333333333',
                   '44444444-4444-4444-8444-444444444444',
                   body,
                 ),
-                entryRevisionRow(
+                entryRow(
                   '55555555-5555-4555-8555-555555555555',
                   '66666666-6666-4666-8666-666666666666',
                   body,
@@ -80,9 +80,7 @@ describe('M1D Entry Bundle section', () => {
     });
 
     expect(
-      snapshot.tables.find(
-        (table) => table.name === 'information_entry_revision',
-      )?.rows,
+      snapshot.tables.find((table) => table.name === 'information_entry')?.rows,
     ).toHaveLength(2);
   });
 });
@@ -114,7 +112,12 @@ function syntheticSnapshot(reverseEntries: boolean) {
                   snapshot_id: '88888888-8888-4888-8888-888888888888',
                   current_revision: 1,
                   current_revision_id: '99999999-9999-4999-8999-999999999999',
+                  revision_kind: 'deterministic_aggregate',
+                  rule_version: 'synthetic-v1',
+                  is_private: false,
+                  entry_count: 2,
                   created_at: CREATED_AT,
+                  updated_at: CREATED_AT,
                 },
               ]
             : [],
@@ -122,7 +125,11 @@ function syntheticSnapshot(reverseEntries: boolean) {
   });
 }
 
-function entryRow(entryId: string, revisionId: string) {
+function entryRow(
+  entryId: string,
+  revisionId: string,
+  body = 'Synthetic Entry body.',
+) {
   return {
     workspace_id: WORKSPACE_ID,
     entry_id: entryId,
@@ -130,17 +137,6 @@ function entryRow(entryId: string, revisionId: string) {
     snapshot_id: '88888888-8888-4888-8888-888888888888',
     current_revision: 1,
     current_revision_id: revisionId,
-    created_at: CREATED_AT,
-  };
-}
-
-function entryRevisionRow(entryId: string, revisionId: string, body: string) {
-  return {
-    workspace_id: WORKSPACE_ID,
-    entry_id: entryId,
-    revision_number: 1,
-    revision_id: revisionId,
-    previous_revision_id: null,
     document_order: 0,
     title_path: '',
     body,
@@ -150,6 +146,9 @@ function entryRevisionRow(entryId: string, revisionId: string, body: string) {
     is_private: false,
     type_keyword: null,
     type_custom_name: null,
+    usefulness_score: null,
+    interest_score: null,
     created_at: CREATED_AT,
+    updated_at: CREATED_AT,
   };
 }

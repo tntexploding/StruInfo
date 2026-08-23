@@ -102,15 +102,6 @@ async function routeM1cApi(
       source: string;
       canonical: string;
     }>[],
-    links: [] as readonly Readonly<{
-      left: string;
-      right: string;
-      kind: 'related' | 'translation';
-    }>[],
-    knowledgeKinds: [] as readonly Readonly<{
-      keyword: string;
-      knowledgeKind: string;
-    }>[],
   };
   const persistedTerms: Readonly<Record<string, unknown>>[] = [];
   const persistedTermIds = new Set<string>();
@@ -679,7 +670,7 @@ test.describe('M1C product workspaces', () => {
           includeLinkDomains: false,
           excludedKeywords: ['广告', '下载'],
         },
-        vocabulary: {aliases: [], links: [], knowledgeKinds: []},
+        vocabulary: {aliases: []},
       });
     await page.getByPlaceholder('新增个人标记').fill('命令行工具');
     await page.getByRole('button', {name: '新增', exact: true}).click();
@@ -693,7 +684,7 @@ test.describe('M1C product workspaces', () => {
         includeLinkDomains: false,
         excludedKeywords: ['广告', '下载'],
       },
-      vocabulary: {aliases: [], links: [], knowledgeKinds: []},
+      vocabulary: {aliases: []},
     });
     await page.getByRole('button', {name: '从快捷栏删除 命令行工具'}).click();
     await expect(
@@ -706,7 +697,7 @@ test.describe('M1C product workspaces', () => {
         includeLinkDomains: false,
         excludedKeywords: ['广告', '下载'],
       },
-      vocabulary: {aliases: [], links: [], knowledgeKinds: []},
+      vocabulary: {aliases: []},
     });
 
     await page.getByRole('slider', {name: '有用程度'}).fill('4');

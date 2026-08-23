@@ -25,11 +25,20 @@ Empty or skipped checks cannot be reported as successful.
 
 ## Decision
 
-Use one pnpm workspace with the following exact toolchain:
+Use one pnpm workspace with the following toolchain baseline:
 
-- Node.js `24.18.0`;
+- Node.js `>=24.18.0`, with `24.18.0` retained as the reference minimum in
+  `.node-version` and CI;
 - pnpm `11.20.0` through the root `packageManager` field and Corepack; and
 - TypeScript `6.0.3`, ES2023, ESM, and NodeNext module/resolution semantics.
+
+The Node engine range is advisory at command entry. pnpm reports an engine
+warning when a local runtime is below the reference minimum, but it does not
+reject repository commands solely because the Node version differs. Actual
+build, test, dependency, or runtime incompatibilities remain ordinary visible
+failures. This proportional policy was accepted by the project owner on
+2026-08-23 so patch/minor Node upgrades and temporarily older local runtimes do
+not stall unrelated product work.
 
 Use four private first-party workspaces:
 
@@ -54,7 +63,8 @@ so resolved versions, integrities, peer contexts, and platform selections do not
 drift.
 
 Put pnpm 11 policy in `pnpm-workspace.yaml`: disable automatic peers, require
-strict peer and engine compatibility, exact saves, store integrity and lockfile
+strict peer compatibility, report Node engine compatibility without turning it
+into a command-entry blocker, require exact saves, store integrity and lockfile
 revalidation, enforce a 1,440-minute release age with strict missing-time
 handling, block exotic subdependencies, and require explicit build decisions.
 Lifecycle execution is default-deny; exact `esbuild@0.28.1` is explicitly denied

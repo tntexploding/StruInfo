@@ -16,28 +16,25 @@ const REVISION_ID = '55555555-5555-4555-8555-555555555555';
 const FRAGMENT_ID = '66666666-6666-4666-8666-666666666666';
 
 describe('PostgresInformationEntryRepository', () => {
-  it('treats source revision 1 as an equal replay after later manual revisions', async () => {
+  it('treats an existing source materialization as an equal replay', async () => {
     const statements: string[] = [];
     const pool = createPool((sql) => {
       statements.push(sql);
       if (sql.includes('FROM struinfo.workspace WHERE')) {
         return rows({workspace_id: WORKSPACE_ID});
       }
-      if (sql.includes('AS materialized_revision_id')) {
+      if (sql.includes('information_entry_fragment_input')) {
+        return rows({fragment_id: FRAGMENT_ID});
+      }
+      if (sql.includes('FROM struinfo.information_entry')) {
         return rows({
           resource_id: RESOURCE_ID,
           snapshot_id: SNAPSHOT_ID,
-          materialized_revision_id: REVISION_ID,
           document_order: 0,
-          title_path: 'Synthetic Entry',
-          body_sha256: 'a'.repeat(64),
           chunk_mode: 'split',
           split_rule_version: 'struinfo.entry-split.section.v1',
           is_private: false,
         });
-      }
-      if (sql.includes('information_entry_fragment_input')) {
-        return rows({fragment_id: FRAGMENT_ID});
       }
       return rows();
     });
@@ -50,11 +47,7 @@ describe('PostgresInformationEntryRepository', () => {
       createdCount: 0,
     });
     expect(
-      statements.some(
-        (sql) =>
-          sql.includes('r.revision_number = 1') &&
-          !sql.includes('r.revision_number = e.current_revision'),
-      ),
+      statements.some((sql) => sql.includes('FROM struinfo.information_entry')),
     ).toBe(true);
     expect(statements.some((sql) => sql.startsWith('INSERT INTO'))).toBe(false);
   });

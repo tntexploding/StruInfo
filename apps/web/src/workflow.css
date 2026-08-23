@@ -1,0 +1,1230 @@
+/* M1D document workflow shell. Loaded after app.css as the authoritative
+ * layout layer for the six owner-facing workspaces. */
+
+.workflow-shell {
+  --workflow-panel: color-mix(
+    in srgb,
+    var(--si-color-surface-1),
+    var(--si-color-bg-shell) 20%
+  );
+  --workflow-panel-raised: color-mix(
+    in srgb,
+    var(--si-color-surface-2),
+    var(--si-color-bg-shell) 12%
+  );
+}
+
+.workflow-navigation__list {
+  position: relative;
+  display: grid;
+  list-style: none;
+  padding: var(--si-space-0);
+}
+
+.workflow-navigation__list::before {
+  content: '';
+  position: absolute;
+  inset-block: calc(var(--si-space-11) / 2);
+  inset-inline-start: calc(var(--si-space-7) + var(--si-space-8) + 0.32rem);
+  inline-size: var(--si-rule-thin);
+  background: var(--si-color-border-default);
+  pointer-events: none;
+}
+
+.workflow-navigation__list li {
+  min-inline-size: 0;
+}
+
+.workflow-shell .primary-navigation__item {
+  grid-template-columns: var(--si-space-8) var(--si-space-5) minmax(0, 1fr);
+  gap: var(--si-space-3);
+  min-block-size: 4.75rem;
+  border-block-end-color: transparent;
+}
+
+.workflow-navigation__node {
+  position: relative;
+  z-index: 1;
+  inline-size: var(--si-space-3);
+  block-size: var(--si-space-3);
+  justify-self: center;
+  border: var(--si-rule-thin) solid var(--si-color-text-muted);
+  border-radius: 50%;
+  background: var(--si-color-bg-shell);
+  transition:
+    border-color var(--si-motion-direct) var(--si-motion-ease),
+    background-color var(--si-motion-direct) var(--si-motion-ease),
+    transform var(--si-motion-direct) var(--si-motion-ease);
+}
+
+.primary-navigation__item:hover .workflow-navigation__node,
+.primary-navigation__item[data-active='true'] .workflow-navigation__node {
+  border-color: var(--si-color-signal);
+  background: var(--si-color-signal);
+  box-shadow: 0 0 0 var(--si-space-2) var(--si-color-bg-shell);
+  transform: scale(1.18);
+}
+
+.workflow-page-heading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--si-space-8);
+  min-inline-size: 0;
+  padding-block-end: var(--si-space-6);
+  border-block-end: var(--si-rule-thin) solid var(--si-color-border-default);
+}
+
+.workflow-page-heading > div {
+  min-inline-size: 0;
+  max-inline-size: 62rem;
+}
+
+.workflow-page-heading h1 {
+  margin-block-start: var(--si-space-2);
+  font-family: var(--si-font-display);
+  font-size: var(--si-text-title);
+  line-height: 0.96;
+  letter-spacing: -0.035em;
+}
+
+.workflow-page-heading p:last-child {
+  max-inline-size: 55rem;
+  margin-block-start: var(--si-space-4);
+  color: var(--si-color-text-secondary);
+}
+
+/* Overview */
+
+.workflow-overview {
+  display: grid;
+  gap: var(--si-space-7);
+}
+
+.workflow-overview__layout {
+  display: grid;
+  grid-template-columns: minmax(12.5rem, 0.24fr) minmax(0, 1fr);
+  gap: var(--si-space-7);
+  min-inline-size: 0;
+}
+
+.workflow-overview__ai {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 41rem;
+  padding: var(--si-space-6);
+  border-inline-start: var(--si-space-1) solid var(--si-color-topic);
+  background: var(--workflow-panel);
+}
+
+.workflow-overview__ai header {
+  display: grid;
+  gap: var(--si-space-3);
+}
+
+.workflow-overview__ai h2,
+.workflow-stage-board h2,
+.project-intro h2 {
+  font-family: var(--si-font-display);
+  font-size: var(--si-text-section);
+  line-height: 1.05;
+}
+
+.status-chip {
+  justify-self: start;
+  padding: var(--si-space-2) var(--si-space-3);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  color: var(--si-color-text-secondary);
+  font-family: var(--si-font-mono);
+  font-size: var(--si-text-xs);
+}
+
+.status-chip[data-state='ready'] {
+  border-color: var(--si-color-success-text);
+  color: var(--si-color-success-text);
+}
+
+.ai-stage-list {
+  position: relative;
+  display: grid;
+  gap: var(--si-space-3);
+  margin-block-start: var(--si-space-7);
+  padding: var(--si-space-0);
+  list-style: none;
+}
+
+.ai-stage-list::before {
+  content: '';
+  position: absolute;
+  inset-block: var(--si-space-5);
+  inset-inline-start: calc(var(--si-space-3) - 0.5px);
+  inline-size: var(--si-rule-thin);
+  background: var(--si-color-topic);
+  opacity: 0.6;
+}
+
+.ai-stage-list li {
+  display: grid;
+  grid-template-columns: var(--si-space-6) minmax(0, 1fr);
+  gap: var(--si-space-3);
+  align-items: center;
+  min-block-size: 3.25rem;
+}
+
+.ai-stage-list__node {
+  z-index: 1;
+  inline-size: var(--si-space-3);
+  block-size: var(--si-space-3);
+  border: var(--si-rule-thin) solid var(--si-color-topic-text);
+  border-radius: 50%;
+  background: var(--si-color-bg-shell);
+}
+
+.ai-stage-list li div {
+  display: grid;
+  gap: var(--si-space-1);
+}
+
+.ai-stage-list small,
+.ai-operation-status p {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-xs);
+}
+
+.ai-operation-status {
+  display: grid;
+  gap: var(--si-space-2);
+  margin-block-start: auto;
+  padding-block-start: var(--si-space-5);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-default);
+}
+
+.ai-operation-status > span {
+  color: var(--si-color-topic-text);
+  font-family: var(--si-font-mono);
+  font-size: var(--si-text-xs);
+  letter-spacing: 0.08em;
+}
+
+.workflow-overview__main {
+  min-inline-size: 0;
+  display: grid;
+  gap: var(--si-space-6);
+}
+
+.project-intro {
+  min-block-size: 18rem;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(var(--si-space-6), 4vw, var(--si-space-10));
+  padding: clamp(var(--si-space-7), 4vw, var(--si-space-10));
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  border-start-start-radius: 2.5rem;
+  border-end-end-radius: 2.5rem;
+  background:
+    linear-gradient(
+      115deg,
+      color-mix(in srgb, var(--si-color-signal) 8%, transparent),
+      transparent 55%
+    ),
+    var(--workflow-panel);
+}
+
+.project-intro__mark {
+  display: grid;
+  inline-size: clamp(5rem, 10vw, 8rem);
+  aspect-ratio: 1;
+  place-items: center;
+  border: var(--si-rule-thin) solid var(--si-color-signal);
+  border-radius: 50%;
+  color: var(--si-color-signal);
+  font-family: var(--si-font-display);
+  font-size: clamp(1.5rem, 4vw, 3rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.project-intro p:last-child {
+  max-inline-size: 46rem;
+  margin-block-start: var(--si-space-4);
+  color: var(--si-color-text-secondary);
+}
+
+.project-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-bg-shell);
+}
+
+.project-metrics article {
+  min-inline-size: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--si-space-2);
+  padding: var(--si-space-5);
+  border-inline-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.project-metrics article:first-child {
+  border-inline-start: 0;
+}
+
+.project-metrics span {
+  grid-column: 1 / -1;
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-xs);
+}
+
+.project-metrics strong {
+  font-family: var(--si-font-display);
+  font-size: clamp(1.75rem, 3vw, 2.75rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.project-metrics small {
+  color: var(--si-color-text-muted);
+}
+
+.workflow-inline-error {
+  display: flex;
+  gap: var(--si-space-4);
+  padding: var(--si-space-4) var(--si-space-5);
+  border-inline-start: var(--si-space-1) solid var(--si-color-warning);
+  background: var(--workflow-panel);
+  color: var(--si-color-text-secondary);
+}
+
+.workflow-stage-board {
+  padding: var(--si-space-6);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--workflow-panel);
+}
+
+.workflow-stage-board > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--si-space-5);
+  padding-block-end: var(--si-space-5);
+  border-block-end: var(--si-rule-thin) solid var(--si-color-border-default);
+}
+
+.workflow-stage-board ol {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: var(--si-space-0);
+  list-style: none;
+}
+
+.workflow-stage-board li + li {
+  border-inline-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.workflow-stage-board button {
+  inline-size: 100%;
+  min-block-size: 9.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--si-space-4);
+  padding: var(--si-space-5);
+  border: 0;
+  background: transparent;
+  color: var(--si-color-text-primary);
+  text-align: start;
+}
+
+.workflow-stage-board button:hover {
+  background: var(--si-color-bg-shell);
+}
+
+.workflow-stage-board button > span:nth-child(2) {
+  display: grid;
+  gap: var(--si-space-2);
+}
+
+.workflow-stage-board button strong {
+  font-family: var(--si-font-display);
+  font-size: var(--si-text-subheading);
+}
+
+.workflow-stage-board button small,
+.workflow-stage-board__status {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-xs);
+}
+
+.workflow-stage-board__index {
+  color: var(--si-color-signal);
+  font-family: var(--si-font-mono);
+}
+
+/* Import */
+
+.materials-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(23rem, 0.55fr);
+  align-items: start;
+  gap: var(--si-space-7);
+}
+
+.materials-workspace .intake-console,
+.materials-workspace .record-list-section {
+  min-inline-size: 0;
+  margin: var(--si-space-0);
+  padding: var(--si-space-6);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  border-inline-start: var(--si-space-1) solid var(--si-color-signal);
+  background: var(--workflow-panel);
+}
+
+.materials-workspace .record-list-section {
+  border-inline-start-color: var(--si-color-info);
+}
+
+.materials-workspace .workspace-transfer-section {
+  grid-column: 1 / -1;
+  margin: var(--si-space-0);
+  padding: var(--si-space-6);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--workflow-panel);
+}
+
+.materials-workspace .record-list {
+  max-block-size: 50rem;
+  overflow: auto;
+}
+
+.materials-workspace .record-list > li {
+  grid-template-columns: var(--si-space-8) minmax(0, 1fr);
+  gap: var(--si-space-3);
+  align-items: start;
+}
+
+.materials-workspace .record-list__facts,
+.materials-workspace .row-action {
+  grid-column: 2;
+}
+
+.materials-workspace .record-list__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.materials-workspace .row-action {
+  inline-size: 100%;
+}
+
+.import-preface-field textarea {
+  min-block-size: 5rem;
+}
+
+/* Shared stage architecture */
+
+.workflow-stage-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--si-space-6);
+}
+
+.workflow-capability-strip {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(18rem, 1fr) minmax(16rem, 0.58fr);
+  gap: var(--si-space-4);
+  padding: var(--si-space-5);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-bg-shell);
+}
+
+.workflow-capability-strip__primary,
+.workflow-capability-strip__ai {
+  min-inline-size: 0;
+  display: grid;
+  gap: var(--si-space-2);
+}
+
+.workflow-capability-strip__primary > span,
+.workflow-capability-strip__ai small {
+  color: var(--si-color-text-muted);
+}
+
+.workflow-capability-strip__ai {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  padding-inline-start: var(--si-space-5);
+  border-inline-start: var(--si-rule-thin) solid var(--si-color-border-default);
+}
+
+.workflow-capability-strip__indicator {
+  inline-size: var(--si-space-3);
+  block-size: var(--si-space-3);
+  border: var(--si-rule-thin) solid var(--si-color-topic-text);
+  border-radius: 50%;
+}
+
+.workflow-capability-strip__options {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--si-space-2);
+  padding-block-start: var(--si-space-3);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.workflow-capability-strip__options span {
+  padding: var(--si-space-2) var(--si-space-3);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-xs);
+}
+
+.workflow-capability-strip__options span[data-active='true'] {
+  border-color: var(--si-color-signal);
+  color: var(--si-color-text-primary);
+}
+
+.workflow-stage-workspace .entry-document-navigator,
+.workflow-stage-workspace .entry-batch-panel,
+.workflow-stage-workspace .entry-command-panel,
+.workflow-stage-workspace .entry-document-panel,
+.workflow-stage-workspace .entry-result-list,
+.workflow-stage-workspace .entry-editor,
+.workflow-stage-workspace .entry-association-panel,
+.entry-readonly-detail {
+  margin: var(--si-space-0);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--workflow-panel);
+}
+
+.workflow-stage-workspace .entry-document-navigator {
+  grid-column: 1 / -1;
+}
+
+.workflow-stage-workspace .entry-document-navigator__rail {
+  grid-auto-columns: minmax(15rem, 0.22fr);
+}
+
+.workflow-stage-workspace .entry-command-panel {
+  min-inline-size: 0;
+}
+
+.entry-readonly-detail {
+  min-inline-size: 0;
+  padding: var(--si-space-7);
+  border-inline-start: var(--si-space-1) solid var(--si-color-signal);
+}
+
+.entry-readonly-detail__body {
+  max-block-size: 36rem;
+  margin-block-start: var(--si-space-6);
+  padding: var(--si-space-6);
+  overflow: auto;
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-bg-shell);
+  color: var(--si-color-text-secondary);
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.entry-readonly-detail__facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-block-start: var(--si-space-5);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+}
+
+.entry-readonly-detail__facts > div {
+  min-inline-size: 0;
+  padding: var(--si-space-4);
+  border-inline-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.entry-readonly-detail__facts > div:first-child {
+  border-inline-start: 0;
+}
+
+.entry-readonly-detail__facts dt {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-xs);
+}
+
+.entry-readonly-detail__facts dd {
+  margin-block-start: var(--si-space-2);
+}
+
+.entry-readonly-detail__keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--si-space-2);
+  margin-block-start: var(--si-space-4);
+}
+
+.entry-readonly-detail__keywords span {
+  padding: var(--si-space-2) var(--si-space-3);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  color: var(--si-color-topic-text);
+}
+
+.workflow-boundary-note {
+  margin-block-start: var(--si-space-5);
+  padding: var(--si-space-4);
+  border-inline-start: var(--si-space-1) solid var(--si-color-warning);
+  color: var(--si-color-text-secondary);
+}
+
+/* Split: rule controls and generated paragraphs remain separate. */
+
+.workflow-stage-workspace[data-workflow-page='split'] {
+  grid-template-columns: minmax(20rem, 0.38fr) minmax(0, 0.62fr);
+}
+
+.workflow-stage-workspace[data-workflow-page='split'] > .workflow-page-heading,
+.workflow-stage-workspace[data-workflow-page='split']
+  > .workflow-capability-strip,
+.workflow-stage-workspace[data-workflow-page='split']
+  > .entry-document-navigator {
+  grid-column: 1 / -1;
+}
+
+.workflow-stage-workspace[data-workflow-page='split'] > .entry-batch-panel,
+.workflow-stage-workspace[data-workflow-page='split'] > .entry-command-panel {
+  grid-column: 1;
+}
+
+.workflow-stage-workspace[data-workflow-page='split'] > .entry-workbench,
+.workflow-stage-workspace[data-workflow-page='split'] > .entry-state,
+.workflow-stage-workspace[data-workflow-page='split'] > .entry-loading {
+  grid-column: 2;
+  grid-row: 4 / span 2;
+  margin: var(--si-space-0);
+}
+
+.workflow-stage-workspace[data-workflow-page='split'] .entry-workbench {
+  grid-template-columns: minmax(15rem, 0.36fr) minmax(0, 1fr);
+}
+
+.workflow-stage-workspace[data-workflow-page='split'] .entry-search-form {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workflow-stage-workspace[data-workflow-page='split'] .entry-command-actions {
+  grid-column: 1;
+}
+
+/* Tags: document / Entry selector on the left, manual edit on the right. */
+
+.workflow-stage-workspace[data-workflow-page='tags'] .entry-command-panel {
+  grid-column: 1 / -1;
+}
+
+.workflow-stage-workspace[data-workflow-page='tags'] .entry-document-panel {
+  grid-column: 1 / -1;
+}
+
+.workflow-stage-workspace[data-workflow-page='tags'] .entry-workbench {
+  grid-template-columns: minmax(18rem, 0.34fr) minmax(0, 1fr);
+}
+
+.workflow-stage-workspace[data-workflow-page='tags'] .entry-editor-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* Associations: selection on the left, parameters and candidate actions on the right. */
+
+.workflow-stage-workspace[data-workflow-page='associations'] {
+  grid-template-columns: minmax(0, 1fr) minmax(19rem, 0.31fr);
+}
+
+.workflow-stage-workspace[data-workflow-page='associations']
+  > .workflow-page-heading,
+.workflow-stage-workspace[data-workflow-page='associations']
+  > .workflow-capability-strip {
+  grid-column: 1 / -1;
+}
+
+.workflow-stage-workspace[data-workflow-page='associations']
+  > .entry-command-panel {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.workflow-stage-workspace[data-workflow-page='associations'] > .entry-workbench,
+.workflow-stage-workspace[data-workflow-page='associations'] > .entry-state,
+.workflow-stage-workspace[data-workflow-page='associations'] > .entry-loading {
+  grid-column: 1;
+  grid-row: 3;
+  margin: var(--si-space-0);
+}
+
+.workflow-stage-workspace[data-workflow-page='associations'] .entry-workbench {
+  grid-template-columns: minmax(16rem, 0.3fr) minmax(0, 1fr);
+}
+
+.workflow-stage-workspace[data-workflow-page='associations']
+  .entry-search-form {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workflow-stage-workspace[data-workflow-page='associations']
+  .entry-search-query,
+.workflow-stage-workspace[data-workflow-page='associations']
+  .entry-private-toggle,
+.workflow-stage-workspace[data-workflow-page='associations']
+  .entry-command-actions {
+  grid-column: 1;
+}
+
+/* Query: dominant search field, compact settings rail, results below. */
+
+.workflow-stage-workspace[data-workflow-page='query'] .entry-command-panel {
+  padding: var(--si-space-6);
+}
+
+.workflow-stage-workspace[data-workflow-page='query'] .entry-search-form {
+  grid-template-columns: minmax(24rem, 1fr) minmax(16rem, 0.3fr);
+  grid-template-rows: repeat(5, auto);
+  align-items: start;
+}
+
+.workflow-stage-workspace[data-workflow-page='query'] .entry-search-query {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.workflow-stage-workspace[data-workflow-page='query']
+  .entry-search-query
+  input {
+  min-block-size: 4.5rem;
+  padding-inline: var(--si-space-6);
+  font-size: var(--si-text-subheading);
+}
+
+.workflow-stage-workspace[data-workflow-page='query'] .entry-source-filter {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.workflow-stage-workspace[data-workflow-page='query'] .entry-type-filter {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.workflow-stage-workspace[data-workflow-page='query'] .entry-domain-filter {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.workflow-stage-workspace[data-workflow-page='query'] .entry-search-advanced {
+  grid-column: 2;
+  grid-row: 4;
+}
+
+.workflow-stage-workspace[data-workflow-page='query']
+  .entry-search-advanced__grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workflow-stage-workspace[data-workflow-page='query'] .entry-private-toggle {
+  grid-column: 2;
+  grid-row: 5;
+}
+
+.workflow-stage-workspace[data-workflow-page='query'] .entry-command-actions {
+  grid-column: 1;
+  grid-row: 2;
+  justify-content: flex-start;
+}
+
+.workflow-stage-workspace[data-workflow-page='query'] .entry-workbench {
+  grid-template-columns: minmax(20rem, 0.42fr) minmax(0, 1fr);
+}
+
+/* Responsive behavior: keep page hierarchy; collapse, never clip. */
+
+@media (max-width: 87.5rem) {
+  .project-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .project-metrics article:nth-child(4) {
+    border-inline-start: 0;
+  }
+
+  .workflow-stage-board ol {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .workflow-stage-board li:nth-child(4) {
+    border-inline-start: 0;
+  }
+
+  .materials-workspace {
+    grid-template-columns: minmax(0, 1.15fr) minmax(20rem, 0.85fr);
+  }
+}
+
+@media (max-width: 74.9375rem) {
+  .workflow-overview__layout,
+  .materials-workspace,
+  .workflow-stage-workspace[data-workflow-page='split'],
+  .workflow-stage-workspace[data-workflow-page='associations'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workflow-overview__ai {
+    min-block-size: auto;
+  }
+
+  .ai-stage-list {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .ai-stage-list::before {
+    inset-block: calc(var(--si-space-3) - 0.5px) auto;
+    inset-inline: var(--si-space-3);
+    inline-size: auto;
+    block-size: var(--si-rule-thin);
+  }
+
+  .ai-stage-list li {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+  }
+
+  .workflow-stage-workspace[data-workflow-page='split'] > .entry-batch-panel,
+  .workflow-stage-workspace[data-workflow-page='split'] > .entry-command-panel,
+  .workflow-stage-workspace[data-workflow-page='split'] > .entry-workbench,
+  .workflow-stage-workspace[data-workflow-page='split'] > .entry-state,
+  .workflow-stage-workspace[data-workflow-page='split'] > .entry-loading,
+  .workflow-stage-workspace[data-workflow-page='associations']
+    > .entry-command-panel,
+  .workflow-stage-workspace[data-workflow-page='associations']
+    > .entry-workbench,
+  .workflow-stage-workspace[data-workflow-page='associations'] > .entry-state,
+  .workflow-stage-workspace[data-workflow-page='associations']
+    > .entry-loading {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .workflow-stage-workspace[data-workflow-page='split'] > .entry-command-panel,
+  .workflow-stage-workspace[data-workflow-page='associations']
+    > .entry-command-panel {
+    order: -1;
+  }
+}
+
+@media (max-width: 63.9375rem) {
+  .workflow-navigation__list::before {
+    inset-inline-start: 50%;
+  }
+
+  .workflow-shell .primary-navigation__item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workflow-navigation__node {
+    display: none;
+  }
+
+  .workflow-overview__layout,
+  .project-intro,
+  .workflow-capability-strip,
+  .workflow-stage-workspace[data-workflow-page='query'] .entry-search-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workflow-capability-strip__ai {
+    padding-block-start: var(--si-space-4);
+    padding-inline-start: var(--si-space-0);
+    border-block-start: var(--si-rule-thin) solid var(--si-color-border-default);
+    border-inline-start: 0;
+  }
+
+  .workflow-stage-workspace[data-workflow-page='query'] .entry-search-query,
+  .workflow-stage-workspace[data-workflow-page='query'] .entry-source-filter,
+  .workflow-stage-workspace[data-workflow-page='query'] .entry-type-filter,
+  .workflow-stage-workspace[data-workflow-page='query'] .entry-domain-filter,
+  .workflow-stage-workspace[data-workflow-page='query'] .entry-search-advanced,
+  .workflow-stage-workspace[data-workflow-page='query'] .entry-private-toggle,
+  .workflow-stage-workspace[data-workflow-page='query'] .entry-command-actions {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .workflow-stage-workspace[data-workflow-page='split'] .entry-workbench,
+  .workflow-stage-workspace[data-workflow-page='tags'] .entry-workbench,
+  .workflow-stage-workspace[data-workflow-page='associations'] .entry-workbench,
+  .workflow-stage-workspace[data-workflow-page='query'] .entry-workbench,
+  .workflow-stage-workspace[data-workflow-page='tags'] .entry-editor-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 47.9375rem), (orientation: portrait) {
+  .workflow-navigation__list {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    overflow-x: hidden;
+  }
+
+  .workflow-navigation__list::before,
+  .workflow-navigation__node,
+  .primary-navigation__index {
+    display: none;
+  }
+
+  .workflow-shell .primary-navigation__item {
+    min-block-size: var(--si-target-touch);
+    padding: var(--si-space-3);
+    border-inline-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  }
+
+  .workflow-shell .primary-navigation__copy {
+    display: flex;
+    align-items: center;
+  }
+
+  .workflow-page-heading,
+  .workflow-stage-board > header,
+  .workflow-inline-error {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workflow-page-heading h1 {
+    font-size: clamp(2rem, 12vw, 3rem);
+  }
+
+  .workflow-overview__ai,
+  .workflow-stage-board,
+  .materials-workspace .intake-console,
+  .materials-workspace .record-list-section,
+  .materials-workspace .workspace-transfer-section,
+  .workflow-stage-workspace .entry-document-navigator,
+  .workflow-stage-workspace .entry-batch-panel,
+  .workflow-stage-workspace .entry-command-panel,
+  .workflow-stage-workspace .entry-document-panel,
+  .workflow-stage-workspace .entry-editor,
+  .workflow-stage-workspace .entry-association-panel,
+  .entry-readonly-detail {
+    padding: var(--si-space-5);
+  }
+
+  .project-intro {
+    grid-template-columns: minmax(0, 1fr);
+    border-radius: var(--si-radius-surface);
+  }
+
+  .project-intro__mark {
+    inline-size: 4.5rem;
+  }
+
+  .project-metrics,
+  .workflow-stage-board ol,
+  .ai-stage-list,
+  .entry-readonly-detail__facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-metrics article,
+  .project-metrics article:nth-child(4),
+  .workflow-stage-board li,
+  .workflow-stage-board li:nth-child(4),
+  .entry-readonly-detail__facts > div {
+    border-inline-start: 0;
+    border-block-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  }
+
+  .project-metrics article:first-child,
+  .workflow-stage-board li:first-child,
+  .entry-readonly-detail__facts > div:first-child {
+    border-block-start: 0;
+  }
+
+  .ai-stage-list::before {
+    display: none;
+  }
+
+  .materials-workspace .record-list__facts,
+  .materials-workspace .row-action {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workflow-navigation__node {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .workflow-navigation__node,
+  .ai-stage-list__node,
+  .project-intro__mark,
+  .status-chip,
+  .workflow-capability-strip__options span {
+    forced-color-adjust: auto;
+  }
+}
+
+/* M1D current-state review and reserved formal knowledge workspace. */
+
+.entry-review-controls {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--si-space-5);
+  padding: var(--si-space-5);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  border-inline-start: var(--si-space-1) solid var(--si-color-signal);
+  background: var(--si-color-bg-shell);
+}
+
+.entry-review-controls__heading,
+.entry-review-score > span:first-child,
+.entry-review-toggle-row,
+.entry-review-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--si-space-4);
+}
+
+.entry-review-controls__heading h3 {
+  margin-block-start: var(--si-space-1);
+}
+
+.entry-review-score-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--si-space-4);
+}
+
+.entry-review-score {
+  display: grid;
+  gap: var(--si-space-3);
+  padding: var(--si-space-4);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-surface-1);
+}
+
+.entry-review-score b {
+  color: var(--si-color-signal);
+  font-family: var(--si-font-mono);
+}
+
+.entry-review-score input {
+  inline-size: 100%;
+  accent-color: var(--si-color-signal);
+}
+
+.entry-review-score__ticks {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  color: var(--si-color-text-muted);
+  font-family: var(--si-font-mono);
+  font-size: var(--si-text-xs);
+  text-align: center;
+}
+
+.entry-review-score__ticks i {
+  font-style: normal;
+}
+
+.entry-deterministic-keywords {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--si-space-4);
+  padding-block-start: var(--si-space-4);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.entry-deterministic-keywords > div:first-child {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--si-space-1);
+}
+
+.entry-deterministic-keywords small,
+.entry-review-preferences p,
+.entry-alias-editor p,
+.entry-preference-message {
+  color: var(--si-color-text-muted);
+}
+
+.entry-keyword-candidates,
+.entry-preference-list > div,
+.entry-alias-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--si-space-2);
+}
+
+.tag-token,
+.entry-preference-token {
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-surface-1);
+  color: var(--si-color-topic-text);
+}
+
+.tag-token {
+  min-block-size: var(--si-control-height);
+  padding-inline: var(--si-space-3);
+}
+
+.tag-token:hover {
+  border-color: var(--si-color-signal);
+  color: var(--si-color-text-primary);
+}
+
+.entry-review-preferences {
+  padding-block: var(--si-space-4);
+  border-block: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.entry-review-preferences > summary {
+  cursor: pointer;
+  color: var(--si-color-text-secondary);
+  font-family: var(--si-font-mono);
+}
+
+.entry-review-preferences__body {
+  display: grid;
+  gap: var(--si-space-5);
+  margin-block-start: var(--si-space-5);
+}
+
+.entry-review-toggle-row {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.entry-review-toggle-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--si-space-2);
+}
+
+.entry-preference-list {
+  display: grid;
+  gap: var(--si-space-2);
+}
+
+.entry-preference-token {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.entry-preference-token em,
+.entry-preference-token button {
+  padding: var(--si-space-2) var(--si-space-3);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-style: normal;
+}
+
+.entry-preference-token button:hover {
+  background: var(--si-color-surface-2);
+  color: var(--si-color-signal);
+}
+
+.entry-inline-draft,
+.entry-alias-editor__inputs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--si-space-3);
+}
+
+.entry-alias-editor {
+  display: grid;
+  gap: var(--si-space-3);
+  padding: var(--si-space-4);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+}
+
+.entry-alias-editor__inputs {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+}
+
+.entry-alias-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry-alias-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--si-space-2);
+  padding: var(--si-space-2) var(--si-space-3);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+}
+
+.entry-alias-list button {
+  border: 0;
+  background: transparent;
+  color: var(--si-color-text-muted);
+}
+
+.entry-review-navigation {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.formal-knowledge-workspace {
+  display: grid;
+  gap: var(--si-space-6);
+}
+
+.formal-knowledge-placeholder {
+  min-block-size: 24rem;
+  padding: var(--si-space-8);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  border-inline-start: var(--si-space-1) solid var(--si-color-signal);
+  background: var(--workflow-panel);
+}
+
+.formal-knowledge-placeholder h2 {
+  margin-block: var(--si-space-3) var(--si-space-4);
+}
+
+.formal-knowledge-placeholder > p:last-child {
+  max-inline-size: 52rem;
+  color: var(--si-color-text-secondary);
+  line-height: 1.8;
+}
+
+@media (max-width: 47.9375rem), (orientation: portrait) {
+  .entry-review-controls__heading,
+  .entry-review-toggle-row,
+  .entry-review-navigation {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .entry-review-score-grid,
+  .entry-deterministic-keywords,
+  .entry-inline-draft,
+  .entry-alias-editor__inputs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .entry-review-navigation .primary-action,
+  .entry-review-navigation .secondary-action,
+  .entry-deterministic-keywords .secondary-action,
+  .entry-inline-draft .secondary-action,
+  .entry-alias-editor__inputs .secondary-action {
+    inline-size: 100%;
+  }
+}

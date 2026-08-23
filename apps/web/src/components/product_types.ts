@@ -1,7 +1,13 @@
 import type {EvidenceSnapshot} from '../api/m1c_api_contract.js';
 
 export type ProductSection =
-  'materials' | 'review' | 'entries' | 'knowledge' | 'search';
+  | 'overview'
+  | 'import'
+  | 'split'
+  | 'tags'
+  | 'associations'
+  | 'query'
+  | 'knowledge';
 
 export type Loadable<T> =
   | Readonly<{status: 'loading'}>

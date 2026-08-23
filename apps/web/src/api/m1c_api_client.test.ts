@@ -262,7 +262,7 @@ describe('M1cApiClient', () => {
                 includeLinkDomains: false,
                 excludedKeywords: [],
               },
-              vocabulary: {aliases: [], links: [], knowledgeKinds: []},
+              vocabulary: {aliases: []},
             }),
             {headers: {'content-type': 'application/json'}},
           ),
@@ -280,8 +280,6 @@ describe('M1cApiClient', () => {
       },
       vocabulary: {
         aliases: [{source: 'Synthetic CLI', canonical: '工具'}],
-        links: [],
-        knowledgeKinds: [{keyword: 'Synthetic Cover', knowledgeKind: 'work'}],
       },
     });
 
@@ -303,10 +301,6 @@ describe('M1cApiClient', () => {
           },
           vocabulary: {
             aliases: [{source: 'Synthetic CLI', canonical: '工具'}],
-            links: [],
-            knowledgeKinds: [
-              {keyword: 'Synthetic Cover', knowledgeKind: 'work'},
-            ],
           },
         }),
       },

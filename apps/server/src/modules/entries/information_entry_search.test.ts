@@ -97,6 +97,37 @@ describe('complete InformationEntry search', () => {
     ).toThrow(InformationEntrySearchCursorError);
   });
 
+  it('supports public, mixed, and private-only visibility scopes', () => {
+    const publicEntry = currentEntry('00000000-0000-4000-8000-000000000001');
+    const privateEntry = currentEntry('00000000-0000-4000-8000-000000000002', {
+      isPrivate: true,
+    });
+    const entries = [publicEntry, privateEntry];
+
+    const publicResult = searchCurrentInformationEntries(entries, {
+      includePrivate: false,
+      limit: 25,
+    });
+    const allResult = searchCurrentInformationEntries(entries, {
+      includePrivate: true,
+      limit: 25,
+    });
+    const privateResult = searchCurrentInformationEntries(entries, {
+      includePrivate: true,
+      onlyPrivate: true,
+      limit: 25,
+    });
+
+    expect(publicResult.items.map((item) => item.entry.entryId)).toEqual([
+      publicEntry.entryId,
+    ]);
+    expect(allResult.totalCount).toBe(2);
+    expect(privateResult.items.map((item) => item.entry.entryId)).toEqual([
+      privateEntry.entryId,
+    ]);
+    expect(privateResult.totalCount).toBe(1);
+  });
+
   it('traverses at most two visible association hops and explains the path', () => {
     const entryA = currentEntry('00000000-0000-4000-8000-000000000001');
     const entryB = currentEntry('00000000-0000-4000-8000-000000000002');
@@ -167,6 +198,7 @@ function currentEntry(
     typeKeyword?: 'knowledge_explanation' | 'other';
     typeCustomName?: string;
     domains?: CurrentInformationEntry['value']['domains'];
+    isPrivate?: boolean;
   }> = {},
 ): Readonly<CurrentInformationEntry> {
   return Object.freeze({
@@ -188,7 +220,7 @@ function currentEntry(
       bodySha256: 'a'.repeat(64),
       chunkMode: 'split' as const,
       splitRuleVersion: 'struinfo.entry-split.section.v1',
-      isPrivate: false,
+      isPrivate: overrides.isPrivate ?? false,
       typeKeyword: overrides.typeKeyword ?? 'knowledge_explanation',
       ...(overrides.typeCustomName === undefined
         ? {}

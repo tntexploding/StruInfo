@@ -43,8 +43,10 @@ export function searchCurrentInformationEntries(
     throw new InformationEntrySearchCursorError();
   }
 
-  const visibleEntries = entries.filter(
-    (entry) => request.includePrivate || !entry.value.isPrivate,
+  const visibleEntries = entries.filter((entry) =>
+    request.onlyPrivate
+      ? entry.value.isPrivate
+      : request.includePrivate || !entry.value.isPrivate,
   );
   const associationMatches =
     request.association === undefined
@@ -108,6 +110,7 @@ export function informationEntryQuerySha256(
     time: request.time ?? null,
     association: request.association ?? null,
     includePrivate: request.includePrivate,
+    onlyPrivate: request.onlyPrivate,
   };
   return createHash('sha256')
     .update(`${JSON.stringify(projection)}\n`, 'utf8')

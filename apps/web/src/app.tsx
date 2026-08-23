@@ -1,8 +1,6 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 import type {
-  CurationState,
-  DomainCommandResponse,
   EvidenceSnapshotSummary,
   InformationEntryAssociationListResponse,
   InformationEntryAssociationOverrideResponse,
@@ -15,8 +13,8 @@ import type {
   KnowledgeSearchResponse,
   M1cHttpResponse,
   MarkdownImportResponse,
-  ReviewPreferencesWrite,
   ReviewPreferencesResponse,
+  ReviewPreferencesWrite,
   WorkspaceResponse,
   WorkspaceBundleTransferResponse,
 } from './api/m1c_api_contract.js';
@@ -34,10 +32,12 @@ import type {HealthClient} from './health/health_client.js';
 import type {HealthTransportMode} from './health/health_runtime.js';
 import {useOperationalHealth} from './health/use_operational_health.js';
 import {MaterialsWorkspace} from './workspaces/materials_workspace.js';
-import {KnowledgeWorkspace} from './workspaces/knowledge_workspace.js';
-import {InformationEntryWorkspace} from './workspaces/information_entry_workspace.js';
-import {ReviewWorkspace} from './workspaces/review_workspace.js';
-import {SearchWorkspace} from './workspaces/search_workspace.js';
+import {InformationEntryAssociationsWorkspace} from './workspaces/information_entry_associations_workspace.js';
+import {InformationEntryQueryWorkspace} from './workspaces/information_entry_query_workspace.js';
+import {InformationEntrySplitWorkspace} from './workspaces/information_entry_split_workspace.js';
+import {InformationEntryTagsWorkspace} from './workspaces/information_entry_tags_workspace.js';
+import {WorkflowOverview} from './workspaces/workflow_overview.js';
+import {FormalKnowledgeWorkspace} from './workspaces/formal_knowledge_workspace.js';
 
 export interface AppProps {
   readonly apiClient: M1cApiClient;
@@ -48,19 +48,19 @@ export interface AppProps {
 export function App({apiClient, healthClient, transportMode}: AppProps) {
   const health = useOperationalHealth(healthClient);
   const [activeSection, setActiveSection] =
-    useState<ProductSection>('materials');
+    useState<ProductSection>('overview');
   const [workspace, setWorkspace] = useState<
     Loadable<Readonly<WorkspaceResponse>>
   >({status: 'loading'});
   const [snapshots, setSnapshots] = useState<
     Loadable<readonly Readonly<EvidenceSnapshotSummary>[]>
   >({status: 'loading'});
-  const [curation, setCuration] = useState<Loadable<Readonly<CurationState>>>({
-    status: 'loading',
-  });
   const [reviewPreferences, setReviewPreferences] = useState<
     Loadable<Readonly<ReviewPreferencesResponse>>
   >({status: 'loading'});
+  const [reviewPreferencesOverride, setReviewPreferencesOverride] = useState<
+    Readonly<ReviewPreferencesWrite> | undefined
+  >();
   const [evidencePanel, setEvidencePanel] = useState<EvidencePanelState>({
     status: 'closed',
   });
@@ -115,27 +115,6 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
-  const refreshCuration = useCallback(
-    async (signal?: AbortSignal) => {
-      try {
-        const response = await apiClient.loadCuration(
-          signal === undefined ? undefined : {signal},
-        );
-        if (!signal?.aborted) {
-          setCuration({status: 'ready', value: response.body.state});
-        }
-      } catch {
-        if (!signal?.aborted) {
-          setCuration({
-            status: 'error',
-            message: '无法读取当前审核版本；请稍后重试，避免基于陈旧状态提交。',
-          });
-        }
-      }
-    },
-    [apiClient],
-  );
-
   const refreshReviewPreferences = useCallback(
     async (signal?: AbortSignal) => {
       try {
@@ -149,11 +128,19 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
         if (!signal?.aborted) {
           setReviewPreferences({
             status: 'error',
-            message:
-              '个人偏好服务尚未加载；仍可在本次页面会话新增并使用快捷标记、调整自动标签和完成手工分类，重启新版服务后这些设置才会持久化。',
+            message: '无法读取外部个人标签设置；Entry 数据仍可继续查看。',
           });
         }
       }
+    },
+    [apiClient],
+  );
+
+  const saveReviewPreferences = useCallback(
+    async (value: Readonly<ReviewPreferencesWrite>) => {
+      const response = await apiClient.saveReviewPreferences(value);
+      setReviewPreferences({status: 'ready', value: response.body});
+      return response;
     },
     [apiClient],
   );
@@ -163,18 +150,12 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     globalThis.queueMicrotask(() => {
       void refreshWorkspace(controller.signal);
       void refreshEvidence(controller.signal);
-      void refreshCuration(controller.signal);
       void refreshReviewPreferences(controller.signal);
     });
     return () => {
       controller.abort();
     };
-  }, [
-    refreshCuration,
-    refreshEvidence,
-    refreshReviewPreferences,
-    refreshWorkspace,
-  ]);
+  }, [refreshEvidence, refreshReviewPreferences, refreshWorkspace]);
 
   const openEvidence = useCallback(
     async (
@@ -220,42 +201,6 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
         });
       }
     },
-    [apiClient],
-  );
-
-  const selectEvidenceForKnowledge = useCallback(
-    async (
-      snapshotId: string,
-      includePrivate: boolean,
-    ): Promise<ActionFeedback> => {
-      try {
-        const response = await apiClient.loadEvidenceSnapshot(snapshotId, {
-          includePrivate,
-        });
-        if (response.body.status !== 'ok') {
-          return {
-            kind: 'error',
-            title: '无法选择审核来源',
-            detail: '该 Snapshot 不存在于当前工作区，或隐私查看未被明确启用。',
-          };
-        }
-        setSelectedEvidence(response.body.snapshot);
-        return {
-          kind: 'success',
-          title: '审核来源已切换',
-          detail: '正在核对这份文档已经形成的正式知识。',
-        };
-      } catch {
-        return connectionFeedback(
-          '无法读取所选 Snapshot；当前正式知识没有被修改。',
-        );
-      }
-    },
-    [apiClient],
-  );
-
-  const searchKnowledge = useCallback(
-    (body: unknown) => apiClient.search(body),
     [apiClient],
   );
 
@@ -378,62 +323,13 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     }
   }
 
-  async function putTerm(body: unknown): Promise<ActionFeedback> {
-    try {
-      const response = await apiClient.putCurationTerm(body);
-      const feedback = domainFeedback(response.body, '分类词条已保存');
-      if (feedback.kind === 'success') await refreshCuration();
-      return feedback;
-    } catch {
-      return connectionFeedback('分类词条没有写入；当前审核状态保持不变。');
-    }
-  }
-
-  async function applyCuration(body: unknown): Promise<ActionFeedback> {
-    try {
-      const response = await apiClient.applyCuration(body);
-      const feedback = domainFeedback(response.body, '人工审核已保存');
-      if (feedback.kind === 'success') await refreshCuration();
-      return feedback;
-    } catch {
-      return connectionFeedback('审核命令没有写入；当前材料与知识保持不变。');
-    }
-  }
-
-  async function saveReviewPreferences(
-    preferences: Readonly<ReviewPreferencesWrite>,
-  ): Promise<ActionFeedback> {
-    try {
-      const response = await apiClient.saveReviewPreferences(preferences);
-      setReviewPreferences({status: 'ready', value: response.body});
-      return {
-        kind: 'success',
-        title: '审核偏好已保存',
-        detail: '配置只写入当前外部工作区的个人偏好文件。',
-      };
-    } catch {
-      return connectionFeedback(
-        '审核偏好没有保存；当前 Fragment 的审核内容未受影响。',
-      );
-    }
-  }
-
-  async function applyKnowledge(body: unknown): Promise<ActionFeedback> {
-    try {
-      const response = await apiClient.applyKnowledgeChangeSet(body);
-      return domainFeedback(response.body, '知识变更集已提交');
-    } catch {
-      return connectionFeedback('知识变更集没有写入；可以在服务恢复后重试。');
-    }
-  }
-
   async function exportWorkspaceBundle(): Promise<WorkspaceTransferFeedback> {
     try {
       const response = await apiClient.exportWorkspaceBundle();
       return workspaceTransferFeedback(response.body, 'exported');
     } catch {
       return connectionFeedback(
-        'Bundle 没有生成；数据库和外部 Blob 均未被修改。',
+        '个人数据包没有生成；数据库、原始文件和个人配置均未被修改。',
       );
     }
   }
@@ -448,11 +344,13 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
         setEvidencePanel({status: 'closed'});
         setSelectedEvidence(undefined);
         await refreshEvidence();
-        await refreshCuration();
+        await refreshReviewPreferences();
       }
       return feedback;
     } catch {
-      return connectionFeedback('恢复没有执行；当前工作区内容保持不变。');
+      return connectionFeedback(
+        '个人数据恢复没有执行；当前工作区内容保持不变。',
+      );
     }
   }
 
@@ -495,11 +393,18 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           health.retry();
           void refreshWorkspace();
           void refreshEvidence();
-          void refreshCuration();
           void refreshReviewPreferences();
         }}
       />
-      {activeSection === 'materials' ? (
+      {activeSection === 'overview' ? (
+        <WorkflowOverview
+          snapshots={snapshots}
+          workspace={workspace.status === 'ready' ? workspace.value : undefined}
+          onListDocuments={listInformationEntryDocuments}
+          onNavigate={setActiveSection}
+        />
+      ) : null}
+      {activeSection === 'import' ? (
         <MaterialsWorkspace
           snapshots={snapshots}
           selectedSnapshotId={selectedEvidence?.snapshotId}
@@ -512,81 +417,69 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onRestore={restoreWorkspaceBundle}
         />
       ) : null}
-      {activeSection === 'review' ? (
-        <ReviewWorkspace
-          curation={curation}
-          evidence={selectedEvidence}
-          reviewPreferences={reviewPreferences}
-          snapshots={snapshotValues}
-          onApplyCuration={applyCuration}
-          onOpenEvidence={(snapshotId, target, fragmentId) =>
-            void openEvidence(
-              snapshotId,
-              target,
-              fragmentId,
-              snapshotValues.find(
-                (snapshot) => snapshot.snapshotId === snapshotId,
-              )?.isPrivate === true,
-            )
+      {activeSection === 'split' ? (
+        <InformationEntrySplitWorkspace
+          aiEnabled={
+            workspace.status === 'ready' &&
+            workspace.value.capabilities.includes('ai')
           }
-          onPutTerm={putTerm}
-          onSaveReviewPreferences={saveReviewPreferences}
-          onRefresh={() => {
-            void refreshCuration();
-            void refreshReviewPreferences();
-          }}
-        />
-      ) : null}
-      {activeSection === 'entries' ? (
-        <InformationEntryWorkspace
-          snapshots={snapshotValues}
-          onListAssociations={listInformationEntryAssociations}
           onListDocuments={listInformationEntryDocuments}
           onMaterialize={materializeInformationEntries}
-          onRebuildAssociations={rebuildInformationEntryAssociations}
-          onReviseAssociation={reviseInformationEntryAssociation}
-          onAggregateDocumentTags={aggregateInformationDocumentTags}
-          onRevise={reviseInformationEntry}
-          onReviseDocumentTags={reviseInformationDocumentTags}
           onSearch={searchInformationEntries}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
             void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
           }
         />
       ) : null}
-      {activeSection === 'knowledge' ? (
-        <KnowledgeWorkspace
-          curation={curation}
-          evidence={selectedEvidence}
-          snapshots={snapshotValues}
-          reviewPreferences={reviewPreferences}
-          onApplyCuration={applyCuration}
-          onApplyKnowledge={applyKnowledge}
-          onLoadKnowledgeItem={(itemId, includePrivate) =>
-            apiClient.loadKnowledgeItem(itemId, {includePrivate})
+      {activeSection === 'tags' ? (
+        <InformationEntryTagsWorkspace
+          aiEnabled={
+            workspace.status === 'ready' &&
+            workspace.value.capabilities.includes('ai')
           }
+          reviewPreferences={reviewPreferences}
+          reviewPreferencesOverride={reviewPreferencesOverride}
+          onReviewPreferencesChange={setReviewPreferencesOverride}
+          onAggregateDocumentTags={aggregateInformationDocumentTags}
+          onListDocuments={listInformationEntryDocuments}
+          onRevise={reviseInformationEntry}
+          onReviseDocumentTags={reviseInformationDocumentTags}
+          onSaveReviewPreferences={saveReviewPreferences}
+          onSearch={searchInformationEntries}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
             void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
           }
-          onPutTerm={putTerm}
-          onRefresh={() => {
-            void refreshCuration();
-            void refreshReviewPreferences();
-          }}
-          onSearch={searchKnowledge}
-          onSelectEvidence={selectEvidenceForKnowledge}
-          onSaveReviewPreferences={saveReviewPreferences}
         />
       ) : null}
-      {activeSection === 'search' ? (
-        <SearchWorkspace
-          snapshots={snapshotValues}
-          onOpenEvidence={(snapshotId, target, fragmentId, includePrivate) =>
-            void openEvidence(snapshotId, target, fragmentId, includePrivate)
+      {activeSection === 'associations' ? (
+        <InformationEntryAssociationsWorkspace
+          aiEnabled={
+            workspace.status === 'ready' &&
+            workspace.value.capabilities.includes('ai')
           }
-          onSearch={searchKnowledge}
+          onListAssociations={listInformationEntryAssociations}
+          onRebuildAssociations={rebuildInformationEntryAssociations}
+          onReviseAssociation={reviseInformationEntryAssociation}
+          onSearch={searchInformationEntries}
+          onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
+            void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
+          }
         />
       ) : null}
+      {activeSection === 'query' ? (
+        <InformationEntryQueryWorkspace
+          aiEnabled={
+            workspace.status === 'ready' &&
+            workspace.value.capabilities.includes('ai')
+          }
+          snapshots={snapshotValues}
+          onSearch={searchInformationEntries}
+          onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
+            void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
+          }
+        />
+      ) : null}
+      {activeSection === 'knowledge' ? <FormalKnowledgeWorkspace /> : null}
     </ProductAppShell>
   );
 }
@@ -650,40 +543,6 @@ function importFeedback(body: MarkdownImportResponse): ActionFeedback {
   };
 }
 
-function domainFeedback(
-  body: DomainCommandResponse,
-  successTitle: string,
-): ActionFeedback {
-  if (
-    body.status === 'applied' ||
-    body.status === 'unchanged' ||
-    body.status === 'replayed'
-  ) {
-    return {
-      kind: 'success',
-      title: successTitle,
-      detail:
-        body.status === 'applied'
-          ? '新修订已原子提交。'
-          : body.status === 'unchanged'
-            ? '请求与当前状态相同，没有创建多余修订。'
-            : '相同命令已安全重放，返回首次提交凭据。',
-    };
-  }
-  if (!('issue' in body)) {
-    return {
-      kind: 'error',
-      title: '返回协议无法识别',
-      detail: '命令结果没有包含可显示的问题信息。',
-    };
-  }
-  return {
-    kind: 'error',
-    title: body.status === 'rejected' ? '命令未被接受' : '持久化失败',
-    detail: describeWireIssue(body.issue),
-  };
-}
-
 function connectionFeedback(detail: string): ActionFeedback {
   return {kind: 'error', title: '本地接口不可达', detail};
 }
@@ -698,9 +557,9 @@ function workspaceTransferFeedback(
       kind: 'success',
       title:
         expectedStatus === 'exported'
-          ? '工作区 Bundle 已导出'
-          : '工作区 Bundle 已恢复',
-      detail: `${snapshotCount.toString()} 个 Snapshot · ${body.blobCount.toString()} 个 Blob 引用 · ${formatByteCount(body.byteLength)}`,
+          ? '全部个人数据已导出'
+          : '全部个人数据已恢复',
+      detail: `${snapshotCount.toString()} 个文档版本 · ${body.blobCount.toString()} 份原始 Blob · 标签、联系与个人偏好${body.personalDataIncluded ? '已包含' : '未包含'} · ${formatByteCount(body.byteLength)}`,
       fileName: body.fileName,
     };
   }

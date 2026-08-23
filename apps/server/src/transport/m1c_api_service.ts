@@ -1141,6 +1141,8 @@ function decodeEntryRevisionBody(body: unknown):
         contentKeywords: readonly string[];
         typeKeyword: EntryTypeKeyword;
         typeCustomName?: string;
+        usefulnessScore?: 1 | 2 | 3 | 4 | 5;
+        interestScore?: 1 | 2 | 3 | 4 | 5;
         domains: readonly Readonly<{
           keyword: EntryDomainKeyword;
           customName?: string;
@@ -1166,6 +1168,8 @@ function decodeEntryRevisionBody(body: unknown):
     !ENTRY_TYPE_KEYWORDS.includes(annotation.typeKeyword as EntryTypeKeyword) ||
     (annotation.typeCustomName !== undefined &&
       typeof annotation.typeCustomName !== 'string') ||
+    !isOptionalAssessmentScore(annotation.usefulnessScore) ||
+    !isOptionalAssessmentScore(annotation.interestScore) ||
     !Array.isArray(annotation.domains)
   ) {
     return undefined;
@@ -1201,6 +1205,12 @@ function decodeEntryRevisionBody(body: unknown):
       ...(annotation.typeCustomName === undefined
         ? {}
         : {typeCustomName: annotation.typeCustomName}),
+      ...(annotation.usefulnessScore === undefined
+        ? {}
+        : {usefulnessScore: annotation.usefulnessScore}),
+      ...(annotation.interestScore === undefined
+        ? {}
+        : {interestScore: annotation.interestScore}),
       domains: Object.freeze(domains),
     }),
   });
@@ -1221,6 +1231,7 @@ function decodeEntrySearchBody(
   const domainScope = body.domainScope ?? 'any';
   const chunkMode = body.chunkMode ?? undefined;
   const includePrivate = body.includePrivate ?? false;
+  const onlyPrivate = body.onlyPrivate ?? false;
   const limit = body.limit ?? 25;
   const time = decodeEntrySearchTime(body.time);
   const association = decodeEntrySearchAssociation(body.association);
@@ -1256,6 +1267,8 @@ function decodeEntrySearchBody(
     (body.association !== undefined && association === undefined) ||
     (body.after !== undefined && after === undefined) ||
     typeof includePrivate !== 'boolean' ||
+    typeof onlyPrivate !== 'boolean' ||
+    (onlyPrivate && !includePrivate) ||
     typeof limit !== 'number' ||
     !Number.isSafeInteger(limit) ||
     limit < 1 ||
@@ -1283,9 +1296,22 @@ function decodeEntrySearchBody(
     ...(time === undefined ? {} : {time}),
     ...(association === undefined ? {} : {association}),
     includePrivate,
+    onlyPrivate,
     limit,
     ...(after === undefined ? {} : {after}),
   });
+}
+
+function isOptionalAssessmentScore(
+  value: unknown,
+): value is 1 | 2 | 3 | 4 | 5 | undefined {
+  return (
+    value === undefined ||
+    (typeof value === 'number' &&
+      Number.isInteger(value) &&
+      value >= 1 &&
+      value <= 5)
+  );
 }
 
 function optionalBoundedText(

@@ -17,11 +17,11 @@ import {
 } from '../../workspace_transfer/workspace_bundle_file_store.js';
 
 const FILE_NAME_PATTERN =
-  /^[A-Za-z0-9][A-Za-z0-9._-]{0,220}\.workspace-bundle\.json$/u;
+  /^[A-Za-z0-9][A-Za-z0-9._-]{0,220}\.(?:personal-data|workspace-bundle)\.json$/u;
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
-/** External, direct-child-only Bundle files under the configured exports area. */
+/** External, direct-child-only personal-data files under the configured exports area. */
 export class LocalWorkspaceBundleFileStore implements WorkspaceBundleFileStore {
   readonly #exportsRoot: string;
 
@@ -45,7 +45,7 @@ export class LocalWorkspaceBundleFileStore implements WorkspaceBundleFileStore {
     const owned = Uint8Array.from(bytes);
     const digest = createHash('sha256').update(owned).digest('hex');
     const stamp = exportedAt.replaceAll(/[^0-9]/gu, '');
-    const fileName = `${workspaceId}-${stamp}-${randomUUID()}.workspace-bundle.json`;
+    const fileName = `${workspaceId}-${stamp}-${randomUUID()}.personal-data.json`;
     const targetPath = join(this.#exportsRoot, fileName);
     const temporaryPath = join(this.#exportsRoot, `.${randomUUID()}.tmp`);
     try {

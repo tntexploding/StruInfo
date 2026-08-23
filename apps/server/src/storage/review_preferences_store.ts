@@ -4,49 +4,16 @@ export const MAX_REVIEW_QUICK_TAGS = 24;
 export const MAX_REVIEW_QUICK_TAG_CODE_POINTS = 120;
 export const MAX_REVIEW_KEYWORD_EXCLUSIONS = 64;
 export const MAX_REVIEW_VOCABULARY_ALIASES = 128;
-export const MAX_REVIEW_VOCABULARY_LINKS = 128;
-export const MAX_REVIEW_KNOWLEDGE_KIND_RULES = 64;
-
-export const REVIEW_VOCABULARY_LINK_KINDS = ['related', 'translation'] as const;
-
-export const REVIEW_PREFERRED_KNOWLEDGE_KINDS = [
-  'entity',
-  'concept',
-  'assertion',
-  'event',
-  'method',
-  'framework',
-  'resource',
-  'work',
-  'other',
-] as const;
-
-export type ReviewVocabularyLinkKind =
-  (typeof REVIEW_VOCABULARY_LINK_KINDS)[number];
-export type ReviewPreferredKnowledgeKind =
-  (typeof REVIEW_PREFERRED_KNOWLEDGE_KINDS)[number];
-
 export interface ReviewVocabularyPreferences {
   readonly aliases: readonly Readonly<{
     source: string;
     canonical: string;
-  }>[];
-  readonly links: readonly Readonly<{
-    left: string;
-    right: string;
-    kind: ReviewVocabularyLinkKind;
-  }>[];
-  readonly knowledgeKinds: readonly Readonly<{
-    keyword: string;
-    knowledgeKind: ReviewPreferredKnowledgeKind;
   }>[];
 }
 
 export const DEFAULT_REVIEW_VOCABULARY_PREFERENCES: Readonly<ReviewVocabularyPreferences> =
   Object.freeze({
     aliases: Object.freeze([]),
-    links: Object.freeze([]),
-    knowledgeKinds: Object.freeze([]),
   });
 
 export interface ReviewAutomaticKeywordPreferences {
@@ -127,18 +94,9 @@ export function decodeReviewVocabularyPreferences(
 ): Readonly<ReviewVocabularyPreferences> | undefined {
   if (!isRecord(value)) return undefined;
   const aliases = decodeAliases(value.aliases);
-  const links = decodeLinks(value.links);
-  const knowledgeKinds = decodeKnowledgeKinds(value.knowledgeKinds);
-  if (
-    aliases === undefined ||
-    links === undefined ||
-    knowledgeKinds === undefined
-  ) {
-    return undefined;
-  }
-  return Object.freeze({aliases, links, knowledgeKinds});
+  if (aliases === undefined) return undefined;
+  return Object.freeze({aliases});
 }
-
 function decodeKeywordList(
   value: unknown,
   maximumItems: number,
@@ -191,12 +149,6 @@ export function createReviewPreferences(
       aliases: Object.freeze(
         vocabulary.aliases.map((rule) => Object.freeze({...rule})),
       ),
-      links: Object.freeze(
-        vocabulary.links.map((rule) => Object.freeze({...rule})),
-      ),
-      knowledgeKinds: Object.freeze(
-        vocabulary.knowledgeKinds.map((rule) => Object.freeze({...rule})),
-      ),
     }),
   });
 }
@@ -228,67 +180,6 @@ function decodeAliases(
   return Object.freeze(result.map((rule) => Object.freeze(rule)));
 }
 
-function decodeLinks(
-  value: unknown,
-): ReviewVocabularyPreferences['links'] | undefined {
-  if (!Array.isArray(value) || value.length > MAX_REVIEW_VOCABULARY_LINKS) {
-    return undefined;
-  }
-  const result: {
-    left: string;
-    right: string;
-    kind: ReviewVocabularyLinkKind;
-  }[] = [];
-  const identities = new Set<string>();
-  for (const candidate of value) {
-    if (!isRecord(candidate)) return undefined;
-    const left = decodeKeyword(candidate.left);
-    const right = decodeKeyword(candidate.right);
-    if (
-      left === undefined ||
-      right === undefined ||
-      !isOneOf(REVIEW_VOCABULARY_LINK_KINDS, candidate.kind)
-    ) {
-      return undefined;
-    }
-    const ordered = orderPair(left, right);
-    if (ordered === undefined) return undefined;
-    const identity = `${candidate.kind}:${keywordIdentity(ordered.left)}:${keywordIdentity(ordered.right)}`;
-    if (identities.has(identity)) return undefined;
-    identities.add(identity);
-    result.push({...ordered, kind: candidate.kind});
-  }
-  return Object.freeze(result.map((rule) => Object.freeze(rule)));
-}
-
-function decodeKnowledgeKinds(
-  value: unknown,
-): ReviewVocabularyPreferences['knowledgeKinds'] | undefined {
-  if (!Array.isArray(value) || value.length > MAX_REVIEW_KNOWLEDGE_KIND_RULES) {
-    return undefined;
-  }
-  const result: {
-    keyword: string;
-    knowledgeKind: ReviewPreferredKnowledgeKind;
-  }[] = [];
-  const identities = new Set<string>();
-  for (const candidate of value) {
-    if (!isRecord(candidate)) return undefined;
-    const keyword = decodeKeyword(candidate.keyword);
-    if (
-      keyword === undefined ||
-      !isOneOf(REVIEW_PREFERRED_KNOWLEDGE_KINDS, candidate.knowledgeKind)
-    ) {
-      return undefined;
-    }
-    const identity = keywordIdentity(keyword);
-    if (identities.has(identity)) return undefined;
-    identities.add(identity);
-    result.push({keyword, knowledgeKind: candidate.knowledgeKind});
-  }
-  return Object.freeze(result.map((rule) => Object.freeze(rule)));
-}
-
 function decodeKeyword(value: unknown): string | undefined {
   const decoded = decodeKeywordList([value], 1);
   return decoded?.[0];
@@ -317,25 +208,6 @@ function hasAliasCycle(
     }
   }
   return false;
-}
-
-function orderPair(
-  left: string,
-  right: string,
-): Readonly<{left: string; right: string}> | undefined {
-  const leftIdentity = keywordIdentity(left);
-  const rightIdentity = keywordIdentity(right);
-  if (leftIdentity === rightIdentity) return undefined;
-  return leftIdentity < rightIdentity
-    ? {left, right}
-    : {left: right, right: left};
-}
-
-function isOneOf<const T extends readonly string[]>(
-  values: T,
-  value: unknown,
-): value is T[number] {
-  return typeof value === 'string' && values.includes(value);
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

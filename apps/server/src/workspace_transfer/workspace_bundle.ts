@@ -15,7 +15,7 @@ import {
 
 export const WORKSPACE_BUNDLE_FORMAT = 'struinfo.workspace-bundle';
 export const WORKSPACE_BUNDLE_VERSION = 1;
-export const DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_BYTES = 16 * 1024 * 1024;
+export const DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_BYTES = 256 * 1024 * 1024;
 export const DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES = 1_000_000;
 
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;

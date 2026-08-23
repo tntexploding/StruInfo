@@ -11,18 +11,21 @@ legal material, and root `THIRD_PARTY_NOTICES.md` record the corresponding
 identity and attribution closure; they do not select a StruInfo distribution
 license.
 
-## Exact toolchain
+## Toolchain baseline
 
-| Tool                     | Exact version or identity                                                |
+| Tool                     | Version, range, or identity                                              |
 | ------------------------ | ------------------------------------------------------------------------ |
-| Node.js                  | `24.18.0`                                                                |
+| Node.js                  | `>=24.18.0`; reference minimum and CI version: `24.18.0`                 |
 | pnpm                     | `11.20.0` through `packageManager` and Corepack                          |
 | TypeScript               | `6.0.3`                                                                  |
 | GitHub checkout action   | `actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1` (`v7.0.1`)   |
 | GitHub Node setup action | `actions/setup-node@820762786026740c76f36085b0efc47a31fe5020` (`v7.0.0`) |
 
-The Node version marker, package-manager field, exact engines, CI input, and
-lockfile all agree. No pnpm setup or cache action is admitted.
+The Node version marker and CI retain the recommended minimum. Package engines
+accept that version or newer, and pnpm engine checking is deliberately
+non-strict so a local version mismatch produces guidance instead of blocking
+repository commands. The exact pnpm/package graph and lockfile policy remain
+unchanged. No pnpm setup or cache action is admitted.
 
 ## Direct package ownership
 
@@ -106,10 +109,11 @@ than separately bundled third-party binaries.
   perpetual vulnerability guarantee.
 
 `pnpm-workspace.yaml` owns the pnpm 11 policy. Peer installation is disabled;
-peer and engine checks, exact saves, store integrity, lock revalidation,
-minimum release age, missing-time rejection, exotic-subdependency rejection,
-and strict dependency builds are enabled. The normal 1,440-minute release-age
-gate accepted every exact package, so no `minimumReleaseAgeExclude` remains.
+peer checks, exact saves, store integrity, lock revalidation, minimum release
+age, missing-time rejection, exotic-subdependency rejection, and strict
+dependency builds are enabled. Node engine compatibility is advisory rather
+than an operation-blocking gate. The normal 1,440-minute release-age gate
+accepted every exact package, so no `minimumReleaseAgeExclude` remains.
 
 Lifecycle execution is default-deny. The only selected install lifecycle is
 `esbuild@0.28.1` `postinstall`; `allowBuilds` explicitly sets that exact identity

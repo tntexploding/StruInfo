@@ -1,23 +1,20 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
 
-import type {CurationState, EvidenceSnapshot} from '../api/m1c_api_contract.js';
+import type {
+  EvidenceSnapshot,
+  InformationEntry,
+} from '../api/m1c_api_contract.js';
 import {READY_HEALTH_FIXTURE} from '../health/mock_health_client.js';
 import {MaterialsWorkspace} from '../workspaces/materials_workspace.js';
-import {InformationEntryWorkspace} from '../workspaces/information_entry_workspace.js';
-import {KnowledgeWorkspace} from '../workspaces/knowledge_workspace.js';
-import {ReviewWorkspace} from '../workspaces/review_workspace.js';
-import {SearchWorkspace} from '../workspaces/search_workspace.js';
+import {InformationEntryPrivacyScope} from '../workspaces/information_entry_components.js';
+import {InformationEntrySplitWorkspace} from '../workspaces/information_entry_split_workspace.js';
+import {InformationEntryReviewControls} from '../workspaces/information_entry_review_controls.js';
+import {FormalKnowledgeWorkspace} from '../workspaces/formal_knowledge_workspace.js';
+
+import {WorkflowOverview} from '../workspaces/workflow_overview.js';
 import {ApplicationFailureFallback} from './application_error_boundary.js';
 import {ProductAppShell} from './product_app_shell.js';
-
-const EMPTY_CURATION: Readonly<CurationState> = Object.freeze({
-  terms: [],
-  targets: [],
-  assignments: [],
-  decisions: [],
-  assessments: [],
-});
 
 const REVIEW_EVIDENCE: Readonly<EvidenceSnapshot> = Object.freeze({
   workspaceId: '11111111-1111-4111-8111-111111111111',
@@ -59,31 +56,7 @@ const REVIEW_EVIDENCE: Readonly<EvidenceSnapshot> = Object.freeze({
   ],
 });
 
-const REVIEWED_CURATION: Readonly<CurationState> = Object.freeze({
-  terms: [],
-  assignments: [],
-  assessments: [],
-  targets: [
-    {
-      workspaceId: '11111111-1111-4111-8111-111111111111',
-      targetId: '66666666-6666-4666-8666-666666666666',
-      currentVersion: 1,
-      kind: 'fragment' as const,
-      fragmentId: '55555555-5555-4555-8555-555555555555',
-    },
-  ],
-  decisions: [
-    {
-      decisionId: '77777777-7777-4777-8777-777777777777',
-      targetId: '66666666-6666-4666-8666-666666666666',
-      currentRevision: 1,
-      currentRevisionId: '88888888-8888-4888-8888-888888888888',
-      value: {action: 'full' as const, reasonCodes: []},
-    },
-  ],
-});
-
-describe('M1C product workspaces', () => {
+describe('M1D product workspaces', () => {
   it('renders a visible recovery surface instead of an empty application root', () => {
     const markup = renderToStaticMarkup(<ApplicationFailureFallback />);
 
@@ -92,10 +65,10 @@ describe('M1C product workspaces', () => {
     expect(markup).toContain('role="alert"');
   });
 
-  it('renders the five real product routes without claiming AI capability', () => {
+  it('renders the seven product routes without claiming AI capability', () => {
     const markup = renderToStaticMarkup(
       <ProductAppShell
-        activeSection="materials"
+        activeSection="overview"
         health={{kind: 'ready', response: READY_HEALTH_FIXTURE}}
         transportMode="live"
         workspace={{
@@ -106,26 +79,73 @@ describe('M1C product workspaces', () => {
         onNavigate={() => undefined}
         evidencePanel={null}
       >
-        <h1>材料与证据</h1>
+        <h1>总览</h1>
       </ProductAppShell>,
     );
 
-    expect(markup).toContain('材料');
-    expect(markup).toContain('审核');
-    expect(markup).toContain('条目');
-    expect(markup).toContain('知识');
-    expect(markup).toContain('搜索');
+    expect(markup).toContain('总览');
+    expect(markup).toContain('导入');
+    expect(markup).toContain('拆分');
+    expect(markup).toContain('标签');
+    expect(markup).toContain('联系');
+    expect(markup).toContain('查询');
+    expect(markup).toContain('正式知识');
+    expect(markup.indexOf('查询')).toBeLessThan(markup.indexOf('正式知识'));
     expect(markup).toContain('<dd>未启用</dd>');
-    expect(markup).toContain('NON-AI CORE · MANUAL AUTHORITY');
+    expect(markup).toContain('TRACEABLE CORE · MANUAL AUTHORITY');
     expect(markup.match(/<h1/g)).toHaveLength(1);
     expect(markup).toContain('href="#main-workspace"');
     expect(markup).toContain('aria-current="page"');
   });
 
-  it('renders the Entry-first build, filter, privacy, and source controls', () => {
+  it('renders the closed three-state privacy query scope', () => {
     const markup = renderToStaticMarkup(
-      <InformationEntryWorkspace
-        snapshots={[REVIEW_EVIDENCE]}
+      <InformationEntryPrivacyScope
+        includePrivate={true}
+        onlyPrivate={true}
+        onChange={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('仅公开结果');
+    expect(markup).toContain('公开与隐私结果');
+    expect(markup).toContain('只看隐私结果');
+    expect(markup).toContain('<option value="private" selected="">');
+  });
+
+  it('renders real workspace metrics and a truthful AI workflow state', () => {
+    const markup = renderToStaticMarkup(
+      <WorkflowOverview
+        snapshots={{status: 'ready', value: [REVIEW_EVIDENCE]}}
+        workspace={{
+          status: 'ok',
+          workspaceId: REVIEW_EVIDENCE.workspaceId,
+          capabilities: ['manual-core'],
+        }}
+        onListDocuments={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {status: 'ok', totalCount: 0, documents: []},
+          })
+        }
+        onNavigate={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('AI 处理进度');
+    expect(markup).toContain('AI 未启用');
+    expect(markup).toContain('无模型任务');
+    expect(markup).toContain('当前项目数据');
+    expect(markup).toContain('来源片段');
+    expect(markup).toContain('继续当前工作');
+    expect(markup).toContain('无 AI 也完整可用');
+    expect(markup).not.toContain('<main class="workflow-overview__main"');
+  });
+
+  it('keeps Split focused on document selection, materialization, and preview', () => {
+    const markup = renderToStaticMarkup(
+      <InformationEntrySplitWorkspace
+        aiEnabled={false}
         onListDocuments={() =>
           Promise.resolve({
             statusCode: 200,
@@ -153,66 +173,6 @@ describe('M1C product workspaces', () => {
             },
           })
         }
-        onRevise={() =>
-          Promise.resolve({
-            statusCode: 200,
-            body: {status: 'unchanged'},
-          })
-        }
-        onRebuildAssociations={() =>
-          Promise.resolve({
-            statusCode: 200,
-            body: {
-              status: 'rebuilt',
-              entryCount: 0,
-              projectedCount: 0,
-              policy: {
-                version: 'synthetic-v1',
-                contentWeight: 65,
-                typeWeight: 15,
-                domainWeight: 20,
-                threshold: 1100,
-                candidateLimit: 12,
-                adjustmentStep: 1500,
-              },
-            },
-          })
-        }
-        onListAssociations={() =>
-          Promise.resolve({
-            statusCode: 200,
-            body: {
-              status: 'ok',
-              entryId: 'synthetic-entry',
-              totalCount: 0,
-              policy: {
-                version: 'synthetic-v1',
-                contentWeight: 65,
-                typeWeight: 15,
-                domainWeight: 20,
-                threshold: 1100,
-                candidateLimit: 12,
-                adjustmentStep: 1500,
-              },
-              associations: [],
-            },
-          })
-        }
-        onReviseAssociation={() =>
-          Promise.resolve({statusCode: 200, body: {status: 'unchanged'}})
-        }
-        onAggregateDocumentTags={() =>
-          Promise.resolve({
-            statusCode: 200,
-            body: {status: 'unchanged'},
-          })
-        }
-        onReviseDocumentTags={() =>
-          Promise.resolve({
-            statusCode: 200,
-            body: {status: 'unchanged'},
-          })
-        }
         onSearch={() =>
           Promise.resolve({
             statusCode: 200,
@@ -228,19 +188,17 @@ describe('M1C product workspaces', () => {
       />,
     );
 
-    expect(markup).toContain('文档条目');
+    expect(markup).toContain('<h1>拆分</h1>');
     expect(markup).toContain('来源文档导航');
     expect(markup).toContain('批量构建文档条目');
     expect(markup).toContain('构建所选文档');
     expect(markup).toContain('按结构生成条目');
-    expect(markup).toContain('正文或关键词');
-    expect(markup).toContain('类型关键词');
-    expect(markup).toContain('领域关键词');
-    expect(markup).toContain('查询隐私文档');
-    expect(markup).toContain('来源绑定 · 无需 AI');
+    expect(markup).not.toContain('类型关键词');
+    expect(markup).not.toContain('领域关键词');
+    expect(markup).not.toContain('高级筛选');
   });
 
-  it('renders rapid review separately from advanced knowledge maintenance', () => {
+  it('integrates manual scores and deterministic tag preferences into Tags', () => {
     const materials = renderToStaticMarkup(
       <MaterialsWorkspace
         snapshots={{status: 'empty'}}
@@ -257,153 +215,131 @@ describe('M1C product workspaces', () => {
         }
       />,
     );
+    const entry: Readonly<InformationEntry> = {
+      workspaceId: REVIEW_EVIDENCE.workspaceId,
+      entryId: '66666666-6666-4666-8666-666666666666',
+      resourceId: REVIEW_EVIDENCE.resourceId,
+      snapshotId: REVIEW_EVIDENCE.snapshotId,
+      revision: 1,
+      revisionId: '77777777-7777-4777-8777-777777777777',
+      sourceKey: REVIEW_EVIDENCE.sourceKey,
+      capturedAt: REVIEW_EVIDENCE.capturedAt,
+      value: {
+        documentOrder: 0,
+        titlePath: 'TinyPNG',
+        body: 'TinyPNG 是图片压缩工具。https://example.invalid/tool',
+        bodySha256: 'f'.repeat(64),
+        chunkMode: 'split',
+        splitRuleVersion: 'synthetic-v1',
+        isPrivate: false,
+        usefulnessScore: 3,
+        interestScore: 4,
+        contentKeywords: [],
+        domains: [],
+        fragmentIds: ['55555555-5555-4555-8555-555555555555'],
+      },
+    };
     const review = renderToStaticMarkup(
-      <ReviewWorkspace
-        curation={{status: 'ready', value: EMPTY_CURATION}}
-        evidence={REVIEW_EVIDENCE}
-        reviewPreferences={{
+      <InformationEntryReviewControls
+        entry={entry}
+        contentKeywords=""
+        usefulnessScore={3}
+        interestScore={4}
+        preferences={{
           status: 'ready',
           value: {
             status: 'ok',
-            workspaceId: '00000000-0000-4000-8000-000000000001',
+            workspaceId: REVIEW_EVIDENCE.workspaceId,
             quickTags: ['实用工具'],
             automaticKeywords: {
               enabled: true,
               includeLinkDomains: false,
-              excludedKeywords: [],
+              excludedKeywords: ['example.invalid'],
             },
-            vocabulary: {aliases: [], links: [], knowledgeKinds: []},
+            vocabulary: {
+              aliases: [{source: 'Postgres', canonical: 'PostgreSQL'}],
+            },
           },
         }}
-        snapshots={[REVIEW_EVIDENCE]}
-        onApplyCuration={() =>
-          Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
-        }
-        onOpenEvidence={() => undefined}
-        onPutTerm={() =>
-          Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
-        }
-        onSaveReviewPreferences={() =>
-          Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
-        }
-        onRefresh={() => undefined}
-      />,
-    );
-    const knowledge = renderToStaticMarkup(
-      <KnowledgeWorkspace
-        curation={{status: 'ready', value: REVIEWED_CURATION}}
-        evidence={REVIEW_EVIDENCE}
-        snapshots={[REVIEW_EVIDENCE]}
-        reviewPreferences={{
-          status: 'ready',
-          value: {
-            status: 'ok',
-            workspaceId: '00000000-0000-4000-8000-000000000001',
-            quickTags: [],
-            automaticKeywords: {
-              enabled: true,
-              includeLinkDomains: false,
-              excludedKeywords: [],
-            },
-            vocabulary: {aliases: [], links: [], knowledgeKinds: []},
-          },
-        }}
-        onApplyCuration={() =>
-          Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
-        }
-        onApplyKnowledge={() =>
-          Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
-        }
-        onLoadKnowledgeItem={() =>
-          Promise.resolve({statusCode: 404, body: {status: 'not_found'}})
-        }
-        onOpenEvidence={() => undefined}
-        onPutTerm={() =>
-          Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
-        }
-        onRefresh={() => undefined}
-        onSearch={() =>
+        onContentKeywordsChange={() => undefined}
+        onUsefulnessScoreChange={() => undefined}
+        onInterestScoreChange={() => undefined}
+        onSavePreferences={() =>
           Promise.resolve({
             statusCode: 200,
             body: {
               status: 'ok',
-              querySha256: '0'.repeat(64),
-              totalCount: 0,
-              items: [],
+              workspaceId: REVIEW_EVIDENCE.workspaceId,
+              quickTags: ['实用工具'],
+              automaticKeywords: {
+                enabled: true,
+                includeLinkDomains: false,
+                excludedKeywords: ['example.invalid'],
+              },
+              vocabulary: {
+                aliases: [{source: 'Postgres', canonical: 'PostgreSQL'}],
+              },
             },
           })
         }
-        onSelectEvidence={() =>
-          Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
-        }
-        onSaveReviewPreferences={() =>
-          Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
+      />,
+    );
+    const reviewFallback = renderToStaticMarkup(
+      <InformationEntryReviewControls
+        entry={entry}
+        contentKeywords=""
+        usefulnessScore={3}
+        interestScore={4}
+        preferences={{status: 'error', message: 'synthetic unavailable'}}
+        overridePreferences={{
+          quickTags: ['会话工具'],
+          automaticKeywords: {
+            enabled: true,
+            includeLinkDomains: false,
+            excludedKeywords: [],
+          },
+          vocabulary: {aliases: [{source: 'tool', canonical: '工具'}]},
+        }}
+        onContentKeywordsChange={() => undefined}
+        onUsefulnessScoreChange={() => undefined}
+        onInterestScoreChange={() => undefined}
+        onSavePreferences={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {
+              status: 'ok',
+              workspaceId: REVIEW_EVIDENCE.workspaceId,
+              quickTags: [],
+              automaticKeywords: {
+                enabled: true,
+                includeLinkDomains: false,
+                excludedKeywords: [],
+              },
+              vocabulary: {aliases: []},
+            },
+          })
         }
       />,
     );
+    const formal = renderToStaticMarkup(<FormalKnowledgeWorkspace />);
 
-    expect(materials).toContain('保存并拆解材料');
+    expect(materials).toContain('保存来源 Snapshot');
     expect(materials).toContain('作为隐私文档录入');
-    expect(materials).toContain('拆出的知识与相关关系自动继承私密范围');
-    expect(materials).toContain('内容不会写入 Git 或前端包体');
-    expect(materials).toContain('当前工作区还没有材料');
-    expect(materials).toContain('工作区迁移');
-    expect(materials).toContain('恢复到空工作区');
+    expect(materials).toContain('全部个人数据导入导出');
+    expect(materials).toContain('恢复全部个人数据');
     expect(review).toContain('有用程度');
     expect(review).toContain('有趣程度');
-    expect(review).toContain('完整处理');
-    expect(review).toContain('压缩入库');
-    expect(review).toContain('处理倾向');
-    expect(review).toContain('短条目单项');
+    expect(review).toContain('自动确定性候选');
     expect(review).toContain('实用工具');
-    expect(review).toContain('个人快捷标记');
-    expect(review).toContain('很低');
-    expect(review).toContain('很高');
-    expect(review).toContain('自动标签提取');
-    expect(review).toContain('启用自动标签');
-    expect(review).toContain('允许链接域名进入候选');
-    expect(review).toContain('自动排除词');
-    expect(review).toContain('拒绝本条与其他条目建立联系');
-    expect(review).not.toContain('知识变更集');
-    expect(knowledge).toContain('审核转知识');
-    expect(knowledge).toContain('写入后立即用同一搜索边界回读');
-    expect(knowledge).toContain('写入知识并继续');
-    expect(knowledge).toContain('返回上一条');
-    expect(knowledge).toContain('内容如何形成');
-    expect(knowledge).toContain('来源原文所述');
-    expect(knowledge).toContain('内容直接来自原文陈述，不加入新的归纳');
-    expect(knowledge).toContain('查看精确原文');
-    expect(knowledge).toContain('高级拆分、修订与关系编辑');
-    expect(knowledge).toContain('词表整理');
-    expect(knowledge).toContain('添加拆分项');
-    expect(knowledge).toContain('最高权限人工编辑');
-  });
-
-  it('renders deterministic search with source and one-hop filters', () => {
-    const markup = renderToStaticMarkup(
-      <SearchWorkspace
-        snapshots={[]}
-        onOpenEvidence={() => undefined}
-        onSearch={() =>
-          Promise.resolve({
-            statusCode: 200,
-            body: {
-              status: 'ok',
-              querySha256: '0'.repeat(64),
-              totalCount: 0,
-              items: [],
-            },
-          })
-        }
-      />,
-    );
-
-    expect(markup).toContain('确定性查询');
-    expect(markup).toContain('查询隐私文档');
-    expect(markup).toContain('直接来源');
-    expect(markup).toContain('形成方式');
-    expect(markup).toContain('一跳关系锚点 Item ID');
-    expect(markup).toContain('留空可浏览当前知识');
-    expect(markup).toContain('可复现排序 · 非 AI');
+    expect(review).toContain('标签别名合并');
+    expect(review).not.toContain('处理方式');
+    expect(review).not.toContain('判断原因');
+    expect(review).not.toContain('手工联系');
+    expect(reviewFallback).toContain('会话内设置');
+    expect(reviewFallback).toContain('新增快捷标签');
+    expect(reviewFallback).toContain('标签别名合并');
+    expect(reviewFallback).toContain('会话工具');
+    expect(formal).toContain('正式知识');
+    expect(formal).toContain('当前不会写入数据');
   });
 });

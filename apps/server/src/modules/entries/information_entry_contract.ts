@@ -33,6 +33,7 @@ export type EntryTypeKeyword = (typeof ENTRY_TYPE_KEYWORDS)[number];
 export type EntryDomainKeyword = (typeof ENTRY_DOMAIN_KEYWORDS)[number];
 export type EntryChunkMode = (typeof ENTRY_CHUNK_MODES)[number];
 export type EntryAnnotationOrigin = (typeof ENTRY_ANNOTATION_ORIGINS)[number];
+export type EntryAssessmentScore = 1 | 2 | 3 | 4 | 5;
 
 export interface EntryContentKeyword {
   readonly displayValue: string;
@@ -58,6 +59,8 @@ export interface InformationEntryRevisionValue {
   readonly isPrivate: boolean;
   readonly typeKeyword?: EntryTypeKeyword;
   readonly typeCustomName?: string;
+  readonly usefulnessScore?: EntryAssessmentScore;
+  readonly interestScore?: EntryAssessmentScore;
   readonly contentKeywords: readonly Readonly<EntryContentKeyword>[];
   readonly domains: readonly Readonly<EntryDomainAssignment>[];
   readonly fragmentIds: readonly string[];
@@ -116,6 +119,7 @@ export interface InformationEntrySearchRequest {
     minimumScore: number;
   }>;
   readonly includePrivate: boolean;
+  readonly onlyPrivate?: boolean;
   readonly limit: number;
   readonly after?: Readonly<InformationEntrySearchCursor>;
 }

@@ -97,17 +97,7 @@ export interface ReviewVocabularyPreferences {
     source: string;
     canonical: string;
   }>[];
-  readonly links: readonly Readonly<{
-    left: string;
-    right: string;
-    kind: 'related' | 'translation';
-  }>[];
-  readonly knowledgeKinds: readonly Readonly<{
-    keyword: string;
-    knowledgeKind: KnowledgeKind;
-  }>[];
 }
-
 export const DEFAULT_REVIEW_AUTOMATIC_KEYWORDS: Readonly<ReviewAutomaticKeywordPreferences> =
   Object.freeze({
     enabled: true,
@@ -118,10 +108,7 @@ export const DEFAULT_REVIEW_AUTOMATIC_KEYWORDS: Readonly<ReviewAutomaticKeywordP
 export const DEFAULT_REVIEW_VOCABULARY: Readonly<ReviewVocabularyPreferences> =
   Object.freeze({
     aliases: Object.freeze([]),
-    links: Object.freeze([]),
-    knowledgeKinds: Object.freeze([]),
   });
-
 export interface PublicationState {
   readonly instant?: string;
   readonly sourceTimezone?: string;
@@ -256,6 +243,8 @@ export interface InformationEntry {
     isPrivate: boolean;
     typeKeyword?: EntryTypeKeyword;
     typeCustomName?: string;
+    usefulnessScore?: 1 | 2 | 3 | 4 | 5;
+    interestScore?: 1 | 2 | 3 | 4 | 5;
     contentKeywords: readonly Readonly<InformationEntryContentKeyword>[];
     domains: readonly Readonly<InformationEntryDomainAssignment>[];
     fragmentIds: readonly string[];
@@ -671,6 +660,7 @@ export interface WorkspaceBundleTransferSummary {
   readonly byteLength: number;
   readonly sha256?: string;
   readonly blobCount: number;
+  readonly personalDataIncluded: boolean;
   readonly tableCounts: Readonly<Record<string, number>>;
 }
 

@@ -2,6 +2,7 @@ import {
   ENTRY_DOMAIN_KEYWORDS,
   ENTRY_TYPE_KEYWORDS,
   type CurrentInformationEntry,
+  type EntryAssessmentScore,
   type EntryContentKeyword,
   type EntryDomainAssignment,
   type EntryDomainKeyword,
@@ -47,6 +48,8 @@ export interface ManualEntryAnnotationInput {
   readonly contentKeywords: readonly string[];
   readonly typeKeyword: EntryTypeKeyword;
   readonly typeCustomName?: string;
+  readonly usefulnessScore?: EntryAssessmentScore;
+  readonly interestScore?: EntryAssessmentScore;
   readonly domains: readonly Readonly<{
     keyword: EntryDomainKeyword;
     customName?: string;
@@ -109,7 +112,9 @@ export function prepareManualEntryRevision(
     body === undefined ||
     contentKeywords === undefined ||
     type === undefined ||
-    domains === undefined
+    domains === undefined ||
+    !isAssessmentScore(input.usefulnessScore) ||
+    !isAssessmentScore(input.interestScore)
   ) {
     return undefined;
   }
@@ -123,6 +128,16 @@ export function prepareManualEntryRevision(
     isPrivate: current.value.isPrivate,
     typeKeyword: type.keyword,
     ...(type.customName === undefined ? {} : {typeCustomName: type.customName}),
+    ...(input.usefulnessScore === undefined
+      ? current.value.usefulnessScore === undefined
+        ? {}
+        : {usefulnessScore: current.value.usefulnessScore}
+      : {usefulnessScore: input.usefulnessScore}),
+    ...(input.interestScore === undefined
+      ? current.value.interestScore === undefined
+        ? {}
+        : {interestScore: current.value.interestScore}
+      : {interestScore: input.interestScore}),
     contentKeywords,
     domains,
     fragmentIds: current.value.fragmentIds,
@@ -140,6 +155,12 @@ export function informationEntrySearchKey(value: string): string {
         : codePoint;
   }
   return lowered.normalize('NFC');
+}
+
+function isAssessmentScore(value: EntryAssessmentScore | undefined): boolean {
+  return (
+    value === undefined || (Number.isInteger(value) && value >= 1 && value <= 5)
+  );
 }
 
 function normalizeBody(value: string): string | undefined {

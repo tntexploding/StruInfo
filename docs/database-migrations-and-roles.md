@@ -1,6 +1,6 @@
 # Database Migrations and Roles
 
-- Status: First-party runner and ten forward migrations implemented; the M1C
+- Status: First-party runner and eleven forward migrations implemented; the M1C
   `000001`–`000006` PostgreSQL 18 functional smoke passed
 - Contract: `C-M0-S-r2`
 - Database direction: PostgreSQL 18 with separate migration and runtime
@@ -45,6 +45,7 @@ apps/server/migrations/000007_add_other_knowledge_kind.sql
 apps/server/migrations/000008_create_information_entry_core.sql
 apps/server/migrations/000009_create_information_document_tags.sql
 apps/server/migrations/000010_create_information_entry_associations.sql
+apps/server/migrations/000011_collapse_information_entry_current_state.sql
 ```
 
 The runner is first-party code over the already admitted `pg@8.22.0` driver.
@@ -181,6 +182,17 @@ override-revision INSERT and the override current-pointer UPDATE. The migration
 stores no source bytes, personal vocabulary, seed, AI output, vector, extension,
 JSON payload, trigger, role or grant, and it does not create a formal
 `KnowledgeRelation`.
+
+`000011_collapse_information_entry_current_state.sql` implements ADR 0008. It
+copies each pointer-selected Entry, Document-tag set and association override
+into its stable current row, removes noncurrent ordinary-edit children, rewires
+their current inputs/tags to stable identities and drops the three obsolete
+ordinary revision tables. It retains the existing revision number and revision
+UUID as optimistic-concurrency tokens. Immutable Snapshot/Fragment evidence,
+Curation command records and formal KnowledgeItem/KnowledgeRelation revisions
+are untouched. Association projections keep endpoint version tokens so a stale
+projection remains detectable and rebuildable. The migration adds no seed,
+personal value, AI output, dependency, role, grant or database extension.
 
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.

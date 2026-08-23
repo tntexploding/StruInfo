@@ -42,7 +42,7 @@ describe('PostgresInformationEntryAssociationRepository', () => {
       [WORKSPACE_ID, true],
     ]);
     expect(DELETE_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL).toContain(
-      'NOT low_revision.is_private AND NOT high_revision.is_private',
+      'NOT low_entry.is_private AND NOT high_entry.is_private',
     );
     expect(
       statements.some(({sql}) =>

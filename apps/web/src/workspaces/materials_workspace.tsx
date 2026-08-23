@@ -62,6 +62,7 @@ export function MaterialsWorkspace({
     'commonmark-v1',
   );
   const [sourceText, setSourceText] = useState('');
+  const [sourcePreface, setSourcePreface] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<ActionFeedback>();
   const [bundleFileName, setBundleFileName] = useState('');
@@ -78,12 +79,18 @@ export function MaterialsWorkspace({
     setFeedback(undefined);
     const capturedAt = new Date().toISOString();
     const gitSource = sourceMode === 'git_file';
+    const resolvedSourceKey =
+      sourceKey.trim() || `import-${identity.snapshotId.slice(0, 8)}`;
+    const importedText =
+      sourcePreface.trim() === ''
+        ? sourceText
+        : `${sourcePreface.trim()}\n\n${sourceText}`;
     const body = {
       commandIdempotencyKey: identity.commandIdempotencyKey,
       resource: {
         resourceId: identity.resourceId,
         resourceKind: sourceMode,
-        sourceKey,
+        sourceKey: resolvedSourceKey,
         ...(isPrivate ? {isPrivate: true} : {}),
         ...(canonicalUri.trim() === ''
           ? {}
@@ -131,7 +138,7 @@ export function MaterialsWorkspace({
           ]
         : [],
       profile,
-      sourceText,
+      sourceText: importedText,
       ...(canonicalUri.trim() === ''
         ? {}
         : {documentBaseUri: canonicalUri.trim()}),
@@ -149,6 +156,7 @@ export function MaterialsWorkspace({
         setCommitDigest('');
         setPublicationDate('');
         setSourceText('');
+        setSourcePreface('');
         setIsPrivate(false);
       }
     } finally {
@@ -188,13 +196,13 @@ export function MaterialsWorkspace({
 
   return (
     <div className="workspace-view materials-workspace">
-      <header className="workspace-heading">
+      <header className="workflow-page-heading">
         <div>
-          <p className="section-index">01 / MATERIAL INTAKE</p>
-          <h1>材料与证据</h1>
+          <p className="section-index">01 / DOCUMENT IMPORT</p>
+          <h1>导入</h1>
           <p>
-            将 Markdown 保存到当前外部工作区；正文进入 Blob
-            存储，数据库只维护结构、定位与来源。
+            记录来源、格式、日期与隐私范围，并保存不可变 Snapshot。正文进入外部
+            Blob 存储，不进入 Git 或应用包体。
           </p>
         </div>
         <button className="secondary-action" type="button" onClick={onRefresh}>
@@ -205,9 +213,9 @@ export function MaterialsWorkspace({
       <section className="intake-console" aria-labelledby="import-title">
         <header className="console-heading">
           <div>
-            <p className="section-index">CAPTURE / MARKDOWN</p>
+            <p className="section-index">SOURCE / CAPTURE</p>
             <h2 id="import-title" ref={importHeading} tabIndex={-1}>
-              导入一份材料
+              导入来源
             </h2>
           </div>
           <span className="origin-label origin-label--deterministic">
@@ -263,15 +271,14 @@ export function MaterialsWorkspace({
             </span>
           </label>
           <label className="field field--wide">
-            <span>来源标识</span>
+            <span>来源别名（可选）</span>
             <input
-              required
               maxLength={500}
               value={sourceKey}
               onChange={(event) => {
                 setSourceKey(event.currentTarget.value);
               }}
-              placeholder="为这份来源输入一个稳定、可辨认的名称"
+              placeholder="留空时按本次导入身份自动生成"
             />
           </label>
           {sourceMode === 'git_file' ? (
@@ -339,7 +346,7 @@ export function MaterialsWorkspace({
             />
           </label>
           <label className="field">
-            <span>结构配置</span>
+            <span>文档格式与解析规则</span>
             <select
               value={profile}
               onChange={(event) => {
@@ -361,6 +368,17 @@ export function MaterialsWorkspace({
               onChange={(event) => {
                 setPublicationDate(event.currentTarget.value);
               }}
+            />
+          </label>
+          <label className="field field--full import-preface-field">
+            <span>正文前置文字（可选）</span>
+            <textarea
+              rows={3}
+              value={sourcePreface}
+              onChange={(event) => {
+                setSourcePreface(event.currentTarget.value);
+              }}
+              placeholder="需要时补充标题、导语或上下文；保存后将成为本次 Snapshot 正文的一部分。"
             />
           </label>
           <label className="field field--full">
@@ -385,7 +403,6 @@ export function MaterialsWorkspace({
               type="submit"
               disabled={
                 submitting ||
-                sourceKey.trim() === '' ||
                 sourceText === '' ||
                 (sourceMode === 'git_file' &&
                   (repositoryUri.trim() === '' ||
@@ -394,7 +411,7 @@ export function MaterialsWorkspace({
                     !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(commitDigest)))
               }
             >
-              {submitting ? '正在写入…' : '保存并拆解材料'}
+              {submitting ? '正在写入…' : '保存来源 Snapshot'}
             </button>
           </div>
         </form>
@@ -407,8 +424,8 @@ export function MaterialsWorkspace({
       >
         <header className="subsection-heading">
           <div>
-            <p className="section-index">EVIDENCE VAULT / RECENT 200</p>
-            <h2 id="evidence-list-title">已保存 Snapshot</h2>
+            <p className="section-index">IMPORT HISTORY / RECENT 200</p>
+            <h2 id="evidence-list-title">已导入文档</h2>
           </div>
           {snapshots.status === 'ready' ? (
             <div className="record-list-controls">
@@ -443,8 +460,8 @@ export function MaterialsWorkspace({
       >
         <header className="subsection-heading">
           <div>
-            <p className="section-index">PORTABILITY / EXTERNAL DATA</p>
-            <h2 id="workspace-transfer-title">工作区迁移</h2>
+            <p className="section-index">PERSONAL DATA / PORTABILITY</p>
+            <h2 id="workspace-transfer-title">全部个人数据导入导出</h2>
           </div>
           <span className="origin-label origin-label--deterministic">
             同一 Workspace ID
@@ -453,10 +470,11 @@ export function MaterialsWorkspace({
         <div className="workspace-transfer-grid">
           <article className="workspace-transfer-card">
             <p className="section-index">01 / EXPORT</p>
-            <h3>生成领域 Bundle</h3>
+            <h3>导出全部个人数据</h3>
             <p>
-              将 Evidence、人工审核和知识修订写入外部 exports 区；正文 Blob
-              只记录内容哈希，不进入 Git 或应用包。
+              将原始文件、拆分结果、Entry
+              与文档标签、联系、正式知识、审核偏好和个人标签规则写入外部 exports
+              区。导出文件始终位于代码仓库和应用包之外。
             </p>
             <button
               className="secondary-action"
@@ -466,7 +484,9 @@ export function MaterialsWorkspace({
                 void exportWorkspace();
               }}
             >
-              {transferOperation === 'export' ? '正在导出…' : '导出当前工作区'}
+              {transferOperation === 'export'
+                ? '正在导出…'
+                : '导出全部个人数据'}
             </button>
           </article>
           <form
@@ -476,20 +496,21 @@ export function MaterialsWorkspace({
             }}
           >
             <p className="section-index">02 / RESTORE</p>
-            <h3>恢复到空工作区</h3>
+            <h3>恢复全部个人数据</h3>
             <p>
-              只接受同一 Workspace ID，且数据库中尚不存在该工作区。恢复前会验证
-              Bundle 结构与全部 Blob 引用。
+              只接受同一 Workspace
+              ID，且数据库中尚不存在该工作区。恢复前会验证数据库内容、内嵌原始
+              Blob 和个人偏好；旧版 Workspace Bundle 仍可兼容读取。
             </p>
             <label className="field">
-              <span>Bundle 文件名</span>
+              <span>个人数据文件名</span>
               <input
                 required
                 value={bundleFileName}
                 onChange={(event) => {
                   setBundleFileName(event.currentTarget.value);
                 }}
-                placeholder="…workspace-bundle.json"
+                placeholder="…personal-data.json"
               />
             </label>
             <button

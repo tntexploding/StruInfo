@@ -122,6 +122,7 @@ export async function startRoleRuntime(
           workspaceTransfer: new M1cWorkspaceTransfer({
             repository: repositories.workspaceTransfer,
             blobStore: storage.blobStore,
+            reviewPreferences: storage.reviewPreferences,
             fileStore: storage.workspaceBundleFiles,
           }),
         })
