@@ -1,71 +1,3 @@
-export const KNOWLEDGE_KINDS = [
-  'entity',
-  'concept',
-  'assertion',
-  'event',
-  'method',
-  'framework',
-  'resource',
-  'work',
-  'other',
-] as const;
-
-export const EPISTEMIC_ROLES = [
-  'source_claim',
-  'summary',
-  'inference',
-  'user_assertion',
-] as const;
-
-export const KNOWLEDGE_REVIEW_STATES = [
-  'draft',
-  'pending_review',
-  'confirmed',
-  'disputed',
-  'rejected',
-  'withdrawn',
-] as const;
-
-export const INTAKE_ACTIONS = [
-  'full',
-  'split',
-  'condense',
-  'source_only',
-  'ignore',
-  'needs_review',
-] as const;
-
-export const INTAKE_REASONS = [
-  'already_known',
-  'low_information_value',
-  'high_noise_or_marketing',
-  'unreliable_source',
-  'insufficient_evidence',
-  'temporarily_not_needed',
-  'not_interested',
-  'worth_exploring',
-  'recommendation_direction_right_sample_wrong',
-  'other',
-] as const;
-
-export const ASSESSMENT_DIMENSIONS = [
-  'information_density',
-  'breadth',
-  'depth',
-  'current_interest',
-  'serendipity',
-  'noise_marketing',
-  'source_reliability',
-] as const;
-
-export type KnowledgeKind = (typeof KNOWLEDGE_KINDS)[number];
-export type EpistemicRole = (typeof EPISTEMIC_ROLES)[number];
-export type KnowledgeItemEpistemicRole = EpistemicRole | 'source_excerpt';
-export type KnowledgeReviewState = (typeof KNOWLEDGE_REVIEW_STATES)[number];
-export type IntakeAction = (typeof INTAKE_ACTIONS)[number];
-export type IntakeReason = (typeof INTAKE_REASONS)[number];
-export type AssessmentDimension = (typeof ASSESSMENT_DIMENSIONS)[number];
-
 export interface WorkspaceResponse {
   readonly status: 'ok';
   readonly workspaceId: string;
@@ -306,14 +238,6 @@ export type InformationEntryMaterializeResponse =
   | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
   | DomainFailure;
 
-export type InformationEntryListResponse =
-  | Readonly<{
-      status: 'ok';
-      totalCount: number;
-      entries: readonly Readonly<InformationEntry>[];
-    }>
-  | DomainFailure;
-
 export type InformationEntryRevisionResponse =
   | Readonly<{
       status: 'applied' | 'unchanged';
@@ -456,141 +380,6 @@ export type InformationEntryAssociationOverrideResponse =
   | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
   | DomainFailure;
 
-export interface CurationTarget {
-  readonly workspaceId: string;
-  readonly targetId: string;
-  readonly currentVersion: number;
-  readonly kind: 'snapshot' | 'fragment';
-  readonly resourceId?: string;
-  readonly snapshotId?: string;
-  readonly fragmentId?: string;
-}
-
-export interface VocabularyTerm {
-  readonly workspaceId: string;
-  readonly termId: string;
-  readonly currentRevision: number;
-  readonly currentRevisionId: string;
-  readonly value: Readonly<{
-    displayName: string;
-    description?: string;
-    parentTermId?: string;
-    lifecycle: 'active' | 'retired';
-  }>;
-}
-
-export interface ClassificationAssignment {
-  readonly assignmentId: string;
-  readonly targetId: string;
-  readonly termId: string;
-  readonly state: 'assigned' | 'removed';
-}
-
-export interface IntakeDecision {
-  readonly decisionId: string;
-  readonly targetId: string;
-  readonly currentRevision: number;
-  readonly currentRevisionId: string;
-  readonly value: Readonly<{
-    action: IntakeAction;
-    reasonCodes: readonly IntakeReason[];
-    note?: string;
-  }>;
-}
-
-export interface Assessment {
-  readonly assessmentId: string;
-  readonly targetId: string;
-  readonly dimension: string;
-  readonly currentRevision: number;
-  readonly value:
-    | Readonly<{state: 'rated'; score: 0 | 1 | 2 | 3 | 4; note?: string}>
-    | Readonly<{state: 'cleared'}>;
-}
-
-export interface CurationState {
-  readonly terms: readonly Readonly<VocabularyTerm>[];
-  readonly targets: readonly Readonly<CurationTarget>[];
-  readonly assignments: readonly Readonly<ClassificationAssignment>[];
-  readonly decisions: readonly Readonly<IntakeDecision>[];
-  readonly assessments: readonly Readonly<Assessment>[];
-}
-
-export interface KnowledgeSearchSourceMatch {
-  readonly inputKind: 'citation' | 'derivation';
-  readonly inputOrdinal: number;
-  readonly resourceId: string;
-  readonly snapshotId: string;
-  readonly fragmentId: string;
-}
-
-export interface KnowledgeSearchRelationMatch {
-  readonly relationId: string;
-  readonly direction: 'outgoing' | 'incoming';
-  readonly relationTypeKey: string;
-  readonly epistemicRole: EpistemicRole;
-  readonly reviewState: KnowledgeReviewState;
-  readonly qualifier?: string;
-  readonly isPrivate?: true;
-}
-
-export interface KnowledgeSearchItem {
-  readonly itemId: string;
-  readonly revision: number;
-  readonly revisionId: string;
-  readonly value: Readonly<{
-    knowledgeKind: KnowledgeKind;
-    epistemicRole: KnowledgeItemEpistemicRole;
-    reviewState: KnowledgeReviewState;
-    title: string;
-    body?: string;
-  }>;
-  readonly matchRank: 0 | 1 | 2 | 3 | 4;
-  readonly textMatches: readonly Readonly<{
-    field: 'title' | 'body';
-    kind: 'exact' | 'substring';
-    rank: 0 | 1 | 2 | 3;
-  }>[];
-  readonly sourceMatches: readonly Readonly<KnowledgeSearchSourceMatch>[];
-  readonly relationMatchCount: number;
-  readonly relationMatches: readonly Readonly<KnowledgeSearchRelationMatch>[];
-  readonly relationMatchesTruncated: boolean;
-  readonly isPrivate?: true;
-}
-
-export interface PrivateDocumentSearchResult {
-  readonly isPrivate: true;
-  readonly workspaceId: string;
-  readonly resourceId: string;
-  readonly snapshotId: string;
-  readonly sourceKey: string;
-  readonly capturedAt: string;
-  readonly fragmentCount: number;
-  readonly matchKind: 'browse' | 'source_key' | 'full_text';
-  readonly excerpt: string;
-}
-
-export interface KnowledgeSearchCursor {
-  readonly schemaVersion: 1;
-  readonly querySha256: string;
-  readonly matchRank: 0 | 1 | 2 | 3 | 4;
-  readonly normalizedTitle: string;
-  readonly itemId: string;
-}
-
-export type KnowledgeSearchResponse =
-  | Readonly<{
-      status: 'ok';
-      querySha256: string;
-      totalCount: number;
-      items: readonly Readonly<KnowledgeSearchItem>[];
-      nextCursor?: Readonly<KnowledgeSearchCursor>;
-      includePrivate?: boolean;
-      privateDocumentTotalCount?: number;
-      privateDocuments?: readonly Readonly<PrivateDocumentSearchResult>[];
-    }>
-  | DomainFailure;
-
 export interface DomainIssue {
   readonly code: string;
   readonly path?: string;
@@ -601,40 +390,6 @@ export type DomainFailure =
   | Readonly<{status: 'rejected'; issue: Readonly<DomainIssue>}>
   | Readonly<{status: 'failed'; issue: Readonly<DomainIssue>}>;
 
-export interface KnowledgeItemEditState {
-  readonly itemId: string;
-  readonly revision: number;
-  readonly revisionId: string;
-  readonly value: Readonly<{
-    knowledgeKind: KnowledgeKind;
-    epistemicRole: KnowledgeItemEpistemicRole;
-    reviewState: KnowledgeReviewState;
-    title: string;
-    body?: string;
-  }>;
-  readonly provenance: Readonly<{
-    citations: readonly string[];
-    fragmentDerivations: readonly string[];
-    knowledgeDerivations: readonly Readonly<
-      | {kind: 'item'; itemId: string; revision: number}
-      | {kind: 'relation'; relationId: string; revision: number}
-    >[];
-  }>;
-  readonly isPrivate?: true;
-}
-
-export type KnowledgeItemReadResponse =
-  | Readonly<{status: 'ok'; item: Readonly<KnowledgeItemEditState>}>
-  | Readonly<{status: 'not_found'; issue?: Readonly<DomainIssue>}>
-  | DomainFailure;
-
-export type DomainCommandResponse =
-  | Readonly<{
-      status: 'applied' | 'unchanged' | 'replayed';
-      receipt: Readonly<Record<string, unknown>>;
-    }>
-  | DomainFailure;
-
 export type MarkdownImportResponse =
   | Readonly<{
       status: 'created' | 'existing';
@@ -644,7 +399,6 @@ export type MarkdownImportResponse =
       snapshotId: string;
       structureId: string;
       fragmentIds: readonly string[];
-      intakeTargetFragmentIds: readonly string[];
       mediaAssetIds: readonly string[];
       isPrivate?: true;
     }>

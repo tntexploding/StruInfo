@@ -1,12 +1,6 @@
 import {createHash} from 'node:crypto';
 
 import {
-  executeApplyManualCuration,
-  executePutContentClassificationTerm,
-  type ManualCurationRepositoryPort,
-} from '../modules/curation/index.js';
-import type {ManualCurationReadRepositoryPort} from '../modules/curation/manual_curation_read_repository.js';
-import {
   ENTRY_CHUNK_MODES,
   ENTRY_DOMAIN_KEYWORDS,
   ENTRY_TYPE_KEYWORDS,
@@ -42,15 +36,6 @@ import {
   type EvidenceSnapshotReadState,
   type ImportMarkdownEvidenceInput,
 } from '../modules/evidence/index.js';
-import {
-  executeApplyManualKnowledgeChangeSet,
-  executeDeterministicKnowledgeSearch,
-  searchKeyV1,
-  type DeterministicKnowledgeSearchRequest,
-  type DeterministicKnowledgeSearchRepositoryPort,
-  type ManualKnowledgeReadRepositoryPort,
-  type ManualKnowledgeRepositoryPort,
-} from '../modules/knowledge/index.js';
 import type {BlobStore} from '../storage/blob_store.js';
 import {
   decodeReviewAutomaticKeywordPreferences,
@@ -74,11 +59,6 @@ export interface M1cApiServiceDependencies {
   readonly reviewPreferences: ReviewPreferencesStore;
   readonly evidenceRepository: EvidenceRepositoryPort;
   readonly evidenceReadRepository: EvidenceReadRepositoryPort;
-  readonly curationRepository: ManualCurationRepositoryPort;
-  readonly curationReadRepository: ManualCurationReadRepositoryPort;
-  readonly knowledgeRepository: ManualKnowledgeRepositoryPort;
-  readonly knowledgeReadRepository: ManualKnowledgeReadRepositoryPort;
-  readonly retrievalRepository: DeterministicKnowledgeSearchRepositoryPort;
   readonly informationEntryRepository: InformationEntryRepositoryPort;
   readonly informationDocumentTagRepository: InformationDocumentTagRepositoryPort;
   readonly informationEntryAssociationRepository: InformationEntryAssociationRepositoryPort;
@@ -97,23 +77,10 @@ export interface M1cApiServicePort {
     snapshotId: string,
     includePrivate?: unknown,
   ): Promise<M1cHttpResult>;
-  loadCurationState(): Promise<M1cHttpResult>;
   loadReviewPreferences(): Promise<M1cHttpResult>;
   saveReviewPreferences(body: unknown): Promise<M1cHttpResult>;
   importMarkdown(body: unknown): Promise<M1cHttpResult>;
-  putCurationTerm(body: unknown): Promise<M1cHttpResult>;
-  applyCuration(body: unknown): Promise<M1cHttpResult>;
-  applyKnowledgeChangeSet(body: unknown): Promise<M1cHttpResult>;
-  loadKnowledgeItem(
-    itemId: string,
-    includePrivate?: unknown,
-  ): Promise<M1cHttpResult>;
-  search(body: unknown): Promise<M1cHttpResult>;
   materializeInformationEntries(body: unknown): Promise<M1cHttpResult>;
-  listInformationEntries(
-    snapshotId?: unknown,
-    includePrivate?: unknown,
-  ): Promise<M1cHttpResult>;
   reviseInformationEntry(
     entryId: string,
     body: unknown,
@@ -159,9 +126,6 @@ export class M1cApiService implements M1cApiServicePort {
       capabilities: Object.freeze([
         'markdown_import',
         'evidence_read',
-        'manual_curation',
-        'manual_knowledge',
-        'deterministic_search',
         'information_entries',
         'information_document_tags',
         'private_documents',
@@ -227,18 +191,6 @@ export class M1cApiService implements M1cApiServicePort {
         status: 'failed',
         issue: Object.freeze({code: 'evidence_read_failed'}),
       });
-    }
-  }
-
-  public async loadCurationState(): Promise<M1cHttpResult> {
-    try {
-      const state =
-        await this.#dependencies.curationReadRepository.loadCurrentCurationState(
-          this.#dependencies.workspaceId,
-        );
-      return httpResult(200, {status: 'ok', state});
-    } catch {
-      return repositoryFailure();
     }
   }
 
@@ -312,119 +264,6 @@ export class M1cApiService implements M1cApiServicePort {
     return httpResult(statusForImport(result.status), result);
   }
 
-  public async putCurationTerm(body: unknown): Promise<M1cHttpResult> {
-    const envelope = commandEnvelope(body);
-    const result = await executePutContentClassificationTerm(
-      this.#dependencies.curationRepository,
-      commandContext(this.#dependencies.workspaceId, envelope.key),
-      envelope.request,
-    );
-    return httpResult(statusForDomainResult(result), result);
-  }
-
-  public async applyCuration(body: unknown): Promise<M1cHttpResult> {
-    const envelope = commandEnvelope(body);
-    const result = await executeApplyManualCuration(
-      this.#dependencies.curationRepository,
-      commandContext(this.#dependencies.workspaceId, envelope.key),
-      envelope.request,
-    );
-    return httpResult(statusForDomainResult(result), result);
-  }
-
-  public async applyKnowledgeChangeSet(body: unknown): Promise<M1cHttpResult> {
-    const envelope = commandEnvelope(body);
-    const result = await executeApplyManualKnowledgeChangeSet(
-      this.#dependencies.knowledgeRepository,
-      commandContext(this.#dependencies.workspaceId, envelope.key),
-      envelope.request,
-    );
-    return httpResult(statusForDomainResult(result), result);
-  }
-
-  public async loadKnowledgeItem(
-    itemId: string,
-    includePrivate: unknown = false,
-  ): Promise<M1cHttpResult> {
-    if (!CANONICAL_UUID.test(itemId)) {
-      return inputFailure('path.itemId');
-    }
-    if (typeof includePrivate !== 'boolean') {
-      return inputFailure('query.includePrivate');
-    }
-    try {
-      const item =
-        await this.#dependencies.knowledgeReadRepository.loadCurrentKnowledgeItem(
-          this.#dependencies.workspaceId,
-          itemId,
-        );
-      if (item === undefined) {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({code: 'knowledge_item_not_found'}),
-        });
-      }
-      if (item.isPrivate === true && !includePrivate) {
-        return httpResult(403, {
-          status: 'rejected',
-          issue: Object.freeze({
-            code: 'private_content_requires_opt_in',
-            path: 'query.includePrivate',
-          }),
-        });
-      }
-      return httpResult(200, {
-        status: 'ok',
-        item: Object.freeze({
-          itemId: item.itemId,
-          revision: item.revision,
-          revisionId: item.revisionId,
-          value: item.value,
-          provenance: item.provenance,
-          ...(item.isPrivate === true ? {isPrivate: true as const} : {}),
-        }),
-      });
-    } catch {
-      return repositoryFailure();
-    }
-  }
-
-  public async search(body: unknown): Promise<M1cHttpResult> {
-    const envelope = searchEnvelope(body);
-    if (envelope === undefined) return inputFailure('body');
-    const result = await executeDeterministicKnowledgeSearch(
-      this.#dependencies.retrievalRepository,
-      Object.freeze({
-        effectiveWorkspaceId: this.#dependencies.workspaceId,
-        authority: 'manual_user' as const,
-      }),
-      envelope.request,
-      Object.freeze({includePrivate: envelope.includePrivate}),
-    );
-    if (result.status === 'ok') {
-      try {
-        const privateDocuments = envelope.includePrivate
-          ? await searchPrivateDocuments(
-              this.#dependencies,
-              envelope.request as Readonly<DeterministicKnowledgeSearchRequest>,
-            )
-          : Object.freeze([]);
-        return httpResult(200, {
-          ...result,
-          includePrivate: envelope.includePrivate,
-          privateDocumentTotalCount: privateDocuments.length,
-          privateDocuments,
-        });
-      } catch {
-        return httpResult(503, {
-          status: 'failed',
-          issue: Object.freeze({code: 'evidence_read_failed'}),
-        });
-      }
-    }
-    return httpResult(result.status === 'failed' ? 503 : 422, result);
-  }
-
   public async materializeInformationEntries(
     body: unknown,
   ): Promise<M1cHttpResult> {
@@ -486,39 +325,6 @@ export class M1cApiService implements M1cApiServicePort {
         entries: Object.freeze(
           current.filter((entry) => entryIds.has(entry.entryId)),
         ),
-      });
-    } catch {
-      return repositoryFailure();
-    }
-  }
-
-  public async listInformationEntries(
-    snapshotId?: unknown,
-    includePrivate: unknown = false,
-  ): Promise<M1cHttpResult> {
-    if (
-      snapshotId !== undefined &&
-      (typeof snapshotId !== 'string' || !CANONICAL_UUID.test(snapshotId))
-    ) {
-      return inputFailure('query.snapshotId');
-    }
-    if (typeof includePrivate !== 'boolean') {
-      return inputFailure('query.includePrivate');
-    }
-    try {
-      const entries =
-        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          includePrivate,
-        );
-      const selected =
-        snapshotId === undefined
-          ? entries
-          : entries.filter((entry) => entry.snapshotId === snapshotId);
-      return httpResult(200, {
-        status: 'ok',
-        totalCount: selected.length,
-        entries: Object.freeze(selected),
       });
     } catch {
       return repositoryFailure();
@@ -958,142 +764,6 @@ function reviewPreferencesFailure(): M1cHttpResult {
   });
 }
 
-function searchEnvelope(
-  body: unknown,
-): Readonly<{includePrivate: boolean; request: unknown}> | undefined {
-  if (!isRecord(body)) return undefined;
-  if (!Object.hasOwn(body, 'request')) {
-    return Object.freeze({includePrivate: false, request: body});
-  }
-  if (
-    !Object.hasOwn(body, 'includePrivate') ||
-    typeof body.includePrivate !== 'boolean'
-  ) {
-    return undefined;
-  }
-  return Object.freeze({
-    includePrivate: body.includePrivate,
-    request: body.request,
-  });
-}
-
-async function searchPrivateDocuments(
-  dependencies: Readonly<M1cApiServiceDependencies>,
-  request: Readonly<DeterministicKnowledgeSearchRequest>,
-): Promise<readonly Readonly<Record<string, unknown>>[]> {
-  const summaries = await dependencies.evidenceReadRepository.listSnapshots(
-    dependencies.workspaceId,
-  );
-  const matches: Readonly<Record<string, unknown>>[] = [];
-  for (const summary of summaries) {
-    if (summary.isPrivate !== true) continue;
-    if (!sourceSummaryMatches(request, summary)) continue;
-    const snapshot = await dependencies.evidenceReadRepository.loadSnapshot(
-      dependencies.workspaceId,
-      summary.snapshotId,
-    );
-    if (snapshot?.isPrivate !== true) continue;
-    const materialized = await materializeEvidenceSnapshot(
-      snapshot,
-      dependencies.blobStore,
-    );
-    const structures = materialized.structures as readonly Readonly<{
-      normalizedText: string;
-      fragments: readonly Readonly<{fragmentId: string}>[];
-    }>[];
-    if (!sourceDocumentMatches(request, summary, structures)) continue;
-    const normalizedText = structures
-      .map((structure) => structure.normalizedText)
-      .join('\n');
-    matches.push(
-      Object.freeze({
-        isPrivate: true,
-        workspaceId: summary.workspaceId,
-        resourceId: summary.resourceId,
-        snapshotId: summary.snapshotId,
-        sourceKey: summary.sourceKey,
-        capturedAt: summary.capturedAt,
-        fragmentCount: summary.fragmentCount,
-        matchKind: privateDocumentMatchKind(request, summary, normalizedText),
-        excerpt: excerptFromText(normalizedText),
-      }),
-    );
-  }
-  return Object.freeze(matches);
-}
-
-function sourceSummaryMatches(
-  request: Readonly<DeterministicKnowledgeSearchRequest>,
-  summary: Readonly<{resourceId: string; snapshotId: string}>,
-): boolean {
-  const source = request.filters.source;
-  return source.kind === 'any' || source.kind === 'fragment'
-    ? true
-    : source.kind === 'resource'
-      ? source.resourceId === summary.resourceId
-      : source.snapshotId === summary.snapshotId;
-}
-
-function sourceDocumentMatches(
-  request: Readonly<DeterministicKnowledgeSearchRequest>,
-  summary: Readonly<{sourceKey: string}>,
-  structures: readonly Readonly<{
-    normalizedText: string;
-    fragments: readonly Readonly<{fragmentId: string}>[];
-  }>[],
-): boolean {
-  const source = request.filters.source;
-  if (
-    source.kind === 'fragment' &&
-    !structures.some((structure) =>
-      structure.fragments.some(
-        (fragment) => fragment.fragmentId === source.fragmentId,
-      ),
-    )
-  ) {
-    return false;
-  }
-  if (request.text === undefined) return true;
-  const query = searchKeyV1(request.text.value);
-  const fields = new Set(request.text.fields);
-  const candidates = [
-    ...(fields.has('title') ? [searchKeyV1(summary.sourceKey)] : []),
-    ...(fields.has('body')
-      ? structures.map((structure) => searchKeyV1(structure.normalizedText))
-      : []),
-  ];
-  return candidates.some((candidate) =>
-    request.text?.mode === 'exact'
-      ? candidate === query
-      : candidate.includes(query),
-  );
-}
-
-function privateDocumentMatchKind(
-  request: Readonly<DeterministicKnowledgeSearchRequest>,
-  summary: Readonly<{sourceKey: string}>,
-  normalizedText: string,
-): 'browse' | 'source_key' | 'full_text' {
-  if (request.text === undefined) return 'browse';
-  const query = searchKeyV1(request.text.value);
-  if (
-    request.text.fields.includes('title') &&
-    (request.text.mode === 'exact'
-      ? searchKeyV1(summary.sourceKey) === query
-      : searchKeyV1(summary.sourceKey).includes(query))
-  ) {
-    return 'source_key';
-  }
-  return searchKeyV1(normalizedText).includes(query) ? 'full_text' : 'browse';
-}
-
-function excerptFromText(value: string): string {
-  const codePoints = Array.from(value.trim());
-  return codePoints.length <= 240
-    ? codePoints.join('')
-    : `${codePoints.slice(0, 240).join('')}…`;
-}
-
 function mapMarkdownImportBody(
   body: unknown,
   workspaceId: string,
@@ -1507,26 +1177,6 @@ function decodeDocumentTagWriteBody(
   });
 }
 
-function commandEnvelope(body: unknown): Readonly<{
-  key: unknown;
-  request: unknown;
-}> {
-  return isRecord(body)
-    ? Object.freeze({
-        key: body.commandIdempotencyKey,
-        request: body.request,
-      })
-    : Object.freeze({key: undefined, request: undefined});
-}
-
-function commandContext(workspaceId: string, key: unknown): object {
-  return Object.freeze({
-    effectiveWorkspaceId: workspaceId,
-    commandIdempotencyKey: key,
-    authority: 'manual_user',
-  });
-}
-
 async function materializeEvidenceSnapshot(
   snapshot: Readonly<EvidenceSnapshotReadState>,
   blobStore: BlobStore,
@@ -1568,32 +1218,6 @@ function statusForImport(status: string): number {
   if (status === 'existing') return 200;
   if (status === 'conflict') return 409;
   if (status === 'persistence_failed') return 503;
-  return 422;
-}
-
-function statusForDomainResult(result: Readonly<{status: string}>): number {
-  if (result.status !== 'rejected') return 200;
-  const issue = Reflect.get(result, 'issue') as unknown;
-  const code = isRecord(issue) ? issue.code : undefined;
-  if (code === 'persistence_failed') return 503;
-  if (
-    code === 'idempotency_conflict' ||
-    code === 'stale_revision' ||
-    code === 'stale_curation_revision'
-  ) {
-    return 409;
-  }
-  if (
-    code === 'target_not_found' ||
-    code === 'term_not_found' ||
-    code === 'curation_target_not_found' ||
-    code === 'fragment_not_found' ||
-    code === 'item_not_found' ||
-    code === 'relation_not_found' ||
-    code === 'revision_not_found'
-  ) {
-    return 404;
-  }
   return 422;
 }
 

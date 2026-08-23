@@ -40,13 +40,15 @@ runtime-grant, transaction, adapter-completeness, and result-parity gate. Its
 production adapter candidate and TM2 harness are implemented, and production
 scope review has passed; real PostgreSQL 18 execution and the formal TM2 verdict
 remain deferred. Test-harness-only hardening findings do not block the next
-product-development task. M1C-PERSIST introduced the fifth migration,
+product-development task. The following M1C paragraphs are historical evidence,
+not a list of current routes. M1C-PERSIST introduced the fifth migration,
 Evidence/Blob import, external workspace selection and a PostgreSQL 18
-two-workspace functional smoke. M1C-API exposes import, evidence/review reads,
-manual curation, knowledge changes and deterministic search through a narrow
-workspace-fixed local HTTP surface. M1C-WEB now provides the three shipped
-browser workspaces and serves the built Web application from the same loopback
-listener. M1C-VERTICAL has passed with fixed `ruanyf/weekly` issue 405 in a
+two-workspace functional smoke. M1C-API formerly exposed import, evidence/review
+reads, manual curation, knowledge changes and deterministic search through a
+narrow workspace-fixed local HTTP surface. ADR 0009 retires the curation and
+formal-Knowledge runtime; the current listener exposes the Entry-first product.
+M1C-WEB formerly provided three shipped browser workspaces and served the built
+Web application from the same loopback listener. M1C-VERTICAL has passed with fixed `ruanyf/weekly` issue 405 in a
 real browser against disposable PostgreSQL 18: Git provenance, 277 Fragments,
 three representative review decisions, versioned knowledge and a typed
 relation, Framework recomposition from prior revisions, withdrawal revision,
@@ -111,17 +113,14 @@ and are presented and searched as resources. The seventh forward migration adds
 the genuine `other` value without rewriting existing revisions. New source-backed
 items default to “来源原文所述”; review-state behavior is intentionally unchanged.
 
-M1C is now frozen as the runnable compatibility baseline. ADR 0007 redirects the
+M1C is the historical runnable compatibility baseline. ADR 0007 redirected the
 active product main line to M1D: a canonical `InformationEntry` layer between
-immutable Snapshot/Fragment evidence and optional formal KnowledgeItem records.
-Entry is the ordinary document annotation, association, and retrieval unit;
-formal knowledge remains available for stable semantic identities, claims,
-synthesis, and typed relations. M1D begins with additive migration `000008` and
-one narrow vertical slice that materializes Entries from existing Snapshots,
-edits content/type/domain keywords, searches them without AI, and returns exact
-source evidence through the existing local HTTP/Web application. Do not rewrite
-existing M1C knowledge or turn AI, vectors, formal TM2, or test-harness hardening
-into an Entry prerequisite.
+immutable Snapshot/Fragment evidence and optional formal Knowledge records.
+Entry is the ordinary document annotation, association and retrieval unit.
+ADR 0009 later removes the superseded Curation/Knowledge/Retrieval application
+runtime while preserving accepted migrations, historical rows and personal-data
+package compatibility. Do not rewrite existing M1C data or turn AI, vectors,
+formal TM2 or test-harness hardening into an Entry prerequisite.
 
 M1D-1 now implements that first Entry slice. Forward migration `000008` adds
 stable Entry identities, append-only revisions, exact Fragment inputs,
@@ -208,6 +207,15 @@ all referenced Blob bytes and workspace preferences with database sections while
 remaining backward-readable with legacy Bundles. Entry search has public,
 include-private and private-only scopes, and a placeholder Formal Knowledge page
 follows Query pending a separately accepted product design.
+
+ADR 0009 completes the cleanup. Active source MUST NOT restore imports, adapters,
+HTTP routes, frontend contracts or hidden tools from the retired Manual Curation,
+formal Knowledge writer/current-item reader or deterministic Knowledge search.
+Migrations `000003`, `000004`, `000006` and `000007`, their historical rows,
+frozen contracts and legacy personal-data-package section remain for recovery.
+The old TM2 harness is an excluded historical archive with no product script and
+MUST NOT block current work. A Formal Knowledge runtime may return only after an
+accepted M1E-2 boundary.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable

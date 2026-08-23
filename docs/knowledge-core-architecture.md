@@ -1,8 +1,8 @@
 # StruInfo 知识核心架构
 
-- 状态：M1E-1 当前成品态、统一标签审核与完整个人数据包已实现
+- 状态：M1E-1 当前成品态已实现，旧 M1C 应用运行时已退役
 - 最近更新：2026-08-23
-- 相关决策：[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、[ADR 0007](adr/0007-information-entry-first-document-processing.md)、[ADR 0008](adr/0008-current-entry-state-and-portable-personal-data.md)
+- 相关决策：[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、[ADR 0007](adr/0007-information-entry-first-document-processing.md)、[ADR 0008](adr/0008-current-entry-state-and-portable-personal-data.md)、[ADR 0009](adr/0009-retire-superseded-m1c-runtime.md)
 
 ## 1. 核心结论
 
@@ -128,20 +128,16 @@ Entry 的内容、类型和领域关键词服务于文档组织和相似发现�
 000011 在收敛 Entry 当前态时承担一次兼容桥接：与当前 Entry Fragment 输入对应的旧 Curation
 `information_density` 和 `current_interest` 评分按 0–4 到 1–5 映射；当前 active 且 assigned 的
 分类词投影为内容关键词。若 Entry 已有当前评分或同一规范关键词则保留现值并跳过重复。桥接完成后，
-旧 Curation 仍只作为历史兼容层，不再参与普通审核写入。
+旧 Curation 表仅作为历史数据和个人数据包兼容内容，不再有活动命令、读取端口或普通审核写入。
 
 普通 Entry 与正式 Knowledge 保持显式分层。当前“正式知识”页面只是待用户定义的占位，不从
-标签审核自动生成 KnowledgeItem，也不恢复旧处理意图、判断原因或手工联系。M1C 的 Curation、
-Knowledge 和 Retrieval 数据与公共端口作为兼容层保留，既有数据仍可读取，但不驱动当前
-导入 → 拆分 → 标签 → 联系 → 查询主线。
-网页把协议字段 `EpistemicRole` 显示为“内容如何形成”，而不暴露难懂的“内容角色”或
-“认识论角色”：`source_claim` 表示来源原文直接陈述，`summary` 表示从来源压缩整理，
-`inference` 表示依据来源进一步推断，`user_assertion` 表示用户补充判断。该名称调整不改变
-数据库值。队列写入后保留“返回上一条”；对本次页面会话内由快速队列创建的知识，修改复用
-稳定 `KnowledgeItem` 身份并追加下一条 `KnowledgeRevision`，绝不原地覆盖历史。页面无法
-从搜索结果完整重建来源链时，必须先通过工作区限定的当前知识读取端口取得所选 Item 的
-完整值、隐私事实、Fragment 引用/派生和历史知识派生，再预填高级编辑器；不能用一个简化
-搜索结果替换未知 provenance。高级保存仍走同一追加式知识命令。
+标签审核自动生成 KnowledgeItem，也不恢复旧处理意图、判断原因或手工联系。ADR 0009 已删除
+M1C Curation、Knowledge 和 Retrieval 的活动纯逻辑、repository adapter、HTTP 与 Web 入口；
+既有迁移、历史表、旧行和个人数据包分区继续保留，代码清理不等于用户数据删除。
+
+`EpistemicRole`、`KnowledgeItem`、`KnowledgeRevision` 和类型化关系仍是正式知识模型的
+历史与未来设计词汇，但当前 Entry 主线不展示或调用它们。M1E-2 必须先由所有者定义形成条件、
+编辑对象、关系语义和检索用途，再实现新的最小纵向路径；不得悄悄恢复已删除的高级编辑器。
 
 ## 5. 知识数据模型
 
@@ -409,15 +405,13 @@ oracle”的方式推进，而按一条可运行纵向路径接线：
 11. **已完成并继续使用**：有用/有趣评价采用独立五档控件；个人快捷标签、自动提取开关、
     URL 域名策略、排除词和别名保存在外部工作区偏好文件中。当前标签页使用普通纵向滚动，
     不要求单屏塞入全部控件；
-12. **历史 M1C 兼容能力**：既有 Curation → Knowledge 编排和高级知识编辑端口仍可读取旧数据，
-    但已从活动导航移除；新的“正式知识”页面等待用户另行定义，不由 Entry 审核自动触发；
-13. **已完成**：既有正式知识通过工作区限定的当前 Item 读取端口把当前值、修订身份、
-    隐私事实和完整 provenance 装入高级编辑器；保存继续追加不可变修订，不从搜索卡片猜测
-    或丢弃来源；
-14. **已完成**：日常新知识写入收敛为概念、观点、事件、方法、资源、其他六类；旧
-    `entity`、`framework`、`work` 修订不迁移，界面统一作为资源显示，资源筛选同时覆盖
-    这些旧值。`assertion` 保持存储值但显示为观点，`000007` 仅为新写入增加 `other`；
-    来源支持的新条目默认标记为来源原文所述，审核状态逻辑未改变；
+12. **历史 M1C 运行时（已退役）**：旧 Curation → Knowledge 编排、高级知识编辑、当前 Item
+    读取和 Knowledge 检索均已由 ADR 0009 从活动代码删除；迁移、历史表和个人数据包旧分区保留；
+13. **历史正式知识证据**：M1C 曾证明完整 provenance 读取、追加修订、类型化关系及隐私传播，
+    但这些通过记录不再表示当前应用仍公开对应命令；
+14. **未来正式知识边界**：`KnowledgeItem`、`KnowledgeRevision`、`EpistemicRole` 与
+    `entity`/`framework`/`work` 等旧值保持数据兼容；M1E-2 重新定义页面和命令前不在 UI
+    中提供编辑或搜索；
 15. **已完成 M1D-0**：冻结 M1C，不重写现有 Evidence、Curation 或 Knowledge 数据；
     ADR 0007 固定 Entry-first 路径及兼容边界；
 16. **已完成 M1D-1**：通过 `000008` 和窄应用端口从已有 Snapshot 生成稳定 Entry，允许
@@ -453,11 +447,11 @@ oracle”的方式推进，而按一条可运行纵向路径接线：
 
 在接入真实 AI 之前，固定语料必须能够证明：
 
-- “小说”被保存为内容分类，同时处理动作可以独立保持未决定；
-- 文档 Entry 可在不创建 KnowledgeItem 的情况下设置三类关键词、建立可解释关联并被搜索；
-- Entry、Fragment 和 KnowledgeItem 可以互相返回来源，但不会共享或混淆身份；
-- 用户能够把一个主文拆成多个知识项，并返回原文行号；
-- 用户能够建立和撤回一条类型化关系，而不改写两个端点；
+- 文档 Entry 可在不创建 KnowledgeItem 的情况下设置三类关键词、五档评价、建立可解释关联并被搜索；
+- 导入、拆分、标签、联系和查询均只调用当前 Entry 边界，不依赖旧 Curation/Knowledge 运行时；
+- Entry 与 Fragment 可以精确返回来源，但不会共享或混淆身份；
+- 正式知识占位不会伪装成已实现页面，也不会自动把 Entry 升级为 KnowledgeItem；
+- 历史 Knowledge 数据可随个人数据包保存，而当前应用不会未经新决策修改它；
 - 用户能够把同一知识放入两个集合或树位置而不复制修订；
 - 用户能够创建一个由多项知识派生的框架并查看全部依据；
 - 编辑产生新修订，旧引用不会被静默继承；

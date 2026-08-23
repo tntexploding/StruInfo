@@ -58,11 +58,6 @@ export class M1cApiController {
     );
   }
 
-  @Get('curation')
-  public async curation(@Res() response: Response): Promise<void> {
-    writeLocalApiResponse(response, await this.#service.loadCurationState());
-  }
-
   @Get('preferences/review')
   public async reviewPreferences(@Res() response: Response): Promise<void> {
     writeLocalApiResponse(
@@ -90,62 +85,6 @@ export class M1cApiController {
     writeLocalApiResponse(response, await this.#service.importMarkdown(body));
   }
 
-  @Post('curation/terms')
-  public async putCurationTerm(
-    @Body() body: unknown,
-    @Res() response: Response,
-  ): Promise<void> {
-    writeLocalApiResponse(response, await this.#service.putCurationTerm(body));
-  }
-
-  @Post('curation/apply')
-  public async applyCuration(
-    @Body() body: unknown,
-    @Res() response: Response,
-  ): Promise<void> {
-    writeLocalApiResponse(response, await this.#service.applyCuration(body));
-  }
-
-  @Post('knowledge/change-sets')
-  public async applyKnowledgeChangeSet(
-    @Body() body: unknown,
-    @Res() response: Response,
-  ): Promise<void> {
-    writeLocalApiResponse(
-      response,
-      await this.#service.applyKnowledgeChangeSet(body),
-    );
-  }
-
-  @Get('knowledge/items/:itemId')
-  public async knowledgeItem(
-    @Param('itemId') itemId: string,
-    @Query('includePrivate') includePrivate: string | undefined,
-    @Res() response: Response,
-  ): Promise<void> {
-    writeLocalApiResponse(
-      response,
-      await this.#service.loadKnowledgeItem(
-        itemId,
-        includePrivate === undefined
-          ? false
-          : includePrivate === 'true'
-            ? true
-            : includePrivate === 'false'
-              ? false
-              : includePrivate,
-      ),
-    );
-  }
-
-  @Post('search')
-  public async search(
-    @Body() body: unknown,
-    @Res() response: Response,
-  ): Promise<void> {
-    writeLocalApiResponse(response, await this.#service.search(body));
-  }
-
   @Post('entries/materialize')
   public async materializeInformationEntries(
     @Body() body: unknown,
@@ -154,21 +93,6 @@ export class M1cApiController {
     writeLocalApiResponse(
       response,
       await this.#service.materializeInformationEntries(body),
-    );
-  }
-
-  @Get('entries')
-  public async informationEntries(
-    @Query('snapshotId') snapshotId: string | undefined,
-    @Query('includePrivate') includePrivate: string | undefined,
-    @Res() response: Response,
-  ): Promise<void> {
-    writeLocalApiResponse(
-      response,
-      await this.#service.listInformationEntries(
-        snapshotId,
-        parseOptionalBooleanQuery(includePrivate),
-      ),
     );
   }
 

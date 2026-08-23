@@ -1,19 +1,14 @@
 import type {
-  CurationState,
-  DomainCommandResponse,
   EvidenceSnapshot,
   EvidenceSnapshotSummary,
   InformationEntryAssociationListResponse,
   InformationEntryAssociationOverrideResponse,
   InformationEntryAssociationRebuildResponse,
-  InformationEntryListResponse,
   InformationEntryDocumentListResponse,
   InformationEntryMaterializeResponse,
   InformationEntryRevisionResponse,
   InformationEntrySearchResponse,
   InformationDocumentTagWriteResponse,
-  KnowledgeItemReadResponse,
-  KnowledgeSearchResponse,
   M1cHttpResponse,
   MarkdownImportResponse,
   ReviewPreferencesWrite,
@@ -53,9 +48,6 @@ export interface M1cApiClient {
       | Readonly<{status: 'rejected'; issue: Readonly<{code: string}>}>
     >
   >;
-  loadCuration(
-    options?: M1cApiRequestOptions,
-  ): Promise<M1cHttpResponse<Readonly<{status: 'ok'; state: CurationState}>>>;
   loadReviewPreferences(
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<ReviewPreferencesResponse>>;
@@ -67,34 +59,10 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<MarkdownImportResponse>>;
-  putCurationTerm(
-    body: unknown,
-    options?: M1cApiRequestOptions,
-  ): Promise<M1cHttpResponse<DomainCommandResponse>>;
-  applyCuration(
-    body: unknown,
-    options?: M1cApiRequestOptions,
-  ): Promise<M1cHttpResponse<DomainCommandResponse>>;
-  applyKnowledgeChangeSet(
-    body: unknown,
-    options?: M1cApiRequestOptions,
-  ): Promise<M1cHttpResponse<DomainCommandResponse>>;
-  loadKnowledgeItem(
-    itemId: string,
-    options?: M1cApiRequestOptions,
-  ): Promise<M1cHttpResponse<KnowledgeItemReadResponse>>;
-  search(
-    body: unknown,
-    options?: M1cApiRequestOptions,
-  ): Promise<M1cHttpResponse<KnowledgeSearchResponse>>;
   materializeInformationEntries(
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryMaterializeResponse>>;
-  listInformationEntries(
-    snapshotId?: string,
-    options?: M1cApiRequestOptions,
-  ): Promise<M1cHttpResponse<InformationEntryListResponse>>;
   reviseInformationEntry(
     entryId: string,
     body: unknown,
@@ -158,17 +126,10 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     workspace: reject,
     listEvidence: reject,
     loadEvidenceSnapshot: reject,
-    loadCuration: reject,
     loadReviewPreferences: reject,
     saveReviewPreferences: reject,
     importMarkdown: reject,
-    putCurationTerm: reject,
-    applyCuration: reject,
-    applyKnowledgeChangeSet: reject,
-    loadKnowledgeItem: reject,
-    search: reject,
     materializeInformationEntries: reject,
-    listInformationEntries: reject,
     reviseInformationEntry: reject,
     searchInformationEntries: reject,
     rebuildInformationEntryAssociations: reject,
@@ -224,11 +185,6 @@ export function createM1cApiClient(
         `api/v1/evidence/snapshots/${encodeURIComponent(snapshotId)}${options?.includePrivate === true ? '?includePrivate=true' : ''}`,
         options,
       ),
-    loadCuration: (options) =>
-      get<Readonly<{status: 'ok'; state: CurationState}>>(
-        'api/v1/curation',
-        options,
-      ),
     loadReviewPreferences: async (options) =>
       decodeReviewPreferencesResponse(
         await get<unknown>('api/v1/preferences/review', options),
@@ -239,32 +195,10 @@ export function createM1cApiClient(
       ),
     importMarkdown: (body, options) =>
       post<MarkdownImportResponse>('api/v1/imports/markdown', body, options),
-    putCurationTerm: (body, options) =>
-      post<DomainCommandResponse>('api/v1/curation/terms', body, options),
-    applyCuration: (body, options) =>
-      post<DomainCommandResponse>('api/v1/curation/apply', body, options),
-    applyKnowledgeChangeSet: (body, options) =>
-      post<DomainCommandResponse>(
-        'api/v1/knowledge/change-sets',
-        body,
-        options,
-      ),
-    loadKnowledgeItem: (itemId, options) =>
-      get<KnowledgeItemReadResponse>(
-        `api/v1/knowledge/items/${encodeURIComponent(itemId)}${options?.includePrivate === true ? '?includePrivate=true' : ''}`,
-        options,
-      ),
-    search: (body, options) =>
-      post<KnowledgeSearchResponse>('api/v1/search', body, options),
     materializeInformationEntries: (body, options) =>
       post<InformationEntryMaterializeResponse>(
         'api/v1/entries/materialize',
         body,
-        options,
-      ),
-    listInformationEntries: (snapshotId, options) =>
-      get<InformationEntryListResponse>(
-        `api/v1/entries${entryQuery(snapshotId, options?.includePrivate === true)}`,
         options,
       ),
     reviseInformationEntry: (entryId, body, options) =>
@@ -332,17 +266,6 @@ export function createM1cApiClient(
       ),
   };
   return Object.freeze(client);
-}
-
-function entryQuery(
-  snapshotId: string | undefined,
-  includePrivate: boolean,
-): string {
-  const parameters = new URLSearchParams();
-  if (snapshotId !== undefined) parameters.set('snapshotId', snapshotId);
-  if (includePrivate) parameters.set('includePrivate', 'true');
-  const value = parameters.toString();
-  return value === '' ? '' : `?${value}`;
 }
 
 function privateOnlyQuery(includePrivate: boolean): string {

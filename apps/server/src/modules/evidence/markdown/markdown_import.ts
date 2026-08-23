@@ -58,7 +58,6 @@ interface MarkdownImportReceipt {
   readonly snapshotId: string;
   readonly structureId: string;
   readonly fragmentIds: readonly string[];
-  readonly intakeTargetFragmentIds: readonly string[];
   readonly mediaAssetIds: readonly string[];
   readonly isPrivate?: true;
 }
@@ -182,10 +181,6 @@ export async function importMarkdownEvidence(
     return Object.freeze({...writeResult});
   }
 
-  const intakeTargetFragmentIds = findIntakeTargetFragmentIds(
-    parsed.value,
-    materialized.value.structure.fragments,
-  );
   return Object.freeze({
     status: writeResult.status,
     workspaceId: writeResult.workspaceId,
@@ -198,7 +193,6 @@ export async function importMarkdownEvidence(
         (fragment) => fragment.fragmentId,
       ),
     ),
-    intakeTargetFragmentIds: Object.freeze(intakeTargetFragmentIds),
     mediaAssetIds: Object.freeze(
       materialized.value.mediaAssets.map((asset) => asset.mediaAssetId),
     ),
@@ -266,23 +260,6 @@ async function persistNormalizedText(
       result: mapBlobFailure(error),
     });
   }
-}
-
-function findIntakeTargetFragmentIds(
-  parsed: Readonly<ParsedMarkdownDocument>,
-  materializedFragments: readonly Readonly<{fragmentId: string}>[],
-): string[] {
-  const result: string[] = [];
-  for (const [index, fragment] of parsed.fragments.entries()) {
-    if (fragment.role !== 'intake_target') {
-      continue;
-    }
-    const materialized = materializedFragments[index];
-    if (materialized !== undefined) {
-      result.push(materialized.fragmentId);
-    }
-  }
-  return result;
 }
 
 function markdownIssueResult(

@@ -10,7 +10,6 @@ import type {
   InformationEntryRevisionResponse,
   InformationEntrySearchResponse,
   InformationDocumentTagWriteResponse,
-  KnowledgeSearchResponse,
   M1cHttpResponse,
   MarkdownImportResponse,
   ReviewPreferencesResponse,
@@ -584,7 +583,3 @@ function describeWireIssue(value: Readonly<Record<string, unknown>>): string {
     typeof value.budget === 'string' ? ` · 上限 ${value.budget}` : '';
   return `${code}${path}${budget}`;
 }
-
-export type M1cSearchHandler = (
-  body: unknown,
-) => Promise<M1cHttpResponse<KnowledgeSearchResponse>>;

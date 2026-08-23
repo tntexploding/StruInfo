@@ -1,7 +1,7 @@
 # StruInfo Frontend Design Specification
 
 - Status: Project frontend baseline
-- Version: 1.2
+- Version: 1.3
 - Effective date: 2026-08-10
 - Scope: StruInfo web application design, implementation, and review
 
@@ -40,8 +40,8 @@ The fixed design contract is:
 | Visual family            | `struinfo-industrial`, an original black/white/cyan industrial information system                            |
 | Full-product depth       | `complex / 3`: multi-zone shell and complete shared component treatment                                      |
 | M0-S depth               | `moderate / 2`: recognizable shell and states without fake product data                                      |
-| M1C depth                | `complex / 3`: four task workspaces plus a contextual provenance dossier                                     |
-| M1D depth                | `complex / 3`: Entry annotation/search workspace inside the existing product shell                           |
+| Historical M1C depth     | `complex / 3`: retired four-workspace runtime retained only in design history                                |
+| M1E depth                | `complex / 3`: five-stage Entry workflow, overview and reserved Formal Knowledge page                        |
 | Primary evidence pattern | Black edge shell, cyan active rule, indexed sections, precise provenance dossier                             |
 | Primary user question    | What is worth retaining or exploring, what knowledge changed, what supports it, and what can I control next? |
 
@@ -150,51 +150,24 @@ The same number SHOULD NOT be repeated in both places merely to fill space.
 
 ## 4. Phase-aware Information Architecture
 
-The long-term information architecture reserves these modules:
+Current primary navigation is `总览 / 导入 / 拆分 / 标签 / 联系 / 查询`.
+A seventh `正式知识` destination is an honest reserved page, not a working
+legacy editor. Only implemented routes MAY expose controls or live metrics.
 
-- Command Center;
-- Intake Workspace;
-- Review Queue;
-- Saved Knowledge;
-- Search;
-- Sources;
-- Evidence Vault;
-- Processing Runs and Change Sets;
-- Knowledge Graph;
-- Timeline;
-- Ask AI;
-- Daily and Weekly Briefs;
-- Reports;
-- Settings.
-
-Only implemented routes MAY appear as active navigation.
-Future modules MUST NOT be rendered as working controls, live metrics, or empty
-shells solely to make the product appear complete.
-
-For MVP-0, prioritize this task path:
+The active non-AI task path is:
 
 ```text
-Fixed weekly source document
-  -> document structure and independent items
-  -> evidence and media inspection
-  -> content classification, separate from intake action
-  -> full / split / condense / source-only / ignore / review decision
-  -> manual or deterministic knowledge change set
-  -> commit stable items, immutable revisions, relations, and citations
-  -> deterministic search and return to source or change evidence
-  -> optional AI proposal through the same change-set boundary
+external source document
+  -> immutable Snapshot and Fragment evidence
+  -> current InformationEntry materialization
+  -> content / type / domain tags plus independent usefulness / interest
+  -> explainable Entry associations and manual overrides
+  -> privacy-scoped deterministic Entry search and exact source return
 ```
 
-After the M1C checkpoint, the routine document path is redirected by ADR 0007:
-
-```text
-captured Snapshot and Fragment evidence
-  -> InformationEntry
-  -> content / type / domain keyword editing
-  -> document context and selective related entries
-  -> deterministic Entry search and exact source return
-  -> optional formal KnowledgeItem or typed relation when deeper semantics help
-```
+The former Review Queue, Knowledge Change Set editor and deterministic Knowledge
+search are retired application surfaces. Their historical data and design
+records do not authorize hidden navigation or API calls.
 
 Scheduled acquisition, Daily and Weekly Briefs, QQbot, public integration APIs,
 Knowledge Graph canvas, complete Timeline, and mixed online query are later
@@ -265,70 +238,34 @@ rule or grid layer, indexed metadata, restrained reveal, and complete responsive
 states.
 It does not need the full long-term navigation or a synthetic dashboard.
 
-### 5.4 M1C product workspace profile
+### 5.4 Current product boundary
 
-M1C releases four real task workspaces: materials/evidence, rapid manual
-review, advanced knowledge maintenance, and deterministic search/source return. The built Web
-application uses the same loopback listener as the narrow product API and MUST
-continue to expose AI as unavailable until an admitted adapter is configured.
+The Web application and narrow loopback API expose one owner workflow:
+Evidence/Blob import, Entry materialization, current Entry/Document tagging,
+explainable associations, privacy-aware Entry search, external preferences and
+complete personal-data-package transfer. AI remains visibly unavailable until
+an admitted adapter has real run state.
 
-The right provenance dossier MUST preserve Snapshot identity, Fragment line
-range, exact selected text, and digest. A search source match opens its exact
-`fragmentId`, not merely the first Fragment in the same Snapshot. Review keeps
-information density, current interest, serendipity, noise/marketing, and source
-reliability separate. Search keeps text, source, state and one-hop relation
-reasons visible rather than collapsing them into an opaque score.
+Manual Curation, the old formal Knowledge writer/current-item reader and the old
+Knowledge search are not current product capabilities. Their pages, client
+contracts and server routes MUST NOT be restored as secondary or hidden tools.
+The `正式知识` page remains a labelled placeholder until M1E-2 accepts its own
+formation, editing, relation and retrieval semantics.
 
-The knowledge workspace MUST make the routine post-review path primary. For a
-selected Snapshot it reconstructs eligible reviewed Fragments, distinguishes
-pending entries from entries already returned by source-scoped deterministic
-search, and lets the user confirm an editable title, body, knowledge kind,
-epistemic role, and review state before writing. The protocol term
-`EpistemicRole` MUST be presented as the plain-language question “内容如何形成”:
-source text, a summary organized from the source, an inference based on the
-source, or a user-supplied judgment. A new source-backed item defaults to source
-text while keeping the other choices available. New-write knowledge kinds are
-limited to concept, viewpoint, event, method, resource, and other. The stored
-`assertion` kind is labelled viewpoint; legacy entity, framework, and work kinds
-remain unchanged but are displayed and filtered as resources. A successful write is followed by a search
-read-back and queue advance. The action row MUST also offer a visible route to
-the previous entry. An item created in the current queue session may be edited
-there by appending a new immutable revision; an older or structurally complex
-item routes to the advanced editor. Choosing “在高级编辑器中修改” MUST first
-load that selected item's current stable identity, revision, value, privacy
-fact, Fragment inputs, and historical knowledge derivations through the public
-workspace-scoped read boundary. The editor MUST visibly identify the loaded
-revision and preserve those inputs until the user explicitly replaces them; it
-MUST NOT infer complete provenance from a search result or open a blank draft.
-Multi-item splits and typed relations remain available in that secondary
-advanced editor; the term
-“change set” alone MUST NOT be the primary user-facing explanation. A search
-refresh failure after a successful commit MUST NOT be presented as a failed
-write or invite an accidental duplicate command.
+Privacy is explicit and local to the action being taken:
 
-Privacy-document interaction is explicit and local to the action being taken:
+- import offers an unchecked private-document control before submission;
+- Entry views and search default to public-only and may explicitly include or
+  show only private results;
+- a previous result or navigation event MUST NOT silently broaden a later view;
+- privacy state uses text in addition to color; and
+- private source bytes and complete text open only within the explicitly
+  broadened current scope.
 
-- Markdown intake MUST offer an unchecked “作为隐私文档录入” control beside
-  the source/import fields, before the submit action;
-- search MUST default to the public scope and expose a separately labelled
-  unchecked “查询隐私文档” control; a previous result or page transition MUST
-  NOT silently broaden a later query;
-- privacy state MUST use a text label or badge in addition to color, and every
-  returned private item, relation reason and full-document result MUST remain
-  visibly marked;
-- complete private documents MUST appear in a distinct result section and open
-  only through an action that preserves the explicit privacy scope; they MUST
-  NOT be blended into ordinary knowledge cards or silently opened by a public
-  source match; and
-- metadata needed to identify and deliberately select a private Snapshot MAY be
-  visible in the materials list, but its full text, excerpts, derived entries
-  and relation content MUST remain hidden until the explicit control is active.
+This visibility boundary is not encryption or multi-user authorization. The UI
+MUST NOT claim otherwise.
 
-This first local-product control communicates a visibility boundary, not
-encryption or multi-user authorization. The interface MUST NOT make stronger
-security claims than the implemented storage and local-runtime model.
-
-### 5.5 M1D Entry workspace profile
+### 5.5 Entry workspace profile
 
 M1D adds Entry browsing, annotation, and search to the existing shell. It MUST
 not relabel an Entry as formal knowledge or force the advanced knowledge editor
@@ -345,7 +282,7 @@ search the saved result with an exact source route. The screen MUST expose:
 - one primary domain and at most two secondary domains;
 - explicit save state and actionable failure state;
 - deterministic body/keyword match reasons; and
-- an optional, clearly secondary route to formal knowledge maintenance.
+- a clearly labelled route to the reserved Formal Knowledge page without pretending that editing is implemented.
 
 Type and domain choices are system protocol values and use concise Chinese
 labels. A selected `其他` value reveals a dimension-specific custom-name field;
@@ -364,14 +301,14 @@ fabricating candidates, counts, or AI activity. At 320/390/768/1024/1440 widths,
 Entry body, keyword controls, save action, search results, and source return must
 remain reachable through normal document scrolling and keyboard order.
 
-### 5.6 M1D owner workflow shell
+### 5.6 Current owner workflow shell
 
-The primary browser information architecture MUST use exactly six owner-facing
-workspaces in this order: `总览`, `导入`, `拆分`, `标签`, `联系`, and `查询`.
-The five processing workspaces form one visually continuous timeline; `总览`
-is its home and status surface. Historical review and formal-knowledge tools MAY
-remain as secondary maintenance routes, but MUST NOT compete with these six as
-equal primary navigation destinations.
+The primary browser information architecture MUST use six working destinations
+in this order: `总览`, `导入`, `拆分`, `标签`, `联系`, and `查询`. A seventh
+`正式知识` item follows `查询` and remains visibly unavailable until M1E-2.
+The five processing workspaces form one continuous timeline; `总览` is its home
+and status surface. Retired review and Knowledge tools MUST NOT appear as
+secondary maintenance routes.
 
 Each workspace has one dominant task and a visibly subordinate context area:
 
@@ -402,7 +339,7 @@ usable while those capabilities are absent.
 
 Desktop layouts SHOULD preserve a narrow workflow timeline, a dominant work
 surface, and at most one contextual side rail. Tablet layouts MAY stack the
-context rail below the dominant task. At phone widths the six navigation items
+context rail below the dominant task. At phone widths the navigation items
 MAY become a bottom bar, but all six labels, current-page indication, primary
 action, privacy state, errors, results, and source-return controls MUST remain
 reachable without horizontal page scrolling. Pages use natural vertical
@@ -611,123 +548,44 @@ Search and Ask AI MUST communicate their scope: saved knowledge, current online
 material, or mixed results.
 Capture MUST make the destination and subsequent review state clear.
 
-### 9.2 Intake, change sets, and review queue
+### 9.2 Entry tags and current-state editing
 
-An intake item row owns comparable decision data:
+The Tags page owns routine manual annotation. For the selected Entry or complete
+Document it presents:
 
-- title and short summary;
-- source document, section, and stable item location;
-- user-defined content classification and vocabulary version;
-- information value and noise dimensions;
-- current-interest and exploration types;
-- traceability state;
-- conflict or risk state;
-- intake decision and review state;
-- operation origin: user, deterministic parser, rule, import, AI, or external client;
-- the policy responsible for any automatic decision;
-- one primary intake or takeover action.
+- exact source identity and a direct evidence route;
+- content, type and domain tags as separate dimensions;
+- independent five-position usefulness and interest controls;
+- editable deterministic keyword candidates;
+- user-managed quick tags, exclusions and user-confirmed aliases; and
+- a single explicit save action with visible success or failure.
 
-The interface MUST distinguish content classification, knowledge-admission
-action, knowledge kind, epistemic role, review state, operation origin, and
-attention routing. For example, `小说` says what the content is and does not
-choose an intake action. `安静入库`, `探索推荐`, and `优先审核` describe
-presentation; they MUST NOT replace `完整处理`, `拆分`, `压缩`,
-`仅保留来源`, `忽略`, or `待定`.
+Usefulness and interest MUST NOT be collapsed into a combined preference or
+truth score. Case-only duplicates are normalized deterministically; bilingual or
+semantic equivalence requires an explicit user alias. URL targets, paths and
+attachment names are excluded from candidates by default.
 
-A knowledge change set owns proposed additions, revisions, relations,
-conflicts, citations, derivations, operation origin, and authorization basis.
-It MUST show which operations were committed automatically and which require
-human review. AI origin appears only when AI actually produced or changed an
-operation; user and deterministic changes MUST NOT be visually relabeled as AI.
+If external preference storage is unavailable, manual annotation remains usable
+with a visibly session-only fallback. Quick tags and aliases remain external
+personal data and never become source constants or migration seeds.
 
-The evidence drawer owns excerpts, snapshot metadata, derivation, and detailed
-assessments.
-Full-process, split, condense, source-only, ignore, revise, authorize, reject,
-merge, archive, revert-policy, and reprocess actions MUST expose their real
-availability and consequences.
-
-Negative feedback SHOULD distinguish `已经知道`, `质量低`, `来源不可靠`,
-`暂时不需要`, `不感兴趣`, and `陌生但值得探索` so preference learning does
-not treat every rejection as permanent topic exclusion.
-
-The rapid-review route MUST optimize one-fragment-at-a-time decisions. Its
-desktop reading order is: a narrow queue/paginator; the Fragment body above its
-manual evaluation; deterministic keyword candidates above relation-intent
-editing. On narrow screens these regions become one document-order column.
-Queue counts belong in the page header instead of consuming a separate metric
-dashboard.
-
-`有用程度` is the review UI projection of `information_density`, while
-`有趣程度` writes `current_interest`. They MUST remain independent sliders and
-MUST NOT be combined into an opaque preference score. The selected
-`IntakeAction` is also independent: scores MAY produce a visible recommendation
-for `完整处理`, `拆分`, or `压缩`, but only the user's explicit submit chooses the
-action. Submit advances to the next pending Fragment; previous/next navigation
-MUST reconstruct persisted decisions, assessments, reasons, and vocabulary
-assignments rather than preserve unsaved accidental state.
-
-The submitted action is an audit-time inclination, not a mandatory downstream
-knowledge shape. The review page MUST show a separate derived processing plan:
-short Fragments normally become one item, while a real split requires sufficient
-length and internal structure. A workspace-owned classification rule MAY suggest
-a generic `KnowledgeKind` such as `work`; the actual classification label remains
-external user data and MUST NOT be hard-coded as a product literal.
-
-Both sliders expose exactly five visible positions, labelled `1` through `5`
-from `很低` to `很高`; the wire value remains the accepted `0..4` assessment
-score. The review workspace MUST grow to its content and use the product
-workspace's normal vertical scrolling; it MUST NOT lock the route to one
-viewport or clip lower panels. The queue may remain sticky and long Fragment
-text may scroll inside its reading region, but evaluation, keyword, relation,
-previous, and submit controls must remain reachable through ordinary page
-scrolling. Reducing readable type or pointer targets is not an acceptable way
-to increase density.
-
-Keyword suggestions in the no-AI path are deterministic, visibly editable
-candidates. Users can add and remove their own quick markers. The quick-marker
-bar is stored in the selected workspace's external personal-preferences file,
-is not exported as application code or a domain Bundle, and contains no
-hard-coded default vocabulary. Choosing a marker classifies the current
-Fragment; removing it from the shortcut bar does not rewrite existing reviews.
-A user-visible master switch MUST disable automatic keyword insertion without
-removing manually entered or already persisted terms. Link destinations, URL
-paths, and attachment filenames MUST be excluded from automatic candidates by
-default; a semantic link label may remain a candidate. The user may explicitly
-allow URL hosts and maintain exact exclusion terms. These controls are stored
-with the selected external workspace preferences and MUST NOT become source
-constants, Git data, migration seeds, or domain-Bundle content.
-Failure to load that optional UI-preference endpoint MUST NOT disable manual
-classification. The page keeps an explicitly session-only quick-marker and
-automatic-filter fallback, visibly states that it will not persist, and still
-allows the current Fragment to create and assign user-confirmed vocabulary.
-A confirmed keyword or quick marker becomes a term in the active external
-workspace only after a user action. Before a formal knowledge item exists,
-`自动候选`, `仅手动联系`, `不建立联系`, and explicit target directives express
-future processing intent, not a committed `KnowledgeRelation`. The UI MUST
-state this distinction.
-
-Knowledge maintenance MUST provide a compact vocabulary workbench. Case-only
-duplicates can migrate current assignments to one retained term and retire the
-other; user-confirmed cross-language equivalents become alias rules; related or
-containing terms stay explicit hints unless the user confirms a merge. History is
-never deleted. These rules live with external review preferences, while formal
-knowledge relations still require the normal knowledge-change command.
-
-The `KnowledgeChangeSet` editor is an advanced knowledge-maintenance surface.
-It MUST NOT appear as a required control in every Fragment review or block the
-rapid submit-and-advance loop.
+Routine edits update one current finished Entry state with an optimistic
+concurrency version. The UI MUST NOT recreate intake actions, judgment reasons,
+manual-link intent, the old review queue or a KnowledgeChangeSet editor.
+Associations are edited only through the current association page and its
+enhance/weaken/block/restore boundary.
 
 ### 9.3 Evidence drawer
 
 The drawer SHOULD contain these ordered regions when data exists:
 
-1. origin, content classification, intake decision, review state, and policy authorization;
+1. Entry identity, privacy scope and current version;
 2. exact supporting excerpt or image region;
-3. captured snapshot and canonical source links;
-4. separated information, preference, exploration, noise, and trust dimensions;
-5. optional processing plan, change set, derivation, and provenance events;
-6. media usage and whether it came from source text, AI inference, or user confirmation;
-7. source, capture, language, content type, and revision metadata.
+3. captured Snapshot and canonical source links;
+4. content/type/domain tags and independent usefulness/interest values;
+5. split lineage and optional association path;
+6. media usage and whether it came from source text, deterministic extraction, AI proposal or user confirmation;
+7. source, capture, language, content type and revision metadata.
 
 The drawer MUST preserve keyboard focus, provide a clear close action, and
 return focus to the invoking record.

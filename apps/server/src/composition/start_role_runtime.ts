@@ -25,8 +25,8 @@ import {
 import type {RuntimeLogger} from '../logging/structured_logger.js';
 import {createLocalStorageServices} from '../platform/storage/local_storage_services.js';
 import {
-  createPostgresKnowledgeRepositories,
-  type PostgresKnowledgeRepositorySet,
+  createPostgresRepositories,
+  type PostgresRepositorySet,
 } from '../platform/database/postgresql/index.js';
 import {
   createPgBossOptions,
@@ -50,7 +50,7 @@ export interface StartedRoleRuntime {
   readonly workspaceId: string;
   readonly resources: readonly RuntimeResource[];
   readonly storage: Readonly<StorageServices>;
-  readonly repositories: Readonly<PostgresKnowledgeRepositorySet>;
+  readonly repositories: Readonly<PostgresRepositorySet>;
   readonly shutdown: ShutdownCoordinator;
   disposeSignalHandlers(): void;
 }
@@ -79,7 +79,7 @@ export async function startRoleRuntime(
     dependencies.databasePoolFactory,
   );
   const gate = new ReadinessGate();
-  const repositories = createPostgresKnowledgeRepositories(database.pool);
+  const repositories = createPostgresRepositories(database.pool);
   const health = new OperationalHealthService({
     role: config.role,
     gate,
@@ -109,11 +109,6 @@ export async function startRoleRuntime(
           reviewPreferences: storage.reviewPreferences,
           evidenceRepository: repositories.evidence,
           evidenceReadRepository: repositories.evidenceRead,
-          curationRepository: repositories.curation,
-          curationReadRepository: repositories.curationRead,
-          knowledgeRepository: repositories.knowledge,
-          knowledgeReadRepository: repositories.knowledgeRead,
-          retrievalRepository: repositories.retrieval,
           informationEntryRepository: repositories.informationEntries,
           informationDocumentTagRepository:
             repositories.informationDocumentTags,

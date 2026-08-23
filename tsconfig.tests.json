@@ -16,5 +16,6 @@
     "./packages/**/*.test.tsx",
     "./tests/**/*.ts",
     "./tools/**/*.test.ts"
-  ]
+  ],
+  "exclude": ["./tests/postgres/**/*.ts"]
 }

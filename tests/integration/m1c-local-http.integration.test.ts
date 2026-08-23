@@ -30,17 +30,15 @@ describe('M1C local HTTP transport', () => {
 
   it('serves health and product routes from the same loopback listener', async () => {
     const importedBodies: unknown[] = [];
-    const knowledgeReads: unknown[] = [];
+    const entrySearches: unknown[] = [];
     const api = stubApi({
       importMarkdown(body) {
         importedBodies.push(body);
         return Promise.resolve(result(201, {status: 'created'}));
       },
-      loadKnowledgeItem(itemId, includePrivate) {
-        knowledgeReads.push({itemId, includePrivate});
-        return Promise.resolve(
-          result(200, {status: 'ok', item: {itemId, revision: 2}}),
-        );
+      searchInformationEntries(body) {
+        entrySearches.push(body);
+        return Promise.resolve(result(200, {status: 'ok', items: []}));
       },
     });
     const gate = new ReadinessGate();
@@ -76,17 +74,17 @@ describe('M1C local HTTP transport', () => {
     await expect(importResponse.json()).resolves.toEqual({status: 'created'});
     expect(importedBodies).toEqual([{sourceText}]);
 
-    const knowledgeResponse = await fetch(
-      `${base}/api/v1/knowledge/items/synthetic-item?includePrivate=true`,
-    );
-    expect(knowledgeResponse.status).toBe(200);
-    await expect(knowledgeResponse.json()).resolves.toEqual({
-      status: 'ok',
-      item: {itemId: 'synthetic-item', revision: 2},
+    const entrySearchResponse = await fetch(`${base}/api/v1/entries/search`, {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({text: 'synthetic', includePrivate: true}),
     });
-    expect(knowledgeReads).toEqual([
-      {itemId: 'synthetic-item', includePrivate: true},
-    ]);
+    expect(entrySearchResponse.status).toBe(200);
+    await expect(entrySearchResponse.json()).resolves.toEqual({
+      status: 'ok',
+      items: [],
+    });
+    expect(entrySearches).toEqual([{text: 'synthetic', includePrivate: true}]);
 
     const healthResponse = await fetch(`${base}/health/ready`);
     expect(healthResponse.status).toBe(200);
@@ -138,23 +136,13 @@ function stubApi(
     listEvidence: () => Promise.resolve(result(200, {status: 'ok'})),
     loadEvidenceSnapshot: () =>
       Promise.resolve(result(404, {status: 'not_found'})),
-    loadCurationState: () => Promise.resolve(result(200, {status: 'ok'})),
     loadReviewPreferences: () =>
       Promise.resolve(result(200, {status: 'ok', quickTags: []})),
     saveReviewPreferences: () =>
       Promise.resolve(result(200, {status: 'ok', quickTags: []})),
     importMarkdown: () => Promise.resolve(result(201, {status: 'created'})),
-    putCurationTerm: () => Promise.resolve(result(200, {status: 'applied'})),
-    applyCuration: () => Promise.resolve(result(200, {status: 'applied'})),
-    applyKnowledgeChangeSet: () =>
-      Promise.resolve(result(200, {status: 'applied'})),
-    loadKnowledgeItem: () =>
-      Promise.resolve(result(404, {status: 'not_found'})),
-    search: () => Promise.resolve(result(200, {status: 'ok'})),
     materializeInformationEntries: () =>
       Promise.resolve(result(201, {status: 'created'})),
-    listInformationEntries: () =>
-      Promise.resolve(result(200, {status: 'ok', entries: []})),
     reviseInformationEntry: () =>
       Promise.resolve(result(200, {status: 'applied'})),
     searchInformationEntries: () =>
