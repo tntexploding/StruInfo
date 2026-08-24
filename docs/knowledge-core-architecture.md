@@ -20,17 +20,17 @@ M1E-2 正式图谱的节点。当前 Entry 采用一个成品态和并发版本�
 
 ## 2. 当前数据类别与目标派生物
 
-| 类别        | 主要内容                                                                                        | 当前状态                                  |
-| ----------- | ----------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| 证据        | Resource、不可变 Snapshot、Blob、DocumentNode、Fragment 和媒体引用                              | 活动规范数据                              |
-| 信息条目    | InformationEntry 当前成品态、三维标签、两项评分和 Fragment 输入                                 | 活动规范数据                              |
-| 文档标签    | Snapshot 级当前标签及全文/Entry 覆盖证据                                                        | 活动规范数据                              |
-| Entry 联系  | 可重建相似度投影和当前人工 override                                                             | 投影活动；人工控制是规范数据              |
-| 用户偏好    | 快捷标签、提取开关、排除词、URL 规则、确认别名和版本化联系策略                                  | 活动；包体外文件                          |
-| 正式知识    | Entry 节点、自动相似边、用户关系和精确来源；历史 Knowledge 表                                   | M1E-2 活动；旧表兼容保留                  |
-| 处理任务    | 当前 ProcessingRun、三类提案信封、精确 Fragment 输入和 typed tags/association payload           | 活动；tags/association 可启动、接受或拒绝 |
-| 高级控制    | IntakeDecision、ConflictCase、集合、树、SavedView、自动策略                                     | 历史兼容或未实现                          |
-| AI/检索派生 | OpenAI tags 与 selected-pair association；其他 Provider/提案、Embedding、模糊索引、自然语言综合 | 两个窄提案已实现；其余未实现              |
+| 类别        | 主要内容                                                                                               | 当前状态                           |
+| ----------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------- |
+| 证据        | Resource、不可变 Snapshot、Blob、DocumentNode、Fragment 和媒体引用                                     | 活动规范数据                       |
+| 信息条目    | InformationEntry 当前成品态、三维标签、两项评分和 Fragment 输入                                        | 活动规范数据                       |
+| 文档标签    | Snapshot 级当前标签及全文/Entry 覆盖证据                                                               | 活动规范数据                       |
+| Entry 联系  | 可重建相似度投影和当前人工 override                                                                    | 投影活动；人工控制是规范数据       |
+| 用户偏好    | 快捷标签、提取开关、排除词、URL 规则、确认别名和版本化联系策略                                         | 活动；包体外文件                   |
+| 正式知识    | Entry 节点、自动相似边、用户关系和精确来源；历史 Knowledge 表                                          | M1E-2 活动；旧表兼容保留           |
+| 处理任务    | 当前 ProcessingRun、三类提案信封、精确 Fragment 输入和 typed split/tags/association payload            | 活动；三类提案均可启动、接受或拒绝 |
+| 高级控制    | IntakeDecision、ConflictCase、集合、树、SavedView、自动策略                                            | 历史兼容或未实现                   |
+| AI/检索派生 | OpenAI split、tags 与 selected-pair association；其他 Provider/提案、Embedding、模糊索引、自然语言综合 | 三个窄提案已实现；其余未实现       |
 
 证据、Entry、正式知识和用户控制数据不能互相覆盖。删除联系投影不会删除 Entry；修改标签不会
 改写 Snapshot；模型建议一个关系不能立即使其成为正式知识关系；只有人工接受后才调用现有图谱命令。
