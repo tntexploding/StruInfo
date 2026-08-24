@@ -1,6 +1,6 @@
 # StruInfo 产品需求
 
-- 状态：M1E-3B 首个可选 OpenAI Entry 标签提案已实现；无 AI 完整主线不变
+- 状态：M1E-3D selected-Snapshot OpenAI 拆分提案已实现；无 AI 完整主线不变
 - 最近更新：2026-08-24
 - 目的：定义“来源可追溯、AI 可增强且无 AI 仍完整可用的个人知识摄取与维护系统”的产品边界和首个验证切片
 - 历史基线：[产品需求 v0.1](archive/product-requirements-v0.1.md)
@@ -185,8 +185,9 @@ StruInfo 的价值不是“收藏更多网页”，而是降低五种成本：
 
 当前导入只接受手工 Markdown 或固定 Git Markdown。导入时选择 `commonmark-v1` 或
 `ruanyf-weekly-v1`，由确定性解析器保存完整结构。拆分页让用户选择尚未生成 Entry 的
-Snapshot，并把已识别的 section 幂等物化为 Entry；它尚不支持保存拆分前全文修改、任意
-选区拆分/合并、替换自定义规则或 AI 语义拆分。
+Snapshot，并把已识别的 section 幂等物化为 Entry。对于公开 Snapshot，用户还可显式发起 OpenAI
+Fragment 分组提案，并在逐组核对精确本地正文后人工应用；没有 Provider 时确定性物化仍完整可用。
+它尚不支持保存拆分前全文修改、任意选区拆分/合并或替换自定义规则。
 
 普通 Entry 更新只保留一个当前成品态和并发版本，不重复保存每次中间输入；原始 Snapshot、
 Fragment 与 Blob 仍不可变。结构结果出错时可以返回完整证据，但新的手工结构编辑器属于
@@ -242,15 +243,15 @@ AI 可以参与：
 - 确定性关键词候选、用户快捷标签、排除词、URL 过滤和确认别名；
 - 文档标签聚合、可解释 Entry 联系及人工增强/削弱/屏蔽/恢复；
 - 文本子串、结构、来源、时间、隐私和一至两跳联系查询；
-- 含 52 张工作区表、引用 Blob 字节和偏好的个人数据包导出/空工作区恢复；
+- 含 55 张工作区表、引用 Blob 字节和偏好的个人数据包导出/空工作区恢复；
 - 最高匹配 Entry 中心、有界图谱/列表、边来源、用户关系编辑和三种隐私范围。
 
 尚未实现的是任意选区拆分、集合/树/时间线、复杂事实关系类型、模糊或向量检索、
-在线查询、AI 拆分/查询提案和自动维护。系统不得因为这些未来能力缺席而把当前工作区显示为故障。
+在线查询、AI 查询提案和自动维护。系统不得因为这些未来能力缺席而把当前工作区显示为故障。
 
 ### 5.5 入库自动化与权限等级
 
-ADR 0012 已实现 Provider-neutral ProcessingRun/提案信封、最近任务读取和期望版本取消。ADR 0013 只选择 OpenAI Responses API 和一个公开 Entry 的 `tags` 提案：用户显式启动，Provider 返回闭合标签内容，用户接受后转换为既有 Entry revision；拒绝不修改 Entry。私密 Entry 在网络调用前拒绝，模型没有直接写表、物化、关系或图谱命令。没有 Provider 配置时，所有导入、物化、标签、联系、查询和正式图谱关系编辑仍由用户显式操作或确定性逻辑完成。
+ADR 0012 已实现 Provider-neutral ProcessingRun/提案信封、最近任务读取和期望版本取消。ADR 0013、0014、0015 在同一 OpenAI Responses API 边界上分别实现一个公开 Entry 的 `tags`、用户选择公开 Entry 对的 `association` 和用户选择公开 Snapshot 的 `split` 提案：用户显式启动，Provider 返回闭合载荷，用户接受后才转换为既有 Entry revision、graph edge command 或 Entry materialization；拒绝不修改领域状态。私密内容在网络调用前拒绝，模型没有直接写表、证据或图谱命令。没有 Provider 配置时，所有导入、确定性物化、标签、联系、查询和正式图谱关系编辑仍由用户显式操作或确定性逻辑完成。
 
 ADR 0011 已把 M1E-2 定义为 Entry 节点、确定性相似边与用户关系共同组成的图谱。现有
 AssociationProjection 达到可见条件后可直接进入图谱，不需要逐边人工确认；用户可以编辑、
@@ -499,12 +500,12 @@ QQ 中的普通自然语言不能直接执行批量批准、合并、删除等�
 - 确定性联系投影、逐对人工控制，以及正式图谱中的用户编辑/创建关系；
 - 文本/结构/来源/时间/隐私/有限联系查询、Entry 中心图谱和精确证据返回；
 - 包体外 Blob、偏好与完整个人数据包；
-- Provider-neutral ProcessingRun 最近列表/取消、总览真实任务轨道，以及可选 OpenAI Entry 标签与 selected-pair 联系提案的启动/接受/拒绝；
+- Provider-neutral ProcessingRun 最近列表/取消、总览真实任务轨道，以及可选 OpenAI Snapshot 拆分、Entry 标签与 selected-pair 联系提案的启动/接受/拒绝；
 - 幂等导入、乐观并发、明确错误、健康检查和当前质量门。
 
-当前不包含旧准入动作/判断原因/手工联系、旧 KnowledgeItem 写入或旧 Knowledge 检索、AI 拆分/查询/问答、自动接受、Embedding、
+当前不包含旧准入动作/判断原因/手工联系、旧 KnowledgeItem 写入或旧 Knowledge 检索、AI 查询/问答、自动接受、Embedding、
 定时采集、日报/周报、QQbot、Webhook、公共外部 API、云部署、批量外链抓取、OCR 或
-完整媒体理解。M1E-3B/C 的标签与 selected-pair 联系提案是两个最小模型切片，不代表其他 MVP-0B 模型能力已实现。
+完整媒体理解。M1E-3B/C/D 的标签、selected-pair 联系与 selected-Snapshot 拆分提案是三个最小模型切片，不代表其他 MVP-0B 模型能力已实现。
 
 #### 7.1.1 M1C 可运行核心检查点（历史证据）
 
@@ -653,6 +654,12 @@ ADR 0014 和前向迁移 `000015` 已实现第二个可选 Provider 纵向链。
 
 typed association payload 冻结两个 Entry 修订、当前 pair override 修订、模型、Prompt 版本、短关系名和方向。启动与拒绝不改变图谱；人工接受复用现有 graph edge command/CAS，并把来源显示为 `ai_assisted`。后续人工编辑成为用户编辑关系，投影重建不会覆盖。Processing Bundle v3 携带七张处理表，旧 v1/v2 恢复为空联系提案状态。自动接受、AI 选对、私密外发、第二 Provider、Embedding、RAG 和事实核验不属于本切片。
 
+### 7.1.7 M1E-3D OpenAI Snapshot 拆分提案
+
+ADR 0015 和前向迁移 `000016` 已实现第三个可选 Provider 纵向链。用户必须先在拆分页明确选择一个尚未物化 Entry 的公开 Snapshot；服务端只把结构顺序、ordinal 与精确 section Fragment 正文发送给同一 OpenAI Responses API。私密 Snapshot 在 Blob 读取和 fetch 前拒绝，Provider 不接收 workspace/Snapshot/Fragment 标识、偏好或数据库信息。
+
+closed split payload 只能把 1–64 个输入 Fragment 分成连续、不重叠且完整覆盖的分组，并冻结模型、Prompt 版本和拆分规则版本。界面逐组显示本地精确 Fragment 与外部 AI 来源；人工接受后才从本地 Fragment 重建标题/正文，并复用既有空 Snapshot Entry 物化和 workspace lock。拒绝不创建 Entry；确定性物化赢得并发时，过期提案不会覆盖现有结构。Processing Bundle v4 携带十张处理表，旧 v1/v2/v3 恢复为空拆分提案状态。后台扫描、证据改写、私密外发、自动接受、查询综合、第二 Provider、Embedding 和 RAG 不属于本切片。
+
 ### 7.2 MVP-1：偏好学习与每周自适应摄取
 
 MVP-0 证明知识核心可用后，再让系统持续处理该信源并逐步学习用户偏好：
@@ -693,12 +700,13 @@ MVP-0 证明知识核心可用后，再让系统持续处理该信源并逐步�
 5. **已完成**：结果解释文本/结构/联系路径，并能打开精确证据。
 6. **已完成**：Entry 当前态使用乐观版本，前端请求标识避免迟到响应覆盖新状态。
 7. **已完成**：“正式知识”按 ADR 0010/0011 显示最高匹配 Entry 中心与有界邻域，区分自动/用户编辑/用户创建边，并支持编辑、隐藏、恢复、创建、列表替代和精确来源；不调用旧 Knowledge API。
-8. **已完成**：个人数据包携带 52 张当前工作区表、引用 Blob 字节、偏好、Association v3 图谱元数据与 Processing v3 section；旧 Bundle 可读，恢复限空工作区。
+8. **已完成**：个人数据包携带 55 张当前工作区表、引用 Blob 字节、偏好、Association v3 图谱元数据与 Processing v4 section；旧 Bundle 可读，恢复限空工作区。
 9. **部分完成**：运行配置和个人数据位于包体外，Git 与应用制品审计通过；容器镜像和发布认证尚未完成。
 10. **已完成**：隐私导入、完整字节保存、Entry/联系默认隐藏、包含隐私/只看隐私查询、独立完整隐私文档结果通道和材料页全文查看已实现。
 11. **已完成**：Provider-neutral ProcessingRun 可持久化、列出和按期望版本取消；无任务与无 Provider 状态诚实显示，三类提案信封可携带。
 12. **已完成**：配置完整时可对公开 Entry 显式启动 OpenAI 标签提案并人工接受/拒绝；私密 Entry 不外发，接受沿用 Entry revision，无 Provider 时无 AI 主线不降级。
 13. **已完成**：可对明确选中的两个公开 Entry 显式启动 OpenAI 联系提案；人工接受沿用 graph edge CAS，拒绝不改图谱，任一隐私端点不外发，AI 来源在界面和图谱结果中可见。
+14. **已完成**：可对明确选中的公开 Snapshot 显式启动 OpenAI 拆分提案；精确 Fragment 分组由用户审阅，接受沿用 Entry 物化边界，拒绝不创建 Entry，私密 Snapshot 不读取 Blob 或外发。
 
 以上状态只描述清理基线的当前产品能力。历史 M1C smoke 证明过的正式知识或旧检索行为不再
 被计作活动功能；发布、容器和生产等价数据库认证也不会因本机功能通过而自动变成 PASS。
@@ -711,14 +719,15 @@ MVP-0 证明知识核心可用后，再让系统持续处理该信源并逐步�
 
 ### 8.2 MVP-0B AI 增强验收
 
-M1E-3A 已完成任务生命周期与提案信封基础；M1E-3B/M1E-3C 已完成公开 Entry 标签提案和 selected-pair 联系提案的产品边界与合成测试。真实质量审核延期；其余能力仍需新的窄切片实现。
+M1E-3A 已完成任务生命周期与提案信封基础；M1E-3B/M1E-3C/M1E-3D 已完成公开 Entry 标签、selected-pair 联系和 selected-Snapshot 拆分提案的产品边界与合成测试。真实质量审核延期；其余能力仍需新的窄切片实现。
 
 1. **标签子集已实现**：AI 启用后只为用户显式选择的公开 Entry 生成闭合标签提案，不获得直接写表通道。
 2. **联系子集已实现**：AI 只为用户显式选择的两个公开 Entry 生成闭合关系名/方向提案，人工接受后才调用现有图谱命令；Provider 不获得图谱写端口。
-3. 自动提交的每项正式知识都有用户命令或具体策略版本作为授权依据，并能返回具体来源片段、操作来源、AI 处理运行和认知角色。
-4. AI 对重复、补充、关系和冲突的建议可以逐项审核；重要冲突、合并、删除和大规模重组保持人工确认。
-4. AI 未启用、超时、预算耗尽或供应商切换时，MVP-0A 的导入、维护、搜索、导出和恢复能力不降级。
-5. AI 增强没有增加总体操作成本，用户愿意继续处理下一批内容，且至少一个首要指标优于无 AI 的当前做法。
+3. **拆分子集已实现**：AI 只为用户显式选择的公开 Snapshot 生成闭合 Fragment 分组提案，人工接受后才调用既有 Entry 物化；Provider 不获得证据或 Entry 写端口。
+4. 自动提交的每项正式知识都有用户命令或具体策略版本作为授权依据，并能返回具体来源片段、操作来源、AI 处理运行和认知角色。
+5. AI 对重复、补充、关系和冲突的建议可以逐项审核；重要冲突、合并、删除和大规模重组保持人工确认。
+6. AI 未启用、超时、预算耗尽或供应商切换时，MVP-0A 的导入、维护、搜索、导出和恢复能力不降级。
+7. AI 增强没有增加总体操作成本，用户愿意继续处理下一批内容，且至少一个首要指标优于无 AI 的当前做法。
 
 ### 8.3 MVP-1 验收
 

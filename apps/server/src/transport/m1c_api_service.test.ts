@@ -1361,6 +1361,70 @@ describe('M1E provider-neutral processing API', () => {
     );
   });
 
+  it('exposes configured split proposals without materializing on list or start', async () => {
+    const proposal = Object.freeze({
+      workspaceId: WORKSPACE_ID,
+      proposalId: '33333333-3333-4333-8333-333333333333',
+      runId: '22222222-2222-4222-8222-222222222222',
+      ordinal: 0,
+      stage: 'split' as const,
+      kind: 'split' as const,
+      targetSnapshotId: SNAPSHOT_ID,
+      status: 'pending_review' as const,
+      summary: 'Synthetic split proposal',
+      fragmentIds: Object.freeze([FRAGMENT_ID]),
+      splitPayload: Object.freeze({
+        providerModel: 'gpt-5-mini',
+        promptVersion: 'struinfo.openai-entry-split.v1',
+        splitRuleVersion: 'struinfo.entry-split.ai-group.v1' as const,
+        entries: Object.freeze([
+          Object.freeze({
+            titlePath: 'Synthetic group',
+            fragmentIds: Object.freeze([FRAGMENT_ID]),
+          }),
+        ]),
+      }),
+      createdAt: '2040-01-02T03:04:05.000Z',
+    });
+    const listForSnapshot = vi.fn(() => Promise.resolve([proposal]));
+    const accept = vi.fn(() =>
+      Promise.resolve({outcome: 'accepted' as const, proposal, entries: []}),
+    );
+    const service = createService({
+      aiSplitProposals: {
+        providerKey: 'openai-responses-v1',
+        model: 'gpt-5-mini',
+        listForSnapshot,
+        start: () => Promise.reject(new Error('unused')),
+        accept,
+        reject: () => Promise.reject(new Error('unused')),
+      },
+    });
+
+    const workspace = service.workspace().body as Readonly<{
+      status: 'ok';
+      capabilities: readonly string[];
+    }>;
+    expect(workspace.capabilities).toContain('ai_split');
+    await expect(
+      service.listAiSplitProposals(SNAPSHOT_ID),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        proposals: [{splitPayload: {providerModel: 'gpt-5-mini'}}],
+      },
+    });
+    await expect(
+      service.acceptAiSplitProposal(SNAPSHOT_ID, proposal.proposalId),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'accepted'},
+    });
+    expect(listForSnapshot).toHaveBeenCalledWith(SNAPSHOT_ID);
+    expect(accept).toHaveBeenCalledWith(SNAPSHOT_ID, proposal.proposalId);
+  });
+
   it('keeps AI tag routes visibly unavailable without Provider configuration', async () => {
     const service = createService();
     const workspace = service.workspace().body as Readonly<{

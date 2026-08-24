@@ -4,6 +4,9 @@ import type {
   AiAssociationProposalDecisionResponse,
   AiAssociationProposalListResponse,
   AiAssociationProposalStartResponse,
+  AiSplitProposalDecisionResponse,
+  AiSplitProposalListResponse,
+  AiSplitProposalStartResponse,
   AiTagProposalDecisionResponse,
   AiTagProposalListResponse,
   AiTagProposalStartResponse,
@@ -327,6 +330,46 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const listAiSplitProposals = useCallback(
+    (
+      snapshotId: string,
+    ): Promise<M1cHttpResponse<AiSplitProposalListResponse>> =>
+      apiClient.listAiSplitProposals(snapshotId),
+    [apiClient],
+  );
+
+  const startAiSplitProposal = useCallback(
+    (
+      snapshotId: string,
+      requestKey: string,
+    ): Promise<M1cHttpResponse<AiSplitProposalStartResponse>> =>
+      apiClient.startAiSplitProposal(snapshotId, requestKey),
+    [apiClient],
+  );
+
+  const acceptAiSplitProposal = useCallback(
+    (
+      snapshotId: string,
+      proposalId: string,
+    ): Promise<M1cHttpResponse<AiSplitProposalDecisionResponse>> =>
+      apiClient.acceptAiSplitProposal(snapshotId, proposalId),
+    [apiClient],
+  );
+
+  const rejectAiSplitProposal = useCallback(
+    (
+      snapshotId: string,
+      proposalId: string,
+    ): Promise<M1cHttpResponse<AiSplitProposalDecisionResponse>> =>
+      apiClient.rejectAiSplitProposal(snapshotId, proposalId),
+    [apiClient],
+  );
+
+  const loadEvidenceSnapshotForSplit = useCallback(
+    (snapshotId: string) => apiClient.loadEvidenceSnapshot(snapshotId),
+    [apiClient],
+  );
+
   const listAiTagProposals = useCallback(
     (entryId: string): Promise<M1cHttpResponse<AiTagProposalListResponse>> =>
       apiClient.listAiTagProposals(entryId),
@@ -560,11 +603,16 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
         <InformationEntrySplitWorkspace
           aiEnabled={
             workspace.status === 'ready' &&
-            workspace.value.capabilities.includes('ai')
+            workspace.value.capabilities.includes('ai_split')
           }
+          onAcceptAiSplitProposal={acceptAiSplitProposal}
+          onListAiSplitProposals={listAiSplitProposals}
           onListDocuments={listInformationEntryDocuments}
+          onLoadEvidenceSnapshot={loadEvidenceSnapshotForSplit}
           onMaterialize={materializeInformationEntries}
+          onRejectAiSplitProposal={rejectAiSplitProposal}
           onSearch={searchInformationEntries}
+          onStartAiSplitProposal={startAiSplitProposal}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
             void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
           }

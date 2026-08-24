@@ -48,7 +48,7 @@ export function ProcessingRunRail({
     workspace?.capabilities.includes('processing_runs') === true;
   const aiEnabled =
     workspace?.capabilities.some(
-      (capability) => capability === 'ai' || capability === 'ai_tags',
+      (capability) => capability === 'ai' || capability.startsWith('ai_'),
     ) === true;
   const [state, setState] = useState<RunState>(
     processingEnabled

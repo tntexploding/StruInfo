@@ -1,6 +1,7 @@
 import {
   ENTRY_DOMAIN_KEYWORDS,
   ENTRY_TYPE_KEYWORDS,
+  type AiSplitEntryGroupInput,
   type CurrentInformationEntry,
   type EntryAssessmentScore,
   type EntryContentKeyword,
@@ -17,6 +18,7 @@ import {
 } from './information_entry_identity.js';
 
 export const ENTRY_SPLIT_RULE_VERSION = 'struinfo.entry-split.section.v1';
+export const AI_ENTRY_SPLIT_RULE_VERSION = 'struinfo.entry-split.ai-group.v1';
 export const ENTRY_MANUAL_ORIGIN_VERSION = 'manual-entry-editor.v1';
 export const MAXIMUM_ENTRY_BODY_CODE_POINTS = 200_000;
 export const MAXIMUM_CONTENT_KEYWORDS = 32;
@@ -109,6 +111,82 @@ export function prepareSplitInformationEntries(
       });
     }),
   );
+}
+
+export function prepareAiSplitInformationEntries(
+  snapshot: Readonly<MaterializedEvidenceSnapshot>,
+  groups: readonly Readonly<AiSplitEntryGroupInput>[],
+): readonly Readonly<InformationEntryMaterializeRow>[] | undefined {
+  const structure = snapshot.structures[0];
+  if (structure === undefined || groups.length < 1) return undefined;
+  const sections = structure.fragments
+    .filter((fragment) => fragment.nodeKind === 'section')
+    .sort((left, right) =>
+      left.codePointRange.start !== right.codePointRange.start
+        ? left.codePointRange.start - right.codePointRange.start
+        : left.fragmentId.localeCompare(right.fragmentId),
+    );
+  const expectedIds = sections.map((fragment) => fragment.fragmentId);
+  const actualIds = groups.flatMap((group) => group.fragmentIds);
+  if (
+    actualIds.length !== expectedIds.length ||
+    actualIds.some((fragmentId, index) => fragmentId !== expectedIds[index])
+  ) {
+    return undefined;
+  }
+  const sectionById = new Map(
+    sections.map((fragment) => [fragment.fragmentId, fragment]),
+  );
+  const rows: Readonly<InformationEntryMaterializeRow>[] = [];
+  for (const [documentOrder, group] of groups.entries()) {
+    const titlePath = normalizeAiSplitTitle(group.titlePath);
+    if (titlePath === undefined || group.fragmentIds.length < 1) {
+      return undefined;
+    }
+    const fragments = group.fragmentIds.map((fragmentId) =>
+      sectionById.get(fragmentId),
+    );
+    if (fragments.some((fragment) => fragment === undefined)) return undefined;
+    const body = fragments
+      .map((fragment) => fragment?.selectedText ?? '')
+      .join('\n\n');
+    if (
+      body.length === 0 ||
+      Array.from(body).length > MAXIMUM_ENTRY_BODY_CODE_POINTS
+    ) {
+      return undefined;
+    }
+    const sourceIdentity = `ai-group-v1:${informationEntryBodySha256(
+      group.fragmentIds.join('\n'),
+    )}`;
+    const entryId = deriveInformationEntryId(
+      snapshot.snapshotId,
+      structure.structureId,
+      sourceIdentity,
+    );
+    rows.push(
+      Object.freeze({
+        workspaceId: snapshot.workspaceId,
+        entryId,
+        resourceId: snapshot.resourceId,
+        snapshotId: snapshot.snapshotId,
+        revisionId: deriveInformationEntryRevisionId(entryId, 1),
+        value: Object.freeze({
+          documentOrder,
+          titlePath,
+          body,
+          bodySha256: informationEntryBodySha256(body),
+          chunkMode: 'split' as const,
+          splitRuleVersion: AI_ENTRY_SPLIT_RULE_VERSION,
+          isPrivate: false,
+          contentKeywords: Object.freeze([]),
+          domains: Object.freeze([]),
+          fragmentIds: Object.freeze([...group.fragmentIds]),
+        }),
+      }),
+    );
+  }
+  return Object.freeze(rows);
 }
 
 export function prepareManualEntryRevision(
@@ -317,6 +395,24 @@ function normalizeFixedOrOther<Keyword extends string>(
     return undefined;
   }
   return Object.freeze({keyword, customName: normalizedCustomName});
+}
+
+function normalizeAiSplitTitle(value: string): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().normalize('NFC');
+  if (
+    normalized.length === 0 ||
+    Array.from(normalized).length > 200 ||
+    Array.from(normalized).some((character) => {
+      const codePoint = character.codePointAt(0);
+      return (
+        codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f)
+      );
+    })
+  ) {
+    return undefined;
+  }
+  return normalized;
 }
 
 function deriveTitlePath(body: string): string {

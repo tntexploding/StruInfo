@@ -9,3 +9,4 @@ export {
   OpenAiEntryAssociationProvider,
   OPENAI_ASSOCIATION_PROMPT_VERSION,
 } from './openai_entry_association_provider.js';
+export * from './openai_entry_split_provider.js';

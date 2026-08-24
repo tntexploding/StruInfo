@@ -85,6 +85,52 @@ export class M1cApiController {
     writeLocalApiResponse(response, await this.#service.importMarkdown(body));
   }
 
+  @Get('evidence/snapshots/:snapshotId/split-proposals')
+  public async aiSplitProposals(
+    @Param('snapshotId') snapshotId: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.listAiSplitProposals(snapshotId),
+    );
+  }
+
+  @Post('evidence/snapshots/:snapshotId/split-proposals/start')
+  public async startAiSplitProposal(
+    @Param('snapshotId') snapshotId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.startAiSplitProposal(snapshotId, body),
+    );
+  }
+
+  @Post('evidence/snapshots/:snapshotId/split-proposals/:proposalId/accept')
+  public async acceptAiSplitProposal(
+    @Param('snapshotId') snapshotId: string,
+    @Param('proposalId') proposalId: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.acceptAiSplitProposal(snapshotId, proposalId),
+    );
+  }
+
+  @Post('evidence/snapshots/:snapshotId/split-proposals/:proposalId/reject')
+  public async rejectAiSplitProposal(
+    @Param('snapshotId') snapshotId: string,
+    @Param('proposalId') proposalId: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.rejectAiSplitProposal(snapshotId, proposalId),
+    );
+  }
   @Post('entries/materialize')
   public async materializeInformationEntries(
     @Body() body: unknown,

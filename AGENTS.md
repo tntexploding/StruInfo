@@ -290,8 +290,22 @@ state. Processing Bundle v3 carries all seven processing tables and upgrades v1
 or v2 with empty association-proposal state. `ai_associations` is separate from
 `ai_tags`; neither means generic AI capability. The UI MUST label a pending
 proposal as AI-generated and require an explicit accept action. Do not add a
-second Provider, automatic acceptance, private-content transfer, AI split,
-query synthesis, Embedding or RAG without a later accepted increment.
+second Provider, automatic acceptance, private-content transfer, query
+synthesis, Embedding or RAG without a later accepted increment.
+
+ADR 0015 completes M1E-3D with one closed OpenAI `split` proposal for an
+explicitly selected public Snapshot. Forward migration `000016` adds three typed
+split-payload tables. The provider receives only the ordered public section
+Fragment ordinals and exact text; database, Snapshot, Fragment and workspace
+identifiers stay local. The public local API and Split page may list, explicitly
+start, accept or reject a proposal. Private Snapshots MUST be rejected before
+Blob reads and before any Provider call. Acceptance reconstructs Entry bodies
+from exact local Fragment text and uses the existing empty-Snapshot Entry
+materialization boundary under the workspace lock; rejection does not create
+Entries. Processing Bundle v4 carries all ten processing tables and upgrades
+v1-v3 with empty split-proposal state. `ai_split` is independent from `ai_tags`
+and `ai_associations`, and the deterministic split path remains complete when
+no Provider is configured.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable

@@ -33,6 +33,16 @@ export interface ProcessingAssociationProposalPayloadView {
   readonly direction: InformationEntryGraphDirection;
 }
 
+export interface ProcessingSplitProposalPayloadView {
+  readonly providerModel: string;
+  readonly promptVersion: string;
+  readonly splitRuleVersion: 'struinfo.entry-split.ai-group.v1';
+  readonly entries: readonly Readonly<{
+    titlePath: string;
+    fragmentIds: readonly string[];
+  }>[];
+}
+
 export interface ProcessingProposalView {
   readonly proposalId: string;
   readonly runId: string;
@@ -45,6 +55,7 @@ export interface ProcessingProposalView {
   readonly status: 'pending_review' | 'accepted' | 'rejected' | 'superseded';
   readonly summary: string;
   readonly fragmentIds: readonly string[];
+  readonly splitPayload?: Readonly<ProcessingSplitProposalPayloadView>;
   readonly tagPayload?: Readonly<ProcessingTagProposalPayloadView>;
   readonly associationPayload?: Readonly<ProcessingAssociationProposalPayloadView>;
   readonly createdAt: string;
@@ -109,6 +120,19 @@ export type AiTagProposalDecisionResponse =
       status: 'accepted' | 'rejected' | 'unchanged';
       proposal: Readonly<ProcessingProposalView>;
       entry?: Readonly<InformationEntry>;
+    }>
+  | Readonly<{
+      status: 'not_found' | 'rejected' | 'failed';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
+export type AiSplitProposalListResponse = AiTagProposalListResponse;
+export type AiSplitProposalStartResponse = AiTagProposalStartResponse;
+export type AiSplitProposalDecisionResponse =
+  | Readonly<{
+      status: 'accepted' | 'rejected' | 'unchanged';
+      proposal: Readonly<ProcessingProposalView>;
+      entries?: readonly Readonly<InformationEntry>[];
     }>
   | Readonly<{
       status: 'not_found' | 'rejected' | 'failed';

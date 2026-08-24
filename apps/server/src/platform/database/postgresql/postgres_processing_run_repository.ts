@@ -305,7 +305,12 @@ export class PostgresProcessingRunRepository implements ProcessingRunRepositoryP
   public appendProposal(
     proposal: Readonly<ProcessingProposalAppend>,
   ): Promise<ProcessingRunWriteOutcome> {
-    if (proposal.tagPayload !== undefined) throw new PostgresAdapterError();
+    if (
+      proposal.splitPayload !== undefined ||
+      proposal.tagPayload !== undefined ||
+      proposal.associationPayload !== undefined
+    )
+      throw new PostgresAdapterError();
     assertProcessingProposalAppend(proposal);
     const workspaceId = canonicalUuid(proposal.workspaceId);
     return runPostgresTransaction(

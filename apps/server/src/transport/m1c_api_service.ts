@@ -1,5 +1,3 @@
-import {createHash} from 'node:crypto';
-
 import {
   ENTRY_CHUNK_MODES,
   ENTRY_DOMAIN_KEYWORDS,
@@ -38,20 +36,21 @@ import {
   type InformationEntryDocumentView,
   type InformationEntryRepositoryPort,
   type InformationEntrySearchRequest,
-  type MaterializedEvidenceSnapshot,
 } from '../modules/entries/index.js';
 import {
   importMarkdownEvidence,
+  materializeEvidenceSnapshot,
   type EvidenceReadRepositoryPort,
   type EvidenceRepositoryPort,
-  type EvidenceSnapshotReadState,
   type EvidenceSnapshotSummary,
   type ImportMarkdownEvidenceInput,
 } from '../modules/evidence/index.js';
 import {
   AiAssociationProposalServiceError,
+  AiSplitProposalServiceError,
   AiTagProposalServiceError,
   type AiAssociationProposalServicePort,
+  type AiSplitProposalServicePort,
   type AiTagProposalServicePort,
   type ProcessingProposal,
   type ProcessingRun,
@@ -87,6 +86,7 @@ export interface M1cApiServiceDependencies {
   readonly informationDocumentTagRepository: InformationDocumentTagRepositoryPort;
   readonly informationEntryAssociationRepository: InformationEntryAssociationRepositoryPort;
   readonly processingRunRepository: ProcessingRunRepositoryPort;
+  readonly aiSplitProposals?: AiSplitProposalServicePort;
   readonly aiTagProposals?: AiTagProposalServicePort;
   readonly aiAssociationProposals?: AiAssociationProposalServicePort;
   readonly workspaceTransfer: M1cWorkspaceTransferPort;
@@ -145,6 +145,19 @@ export interface M1cApiServicePort {
   ): Promise<M1cHttpResult>;
   listProcessingRuns(limit?: unknown): Promise<M1cHttpResult>;
   cancelProcessingRun(runId: string, body: unknown): Promise<M1cHttpResult>;
+  listAiSplitProposals(snapshotId: string): Promise<M1cHttpResult>;
+  startAiSplitProposal(
+    snapshotId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult>;
+  acceptAiSplitProposal(
+    snapshotId: string,
+    proposalId: string,
+  ): Promise<M1cHttpResult>;
+  rejectAiSplitProposal(
+    snapshotId: string,
+    proposalId: string,
+  ): Promise<M1cHttpResult>;
   listAiTagProposals(entryId: string): Promise<M1cHttpResult>;
   startAiTagProposal(entryId: string, body: unknown): Promise<M1cHttpResult>;
   acceptAiTagProposal(
@@ -336,6 +349,9 @@ export class M1cApiService implements M1cApiServicePort {
         'review_preferences',
         'workspace_bundle_export',
         'workspace_bundle_restore',
+        ...(this.#dependencies.aiSplitProposals === undefined
+          ? []
+          : ['ai_split']),
         ...(this.#dependencies.aiTagProposals === undefined ? [] : ['ai_tags']),
         ...(this.#dependencies.aiAssociationProposals === undefined
           ? []
@@ -1290,6 +1306,94 @@ export class M1cApiService implements M1cApiServicePort {
     }
   }
 
+  public async listAiSplitProposals(
+    snapshotId: string,
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(snapshotId))
+      return inputFailure('path.snapshotId');
+    const service = this.#dependencies.aiSplitProposals;
+    if (service === undefined) return aiTagProviderNotConfigured();
+    try {
+      const proposals = await service.listForSnapshot(snapshotId);
+      return httpResult(200, {
+        status: 'ok',
+        proposals: Object.freeze(proposals.map(processingProposalResponse)),
+      });
+    } catch (error) {
+      return aiSplitProposalFailure(error);
+    }
+  }
+
+  public async startAiSplitProposal(
+    snapshotId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(snapshotId))
+      return inputFailure('path.snapshotId');
+    const input = decodeAiTagProposalStart(body);
+    if (input === undefined) return inputFailure('body.requestKey');
+    const service = this.#dependencies.aiSplitProposals;
+    if (service === undefined) return aiTagProviderNotConfigured();
+    try {
+      const result = await service.start(snapshotId, input.requestKey);
+      const response = processingRunResponse(result.run);
+      if (result.run.status === 'failed') {
+        return httpResult(502, {
+          status: 'failed',
+          issue: Object.freeze({
+            code: result.run.errorCode ?? 'ai_provider_unavailable',
+          }),
+          run: response,
+        });
+      }
+      return httpResult(result.outcome === 'created' ? 201 : 200, {
+        status: result.outcome,
+        run: response,
+      });
+    } catch (error) {
+      return aiSplitProposalFailure(error);
+    }
+  }
+
+  public async acceptAiSplitProposal(
+    snapshotId: string,
+    proposalId: string,
+  ): Promise<M1cHttpResult> {
+    return this.#decideAiSplitProposal(snapshotId, proposalId, 'accepted');
+  }
+
+  public async rejectAiSplitProposal(
+    snapshotId: string,
+    proposalId: string,
+  ): Promise<M1cHttpResult> {
+    return this.#decideAiSplitProposal(snapshotId, proposalId, 'rejected');
+  }
+
+  async #decideAiSplitProposal(
+    snapshotId: string,
+    proposalId: string,
+    decision: 'accepted' | 'rejected',
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(snapshotId))
+      return inputFailure('path.snapshotId');
+    if (!CANONICAL_UUID.test(proposalId))
+      return inputFailure('path.proposalId');
+    const service = this.#dependencies.aiSplitProposals;
+    if (service === undefined) return aiTagProviderNotConfigured();
+    try {
+      const result =
+        decision === 'accepted'
+          ? await service.accept(snapshotId, proposalId)
+          : await service.reject(snapshotId, proposalId);
+      return httpResult(200, {
+        status: result.outcome,
+        proposal: processingProposalResponse(result.proposal),
+        ...(result.entries === undefined ? {} : {entries: result.entries}),
+      });
+    } catch (error) {
+      return aiSplitProposalFailure(error);
+    }
+  }
   public async listAiTagProposals(entryId: string): Promise<M1cHttpResult> {
     if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
     const service = this.#dependencies.aiTagProposals;
@@ -2146,42 +2250,6 @@ function informationEntryAssociationPolicyFromPreferences(
   });
 }
 
-async function materializeEvidenceSnapshot(
-  snapshot: Readonly<EvidenceSnapshotReadState>,
-  blobStore: BlobStore,
-): Promise<Readonly<MaterializedEvidenceSnapshot>> {
-  const structures = [];
-  for (const structure of snapshot.structures) {
-    const bytes = await blobStore.read(structure.textBlob);
-    const normalizedText = new TextDecoder('utf-8', {fatal: true}).decode(
-      bytes,
-    );
-    // Array.from follows the Evidence contract's Unicode code-point locators.
-    const codePoints = Array.from(normalizedText);
-    const fragments = structure.fragments.map((fragment) => {
-      const selectedText = codePoints
-        .slice(fragment.codePointRange.start, fragment.codePointRange.end)
-        .join('');
-      if (digestText(selectedText) !== fragment.selectedTextSha256) {
-        throw new Error('Evidence fragment integrity failed.');
-      }
-      return Object.freeze({...fragment, selectedText});
-    });
-    structures.push(
-      Object.freeze({
-        ...structure,
-        normalizedText,
-        fragments: Object.freeze(fragments),
-      }),
-    );
-  }
-  return Object.freeze({...snapshot, structures: Object.freeze(structures)});
-}
-
-function digestText(value: string): string {
-  return createHash('sha256').update(value, 'utf8').digest('hex');
-}
-
 function statusForImport(status: string): number {
   if (status === 'created') return 201;
   if (status === 'existing') return 200;
@@ -2258,6 +2326,9 @@ function processingProposalResponse(
     status: proposal.status,
     summary: proposal.summary,
     fragmentIds: proposal.fragmentIds,
+    ...(proposal.splitPayload === undefined
+      ? {}
+      : {splitPayload: proposal.splitPayload}),
     ...(proposal.tagPayload === undefined
       ? {}
       : {tagPayload: proposal.tagPayload}),
@@ -2292,6 +2363,45 @@ function aiTagProviderNotConfigured(): M1cHttpResult {
   });
 }
 
+function aiSplitProposalFailure(error: unknown): M1cHttpResult {
+  if (!(error instanceof AiSplitProposalServiceError))
+    return repositoryFailure();
+  if (
+    error.code === 'ai_snapshot_not_found' ||
+    error.code === 'ai_proposal_not_found'
+  ) {
+    return httpResult(404, {
+      status: 'not_found',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  if (
+    error.code === 'ai_split_input_unsupported' ||
+    error.code === 'ai_proposal_invalid'
+  ) {
+    return httpResult(422, {
+      status: 'rejected',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  if (
+    error.code === 'ai_private_snapshot_forbidden' ||
+    error.code === 'ai_snapshot_already_materialized' ||
+    error.code === 'ai_run_conflict' ||
+    error.code === 'ai_run_invalid_state' ||
+    error.code === 'ai_proposal_terminal' ||
+    error.code === 'stale_split_materialization'
+  ) {
+    return httpResult(409, {
+      status: 'rejected',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  return httpResult(502, {
+    status: 'failed',
+    issue: Object.freeze({code: error.code}),
+  });
+}
 function aiTagProposalFailure(error: unknown): M1cHttpResult {
   if (!(error instanceof AiTagProposalServiceError)) {
     return repositoryFailure();

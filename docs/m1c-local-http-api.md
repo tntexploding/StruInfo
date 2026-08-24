@@ -1,6 +1,6 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1E-3C 活动接口
+- 状态：M1E-3D 活动接口
 - 最近核对：2026-08-24
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
@@ -69,7 +69,9 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 ### 3.2 拆分
 
-`POST /entries/materialize` 当前只接受 `snapshotId`、可选的 `chunkMode: "split"` 和 `includePrivate`。服务端读取已经导入的 CommonMark 结构，把 section 节点确定性转换为 Entry。当前没有自定义范围、全文保存修改或 AI 拆分接口。
+`POST /entries/materialize` 当前只接受 `snapshotId`、可选的 `chunkMode: "split"` 和 `includePrivate`。服务端读取已经导入的 CommonMark 结构，把 section 节点确定性转换为 Entry。
+
+四个 `/evidence/snapshots/:snapshotId/split-proposals` 路由提供列表、显式启动、接受和拒绝。start 只允许用户当前选择的公开、尚未物化 Entry 的 Snapshot；Provider 只收到按结构顺序排列的 section Fragment ordinal 与正文，不收到任何本地标识。响应是连续、不重叠、完整覆盖的闭合分组；界面用本地精确 Fragment 审阅。accept 从本地 Fragment 重建标题/正文并调用既有空 Snapshot Entry 物化边界，reject 不创建 Entry。私密 Snapshot 在 Blob 读取和 fetch 前拒绝。当前仍没有自定义范围、全文保存修改或可替换拆分规则接口。
 
 ### 3.3 标签
 
@@ -111,15 +113,15 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 四个 `/knowledge-graph/edges/:entryId/:relatedEntryId/proposals` 路由只处理用户已经选中的 Entry 对。start 接受 `{requestKey}`；服务端先固定两端 current revision 和 pair override revision，任一端隐私时在 fetch 前拒绝。Provider 只接收该对标题、正文和三维标签，返回有界关系名、方向和说明。reject 不改图谱；accept 使用提案冻结的版本调用同一 graph edge command/CAS，成功边来源为 `ai_assisted`，后续人工编辑仍转为用户编辑来源。
 
-### 3.7 处理任务与 OpenAI 标签/联系提案
+### 3.7 处理任务与 OpenAI 拆分/标签/联系提案
 
 `GET /processing-runs?limit=N` 返回最近任务、真实阶段/步骤/进度、状态、版本和有界提案信封；不会返回 idempotency key、正文、Prompt、凭据或原始 Provider 错误。`POST /processing-runs/:runId/cancel` 只接受 `{expectedVersion}`，queued/running 可取消，终态、过期版本和缺失任务返回稳定冲突/不存在结果。
 
-`processing_runs` capability 只表示读取/取消可用。只有 `OPENAI_API_KEY` 与 `STRUIINFO_OPENAI_MODEL` 同时有效时，工作区才分别发布 `ai_tags` 与 `ai_associations`；通用 `ai` 仍缺席，因此拆分和查询页不会错误解锁 AI 占位。
+`processing_runs` capability 只表示读取/取消可用。只有 `OPENAI_API_KEY` 与 `STRUIINFO_OPENAI_MODEL` 同时有效时，工作区才分别发布 `ai_split`、`ai_tags` 与 `ai_associations`；通用 `ai` 仍缺席，因此查询页不会错误解锁 AI 占位。
 
 `POST /entries/:entryId/tag-proposals/start` 接受 `{requestKey}`，只把一个公开 Entry 的标题路径和正文交给 Provider。响应先落为真实 ProcessingRun，再保存闭合的内容关键词、类型、领域、说明、模型和 Prompt 版本。私密 Entry 在 fetch 前返回拒绝；API key、Blob、其他 Entry、偏好和数据库信息不会进入请求或响应。
 
-接受接口先核对提案所基于的 Entry revision，再通过现有 Entry 修订命令保存 AI 来源标签；它保留正文、两项评分、隐私和 Fragment 输入。拒绝只终结提案。标签 Provider 不能直接写 Entry；联系 Provider 也不能直接写 override 或图谱。两种提案都必须由用户接受，并在版本过期时拒绝覆盖。
+接受接口先核对提案所基于的 Entry revision，再通过现有 Entry 修订命令保存 AI 来源标签；它保留正文、两项评分、隐私和 Fragment 输入。拒绝只终结提案。拆分/标签 Provider 不能直接写 Entry；联系 Provider 也不能直接写 override 或图谱。三种提案都必须由用户接受，并在版本或结构过期时拒绝覆盖。
 
 启用方法：在外部运行配置文件加入 `STRUIINFO_OPENAI_MODEL=<已选模型名>`，并只在启动服务的进程环境中设置 `OPENAI_API_KEY`。不要把 key 写进配置文件、Git、个人数据包或启动脚本。修改后重启服务；任一项缺失时应用会保持无 AI 模式。Responses API 请求由服务端直接发出，浏览器不会接触密钥。
 
@@ -131,7 +133,7 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 ## 5. 个人数据包
 
-export 接口生成当前五分区 Bundle，包含 52 张当前工作区表、被引用的 Blob 字节和含版本化联系策略的当前偏好文件。Processing v3 section 携带三张任务表、三张 typed tag proposal 表和一张 typed association proposal 表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1/v2 保持可读，缺失的新表恢复为空状态。
+export 接口生成当前五分区 Bundle，包含 55 张当前工作区表、被引用的 Blob 字节和含版本化联系策略的当前偏好文件。Processing v4 section 携带三张任务表、三张 typed tag proposal 表、一张 typed association proposal 表和三张 typed split proposal 表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1/v2/v3 保持可读，缺失的新表恢复为空状态。
 
 Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不进入 Git 或应用安装树。
 
@@ -144,6 +146,7 @@ Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不�
 - `404`：当前范围内找不到对象，隐私对象在未授权范围也按不可见处理；
 - `409`：期望版本过期、幂等键冲突或恢复目标非空；
 - `422`：结构可读但业务条件不成立或游标无效；
+- `502`：已启用 Provider 返回失败或不符合闭合提案协议；
 - `503`：repository、Blob、偏好或传输边界失败。
 
 错误响应只返回稳定 code/path，不回显正文、密码、URL 凭据、数据库 driver message 或本机个人路径。
@@ -153,5 +156,5 @@ Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不�
 - JSON 请求体上限为 2 MiB，Markdown 导入上限为 1 MiB；
 - Evidence 列表当前最多返回最近 200 个 Snapshot；
 - 接口仅面向回环单用户产品，没有公开认证或 CSRF 完整边界；
-- 没有文件上传、多格式解析、抓取、订阅、AI 拆分/查询、自动接受、模糊/向量搜索或在线检索接口；OpenAI 目前只提供公开 Entry 的 tags 提案和用户选中公开 Entry 对的 association 提案；
+- 没有文件上传、多格式解析、抓取、订阅、AI 查询综合、自动接受、模糊/向量搜索或在线检索接口；OpenAI 目前只提供用户选中公开 Snapshot 的 split、公开 Entry 的 tags 和用户选中公开 Entry 对的 association 提案；
 - 当前正式知识只实现 Entry 中心关系图谱；不恢复 `/curation`、旧 `/knowledge` 写入/读取或旧 `/search` 路由，也不把历史 Knowledge 表当作当前产品入口。

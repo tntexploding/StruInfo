@@ -34,6 +34,7 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0012](0012-provider-neutral-processing-runs-and-proposals.md) | Accepted | Provider-neutral durable processing runs and typed proposal envelopes |
 | [0013](0013-openai-entry-tag-proposals.md) | Accepted | Optional OpenAI Responses API tag proposals for public Entries with manual acceptance |
 | [0014](0014-openai-entry-association-proposals.md) | Accepted | Optional OpenAI selected-pair Entry association proposals with manual graph acceptance |
+| [0015](0015-openai-entry-split-proposals.md) | Accepted | Optional OpenAI public-Snapshot split proposals with exact Fragment review and manual Entry materialization |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -58,4 +59,7 @@ owner authority. ADR 0012 adds durable provider-neutral processing runs and
 typed proposal envelopes without selecting an AI provider or creating a second
 write path. ADR 0013 selects one optional OpenAI tag-proposal path; ADR 0014
 reuses that provider boundary for a user-selected public Entry pair and accepts
-a typed relation proposal only through the existing graph command.
+a typed relation proposal only through the existing graph command. ADR 0015
+adds an explicitly selected public-Snapshot split proposal whose exact Fragment
+groups materialize only after manual acceptance through the existing Entry
+boundary.

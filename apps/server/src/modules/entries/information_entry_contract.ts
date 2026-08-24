@@ -89,6 +89,11 @@ export interface InformationEntryMaterializeRow {
   readonly value: Readonly<InformationEntryRevisionValue>;
 }
 
+export interface AiSplitEntryGroupInput {
+  readonly titlePath: string;
+  readonly fragmentIds: readonly string[];
+}
+
 export interface InformationEntryRevisionWrite {
   readonly workspaceId: string;
   readonly entryId: string;

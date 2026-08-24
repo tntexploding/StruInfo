@@ -1,3 +1,5 @@
+export * from './ai_split_proposal.js';
+export * from './ai_split_proposal_service.js';
 export * from './ai_association_proposal.js';
 export * from './ai_association_proposal_service.js';
 export * from './ai_tag_proposal.js';
