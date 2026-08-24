@@ -10,6 +10,7 @@ import {
   type EntryTypeKeyword,
   type InformationEntryMaterializeRow,
   type InformationEntryRevisionValue,
+  type ManualEntryFragmentGroupInput,
 } from './information_entry_contract.js';
 import {
   deriveInformationEntryId,
@@ -20,7 +21,7 @@ import {
 export const ENTRY_SPLIT_RULE_VERSION = 'struinfo.entry-split.section.v1';
 export const AI_ENTRY_SPLIT_RULE_VERSION = 'struinfo.entry-split.ai-group.v1';
 export const MANUAL_ENTRY_SPLIT_RULE_VERSION =
-  'struinfo.entry-split.manual-group.v1';
+  'struinfo.entry-split.manual-range.v1';
 export const ENTRY_MANUAL_ORIGIN_VERSION = 'manual-entry-editor.v1';
 export const MAXIMUM_ENTRY_BODY_CODE_POINTS = 200_000;
 export const MAXIMUM_CONTENT_KEYWORDS = 32;
@@ -129,16 +130,161 @@ export function prepareAiSplitInformationEntries(
 
 export function prepareManualSplitInformationEntries(
   snapshot: Readonly<MaterializedEvidenceSnapshot>,
-  groups: readonly Readonly<EntryFragmentGroupInput>[],
+  groups: readonly Readonly<ManualEntryFragmentGroupInput>[],
 ): readonly Readonly<InformationEntryMaterializeRow>[] | undefined {
-  return prepareGroupedInformationEntries(snapshot, groups, {
-    splitRuleVersion: MANUAL_ENTRY_SPLIT_RULE_VERSION,
-    identityVersion: 'manual-group-v1',
-    includeTitleInIdentity: true,
-    isPrivate: snapshot.isPrivate === true,
-  });
+  const structure = snapshot.structures[0];
+  if (structure === undefined || groups.length < 1 || groups.length > 256) {
+    return undefined;
+  }
+  const sections = structure.fragments
+    .filter((fragment) => fragment.nodeKind === 'section')
+    .sort((left, right) =>
+      left.codePointRange.start !== right.codePointRange.start
+        ? left.codePointRange.start - right.codePointRange.start
+        : left.fragmentId.localeCompare(right.fragmentId),
+    );
+  const scalarTextByFragment = new Map(
+    sections.map((fragment) => [
+      fragment.fragmentId,
+      Object.freeze(Array.from(fragment.selectedText)),
+    ]),
+  );
+  let sectionIndex = 0;
+  let expectedStart = 0;
+  let inputCount = 0;
+  for (const group of groups) {
+    if (group.fragments.length < 1) return undefined;
+    for (const input of group.fragments) {
+      inputCount += 1;
+      if (inputCount > 512) return undefined;
+      const section = sections[sectionIndex];
+      const scalars = scalarTextByFragment.get(input.fragmentId);
+      if (
+        section?.fragmentId !== input.fragmentId ||
+        scalars === undefined ||
+        !Number.isSafeInteger(input.startCodePoint) ||
+        !Number.isSafeInteger(input.endCodePoint) ||
+        input.startCodePoint !== expectedStart ||
+        input.endCodePoint <= input.startCodePoint ||
+        input.endCodePoint > scalars.length
+      ) {
+        return undefined;
+      }
+      if (input.endCodePoint === scalars.length) {
+        sectionIndex += 1;
+        expectedStart = 0;
+      } else {
+        expectedStart = input.endCodePoint;
+      }
+    }
+  }
+  if (sectionIndex !== sections.length || expectedStart !== 0) return undefined;
+
+  const rows: Readonly<InformationEntryMaterializeRow>[] = [];
+  for (const [documentOrder, group] of groups.entries()) {
+    const titlePath = normalizeSplitTitle(group.titlePath);
+    if (titlePath === undefined) return undefined;
+    const fragments = coalesceManualFragmentInputs(group.fragments);
+    const parts = fragments.map((input) => {
+      const scalars = scalarTextByFragment.get(input.fragmentId);
+      if (scalars === undefined) return undefined;
+      return Object.freeze({
+        fragmentId: input.fragmentId,
+        text: scalars.slice(input.startCodePoint, input.endCodePoint).join(''),
+      });
+    });
+    if (parts.some((part) => part === undefined)) return undefined;
+    let body = '';
+    let previousFragmentId: string | undefined;
+    for (const part of parts) {
+      if (part === undefined) return undefined;
+      if (body !== '' && previousFragmentId !== part.fragmentId) body += '\n\n';
+      body += part.text;
+      previousFragmentId = part.fragmentId;
+    }
+    if (
+      body.length === 0 ||
+      Array.from(body).length > MAXIMUM_ENTRY_BODY_CODE_POINTS
+    ) {
+      return undefined;
+    }
+    const identityInput = [
+      titlePath,
+      ...fragments.map(
+        (input) =>
+          `${input.fragmentId}:${input.startCodePoint.toString()}:${input.endCodePoint.toString()}`,
+      ),
+    ].join('\n');
+    const sourceIdentity = `manual-range-v1:${informationEntryBodySha256(identityInput)}`;
+    const entryId = deriveInformationEntryId(
+      snapshot.snapshotId,
+      structure.structureId,
+      sourceIdentity,
+    );
+    rows.push(
+      Object.freeze({
+        workspaceId: snapshot.workspaceId,
+        entryId,
+        resourceId: snapshot.resourceId,
+        snapshotId: snapshot.snapshotId,
+        revisionId: deriveInformationEntryRevisionId(entryId, 1),
+        value: Object.freeze({
+          documentOrder,
+          titlePath,
+          body,
+          bodySha256: informationEntryBodySha256(body),
+          chunkMode: 'split' as const,
+          splitRuleVersion: MANUAL_ENTRY_SPLIT_RULE_VERSION,
+          isPrivate: snapshot.isPrivate === true,
+          contentKeywords: Object.freeze([]),
+          domains: Object.freeze([]),
+          fragmentIds: Object.freeze(
+            fragments.map((input) => input.fragmentId),
+          ),
+          fragmentRanges: Object.freeze(
+            fragments.map((input) =>
+              Object.freeze({
+                startCodePoint: input.startCodePoint,
+                endCodePoint: input.endCodePoint,
+              }),
+            ),
+          ),
+        }),
+      }),
+    );
+  }
+  return Object.freeze(rows);
 }
 
+function coalesceManualFragmentInputs(
+  inputs: readonly Readonly<{
+    fragmentId: string;
+    startCodePoint: number;
+    endCodePoint: number;
+  }>[],
+): readonly Readonly<{
+  fragmentId: string;
+  startCodePoint: number;
+  endCodePoint: number;
+}>[] {
+  const result: {
+    fragmentId: string;
+    startCodePoint: number;
+    endCodePoint: number;
+  }[] = [];
+  for (const input of inputs) {
+    const previous = result.at(-1);
+    if (
+      previous?.fragmentId === input.fragmentId &&
+      previous.endCodePoint === input.startCodePoint
+    ) {
+      previous.endCodePoint = input.endCodePoint;
+    } else {
+      result.push({...input});
+    }
+  }
+  return Object.freeze(result.map((input) => Object.freeze(input)));
+}
 function prepareGroupedInformationEntries(
   snapshot: Readonly<MaterializedEvidenceSnapshot>,
   groups: readonly Readonly<EntryFragmentGroupInput>[],
@@ -273,6 +419,9 @@ export function prepareManualEntryRevision(
     contentKeywords,
     domains,
     fragmentIds: current.value.fragmentIds,
+    ...(current.value.fragmentRanges === undefined
+      ? {}
+      : {fragmentRanges: current.value.fragmentRanges}),
   });
 }
 

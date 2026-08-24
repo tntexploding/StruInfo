@@ -10,10 +10,13 @@ import {ActionNotice} from '../components/action_notice.js';
 import type {ActionFeedback} from '../components/product_types.js';
 import {
   createManualSplitDraft,
+  mergeAllManualSplitGroups,
   mergeManualSplitGroups,
   splitManualSplitGroup,
+  splitManualSplitPiece,
   type ManualSplitDraftGroup,
 } from './information_entry_manual_split_model.js';
+import {ManualSplitGroupEditor} from './information_entry_manual_split_group.js';
 
 type EvidenceSnapshotReadResponse =
   | Readonly<{status: 'ok'; snapshot: Readonly<EvidenceSnapshot>}>
@@ -104,8 +107,8 @@ export function InformationEntryManualSplit({
     };
   }, [loadDraft]);
 
-  const fragmentCount = useMemo(
-    () => groups.reduce((sum, group) => sum + group.fragments.length, 0),
+  const sourcePieceCount = useMemo(
+    () => groups.reduce((sum, group) => sum + group.pieces.length, 0),
     [groups],
   );
 
@@ -120,16 +123,7 @@ export function InformationEntryManualSplit({
   }
 
   function mergeAll() {
-    setGroups((current) => {
-      const first = current[0];
-      if (first === undefined || current.length === 1) return current;
-      return Object.freeze([
-        Object.freeze({
-          titlePath: first.titlePath,
-          fragments: Object.freeze(current.flatMap((group) => group.fragments)),
-        }),
-      ]);
-    });
+    setGroups((current) => mergeAllManualSplitGroups(current));
   }
 
   async function commit() {
@@ -155,8 +149,14 @@ export function InformationEntryManualSplit({
           groups.map((group) =>
             Object.freeze({
               titlePath: group.titlePath,
-              fragmentIds: Object.freeze(
-                group.fragments.map((fragment) => fragment.fragmentId),
+              fragments: Object.freeze(
+                group.pieces.map((piece) =>
+                  Object.freeze({
+                    fragmentId: piece.fragment.fragmentId,
+                    startCodePoint: piece.startCodePoint,
+                    endCodePoint: piece.endCodePoint,
+                  }),
+                ),
               ),
             }),
           ),
@@ -206,13 +206,13 @@ export function InformationEntryManualSplit({
         </div>
         <span className="record-count">
           {status === 'ready'
-            ? `${groups.length.toString()} 条 · ${fragmentCount.toString()} 个 Fragment`
+            ? `${groups.length.toString()} 条 · ${sourcePieceCount.toString()} 个来源段`
             : '等待文档'}
         </span>
       </header>
       <p className="entry-manual-split__boundary">
-        在既有 Fragment
-        边界合并或拆开连续分组，编辑条目标题后一次保存。正文、顺序和来源不会被改写。
+        可在既有 Fragment 边界或正文光标处拆分，编辑条目标题后一次保存。
+        原始证据、字符顺序和来源不会被改写。
       </p>
       {snapshotId === '' ? (
         <p className="entry-manual-split__state">
@@ -272,80 +272,42 @@ export function InformationEntryManualSplit({
           )}
           <ol className="entry-manual-split__groups">
             {groups.map((group, groupIndex) => (
-              <li
-                key={group.fragments
-                  .map((fragment) => fragment.fragmentId)
-                  .join(':')}
-              >
-                {groupIndex === 0 ? null : (
-                  <button
-                    className="entry-manual-split__merge"
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      setGroups((current) =>
-                        mergeManualSplitGroups(current, groupIndex),
-                      );
-                    }}
-                  >
-                    与上一条合并
-                  </button>
-                )}
-                <article className="entry-manual-split__group">
-                  <header>
-                    <strong>
-                      条目 {String(groupIndex + 1).padStart(2, '0')}
-                    </strong>
-                    <span>{group.fragments.length.toString()} 个 Fragment</span>
-                  </header>
-                  <label>
-                    条目标题
-                    <input
-                      type="text"
-                      value={group.titlePath}
-                      maxLength={200}
-                      disabled={busy}
-                      onChange={(event) => {
-                        updateTitle(groupIndex, event.currentTarget.value);
-                      }}
-                    />
-                  </label>
-                  <div className="entry-manual-split__fragments">
-                    {group.fragments.map((fragment, fragmentIndex) => (
-                      <div key={fragment.fragmentId}>
-                        {fragmentIndex === 0 ? null : (
-                          <button
-                            className="entry-manual-split__cut"
-                            type="button"
-                            disabled={busy}
-                            aria-label={`在条目 ${String(groupIndex + 1)} 的第 ${String(fragmentIndex + 1)} 个 Fragment 前拆开`}
-                            onClick={() => {
-                              setGroups((current) =>
-                                splitManualSplitGroup(
-                                  current,
-                                  groupIndex,
-                                  fragmentIndex,
-                                ),
-                              );
-                            }}
-                          >
-                            在此拆开
-                          </button>
-                        )}
-                        <article>
-                          <span>
-                            Fragment{' '}
-                            {String(fragmentIndex + 1).padStart(2, '0')}
-                          </span>
-                          <pre>{fragment.selectedText}</pre>
-                        </article>
-                      </div>
-                    ))}
-                  </div>
-                </article>
-              </li>
+              <ManualSplitGroupEditor
+                key={group.pieces
+                  .map(
+                    (piece) =>
+                      `${piece.fragment.fragmentId}:${piece.startCodePoint.toString()}:${piece.endCodePoint.toString()}`,
+                  )
+                  .join('|')}
+                busy={busy}
+                group={group}
+                groupIndex={groupIndex}
+                onTitleChange={(titlePath) => {
+                  updateTitle(groupIndex, titlePath);
+                }}
+                onMergePrevious={() => {
+                  setGroups((current) =>
+                    mergeManualSplitGroups(current, groupIndex),
+                  );
+                }}
+                onSplitBefore={(pieceIndex) => {
+                  setGroups((current) =>
+                    splitManualSplitGroup(current, groupIndex, pieceIndex),
+                  );
+                }}
+                onSplitWithin={(pieceIndex, codePoint) => {
+                  setGroups((current) =>
+                    splitManualSplitPiece(
+                      current,
+                      groupIndex,
+                      pieceIndex,
+                      codePoint,
+                    ),
+                  );
+                }}
+              />
             ))}
-          </ol>
+          </ol>{' '}
           <div className="entry-manual-split__commit">
             <span>保存后生成当前结构；已有 Entry 不会被替换。</span>
             <button

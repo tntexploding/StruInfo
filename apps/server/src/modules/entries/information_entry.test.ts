@@ -65,9 +65,21 @@ describe('InformationEntry', () => {
     expect(first[0]?.value.bodySha256).toMatch(/^[0-9a-f]{64}$/u);
   });
 
-  it('groups every section exactly once for stable manual split materialization', () => {
+  it('groups every section range exactly once for stable manual materialization', () => {
     const firstId = '55555555-5555-4555-8555-555555555555';
     const secondId = '66666666-6666-4666-8666-666666666666';
+    const firstText = '## First\n\nFirst body.';
+    const secondText = '## Second\n\nSecond body.';
+    const firstRange = Object.freeze({
+      fragmentId: firstId,
+      startCodePoint: 0,
+      endCodePoint: Array.from(firstText).length,
+    });
+    const secondRange = Object.freeze({
+      fragmentId: secondId,
+      startCodePoint: 0,
+      endCodePoint: Array.from(secondText).length,
+    });
     const snapshot = Object.freeze({
       workspaceId: WORKSPACE_ID,
       resourceId: RESOURCE_ID,
@@ -77,18 +89,21 @@ describe('InformationEntry', () => {
         {
           structureId: STRUCTURE_ID,
           fragments: [
-            fragment(secondId, 'section', 40, '## Second\n\nSecond body.'),
-            fragment(firstId, 'section', 0, '## First\n\nFirst body.'),
+            fragment(secondId, 'section', 40, secondText),
+            fragment(firstId, 'section', 0, firstText),
           ],
         },
       ],
     });
 
     const rows = prepareManualSplitInformationEntries(snapshot, [
-      {titlePath: ' Combined entry ', fragmentIds: [firstId, secondId]},
+      {
+        titlePath: ' Combined entry ',
+        fragments: [firstRange, secondRange],
+      },
     ]);
     const replay = prepareManualSplitInformationEntries(snapshot, [
-      {titlePath: 'Combined entry', fragmentIds: [firstId, secondId]},
+      {titlePath: 'Combined entry', fragments: [firstRange, secondRange]},
     ]);
 
     expect(rows).toEqual(replay);
@@ -97,27 +112,93 @@ describe('InformationEntry', () => {
       value: {
         documentOrder: 0,
         titlePath: 'Combined entry',
-        body: '## First\n\nFirst body.\n\n## Second\n\nSecond body.',
-        splitRuleVersion: 'struinfo.entry-split.manual-group.v1',
+        body: `${firstText}\n\n${secondText}`,
+        splitRuleVersion: 'struinfo.entry-split.manual-range.v1',
         isPrivate: true,
         fragmentIds: [firstId, secondId],
+        fragmentRanges: [
+          {startCodePoint: 0, endCodePoint: Array.from(firstText).length},
+          {startCodePoint: 0, endCodePoint: Array.from(secondText).length},
+        ],
       },
     });
     expect(
       prepareManualSplitInformationEntries(snapshot, [
-        {titlePath: 'Second first', fragmentIds: [secondId, firstId]},
+        {
+          titlePath: 'Second first',
+          fragments: [secondRange, firstRange],
+        },
       ]),
     ).toBeUndefined();
     expect(
       prepareManualSplitInformationEntries(snapshot, [
-        {titlePath: 'Missing section', fragmentIds: [firstId]},
+        {titlePath: 'Missing section', fragments: [firstRange]},
       ]),
     ).toBeUndefined();
     expect(
       prepareManualSplitInformationEntries(snapshot, [
-        {titlePath: 'Different title', fragmentIds: [firstId, secondId]},
+        {
+          titlePath: 'Different title',
+          fragments: [firstRange, secondRange],
+        },
       ])?.[0]?.entryId,
     ).not.toBe(rows?.[0]?.entryId);
+  });
+
+  it('splits a Fragment by Unicode scalar boundaries and rejects gaps', () => {
+    const fragmentId = '55555555-5555-4555-8555-555555555555';
+    const selectedText = 'A😀e\u0301Z';
+    const snapshot = Object.freeze({
+      workspaceId: WORKSPACE_ID,
+      resourceId: RESOURCE_ID,
+      snapshotId: SNAPSHOT_ID,
+      structures: [
+        {
+          structureId: STRUCTURE_ID,
+          fragments: [fragment(fragmentId, 'section', 0, selectedText)],
+        },
+      ],
+    });
+    const split = prepareManualSplitInformationEntries(snapshot, [
+      {
+        titlePath: 'Left',
+        fragments: [{fragmentId, startCodePoint: 0, endCodePoint: 2}],
+      },
+      {
+        titlePath: 'Right',
+        fragments: [{fragmentId, startCodePoint: 2, endCodePoint: 5}],
+      },
+    ]);
+
+    expect(split?.map((entry) => entry.value.body)).toEqual(['A😀', 'éZ']);
+    expect(split?.map((entry) => entry.value.fragmentRanges)).toEqual([
+      [{startCodePoint: 0, endCodePoint: 2}],
+      [{startCodePoint: 2, endCodePoint: 5}],
+    ]);
+    expect(
+      prepareManualSplitInformationEntries(snapshot, [
+        {
+          titlePath: 'Gap',
+          fragments: [{fragmentId, startCodePoint: 0, endCodePoint: 1}],
+        },
+        {
+          titlePath: 'After gap',
+          fragments: [{fragmentId, startCodePoint: 2, endCodePoint: 5}],
+        },
+      ]),
+    ).toBeUndefined();
+    expect(
+      prepareManualSplitInformationEntries(snapshot, [
+        {
+          titlePath: 'Overlap',
+          fragments: [{fragmentId, startCodePoint: 0, endCodePoint: 3}],
+        },
+        {
+          titlePath: 'After overlap',
+          fragments: [{fragmentId, startCodePoint: 2, endCodePoint: 5}],
+        },
+      ]),
+    ).toBeUndefined();
   });
   it('normalizes manual keywords independently and preserves immutable source facts', () => {
     const current = currentEntry({isPrivate: true});

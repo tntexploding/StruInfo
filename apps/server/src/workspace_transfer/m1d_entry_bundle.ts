@@ -10,8 +10,10 @@ import {
 import type {WorkspaceBundleSectionCodec} from './workspace_bundle.js';
 
 export const M1D_ENTRY_BUNDLE_SECTION_TYPE = 'struinfo.m1d-entry';
-export const M1D_ENTRY_BUNDLE_SECTION_VERSION = 2;
-export const M1D_ENTRY_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v2';
+export const M1D_ENTRY_BUNDLE_SECTION_VERSION = 3;
+export const M1D_ENTRY_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v3';
+export const M1D_ENTRY_VERSION_TWO_BUNDLE_SECTION_VERSION = 2;
+export const M1D_ENTRY_VERSION_TWO_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v2';
 export const M1D_ENTRY_LEGACY_BUNDLE_SECTION_VERSION = 1;
 export const M1D_ENTRY_LEGACY_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v1';
 
@@ -118,7 +120,17 @@ export const M1D_ENTRY_TABLES: readonly Readonly<M1dEntryTableDescriptor>[] =
       'entry_coverage_count',
       'created_at',
     ]),
+    table('information_entry_fragment_range', [
+      'workspace_id',
+      'entry_id',
+      'input_ordinal',
+      'start_code_point',
+      'end_code_point',
+      'created_at',
+    ]),
   ]);
+
+const VERSION_TWO_ENTRY_TABLES = Object.freeze(M1D_ENTRY_TABLES.slice(0, -1));
 
 const LEGACY_ENTRY_TABLES: readonly Readonly<M1dEntryTableDescriptor>[] =
   Object.freeze([
@@ -225,6 +237,18 @@ export const M1D_ENTRY_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     decode: normalizeM1dEntrySnapshot,
   });
 
+export const M1D_ENTRY_VERSION_TWO_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1D_ENTRY_BUNDLE_SECTION_TYPE,
+    version: M1D_ENTRY_VERSION_TWO_BUNDLE_SECTION_VERSION,
+    encode(value: unknown): unknown {
+      return normalizeVersionTwoSnapshot(value);
+    },
+    decode(payload: JsonValue): unknown {
+      return upgradeVersionTwoSnapshot(normalizeVersionTwoSnapshot(payload));
+    },
+  });
+
 export const M1D_ENTRY_LEGACY_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
   Object.freeze({
     type: M1D_ENTRY_BUNDLE_SECTION_TYPE,
@@ -274,6 +298,32 @@ export function createEmptyM1dEntrySnapshot(): M1dEntrySnapshot {
       name: descriptor.name,
       rows: [],
     })),
+  });
+}
+
+function normalizeVersionTwoSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1D_ENTRY_VERSION_TWO_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1dEntryTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1D_ENTRY_VERSION_TWO_BUNDLE_SCHEMA,
+    VERSION_TWO_ENTRY_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1D_ENTRY_VERSION_TWO_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1dEntryTableSnapshot>[];
+  }>;
+}
+
+function upgradeVersionTwoSnapshot(
+  snapshot: ReturnType<typeof normalizeVersionTwoSnapshot>,
+): M1dEntrySnapshot {
+  return normalizeM1dEntrySnapshot({
+    schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
+    tables: [
+      ...snapshot.tables,
+      {name: 'information_entry_fragment_range', rows: []},
+    ],
   });
 }
 
@@ -429,6 +479,7 @@ function upgradeLegacySnapshot(
       },
       {name: 'information_document_tag_set', rows: currentTagSets},
       {name: 'information_document_tag_value', rows: currentTagValues},
+      {name: 'information_entry_fragment_range', rows: []},
     ],
   });
 }

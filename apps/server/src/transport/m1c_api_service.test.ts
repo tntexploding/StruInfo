@@ -635,7 +635,21 @@ describe('M1cApiService', () => {
       service.materializeManualInformationEntries({
         snapshotId: SNAPSHOT_ID,
         groups: [
-          {titlePath: 'Combined entry', fragmentIds: [firstId, secondId]},
+          {
+            titlePath: 'Combined entry',
+            fragments: [
+              {
+                fragmentId: firstId,
+                startCodePoint: 0,
+                endCodePoint: Array.from(firstText).length,
+              },
+              {
+                fragmentId: secondId,
+                startCodePoint: 0,
+                endCodePoint: Array.from(secondText).length,
+              },
+            ],
+          },
         ],
       }),
     ).resolves.toMatchObject({
@@ -648,8 +662,15 @@ describe('M1cApiService', () => {
             value: {
               titlePath: 'Combined entry',
               body: `${firstText}\n\n${secondText}`,
-              splitRuleVersion: 'struinfo.entry-split.manual-group.v1',
+              splitRuleVersion: 'struinfo.entry-split.manual-range.v1',
               fragmentIds: [firstId, secondId],
+              fragmentRanges: [
+                {startCodePoint: 0, endCodePoint: Array.from(firstText).length},
+                {
+                  startCodePoint: 0,
+                  endCodePoint: Array.from(secondText).length,
+                },
+              ],
             },
           },
         ],
@@ -658,7 +679,23 @@ describe('M1cApiService', () => {
     await expect(
       service.materializeManualInformationEntries({
         snapshotId: SNAPSHOT_ID,
-        groups: [{titlePath: 'Wrong order', fragmentIds: [secondId, firstId]}],
+        groups: [
+          {
+            titlePath: 'Wrong order',
+            fragments: [
+              {
+                fragmentId: secondId,
+                startCodePoint: 0,
+                endCodePoint: Array.from(secondText).length,
+              },
+              {
+                fragmentId: firstId,
+                startCodePoint: 0,
+                endCodePoint: Array.from(firstText).length,
+              },
+            ],
+          },
+        ],
       }),
     ).resolves.toMatchObject({
       statusCode: 422,

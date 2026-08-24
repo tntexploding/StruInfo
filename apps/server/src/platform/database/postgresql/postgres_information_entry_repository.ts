@@ -62,8 +62,12 @@ export const READ_CURRENT_INFORMATION_ENTRIES_SQL = sql(
 );
 
 export const READ_CURRENT_INFORMATION_ENTRY_INPUTS_SQL = sql(
-  'SELECT i.entry_id::text, i.input_ordinal, i.fragment_id::text',
+  'SELECT i.entry_id::text, i.input_ordinal, i.fragment_id::text,',
+  '  r.start_code_point, r.end_code_point',
   'FROM struinfo.information_entry_fragment_input AS i',
+  'LEFT JOIN struinfo.information_entry_fragment_range AS r',
+  '  ON r.workspace_id = i.workspace_id',
+  ' AND r.entry_id = i.entry_id AND r.input_ordinal = i.input_ordinal',
   'JOIN struinfo.information_entry AS e',
   '  ON e.workspace_id = i.workspace_id AND e.entry_id = i.entry_id',
   'WHERE i.workspace_id = $1 AND ($2::boolean OR NOT e.is_private)',
@@ -111,10 +115,14 @@ const READ_ENTRY_MATERIALIZATION_SQL = sql(
 );
 
 const READ_ENTRY_INPUTS_SQL = sql(
-  'SELECT input_ordinal, fragment_id::text',
-  'FROM struinfo.information_entry_fragment_input',
-  'WHERE workspace_id = $1 AND entry_id = $2',
-  'ORDER BY input_ordinal',
+  'SELECT i.input_ordinal, i.fragment_id::text,',
+  '  r.start_code_point, r.end_code_point',
+  'FROM struinfo.information_entry_fragment_input AS i',
+  'LEFT JOIN struinfo.information_entry_fragment_range AS r',
+  '  ON r.workspace_id = i.workspace_id',
+  ' AND r.entry_id = i.entry_id AND r.input_ordinal = i.input_ordinal',
+  'WHERE i.workspace_id = $1 AND i.entry_id = $2',
+  'ORDER BY i.input_ordinal',
 );
 
 const READ_ENTRY_KEYWORDS_SQL = sql(
@@ -155,6 +163,8 @@ const UPDATE_ENTRY_SQL = sql(
 
 const DELETE_FRAGMENT_INPUTS_SQL =
   'DELETE FROM struinfo.information_entry_fragment_input WHERE workspace_id = $1 AND entry_id = $2';
+const DELETE_FRAGMENT_RANGES_SQL =
+  'DELETE FROM struinfo.information_entry_fragment_range WHERE workspace_id = $1 AND entry_id = $2';
 const DELETE_CONTENT_KEYWORDS_SQL =
   'DELETE FROM struinfo.information_entry_content_keyword WHERE workspace_id = $1 AND entry_id = $2';
 const DELETE_DOMAIN_KEYWORDS_SQL =
@@ -164,6 +174,19 @@ const INSERT_FRAGMENT_INPUT_SQL = sql(
   'INSERT INTO struinfo.information_entry_fragment_input (',
   '  workspace_id, entry_id, input_ordinal, fragment_id',
   ') VALUES ($1, $2, $3, $4)',
+);
+const INSERT_FRAGMENT_RANGE_SQL = sql(
+  'INSERT INTO struinfo.information_entry_fragment_range (',
+  '  workspace_id, entry_id, input_ordinal, start_code_point, end_code_point',
+  ') SELECT $1, $2, $3, $4::integer, $5::integer',
+  'FROM struinfo.information_entry_fragment_input AS input',
+  'JOIN struinfo.fragment AS fragment',
+  '  ON fragment.workspace_id = input.workspace_id',
+  ' AND fragment.fragment_id = input.fragment_id',
+  'WHERE input.workspace_id = $1 AND input.entry_id = $2',
+  '  AND input.input_ordinal = $3',
+  '  AND $4::integer >= 0',
+  '  AND $5::integer <= char_length(fragment.selected_text)',
 );
 const INSERT_CONTENT_KEYWORD_SQL = sql(
   'INSERT INTO struinfo.information_entry_content_keyword (',
@@ -408,6 +431,7 @@ async function replaceEntryChildren(
   entryId: string,
   value: Readonly<InformationEntryRevisionValue>,
 ): Promise<void> {
+  await client.query<Row>(DELETE_FRAGMENT_RANGES_SQL, [workspaceId, entryId]);
   await client.query<Row>(DELETE_FRAGMENT_INPUTS_SQL, [workspaceId, entryId]);
   await client.query<Row>(DELETE_CONTENT_KEYWORDS_SQL, [workspaceId, entryId]);
   await client.query<Row>(DELETE_DOMAIN_KEYWORDS_SQL, [workspaceId, entryId]);
@@ -420,6 +444,12 @@ async function insertEntryChildren(
   entryId: string,
   value: Readonly<InformationEntryRevisionValue>,
 ): Promise<void> {
+  if (
+    value.fragmentRanges !== undefined &&
+    value.fragmentRanges.length !== value.fragmentIds.length
+  ) {
+    throw new PostgresAdapterError();
+  }
   for (const [index, fragmentId] of value.fragmentIds.entries()) {
     const result = await client.query<Row>(INSERT_FRAGMENT_INPUT_SQL, [
       workspaceId,
@@ -428,6 +458,17 @@ async function insertEntryChildren(
       fragmentId,
     ]);
     expectOneAffected(result.rowCount);
+    const range = value.fragmentRanges?.[index];
+    if (range !== undefined) {
+      const insertedRange = await client.query<Row>(INSERT_FRAGMENT_RANGE_SQL, [
+        workspaceId,
+        entryId,
+        index,
+        range.startCodePoint,
+        range.endCodePoint,
+      ]);
+      expectOneAffected(insertedRange.rowCount);
+    }
   }
   for (const [index, keyword] of value.contentKeywords.entries()) {
     const result = await client.query<Row>(INSERT_CONTENT_KEYWORD_SQL, [
@@ -464,6 +505,7 @@ async function assertExistingMaterialization(
     entry.workspaceId,
     entry.entryId,
   ]);
+  const actualRanges = mapFragmentRanges(inputs.rows);
   if (
     canonicalUuid(row.resource_id) !== entry.resourceId ||
     canonicalUuid(row.snapshot_id) !== entry.snapshotId ||
@@ -475,7 +517,8 @@ async function assertExistingMaterialization(
     inputs.rows.some(
       (input, index) =>
         canonicalUuid(input.fragment_id) !== entry.value.fragmentIds[index],
-    )
+    ) ||
+    JSON.stringify(actualRanges) !== JSON.stringify(entry.value.fragmentRanges)
   ) {
     throw new PostgresAdapterError();
   }
@@ -538,6 +581,7 @@ function mapRevisionValue(
   const typeCustomName = optionalText(row.type_custom_name);
   const usefulnessScore = optionalAssessmentScore(row.usefulness_score);
   const interestScore = optionalAssessmentScore(row.interest_score);
+  const fragmentRanges = mapFragmentRanges(inputRows);
   if (
     (typeKeyword === 'other') !== (typeCustomName !== undefined) ||
     inputRows.some(
@@ -569,7 +613,31 @@ function mapRevisionValue(
     fragmentIds: Object.freeze(
       inputRows.map((candidate) => canonicalUuid(candidate.fragment_id)),
     ),
+    ...(fragmentRanges === undefined ? {} : {fragmentRanges}),
   });
+}
+
+function mapFragmentRanges(inputRows: readonly Row[]):
+  | readonly Readonly<{
+      startCodePoint: number;
+      endCodePoint: number;
+    }>[]
+  | undefined {
+  const hasAnyRange = inputRows.some(
+    (row) => row.start_code_point !== null || row.end_code_point !== null,
+  );
+  if (!hasAnyRange) return undefined;
+  return Object.freeze(
+    inputRows.map((row) => {
+      if (row.start_code_point === null || row.end_code_point === null) {
+        throw new PostgresAdapterError();
+      }
+      const startCodePoint = integer(row.start_code_point);
+      const endCodePoint = integer(row.end_code_point, 1);
+      if (endCodePoint <= startCodePoint) throw new PostgresAdapterError();
+      return Object.freeze({startCodePoint, endCodePoint});
+    }),
+  );
 }
 
 function optionalAssessmentScore(

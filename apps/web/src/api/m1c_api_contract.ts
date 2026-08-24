@@ -338,6 +338,10 @@ export interface InformationEntry {
     contentKeywords: readonly Readonly<InformationEntryContentKeyword>[];
     domains: readonly Readonly<InformationEntryDomainAssignment>[];
     fragmentIds: readonly string[];
+    fragmentRanges?: readonly Readonly<{
+      startCodePoint: number;
+      endCodePoint: number;
+    }>[];
   }>;
 }
 
@@ -388,7 +392,11 @@ export type InformationDocumentTagWriteResponse =
 
 export interface InformationEntryFragmentGroup {
   readonly titlePath: string;
-  readonly fragmentIds: readonly string[];
+  readonly fragments: readonly Readonly<{
+    fragmentId: string;
+    startCodePoint: number;
+    endCodePoint: number;
+  }>[];
 }
 
 export interface InformationEntryManualMaterializeRequest {

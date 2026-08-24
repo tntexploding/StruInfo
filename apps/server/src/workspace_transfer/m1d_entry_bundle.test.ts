@@ -5,6 +5,8 @@ import {
   createEmptyM1dEntrySnapshot,
   M1D_ENTRY_BUNDLE_SCHEMA,
   M1D_ENTRY_TABLES,
+  M1D_ENTRY_VERSION_TWO_BUNDLE_CODEC,
+  M1D_ENTRY_VERSION_TWO_BUNDLE_SCHEMA,
   m1dEntryTableCounts,
   normalizeM1dEntrySnapshot,
 } from './m1d_entry_bundle.js';
@@ -14,21 +16,40 @@ const OTHER_WORKSPACE_ID = '22222222-2222-4222-8222-222222222222';
 const CREATED_AT = '2040-01-02T03:04:05.000Z';
 
 describe('M1D Entry Bundle section', () => {
-  it('normalizes all seven current Entry and document-tag tables deterministically', () => {
+  it('normalizes all eight current Entry, range, and document-tag tables deterministically', () => {
     const first = syntheticSnapshot(false);
     const reversed = syntheticSnapshot(true);
 
     expect(reversed).toEqual(first);
-    expect(first.tables).toHaveLength(7);
+    expect(first.tables).toHaveLength(8);
     expect(m1dEntryTableCounts(first)).toMatchObject({
       information_entry: 2,
       information_document_tag_set: 1,
+      information_entry_fragment_range: 1,
     });
     expect(() => {
       assertM1dEntryWorkspace(first, WORKSPACE_ID);
     }).not.toThrow();
   });
 
+  it('upgrades version two sections with an empty fragment-range table', () => {
+    const current = syntheticSnapshot(false);
+    const versionTwo = {
+      schemaVersion: M1D_ENTRY_VERSION_TWO_BUNDLE_SCHEMA,
+      tables: current.tables.slice(0, -1),
+    };
+
+    const upgraded = M1D_ENTRY_VERSION_TWO_BUNDLE_CODEC.decode(
+      versionTwo,
+    ) as ReturnType<typeof normalizeM1dEntrySnapshot>;
+
+    expect(upgraded.schemaVersion).toBe(M1D_ENTRY_BUNDLE_SCHEMA);
+    expect(upgraded.tables).toHaveLength(8);
+    expect(upgraded.tables.at(-1)).toEqual({
+      name: 'information_entry_fragment_range',
+      rows: [],
+    });
+  });
   it('rejects schema drift and cross-workspace rows', () => {
     const raw = JSON.parse(JSON.stringify(syntheticSnapshot(false))) as {
       tables: {name: string; rows: Record<string, unknown>[]}[];
@@ -104,23 +125,34 @@ function syntheticSnapshot(reverseEntries: boolean) {
       rows:
         descriptor.name === 'information_entry'
           ? entryRows
-          : descriptor.name === 'information_document_tag_set'
+          : descriptor.name === 'information_entry_fragment_range'
             ? [
                 {
                   workspace_id: WORKSPACE_ID,
-                  resource_id: '77777777-7777-4777-8777-777777777777',
-                  snapshot_id: '88888888-8888-4888-8888-888888888888',
-                  current_revision: 1,
-                  current_revision_id: '99999999-9999-4999-8999-999999999999',
-                  revision_kind: 'deterministic_aggregate',
-                  rule_version: 'synthetic-v1',
-                  is_private: false,
-                  entry_count: 2,
+                  entry_id: '33333333-3333-4333-8333-333333333333',
+                  input_ordinal: 0,
+                  start_code_point: 0,
+                  end_code_point: 5,
                   created_at: CREATED_AT,
-                  updated_at: CREATED_AT,
                 },
               ]
-            : [],
+            : descriptor.name === 'information_document_tag_set'
+              ? [
+                  {
+                    workspace_id: WORKSPACE_ID,
+                    resource_id: '77777777-7777-4777-8777-777777777777',
+                    snapshot_id: '88888888-8888-4888-8888-888888888888',
+                    current_revision: 1,
+                    current_revision_id: '99999999-9999-4999-8999-999999999999',
+                    revision_kind: 'deterministic_aggregate',
+                    rule_version: 'synthetic-v1',
+                    is_private: false,
+                    entry_count: 2,
+                    created_at: CREATED_AT,
+                    updated_at: CREATED_AT,
+                  },
+                ]
+              : [],
     })),
   });
 }

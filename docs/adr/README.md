@@ -36,6 +36,7 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0014](0014-openai-entry-association-proposals.md) | Accepted | Optional OpenAI selected-pair Entry association proposals with manual graph acceptance |
 | [0015](0015-openai-entry-split-proposals.md) | Accepted | Optional OpenAI public-Snapshot split proposals with exact Fragment review and manual Entry materialization |
 | [0016](0016-manual-entry-fragment-grouping.md) | Accepted | Local manual grouping at existing Fragment boundaries before atomic Entry materialization |
+| [0017](0017-manual-within-fragment-entry-boundaries.md) | Accepted | Exact manual Unicode-scalar boundaries inside immutable Fragments before first Entry materialization |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -64,4 +65,5 @@ a typed relation proposal only through the existing graph command. ADR 0015
 adds an explicitly selected public-Snapshot split proposal whose exact Fragment
 groups materialize only after manual acceptance through the existing Entry
 boundary. ADR 0016 adds the complete no-Provider owner path for grouping those
-same immutable Fragments before the first Entry structure is committed.
+same immutable Fragments before the first Entry structure is committed. ADR 0017
+extends that path to exact Unicode-scalar ranges without rewriting source evidence.

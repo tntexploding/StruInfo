@@ -1,6 +1,6 @@
 # StruInfo 分阶段计划
 
-- 状态：M1E-4A 人工 Fragment 分组已实现；全部审核流程延期，继续无数据开发
+- 状态：M1E-4B Fragment 内人工边界已实现；全部审核流程延期，继续无数据开发
 - 最近更新：2026-08-24
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
@@ -27,7 +27,7 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 | InformationEntry               | 已实现 | 确定性/人工/AI 首次物化、当前成品态、三维标签、两项评分、文档标签、隐私和来源            |
 | Entry 联系                     | 已实现 | 确定性投影、分项解释、外部版本化权重和逐对人工 override                                  |
 | Entry 查询                     | 已实现 | Entry 组合查询、绑定分页及显式隐私范围内的独立完整文档结果                               |
-| 完整个人数据包                 | 已实现 | 55 表、引用 Blob 字节、偏好、Association v3 与 Processing v4                             |
+| 完整个人数据包                 | 已实现 | 56 表、引用 Blob 字节、偏好、Entry v3、Association v3 与 Processing v4                   |
 | 旧 Curation/Knowledge 运行时   | 已退役 | 迁移和数据兼容保留，活动代码/HTTP/Web 已删除                                             |
 | 正式知识页面                   | 已实现 | 最高匹配中心、有界图/列表、来源、用户关系编辑、隐私范围与 selected-pair AI 联系提案      |
 | ProcessingRun / AI 提案        | 已实现 | 中性任务状态、取消；OpenAI split/tags/selected-pair association 的启动、列表、接受与拒绝 |
@@ -40,7 +40,7 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 
 M1E-3B、M1E-3C 和 M1E-3D 已依次完成单个公开 Entry 标签提案、用户明确选择的公开 Entry 对联系提案，以及用户明确选择的公开 Snapshot 拆分提案。三者都只创建 typed proposal，只有人工接受才调用现有 Entry/图谱命令；私密内容在网络前拒绝。
 
-M1E-4A 又补齐了无 Provider 的人工拆分：用户可在首次 Entry 物化前按既有 Fragment 边界合并、重新拆开并改标题，服务端从本地证据重建正文，三种物化方式共享唯一空 Snapshot 原子边界。下一增量应来自无数据直接使用暴露的产品缺口或另行接受的窄边界；第二 Provider、自动接受、私密外发、查询综合、Embedding 和 RAG 继续后置。
+M1E-4A/4B 已补齐无 Provider 的人工拆分：用户可在首次 Entry 物化前按既有 Fragment 边界或 Fragment 内 Unicode 标量边界合并、重新拆开并改标题，服务端从本地证据重建正文，三种物化方式共享唯一空 Snapshot 原子边界。下一增量应来自无数据直接使用暴露的产品缺口或另行接受的窄边界；第二 Provider、自动接受、私密外发、查询综合、Embedding 和 RAG 继续后置。
 
 ## 已完成主线：M1D Entry 网络
 
@@ -141,7 +141,7 @@ M1E-2 按以下最小顺序实现，不恢复已删除的旧高级编辑器或�
 
 第一版不渲染全库图，不引入图数据库、AI、Embedding、RAG、复杂本体或物理布局依赖。关系
 标签属于外部工作区数据，不作为代码常量或迁移 seed。已按真实使用插入的隐私全文查询和联系
-策略编辑不新增数据库迁移或依赖。M1E-4A 已补齐既有 Fragment 边界上的人工结构编辑；剩余可插入缺口是 Fragment 内任意边界、已物化结构重组和更多导入格式。容器/
+策略编辑不新增数据库迁移或依赖。M1E-4A/4B 已补齐既有 Fragment 与 Fragment 内 Unicode 标量边界上的人工结构编辑；剩余可插入缺口是拆分前全文保存修改、来源重排、自定义规则、已物化结构重组和更多导入格式。容器/
 Linux、正式 TM2 和发布许可继续后置，除非当前产品路径出现可复现阻断。
 
 ## 已完成增量：M1E-3 Provider-neutral 任务与提案
@@ -172,7 +172,14 @@ ADR 0012 将任务生命周期、产品提案语义和具体 Provider 分开；A
 1. **M1E-4A1 关闭分组模型（已完成）**：人工分组必须按来源顺序完整覆盖第一结构的全部 section Fragment；标题有界，正文只由服务端从精确 Fragment 重建；
 2. **M1E-4A2 唯一提交边界（已完成）**：确定性、人工和 AI 接受都使用 `materializeEntriesIfSnapshotEmpty`，workspace lock 下只有第一套完整结构生效；
 3. **M1E-4A3 页面工作台（已完成）**：拆分页支持全文查看、逐 Fragment 预览、相邻合并、边界恢复、标题编辑、重置、全部合并及明确的隐私/加载/冲突状态；
-4. **M1E-4A4 边界保持（已完成）**：不新增迁移、依赖、偏好或 Bundle section，不改 Snapshot/Fragment，也不重组已有 Entry。Fragment 内任意选区、重排、全文源修改、自定义规则和结构迁移继续后置。
+4. **M1E-4A4 边界保持（已完成）**：不新增迁移、依赖、偏好或 Bundle section，不改 Snapshot/Fragment，也不重组已有 Entry。该切片当时尚未覆盖的 Fragment 内边界由后继 M1E-4B 实现；重排、全文源修改、自定义规则和结构迁移继续后置。
+
+## 当前增量：M1E-4B Fragment 内人工边界（已完成）
+
+1. **M1E-4B1 精确区间模型（已完成）**：人工输入以相对不可变 Fragment 正文的半开 Unicode 标量区间表示，完整分割全部 section Fragment，拒绝缺口、重叠和重排；
+2. **M1E-4B2 持久化与携带（已完成）**：迁移 `000017` 新增可选一对一 range 子表；Entry Bundle 升级为 v3/8 表，个人数据包覆盖 56 张表，旧 Entry v1/v2 补空区间表；
+3. **M1E-4B3 产品接线（已完成）**：本地 API 只接收标题/Fragment ID/标量区间并从本地证据重建正文；拆分页提供只读来源段、鼠标/键盘光标和明确的“在光标处分开”；
+4. **M1E-4B4 边界保持（已完成）**：继续复用空 Snapshot 原子赢家，不改证据、不引入 Provider/依赖/真实资料，也不迁移已物化 Entry。全文保存修改、来源重排、自定义规则和结构迁移继续后置。
 
 ## 历史基线：M1C 可运行核心闭环（运行时已退役）
 
