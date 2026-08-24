@@ -1,4 +1,7 @@
 import type {
+  AiAssociationProposalDecisionResponse,
+  AiAssociationProposalListResponse,
+  AiAssociationProposalStartResponse,
   AiTagProposalDecisionResponse,
   AiTagProposalListResponse,
   AiTagProposalStartResponse,
@@ -140,6 +143,29 @@ export interface M1cApiClient {
     proposalId: string,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<AiTagProposalDecisionResponse>>;
+  listAiAssociationProposals(
+    entryId: string,
+    relatedEntryId: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<AiAssociationProposalListResponse>>;
+  startAiAssociationProposal(
+    entryId: string,
+    relatedEntryId: string,
+    requestKey: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<AiAssociationProposalStartResponse>>;
+  acceptAiAssociationProposal(
+    entryId: string,
+    relatedEntryId: string,
+    proposalId: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<AiAssociationProposalDecisionResponse>>;
+  rejectAiAssociationProposal(
+    entryId: string,
+    relatedEntryId: string,
+    proposalId: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<AiAssociationProposalDecisionResponse>>;
   listProcessingRuns(
     limit?: number,
     options?: M1cApiRequestOptions,
@@ -195,6 +221,10 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     startAiTagProposal: reject,
     acceptAiTagProposal: reject,
     rejectAiTagProposal: reject,
+    listAiAssociationProposals: reject,
+    startAiAssociationProposal: reject,
+    acceptAiAssociationProposal: reject,
+    rejectAiAssociationProposal: reject,
     listProcessingRuns: reject,
     cancelProcessingRun: reject,
     exportWorkspaceBundle: reject,
@@ -354,6 +384,64 @@ export function createM1cApiClient(
     rejectAiTagProposal: (entryId, proposalId, options) =>
       post<AiTagProposalDecisionResponse>(
         `api/v1/entries/${encodeURIComponent(entryId)}/tag-proposals/${encodeURIComponent(proposalId)}/reject`,
+        {},
+        options,
+      ),
+    listAiAssociationProposals: (entryId, relatedEntryId, options) =>
+      get<AiAssociationProposalListResponse>(
+        'api/v1/knowledge-graph/edges/' +
+          encodeURIComponent(entryId) +
+          '/' +
+          encodeURIComponent(relatedEntryId) +
+          '/proposals',
+        options,
+      ),
+    startAiAssociationProposal: (
+      entryId,
+      relatedEntryId,
+      requestKey,
+      options,
+    ) =>
+      post<AiAssociationProposalStartResponse>(
+        'api/v1/knowledge-graph/edges/' +
+          encodeURIComponent(entryId) +
+          '/' +
+          encodeURIComponent(relatedEntryId) +
+          '/proposals/start',
+        {requestKey},
+        options,
+      ),
+    acceptAiAssociationProposal: (
+      entryId,
+      relatedEntryId,
+      proposalId,
+      options,
+    ) =>
+      post<AiAssociationProposalDecisionResponse>(
+        'api/v1/knowledge-graph/edges/' +
+          encodeURIComponent(entryId) +
+          '/' +
+          encodeURIComponent(relatedEntryId) +
+          '/proposals/' +
+          encodeURIComponent(proposalId) +
+          '/accept',
+        {},
+        options,
+      ),
+    rejectAiAssociationProposal: (
+      entryId,
+      relatedEntryId,
+      proposalId,
+      options,
+    ) =>
+      post<AiAssociationProposalDecisionResponse>(
+        'api/v1/knowledge-graph/edges/' +
+          encodeURIComponent(entryId) +
+          '/' +
+          encodeURIComponent(relatedEntryId) +
+          '/proposals/' +
+          encodeURIComponent(proposalId) +
+          '/reject',
         {},
         options,
       ),

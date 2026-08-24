@@ -49,7 +49,9 @@ import {
   type ImportMarkdownEvidenceInput,
 } from '../modules/evidence/index.js';
 import {
+  AiAssociationProposalServiceError,
   AiTagProposalServiceError,
+  type AiAssociationProposalServicePort,
   type AiTagProposalServicePort,
   type ProcessingProposal,
   type ProcessingRun,
@@ -86,6 +88,7 @@ export interface M1cApiServiceDependencies {
   readonly informationEntryAssociationRepository: InformationEntryAssociationRepositoryPort;
   readonly processingRunRepository: ProcessingRunRepositoryPort;
   readonly aiTagProposals?: AiTagProposalServicePort;
+  readonly aiAssociationProposals?: AiAssociationProposalServicePort;
   readonly workspaceTransfer: M1cWorkspaceTransferPort;
 }
 
@@ -150,6 +153,25 @@ export interface M1cApiServicePort {
   ): Promise<M1cHttpResult>;
   rejectAiTagProposal(
     entryId: string,
+    proposalId: string,
+  ): Promise<M1cHttpResult>;
+  listAiAssociationProposals(
+    entryId: string,
+    relatedEntryId: string,
+  ): Promise<M1cHttpResult>;
+  startAiAssociationProposal(
+    entryId: string,
+    relatedEntryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult>;
+  acceptAiAssociationProposal(
+    entryId: string,
+    relatedEntryId: string,
+    proposalId: string,
+  ): Promise<M1cHttpResult>;
+  rejectAiAssociationProposal(
+    entryId: string,
+    relatedEntryId: string,
     proposalId: string,
   ): Promise<M1cHttpResult>;
   exportWorkspaceBundle(): Promise<M1cHttpResult>;
@@ -315,6 +337,9 @@ export class M1cApiService implements M1cApiServicePort {
         'workspace_bundle_export',
         'workspace_bundle_restore',
         ...(this.#dependencies.aiTagProposals === undefined ? [] : ['ai_tags']),
+        ...(this.#dependencies.aiAssociationProposals === undefined
+          ? []
+          : ['ai_associations']),
       ]),
     });
   }
@@ -759,8 +784,12 @@ export class M1cApiService implements M1cApiServicePort {
       let value;
       if (input.operation === 'edit') {
         const origin =
-          current?.value.graph?.origin ??
-          (projection === undefined ? 'user' : 'association');
+          current?.value.graph?.origin === 'ai'
+            ? projection === undefined
+              ? 'user'
+              : 'association'
+            : (current?.value.graph?.origin ??
+              (projection === undefined ? 'user' : 'association'));
         const graph = prepareInformationEntryGraphRelation(
           input.label,
           input.direction,
@@ -1346,6 +1375,119 @@ export class M1cApiService implements M1cApiServicePort {
     }
   }
 
+  public async listAiAssociationProposals(
+    entryId: string,
+    relatedEntryId: string,
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
+    if (!CANONICAL_UUID.test(relatedEntryId)) {
+      return inputFailure('path.relatedEntryId');
+    }
+    const service = this.#dependencies.aiAssociationProposals;
+    if (service === undefined) return aiTagProviderNotConfigured();
+    try {
+      const proposals = await service.listForPair(entryId, relatedEntryId);
+      return httpResult(200, {
+        status: 'ok',
+        proposals: Object.freeze(proposals.map(processingProposalResponse)),
+      });
+    } catch (error) {
+      return aiAssociationProposalFailure(error);
+    }
+  }
+
+  public async startAiAssociationProposal(
+    entryId: string,
+    relatedEntryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
+    if (!CANONICAL_UUID.test(relatedEntryId)) {
+      return inputFailure('path.relatedEntryId');
+    }
+    const input = decodeAiTagProposalStart(body);
+    if (input === undefined) return inputFailure('body.requestKey');
+    const service = this.#dependencies.aiAssociationProposals;
+    if (service === undefined) return aiTagProviderNotConfigured();
+    try {
+      const result = await service.start(
+        entryId,
+        relatedEntryId,
+        input.requestKey,
+      );
+      const response = processingRunResponse(result.run);
+      if (result.run.status === 'failed') {
+        return httpResult(502, {
+          status: 'failed',
+          issue: Object.freeze({
+            code: result.run.errorCode ?? 'ai_provider_unavailable',
+          }),
+          run: response,
+        });
+      }
+      return httpResult(result.outcome === 'created' ? 201 : 200, {
+        status: result.outcome,
+        run: response,
+      });
+    } catch (error) {
+      return aiAssociationProposalFailure(error);
+    }
+  }
+
+  public async acceptAiAssociationProposal(
+    entryId: string,
+    relatedEntryId: string,
+    proposalId: string,
+  ): Promise<M1cHttpResult> {
+    return this.#decideAiAssociationProposal(
+      entryId,
+      relatedEntryId,
+      proposalId,
+      'accepted',
+    );
+  }
+
+  public async rejectAiAssociationProposal(
+    entryId: string,
+    relatedEntryId: string,
+    proposalId: string,
+  ): Promise<M1cHttpResult> {
+    return this.#decideAiAssociationProposal(
+      entryId,
+      relatedEntryId,
+      proposalId,
+      'rejected',
+    );
+  }
+
+  async #decideAiAssociationProposal(
+    entryId: string,
+    relatedEntryId: string,
+    proposalId: string,
+    decision: 'accepted' | 'rejected',
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
+    if (!CANONICAL_UUID.test(relatedEntryId)) {
+      return inputFailure('path.relatedEntryId');
+    }
+    if (!CANONICAL_UUID.test(proposalId)) {
+      return inputFailure('path.proposalId');
+    }
+    const service = this.#dependencies.aiAssociationProposals;
+    if (service === undefined) return aiTagProviderNotConfigured();
+    try {
+      const result =
+        decision === 'accepted'
+          ? await service.accept(entryId, relatedEntryId, proposalId)
+          : await service.reject(entryId, relatedEntryId, proposalId);
+      return httpResult(200, {
+        status: result.outcome,
+        proposal: processingProposalResponse(result.proposal),
+      });
+    } catch (error) {
+      return aiAssociationProposalFailure(error);
+    }
+  }
   public async exportWorkspaceBundle(): Promise<M1cHttpResult> {
     try {
       const summary =
@@ -2119,6 +2261,9 @@ function processingProposalResponse(
     ...(proposal.tagPayload === undefined
       ? {}
       : {tagPayload: proposal.tagPayload}),
+    ...(proposal.associationPayload === undefined
+      ? {}
+      : {associationPayload: proposal.associationPayload}),
     createdAt: proposal.createdAt,
     ...(proposal.decidedAt === undefined
       ? {}
@@ -2184,6 +2329,43 @@ function aiTagProposalFailure(error: unknown): M1cHttpResult {
   });
 }
 
+function aiAssociationProposalFailure(error: unknown): M1cHttpResult {
+  if (!(error instanceof AiAssociationProposalServiceError)) {
+    return repositoryFailure();
+  }
+  if (
+    error.code === 'ai_association_entry_not_found' ||
+    error.code === 'ai_proposal_not_found'
+  ) {
+    return httpResult(404, {
+      status: 'not_found',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  if (error.code === 'ai_proposal_invalid') {
+    return httpResult(422, {
+      status: 'rejected',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  if (
+    error.code === 'ai_private_entry_forbidden' ||
+    error.code === 'ai_run_conflict' ||
+    error.code === 'ai_run_invalid_state' ||
+    error.code === 'ai_proposal_terminal' ||
+    error.code === 'stale_entry_revision' ||
+    error.code === 'stale_association_revision'
+  ) {
+    return httpResult(409, {
+      status: 'rejected',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  return httpResult(502, {
+    status: 'failed',
+    issue: Object.freeze({code: error.code}),
+  });
+}
 function repositoryFailure(): M1cHttpResult {
   return httpResult(503, {
     status: 'failed',

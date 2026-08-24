@@ -21,7 +21,7 @@ Workspace Bundle v1 现在是“当前已实现的全部工作区个人数据”
 - 所有被 Evidence 引用的原始/规范化 Blob 字节；
 - 当前工作区的快捷标签、自动标签筛选与标签别名偏好。
 
-共计 51 张数据库表。运行配置、数据库 URL、密码、API key、访问令牌、外部工作区路径和其他秘密不属于个人数据包，继续由外部配置/秘密机制提供。
+共计 52 张数据库表。运行配置、数据库 URL、密码、API key、访问令牌、外部工作区路径和其他秘密不属于个人数据包，继续由外部配置/秘密机制提供。
 
 真实包文件只能位于用户选择的外部数据根 `exports/`，不得进入 Git、源码目录、安装包、容器镜像或测试 fixture。tracked 测试只能使用合成且无个人价值的数据。
 
@@ -46,12 +46,12 @@ Workspace Bundle v1 现在是“当前已实现的全部工作区个人数据”
 | `struinfo.m1c-domain`      |       1 | `struinfo.m1c-domain.v1`      | Evidence、Curation、正式 Knowledge 与命令历史，36 表                          |
 | `struinfo.m1d-entry`       |       2 | `struinfo.m1d-entry.v2`       | 当前 Entry、Fragment 输入、内容/类型/领域标签、lineage 与 Document 标签，7 表 |
 | `struinfo.m1d-association` |       3 | `struinfo.m1d-association.v3` | 可重建联系投影、当前人工控制与正式图谱关系元数据，2 表                        |
-| `struinfo.m1e-processing`  |       2 | `struinfo.m1e-processing.v2`  | 处理任务、提案信封、精确 Fragment 输入与 AI 标签提案载荷，6 表                |
+| `struinfo.m1e-processing`  |       3 | `struinfo.m1e-processing.v3`  | 处理任务、提案信封、精确输入与 AI 标签/关系提案载荷，7 表                     |
 | `struinfo.personal-data`   |       1 | `struinfo.personal-data.v1`   | 引用 Blob 的完整字节与当前审核/标签个人偏好                                   |
 
 每个 codec 都使用闭合 schema，显式列出允许的字段并拒绝未知表、未知列、重复身份、跨工作区引用和错误 scalar。通用信封不会把任意 JSON 直接当作领域事实。
 
-Entry v2、Association v3 和 Processing v2 反映迁移 `000011` 至 `000014` 之后的当前成品态。Association v3 在当前 override 上增加关系来源、名称和方向；Entry 的 `current_revision` / `current_revision_id` 只作为乐观并发版本令牌，不再指向一张普通编辑历史表。Processing v2 在 provider-neutral 任务/提案之上增加闭合的 AI 标签提案载荷；它不保存 API key、提示全文、原始模型响应或任意 JSON。不可变 Snapshot、Fragment 以及正式 Knowledge 修订历史仍由 M1C domain 分区原样保留。
+Entry v2、Association v3 和 Processing v3 反映迁移 `000011` 至 `000015` 之后的当前成品态。Association v3 在当前 override 上增加关系来源、名称和方向；Entry 的 `current_revision` / `current_revision_id` 只作为乐观并发版本令牌，不再指向一张普通编辑历史表。Processing v3 在 provider-neutral 任务/提案之上增加闭合的 AI 标签与所选公开 Entry 对关系提案载荷；它不保存 API key、提示全文、原始模型响应或任意 JSON。不可变 Snapshot、Fragment 以及正式 Knowledge 修订历史仍由 M1C domain 分区原样保留。
 
 ## 4. 规范编码与隐私
 
@@ -71,7 +71,7 @@ Writer 输出确定性 UTF-8 JSON：
 
 一次导出按以下顺序执行：
 
-1. 在 PostgreSQL `REPEATABLE READ READ ONLY` 快照中读取当前 51 张工作区表；
+1. 在 PostgreSQL `REPEATABLE READ READ ONLY` 快照中读取当前 52 张工作区表；
 2. 规范化四个数据库分区并核对同一 `workspaceId`；
 3. 从 Evidence 行导出精确 Blob 引用清单，并从外部 Blob store 读取每个引用的字节；
 4. 从外部 `preferences/` 读取当前快捷标签、自动筛选和别名；

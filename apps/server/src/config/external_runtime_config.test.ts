@@ -108,7 +108,7 @@ describe('loadRuntimeConfig', () => {
       OPENAI_API_KEY: 'synthetic-openai-key',
     });
 
-    expect(config.aiTagsProvider).toMatchObject({
+    expect(config.aiProposalProvider).toMatchObject({
       providerKey: 'openai-responses-v1',
       model: 'gpt-5-mini',
       apiKey: 'synthetic-openai-key',

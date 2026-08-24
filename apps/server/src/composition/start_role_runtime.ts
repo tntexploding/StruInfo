@@ -1,6 +1,12 @@
 import type {RuntimeConfig} from '../config/runtime_config.js';
-import {AiTagProposalService} from '../modules/processing/index.js';
-import {OpenAiEntryTagProvider} from '../platform/ai/index.js';
+import {
+  AiAssociationProposalService,
+  AiTagProposalService,
+} from '../modules/processing/index.js';
+import {
+  OpenAiEntryAssociationProvider,
+  OpenAiEntryTagProvider,
+} from '../platform/ai/index.js';
 import {
   createRuntimeDatabase,
   type DatabasePoolFactory,
@@ -104,13 +110,25 @@ export async function startRoleRuntime(
     dependencies.healthListenerFactory ?? new NestHealthListenerFactory();
   const address = listenerAddress(config);
   const aiTagProposals =
-    config.aiTagsProvider === undefined
+    config.aiProposalProvider === undefined
       ? undefined
       : new AiTagProposalService({
           workspaceId: config.workspaceId,
           entries: repositories.informationEntries,
           processing: repositories.processingRuns,
-          provider: new OpenAiEntryTagProvider(config.aiTagsProvider),
+          provider: new OpenAiEntryTagProvider(config.aiProposalProvider),
+        });
+  const aiAssociationProposals =
+    config.aiProposalProvider === undefined
+      ? undefined
+      : new AiAssociationProposalService({
+          workspaceId: config.workspaceId,
+          entries: repositories.informationEntries,
+          associations: repositories.informationEntryAssociations,
+          processing: repositories.aiAssociationProposals,
+          provider: new OpenAiEntryAssociationProvider(
+            config.aiProposalProvider,
+          ),
         });
   const api =
     config.role === 'api' || config.role === 'all'
@@ -127,6 +145,9 @@ export async function startRoleRuntime(
             repositories.informationEntryAssociations,
           processingRunRepository: repositories.processingRuns,
           ...(aiTagProposals === undefined ? {} : {aiTagProposals}),
+          ...(aiAssociationProposals === undefined
+            ? {}
+            : {aiAssociationProposals}),
           workspaceTransfer: new M1cWorkspaceTransfer({
             repository: repositories.workspaceTransfer,
             blobStore: storage.blobStore,

@@ -95,21 +95,21 @@ describe('parseRuntimeConfig', () => {
     ).toBe(1000);
   });
 
-  it('enables OpenAI tags only from an explicit model and environment secret pair', () => {
+  it('enables OpenAI proposals only from an explicit model and environment secret pair', () => {
     const config = parseRuntimeConfig('api', {
       ...RUNTIME_ENVIRONMENT,
       OPENAI_API_KEY: 'synthetic-openai-key',
       STRUIINFO_OPENAI_MODEL: 'gpt-5-mini',
     });
 
-    expect(config.aiTagsProvider).toEqual({
+    expect(config.aiProposalProvider).toEqual({
       providerKey: 'openai-responses-v1',
       model: 'gpt-5-mini',
       apiKey: 'synthetic-openai-key',
       maxOutputTokens: 800,
       timeoutMs: 60_000,
     });
-    expect(Object.isFrozen(config.aiTagsProvider)).toBe(true);
+    expect(Object.isFrozen(config.aiProposalProvider)).toBe(true);
   });
 
   it.each([

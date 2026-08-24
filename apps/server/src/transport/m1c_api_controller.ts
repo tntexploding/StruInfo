@@ -147,6 +147,72 @@ export class M1cApiController {
     );
   }
 
+  @Get('knowledge-graph/edges/:entryId/:relatedEntryId/proposals')
+  public async aiAssociationProposals(
+    @Param('entryId') entryId: string,
+    @Param('relatedEntryId') relatedEntryId: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.listAiAssociationProposals(entryId, relatedEntryId),
+    );
+  }
+
+  @Post('knowledge-graph/edges/:entryId/:relatedEntryId/proposals/start')
+  public async startAiAssociationProposal(
+    @Param('entryId') entryId: string,
+    @Param('relatedEntryId') relatedEntryId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.startAiAssociationProposal(
+        entryId,
+        relatedEntryId,
+        body,
+      ),
+    );
+  }
+
+  @Post(
+    'knowledge-graph/edges/:entryId/:relatedEntryId/proposals/:proposalId/accept',
+  )
+  public async acceptAiAssociationProposal(
+    @Param('entryId') entryId: string,
+    @Param('relatedEntryId') relatedEntryId: string,
+    @Param('proposalId') proposalId: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.acceptAiAssociationProposal(
+        entryId,
+        relatedEntryId,
+        proposalId,
+      ),
+    );
+  }
+
+  @Post(
+    'knowledge-graph/edges/:entryId/:relatedEntryId/proposals/:proposalId/reject',
+  )
+  public async rejectAiAssociationProposal(
+    @Param('entryId') entryId: string,
+    @Param('relatedEntryId') relatedEntryId: string,
+    @Param('proposalId') proposalId: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.rejectAiAssociationProposal(
+        entryId,
+        relatedEntryId,
+        proposalId,
+      ),
+    );
+  }
   @Put('entries/associations/policy')
   public async reviseInformationEntryAssociationPolicy(
     @Body() body: unknown,

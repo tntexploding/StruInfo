@@ -14,7 +14,11 @@ export const INFORMATION_ENTRY_ASSOCIATION_BASES = [
   'domain_keyword',
 ] as const;
 
-export const INFORMATION_ENTRY_GRAPH_ORIGINS = ['association', 'user'] as const;
+export const INFORMATION_ENTRY_GRAPH_ORIGINS = [
+  'association',
+  'user',
+  'ai',
+] as const;
 
 export const INFORMATION_ENTRY_GRAPH_DIRECTIONS = [
   'symmetric',
@@ -105,7 +109,7 @@ export interface InformationEntryAssociationView {
 }
 
 export type InformationEntryGraphEdgeOrigin =
-  'automatically_calculated' | 'user_edited' | 'user_created';
+  'automatically_calculated' | 'user_edited' | 'user_created' | 'ai_assisted';
 
 export interface InformationEntryGraphEdge {
   readonly entryLowId: string;

@@ -162,6 +162,23 @@ record of why that unissued harness never blocked product work.
 - Revisit when: Current user interaction needs deeper browser coverage; extend
   the new Entry fixture rather than restoring M1C runtime mocks.
 
+### DH-010: Owner and Formal Acceptance Reviews
+
+- Source: Owner scheduling decision ENG-045
+- Owner: Product owner, platform and release maintainers
+- Status: Deferred, non-blocking
+- Scope: Owner experience review, real Provider quality/cost review, formal
+  PostgreSQL/container certification, deployment and release/distribution review
+- Evidence: The active workspace is intentionally empty and all former material
+  remains in an external recovery archive. Current implementation validation uses
+  only synthetic, value-free fixtures.
+- Current product impact: No reachable product defect has been demonstrated.
+  Review results remain unissued; deferral is not a PASS and does not authorize
+  restoring real material.
+- Revisit when: The owner explicitly resumes a named review, authorizes a real
+  material set, prepares a deployment/distribution candidate, or new evidence
+  shows a reachable current-product blocker.
+
 ## Entry Template
 
 ### DH-NNN: Short Title

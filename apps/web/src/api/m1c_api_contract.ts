@@ -23,6 +23,16 @@ export interface ProcessingTagProposalPayloadView {
   }>[];
 }
 
+export interface ProcessingAssociationProposalPayloadView {
+  readonly expectedEntryLowRevision: number;
+  readonly expectedEntryHighRevision: number;
+  readonly expectedOverrideRevision: number;
+  readonly providerModel: string;
+  readonly promptVersion: string;
+  readonly relationLabel: string;
+  readonly direction: InformationEntryGraphDirection;
+}
+
 export interface ProcessingProposalView {
   readonly proposalId: string;
   readonly runId: string;
@@ -36,6 +46,7 @@ export interface ProcessingProposalView {
   readonly summary: string;
   readonly fragmentIds: readonly string[];
   readonly tagPayload?: Readonly<ProcessingTagProposalPayloadView>;
+  readonly associationPayload?: Readonly<ProcessingAssociationProposalPayloadView>;
   readonly createdAt: string;
   readonly decidedAt?: string;
 }
@@ -104,6 +115,10 @@ export type AiTagProposalDecisionResponse =
       issue: Readonly<{code: string; path?: string}>;
     }>;
 
+export type AiAssociationProposalListResponse = AiTagProposalListResponse;
+export type AiAssociationProposalStartResponse = AiTagProposalStartResponse;
+export type AiAssociationProposalDecisionResponse =
+  AiTagProposalDecisionResponse;
 export interface ReviewPreferencesResponse {
   readonly status: 'ok';
   readonly workspaceId: string;
@@ -476,7 +491,7 @@ export interface CurrentInformationEntryAssociationOverride {
     manualAdjustment: number;
     isBlocked: boolean;
     graph?: Readonly<{
-      origin: 'association' | 'user';
+      origin: 'association' | 'user' | 'ai';
       label: string;
       direction: InformationEntryGraphDirection;
     }>;
@@ -495,7 +510,7 @@ export type InformationEntryGraphDirection =
   'symmetric' | 'low_to_high' | 'high_to_low';
 
 export type InformationEntryGraphEdgeOrigin =
-  'automatically_calculated' | 'user_edited' | 'user_created';
+  'automatically_calculated' | 'user_edited' | 'user_created' | 'ai_assisted';
 
 export interface InformationEntryGraphEdge {
   readonly entryLowId: string;

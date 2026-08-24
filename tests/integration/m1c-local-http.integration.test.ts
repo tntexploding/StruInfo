@@ -197,6 +197,14 @@ function stubApi(
       Promise.resolve(result(409, {status: 'rejected'})),
     rejectAiTagProposal: () =>
       Promise.resolve(result(409, {status: 'rejected'})),
+    listAiAssociationProposals: () =>
+      Promise.resolve(result(200, {status: 'ok', proposals: []})),
+    startAiAssociationProposal: () =>
+      Promise.resolve(result(409, {status: 'rejected'})),
+    acceptAiAssociationProposal: () =>
+      Promise.resolve(result(409, {status: 'rejected'})),
+    rejectAiAssociationProposal: () =>
+      Promise.resolve(result(409, {status: 'rejected'})),
     listProcessingRuns: () =>
       Promise.resolve(result(200, {status: 'ok', runs: []})),
     cancelProcessingRun: () =>

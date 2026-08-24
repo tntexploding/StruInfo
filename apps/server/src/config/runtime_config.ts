@@ -10,7 +10,7 @@ export type ProcessRole = 'api' | 'scheduler' | 'worker' | 'all';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
-export interface AiTagsProviderConfig {
+export interface AiProposalProviderConfig {
   readonly providerKey: 'openai-responses-v1';
   readonly model: string;
   readonly apiKey: string;
@@ -30,7 +30,7 @@ export interface RuntimeConfig {
   readonly databaseReadinessTimeoutMs: number;
   readonly shutdownTimeoutMs: number;
   readonly logLevel: LogLevel;
-  readonly aiTagsProvider?: Readonly<AiTagsProviderConfig>;
+  readonly aiProposalProvider?: Readonly<AiProposalProviderConfig>;
 }
 
 export class ConfigurationError extends Error {
@@ -88,7 +88,7 @@ export function parseRuntimeConfig(
     MAX_SHUTDOWN_TIMEOUT_MS,
   );
   const logLevel = parseLogLevel(environment.STRUIINFO_LOG_LEVEL);
-  const aiTagsProvider = parseAiTagsProvider(
+  const aiProposalProvider = parseAiProposalProvider(
     environment.OPENAI_API_KEY,
     environment.STRUIINFO_OPENAI_MODEL,
   );
@@ -105,14 +105,14 @@ export function parseRuntimeConfig(
     databaseReadinessTimeoutMs: DEFAULT_DATABASE_READINESS_TIMEOUT_MS,
     shutdownTimeoutMs,
     logLevel,
-    ...(aiTagsProvider === undefined ? {} : {aiTagsProvider}),
+    ...(aiProposalProvider === undefined ? {} : {aiProposalProvider}),
   });
 }
 
-function parseAiTagsProvider(
+function parseAiProposalProvider(
   apiKey: string | undefined,
   model: string | undefined,
-): Readonly<AiTagsProviderConfig> | undefined {
+): Readonly<AiProposalProviderConfig> | undefined {
   if (apiKey === undefined && model === undefined) return undefined;
   if (
     apiKey === undefined ||
@@ -123,7 +123,7 @@ function parseAiTagsProvider(
     !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/u.test(model)
   ) {
     throw new ConfigurationError(
-      'OPENAI_API_KEY and STRUIINFO_OPENAI_MODEL must both be supplied to enable AI tags.',
+      'OPENAI_API_KEY and STRUIINFO_OPENAI_MODEL must both be supplied to enable AI proposals.',
     );
   }
   return Object.freeze({

@@ -33,6 +33,7 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0011](0011-association-derived-formal-graph-edges.md) | Accepted | Deterministic similarity associations are editable Formal Knowledge graph edges |
 | [0012](0012-provider-neutral-processing-runs-and-proposals.md) | Accepted | Provider-neutral durable processing runs and typed proposal envelopes |
 | [0013](0013-openai-entry-tag-proposals.md) | Accepted | Optional OpenAI Responses API tag proposals for public Entries with manual acceptance |
+| [0014](0014-openai-entry-association-proposals.md) | Accepted | Optional OpenAI selected-pair Entry association proposals with manual graph acceptance |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -55,4 +56,6 @@ by ADR 0011: deterministic similarity associations may appear directly as
 formal graph edges, while visible origin and durable user edits or blocks retain
 owner authority. ADR 0012 adds durable provider-neutral processing runs and
 typed proposal envelopes without selecting an AI provider or creating a second
-write path.
+write path. ADR 0013 selects one optional OpenAI tag-proposal path; ADR 0014
+reuses that provider boundary for a user-selected public Entry pair and accepts
+a typed relation proposal only through the existing graph command.

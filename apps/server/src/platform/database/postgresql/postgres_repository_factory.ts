@@ -8,6 +8,7 @@ import type {
   EvidenceRepositoryPort,
 } from '../../../modules/evidence/index.js';
 import type {
+  AiAssociationProposalRepositoryPort,
   AiTagProposalRepositoryPort,
   ProcessingRunRepositoryPort,
 } from '../../../modules/processing/index.js';
@@ -18,6 +19,7 @@ import {PostgresEvidenceRepository} from './postgres_evidence_repository.js';
 import {PostgresInformationDocumentTagRepository} from './postgres_information_document_tag_repository.js';
 import {PostgresInformationEntryAssociationRepository} from './postgres_information_entry_association_repository.js';
 import {PostgresInformationEntryRepository} from './postgres_information_entry_repository.js';
+import {PostgresAiAssociationProposalRepository} from './postgres_ai_association_proposal_repository.js';
 import {PostgresAiTagProposalRepository} from './postgres_ai_tag_proposal_repository.js';
 import type {PostgresPoolBoundary} from './postgres_pool.js';
 import {PostgresM1cDomainTransferRepository} from './postgres_workspace_transfer_repository.js';
@@ -30,6 +32,7 @@ export interface PostgresRepositorySet {
   readonly informationEntryAssociations: InformationEntryAssociationRepositoryPort;
   readonly processingRuns: ProcessingRunRepositoryPort &
     AiTagProposalRepositoryPort;
+  readonly aiAssociationProposals: AiAssociationProposalRepositoryPort;
   readonly workspaceTransfer: M1cDomainTransferRepositoryPort;
 }
 
@@ -44,6 +47,7 @@ export function createPostgresRepositories(
     informationEntryAssociations:
       new PostgresInformationEntryAssociationRepository(pool),
     processingRuns: new PostgresAiTagProposalRepository(pool),
+    aiAssociationProposals: new PostgresAiAssociationProposalRepository(pool),
     workspaceTransfer: new PostgresM1cDomainTransferRepository(pool),
   });
 }

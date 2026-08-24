@@ -104,6 +104,17 @@ export interface ProcessingTagProposalPayload {
   readonly domains: readonly Readonly<ProcessingTagProposalDomain>[];
 }
 
+/** Closed payload for one explicitly selected public Entry pair. */
+export interface ProcessingAssociationProposalPayload {
+  readonly expectedEntryLowRevision: number;
+  readonly expectedEntryHighRevision: number;
+  readonly expectedOverrideRevision: number;
+  readonly providerModel: string;
+  readonly promptVersion: string;
+  readonly relationLabel: string;
+  readonly direction: 'symmetric' | 'low_to_high' | 'high_to_low';
+}
+
 export interface ProcessingProposal {
   readonly workspaceId: string;
   readonly proposalId: string;
@@ -118,6 +129,7 @@ export interface ProcessingProposal {
   readonly summary: string;
   readonly fragmentIds: readonly string[];
   readonly tagPayload?: Readonly<ProcessingTagProposalPayload>;
+  readonly associationPayload?: Readonly<ProcessingAssociationProposalPayload>;
   readonly createdAt: string;
   readonly decidedAt?: string;
 }
@@ -159,6 +171,7 @@ export interface ProcessingProposalAppend {
   readonly summary: string;
   readonly fragmentIds: readonly string[];
   readonly tagPayload?: Readonly<ProcessingTagProposalPayload>;
+  readonly associationPayload?: Readonly<ProcessingAssociationProposalPayload>;
 }
 
 export type ProcessingProposalDecision = 'accepted' | 'rejected';

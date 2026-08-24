@@ -56,3 +56,27 @@ export interface AiTagProposalRepositoryPort extends ProcessingRunRepositoryPort
     decision: ProcessingProposalDecision,
   ): Promise<ProcessingProposalDecisionOutcome>;
 }
+
+export interface AiAssociationProposalRepositoryPort extends ProcessingRunRepositoryPort {
+  loadRun(
+    workspaceId: string,
+    runId: string,
+  ): Promise<Readonly<ProcessingRun> | undefined>;
+
+  listAssociationProposalsForPair(
+    workspaceId: string,
+    entryLowId: string,
+    entryHighId: string,
+    limit: number,
+  ): Promise<readonly Readonly<ProcessingProposal>[]>;
+
+  appendAssociationProposal(
+    proposal: Readonly<ProcessingProposalAppend>,
+  ): Promise<ProcessingRunWriteOutcome>;
+
+  decideProposal(
+    workspaceId: string,
+    proposalId: string,
+    decision: ProcessingProposalDecision,
+  ): Promise<ProcessingProposalDecisionOutcome>;
+}
