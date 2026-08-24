@@ -134,6 +134,7 @@ export class PostgresAiAssociationProposalRepository implements AiAssociationPro
     proposal: Readonly<ProcessingProposalAppend>,
   ): Promise<ProcessingRunWriteOutcome> {
     if (
+      proposal.splitPayload !== undefined ||
       proposal.tagPayload !== undefined ||
       proposal.associationPayload !== undefined
     ) {

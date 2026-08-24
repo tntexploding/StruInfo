@@ -187,6 +187,36 @@ describe('M1D product workspaces', () => {
     const markup = renderToStaticMarkup(
       <InformationEntrySplitWorkspace
         aiEnabled={false}
+        onLoadEvidenceSnapshot={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {status: 'ok', snapshot: REVIEW_EVIDENCE},
+          })
+        }
+        onListAiSplitProposals={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {status: 'ok', proposals: []},
+          })
+        }
+        onStartAiSplitProposal={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
+        onAcceptAiSplitProposal={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
+        onRejectAiSplitProposal={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
         onListDocuments={() =>
           Promise.resolve({
             statusCode: 200,

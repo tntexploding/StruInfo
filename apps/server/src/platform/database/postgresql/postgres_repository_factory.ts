@@ -1,6 +1,7 @@
 import type {
   InformationDocumentTagRepositoryPort,
   InformationEntryAssociationRepositoryPort,
+  InformationEntryEmptySnapshotRepositoryPort,
   InformationEntryRepositoryPort,
 } from '../../../modules/entries/index.js';
 import type {
@@ -9,6 +10,7 @@ import type {
 } from '../../../modules/evidence/index.js';
 import type {
   AiAssociationProposalRepositoryPort,
+  AiSplitProposalRepositoryPort,
   AiTagProposalRepositoryPort,
   ProcessingRunRepositoryPort,
 } from '../../../modules/processing/index.js';
@@ -27,11 +29,13 @@ import {PostgresM1cDomainTransferRepository} from './postgres_workspace_transfer
 export interface PostgresRepositorySet {
   readonly evidence: EvidenceRepositoryPort;
   readonly evidenceRead: EvidenceReadRepositoryPort;
-  readonly informationEntries: InformationEntryRepositoryPort;
+  readonly informationEntries: InformationEntryRepositoryPort &
+    InformationEntryEmptySnapshotRepositoryPort;
   readonly informationDocumentTags: InformationDocumentTagRepositoryPort;
   readonly informationEntryAssociations: InformationEntryAssociationRepositoryPort;
   readonly processingRuns: ProcessingRunRepositoryPort &
-    AiTagProposalRepositoryPort;
+    AiTagProposalRepositoryPort &
+    AiSplitProposalRepositoryPort;
   readonly aiAssociationProposals: AiAssociationProposalRepositoryPort;
   readonly workspaceTransfer: M1cDomainTransferRepositoryPort;
 }

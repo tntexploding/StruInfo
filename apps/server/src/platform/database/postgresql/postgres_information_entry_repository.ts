@@ -7,6 +7,7 @@ import {
   type EntryAssessmentScore,
   type EntryContentKeyword,
   type EntryDomainAssignment,
+  type InformationEntryEmptySnapshotMaterializeResult,
   type InformationEntryMaterializeResult,
   type InformationEntryMaterializeRow,
   type InformationEntryRepositoryPort,
@@ -93,6 +94,13 @@ const LOCK_CURRENT_ENTRY_SQL = sql(
   CURRENT_ENTRY_SELECT,
   'WHERE e.workspace_id = $1 AND e.entry_id = $2',
   'FOR UPDATE OF e',
+);
+
+const READ_SNAPSHOT_ENTRY_IDS_SQL = sql(
+  'SELECT entry_id::text',
+  'FROM struinfo.information_entry',
+  'WHERE workspace_id = $1 AND snapshot_id = $2',
+  'ORDER BY entry_id',
 );
 
 const READ_ENTRY_MATERIALIZATION_SQL = sql(
@@ -217,6 +225,67 @@ export class PostgresInformationEntryRepository implements InformationEntryRepos
     );
   }
 
+  public async materializeEntriesIfSnapshotEmpty(
+    entries: readonly Readonly<InformationEntryMaterializeRow>[],
+  ): Promise<Readonly<InformationEntryEmptySnapshotMaterializeResult>> {
+    if (entries.length === 0) {
+      return Object.freeze({outcome: 'existing', createdCount: 0});
+    }
+    const first = entries[0];
+    if (first === undefined) throw new PostgresAdapterError();
+    const workspaceId = canonicalUuid(first.workspaceId);
+    const snapshotId = canonicalUuid(first.snapshotId);
+    return runPostgresTransaction(
+      this.#pool,
+      'read_committed',
+      async (client) => {
+        await acquireWorkspaceWriteLock(client, workspaceId);
+        for (const entry of entries) {
+          if (
+            canonicalUuid(entry.workspaceId) !== workspaceId ||
+            canonicalUuid(entry.snapshotId) !== snapshotId
+          ) {
+            throw new PostgresAdapterError();
+          }
+        }
+        const existing = await client.query<Row>(READ_SNAPSHOT_ENTRY_IDS_SQL, [
+          workspaceId,
+          snapshotId,
+        ]);
+        if (existing.rows.length === 0) {
+          for (const entry of entries) await insertNewEntry(client, entry);
+          return Object.freeze({
+            outcome: 'created' as const,
+            createdCount: entries.length,
+          });
+        }
+        const currentIds = existing.rows
+          .map((row) => canonicalUuid(row.entry_id))
+          .sort();
+        const expectedIds = entries.map((entry) => entry.entryId).sort();
+        if (
+          currentIds.length !== expectedIds.length ||
+          currentIds.some((entryId, index) => entryId !== expectedIds[index])
+        ) {
+          return Object.freeze({
+            outcome: 'snapshot_not_empty' as const,
+            createdCount: 0,
+          });
+        }
+        for (const entry of entries) {
+          const current = await client.query<Row>(
+            READ_ENTRY_MATERIALIZATION_SQL,
+            [workspaceId, canonicalUuid(entry.entryId)],
+          );
+          if (current.rows.length !== 1 || current.rows[0] === undefined) {
+            throw new PostgresAdapterError();
+          }
+          await assertExistingMaterialization(client, entry, current.rows[0]);
+        }
+        return Object.freeze({outcome: 'existing' as const, createdCount: 0});
+      },
+    );
+  }
   public reviseEntry(
     write: Readonly<InformationEntryRevisionWrite>,
   ): Promise<InformationEntryRevisionOutcome> {

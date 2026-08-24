@@ -61,6 +61,18 @@ export interface ProcessingRun {
   readonly proposals: readonly Readonly<ProcessingProposal>[];
 }
 
+export interface ProcessingSplitProposalEntry {
+  readonly titlePath: string;
+  readonly fragmentIds: readonly string[];
+}
+
+/** Closed payload for one explicitly selected public Snapshot. */
+export interface ProcessingSplitProposalPayload {
+  readonly providerModel: string;
+  readonly promptVersion: string;
+  readonly splitRuleVersion: 'struinfo.entry-split.ai-group.v1';
+  readonly entries: readonly Readonly<ProcessingSplitProposalEntry>[];
+}
 export interface ProcessingTagProposalContentKeyword {
   readonly displayValue: string;
   readonly normalizedValue: string;
@@ -128,6 +140,7 @@ export interface ProcessingProposal {
   readonly status: ProcessingProposalStatus;
   readonly summary: string;
   readonly fragmentIds: readonly string[];
+  readonly splitPayload?: Readonly<ProcessingSplitProposalPayload>;
   readonly tagPayload?: Readonly<ProcessingTagProposalPayload>;
   readonly associationPayload?: Readonly<ProcessingAssociationProposalPayload>;
   readonly createdAt: string;
@@ -170,6 +183,7 @@ export interface ProcessingProposalAppend {
   readonly relatedEntryId?: string;
   readonly summary: string;
   readonly fragmentIds: readonly string[];
+  readonly splitPayload?: Readonly<ProcessingSplitProposalPayload>;
   readonly tagPayload?: Readonly<ProcessingTagProposalPayload>;
   readonly associationPayload?: Readonly<ProcessingAssociationProposalPayload>;
 }

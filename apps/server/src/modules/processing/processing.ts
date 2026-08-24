@@ -5,6 +5,7 @@ import {
   PROCESSING_RUN_STATUSES,
   PROCESSING_STAGES,
   type ProcessingAssociationProposalPayload,
+  type ProcessingSplitProposalPayload,
   type ProcessingProposalAppend,
   type ProcessingTagProposalPayload,
   type ProcessingRunCreate,
@@ -85,6 +86,19 @@ export function assertProcessingProposalAppend(
     if (value.tagPayload !== undefined) fail();
     if (value.associationPayload !== undefined) fail();
     uuid(value.targetSnapshotId);
+    if (value.splitPayload !== undefined) {
+      assertProcessingSplitProposalPayload(value.splitPayload);
+      const payloadIds = value.splitPayload.entries.flatMap(
+        (entry) => entry.fragmentIds,
+      );
+      if (
+        payloadIds.length !== value.fragmentIds.length ||
+        payloadIds.some(
+          (fragmentId, index) => fragmentId !== value.fragmentIds[index],
+        )
+      )
+        fail();
+    }
     return;
   }
   if (value.kind === 'tags') {
@@ -101,6 +115,7 @@ export function assertProcessingProposalAppend(
       assertProcessingTagProposalPayload(value.tagPayload);
     }
     if (value.associationPayload !== undefined) fail();
+    if (value.splitPayload !== undefined) fail();
     return;
   }
   if (
@@ -113,6 +128,7 @@ export function assertProcessingProposalAppend(
     fail();
   }
   if (value.tagPayload !== undefined) fail();
+  if (value.splitPayload !== undefined) fail();
   uuid(value.targetEntryId);
   uuid(value.relatedEntryId);
   if (value.associationPayload !== undefined) {
@@ -120,6 +136,38 @@ export function assertProcessingProposalAppend(
   }
 }
 
+export function assertProcessingSplitProposalPayload(
+  value: Readonly<ProcessingSplitProposalPayload>,
+): void {
+  boundedText(value.providerModel, 120);
+  boundedText(value.promptVersion, 120);
+  const splitRuleVersion: unknown = value.splitRuleVersion;
+  if (splitRuleVersion !== 'struinfo.entry-split.ai-group.v1') fail();
+  if (
+    !isArrayValue(value.entries) ||
+    value.entries.length < 1 ||
+    value.entries.length > 64
+  )
+    fail();
+  const fragmentIds = new Set<string>();
+  let inputCount = 0;
+  for (const entry of value.entries) {
+    boundedText(entry.titlePath, 200);
+    if (
+      !isArrayValue(entry.fragmentIds) ||
+      entry.fragmentIds.length < 1 ||
+      entry.fragmentIds.length > 64
+    )
+      fail();
+    for (const fragmentId of entry.fragmentIds) {
+      uuid(fragmentId);
+      if (fragmentIds.has(fragmentId)) fail();
+      fragmentIds.add(fragmentId);
+      inputCount += 1;
+    }
+  }
+  if (inputCount > 64) fail();
+}
 export function assertProcessingAssociationProposalPayload(
   value: Readonly<ProcessingAssociationProposalPayload>,
 ): void {

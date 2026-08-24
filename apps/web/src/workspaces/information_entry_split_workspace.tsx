@@ -1,6 +1,7 @@
-import {useMemo, useState} from 'react';
+import {type ComponentProps, useMemo, useState} from 'react';
 
 import {ActionNotice} from '../components/action_notice.js';
+import {InformationEntryAiSplit} from './information_entry_ai_split.js';
 import type {ActionFeedback} from '../components/product_types.js';
 import {
   InformationEntryReadOnlyDetail,
@@ -19,14 +20,34 @@ export interface InformationEntrySplitWorkspaceProps extends Pick<
   'onListDocuments' | 'onMaterialize' | 'onOpenEvidence' | 'onSearch'
 > {
   readonly aiEnabled: boolean;
+  readonly onLoadEvidenceSnapshot: ComponentProps<
+    typeof InformationEntryAiSplit
+  >['onLoadSnapshot'];
+  readonly onListAiSplitProposals: ComponentProps<
+    typeof InformationEntryAiSplit
+  >['onList'];
+  readonly onStartAiSplitProposal: ComponentProps<
+    typeof InformationEntryAiSplit
+  >['onStart'];
+  readonly onAcceptAiSplitProposal: ComponentProps<
+    typeof InformationEntryAiSplit
+  >['onAccept'];
+  readonly onRejectAiSplitProposal: ComponentProps<
+    typeof InformationEntryAiSplit
+  >['onReject'];
 }
 
 export function InformationEntrySplitWorkspace({
   aiEnabled,
+  onAcceptAiSplitProposal,
+  onListAiSplitProposals,
   onListDocuments,
+  onLoadEvidenceSnapshot,
   onMaterialize,
   onOpenEvidence,
+  onRejectAiSplitProposal,
   onSearch,
+  onStartAiSplitProposal,
 }: InformationEntrySplitWorkspaceProps) {
   const controller = useInformationEntryController({
     loadDocuments: true,
@@ -38,6 +59,16 @@ export function InformationEntrySplitWorkspace({
   const [selectedBatchSnapshotIds, setSelectedBatchSnapshotIds] = useState<
     readonly string[]
   >(Object.freeze([]));
+
+  const selectedDocument = useMemo(
+    () =>
+      controller.documentView.status === 'ready'
+        ? controller.documentView.response.documents.find(
+            (document) => document.snapshotId === controller.snapshotId,
+          )
+        : undefined,
+    [controller.documentView, controller.snapshotId],
+  );
 
   const availableBatchDocuments = useMemo(
     () =>
@@ -193,9 +224,7 @@ export function InformationEntrySplitWorkspace({
           <p>选择来源文档，检查结构拆分，并生成可编辑的信息条目。</p>
         </div>
         <span className="origin-label origin-label--deterministic">
-          {aiEnabled
-            ? 'AI 拆分尚未接入 · 当前使用结构规则'
-            : '结构规则 · 可离线使用'}
+          {aiEnabled ? '结构规则 + AI 人工确认' : '结构规则 · 可离线使用'}
         </span>
       </header>
 
@@ -208,7 +237,7 @@ export function InformationEntrySplitWorkspace({
         <div className="workflow-capability-strip__options">
           <span data-active="true">结构规则</span>
           <span data-active="true">明确批量选择</span>
-          <span data-active="false">AI 拆分 · 待接入</span>
+          <span data-active={aiEnabled}>OpenAI 提案 · 手动接受</span>
         </div>
       </section>
 
@@ -275,6 +304,22 @@ export function InformationEntrySplitWorkspace({
         </div>
         <ActionNotice feedback={feedback} />
       </section>
+
+      <InformationEntryAiSplit
+        enabled={aiEnabled}
+        snapshotId={controller.snapshotId}
+        isPrivate={selectedDocument?.isPrivate === true}
+        alreadyMaterialized={(selectedDocument?.entryCount ?? 0) > 0}
+        onLoadSnapshot={onLoadEvidenceSnapshot}
+        onList={onListAiSplitProposals}
+        onStart={onStartAiSplitProposal}
+        onAccept={onAcceptAiSplitProposal}
+        onReject={onRejectAiSplitProposal}
+        onAccepted={async () => {
+          await controller.executeSearch();
+          await controller.refreshDocuments();
+        }}
+      />
 
       <InformationEntryResults
         ariaLabel="拆分条目预览"

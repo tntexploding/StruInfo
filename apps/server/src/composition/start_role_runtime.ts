@@ -1,10 +1,12 @@
 import type {RuntimeConfig} from '../config/runtime_config.js';
 import {
   AiAssociationProposalService,
+  AiSplitProposalService,
   AiTagProposalService,
 } from '../modules/processing/index.js';
 import {
   OpenAiEntryAssociationProvider,
+  OpenAiEntrySplitProvider,
   OpenAiEntryTagProvider,
 } from '../platform/ai/index.js';
 import {
@@ -109,6 +111,17 @@ export async function startRoleRuntime(
   const listenerFactory =
     dependencies.healthListenerFactory ?? new NestHealthListenerFactory();
   const address = listenerAddress(config);
+  const aiSplitProposals =
+    config.aiProposalProvider === undefined
+      ? undefined
+      : new AiSplitProposalService({
+          workspaceId: config.workspaceId,
+          blobStore: storage.blobStore,
+          evidence: repositories.evidenceRead,
+          entries: repositories.informationEntries,
+          processing: repositories.processingRuns,
+          provider: new OpenAiEntrySplitProvider(config.aiProposalProvider),
+        });
   const aiTagProposals =
     config.aiProposalProvider === undefined
       ? undefined
@@ -144,6 +157,7 @@ export async function startRoleRuntime(
           informationEntryAssociationRepository:
             repositories.informationEntryAssociations,
           processingRunRepository: repositories.processingRuns,
+          ...(aiSplitProposals === undefined ? {} : {aiSplitProposals}),
           ...(aiTagProposals === undefined ? {} : {aiTagProposals}),
           ...(aiAssociationProposals === undefined
             ? {}

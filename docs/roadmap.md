@@ -1,6 +1,6 @@
 # StruInfo 分阶段计划
 
-- 状态：M1E-3C 已实现；全部审核流程延期，继续无数据开发
+- 状态：M1E-3D 已实现；全部审核流程延期，继续无数据开发
 - 最近更新：2026-08-24
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
@@ -21,26 +21,26 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 
 ## 当前交付真值表
 
-| 范围                           | 状态   | 说明                                                                                |
-| ------------------------------ | ------ | ----------------------------------------------------------------------------------- |
-| Evidence/Blob 与 Markdown 导入 | 已实现 | 手工文本/固定 Git Markdown、不可变 Snapshot、结构和精确 Fragment                    |
-| InformationEntry               | 已实现 | 当前成品态、三维标签、两项评分、文档标签、隐私和来源                                |
-| Entry 联系                     | 已实现 | 确定性投影、分项解释、外部版本化权重和逐对人工 override                             |
-| Entry 查询                     | 已实现 | Entry 组合查询、绑定分页及显式隐私范围内的独立完整文档结果                          |
-| 完整个人数据包                 | 已实现 | 52 表、引用 Blob 字节、偏好、Association v3 与 Processing v3                        |
-| 旧 Curation/Knowledge 运行时   | 已退役 | 迁移和数据兼容保留，活动代码/HTTP/Web 已删除                                        |
-| 正式知识页面                   | 已实现 | 最高匹配中心、有界图/列表、来源、用户关系编辑、隐私范围与 selected-pair AI 联系提案 |
-| ProcessingRun / AI 提案        | 已实现 | 中性任务状态、取消；OpenAI tags 与 selected-pair association 启动、列表、接受与拒绝 |
-| 其他 AI、模糊/向量/RAG、采集   | 未实现 | AI 拆分/查询、Embedding 与自动采集仍不作为主线前置条件                              |
-| 公网/容器/生产发布             | 未完成 | 进入相应部署或分发阶段时独立验收                                                    |
+| 范围                           | 状态   | 说明                                                                                     |
+| ------------------------------ | ------ | ---------------------------------------------------------------------------------------- |
+| Evidence/Blob 与 Markdown 导入 | 已实现 | 手工文本/固定 Git Markdown、不可变 Snapshot、结构和精确 Fragment                         |
+| InformationEntry               | 已实现 | 当前成品态、三维标签、两项评分、文档标签、隐私和来源                                     |
+| Entry 联系                     | 已实现 | 确定性投影、分项解释、外部版本化权重和逐对人工 override                                  |
+| Entry 查询                     | 已实现 | Entry 组合查询、绑定分页及显式隐私范围内的独立完整文档结果                               |
+| 完整个人数据包                 | 已实现 | 55 表、引用 Blob 字节、偏好、Association v3 与 Processing v4                             |
+| 旧 Curation/Knowledge 运行时   | 已退役 | 迁移和数据兼容保留，活动代码/HTTP/Web 已删除                                             |
+| 正式知识页面                   | 已实现 | 最高匹配中心、有界图/列表、来源、用户关系编辑、隐私范围与 selected-pair AI 联系提案      |
+| ProcessingRun / AI 提案        | 已实现 | 中性任务状态、取消；OpenAI split/tags/selected-pair association 的启动、列表、接受与拒绝 |
+| 其他 AI、模糊/向量/RAG、采集   | 未实现 | AI 查询综合、Embedding 与自动采集仍不作为主线前置条件                                    |
+| 公网/容器/生产发布             | 未完成 | 进入相应部署或分发阶段时独立验收                                                         |
 
 ## 当前开发停点
 
 所有者已推迟全部审核流程。旧资料继续位于外部归档，活动数据库与数据根保持空；真实 Provider 质量、费用、部署与发布结论均保持未签发，但不再阻塞无关的产品开发。
 
-M1E-3B 已完成单个公开 Entry 的 OpenAI 标签提案；M1E-3C 随后完成用户明确选择的两个公开 Entry 的 OpenAI 联系提案。两者都只创建 typed proposal，只有人工接受才调用现有 Entry/图谱命令；私密内容在网络前拒绝，无 Provider 时完整人工/确定性主线不变。
+M1E-3B、M1E-3C 和 M1E-3D 已依次完成单个公开 Entry 标签提案、用户明确选择的公开 Entry 对联系提案，以及用户明确选择的公开 Snapshot 拆分提案。三者都只创建 typed proposal，只有人工接受才调用现有 Entry/图谱命令；私密内容在网络前拒绝，无 Provider 时完整人工/确定性主线不变。
 
-下一个候选增量是 M1E-3D：对用户明确选择的公开 Snapshot 生成闭合拆分提案，并由用户把它应用为 Entry 结构。它不能改写 Snapshot/Fragment 证据，不能后台扫描资料，也不能成为无 AI 拆分的前置条件。第二 Provider、自动接受、私密外发、查询综合、Embedding 和 RAG 继续后置。
+M1E-3D 已闭合本轮计划：它不改写 Snapshot/Fragment 证据，不后台扫描资料，并从本地精确 Fragment 重建接受后的 Entry。下一增量应来自无数据直接使用暴露的产品缺口或另行接受的窄边界；第二 Provider、自动接受、私密外发、查询综合、Embedding 和 RAG 继续后置。
 
 ## 已完成主线：M1D Entry 网络
 
@@ -147,7 +147,7 @@ Linux、正式 TM2 和发布许可继续后置，除非当前产品路径出现�
 
 ## 当前增量：M1E-3 Provider-neutral 任务与提案
 
-ADR 0012 将任务生命周期、产品提案语义和具体 Provider 分开；ADR 0013/0014 在同一边界上依次加入两个最小 OpenAI 纵向链：
+ADR 0012 将任务生命周期、产品提案语义和具体 Provider 分开；ADR 0013/0014/0015 在同一边界上依次加入三个最小 OpenAI 纵向链：
 
 1. **M1E-3A1 决策与模型（已完成）**：`ProcessingRun` 记录稳定身份、五阶段位置、进度、状态、隐私范围和稳定错误码；`ProcessingProposal` 只允许 split/tags/association 三类有界信封与精确 Fragment 输入；
 2. **M1E-3A2 持久化（已完成）**：前向迁移 `000013` 新增三张 workspace-first 表，typed repository 支持幂等创建、闭合进度转换、提案追加、期望版本取消和最近任务读取；
@@ -160,9 +160,13 @@ ADR 0012 将任务生命周期、产品提案语义和具体 Provider 分开；A
 9. **M1E-3C1 closed association payload（已完成）**：迁移 `000015` 新增一张 typed payload 表，冻结两个 Entry 修订、当前 override 修订、模型、Prompt 版本、关系名和方向；
 10. **M1E-3C2 Provider（已完成）**：用户明确选择两个公开 Entry 后才发送该对当前内容与三维标签；任一端隐私时在 fetch 前拒绝；
 11. **M1E-3C3 图谱接受边界（已完成）**：正式知识页/API 列表、启动、接受和拒绝；接受复用现有图谱 edge command/CAS 并标记 `ai_assisted`，拒绝不改图谱；
-12. **M1E-3C4 携带性（已完成）**：Processing section 升级为 v3，个人数据包覆盖 52 张表；旧 v1/v2 section 自动补为空 association proposal 状态。
+12. **M1E-3C4 携带性（已完成）**：Processing section 升级为 v3，个人数据包覆盖 52 张表；旧 v1/v2 section 自动补为空 association proposal 状态；
+13. **M1E-3D1 Provider（已完成）**：用户明确选择一个公开 Snapshot 后，Provider 只接收按结构顺序排列的 section Fragment 序号和正文；私密 Snapshot 在 Blob 读取和 fetch 前拒绝；
+14. **M1E-3D2 closed split payload（已完成）**：迁移 `000016` 用三张类型化表保存模型、Prompt/拆分规则版本以及完整连续覆盖的 Fragment 分组，不保存任意 Provider JSON；
+15. **M1E-3D3 人工应用边界（已完成）**：拆分页/API 提供列表、显式启动、逐组精确来源审阅、接受和拒绝；接受从本地 Fragment 重建正文，并复用既有空 Snapshot Entry 物化与 workspace lock；
+16. **M1E-3D4 携带性（已完成）**：Processing section 升级为 v4，个人数据包覆盖 55 张表；旧 v1/v2/v3 section 自动补为空 split proposal 状态。
 
-`processing_runs` 仍只表示任务读取/取消；`ai_tags` 和 `ai_associations` 是两个独立窄 capability，通用 `ai` 不会因此解锁拆分或查询占位。审核延期不等于通过；当前只以合成、无个人含义 fixture 验证代码，活动工作区继续无数据。
+`processing_runs` 仍只表示任务读取/取消；`ai_split`、`ai_tags` 和 `ai_associations` 是三个独立窄 capability，通用 `ai` 不会因此解锁查询占位。审核延期不等于通过；当前只以合成、无个人含义 fixture 验证代码，活动工作区继续无数据。
 
 ## 历史基线：M1C 可运行核心闭环（运行时已退役）
 

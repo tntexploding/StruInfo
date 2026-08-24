@@ -52,7 +52,7 @@ export function ProductAppShell({
   const healthLabel = describeHealth(health);
   const aiEnabled =
     workspace?.capabilities.some(
-      (capability) => capability === 'ai' || capability === 'ai_tags',
+      (capability) => capability === 'ai' || capability.startsWith('ai_'),
     ) === true;
   return (
     <>

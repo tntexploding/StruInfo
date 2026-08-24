@@ -2,6 +2,9 @@ import type {
   AiAssociationProposalDecisionResponse,
   AiAssociationProposalListResponse,
   AiAssociationProposalStartResponse,
+  AiSplitProposalDecisionResponse,
+  AiSplitProposalListResponse,
+  AiSplitProposalStartResponse,
   AiTagProposalDecisionResponse,
   AiTagProposalListResponse,
   AiTagProposalStartResponse,
@@ -124,6 +127,25 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationDocumentTagWriteResponse>>;
+  listAiSplitProposals(
+    snapshotId: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<AiSplitProposalListResponse>>;
+  startAiSplitProposal(
+    snapshotId: string,
+    requestKey: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<AiSplitProposalStartResponse>>;
+  acceptAiSplitProposal(
+    snapshotId: string,
+    proposalId: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<AiSplitProposalDecisionResponse>>;
+  rejectAiSplitProposal(
+    snapshotId: string,
+    proposalId: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<AiSplitProposalDecisionResponse>>;
   listAiTagProposals(
     entryId: string,
     options?: M1cApiRequestOptions,
@@ -217,6 +239,10 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     listInformationEntryDocuments: reject,
     aggregateInformationDocumentTags: reject,
     reviseInformationDocumentTags: reject,
+    listAiSplitProposals: reject,
+    startAiSplitProposal: reject,
+    acceptAiSplitProposal: reject,
+    rejectAiSplitProposal: reject,
     listAiTagProposals: reject,
     startAiTagProposal: reject,
     acceptAiTagProposal: reject,
@@ -362,6 +388,41 @@ export function createM1cApiClient(
       put<InformationDocumentTagWriteResponse>(
         `api/v1/entry-documents/${encodeURIComponent(snapshotId)}/tags`,
         body,
+        options,
+      ),
+    listAiSplitProposals: (snapshotId, options) =>
+      get<AiSplitProposalListResponse>(
+        'api/v1/evidence/snapshots/' +
+          encodeURIComponent(snapshotId) +
+          '/split-proposals',
+        options,
+      ),
+    startAiSplitProposal: (snapshotId, requestKey, options) =>
+      post<AiSplitProposalStartResponse>(
+        'api/v1/evidence/snapshots/' +
+          encodeURIComponent(snapshotId) +
+          '/split-proposals/start',
+        {requestKey},
+        options,
+      ),
+    acceptAiSplitProposal: (snapshotId, proposalId, options) =>
+      post<AiSplitProposalDecisionResponse>(
+        'api/v1/evidence/snapshots/' +
+          encodeURIComponent(snapshotId) +
+          '/split-proposals/' +
+          encodeURIComponent(proposalId) +
+          '/accept',
+        {},
+        options,
+      ),
+    rejectAiSplitProposal: (snapshotId, proposalId, options) =>
+      post<AiSplitProposalDecisionResponse>(
+        'api/v1/evidence/snapshots/' +
+          encodeURIComponent(snapshotId) +
+          '/split-proposals/' +
+          encodeURIComponent(proposalId) +
+          '/reject',
+        {},
         options,
       ),
     listAiTagProposals: (entryId, options) =>

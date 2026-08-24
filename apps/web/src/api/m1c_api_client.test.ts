@@ -136,6 +136,19 @@ describe('M1cApiClient', () => {
       expectedRevision: 1,
       tags: ['synthetic'],
     });
+    await client.listAiSplitProposals('synthetic/snapshot');
+    await client.startAiSplitProposal(
+      'synthetic/snapshot',
+      'synthetic-split-request',
+    );
+    await client.acceptAiSplitProposal(
+      'synthetic/snapshot',
+      'synthetic/proposal',
+    );
+    await client.rejectAiSplitProposal(
+      'synthetic/snapshot',
+      'synthetic/proposal',
+    );
     await client.listAiTagProposals('synthetic/entry');
     await client.startAiTagProposal('synthetic/entry', 'synthetic-request');
     await client.acceptAiTagProposal('synthetic/entry', 'synthetic/proposal');
@@ -242,6 +255,25 @@ describe('M1cApiClient', () => {
           expectedRevision: 1,
           tags: ['synthetic'],
         }),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/evidence/snapshots/synthetic%2Fsnapshot/split-proposals',
+        method: 'GET',
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/evidence/snapshots/synthetic%2Fsnapshot/split-proposals/start',
+        method: 'POST',
+        body: JSON.stringify({requestKey: 'synthetic-split-request'}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/evidence/snapshots/synthetic%2Fsnapshot/split-proposals/synthetic%2Fproposal/accept',
+        method: 'POST',
+        body: JSON.stringify({}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/evidence/snapshots/synthetic%2Fsnapshot/split-proposals/synthetic%2Fproposal/reject',
+        method: 'POST',
+        body: JSON.stringify({}),
       },
       {
         url: 'http://127.0.0.1:3000/api/v1/entries/synthetic%2Fentry/tag-proposals',

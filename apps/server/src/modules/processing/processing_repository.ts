@@ -34,6 +34,25 @@ export interface ProcessingRunRepositoryPort {
   ): Promise<ProcessingRunWriteOutcome>;
 }
 
+export interface AiSplitProposalRepositoryPort extends ProcessingRunRepositoryPort {
+  loadRun(
+    workspaceId: string,
+    runId: string,
+  ): Promise<Readonly<ProcessingRun> | undefined>;
+  listSplitProposalsForSnapshot(
+    workspaceId: string,
+    snapshotId: string,
+    limit: number,
+  ): Promise<readonly Readonly<ProcessingProposal>[]>;
+  appendSplitProposal(
+    proposal: Readonly<ProcessingProposalAppend>,
+  ): Promise<ProcessingRunWriteOutcome>;
+  decideProposal(
+    workspaceId: string,
+    proposalId: string,
+    decision: ProcessingProposalDecision,
+  ): Promise<ProcessingProposalDecisionOutcome>;
+}
 export interface AiTagProposalRepositoryPort extends ProcessingRunRepositoryPort {
   loadRun(
     workspaceId: string,

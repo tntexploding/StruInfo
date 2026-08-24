@@ -10,8 +10,11 @@ import {
 import type {WorkspaceBundleSectionCodec} from './workspace_bundle.js';
 
 export const M1E_PROCESSING_BUNDLE_SECTION_TYPE = 'struinfo.m1e-processing';
-export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 3;
-export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v3';
+export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 4;
+export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v4';
+export const M1E_PROCESSING_VERSION_THREE_BUNDLE_SECTION_VERSION = 3;
+export const M1E_PROCESSING_VERSION_THREE_BUNDLE_SCHEMA =
+  'struinfo.m1e-processing.v3';
 export const M1E_PROCESSING_VERSION_TWO_BUNDLE_SECTION_VERSION = 2;
 export const M1E_PROCESSING_VERSION_TWO_BUNDLE_SCHEMA =
   'struinfo.m1e-processing.v2';
@@ -118,7 +121,30 @@ export const M1E_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescript
       'relation_label',
       'graph_direction',
     ]),
+    table('processing_split_proposal', [
+      'workspace_id',
+      'proposal_id',
+      'provider_model',
+      'prompt_version',
+      'split_rule_version',
+    ]),
+    table('processing_split_proposal_entry', [
+      'workspace_id',
+      'proposal_id',
+      'entry_ordinal',
+      'title_path',
+    ]),
+    table('processing_split_proposal_entry_fragment', [
+      'workspace_id',
+      'proposal_id',
+      'entry_ordinal',
+      'fragment_ordinal',
+      'fragment_id',
+    ]),
   ]);
+
+const VERSION_THREE_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
+  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 7));
 
 const VERSION_TWO_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
   Object.freeze(M1E_PROCESSING_TABLES.slice(0, 6));
@@ -134,13 +160,23 @@ export const M1E_PROCESSING_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     decode: normalizeM1eProcessingSnapshot,
   });
 
+export const M1E_PROCESSING_VERSION_THREE_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: M1E_PROCESSING_VERSION_THREE_BUNDLE_SECTION_VERSION,
+    encode: normalizeVersionThreeSnapshot,
+    decode(payload: JsonValue): unknown {
+      return upgradePreviousSnapshot(normalizeVersionThreeSnapshot(payload));
+    },
+  });
+
 export const M1E_PROCESSING_VERSION_TWO_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
   Object.freeze({
     type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
     version: M1E_PROCESSING_VERSION_TWO_BUNDLE_SECTION_VERSION,
     encode: normalizeVersionTwoSnapshot,
     decode(payload: JsonValue): unknown {
-      return upgradeVersionTwoSnapshot(normalizeVersionTwoSnapshot(payload));
+      return upgradePreviousSnapshot(normalizeVersionTwoSnapshot(payload));
     },
   });
 export const M1E_PROCESSING_LEGACY_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
@@ -149,7 +185,7 @@ export const M1E_PROCESSING_LEGACY_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     version: M1E_PROCESSING_LEGACY_BUNDLE_SECTION_VERSION,
     encode: normalizeLegacySnapshot,
     decode(payload: JsonValue): unknown {
-      return upgradeLegacySnapshot(normalizeLegacySnapshot(payload));
+      return upgradePreviousSnapshot(normalizeLegacySnapshot(payload));
     },
   });
 
@@ -161,6 +197,20 @@ export function normalizeM1eProcessingSnapshot(
     M1E_PROCESSING_BUNDLE_SCHEMA,
     M1E_PROCESSING_TABLES,
   ) as M1eProcessingSnapshot;
+}
+
+function normalizeVersionThreeSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1E_PROCESSING_VERSION_THREE_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1E_PROCESSING_VERSION_THREE_BUNDLE_SCHEMA,
+    VERSION_THREE_PROCESSING_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1E_PROCESSING_VERSION_THREE_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+  }>;
 }
 
 function normalizeVersionTwoSnapshot(value: unknown): Readonly<{
@@ -177,20 +227,6 @@ function normalizeVersionTwoSnapshot(value: unknown): Readonly<{
   }>;
 }
 
-function upgradeVersionTwoSnapshot(
-  versionTwo: ReturnType<typeof normalizeVersionTwoSnapshot>,
-): M1eProcessingSnapshot {
-  return normalizeM1eProcessingSnapshot({
-    schemaVersion: M1E_PROCESSING_BUNDLE_SCHEMA,
-    tables: [
-      ...versionTwo.tables,
-      {
-        name: 'processing_association_proposal',
-        rows: [],
-      },
-    ],
-  });
-}
 function normalizeLegacySnapshot(value: unknown): Readonly<{
   schemaVersion: typeof M1E_PROCESSING_LEGACY_BUNDLE_SCHEMA;
   tables: readonly Readonly<M1eProcessingTableSnapshot>[];
@@ -237,16 +273,16 @@ function normalizeSnapshot(
   return Object.freeze({schemaVersion, tables: Object.freeze(tables)});
 }
 
-function upgradeLegacySnapshot(
-  legacy: Readonly<{
+function upgradePreviousSnapshot(
+  previous: Readonly<{
     tables: readonly Readonly<M1eProcessingTableSnapshot>[];
   }>,
 ): M1eProcessingSnapshot {
   return normalizeM1eProcessingSnapshot({
     schemaVersion: M1E_PROCESSING_BUNDLE_SCHEMA,
     tables: [
-      ...legacy.tables,
-      ...M1E_PROCESSING_TABLES.slice(LEGACY_PROCESSING_TABLES.length).map(
+      ...previous.tables,
+      ...M1E_PROCESSING_TABLES.slice(previous.tables.length).map(
         (descriptor) => ({name: descriptor.name, rows: []}),
       ),
     ],
