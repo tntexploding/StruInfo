@@ -439,6 +439,80 @@
   min-block-size: 5rem;
 }
 
+.import-preface-field small {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-xs);
+  line-height: 1.55;
+}
+
+.local-file-import {
+  display: grid;
+  gap: var(--si-space-4);
+  min-inline-size: 0;
+  padding: var(--si-space-5);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  border-radius: var(--si-radius-surface);
+  background: color-mix(in srgb, var(--si-color-bg-shell), black 1.5%);
+}
+
+.local-file-input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.local-file-import__heading,
+.local-file-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--si-space-4);
+}
+
+.local-file-import__heading p,
+.local-file-import__status,
+.local-file-dropzone > span {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-sm);
+}
+
+.local-file-dropzone {
+  justify-content: center;
+  min-block-size: 8rem;
+  padding: var(--si-space-6);
+  border: var(--si-rule-thin) dashed var(--si-color-info);
+  background: color-mix(in srgb, var(--si-color-info) 5%, transparent);
+}
+
+.local-file-dropzone:has(.secondary-action:focus-visible) {
+  outline: 0.125rem solid var(--si-color-focus);
+  outline-offset: var(--si-space-1);
+}
+
+.local-file-facts {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr));
+  gap: var(--si-space-3);
+}
+
+.local-file-facts > div {
+  min-inline-size: 0;
+  padding: var(--si-space-3);
+  border-inline-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.local-file-facts dt {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-xs);
+}
+
+.local-file-facts dd {
+  overflow-wrap: anywhere;
+  color: var(--si-color-text-primary);
+}
 /* Shared stage architecture */
 
 .workflow-stage-workspace {
@@ -977,6 +1051,16 @@
 
   .workflow-page-heading h1 {
     font-size: clamp(2rem, 12vw, 3rem);
+  }
+
+  .local-file-import__heading,
+  .local-file-dropzone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .local-file-facts {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .workflow-overview__ai,

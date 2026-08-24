@@ -456,6 +456,7 @@ describe('M1D product workspaces', () => {
 
     expect(materials).toContain('保存来源 Snapshot');
     expect(materials).toContain('作为隐私文档录入');
+    expect(materials).toContain('本地文件');
     expect(materials).toContain('全部个人数据导入导出');
     expect(materials).toContain('恢复全部个人数据');
     expect(review).toContain('有用程度');

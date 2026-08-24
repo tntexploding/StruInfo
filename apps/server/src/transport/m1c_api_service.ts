@@ -1,3 +1,5 @@
+import {Buffer} from 'node:buffer';
+
 import {
   ENTRY_CHUNK_MODES,
   ENTRY_DOMAIN_KEYWORDS,
@@ -1703,11 +1705,17 @@ function mapMarkdownImportBody(
   body: unknown,
   workspaceId: string,
 ): Readonly<ImportMarkdownEvidenceInput> | undefined {
-  if (!isRecord(body) || typeof body.sourceText !== 'string') return undefined;
+  if (!isRecord(body)) return undefined;
   if (!isRecord(body.resource) || !isRecord(body.snapshot)) return undefined;
   if (!Array.isArray(body.gitObservations)) return undefined;
   if (!body.gitObservations.every(isRecord)) return undefined;
   if (body.gitResource !== undefined && !isRecord(body.gitResource)) {
+    return undefined;
+  }
+  const sourceUtf8 = decodeMarkdownImportSource(body);
+  if (sourceUtf8 === undefined) return undefined;
+  const hasUploadBytes = body.sourceBase64 !== undefined;
+  if ((body.resource.resourceKind === 'uploaded_file') !== hasUploadBytes) {
     return undefined;
   }
   const resource = Object.freeze({...body.resource, workspaceId});
@@ -1727,7 +1735,7 @@ function mapMarkdownImportBody(
     snapshot,
     gitObservations,
     profile: body.profile,
-    sourceUtf8: new TextEncoder().encode(body.sourceText),
+    sourceUtf8,
     ...(body.documentBaseUri === undefined
       ? {}
       : {documentBaseUri: body.documentBaseUri}),
@@ -1735,6 +1743,34 @@ function mapMarkdownImportBody(
   return Object.freeze(
     candidate as unknown as Readonly<ImportMarkdownEvidenceInput>,
   );
+}
+
+function decodeMarkdownImportSource(
+  body: Readonly<Record<string, unknown>>,
+): Uint8Array | undefined {
+  const text = body.sourceText;
+  const encoded = body.sourceBase64;
+  if (
+    (text !== undefined && typeof text !== 'string') ||
+    (encoded !== undefined && typeof encoded !== 'string') ||
+    (text === undefined) === (encoded === undefined)
+  ) {
+    return undefined;
+  }
+  if (typeof text === 'string') return new TextEncoder().encode(text);
+  if (
+    typeof encoded !== 'string' ||
+    encoded.length % 4 !== 0 ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(
+      encoded,
+    )
+  ) {
+    return undefined;
+  }
+  const decoded = Buffer.from(encoded, 'base64');
+  return decoded.toString('base64') === encoded
+    ? Uint8Array.from(decoded)
+    : undefined;
 }
 
 function decodeManualEntrySplitBody(body: unknown):

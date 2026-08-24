@@ -1,6 +1,6 @@
 # StruInfo 产品需求
 
-- 状态：M1E-4B Fragment 内人工边界已实现；无 AI 五步主线完整可用
+- 状态：M1E-5A 本地 UTF-8 文本文件导入已实现；无 AI 五步主线完整可用
 - 最近更新：2026-08-24
 - 目的：定义“来源可追溯、AI 可增强且无 AI 仍完整可用的个人知识摄取与维护系统”的产品边界和首个验证切片
 - 历史基线：[产品需求 v0.1](archive/product-requirements-v0.1.md)
@@ -82,7 +82,7 @@ StruInfo 的价值不是“收藏更多网页”，而是降低五种成本：
 ### 3.1 当前资料进入与条目评价闭环
 
 ```text
-手工 Markdown / 固定 Git Markdown
+手工 Markdown / 固定 Git Markdown / 本地 UTF-8 Markdown 或文本文件
   → 保存包体外原始 Blob、来源身份和不可变 Snapshot
   → 用确定性 profile 生成 DocumentNode / Fragment
   → 用户选择 Snapshot，按 section 结构物化当前 InformationEntry
@@ -183,7 +183,7 @@ StruInfo 的价值不是“收藏更多网页”，而是降低五种成本：
 | 正式知识层 | Entry 节点、自动相似边与用户关系；历史 Knowledge 表兼容保留 | M1E-2 中心图谱入口已实现 |
 | 控制层 | 外部个人标签偏好、版本化联系策略、当前联系 override；旧准入/判断/变更集行 | 前三项活动，旧行仅兼容 |
 
-当前导入只接受手工 Markdown 或固定 Git Markdown。导入时选择 `commonmark-v1` 或
+当前导入接受手工 Markdown、固定 Git Markdown，或用户明确选择的一份本地 UTF-8 `.md`、`.markdown`、`.txt` 文件。导入时选择 `commonmark-v1` 或
 `ruanyf-weekly-v1`，由确定性解析器保存完整结构。拆分页让用户选择尚未生成 Entry 的
 Snapshot：可以直接按 section 确定性物化，也可以在本地查看全文和精确 Fragment，在既有
 边界或 Fragment 内 Unicode 标量边界合并/重新拆开连续分组、编辑标题后一次提交。对于公开 Snapshot，用户还可显式发起
@@ -499,7 +499,7 @@ QQ 中的普通自然语言不能直接执行批量批准、合并、删除等�
 
 - 单用户、本机回环地址的浏览器界面；
 - “总览、导入、拆分、标签、联系、查询、正式知识”七页活动主线；
-- 手工 Markdown/固定 Git Markdown、Resource、Snapshot、DocumentNode、Fragment 和基本去重；
+- 手工 Markdown、固定 Git Markdown、本地 UTF-8 Markdown/文本文件、Resource、Snapshot、DocumentNode、Fragment 和基本去重；
 - 当前 InformationEntry、确定性/人工/AI 首次结构物化、内容/类型/领域标签、两项评分和当前 Document 标签；
 - 确定性联系投影、逐对人工控制，以及正式图谱中的用户编辑/创建关系；
 - 文本/结构/来源/时间/隐私/有限联系查询、Entry 中心图谱和精确证据返回；
@@ -679,6 +679,12 @@ ADR 0017 和前向迁移 `000017` 已把无 Provider 人工拆分扩展到 Fragm
 服务端只接受标题、Fragment ID 和标量区间，并从本地证据重建正文。同一 Fragment 内相邻片段直接连接，不同 Fragment 继续使用两个换行。可选子表 `information_entry_fragment_range` 保存精确来源；没有区间行的旧 Entry、确定性 Entry 和 AI 分组 Entry 仍表示完整 Fragment。Entry Bundle 升级为 v3/8 表，v1/v2 恢复时补空区间表。人工规则版本为 `struinfo.entry-split.manual-range.v1`，仍复用同一空 Snapshot 原子赢家边界。
 
 M1E-4B 不修改 Snapshot/Fragment，不新增依赖，不把个人数据放入仓库，也不重组已经拥有标签、联系或图谱关系的 Entry。拆分前全文保存修改、来源重排、自定义解析/规则和已物化结构迁移继续后置。
+
+### 7.1.10 M1E-5A 本地文本文件导入
+
+ADR 0018 已把单份本地 `.md`、`.markdown` 或 `.txt` 文件接入现有导入页。浏览器只读取用户明确选择/拖入的文件，检查基础文件名、严格 UTF-8、空文本/NUL 和现有 1 MiB 上限，不发送本机目录路径。无前置文字时，canonical Base64 解码后的字节必须与外部 Blob 中的 Snapshot 原始字节一致；默认来源身份使用基础文件名与 SHA-256。用户填写前置文字时，界面必须明确这是组合后的新 Snapshot。
+
+服务端只允许 `uploaded_file` 使用 Base64 请求字段，并在写入前完成闭合解码；随后继续使用既有 Evidence、Blob、CommonMark 结构、Fragment、隐私传播和空 Snapshot Split 队列。失败重试复用同一 command/resource/snapshot/capturedAt 身份，成功后才刷新列表和生成下一份身份。本切片不包括 PDF/DOCX/OCR、任意二进制、多文件批量、目录监视、云同步或仓库内上传目录。
 
 ### 7.2 MVP-1：偏好学习与每周自适应摄取
 

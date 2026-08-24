@@ -1,5 +1,5 @@
 import {useRef, useState} from 'react';
-import type {SyntheticEvent} from 'react';
+import type {DragEvent, SyntheticEvent} from 'react';
 
 import type {EvidenceSnapshotSummary} from '../api/m1c_api_contract.js';
 import {ActionNotice} from '../components/action_notice.js';
@@ -12,15 +12,28 @@ import type {
   Loadable,
   WorkspaceTransferFeedback,
 } from '../components/product_types.js';
+import {
+  LOCAL_TEXT_FILE_MAX_BYTES,
+  composeLocalTextFileSource,
+  prepareLocalTextFile,
+  type PreparedLocalTextFile,
+} from './local_file_import.js';
 
 interface ImportIdentity {
   readonly commandIdempotencyKey: string;
+  readonly capturedAt: string;
   readonly observationId: string;
   readonly resourceId: string;
   readonly snapshotId: string;
 }
 
-type SourceMode = 'manual_text' | 'git_file';
+type SourceMode = 'manual_text' | 'git_file' | 'uploaded_file';
+
+type LocalFileState =
+  | Readonly<{status: 'idle'}>
+  | Readonly<{status: 'loading'; fileName: string}>
+  | Readonly<{status: 'ready'; value: Readonly<PreparedLocalTextFile>}>
+  | Readonly<{status: 'error'; fileName: string; message: string}>;
 
 export interface MaterialsWorkspaceProps {
   readonly onImport: (body: unknown) => Promise<ActionFeedback>;
@@ -46,9 +59,12 @@ export function MaterialsWorkspace({
   snapshots,
 }: MaterialsWorkspaceProps) {
   const importHeading = useRef<HTMLHeadingElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const localFileReadGeneration = useRef(0);
   const [identity, setIdentity] =
     useState<ImportIdentity>(createImportIdentity);
   const [sourceMode, setSourceMode] = useState<SourceMode>('manual_text');
+  const [localFile, setLocalFile] = useState<LocalFileState>({status: 'idle'});
   const [isPrivate, setIsPrivate] = useState(false);
   const [showPrivateDocuments, setShowPrivateDocuments] = useState(false);
   const [sourceKey, setSourceKey] = useState('');
@@ -72,78 +88,151 @@ export function MaterialsWorkspace({
     'export' | 'restore'
   >();
 
+  async function readLocalFile(file: File | undefined) {
+    if (file === undefined) return;
+    const generation = localFileReadGeneration.current + 1;
+    localFileReadGeneration.current = generation;
+    setLocalFile({status: 'loading', fileName: file.name});
+    try {
+      const prepared = prepareLocalTextFile(
+        file.name,
+        new Uint8Array(await file.arrayBuffer()),
+      );
+      if (localFileReadGeneration.current !== generation) return;
+      if (prepared.status === 'rejected') {
+        setLocalFile({
+          status: 'error',
+          fileName: file.name,
+          message: describeLocalFileIssue(prepared.code),
+        });
+        return;
+      }
+      setLocalFile({status: 'ready', value: prepared.value});
+      if (prepared.value.mediaType === 'text/plain') {
+        setProfile('commonmark-v1');
+      }
+    } catch {
+      if (localFileReadGeneration.current === generation) {
+        setLocalFile({
+          status: 'error',
+          fileName: file.name,
+          message: '文件读取失败；没有向本地服务发送任何内容。',
+        });
+      }
+    }
+  }
+
+  function clearLocalFile() {
+    localFileReadGeneration.current += 1;
+    setLocalFile({status: 'idle'});
+    if (fileInput.current !== null) fileInput.current.value = '';
+  }
+
   async function submitImport(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting) return;
     setSubmitting(true);
     setFeedback(undefined);
-    const capturedAt = new Date().toISOString();
-    const gitSource = sourceMode === 'git_file';
-    const resolvedSourceKey =
-      sourceKey.trim() || `import-${identity.snapshotId.slice(0, 8)}`;
-    const importedText =
-      sourcePreface.trim() === ''
-        ? sourceText
-        : `${sourcePreface.trim()}\n\n${sourceText}`;
-    const body = {
-      commandIdempotencyKey: identity.commandIdempotencyKey,
-      resource: {
-        resourceId: identity.resourceId,
-        resourceKind: sourceMode,
-        sourceKey: resolvedSourceKey,
-        ...(isPrivate ? {isPrivate: true} : {}),
+    try {
+      const {capturedAt} = identity;
+      const gitSource = sourceMode === 'git_file';
+      const uploadedSource = sourceMode === 'uploaded_file';
+      let resolvedSourceKey: string;
+      let mediaType = 'text/markdown';
+      let sourcePayload: Readonly<
+        {sourceText: string} | {sourceBase64: string}
+      >;
+      if (uploadedSource) {
+        if (localFile.status !== 'ready') {
+          setFeedback({
+            kind: 'error',
+            title: '尚未选择可导入文件',
+            detail: '请选择一个有效的 UTF-8 Markdown 或文本文件。',
+          });
+          return;
+        }
+        const composed = await composeLocalTextFileSource(
+          localFile.value,
+          sourcePreface,
+        );
+        if (composed === undefined) {
+          setFeedback({
+            kind: 'error',
+            title: '组合后的文档超过上限',
+            detail: '文件与前置文字合计不得超过 1 MiB；没有写入任何数据。',
+          });
+          return;
+        }
+        resolvedSourceKey = sourceKey.trim() || composed.defaultSourceKey;
+        mediaType = localFile.value.mediaType;
+        sourcePayload = {sourceBase64: composed.sourceBase64};
+      } else {
+        resolvedSourceKey =
+          sourceKey.trim() || `import-${identity.snapshotId.slice(0, 8)}`;
+        const importedText =
+          sourcePreface.trim() === ''
+            ? sourceText
+            : `${sourcePreface.trim()}\n\n${sourceText}`;
+        sourcePayload = {sourceText: importedText};
+      }
+      const body = {
+        commandIdempotencyKey: identity.commandIdempotencyKey,
+        resource: {
+          resourceId: identity.resourceId,
+          resourceKind: sourceMode,
+          sourceKey: resolvedSourceKey,
+          ...(isPrivate ? {isPrivate: true} : {}),
+          ...(canonicalUri.trim() === ''
+            ? {}
+            : {canonicalUri: canonicalUri.trim()}),
+        },
+        snapshot: {
+          snapshotId: identity.snapshotId,
+          resourceId: identity.resourceId,
+          capturedAt,
+          mediaType,
+          ...(publicationDate === ''
+            ? {}
+            : {
+                publication: {
+                  instant: `${publicationDate}T00:00:00.000Z`,
+                  sourceTimezone: 'UTC',
+                  precision: 'day',
+                  sourceText: publicationDate,
+                  inferred: false,
+                },
+              }),
+        },
+        ...(gitSource
+          ? {
+              gitResource: {
+                resourceId: identity.resourceId,
+                canonicalRepositoryUri: repositoryUri.trim(),
+                repositoryRelativePath: repositoryPath.trim(),
+              },
+            }
+          : {}),
+        gitObservations: gitSource
+          ? [
+              {
+                observationId: identity.observationId,
+                resourceId: identity.resourceId,
+                snapshotId: identity.snapshotId,
+                repositoryRef: repositoryRef.trim(),
+                commit: {
+                  algorithm: commitDigest.length === 40 ? 'sha1' : 'sha256',
+                  digest: commitDigest,
+                },
+                observedAt: capturedAt,
+              },
+            ]
+          : [],
+        profile,
+        ...sourcePayload,
         ...(canonicalUri.trim() === ''
           ? {}
-          : {canonicalUri: canonicalUri.trim()}),
-      },
-      snapshot: {
-        snapshotId: identity.snapshotId,
-        resourceId: identity.resourceId,
-        capturedAt,
-        mediaType: 'text/markdown',
-        ...(publicationDate === ''
-          ? {}
-          : {
-              publication: {
-                instant: `${publicationDate}T00:00:00.000Z`,
-                sourceTimezone: 'UTC',
-                precision: 'day',
-                sourceText: publicationDate,
-                inferred: false,
-              },
-            }),
-      },
-      ...(gitSource
-        ? {
-            gitResource: {
-              resourceId: identity.resourceId,
-              canonicalRepositoryUri: repositoryUri.trim(),
-              repositoryRelativePath: repositoryPath.trim(),
-            },
-          }
-        : {}),
-      gitObservations: gitSource
-        ? [
-            {
-              observationId: identity.observationId,
-              resourceId: identity.resourceId,
-              snapshotId: identity.snapshotId,
-              repositoryRef: repositoryRef.trim(),
-              commit: {
-                algorithm: commitDigest.length === 40 ? 'sha1' : 'sha256',
-                digest: commitDigest,
-              },
-              observedAt: capturedAt,
-            },
-          ]
-        : [],
-      profile,
-      sourceText: importedText,
-      ...(canonicalUri.trim() === ''
-        ? {}
-        : {documentBaseUri: canonicalUri.trim()}),
-    };
-    try {
+          : {documentBaseUri: canonicalUri.trim()}),
+      };
       const nextFeedback = await onImport(body);
       setFeedback(nextFeedback);
       if (nextFeedback.kind === 'success') {
@@ -158,12 +247,18 @@ export function MaterialsWorkspace({
         setSourceText('');
         setSourcePreface('');
         setIsPrivate(false);
+        clearLocalFile();
       }
+    } catch {
+      setFeedback({
+        kind: 'error',
+        title: '文件未能准备完成',
+        detail: '本机文件摘要或编码失败；没有向数据库写入任何内容。',
+      });
     } finally {
       setSubmitting(false);
     }
   }
-
   async function exportWorkspace() {
     if (transferOperation !== undefined) return;
     setTransferOperation('export');
@@ -254,7 +349,102 @@ export function MaterialsWorkspace({
               />
               固定 Git 文件
             </label>
+            <label>
+              <input
+                type="radio"
+                name="source-mode"
+                value="uploaded_file"
+                checked={sourceMode === 'uploaded_file'}
+                onChange={() => {
+                  setSourceMode('uploaded_file');
+                }}
+              />
+              本地文件
+            </label>
           </fieldset>
+          {sourceMode === 'uploaded_file' ? (
+            <section
+              className="local-file-import field--full"
+              aria-labelledby="local-file-import-title"
+            >
+              <div className="local-file-import__heading">
+                <div>
+                  <h3 id="local-file-import-title">选择本地文本文件</h3>
+                  <p>.md / .markdown / .txt · UTF-8 · 最大 1 MiB</p>
+                </div>
+                {localFile.status === 'ready' ? (
+                  <button
+                    className="text-action"
+                    type="button"
+                    onClick={clearLocalFile}
+                  >
+                    移除文件
+                  </button>
+                ) : null}
+              </div>
+              <input
+                ref={fileInput}
+                className="local-file-input"
+                id="local-text-file"
+                type="file"
+                accept=".md,.markdown,.txt,text/markdown,text/plain"
+                onChange={(event) => {
+                  void readLocalFile(
+                    event.currentTarget.files?.item(0) ?? undefined,
+                  );
+                }}
+              />
+              <div
+                className="local-file-dropzone"
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'copy';
+                }}
+                onDrop={(event: DragEvent<HTMLDivElement>) => {
+                  event.preventDefault();
+                  void readLocalFile(
+                    event.dataTransfer.files.item(0) ?? undefined,
+                  );
+                }}
+              >
+                <label className="secondary-action" htmlFor="local-text-file">
+                  选择文件
+                </label>
+                <span>或将一份文件拖到这里</span>
+              </div>
+              <div className="local-file-import__status" aria-live="polite">
+                {localFile.status === 'idle' ? (
+                  <p>浏览器只读取你明确选择的文件，不会读取目录路径。</p>
+                ) : null}
+                {localFile.status === 'loading' ? (
+                  <p role="status">正在读取 {localFile.fileName}…</p>
+                ) : null}
+                {localFile.status === 'error' ? (
+                  <p role="alert">
+                    <strong>{localFile.fileName}</strong> · {localFile.message}
+                  </p>
+                ) : null}
+                {localFile.status === 'ready' ? (
+                  <dl className="local-file-facts">
+                    <div>
+                      <dt>文件</dt>
+                      <dd>{localFile.value.fileName}</dd>
+                    </div>
+                    <div>
+                      <dt>类型</dt>
+                      <dd>{localFile.value.mediaType}</dd>
+                    </div>
+                    <div>
+                      <dt>大小</dt>
+                      <dd>
+                        {formatLocalFileBytes(localFile.value.byteLength)}
+                      </dd>
+                    </div>
+                  </dl>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
           <label className="privacy-choice field--full">
             <input
               type="checkbox"
@@ -278,7 +468,11 @@ export function MaterialsWorkspace({
               onChange={(event) => {
                 setSourceKey(event.currentTarget.value);
               }}
-              placeholder="留空时按本次导入身份自动生成"
+              placeholder={
+                sourceMode === 'uploaded_file'
+                  ? '留空时按文件名与 SHA-256 生成'
+                  : '留空时按本次导入身份自动生成'
+              }
             />
           </label>
           {sourceMode === 'git_file' ? (
@@ -349,6 +543,11 @@ export function MaterialsWorkspace({
             <span>文档格式与解析规则</span>
             <select
               value={profile}
+              disabled={
+                sourceMode === 'uploaded_file' &&
+                localFile.status === 'ready' &&
+                localFile.value.mediaType === 'text/plain'
+              }
               onChange={(event) => {
                 setProfile(
                   event.currentTarget.value as
@@ -380,17 +579,40 @@ export function MaterialsWorkspace({
               }}
               placeholder="需要时补充标题、导语或上下文；保存后将成为本次 Snapshot 正文的一部分。"
             />
+            {sourceMode === 'uploaded_file' ? (
+              <small>
+                留空时保留所选文件的精确原始字节；填写后会明确生成一份组合后的新
+                Snapshot。
+              </small>
+            ) : null}
           </label>
           <label className="field field--full">
-            <span>Markdown 正文</span>
+            <span>
+              {sourceMode === 'uploaded_file'
+                ? '文件正文预览'
+                : 'Markdown 正文'}
+            </span>
             <textarea
-              required
+              required={sourceMode !== 'uploaded_file'}
+              readOnly={sourceMode === 'uploaded_file'}
               rows={12}
-              value={sourceText}
+              value={
+                sourceMode === 'uploaded_file' && localFile.status === 'ready'
+                  ? localFile.value.sourceText
+                  : sourceMode === 'uploaded_file'
+                    ? ''
+                    : sourceText
+              }
               onChange={(event) => {
-                setSourceText(event.currentTarget.value);
+                if (sourceMode !== 'uploaded_file') {
+                  setSourceText(event.currentTarget.value);
+                }
               }}
-              placeholder="粘贴或输入待保存的 Markdown；内容不会写入 Git 或前端包体。"
+              placeholder={
+                sourceMode === 'uploaded_file'
+                  ? '选择文件后在这里检查正文；编辑请使用前置文字或后续拆分流程。'
+                  : '粘贴或输入待保存的 Markdown；内容不会写入 Git 或前端包体。'
+              }
             />
           </label>
           <div className="form-commit field--full">
@@ -403,7 +625,9 @@ export function MaterialsWorkspace({
               type="submit"
               disabled={
                 submitting ||
-                sourceText === '' ||
+                (sourceMode === 'uploaded_file'
+                  ? localFile.status !== 'ready'
+                  : sourceText === '') ||
                 (sourceMode === 'git_file' &&
                   (repositoryUri.trim() === '' ||
                     repositoryPath.trim() === '' ||
@@ -636,9 +860,32 @@ function SnapshotList({
   );
 }
 
+function describeLocalFileIssue(
+  code:
+    | 'file_name_invalid'
+    | 'file_type_unsupported'
+    | 'file_too_large'
+    | 'file_utf8_invalid'
+    | 'file_text_invalid',
+): string {
+  if (code === 'file_name_invalid') return '文件名无效；请选择普通文件名。';
+  if (code === 'file_type_unsupported')
+    return '仅支持 .md、.markdown 和 .txt。';
+  if (code === 'file_too_large')
+    return `文件超过 ${formatLocalFileBytes(LOCAL_TEXT_FILE_MAX_BYTES)} 上限。`;
+  if (code === 'file_utf8_invalid') return '文件不是有效的 UTF-8 文本。';
+  return '文件为空或含有不允许的 NUL 字符。';
+}
+
+function formatLocalFileBytes(value: number): string {
+  return value < 1024
+    ? `${value.toString()} B`
+    : `${(value / 1024).toFixed(value < 1024 * 1024 ? 1 : 0)} KiB`;
+}
 function createImportIdentity(): ImportIdentity {
   return Object.freeze({
     commandIdempotencyKey: createCommandKey('import'),
+    capturedAt: new Date().toISOString(),
     observationId: createClientUuid(),
     resourceId: createClientUuid(),
     snapshotId: createClientUuid(),
