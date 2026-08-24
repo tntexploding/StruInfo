@@ -3,6 +3,8 @@ import {Buffer} from 'node:buffer';
 import {
   ENTRY_CHUNK_MODES,
   ENTRY_DOMAIN_KEYWORDS,
+  ENTRY_TEXT_SEARCH_FIELDS,
+  ENTRY_TEXT_SEARCH_MODES,
   ENTRY_TYPE_KEYWORDS,
   INFORMATION_ENTRY_ASSOCIATION_ACTIONS,
   INFORMATION_ENTRY_ASSOCIATION_POLICY,
@@ -27,8 +29,11 @@ import {
   prepareManualSplitInformationEntries,
   prepareSplitInformationEntries,
   searchCurrentInformationEntries,
+  scoreInformationEntrySearchText,
   type CurrentInformationEntry,
   type EntryDomainKeyword,
+  type EntryTextSearchField,
+  type EntryTextSearchMode,
   type EntryTypeKeyword,
   type ManualEntryFragmentGroupInput,
   type InformationEntryAssociationAction,
@@ -232,7 +237,9 @@ export class M1cApiService implements M1cApiServicePort {
     if (!request.includePrivate) {
       return Object.freeze({totalCount: 0, items: Object.freeze([])});
     }
-    const requiresEntryMatch =
+    const textMode = request.textMode ?? 'substring';
+    const textFields = request.textFields ?? ENTRY_TEXT_SEARCH_FIELDS;
+    const requiresStructuralEntryMatch =
       request.contentKeyword !== undefined ||
       request.typeKeyword !== undefined ||
       request.typeCustomName !== undefined ||
@@ -242,12 +249,16 @@ export class M1cApiService implements M1cApiServicePort {
       request.association !== undefined;
     const {
       text: ignoredText,
+      textMode: ignoredTextMode,
+      textFields: ignoredTextFields,
       after: ignoredAfter,
       ...structuralRequest
     } = request;
     void ignoredText;
+    void ignoredTextMode;
+    void ignoredTextFields;
     void ignoredAfter;
-    const entryMatches = requiresEntryMatch
+    const structuralEntryMatches = requiresStructuralEntryMatch
       ? searchCurrentInformationEntries(
           entries,
           {
@@ -257,15 +268,40 @@ export class M1cApiService implements M1cApiServicePort {
           associationSnapshot,
         ).items
       : Object.freeze([]);
-    const entryMatchCounts = new Map<string, number>();
-    for (const match of entryMatches) {
-      if (!match.entry.value.isPrivate) continue;
-      entryMatchCounts.set(
+    const structuralEntryMatchCounts = entryMatchCountsBySnapshot(
+      structuralEntryMatches,
+    );
+    const query = informationEntrySearchKey(request.text ?? '');
+    const tagEntryMatches =
+      query !== '' && textFields.includes('tags')
+        ? searchCurrentInformationEntries(
+            entries,
+            {
+              ...structuralRequest,
+              text: request.text ?? '',
+              textMode,
+              textFields: Object.freeze(['tags']),
+              limit: Math.max(1, entries.length),
+            },
+            associationSnapshot,
+          ).items
+        : Object.freeze([]);
+    const tagEntryMatchesBySnapshot = new Map<
+      string,
+      Readonly<{count: number; score: number}>
+    >();
+    for (const match of tagEntryMatches) {
+      if (!match.entry.value.isPrivate || match.textMatch === undefined)
+        continue;
+      const previous = tagEntryMatchesBySnapshot.get(match.entry.snapshotId);
+      tagEntryMatchesBySnapshot.set(
         match.entry.snapshotId,
-        (entryMatchCounts.get(match.entry.snapshotId) ?? 0) + 1,
+        Object.freeze({
+          count: (previous?.count ?? 0) + 1,
+          score: Math.max(previous?.score ?? 0, match.textMatch.score),
+        }),
       );
     }
-    const query = informationEntrySearchKey(request.text ?? '');
     const summaries = (
       await this.#dependencies.evidenceReadRepository.listSnapshots(
         this.#dependencies.workspaceId,
@@ -276,7 +312,7 @@ export class M1cApiService implements M1cApiServicePort {
         privateDocumentMatchesStructuralFilters(
           snapshot,
           request,
-          requiresEntryMatch ? entryMatchCounts : undefined,
+          requiresStructuralEntryMatch ? structuralEntryMatchCounts : undefined,
         ),
       )
       .sort((left, right) => {
@@ -289,48 +325,84 @@ export class M1cApiService implements M1cApiServicePort {
     for (const summary of summaries) {
       const matchReasons: string[] = [];
       let excerpt: string | undefined;
+      let textScore = 0;
       if (query !== '') {
-        if (informationEntrySearchKey(summary.sourceKey).includes(query)) {
-          matchReasons.push('source');
-        }
-        if (
-          summary.canonicalUri !== undefined &&
-          informationEntrySearchKey(summary.canonicalUri).includes(query)
-        ) {
-          matchReasons.push('uri');
-        }
-        const snapshot =
-          await this.#dependencies.evidenceReadRepository.loadSnapshot(
-            this.#dependencies.workspaceId,
-            summary.snapshotId,
+        if (textFields.includes('title')) {
+          const sourceScore = scoreInformationEntrySearchText(
+            summary.sourceKey,
+            query,
+            textMode,
           );
-        if (snapshot === undefined) {
-          throw new Error(
-            'Private evidence Snapshot disappeared during search.',
-          );
+          if (sourceScore !== undefined) {
+            matchReasons.push('source');
+            textScore = Math.max(textScore, sourceScore);
+          }
+          if (summary.canonicalUri !== undefined) {
+            const uriScore = scoreInformationEntrySearchText(
+              summary.canonicalUri,
+              query,
+              textMode,
+            );
+            if (uriScore !== undefined) {
+              matchReasons.push('uri');
+              textScore = Math.max(textScore, uriScore);
+            }
+          }
         }
-        const materialized = await materializeEvidenceSnapshot(
-          snapshot,
-          this.#dependencies.blobStore,
-        );
-        const documentText = materialized.structures
-          .map((structure) =>
-            typeof structure.normalizedText === 'string'
-              ? structure.normalizedText
-              : '',
-          )
-          .join('\n');
-        if (informationEntrySearchKey(documentText).includes(query)) {
-          matchReasons.push('body');
+        if (textFields.includes('tags')) {
+          const tagMatch = tagEntryMatchesBySnapshot.get(summary.snapshotId);
+          if (tagMatch !== undefined) {
+            matchReasons.push('entry_tags');
+            textScore = Math.max(textScore, tagMatch.score);
+          }
+        }
+        if (textFields.includes('body')) {
+          const snapshot =
+            await this.#dependencies.evidenceReadRepository.loadSnapshot(
+              this.#dependencies.workspaceId,
+              summary.snapshotId,
+            );
+          if (snapshot === undefined) {
+            throw new Error(
+              'Private evidence Snapshot disappeared during search.',
+            );
+          }
+          const materialized = await materializeEvidenceSnapshot(
+            snapshot,
+            this.#dependencies.blobStore,
+          );
+          const documentText = materialized.structures
+            .map((structure) =>
+              typeof structure.normalizedText === 'string'
+                ? structure.normalizedText
+                : '',
+            )
+            .join('\n');
+          const bodyScore = scoreInformationEntrySearchText(
+            documentText,
+            query,
+            textMode,
+          );
+          if (bodyScore !== undefined) {
+            matchReasons.push('body');
+            textScore = Math.max(textScore, bodyScore);
+            excerpt = privateDocumentExcerpt(documentText);
+          }
         }
         if (matchReasons.length === 0) continue;
-        excerpt = privateDocumentExcerpt(documentText);
       }
+      const structuralCount =
+        structuralEntryMatchCounts.get(summary.snapshotId) ?? 0;
+      const tagCount =
+        tagEntryMatchesBySnapshot.get(summary.snapshotId)?.count ?? 0;
       items.push(
         Object.freeze({
           snapshot: summary,
           matchReasons: Object.freeze(matchReasons),
-          entryMatchCount: entryMatchCounts.get(summary.snapshotId) ?? 0,
+          entryMatchCount: Math.max(structuralCount, tagCount),
+          ...(query === ''
+            ? {}
+            : {textMatch: Object.freeze({mode: textMode, score: textScore})}),
           ...(excerpt === undefined ? {} : {excerpt}),
         }),
       );
@@ -340,7 +412,6 @@ export class M1cApiService implements M1cApiServicePort {
       items: Object.freeze(items),
     });
   }
-
   public workspace(): M1cHttpResult {
     return httpResult(200, {
       status: 'ok',
@@ -2001,6 +2072,8 @@ function decodeEntrySearchBody(
 ): Readonly<InformationEntrySearchRequest> | undefined {
   if (!isRecord(body)) return undefined;
   const textValue = optionalBoundedText(body.text, 300);
+  const textMode = body.textMode ?? 'substring';
+  const textFields = decodeEntrySearchTextFields(body.textFields);
   const contentKeyword = optionalBoundedText(body.contentKeyword, 80);
   const sourceKey = optionalBoundedText(body.sourceKey, 2_048);
   const snapshotId = body.snapshotId ?? undefined;
@@ -2018,6 +2091,11 @@ function decodeEntrySearchBody(
   const after = decodeEntrySearchCursor(body.after);
   if (
     textValue === null ||
+    typeof textMode !== 'string' ||
+    !ENTRY_TEXT_SEARCH_MODES.includes(textMode as EntryTextSearchMode) ||
+    textFields === undefined ||
+    (textValue === undefined &&
+      (body.textMode !== undefined || body.textFields !== undefined)) ||
     contentKeyword === null ||
     sourceKey === null ||
     typeCustomName === null ||
@@ -2057,7 +2135,13 @@ function decodeEntrySearchBody(
     return undefined;
   }
   return Object.freeze({
-    ...(textValue === undefined ? {} : {text: textValue}),
+    ...(textValue === undefined
+      ? {}
+      : {
+          text: textValue,
+          textMode: textMode as EntryTextSearchMode,
+          textFields,
+        }),
     ...(contentKeyword === undefined ? {} : {contentKeyword}),
     ...(sourceKey === undefined ? {} : {sourceKey}),
     ...(snapshotId === undefined ? {} : {snapshotId}),
@@ -2082,6 +2166,27 @@ function decodeEntrySearchBody(
   });
 }
 
+function decodeEntrySearchTextFields(
+  value: unknown,
+): readonly EntryTextSearchField[] | undefined {
+  const fields = value ?? ENTRY_TEXT_SEARCH_FIELDS;
+  if (
+    !Array.isArray(fields) ||
+    fields.length < 1 ||
+    fields.length > ENTRY_TEXT_SEARCH_FIELDS.length ||
+    !fields.every(
+      (field) =>
+        typeof field === 'string' &&
+        ENTRY_TEXT_SEARCH_FIELDS.includes(field as EntryTextSearchField),
+    ) ||
+    new Set(fields).size !== fields.length
+  ) {
+    return undefined;
+  }
+  return Object.freeze(
+    ENTRY_TEXT_SEARCH_FIELDS.filter((field) => fields.includes(field)),
+  );
+}
 function isOptionalAssessmentScore(
   value: unknown,
 ): value is 1 | 2 | 3 | 4 | 5 | undefined {
@@ -2165,13 +2270,17 @@ function decodeEntrySearchCursor(
   if (body === undefined) return undefined;
   if (
     !isRecord(body) ||
-    body.schemaVersion !== 1 ||
+    body.schemaVersion !== 2 ||
     typeof body.querySha256 !== 'string' ||
     !/^[0-9a-f]{64}$/u.test(body.querySha256) ||
     typeof body.associationDepth !== 'number' ||
     !Number.isSafeInteger(body.associationDepth) ||
     body.associationDepth < 0 ||
     body.associationDepth > 2 ||
+    typeof body.textScore !== 'number' ||
+    !Number.isSafeInteger(body.textScore) ||
+    body.textScore < 0 ||
+    body.textScore > 10_000 ||
     typeof body.matchReasonCount !== 'number' ||
     !Number.isSafeInteger(body.matchReasonCount) ||
     body.matchReasonCount < 0 ||
@@ -2191,9 +2300,10 @@ function decodeEntrySearchCursor(
     return undefined;
   }
   return Object.freeze({
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     querySha256: body.querySha256,
     associationDepth: body.associationDepth,
+    textScore: body.textScore,
     matchReasonCount: body.matchReasonCount,
     associationScore: body.associationScore,
     capturedAt: new Date(body.capturedAt).toISOString(),
@@ -2392,6 +2502,19 @@ function decodeDocumentTagWriteBody(
   });
 }
 
+function entryMatchCountsBySnapshot(
+  matches: readonly Readonly<{entry: Readonly<CurrentInformationEntry>}>[],
+): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>();
+  for (const match of matches) {
+    if (!match.entry.value.isPrivate) continue;
+    counts.set(
+      match.entry.snapshotId,
+      (counts.get(match.entry.snapshotId) ?? 0) + 1,
+    );
+  }
+  return counts;
+}
 function privateDocumentMatchesStructuralFilters(
   snapshot: Readonly<EvidenceSnapshotSummary>,
   request: Readonly<InformationEntrySearchRequest>,

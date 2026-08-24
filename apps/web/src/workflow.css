@@ -779,6 +779,11 @@
   font-size: var(--si-text-subheading);
 }
 
+.workflow-stage-workspace[data-workflow-page='query']
+  .entry-text-search-options {
+  grid-column: 1;
+  grid-row: 2;
+}
 .workflow-stage-workspace[data-workflow-page='query'] .entry-source-filter {
   grid-column: 2;
   grid-row: 1;
@@ -811,7 +816,7 @@
 
 .workflow-stage-workspace[data-workflow-page='query'] .entry-command-actions {
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 3;
   justify-content: flex-start;
 }
 

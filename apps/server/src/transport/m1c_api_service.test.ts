@@ -1047,6 +1047,60 @@ describe('M1cApiService', () => {
     expect(loadAssociationSnapshot).toHaveBeenCalledTimes(3);
   });
 
+  it('closes text mode and field scope at the HTTP boundary', async () => {
+    const service = createService();
+    for (const body of [
+      {textMode: 'fuzzy', includePrivate: false, limit: 20},
+      {
+        text: 'synthetic',
+        textMode: 'semantic',
+        textFields: ['body'],
+        includePrivate: false,
+        limit: 20,
+      },
+      {
+        text: 'synthetic',
+        textMode: 'fuzzy',
+        textFields: [],
+        includePrivate: false,
+        limit: 20,
+      },
+      {
+        text: 'synthetic',
+        textMode: 'fuzzy',
+        textFields: ['body', 'body'],
+        includePrivate: false,
+        limit: 20,
+      },
+    ]) {
+      await expect(
+        service.searchInformationEntries(body),
+      ).resolves.toMatchObject({
+        statusCode: 422,
+        body: {status: 'rejected', issue: {path: 'body'}},
+      });
+    }
+
+    const first = await service.searchInformationEntries({
+      text: 'synthetic',
+      textMode: 'fuzzy',
+      textFields: ['tags', 'title'],
+      includePrivate: false,
+      limit: 20,
+    });
+    const second = await service.searchInformationEntries({
+      text: 'synthetic',
+      textMode: 'fuzzy',
+      textFields: ['title', 'tags'],
+      includePrivate: false,
+      limit: 20,
+    });
+    expect(first).toMatchObject({statusCode: 200, body: {status: 'ok'}});
+    expect(second).toMatchObject({statusCode: 200, body: {status: 'ok'}});
+    expect((first.body as {querySha256?: string}).querySha256).toBe(
+      (second.body as {querySha256?: string}).querySha256,
+    );
+  });
   it('rebuilds selective Entry associations and preserves a separate manual override command', async () => {
     const entryLowId = '00000000-0000-4000-8000-000000000011';
     const entryHighId = '00000000-0000-4000-8000-000000000013';
@@ -1287,6 +1341,29 @@ describe('M1cApiService', () => {
               matchReasons: ['body'],
               entryMatchCount: 0,
               excerpt: 'Private complete document',
+            },
+          ],
+        },
+      },
+    });
+    await expect(
+      service.searchInformationEntries({
+        text: 'complete documemt',
+        textMode: 'fuzzy',
+        textFields: ['body'],
+        includePrivate: true,
+        onlyPrivate: true,
+        limit: 20,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        privateDocuments: {
+          totalCount: 1,
+          items: [
+            {
+              matchReasons: ['body'],
+              textMatch: {mode: 'fuzzy'},
             },
           ],
         },

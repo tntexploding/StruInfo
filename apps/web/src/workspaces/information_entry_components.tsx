@@ -185,7 +185,7 @@ export function InformationEntryResults({
         </header>
         <ol>
           {state.response.items.map(
-            ({association, entry, filterReasons, matchReasons}) => (
+            ({association, entry, filterReasons, matchReasons, textMatch}) => (
               <li key={entry.entryId}>
                 <button
                   type="button"
@@ -208,6 +208,13 @@ export function InformationEntryResults({
                     {matchReasons.length > 0 ? (
                       <em>
                         命中：{matchReasons.map(matchReasonLabel).join(' / ')}
+                        {textMatch === undefined ? null : (
+                          <>
+                            {' · '}
+                            {textSearchModeLabel(textMatch.mode)} 词法分{' '}
+                            {scorePercentage(textMatch.score)}/100
+                          </>
+                        )}
                       </em>
                     ) : null}
                     {filterReasons.length > 0 ? (
@@ -362,6 +369,18 @@ function matchReasonLabel(value: string): string {
   }
 }
 
+function textSearchModeLabel(value: string): string {
+  switch (value) {
+    case 'exact':
+      return '精确';
+    case 'substring':
+      return '包含';
+    case 'fuzzy':
+      return '近似';
+    default:
+      return value;
+  }
+}
 function filterReasonLabel(value: string): string {
   switch (value) {
     case 'content_keyword':

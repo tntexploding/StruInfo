@@ -3,6 +3,8 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type {
   EntryDomainKeyword,
   EntryTypeKeyword,
+  EntryTextSearchField,
+  EntryTextSearchMode,
   InformationEntry,
   InformationEntrySearchCursor,
   InformationEntrySearchResponse,
@@ -42,6 +44,10 @@ export function useInformationEntryController({
   onSearch,
 }: InformationEntryControllerOptions) {
   const [query, setQuery] = useState('');
+  const [textMode, setTextMode] = useState<EntryTextSearchMode>('substring');
+  const [textFields, setTextFields] = useState<readonly EntryTextSearchField[]>(
+    Object.freeze(['title', 'body', 'tags']),
+  );
   const [snapshotId, setSnapshotId] = useState('');
   const [typeKeyword, setTypeKeyword] = useState<'' | EntryTypeKeyword>('');
   const [domainKeyword, setDomainKeyword] = useState<'' | EntryDomainKeyword>(
@@ -106,7 +112,13 @@ export function useInformationEntryController({
       setView({status: 'loading'});
       try {
         const response = await onSearch({
-          ...(query.trim() === '' ? {} : {text: query.trim()}),
+          ...(query.trim() === ''
+            ? {}
+            : {
+                text: query.trim(),
+                textMode,
+                textFields,
+              }),
           ...(advancedFilters.contentKeyword.trim() === ''
             ? {}
             : {contentKeyword: advancedFilters.contentKeyword.trim()}),
@@ -182,6 +194,8 @@ export function useInformationEntryController({
       onSearch,
       query,
       snapshotId,
+      textFields,
+      textMode,
       typeKeyword,
     ],
   );
@@ -261,6 +275,8 @@ export function useInformationEntryController({
 
   function clearSearchFilters() {
     setQuery('');
+    setTextMode('substring');
+    setTextFields(Object.freeze(['title', 'body', 'tags']));
     setSnapshotId('');
     setTypeKeyword('');
     setDomainKeyword('');
@@ -297,10 +313,14 @@ export function useInformationEntryController({
     setQuery,
     setSelectedEntryId,
     setSnapshotId,
+    setTextFields,
+    setTextMode,
     setTypeKeyword,
     showNextPage,
     showPreviousPage,
     snapshotId,
+    textFields,
+    textMode,
     typeKeyword,
     view,
   } as const;

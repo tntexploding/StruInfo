@@ -107,7 +107,7 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 `POST /entries/search` 当前支持：
 
-- 规范化文本子串；
+- 非空 `text` 可显式选择 `textMode: exact | substring | fuzzy`，并用 `textFields` 选择 `title`、`body`、`tags` 中的一至三项；省略时保持全部字段的 substring 行为；
 - 内容关键词、来源 key、Snapshot；
 - 类型、自定义类型、领域、自定义领域及主/副领域范围；
 - 整篇/拆分模式；
@@ -116,7 +116,7 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 - 指定 Entry 的一至两跳联系范围和最低分；
 - `limit` 1–100 与查询绑定排他游标 `after`。
 
-结果返回稳定 Entry 分页、匹配原因、关联路径和精确 Fragment/Snapshot 证据。响应还包含 `privateDocuments: { totalCount, items }`；默认及未勾选隐私时该通道为空，显式 `includePrivate=true` 后才按需从外部 Blob 匹配完整规范正文、来源 key 或 URI，并返回独立文档摘要与全文入口。当前实现是完整加载后的确定性查询，不是 SQL query pushdown、模糊检索、向量检索、RAG 或答案生成。
+结果返回稳定 Entry 分页、匹配原因、0–10000 整数词法分、关联路径和精确 Fragment/Snapshot 证据。query digest v2 绑定规范化文字、模式和字段集合；cursor schema v2 另含词法分，旧临时 cursor 会被拒绝。响应还包含 `privateDocuments: { totalCount, items }`；默认及未勾选隐私时该通道为空，显式 `includePrivate=true` 后才按同一模式从外部 Blob 匹配完整规范正文、来源 key/URI 或私密 Entry 标签，并返回独立文档摘要与全文入口。当前实现是完整加载后的确定性词法查询，不是 SQL query pushdown、语义/向量检索、RAG 或答案生成。
 
 ### 3.6 正式知识
 
@@ -169,5 +169,5 @@ Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不�
 - JSON 请求体上限为 2 MiB，Markdown 导入上限为 1 MiB；
 - Evidence 列表当前最多返回最近 200 个 Snapshot；
 - 接口仅面向回环单用户产品，没有公开认证或 CSRF 完整边界；
-- 没有 multipart/服务器路径上传、HTML/PDF/Office/OCR、多文件批量导入、目录监视、抓取、订阅、AI 查询综合、自动接受、模糊/向量搜索或在线检索接口；OpenAI 目前只提供用户选中公开 Snapshot 的 split、公开 Entry 的 tags 和用户选中公开 Entry 对的 association 提案；
+- 没有 multipart/服务器路径上传、Office/OCR、多文件批量导入、目录监视、抓取、订阅、AI 查询综合、自动接受、语义/向量搜索或在线检索接口；OpenAI 目前只提供用户选中公开 Snapshot 的 split、公开 Entry 的 tags 和用户选中公开 Entry 对的 association 提案；
 - 当前正式知识只实现 Entry 中心关系图谱；不恢复 `/curation`、旧 `/knowledge` 写入/读取或旧 `/search` 路由，也不把历史 Knowledge 表当作当前产品入口。

@@ -9,6 +9,7 @@ import {
 import {READY_HEALTH_FIXTURE} from '../health/mock_health_client.js';
 import {MaterialsWorkspace} from '../workspaces/materials_workspace.js';
 import {InformationEntryPrivacyScope} from '../workspaces/information_entry_components.js';
+import {InformationEntryTextSearchOptions} from '../workspaces/information_entry_search_controls.js';
 import {InformationEntrySplitWorkspace} from '../workspaces/information_entry_split_workspace.js';
 import {InformationEntryReviewControls} from '../workspaces/information_entry_review_controls.js';
 import {AssociationPolicyPanel} from '../workspaces/association_policy_panel.js';
@@ -136,6 +137,27 @@ describe('M1D product workspaces', () => {
     expect(markup).toContain('公开与隐私结果');
     expect(markup).toContain('只看隐私结果');
     expect(markup).toContain('<option value="private" selected="">');
+  });
+
+  it('renders explicit local lexical modes and field scopes', () => {
+    const markup = renderToStaticMarkup(
+      <InformationEntryTextSearchOptions
+        mode="fuzzy"
+        fields={['title', 'tags']}
+        onModeChange={() => undefined}
+        onFieldsChange={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain('精确一致');
+    expect(markup).toContain('包含文字');
+    expect(markup).toContain('近似匹配');
+    expect(markup).toContain('标题');
+    expect(markup).toContain('正文');
+    expect(markup).toContain('标签');
+    expect(markup).toContain('不调用 AI');
+    expect(markup).toContain('type="radio"');
+    expect(markup).toContain('type="checkbox"');
   });
 
   it('renders real workspace metrics and a truthful AI workflow state', () => {

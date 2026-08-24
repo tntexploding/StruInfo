@@ -28,11 +28,15 @@ export const ENTRY_DOMAIN_KEYWORDS = [
 
 export const ENTRY_CHUNK_MODES = ['split', 'whole'] as const;
 export const ENTRY_ANNOTATION_ORIGINS = ['manual', 'rule', 'ai'] as const;
+export const ENTRY_TEXT_SEARCH_MODES = ['exact', 'substring', 'fuzzy'] as const;
+export const ENTRY_TEXT_SEARCH_FIELDS = ['title', 'body', 'tags'] as const;
 
 export type EntryTypeKeyword = (typeof ENTRY_TYPE_KEYWORDS)[number];
 export type EntryDomainKeyword = (typeof ENTRY_DOMAIN_KEYWORDS)[number];
 export type EntryChunkMode = (typeof ENTRY_CHUNK_MODES)[number];
 export type EntryAnnotationOrigin = (typeof ENTRY_ANNOTATION_ORIGINS)[number];
+export type EntryTextSearchMode = (typeof ENTRY_TEXT_SEARCH_MODES)[number];
+export type EntryTextSearchField = (typeof ENTRY_TEXT_SEARCH_FIELDS)[number];
 export type EntryAssessmentScore = 1 | 2 | 3 | 4 | 5;
 
 export interface EntryContentKeyword {
@@ -121,6 +125,8 @@ export interface InformationEntryRevisionWrite {
 
 export interface InformationEntrySearchRequest {
   readonly text?: string;
+  readonly textMode?: EntryTextSearchMode;
+  readonly textFields?: readonly EntryTextSearchField[];
   readonly contentKeyword?: string;
   readonly sourceKey?: string;
   readonly snapshotId?: string;
@@ -176,9 +182,10 @@ export interface InformationEntryAssociationMatch {
 }
 
 export interface InformationEntrySearchCursor {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly querySha256: string;
   readonly associationDepth: number;
+  readonly textScore: number;
   readonly matchReasonCount: number;
   readonly associationScore: number;
   readonly capturedAt: string;
@@ -189,6 +196,10 @@ export interface InformationEntrySearchCursor {
 export interface InformationEntrySearchItem {
   readonly entry: Readonly<CurrentInformationEntry>;
   readonly matchReasons: readonly InformationEntryMatchReason[];
+  readonly textMatch?: Readonly<{
+    mode: EntryTextSearchMode;
+    score: number;
+  }>;
   readonly filterReasons: readonly InformationEntryFilterReason[];
   readonly association?: Readonly<InformationEntryAssociationMatch>;
 }
