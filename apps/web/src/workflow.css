@@ -1491,7 +1491,7 @@
   }
 }
 
-/* M1E-4A: local, user-owned Fragment grouping before Entry materialization. */
+/* M1E-4B: local, user-owned ranges before Entry materialization. */
 
 .workflow-stage-workspace[data-workflow-page='split'] > .entry-manual-split {
   grid-column: 1 / -1;
@@ -1570,7 +1570,7 @@
 }
 
 .entry-manual-split__full-text pre,
-.entry-manual-split__fragments pre {
+.entry-manual-split__piece textarea {
   margin: 0;
   overflow: auto;
   white-space: pre-wrap;
@@ -1624,7 +1624,7 @@
 }
 
 .entry-manual-split__group > header span,
-.entry-manual-split__fragments article > span {
+.entry-manual-split__piece > header {
   color: var(--si-color-text-muted);
   font-size: var(--si-text-caption);
 }
@@ -1649,12 +1649,42 @@
   min-inline-size: 0;
 }
 
-.entry-manual-split__fragments pre {
-  max-block-size: 18rem;
+.entry-manual-split__piece {
   padding: var(--si-space-4);
   border-inline-start: 2px solid var(--si-color-border-strong);
   background: var(--si-color-bg-shell);
+}
+
+.entry-manual-split__piece > header,
+.entry-manual-split__piece-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--si-space-3);
+}
+
+.entry-manual-split__piece textarea {
+  inline-size: 100%;
+  min-block-size: 10rem;
+  max-block-size: 24rem;
+  padding: var(--si-space-4);
+  resize: vertical;
+  border: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  background: var(--si-color-surface-1);
   color: var(--si-color-text-secondary);
+}
+
+.entry-manual-split__piece-actions > span,
+.entry-manual-split__guidance {
+  margin: 0;
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-caption);
+}
+
+.entry-manual-split__guidance {
+  padding-inline-start: var(--si-space-3);
+  border-inline-start: 2px solid var(--si-color-warning);
 }
 
 .entry-manual-split__commit {
@@ -1683,14 +1713,17 @@
   .entry-manual-split__state,
   .entry-manual-split__toolbar,
   .entry-manual-split__commit,
-  .entry-manual-split__group > header {
+  .entry-manual-split__group > header,
+  .entry-manual-split__piece > header,
+  .entry-manual-split__piece-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
   .entry-manual-split__toolbar .secondary-action,
   .entry-manual-split__commit .primary-action,
-  .entry-manual-split__state .text-action {
+  .entry-manual-split__state .text-action,
+  .entry-manual-split__piece-actions .secondary-action {
     inline-size: 100%;
   }
 }

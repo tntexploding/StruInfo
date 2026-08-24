@@ -3,9 +3,15 @@ import type {
   EvidenceSnapshot,
 } from '../api/m1c_api_contract.js';
 
+export interface ManualSplitDraftPiece {
+  readonly fragment: Readonly<EvidenceFragment>;
+  readonly startCodePoint: number;
+  readonly endCodePoint: number;
+}
+
 export interface ManualSplitDraftGroup {
   readonly titlePath: string;
-  readonly fragments: readonly Readonly<EvidenceFragment>[];
+  readonly pieces: readonly Readonly<ManualSplitDraftPiece>[];
 }
 
 export function createManualSplitDraft(
@@ -22,10 +28,43 @@ export function createManualSplitDraft(
     sections.map((fragment, index) =>
       Object.freeze({
         titlePath: deriveDraftTitle(fragment.selectedText, index),
-        fragments: Object.freeze([fragment]),
+        pieces: Object.freeze([
+          Object.freeze({
+            fragment,
+            startCodePoint: 0,
+            endCodePoint: Array.from(fragment.selectedText).length,
+          }),
+        ]),
       }),
     ),
   );
+}
+
+export function manualSplitPieceText(
+  piece: Readonly<ManualSplitDraftPiece>,
+): string {
+  return Array.from(piece.fragment.selectedText)
+    .slice(piece.startCodePoint, piece.endCodePoint)
+    .join('');
+}
+
+export function manualSplitCaretCodePoint(
+  piece: Readonly<ManualSplitDraftPiece>,
+  utf16Offset: number,
+): number | undefined {
+  const text = manualSplitPieceText(piece);
+  if (
+    !Number.isSafeInteger(utf16Offset) ||
+    utf16Offset < 0 ||
+    utf16Offset > text.length
+  ) {
+    return undefined;
+  }
+  const scalarOffset = Array.from(text.slice(0, utf16Offset)).length;
+  if (Array.from(text).slice(0, scalarOffset).join('').length !== utf16Offset) {
+    return undefined;
+  }
+  return piece.startCodePoint + scalarOffset;
 }
 
 export function mergeManualSplitGroups(
@@ -37,7 +76,7 @@ export function mergeManualSplitGroups(
   if (previous === undefined || current === undefined) return groups;
   const merged = Object.freeze({
     titlePath: previous.titlePath,
-    fragments: Object.freeze([...previous.fragments, ...current.fragments]),
+    pieces: coalescePieces([...previous.pieces, ...current.pieces]),
   });
   return Object.freeze([
     ...groups.slice(0, groupIndex - 1),
@@ -46,29 +85,88 @@ export function mergeManualSplitGroups(
   ]);
 }
 
+export function mergeAllManualSplitGroups(
+  groups: readonly Readonly<ManualSplitDraftGroup>[],
+): readonly Readonly<ManualSplitDraftGroup>[] {
+  const first = groups[0];
+  if (first === undefined || groups.length === 1) return groups;
+  return Object.freeze([
+    Object.freeze({
+      titlePath: first.titlePath,
+      pieces: coalescePieces(groups.flatMap((group) => group.pieces)),
+    }),
+  ]);
+}
+
 export function splitManualSplitGroup(
   groups: readonly Readonly<ManualSplitDraftGroup>[],
   groupIndex: number,
-  fragmentIndex: number,
+  pieceIndex: number,
 ): readonly Readonly<ManualSplitDraftGroup>[] {
   const group = groups[groupIndex];
   if (
     group === undefined ||
-    fragmentIndex < 1 ||
-    fragmentIndex >= group.fragments.length
+    pieceIndex < 1 ||
+    pieceIndex >= group.pieces.length
   ) {
     return groups;
   }
+  return replaceWithSplitGroups(
+    groups,
+    groupIndex,
+    group,
+    group.pieces.slice(0, pieceIndex),
+    group.pieces.slice(pieceIndex),
+  );
+}
+
+export function splitManualSplitPiece(
+  groups: readonly Readonly<ManualSplitDraftGroup>[],
+  groupIndex: number,
+  pieceIndex: number,
+  splitCodePoint: number,
+): readonly Readonly<ManualSplitDraftGroup>[] {
+  const group = groups[groupIndex];
+  const piece = group?.pieces[pieceIndex];
+  if (
+    group === undefined ||
+    piece === undefined ||
+    !Number.isSafeInteger(splitCodePoint) ||
+    splitCodePoint <= piece.startCodePoint ||
+    splitCodePoint >= piece.endCodePoint
+  ) {
+    return groups;
+  }
+  const leftPiece = Object.freeze({...piece, endCodePoint: splitCodePoint});
+  const rightPiece = Object.freeze({...piece, startCodePoint: splitCodePoint});
+  return replaceWithSplitGroups(
+    groups,
+    groupIndex,
+    group,
+    [...group.pieces.slice(0, pieceIndex), leftPiece],
+    [rightPiece, ...group.pieces.slice(pieceIndex + 1)],
+  );
+}
+
+function replaceWithSplitGroups(
+  groups: readonly Readonly<ManualSplitDraftGroup>[],
+  groupIndex: number,
+  source: Readonly<ManualSplitDraftGroup>,
+  leftPieces: readonly Readonly<ManualSplitDraftPiece>[],
+  rightPieces: readonly Readonly<ManualSplitDraftPiece>[],
+): readonly Readonly<ManualSplitDraftGroup>[] {
+  const firstRight = rightPieces[0];
+  if (leftPieces.length === 0 || firstRight === undefined) return groups;
   const left = Object.freeze({
-    titlePath: group.titlePath,
-    fragments: Object.freeze(group.fragments.slice(0, fragmentIndex)),
+    titlePath: source.titlePath,
+    pieces: Object.freeze(leftPieces),
   });
-  const rightFragments = Object.freeze(group.fragments.slice(fragmentIndex));
-  const first = rightFragments[0];
-  if (first === undefined) return groups;
   const right = Object.freeze({
-    titlePath: deriveDraftTitle(first.selectedText, groupIndex + 1),
-    fragments: rightFragments,
+    titlePath: deriveDraftTitle(
+      manualSplitPieceText(firstRight),
+      groupIndex + 1,
+    ),
+    pieces: Object.freeze(rightPieces),
   });
   return Object.freeze([
     ...groups.slice(0, groupIndex),
@@ -76,6 +174,27 @@ export function splitManualSplitGroup(
     right,
     ...groups.slice(groupIndex + 1),
   ]);
+}
+
+function coalescePieces(
+  pieces: readonly Readonly<ManualSplitDraftPiece>[],
+): readonly Readonly<ManualSplitDraftPiece>[] {
+  const result: ManualSplitDraftPiece[] = [];
+  for (const piece of pieces) {
+    const previous = result.at(-1);
+    if (
+      previous?.fragment.fragmentId === piece.fragment.fragmentId &&
+      previous.endCodePoint === piece.startCodePoint
+    ) {
+      result[result.length - 1] = Object.freeze({
+        ...previous,
+        endCodePoint: piece.endCodePoint,
+      });
+    } else {
+      result.push(Object.freeze({...piece}));
+    }
+  }
+  return Object.freeze(result);
 }
 
 function deriveDraftTitle(text: string, index: number): string {

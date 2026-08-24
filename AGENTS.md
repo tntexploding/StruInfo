@@ -323,7 +323,20 @@ materialized Entry structure. Arbitrary within-Fragment cutting, reordering,
 pre-split source editing, custom parsers/rules and post-materialization
 restructuring remain later boundaries.
 
-The planned M1E-3A-D provider increment and M1E-4A manual grouping increment are
+ADR 0017 completes M1E-4B by extending the same pre-materialization workbench to
+half-open Unicode-scalar ranges inside immutable Fragments. Requests contain
+only bounded titles, Fragment identities and `[startCodePoint, endCodePoint)`
+ranges; the server requires a complete ordered partition and reconstructs every
+body from local evidence. Forward migration `000017` stores optional one-to-one
+range rows, while missing rows continue to mean a complete Fragment for legacy,
+deterministic and accepted-AI Entries. Entry Bundle v3 carries the eighth Entry
+table and upgrades v1/v2 with empty range state, so the full personal-data
+package now covers 56 workspace tables. The rule version is
+`struinfo.entry-split.manual-range.v1`. This increment does not rewrite evidence,
+reorder sources, save pre-split source edits, introduce a Provider/dependency or
+restructure already materialized Entries.
+
+The planned M1E-3A-D provider increment and M1E-4A/4B manual grouping increments are
 now complete. The next product task must come from direct owner use or another
 explicitly accepted narrow boundary; do not infer a generic AI,
 automatic-acceptance, private-content transfer, query synthesis, Embedding, or

@@ -27,8 +27,8 @@ import {
   searchCurrentInformationEntries,
   type CurrentInformationEntry,
   type EntryDomainKeyword,
-  type EntryFragmentGroupInput,
   type EntryTypeKeyword,
+  type ManualEntryFragmentGroupInput,
   type InformationEntryAssociationAction,
   type InformationEntryAssociationPolicy,
   type InformationEntryAssociationRepositoryPort,
@@ -1741,7 +1741,7 @@ function decodeManualEntrySplitBody(body: unknown):
   | Readonly<{
       snapshotId: string;
       includePrivate: boolean;
-      groups: readonly Readonly<EntryFragmentGroupInput>[];
+      groups: readonly Readonly<ManualEntryFragmentGroupInput>[];
     }>
   | undefined {
   if (
@@ -1755,28 +1755,42 @@ function decodeManualEntrySplitBody(body: unknown):
   ) {
     return undefined;
   }
-  const groups: Readonly<EntryFragmentGroupInput>[] = [];
+  const groups: Readonly<ManualEntryFragmentGroupInput>[] = [];
   for (const value of body.groups) {
     if (
       !isRecord(value) ||
       typeof value.titlePath !== 'string' ||
-      !Array.isArray(value.fragmentIds) ||
-      value.fragmentIds.length < 1
+      !Array.isArray(value.fragments) ||
+      value.fragments.length < 1
     ) {
       return undefined;
     }
-    const rawFragmentIds: unknown[] = value.fragmentIds;
-    const fragmentIds: string[] = [];
-    for (const fragmentId of rawFragmentIds) {
-      if (typeof fragmentId !== 'string' || !CANONICAL_UUID.test(fragmentId)) {
+    const fragments = [];
+    for (const rawFragment of value.fragments) {
+      if (
+        !isRecord(rawFragment) ||
+        typeof rawFragment.fragmentId !== 'string' ||
+        !CANONICAL_UUID.test(rawFragment.fragmentId) ||
+        !Number.isSafeInteger(rawFragment.startCodePoint) ||
+        !Number.isSafeInteger(rawFragment.endCodePoint) ||
+        (rawFragment.startCodePoint as number) < 0 ||
+        (rawFragment.endCodePoint as number) <=
+          (rawFragment.startCodePoint as number)
+      ) {
         return undefined;
       }
-      fragmentIds.push(fragmentId);
+      fragments.push(
+        Object.freeze({
+          fragmentId: rawFragment.fragmentId,
+          startCodePoint: rawFragment.startCodePoint as number,
+          endCodePoint: rawFragment.endCodePoint as number,
+        }),
+      );
     }
     groups.push(
       Object.freeze({
         titlePath: value.titlePath,
-        fragmentIds: Object.freeze(fragmentIds),
+        fragments: Object.freeze(fragments),
       }),
     );
   }

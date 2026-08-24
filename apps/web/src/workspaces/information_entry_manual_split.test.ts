@@ -3,8 +3,11 @@ import {describe, expect, it} from 'vitest';
 import type {EvidenceSnapshot} from '../api/m1c_api_contract.js';
 import {
   createManualSplitDraft,
+  manualSplitCaretCodePoint,
+  manualSplitPieceText,
   mergeManualSplitGroups,
   splitManualSplitGroup,
+  splitManualSplitPiece,
 } from './information_entry_manual_split_model.js';
 
 const FIRST_ID = '55555555-5555-4555-8555-555555555555';
@@ -20,13 +23,13 @@ describe('InformationEntryManualSplit draft operations', () => {
     ]);
     expect(
       initial.flatMap((group) =>
-        group.fragments.map((fragment) => fragment.fragmentId),
+        group.pieces.map((piece) => piece.fragment.fragmentId),
       ),
     ).toEqual([FIRST_ID, SECOND_ID]);
 
     const merged = mergeManualSplitGroups(initial, 1);
     expect(merged).toHaveLength(1);
-    expect(merged[0]?.fragments.map((fragment) => fragment.fragmentId)).toEqual(
+    expect(merged[0]?.pieces.map((piece) => piece.fragment.fragmentId)).toEqual(
       [FIRST_ID, SECOND_ID],
     );
 
@@ -34,6 +37,34 @@ describe('InformationEntryManualSplit draft operations', () => {
     expect(restored).toHaveLength(2);
     expect(restored[1]?.titlePath).toBe('Second section');
     expect(splitManualSplitGroup(restored, 0, 0)).toBe(restored);
+  });
+
+  it('converts a UTF-16 caret to a Unicode scalar boundary and splits one Fragment', () => {
+    const original = createManualSplitDraft(snapshot())[0]?.pieces[0];
+    if (original === undefined) throw new Error('Synthetic piece missing.');
+    const piece = Object.freeze({
+      ...original,
+      fragment: Object.freeze({
+        ...original.fragment,
+        selectedText: 'A😀Z',
+      }),
+      startCodePoint: 0,
+      endCodePoint: 3,
+    });
+    const groups = Object.freeze([
+      Object.freeze({titlePath: 'Combined', pieces: Object.freeze([piece])}),
+    ]);
+
+    expect(manualSplitCaretCodePoint(piece, 3)).toBe(2);
+    expect(manualSplitCaretCodePoint(piece, 2)).toBeUndefined();
+    const split = splitManualSplitPiece(groups, 0, 0, 2);
+    expect(
+      split.flatMap((group) => group.pieces.map(manualSplitPieceText)),
+    ).toEqual(['A😀', 'Z']);
+    const rejoined = mergeManualSplitGroups(split, 1);
+    expect(rejoined[0]?.pieces).toMatchObject([
+      {startCodePoint: 0, endCodePoint: 3},
+    ]);
   });
 });
 

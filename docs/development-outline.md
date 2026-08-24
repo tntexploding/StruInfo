@@ -1,6 +1,6 @@
 # StruInfo 开发大纲
 
-- 状态：M1E-4A 人工 Fragment 分组与原子 Entry 物化已实现
+- 状态：M1E-4B Fragment 内人工边界与原子 Entry 物化已实现
 - 最近更新：2026-08-24
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
@@ -20,7 +20,8 @@
   [ADR 0013](adr/0013-openai-entry-tag-proposals.md)、
   [ADR 0014](adr/0014-openai-entry-association-proposals.md)、
   [ADR 0015](adr/0015-openai-entry-split-proposals.md)、
-  [ADR 0016](adr/0016-manual-entry-fragment-grouping.md)
+  [ADR 0016](adr/0016-manual-entry-fragment-grouping.md)、
+  [ADR 0017](adr/0017-manual-within-fragment-entry-boundaries.md)
 
 ## 1. 结论
 
@@ -50,7 +51,7 @@ M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁
 [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化正式知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求；[ADR 0007](adr/0007-information-entry-first-document-processing.md) 把普通文档主线重定向为 Entry-first。ADR 0008 随后把普通 Entry、文档标签和人工联系收敛为当前成品态与可携带个人数据，ADR 0009 删除了没有活动调用方的旧 Curation/Knowledge 应用运行时。ADR 0010 将新的所有者正式知识页定义为有界中心图谱；ADR 0011 进一步允许确定性相似联系
 直接成为可编辑图谱边，并让用户编辑或 block 优先于后续重建。
 
-当前产品已经提供导入、确定性/人工拆分、标签、联系、查询、正式 Entry 图谱、精确来源、隐私范围与完整个人数据包。M1E-2 复用 Association 投影与 override，实现最高匹配中心、有界图/列表、用户关系命令和 Association Bundle v3；M1E-3A–D 增加任务状态及可选的拆分、标签和 selected-pair 联系提案；M1E-4A 让用户在首次 Entry 物化前直接合并或重新拆开既有 Fragment 分组并编辑标题。活动工作区目前按所有者要求保持零业务数据，旧资料只存在于项目目录外的恢复归档。
+当前产品已经提供导入、确定性/人工拆分、标签、联系、查询、正式 Entry 图谱、精确来源、隐私范围与完整个人数据包。M1E-2 复用 Association 投影与 override，实现最高匹配中心、有界图/列表、用户关系命令和 Association Bundle v3；M1E-3A–D 增加任务状态及可选的拆分、标签和 selected-pair 联系提案；M1E-4A/4B 让用户在首次 Entry 物化前直接合并既有 Fragment、在既有边界或 Fragment 内 Unicode 标量边界拆开并编辑标题。活动工作区目前按所有者要求保持零业务数据，旧资料只存在于项目目录外的恢复归档。
 
 ## 2. 为什么选择这个形态
 
@@ -309,7 +310,7 @@ Blob 边界只接受通过 intrinsic brand 检查的普通字节视图，并立�
 大型正文和媒体优先保留为 Blob 引用，不能通过反复嵌套 base64 形成不可读的 current-version 工件。
 writer contract 与边界测试必须证明每个成功输出都能由相同版本的公开 reader 往返读取；若确定性 encoder 与精确 preflight 已提供同等保证，运行时不要求为每次写入重复解析。
 
-切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload。当前五分区个人数据包包含 36 表 M1C 兼容分区、7 表 Entry v2、2 表 Association v3、10 表 Processing v4，以及引用 Blob 字节和偏好，共覆盖 55 张当前工作区表。Association v3 携带 M1E-2 关系来源、名称和方向；Processing v4 携带闭合的 AI 拆分、标签与关系提案载荷；旧版本继续可读并补为空状态。所有文件仍只落到外部 `exports/`。跨工作区克隆、非空合并和生产灾难恢复仍是独立后续能力。
+切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload。当前五分区个人数据包包含 36 表 M1C 兼容分区、8 表 Entry v3、2 表 Association v3、10 表 Processing v4，以及引用 Blob 字节和偏好，共覆盖 56 张当前工作区表。Association v3 携带 M1E-2 关系来源、名称和方向；Processing v4 携带闭合的 AI 拆分、标签与关系提案载荷；旧版本继续可读并补为空状态。所有文件仍只落到外部 `exports/`。跨工作区克隆、非空合并和生产灾难恢复仍是独立后续能力。
 
 Linux 单机部署可先使用受备份保护的持久卷。
 需要多机或对象存储服务时，再增加 S3 兼容适配器；迁移不能改变 Resource、Snapshot 或 Citation ID。
@@ -632,15 +633,15 @@ import -> snapshot -> document nodes/fragments/media
 
 1. 外部配置选择工作区和数据根；
 2. Markdown/固定 Git 文件进入 Blob、Resource、Snapshot、DocumentNode 与 Fragment；
-3. 用户选择 Snapshot，把 section 确定性物化为 InformationEntry；
+3. 用户选择 Snapshot，把 section 以确定性规则、人工 Fragment/标量区间分组或已接受 AI 提案物化为 InformationEntry；
 4. 标签页编辑 Entry 成品态、三维标签和有用/有趣评分，并维护外部偏好；
 5. Document 标签从当前 Entry 聚合或由用户覆盖；
 6. 联系页重建可解释投影，并逐对增强、削弱、屏蔽或恢复；
 7. 查询页按文本、标签、来源、时间、隐私和最多两跳联系稳定分页，并返回精确证据；
 8. 正式知识页搜索最高匹配 Entry，组合有界自动/用户关系图谱，支持图/列表、编辑、隐藏、恢复、创建和来源回看；
-9. 个人数据包导出/恢复 55 张当前表、引用 Blob 字节、当前偏好、Association v3 图谱元数据和 Processing v4 状态。
+9. 个人数据包导出/恢复 56 张当前表、引用 Blob 字节、当前偏好、Entry v3 精确区间、Association v3 图谱元数据和 Processing v4 状态。
 
-旧 Curation、正式 Knowledge 写入/读取和旧 Knowledge 检索应用运行时已经删除；迁移与历史数据只为兼容保留。M1E-2 不恢复这些入口，而是在 Entry/Association 边界完成正式图谱。M1E-3A–D 已完成中性任务、公开 Entry 标签、selected-pair 联系和 selected-Snapshot 拆分提案；下一步来自直接使用或另行接受的窄边界。AI 查询、RAG、向量、自动采集、容器/公网认证和历史测试框架强化都不是当前使用的前置条件。阻断分类继续以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
+旧 Curation、正式 Knowledge 写入/读取和旧 Knowledge 检索应用运行时已经删除；迁移与历史数据只为兼容保留。M1E-2 不恢复这些入口，而是在 Entry/Association 边界完成正式图谱。M1E-3A–D 已完成中性任务、公开 Entry 标签、selected-pair 联系和 selected-Snapshot 拆分提案；M1E-4A/4B 已完成首次物化前的既有 Fragment 与 Fragment 内标量边界人工分组；下一步来自直接使用或另行接受的窄边界。AI 查询、RAG、向量、自动采集、容器/公网认证和历史测试框架强化都不是当前使用的前置条件。阻断分类继续以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
 
 ### 准备门：基础架构（已完成）
 

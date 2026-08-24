@@ -1,6 +1,6 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1E-4A 活动接口
+- 状态：M1E-4B 活动接口
 - 最近核对：2026-08-24
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
@@ -28,7 +28,7 @@ Markdown 正文作为 JSON 字符串提交。原始和规范化字节写入外�
 | `PUT`  | `/api/v1/preferences/review`                                                          | 整体保存当前偏好文件                                                             |
 | `POST` | `/api/v1/imports/markdown`                                                            | 原子导入 Markdown、来源、Blob、结构和 Fragment                                   |
 | `POST` | `/api/v1/entries/materialize`                                                         | 从一个用户选择的空 Snapshot 按 section 规则原子生成 Entry                        |
-| `POST` | `/api/v1/entries/materialize/manual`                                                  | 从标题和完整有序 Fragment 分组原子生成人工 Entry 结构                            |
+| `POST` | `/api/v1/entries/materialize/manual`                                                  | 从标题和完整有序 Fragment 标量区间原子生成人工 Entry 结构                        |
 | `GET`  | `/api/v1/evidence/snapshots/:snapshotId/split-proposals`                              | 列出一个 Snapshot 的有界拆分提案                                                 |
 | `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/start`                        | 用户显式请求一个公开 Snapshot 的 OpenAI 拆分提案                                 |
 | `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/accept`           | 接受提案并从本地 Fragment 物化 Entry                                             |
@@ -80,11 +80,11 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 - `snapshotId`；
 - 明确布尔值 `includePrivate`；
-- 非空 `groups`，每组包含 1–200 Unicode scalar 的 `titlePath` 和非空 canonical Fragment UUID 列表。
+- 非空 `groups`，每组包含 1–200 Unicode scalar 的 `titlePath` 和非空 `fragments`；每个输入显式给出 canonical `fragmentId` 以及半开 Unicode 标量区间 `startCodePoint` / `endCodePoint`。
 
-所有分组展平后必须与第一结构按来源排序的全部 section Fragment 完全相等。客户端不提交正文；服务端从本地 Fragment 以两个换行重建每组正文，保留 Snapshot 隐私并记录 `struinfo.entry-split.manual-group.v1`。成功返回 `created` 或稳定重放 `existing` 及生成的当前 Entry。无效覆盖返回 `422/manual_split_invalid`；确定性、人工或已接受 AI 路径已先生成结构时返回 `409/split_structure_already_materialized`，已有 Entry 不变。
+所有区间展平后必须按来源顺序完整分割第一结构的全部 section Fragment：从零开始、相邻区间相接并在各 Fragment 标量长度处结束，不得缺失、重叠或重排。客户端不提交正文；服务端从本地 Fragment 区间重建每组正文，同一 Fragment 的相邻片段直接连接，不同 Fragment 之间保留两个换行，并记录 `struinfo.entry-split.manual-range.v1`。成功返回 `created` 或稳定重放 `existing` 及生成的当前 Entry。无效覆盖返回 `422/manual_split_invalid`；确定性、人工或已接受 AI 路径已先生成结构时返回 `409/split_structure_already_materialized`，已有 Entry 不变。
 
-四个 `/evidence/snapshots/:snapshotId/split-proposals` 路由提供列表、显式启动、接受和拒绝。start 只允许用户当前选择的公开、尚未物化 Entry 的 Snapshot；Provider 只收到按结构顺序排列的 section Fragment ordinal 与正文，不收到任何本地标识。响应是连续、不重叠、完整覆盖的闭合分组；界面用本地精确 Fragment 审阅。accept 从本地 Fragment 重建标题/正文并调用同一空 Snapshot Entry 物化边界，reject 不创建 Entry。私密 Snapshot 在 Blob 读取和 fetch 前拒绝。当前仍没有 Fragment 内任意字符范围、来源重排、全文保存修改、可替换拆分规则或已有 Entry 结构迁移接口。
+四个 `/evidence/snapshots/:snapshotId/split-proposals` 路由提供列表、显式启动、接受和拒绝。start 只允许用户当前选择的公开、尚未物化 Entry 的 Snapshot；Provider 只收到按结构顺序排列的 section Fragment ordinal 与正文，不收到任何本地标识。响应是连续、不重叠、完整覆盖的闭合分组；界面用本地精确 Fragment 审阅。accept 从本地 Fragment 重建标题/正文并调用同一空 Snapshot Entry 物化边界，reject 不创建 Entry。私密 Snapshot 在 Blob 读取和 fetch 前拒绝。当前人工路径支持 Fragment 内 Unicode 标量边界；AI 提案仍以完整 Fragment 分组。来源重排、全文保存修改、可替换拆分规则和已有 Entry 结构迁移接口仍未实现。
 
 ### 3.3 标签
 
@@ -146,7 +146,7 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 ## 5. 个人数据包
 
-export 接口生成当前五分区 Bundle，包含 55 张当前工作区表、被引用的 Blob 字节和含版本化联系策略的当前偏好文件。Processing v4 section 携带三张任务表、三张 typed tag proposal 表、一张 typed association proposal 表和三张 typed split proposal 表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1/v2/v3 保持可读，缺失的新表恢复为空状态。
+export 接口生成当前五分区 Bundle，包含 56 张当前工作区表、被引用的 Blob 字节和含版本化联系策略的当前偏好文件。Entry v3 section 携带可选精确 Fragment 标量区间；Processing v4 section 携带三张任务表、三张 typed tag proposal 表、一张 typed association proposal 表和三张 typed split proposal 表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1/v2/v3 保持可读，缺失的新表恢复为空状态。
 
 Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不进入 Git 或应用安装树。
 

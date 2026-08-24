@@ -64,6 +64,12 @@ export interface InformationEntryRevisionValue {
   readonly contentKeywords: readonly Readonly<EntryContentKeyword>[];
   readonly domains: readonly Readonly<EntryDomainAssignment>[];
   readonly fragmentIds: readonly string[];
+  readonly fragmentRanges?: readonly Readonly<EntryFragmentRange>[];
+}
+
+export interface EntryFragmentRange {
+  readonly startCodePoint: number;
+  readonly endCodePoint: number;
 }
 
 export interface CurrentInformationEntry {
@@ -95,6 +101,15 @@ export interface EntryFragmentGroupInput {
 }
 
 export type AiSplitEntryGroupInput = EntryFragmentGroupInput;
+
+export interface ManualEntryFragmentInput extends EntryFragmentRange {
+  readonly fragmentId: string;
+}
+
+export interface ManualEntryFragmentGroupInput {
+  readonly titlePath: string;
+  readonly fragments: readonly Readonly<ManualEntryFragmentInput>[];
+}
 
 export interface InformationEntryRevisionWrite {
   readonly workspaceId: string;

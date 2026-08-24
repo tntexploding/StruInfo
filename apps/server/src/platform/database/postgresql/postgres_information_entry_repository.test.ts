@@ -24,7 +24,11 @@ describe('PostgresInformationEntryRepository', () => {
         return rows({workspace_id: WORKSPACE_ID});
       }
       if (sql.includes('information_entry_fragment_input')) {
-        return rows({fragment_id: FRAGMENT_ID});
+        return rows({
+          fragment_id: FRAGMENT_ID,
+          start_code_point: null,
+          end_code_point: null,
+        });
       }
       if (sql.includes('FROM struinfo.information_entry')) {
         return rows({
@@ -51,9 +55,40 @@ describe('PostgresInformationEntryRepository', () => {
     ).toBe(true);
     expect(statements.some((sql) => sql.startsWith('INSERT INTO'))).toBe(false);
   });
+
+  it('writes a typed range row for a ranged source materialization', async () => {
+    const statements: string[] = [];
+    const pool = createPool((sql) => {
+      statements.push(sql);
+      if (sql.includes('FROM struinfo.workspace WHERE')) {
+        return rows({workspace_id: WORKSPACE_ID});
+      }
+      if (sql.startsWith('INSERT INTO')) {
+        return {rows: [], rowCount: 1};
+      }
+      return rows();
+    });
+    const repository = new PostgresInformationEntryRepository(pool);
+
+    await expect(
+      repository.materializeEntries([
+        materializeRow([{startCodePoint: 2, endCodePoint: 8}]),
+      ]),
+    ).resolves.toEqual({outcome: 'created', createdCount: 1});
+    expect(
+      statements.some((sql) =>
+        sql.startsWith('INSERT INTO struinfo.information_entry_fragment_range'),
+      ),
+    ).toBe(true);
+  });
 });
 
-function materializeRow(): Readonly<InformationEntryMaterializeRow> {
+function materializeRow(
+  fragmentRanges?: readonly Readonly<{
+    startCodePoint: number;
+    endCodePoint: number;
+  }>[],
+): Readonly<InformationEntryMaterializeRow> {
   return Object.freeze({
     workspaceId: WORKSPACE_ID,
     entryId: ENTRY_ID,
@@ -71,6 +106,9 @@ function materializeRow(): Readonly<InformationEntryMaterializeRow> {
       contentKeywords: Object.freeze([]),
       domains: Object.freeze([]),
       fragmentIds: Object.freeze([FRAGMENT_ID]),
+      ...(fragmentRanges === undefined
+        ? {}
+        : {fragmentRanges: Object.freeze(fragmentRanges)}),
     }),
   });
 }

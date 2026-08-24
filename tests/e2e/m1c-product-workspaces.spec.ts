@@ -6,6 +6,64 @@ const SNAPSHOT_ID = '33333333-3333-4333-8333-333333333333';
 const ENTRY_ID = '44444444-4444-4444-8444-444444444444';
 const REVISION_ID = '55555555-5555-4555-8555-555555555555';
 const FRAGMENT_ID = '66666666-6666-4666-8666-666666666666';
+const STRUCTURE_ID = '77777777-7777-4777-8777-777777777777';
+const NODE_ID = '88888888-8888-4888-8888-888888888888';
+const SYNTHETIC_FRAGMENT_TEXT = 'A😀Z';
+
+const SYNTHETIC_SNAPSHOT = {
+  workspaceId: WORKSPACE_ID,
+  snapshotId: SNAPSHOT_ID,
+  resourceId: RESOURCE_ID,
+  resourceKind: 'manual_text' as const,
+  sourceKey: 'synthetic-split-source',
+  canonicalUri: 'https://example.invalid/split',
+  capturedAt: '2026-08-23T00:00:00.000Z',
+  fragmentCount: 1,
+  rawSha256: '1'.repeat(64),
+  canonicalContentSha256: '2'.repeat(64),
+  canonicalizationVersion: 'synthetic-v1',
+  mediaType: 'text/markdown',
+  structures: [
+    {
+      structureId: STRUCTURE_ID,
+      parserName: 'synthetic',
+      parserVersion: '1',
+      textNormalizationVersion: 'synthetic-v1',
+      structureSha256: '3'.repeat(64),
+      textBlob: {
+        algorithm: 'sha256' as const,
+        digest: '4'.repeat(64),
+        byteLength: 6,
+      },
+      normalizedText: SYNTHETIC_FRAGMENT_TEXT,
+      fragments: [
+        {
+          fragmentId: FRAGMENT_ID,
+          structureId: STRUCTURE_ID,
+          nodeId: NODE_ID,
+          nodeKind: 'section' as const,
+          codePointRange: {start: 0, end: 3},
+          lineRange: {start: 1, end: 1},
+          selectedTextSha256: '5'.repeat(64),
+          selectedText: SYNTHETIC_FRAGMENT_TEXT,
+        },
+      ],
+    },
+  ],
+};
+
+const SYNTHETIC_DOCUMENT = {
+  workspaceId: WORKSPACE_ID,
+  snapshotId: SNAPSHOT_ID,
+  resourceId: RESOURCE_ID,
+  resourceKind: 'manual_text' as const,
+  sourceKey: 'synthetic-split-source',
+  canonicalUri: 'https://example.invalid/split',
+  capturedAt: '2026-08-23T00:00:00.000Z',
+  fragmentCount: 1,
+  entryCount: 0,
+  annotatedEntryCount: 0,
+};
 
 const SYNTHETIC_ENTRY = {
   workspaceId: WORKSPACE_ID,
@@ -31,8 +89,12 @@ const SYNTHETIC_ENTRY = {
   },
 };
 
-async function installCurrentProductApi(page: Page) {
+async function installCurrentProductApi(
+  page: Page,
+  options?: Readonly<{manualSplitRequests?: string[]}>,
+) {
   const productRequests: string[] = [];
+  const manualSplitEnabled = options?.manualSplitRequests !== undefined;
   let associationPolicy = {
     revision: 0,
     version: 'struinfo.entry-association.local-index.v1',
@@ -81,7 +143,39 @@ async function installCurrentProductApi(page: Page) {
     if (path === '/api/v1/evidence') {
       await route.fulfill({
         contentType: 'application/json',
-        json: {status: 'ok', snapshots: []},
+        json: {
+          status: 'ok',
+          snapshots: manualSplitEnabled ? [SYNTHETIC_SNAPSHOT] : [],
+        },
+        status: 200,
+      });
+      return;
+    }
+    if (
+      manualSplitEnabled &&
+      path === `/api/v1/evidence/snapshots/${SNAPSHOT_ID}`
+    ) {
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {status: 'ok', snapshot: SYNTHETIC_SNAPSHOT},
+        status: 200,
+      });
+      return;
+    }
+    if (
+      manualSplitEnabled &&
+      path === '/api/v1/entries/materialize/manual' &&
+      request.method() === 'POST'
+    ) {
+      options.manualSplitRequests.push(request.postData() ?? '');
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {
+          status: 'created',
+          snapshotId: SNAPSHOT_ID,
+          createdCount: 2,
+          entries: [],
+        },
         status: 200,
       });
       return;
@@ -207,9 +301,10 @@ async function installCurrentProductApi(page: Page) {
       return;
     }
     if (path === '/api/v1/entry-documents') {
+      const documents = manualSplitEnabled ? [SYNTHETIC_DOCUMENT] : [];
       await route.fulfill({
         contentType: 'application/json',
-        json: {status: 'ok', totalCount: 0, documents: []},
+        json: {status: 'ok', totalCount: documents.length, documents},
         status: 200,
       });
       return;
@@ -301,4 +396,69 @@ test('edits association weights and opens the complete private-document channel'
   expect(productRequests).toContain(
     'POST /api/v1/entries/associations/rebuild',
   );
+});
+
+test('splits one immutable Fragment at an explicit caret and submits exact scalar ranges', async ({
+  page,
+}) => {
+  const manualSplitRequests: string[] = [];
+  await installCurrentProductApi(page, {manualSplitRequests});
+  await page.setViewportSize({width: 390, height: 844});
+  await page.goto('/');
+
+  const navigation = page.getByRole('navigation', {name: '产品工作区'});
+  await navigation.getByRole('button', {name: '拆分', exact: true}).click();
+  await page
+    .getByRole('button', {name: /synthetic-split-source/u})
+    .first()
+    .click();
+
+  await expect(
+    page.getByRole('heading', {name: '人工拆分工作台', exact: true}),
+  ).toBeVisible();
+  const sourceText = page.getByLabel('条目 1 来源段 1 正文');
+  await expect(sourceText).toHaveValue(SYNTHETIC_FRAGMENT_TEXT);
+  await sourceText.evaluate((element) => {
+    if (!(element instanceof HTMLTextAreaElement))
+      throw new Error('Expected a textarea.');
+    element.focus();
+    element.setSelectionRange(3, 3);
+    element.dispatchEvent(new Event('select', {bubbles: true}));
+    element.dispatchEvent(
+      new KeyboardEvent('keyup', {bubbles: true, key: 'ArrowLeft'}),
+    );
+  });
+  await expect(sourceText).toHaveJSProperty('selectionStart', 3);
+  await page
+    .getByRole('button', {name: '在光标处分开', exact: true})
+    .first()
+    .click();
+
+  await expect(
+    page.getByText('2 条 · 2 个来源段', {exact: true}),
+  ).toBeVisible();
+  await page
+    .getByRole('button', {name: '保存人工拆分并生成 2 条', exact: true})
+    .click();
+  await expect(page.getByText('人工拆分已保存', {exact: true})).toBeVisible();
+
+  const submitted = JSON.parse(manualSplitRequests[0] ?? 'null') as unknown;
+  expect(submitted).toEqual({
+    snapshotId: SNAPSHOT_ID,
+    includePrivate: false,
+    groups: [
+      {
+        titlePath: SYNTHETIC_FRAGMENT_TEXT,
+        fragments: [
+          {fragmentId: FRAGMENT_ID, startCodePoint: 0, endCodePoint: 2},
+        ],
+      },
+      {
+        titlePath: 'Z',
+        fragments: [
+          {fragmentId: FRAGMENT_ID, startCodePoint: 2, endCodePoint: 3},
+        ],
+      },
+    ],
+  });
 });
