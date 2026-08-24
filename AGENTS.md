@@ -338,7 +338,9 @@ restructure already materialized Entries.
 
 ADR 0018 completes M1E-5A with one explicit local UTF-8 text-file capture path. The Import page accepts one `.md`, `.markdown` or `.txt` selected or dropped by the owner, validates the existing 1 MiB/UTF-8/text boundary in the browser and sends canonical Base64 only for `uploaded_file`. The local service decodes before any Evidence write and reuses the existing external Blob, immutable Snapshot/Fragment, privacy and idempotent import boundary. An unprefixed capture preserves exact selected bytes; an explicit prefix is a visibly composed Snapshot. Default identity uses the base file name plus SHA-256 and never transmits a machine directory path. Retry identity includes a stable capture time. This increment adds no migration, dependency, repository-owned upload directory or real fixture; PDF/DOCX/OCR, multi-file capture, directory watching and cloud sync remain later boundaries.
 
-M1E-3A-D provider work, M1E-4A/4B manual grouping and M1E-5A local-file import are
+ADR 0019 completes M1E-5B with local .html, .htm and text-bearing .pdf capture. The exact selected bytes remain the external Snapshot raw Blob while a server-owned UTF-8 Markdown projection feeds the existing CommonMark/Fragment/Split path. HTML extraction keeps semantic reading content, excludes active/hidden content and never fetches links; PDF extraction is page-oriented text-layer only. Optional preface text changes only the HTML/PDF projection. `parse5`, `pdfjs-dist` and `entities` are the admitted dependency increment, while PDF.js's unused optional native Canvas dependency is explicitly ignored. OCR, complex visual reconstruction, Office and batch ingestion remain later boundaries.
+
+M1E-3A-D provider work, M1E-4A/4B manual grouping and M1E-5A/5B local document import are
 now complete. The next product task must come from direct owner use or another
 explicitly accepted narrow boundary; do not infer a generic AI,
 automatic-acceptance, private-content transfer, query synthesis, Embedding, or

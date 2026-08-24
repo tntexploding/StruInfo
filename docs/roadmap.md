@@ -1,6 +1,6 @@
 # StruInfo 分阶段计划
 
-- 状态：M1E-5A 本地 UTF-8 文本文件导入已实现；全部审核流程延期，继续无数据开发
+- 状态：M1E-5B 本地 HTML/PDF 文字层导入已实现；全部审核流程延期，继续无数据开发
 - 最近更新：2026-08-24
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
@@ -21,18 +21,18 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 
 ## 当前交付真值表
 
-| 范围                           | 状态   | 说明                                                                                                   |
-| ------------------------------ | ------ | ------------------------------------------------------------------------------------------------------ |
-| Evidence/Blob 与 Markdown 导入 | 已实现 | 手工文本、固定 Git Markdown、本地 UTF-8 `.md`/`.markdown`/`.txt`、不可变 Snapshot、结构和精确 Fragment |
-| InformationEntry               | 已实现 | 确定性/人工/AI 首次物化、当前成品态、三维标签、两项评分、文档标签、隐私和来源                          |
-| Entry 联系                     | 已实现 | 确定性投影、分项解释、外部版本化权重和逐对人工 override                                                |
-| Entry 查询                     | 已实现 | Entry 组合查询、绑定分页及显式隐私范围内的独立完整文档结果                                             |
-| 完整个人数据包                 | 已实现 | 56 表、引用 Blob 字节、偏好、Entry v3、Association v3 与 Processing v4                                 |
-| 旧 Curation/Knowledge 运行时   | 已退役 | 迁移和数据兼容保留，活动代码/HTTP/Web 已删除                                                           |
-| 正式知识页面                   | 已实现 | 最高匹配中心、有界图/列表、来源、用户关系编辑、隐私范围与 selected-pair AI 联系提案                    |
-| ProcessingRun / AI 提案        | 已实现 | 中性任务状态、取消；OpenAI split/tags/selected-pair association 的启动、列表、接受与拒绝               |
-| 其他 AI、模糊/向量/RAG、采集   | 未实现 | AI 查询综合、Embedding 与自动采集仍不作为主线前置条件                                                  |
-| 公网/容器/生产发布             | 未完成 | 进入相应部署或分发阶段时独立验收                                                                       |
+| 范围                         | 状态   | 说明                                                                                                                                   |
+| ---------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Evidence/Blob 与文档导入     | 已实现 | 手工/固定 Git Markdown；本地 `.md`/`.markdown`/`.txt`/`.html`/`.htm`/`.pdf`；原始 Blob、文本投影、不可变 Snapshot、结构与精确 Fragment |
+| InformationEntry             | 已实现 | 确定性/人工/AI 首次物化、当前成品态、三维标签、两项评分、文档标签、隐私和来源                                                          |
+| Entry 联系                   | 已实现 | 确定性投影、分项解释、外部版本化权重和逐对人工 override                                                                                |
+| Entry 查询                   | 已实现 | Entry 组合查询、绑定分页及显式隐私范围内的独立完整文档结果                                                                             |
+| 完整个人数据包               | 已实现 | 56 表、引用 Blob 字节、偏好、Entry v3、Association v3 与 Processing v4                                                                 |
+| 旧 Curation/Knowledge 运行时 | 已退役 | 迁移和数据兼容保留，活动代码/HTTP/Web 已删除                                                                                           |
+| 正式知识页面                 | 已实现 | 最高匹配中心、有界图/列表、来源、用户关系编辑、隐私范围与 selected-pair AI 联系提案                                                    |
+| ProcessingRun / AI 提案      | 已实现 | 中性任务状态、取消；OpenAI split/tags/selected-pair association 的启动、列表、接受与拒绝                                               |
+| 其他 AI、模糊/向量/RAG、采集 | 未实现 | AI 查询综合、Embedding 与自动采集仍不作为主线前置条件                                                                                  |
+| 公网/容器/生产发布           | 未完成 | 进入相应部署或分发阶段时独立验收                                                                                                       |
 
 ## 当前开发停点
 
@@ -40,7 +40,7 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 
 M1E-3B、M1E-3C 和 M1E-3D 已依次完成单个公开 Entry 标签提案、用户明确选择的公开 Entry 对联系提案，以及用户明确选择的公开 Snapshot 拆分提案。三者都只创建 typed proposal，只有人工接受才调用现有 Entry/图谱命令；私密内容在网络前拒绝。
 
-M1E-4A/4B 已补齐无 Provider 的人工拆分：用户可在首次 Entry 物化前按既有 Fragment 边界或 Fragment 内 Unicode 标量边界合并、重新拆开并改标题，服务端从本地证据重建正文，三种物化方式共享唯一空 Snapshot 原子边界。M1E-5A 又把一份本地 UTF-8 `.md`/`.markdown`/`.txt` 文件接入相同 Blob → Snapshot → Fragment → Split 主链，并保持失败重试身份稳定。下一增量应来自无数据直接使用暴露的产品缺口或另行接受的窄边界；第二 Provider、自动接受、私密外发、查询综合、Embedding 和 RAG 继续后置。
+M1E-4A/4B 已补齐无 Provider 的人工拆分：用户可在首次 Entry 物化前按既有 Fragment 边界或 Fragment 内 Unicode 标量边界合并、重新拆开并改标题，服务端从本地证据重建正文，三种物化方式共享唯一空 Snapshot 原子边界。M1E-5A/5B 又把一份本地 Markdown、纯文本、HTML 或带文字层 PDF 接入相同 Blob → Snapshot → Fragment → Split 主链；HTML/PDF 保留完整原始 Blob并产生本地文本投影，失败重试身份保持稳定。下一增量应来自无数据直接使用暴露的产品缺口或另行接受的窄边界；第二 Provider、自动接受、私密外发、查询综合、Embedding 和 RAG 继续后置。
 
 ## 已完成主线：M1D Entry 网络
 
@@ -141,7 +141,7 @@ M1E-2 按以下最小顺序实现，不恢复已删除的旧高级编辑器或�
 
 第一版不渲染全库图，不引入图数据库、AI、Embedding、RAG、复杂本体或物理布局依赖。关系
 标签属于外部工作区数据，不作为代码常量或迁移 seed。已按真实使用插入的隐私全文查询和联系
-策略编辑不新增数据库迁移或依赖。M1E-4A/4B 已补齐既有 Fragment 与 Fragment 内 Unicode 标量边界上的人工结构编辑；剩余可插入缺口是拆分前全文保存修改、来源重排、自定义规则、已物化结构重组和 HTML/PDF/Office/OCR 等更多导入格式。容器/
+策略编辑不新增数据库迁移或依赖。M1E-4A/4B 已补齐既有 Fragment 与 Fragment 内 Unicode 标量边界上的人工结构编辑；剩余可插入缺口是拆分前全文保存修改、来源重排、自定义规则、已物化结构重组和 Office/OCR/复杂版面还原等更多导入格式。容器/
 Linux、正式 TM2 和发布许可继续后置，除非当前产品路径出现可复现阻断。
 
 ## 已完成增量：M1E-3 Provider-neutral 任务与提案
@@ -186,7 +186,14 @@ ADR 0012 将任务生命周期、产品提案语义和具体 Provider 分开；A
 1. **M1E-5A1 本地选择边界（已完成）**：导入页可选择或拖入单份 `.md`、`.markdown`、`.txt`，在浏览器侧先检查基础文件名、严格 UTF-8、空文本/NUL 和现有 1 MiB 上限；
 2. **M1E-5A2 原始字节与身份（已完成）**：无前置文字时以 canonical Base64 携带所选原始字节，默认来源 key 为基础文件名加 SHA-256，不发送目录路径；显式前置文字产生可见的组合 Snapshot；
 3. **M1E-5A3 既有原子导入（已完成）**：服务端只允许 `uploaded_file` 使用 Base64，解码后复用现有 Evidence/Blob/CommonMark/Fragment 导入和隐私传播，不新增迁移或依赖；
-4. **M1E-5A4 可恢复交互（已完成）**：文件摘要、只读预览、错误反馈、移除和失败重试均在原表单内完成；重试复用 command/resource/snapshot/capturedAt，成功后进入已有 Split 队列。PDF/DOCX/OCR、多文件、目录监视和云同步继续后置。
+4. **M1E-5A4 可恢复交互（已完成）**：文件摘要、只读预览、错误反馈、移除和失败重试均在原表单内完成；重试复用 command/resource/snapshot/capturedAt，成功后进入已有 Split 队列。DOCX/ODT、OCR、复杂 PDF 版面/图片还原、多文件、目录监视和云同步继续后置。
+
+## 当前增量：M1E-5B 本地 HTML/PDF 文字层导入（已完成）
+
+1. **M1E-5B1 闭合文件边界（已完成）**：导入页接受单份 `.html`、`.htm`、`.pdf`；原始输入与投影均受 1 MiB 边界约束，HTML 必须为严格 UTF-8，PDF 必须具有合法签名和可读取文字层；
+2. **M1E-5B2 原始证据与投影（已完成）**：HTML/PDF 原始字节完整写入外部 Blob；服务端生成单独 Markdown 投影并复用 CommonMark/Fragment 管线，前置文字只进入投影；
+3. **M1E-5B3 格式适配（已完成）**：HTML 提取语义正文并跳过脚本、样式、表单、嵌入/隐藏内容且不抓取外链；PDF.js 按页提取文字层并保留页标记；
+4. **M1E-5B4 边界保持（已完成）**：不新增迁移、数据目录或真实 fixture；隐私、幂等、Split 和 Bundle 语义不变。`parse5@8.0.1`、`pdfjs-dist@6.2.108` 与 `entities@8.0.0` 已纳入依赖记录，未使用的原生 Canvas 可选依赖被排除。OCR、Office、复杂版面还原和批量导入继续后置。
 
 ## 历史基线：M1C 可运行核心闭环（运行时已退役）
 

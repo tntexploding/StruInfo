@@ -653,6 +653,8 @@ export type MarkdownImportResponse =
       budget?: string;
     }>;
 
+export type DocumentImportResponse = MarkdownImportResponse;
+
 export interface WorkspaceBundleTransferSummary {
   readonly fileName: string;
   readonly byteLength: number;

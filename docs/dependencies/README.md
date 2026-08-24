@@ -1,8 +1,8 @@
 # Dependency Governance
 
-- Status: tracked foundation inventory plus the M1A Markdown dependency increment
+- Status: tracked foundation inventory plus the M1A Markdown and M1E-5B document-import dependency increments
 - Contracts: `C-M0-S-r2`, `C-SLICE-A-MARKDOWN-r2`
-- Review date: 2026-08-11
+- Review date: 2026-08-24
 - Distribution status: not authorized
 
 This directory makes the admitted dependency decision durable. Package manifests
@@ -29,19 +29,19 @@ unchanged. No pnpm setup or cache action is admitted.
 
 ## Direct package ownership
 
-The unique admitted set is exactly 11 runtime and 18 development packages.
+The unique admitted set is exactly 13 runtime and 18 development packages.
 Workspace-specific packages are declared by the workspace that imports or
 executes them; the root does not provide undeclared application dependencies.
 Some development identities occur in more than one importer when both the root
 tool configuration and a workspace consume the same exact package.
 
-| Owner                   | Runtime packages                                                                                                                                                                                                     | Development packages                                                                                                                                                                                                                                                                             |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| root shared tools       | none                                                                                                                                                                                                                 | `@eslint/js@10.0.1`, `@playwright/test@1.62.1`, `@types/node@24.13.3`, `eslint@10.8.1`, `eslint-plugin-react-hooks@7.1.1`, `eslint-plugin-react-refresh@0.5.3`, `globals@17.9.0`, `prettier@3.9.6`, `tsx@4.23.11`, `typescript@6.0.3`, `typescript-eslint@8.66.0`, `vite@8.2.1`, `vitest@4.1.10` |
-| `apps/server`           | `@nestjs/common@11.1.28`, `@nestjs/core@11.1.28`, `@nestjs/platform-express@11.1.28`, `drizzle-orm@0.45.2`, `mdast-util-from-markdown@2.0.3`, `pg@8.22.0`, `pg-boss@12.26.3`, `reflect-metadata@0.2.2`, `rxjs@7.8.2` | `@types/express@5.0.6`, `@types/node@24.13.3`, `@types/pg@8.20.3`, `tsx@4.23.11`                                                                                                                                                                                                                 |
-| `apps/web`              | `react@19.2.8`, `react-dom@19.2.8`                                                                                                                                                                                   | `@types/node@24.13.3`, `@types/react@19.2.18`, `@types/react-dom@19.2.4`, `@vitejs/plugin-react@6.0.5`, `tsx@4.23.11`, `vite@8.2.1`                                                                                                                                                              |
-| `packages/contracts`    | none                                                                                                                                                                                                                 | none                                                                                                                                                                                                                                                                                             |
-| `packages/test_support` | none                                                                                                                                                                                                                 | none                                                                                                                                                                                                                                                                                             |
+| Owner                   | Runtime packages                                                                                                                                                                                                                                           | Development packages                                                                                                                                                                                                                                                                             |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| root shared tools       | none                                                                                                                                                                                                                                                       | `@eslint/js@10.0.1`, `@playwright/test@1.62.1`, `@types/node@24.13.3`, `eslint@10.8.1`, `eslint-plugin-react-hooks@7.1.1`, `eslint-plugin-react-refresh@0.5.3`, `globals@17.9.0`, `prettier@3.9.6`, `tsx@4.23.11`, `typescript@6.0.3`, `typescript-eslint@8.66.0`, `vite@8.2.1`, `vitest@4.1.10` |
+| `apps/server`           | `@nestjs/common@11.1.28`, `@nestjs/core@11.1.28`, `@nestjs/platform-express@11.1.28`, `drizzle-orm@0.45.2`, `mdast-util-from-markdown@2.0.3`, `parse5@8.0.1`, `pdfjs-dist@6.2.108`, `pg@8.22.0`, `pg-boss@12.26.3`, `reflect-metadata@0.2.2`, `rxjs@7.8.2` | `@types/express@5.0.6`, `@types/node@24.13.3`, `@types/pg@8.20.3`, `tsx@4.23.11`                                                                                                                                                                                                                 |
+| `apps/web`              | `react@19.2.8`, `react-dom@19.2.8`                                                                                                                                                                                                                         | `@types/node@24.13.3`, `@types/react@19.2.18`, `@types/react-dom@19.2.4`, `@vitejs/plugin-react@6.0.5`, `tsx@4.23.11`, `vite@8.2.1`                                                                                                                                                              |
+| `packages/contracts`    | none                                                                                                                                                                                                                                                       | none                                                                                                                                                                                                                                                                                             |
+| `packages/test_support` | none                                                                                                                                                                                                                                                       | none                                                                                                                                                                                                                                                                                             |
 
 `drizzle-kit`, WebSocket/Swagger packages, routers, UI libraries, loggers,
 deployment helpers, Redis, BullMQ, and Socket.IO are absent. Adding any package
@@ -91,21 +91,41 @@ scripts are not install lifecycle and were not run. Published JavaScript,
 declaration files, and source maps remain ordinary npm package content rather
 than separately bundled third-party binaries.
 
+### HTML/PDF parser dependency increment
+
+`M1E-5B-DOCUMENT-IMPORT` admits `parse5@8.0.1` and
+`pdfjs-dist@6.2.108` as `apps/server` direct runtime packages. The only net-new
+transitive package is `entities@8.0.0`. The three exact public tarballs match
+the lock SHA-512 integrity and the independently computed SHA-256 values kept
+in the SPDX document. Their declared licenses are MIT, Apache-2.0 and
+BSD-2-Clause, and exact legal files are retained under
+`docs/dependencies/licenses/npm/`.
+
+PDF.js declares `@napi-rs/canvas` as optional. StruInfo uses only its data-only
+text extraction path, so `pnpm-workspace.yaml` explicitly lists that package in
+`ignoredOptionalDependencies`. No Canvas package, platform native binding,
+install lifecycle or Wasm/image-rendering capability enters the selected lock
+closure. This exclusion is functional: M1E-5B does not perform OCR or visual
+PDF reconstruction.
+
 ## Lock and lifecycle decision
 
 - Current lock SHA-256:
+  `10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A`.
+- M1E-5B pre-increment lock SHA-256:
   `99F261C35311919380BF6AEF018E0B2A9D076DC7937A5EDE1E0D7F26F56192A0`.
-- Pre-increment baseline lock SHA-256:
+- Foundation pre-M1A lock SHA-256:
   `A783E1C5B2DADD8B653D8E16446847530473D5569BB08830D7FC03D79400880B`.
-- The current graph has 399 package entries and 231 snapshot entries. The
-  Markdown increment adds 32 package entries and 24 materialized snapshot
-  entries, removes none, and introduces no package outside its 34-package
-  runtime closure.
-- The selected Windows x64 and Linux x64/glibc union is 352 packages: the
-  admitted 320-package foundation union plus 32 universal net-new packages.
-- A network-backed 2026-08-11
+- The current graph has 402 package entries and 232 snapshot entries. The
+  M1A Markdown increment remains 32 package entries and 24 materialized
+  snapshots; M1E-5B adds exactly 3 package entries and 1 dependency-bearing
+  snapshot, removes none, and excludes the unused optional Canvas closure.
+- The selected Windows x64 and Linux x64/glibc union is 355 packages: the
+  admitted 320-package foundation union plus 32 Markdown packages and 3
+  universal document-import packages.
+- A network-backed 2026-08-24
   `pnpm audit --audit-level low --json` result reported zero at every severity
-  over all 399 lock packages. This is a point-in-time registry result, not a
+  over all 402 lock packages. This is a point-in-time registry result, not a
   perpetual vulnerability guarantee.
 
 `pnpm-workspace.yaml` owns the pnpm 11 policy. Peer installation is disabled;
@@ -118,23 +138,24 @@ accepted every exact package, so no `minimumReleaseAgeExclude` remains.
 Lifecycle execution is default-deny. The only selected install lifecycle is
 `esbuild@0.28.1` `postinstall`; `allowBuilds` explicitly sets that exact identity
 to `false`. Frozen installation is performed with `--ignore-scripts` as a second
-control. No dependency lifecycle script is authorized, and the Markdown
-increment does not require an `allowBuilds` change.
+control. No dependency lifecycle script is authorized. Neither parser increment requires
+an `allowBuilds` change; the unused PDF.js Canvas optional dependency is skipped
+at resolution/install time.
 
 ## License, notice, and SPDX records
 
 | Tracked artifact                              | SHA-256                                                            |
 | --------------------------------------------- | ------------------------------------------------------------------ |
-| `THIRD_PARTY_NOTICES.md`                      | `F2D9EC875E62B34250414A61F214EAB65728EA4401BB4DFB99FBB6A04EDDF37F` |
-| `sbom/npm-closure.spdx.json`                  | `8220A025E2E934EEBC2F7CA5FD983ADEB5D6D7A739AF1C701CE48F7F4E4DEF52` |
+| `THIRD_PARTY_NOTICES.md`                      | `7C988E6CF55CE62039BC3B9B62EFCD2C0BEF82E21D67BFAE060DD6A164429C9C` |
+| `sbom/npm-closure.spdx.json`                  | `D160C76EE1960299C93FCCB4FB191C82963B6A7DDEF59CA89A32FFC5B2AFC6E8` |
 | `sbom/github-actions-runtime.spdx.json`       | `A5CD5A5DBD820926AB6F77766756ECCB61BBC9B172096D3927392AF5064B3B59` |
 | `evidence/source-license-reconciliation.json` | `3344B7FA8C8C4A90530E6739C835912288F433A5777E63C757281A557BBEAD06` |
 | `evidence/lzma-sdk-7zdec-review.json`         | `9A9A573E009DA1E035A51164524B7B0E213C29708362F2647F254946E63C42A7` |
 
-The npm SPDX describes the root plus 352 selected packages. The actions SPDX
+The npm SPDX describes the root plus 355 selected packages. The actions SPDX
 describes both pinned actions, their 66-package bundled runtime union, and the
 separately licensed LZMA SDK `7zdec.exe` artifact. The tracked legal-material
-tree contains 431 files. Exact notice and source-reconciliation paths are checked
+tree contains 434 files. Exact notice and source-reconciliation paths are checked
 against that tree.
 
 Seven npm entries retain conditional review handling: `caniuse-lite` is
@@ -143,7 +164,8 @@ Seven npm entries retain conditional review handling: `caniuse-lite` is
 retain their parenthesized `(MIT)` expressions. The actions record separately
 preserves `@protobuf-ts/runtime`'s
 `(Apache-2.0 AND BSD-3-Clause)` expression and the public-domain LZMA SDK
-attribution. All 32 net-new Markdown-closure packages are routine-review MIT;
+attribution. All 32 net-new Markdown-closure packages are routine-review MIT. The M1E-5B
+addition is MIT, Apache-2.0 and BSD-2-Clause with exact package legal files;
 none adds a NOTICE file or a source-reconciliation record.
 
 ## Explicit exclusions and release gate
