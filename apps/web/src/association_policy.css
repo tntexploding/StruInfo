@@ -1,6 +1,5 @@
 .association-policy-panel {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--si-space-4);
   margin-block-start: var(--si-space-5);
   padding: var(--si-space-5);
@@ -9,7 +8,6 @@
 }
 
 .association-policy-panel > header {
-  grid-column: 1 / -1;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -29,7 +27,19 @@
   font-size: var(--si-text-xs);
 }
 
-.association-policy-meter label {
+.association-policy-panel form {
+  display: grid;
+  gap: var(--si-space-4);
+}
+
+.association-policy-meter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(5rem, 0.24fr);
+  align-items: end;
+  gap: var(--si-space-3);
+}
+
+.association-policy-meter > label:first-child {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--si-space-2);
@@ -48,17 +58,46 @@
   font-variant-numeric: tabular-nums;
 }
 
-.association-policy-meter input {
+.association-policy-meter input[type='range'] {
   grid-column: 1 / -1;
   inline-size: 100%;
+  min-block-size: var(--si-target-touch);
   accent-color: var(--si-color-signal);
-  opacity: 0.9;
+}
+
+.association-policy-number {
+  display: grid;
+  gap: var(--si-space-2);
+}
+
+.association-policy-number input {
+  inline-size: 100%;
+  min-block-size: var(--si-control-height);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-surface-1);
+  color: var(--si-color-text-primary);
+  font-family: var(--si-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.association-policy-total {
+  margin: 0;
+  padding: var(--si-space-3);
+  border-inline-start: var(--si-rule-medium) solid var(--si-color-signal);
+  color: var(--si-color-text-secondary);
+  background: var(--si-color-surface-1);
+  font-size: var(--si-text-xs);
+}
+
+.association-policy-total--invalid {
+  border-inline-start-color: var(--si-color-danger);
+  color: var(--si-color-danger);
 }
 
 .association-policy-panel dl {
-  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
   border: var(--si-rule-thin) solid var(--si-color-border-subtle);
 }
 
@@ -71,25 +110,37 @@
   border-inline-start: 0;
 }
 
-.association-policy-panel > p {
-  grid-column: 1 / -1;
+.association-policy-panel dt,
+.association-policy-panel dd {
+  margin: 0;
+}
+
+.association-policy-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.association-policy-actions .primary-action {
+  inline-size: 100%;
+}
+
+.association-policy-panel form > p:last-child {
+  margin: 0;
   color: var(--si-color-text-muted);
   font-size: var(--si-text-xs);
 }
 
-@media (max-width: 74.9375rem) {
-  .association-policy-panel {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .association-policy-panel dl,
-  .association-policy-panel > header,
-  .association-policy-panel > p {
-    grid-column: 1;
-  }
-}
-
 @media (max-width: 47.9375rem), (orientation: portrait) {
+  .association-policy-panel,
+  .association-policy-panel > header {
+    align-items: stretch;
+  }
+
+  .association-policy-panel > header {
+    flex-direction: column;
+  }
+
+  .association-policy-meter,
   .association-policy-panel dl {
     grid-template-columns: minmax(0, 1fr);
   }

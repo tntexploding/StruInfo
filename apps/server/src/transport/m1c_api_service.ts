@@ -14,6 +14,7 @@ import {
   deriveInformationDocumentTagRevisionId,
   deriveInformationEntryAssociationOverrideRevisionId,
   deriveInformationEntryRevisionId,
+  informationEntrySearchKey,
   listInformationEntryAssociations as selectInformationEntryAssociations,
   orderedInformationEntryAssociationPair,
   prepareAggregatedInformationDocumentTags,
@@ -25,10 +26,13 @@ import {
   prepareManualEntryRevision,
   prepareSplitInformationEntries,
   searchCurrentInformationEntries,
+  type CurrentInformationEntry,
   type EntryDomainKeyword,
   type EntryTypeKeyword,
   type InformationEntryAssociationAction,
+  type InformationEntryAssociationPolicy,
   type InformationEntryAssociationRepositoryPort,
+  type InformationEntryAssociationRepositorySnapshot,
   type InformationEntryGraphDirection,
   type InformationDocumentTagRepositoryPort,
   type InformationEntryDocumentView,
@@ -41,15 +45,26 @@ import {
   type EvidenceReadRepositoryPort,
   type EvidenceRepositoryPort,
   type EvidenceSnapshotReadState,
+  type EvidenceSnapshotSummary,
   type ImportMarkdownEvidenceInput,
 } from '../modules/evidence/index.js';
+import {
+  AiTagProposalServiceError,
+  type AiTagProposalServicePort,
+  type ProcessingProposal,
+  type ProcessingRun,
+  type ProcessingRunRepositoryPort,
+} from '../modules/processing/index.js';
 import type {BlobStore} from '../storage/blob_store.js';
 import {
+  decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
   decodeReviewQuickTags,
   decodeReviewVocabularyPreferences,
+  DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+  type ReviewAssociationPolicyPreferences,
   type ReviewPreferencesStore,
 } from '../storage/review_preferences_store.js';
 import {
@@ -69,6 +84,8 @@ export interface M1cApiServiceDependencies {
   readonly informationEntryRepository: InformationEntryRepositoryPort;
   readonly informationDocumentTagRepository: InformationDocumentTagRepositoryPort;
   readonly informationEntryAssociationRepository: InformationEntryAssociationRepositoryPort;
+  readonly processingRunRepository: ProcessingRunRepositoryPort;
+  readonly aiTagProposals?: AiTagProposalServicePort;
   readonly workspaceTransfer: M1cWorkspaceTransferPort;
 }
 
@@ -100,6 +117,9 @@ export interface M1cApiServicePort {
     body: unknown,
   ): Promise<M1cHttpResult>;
   rebuildInformationEntryAssociations(body: unknown): Promise<M1cHttpResult>;
+  reviseInformationEntryAssociationPolicy(
+    body: unknown,
+  ): Promise<M1cHttpResult>;
   listInformationEntryAssociations(
     entryId: string,
     includePrivate?: unknown,
@@ -120,6 +140,18 @@ export interface M1cApiServicePort {
     snapshotId: string,
     body: unknown,
   ): Promise<M1cHttpResult>;
+  listProcessingRuns(limit?: unknown): Promise<M1cHttpResult>;
+  cancelProcessingRun(runId: string, body: unknown): Promise<M1cHttpResult>;
+  listAiTagProposals(entryId: string): Promise<M1cHttpResult>;
+  startAiTagProposal(entryId: string, body: unknown): Promise<M1cHttpResult>;
+  acceptAiTagProposal(
+    entryId: string,
+    proposalId: string,
+  ): Promise<M1cHttpResult>;
+  rejectAiTagProposal(
+    entryId: string,
+    proposalId: string,
+  ): Promise<M1cHttpResult>;
   exportWorkspaceBundle(): Promise<M1cHttpResult>;
   restoreWorkspaceBundle(body: unknown): Promise<M1cHttpResult>;
 }
@@ -132,6 +164,140 @@ export class M1cApiService implements M1cApiServicePort {
     this.#dependencies = dependencies;
   }
 
+  async #loadInformationEntryAssociationPolicy(): Promise<
+    Readonly<InformationEntryAssociationPolicy>
+  > {
+    const preferences = await this.#dependencies.reviewPreferences.load(
+      this.#dependencies.workspaceId,
+    );
+    return informationEntryAssociationPolicyFromPreferences(
+      preferences.associationPolicy ??
+        DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
+    );
+  }
+
+  async #searchPrivateDocuments(
+    request: Readonly<InformationEntrySearchRequest>,
+    entries: readonly Readonly<CurrentInformationEntry>[],
+    associationSnapshot: Readonly<InformationEntryAssociationRepositorySnapshot>,
+  ): Promise<
+    Readonly<{
+      totalCount: number;
+      items: readonly Readonly<Record<string, unknown>>[];
+    }>
+  > {
+    if (!request.includePrivate) {
+      return Object.freeze({totalCount: 0, items: Object.freeze([])});
+    }
+    const requiresEntryMatch =
+      request.contentKeyword !== undefined ||
+      request.typeKeyword !== undefined ||
+      request.typeCustomName !== undefined ||
+      request.domainKeyword !== undefined ||
+      request.domainCustomName !== undefined ||
+      request.chunkMode !== undefined ||
+      request.association !== undefined;
+    const {
+      text: ignoredText,
+      after: ignoredAfter,
+      ...structuralRequest
+    } = request;
+    void ignoredText;
+    void ignoredAfter;
+    const entryMatches = requiresEntryMatch
+      ? searchCurrentInformationEntries(
+          entries,
+          {
+            ...structuralRequest,
+            limit: Math.max(1, entries.length),
+          },
+          associationSnapshot,
+        ).items
+      : Object.freeze([]);
+    const entryMatchCounts = new Map<string, number>();
+    for (const match of entryMatches) {
+      if (!match.entry.value.isPrivate) continue;
+      entryMatchCounts.set(
+        match.entry.snapshotId,
+        (entryMatchCounts.get(match.entry.snapshotId) ?? 0) + 1,
+      );
+    }
+    const query = informationEntrySearchKey(request.text ?? '');
+    const summaries = (
+      await this.#dependencies.evidenceReadRepository.listSnapshots(
+        this.#dependencies.workspaceId,
+      )
+    )
+      .filter((snapshot) => snapshot.isPrivate === true)
+      .filter((snapshot) =>
+        privateDocumentMatchesStructuralFilters(
+          snapshot,
+          request,
+          requiresEntryMatch ? entryMatchCounts : undefined,
+        ),
+      )
+      .sort((left, right) => {
+        const captured = right.capturedAt.localeCompare(left.capturedAt);
+        return captured === 0
+          ? left.snapshotId.localeCompare(right.snapshotId)
+          : captured;
+      });
+    const items: Readonly<Record<string, unknown>>[] = [];
+    for (const summary of summaries) {
+      const matchReasons: string[] = [];
+      let excerpt: string | undefined;
+      if (query !== '') {
+        if (informationEntrySearchKey(summary.sourceKey).includes(query)) {
+          matchReasons.push('source');
+        }
+        if (
+          summary.canonicalUri !== undefined &&
+          informationEntrySearchKey(summary.canonicalUri).includes(query)
+        ) {
+          matchReasons.push('uri');
+        }
+        const snapshot =
+          await this.#dependencies.evidenceReadRepository.loadSnapshot(
+            this.#dependencies.workspaceId,
+            summary.snapshotId,
+          );
+        if (snapshot === undefined) {
+          throw new Error(
+            'Private evidence Snapshot disappeared during search.',
+          );
+        }
+        const materialized = await materializeEvidenceSnapshot(
+          snapshot,
+          this.#dependencies.blobStore,
+        );
+        const documentText = materialized.structures
+          .map((structure) =>
+            typeof structure.normalizedText === 'string'
+              ? structure.normalizedText
+              : '',
+          )
+          .join('\n');
+        if (informationEntrySearchKey(documentText).includes(query)) {
+          matchReasons.push('body');
+        }
+        if (matchReasons.length === 0) continue;
+        excerpt = privateDocumentExcerpt(documentText);
+      }
+      items.push(
+        Object.freeze({
+          snapshot: summary,
+          matchReasons: Object.freeze(matchReasons),
+          entryMatchCount: entryMatchCounts.get(summary.snapshotId) ?? 0,
+          ...(excerpt === undefined ? {} : {excerpt}),
+        }),
+      );
+    }
+    return Object.freeze({
+      totalCount: items.length,
+      items: Object.freeze(items),
+    });
+  }
+
   public workspace(): M1cHttpResult {
     return httpResult(200, {
       status: 'ok',
@@ -142,10 +308,13 @@ export class M1cApiService implements M1cApiServicePort {
         'information_entries',
         'information_document_tags',
         'information_entry_knowledge_graph',
+        'information_entry_association_policy',
         'private_documents',
+        'processing_runs',
         'review_preferences',
         'workspace_bundle_export',
         'workspace_bundle_restore',
+        ...(this.#dependencies.aiTagProposals === undefined ? [] : ['ai_tags']),
       ]),
     });
   }
@@ -222,6 +391,9 @@ export class M1cApiService implements M1cApiServicePort {
           DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
         vocabulary:
           preferences.vocabulary ?? DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+        associationPolicy:
+          preferences.associationPolicy ??
+          DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
       });
     } catch {
       return reviewPreferencesFailure();
@@ -246,12 +418,31 @@ export class M1cApiService implements M1cApiServicePort {
     if (vocabulary === undefined) {
       return inputFailure('body.vocabulary');
     }
+    const associationPolicy =
+      body.associationPolicy === undefined
+        ? undefined
+        : decodeReviewAssociationPolicyPreferences(body.associationPolicy);
+    if (
+      body.associationPolicy !== undefined &&
+      associationPolicy === undefined
+    ) {
+      return inputFailure('body.associationPolicy');
+    }
     try {
+      const effectiveAssociationPolicy =
+        associationPolicy ??
+        (
+          await this.#dependencies.reviewPreferences.load(
+            this.#dependencies.workspaceId,
+          )
+        ).associationPolicy ??
+        DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES;
       const preferences = await this.#dependencies.reviewPreferences.save(
         this.#dependencies.workspaceId,
         quickTags,
         automaticKeywords,
         vocabulary,
+        effectiveAssociationPolicy,
       );
       return httpResult(200, {
         status: 'ok',
@@ -259,6 +450,8 @@ export class M1cApiService implements M1cApiServicePort {
         quickTags: preferences.quickTags,
         automaticKeywords: preferences.automaticKeywords ?? automaticKeywords,
         vocabulary: preferences.vocabulary ?? vocabulary,
+        associationPolicy:
+          preferences.associationPolicy ?? effectiveAssociationPolicy,
       });
     } catch {
       return reviewPreferencesFailure();
@@ -311,10 +504,10 @@ export class M1cApiService implements M1cApiServicePort {
           issue: Object.freeze({code: 'snapshot_not_found'}),
         });
       }
-      const materialized = (await materializeEvidenceSnapshot(
+      const materialized = await materializeEvidenceSnapshot(
         snapshot,
         this.#dependencies.blobStore,
-      )) as Readonly<MaterializedEvidenceSnapshot>;
+      );
       const entries = prepareSplitInformationEntries(materialized);
       if (entries.length === 0) {
         return httpResult(422, {
@@ -425,7 +618,16 @@ export class M1cApiService implements M1cApiServicePort {
         request,
         associationSnapshot,
       );
-      return httpResult(200, {status: 'ok', ...result});
+      const privateDocuments = await this.#searchPrivateDocuments(
+        request,
+        entries,
+        associationSnapshot,
+      );
+      return httpResult(200, {
+        status: 'ok',
+        ...result,
+        privateDocuments,
+      });
     } catch (error) {
       if (error instanceof InformationEntrySearchCursorError) {
         return httpResult(422, {
@@ -616,12 +818,17 @@ export class M1cApiService implements M1cApiServicePort {
     const includePrivate = decodeInformationEntryAssociationScope(body);
     if (includePrivate === undefined) return inputFailure('body');
     try {
-      const entries =
-        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+      const [entries, policy] = await Promise.all([
+        this.#dependencies.informationEntryRepository.loadCurrentEntries(
           this.#dependencies.workspaceId,
           includePrivate,
-        );
-      const projections = buildInformationEntryAssociationProjection(entries);
+        ),
+        this.#loadInformationEntryAssociationPolicy(),
+      ]);
+      const projections = buildInformationEntryAssociationProjection(
+        entries,
+        policy,
+      );
       const projectedCount =
         await this.#dependencies.informationEntryAssociationRepository.replaceAssociationProjections(
           this.#dependencies.workspaceId,
@@ -632,10 +839,63 @@ export class M1cApiService implements M1cApiServicePort {
         status: 'rebuilt',
         entryCount: entries.length,
         projectedCount,
-        policy: INFORMATION_ENTRY_ASSOCIATION_POLICY,
+        policy,
       });
     } catch {
       return repositoryFailure();
+    }
+  }
+
+  public async reviseInformationEntryAssociationPolicy(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const input = decodeInformationEntryAssociationPolicyWrite(body);
+    if (input === undefined) return inputFailure('body');
+    try {
+      const preferences = await this.#dependencies.reviewPreferences.load(
+        this.#dependencies.workspaceId,
+      );
+      const current =
+        preferences.associationPolicy ??
+        DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES;
+      if (current.revision !== input.expectedRevision) {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'stale_association_policy_revision',
+          }),
+        });
+      }
+      const unchanged =
+        current.contentWeight === input.contentWeight &&
+        current.typeWeight === input.typeWeight &&
+        current.domainWeight === input.domainWeight &&
+        current.threshold === input.threshold;
+      const next = unchanged
+        ? current
+        : Object.freeze({
+            revision: current.revision + 1,
+            contentWeight: input.contentWeight,
+            typeWeight: input.typeWeight,
+            domainWeight: input.domainWeight,
+            threshold: input.threshold,
+          });
+      if (!unchanged) {
+        await this.#dependencies.reviewPreferences.save(
+          this.#dependencies.workspaceId,
+          preferences.quickTags,
+          preferences.automaticKeywords ??
+            DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+          preferences.vocabulary ?? DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+          next,
+        );
+      }
+      return httpResult(200, {
+        status: unchanged ? 'unchanged' : 'applied',
+        policy: informationEntryAssociationPolicyFromPreferences(next),
+      });
+    } catch {
+      return reviewPreferencesFailure();
     }
   }
 
@@ -648,7 +908,7 @@ export class M1cApiService implements M1cApiServicePort {
       return inputFailure('query.includePrivate');
     }
     try {
-      const [entries, snapshot] = await Promise.all([
+      const [entries, snapshot, policy] = await Promise.all([
         this.#dependencies.informationEntryRepository.loadCurrentEntries(
           this.#dependencies.workspaceId,
           includePrivate,
@@ -657,6 +917,7 @@ export class M1cApiService implements M1cApiServicePort {
           this.#dependencies.workspaceId,
           includePrivate,
         ),
+        this.#loadInformationEntryAssociationPolicy(),
       ]);
       if (!entries.some((entry) => entry.entryId === entryId)) {
         return httpResult(404, {
@@ -673,7 +934,7 @@ export class M1cApiService implements M1cApiServicePort {
         status: 'ok',
         entryId,
         totalCount: associations.length,
-        policy: INFORMATION_ENTRY_ASSOCIATION_POLICY,
+        policy,
         associations,
       });
     } catch {
@@ -864,10 +1125,10 @@ export class M1cApiService implements M1cApiServicePort {
           issue: Object.freeze({code: 'snapshot_not_found'}),
         });
       }
-      const materialized = (await materializeEvidenceSnapshot(
+      const materialized = await materializeEvidenceSnapshot(
         snapshot,
         this.#dependencies.blobStore,
-      )) as Readonly<MaterializedEvidenceSnapshot>;
+      );
       const normalizedText = materialized.structures[0]?.normalizedText;
       if (normalizedText === undefined) {
         return httpResult(422, {
@@ -928,6 +1189,160 @@ export class M1cApiService implements M1cApiServicePort {
       });
     } catch {
       return repositoryFailure();
+    }
+  }
+
+  public async listProcessingRuns(
+    limitInput: unknown = 20,
+  ): Promise<M1cHttpResult> {
+    const limit = decodeProcessingRunLimit(limitInput);
+    if (limit === undefined) return inputFailure('query.limit');
+    try {
+      const runs =
+        await this.#dependencies.processingRunRepository.listRecentRuns(
+          this.#dependencies.workspaceId,
+          limit,
+        );
+      return httpResult(200, {
+        status: 'ok',
+        runs: Object.freeze(runs.map(processingRunResponse)),
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async cancelProcessingRun(
+    runId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(runId)) return inputFailure('path.runId');
+    if (
+      !isRecord(body) ||
+      Object.keys(body).length !== 1 ||
+      !Number.isSafeInteger(body.expectedVersion) ||
+      (body.expectedVersion as number) < 1
+    ) {
+      return inputFailure('body.expectedVersion');
+    }
+    try {
+      const outcome =
+        await this.#dependencies.processingRunRepository.cancelRun(
+          this.#dependencies.workspaceId,
+          runId,
+          body.expectedVersion as number,
+        );
+      if (outcome === 'not_found') {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'processing_run_not_found'}),
+        });
+      }
+      if (outcome === 'stale') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'stale_processing_run_version'}),
+        });
+      }
+      if (outcome === 'terminal') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'processing_run_terminal'}),
+        });
+      }
+      if (outcome !== 'applied') return repositoryFailure();
+      return httpResult(200, {
+        status: 'cancelled',
+        runId,
+        version: (body.expectedVersion as number) + 1,
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async listAiTagProposals(entryId: string): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
+    const service = this.#dependencies.aiTagProposals;
+    if (service === undefined) return aiTagProviderNotConfigured();
+    try {
+      const proposals = await service.listForEntry(entryId);
+      return httpResult(200, {
+        status: 'ok',
+        proposals: Object.freeze(proposals.map(processingProposalResponse)),
+      });
+    } catch (error) {
+      return aiTagProposalFailure(error);
+    }
+  }
+
+  public async startAiTagProposal(
+    entryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
+    const input = decodeAiTagProposalStart(body);
+    if (input === undefined) return inputFailure('body.requestKey');
+    const service = this.#dependencies.aiTagProposals;
+    if (service === undefined) return aiTagProviderNotConfigured();
+    try {
+      const result = await service.start(entryId, input.requestKey);
+      const response = processingRunResponse(result.run);
+      if (result.run.status === 'failed') {
+        return httpResult(502, {
+          status: 'failed',
+          issue: Object.freeze({
+            code: result.run.errorCode ?? 'ai_provider_unavailable',
+          }),
+          run: response,
+        });
+      }
+      return httpResult(result.outcome === 'created' ? 201 : 200, {
+        status: result.outcome,
+        run: response,
+      });
+    } catch (error) {
+      return aiTagProposalFailure(error);
+    }
+  }
+
+  public async acceptAiTagProposal(
+    entryId: string,
+    proposalId: string,
+  ): Promise<M1cHttpResult> {
+    return this.#decideAiTagProposal(entryId, proposalId, 'accepted');
+  }
+
+  public async rejectAiTagProposal(
+    entryId: string,
+    proposalId: string,
+  ): Promise<M1cHttpResult> {
+    return this.#decideAiTagProposal(entryId, proposalId, 'rejected');
+  }
+
+  async #decideAiTagProposal(
+    entryId: string,
+    proposalId: string,
+    decision: 'accepted' | 'rejected',
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
+    if (!CANONICAL_UUID.test(proposalId)) {
+      return inputFailure('path.proposalId');
+    }
+    const service = this.#dependencies.aiTagProposals;
+    if (service === undefined) return aiTagProviderNotConfigured();
+    try {
+      const result =
+        decision === 'accepted'
+          ? await service.accept(entryId, proposalId)
+          : await service.reject(entryId, proposalId);
+      return httpResult(200, {
+        status: result.outcome,
+        proposal: processingProposalResponse(result.proposal),
+        ...(result.entry === undefined ? {} : {entry: result.entry}),
+      });
+    } catch (error) {
+      return aiTagProposalFailure(error);
     }
   }
 
@@ -1485,10 +1900,114 @@ function decodeDocumentTagWriteBody(
   });
 }
 
+function privateDocumentMatchesStructuralFilters(
+  snapshot: Readonly<EvidenceSnapshotSummary>,
+  request: Readonly<InformationEntrySearchRequest>,
+  entryMatchCounts?: ReadonlyMap<string, number>,
+): boolean {
+  if (
+    request.sourceKey !== undefined &&
+    snapshot.sourceKey !== request.sourceKey
+  ) {
+    return false;
+  }
+  if (
+    request.snapshotId !== undefined &&
+    snapshot.snapshotId !== request.snapshotId
+  ) {
+    return false;
+  }
+  if (request.time !== undefined) {
+    const value =
+      request.time.field === 'published'
+        ? snapshot.publication?.instant
+        : snapshot.capturedAt;
+    if (value === undefined) return false;
+    const date = value.slice(0, 10);
+    if (
+      (request.time.from !== undefined && date < request.time.from) ||
+      (request.time.to !== undefined && date > request.time.to)
+    ) {
+      return false;
+    }
+  }
+  return (
+    entryMatchCounts === undefined ||
+    (entryMatchCounts.get(snapshot.snapshotId) ?? 0) > 0
+  );
+}
+
+function privateDocumentExcerpt(value: string): string {
+  const normalized = value.replace(/\s+/gu, ' ').trim();
+  const codePoints = Array.from(normalized);
+  return codePoints.length <= 280
+    ? normalized
+    : `${codePoints.slice(0, 277).join('')}…`;
+}
+
+function decodeInformationEntryAssociationPolicyWrite(body: unknown):
+  | Readonly<{
+      expectedRevision: number;
+      contentWeight: number;
+      typeWeight: number;
+      domainWeight: number;
+      threshold: number;
+    }>
+  | undefined {
+  if (!isRecord(body)) return undefined;
+  const values = [
+    body.expectedRevision,
+    body.contentWeight,
+    body.typeWeight,
+    body.domainWeight,
+    body.threshold,
+  ];
+  if (
+    values.some(
+      (candidate) =>
+        typeof candidate !== 'number' || !Number.isSafeInteger(candidate),
+    ) ||
+    (body.expectedRevision as number) < 0 ||
+    (body.contentWeight as number) < 0 ||
+    (body.typeWeight as number) < 0 ||
+    (body.domainWeight as number) < 0 ||
+    (body.contentWeight as number) +
+      (body.typeWeight as number) +
+      (body.domainWeight as number) !==
+      100 ||
+    (body.threshold as number) < 0 ||
+    (body.threshold as number) > 10_000
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    expectedRevision: body.expectedRevision as number,
+    contentWeight: body.contentWeight as number,
+    typeWeight: body.typeWeight as number,
+    domainWeight: body.domainWeight as number,
+    threshold: body.threshold as number,
+  });
+}
+
+function informationEntryAssociationPolicyFromPreferences(
+  preferences: Readonly<ReviewAssociationPolicyPreferences>,
+): Readonly<InformationEntryAssociationPolicy> {
+  return Object.freeze({
+    revision: preferences.revision,
+    version: INFORMATION_ENTRY_ASSOCIATION_POLICY.version,
+    contentWeight: preferences.contentWeight,
+    typeWeight: preferences.typeWeight,
+    domainWeight: preferences.domainWeight,
+    threshold: preferences.threshold,
+    candidateLimit: INFORMATION_ENTRY_ASSOCIATION_POLICY.candidateLimit,
+    adjustmentStep: INFORMATION_ENTRY_ASSOCIATION_POLICY.adjustmentStep,
+  });
+}
+
 async function materializeEvidenceSnapshot(
   snapshot: Readonly<EvidenceSnapshotReadState>,
   blobStore: BlobStore,
-): Promise<Readonly<Record<string, unknown>>> {
+): Promise<Readonly<MaterializedEvidenceSnapshot>> {
   const structures = [];
   for (const structure of snapshot.structures) {
     const bytes = await blobStore.read(structure.textBlob);
@@ -1533,6 +2052,135 @@ function inputFailure(path: string): M1cHttpResult {
   return httpResult(422, {
     status: 'rejected',
     issue: Object.freeze({code: 'invalid_http_input', path}),
+  });
+}
+
+function decodeProcessingRunLimit(value: unknown): number | undefined {
+  const candidate =
+    typeof value === 'string' && /^[1-9][0-9]{0,2}$/u.test(value)
+      ? Number(value)
+      : value;
+  return typeof candidate === 'number' &&
+    Number.isSafeInteger(candidate) &&
+    candidate >= 1 &&
+    candidate <= 100
+    ? candidate
+    : undefined;
+}
+
+function processingRunResponse(
+  run: Readonly<ProcessingRun>,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze({
+    runId: run.runId,
+    origin: run.origin,
+    ...(run.providerKey === undefined ? {} : {providerKey: run.providerKey}),
+    status: run.status,
+    ...(run.targetSnapshotId === undefined
+      ? {}
+      : {targetSnapshotId: run.targetSnapshotId}),
+    privacyScope: run.privacyScope,
+    currentStage: run.currentStage,
+    ...(run.currentStep === undefined ? {} : {currentStep: run.currentStep}),
+    completedUnits: run.completedUnits,
+    ...(run.totalUnits === undefined ? {} : {totalUnits: run.totalUnits}),
+    attempt: run.attempt,
+    version: run.version,
+    ...(run.errorCode === undefined ? {} : {errorCode: run.errorCode}),
+    createdAt: run.createdAt,
+    ...(run.startedAt === undefined ? {} : {startedAt: run.startedAt}),
+    ...(run.finishedAt === undefined ? {} : {finishedAt: run.finishedAt}),
+    updatedAt: run.updatedAt,
+    proposals: Object.freeze(run.proposals.map(processingProposalResponse)),
+  });
+}
+
+function processingProposalResponse(
+  proposal: Readonly<ProcessingProposal>,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze({
+    proposalId: proposal.proposalId,
+    runId: proposal.runId,
+    ordinal: proposal.ordinal,
+    stage: proposal.stage,
+    kind: proposal.kind,
+    ...(proposal.targetSnapshotId === undefined
+      ? {}
+      : {targetSnapshotId: proposal.targetSnapshotId}),
+    ...(proposal.targetEntryId === undefined
+      ? {}
+      : {targetEntryId: proposal.targetEntryId}),
+    ...(proposal.relatedEntryId === undefined
+      ? {}
+      : {relatedEntryId: proposal.relatedEntryId}),
+    status: proposal.status,
+    summary: proposal.summary,
+    fragmentIds: proposal.fragmentIds,
+    ...(proposal.tagPayload === undefined
+      ? {}
+      : {tagPayload: proposal.tagPayload}),
+    createdAt: proposal.createdAt,
+    ...(proposal.decidedAt === undefined
+      ? {}
+      : {decidedAt: proposal.decidedAt}),
+  });
+}
+
+function decodeAiTagProposalStart(
+  body: unknown,
+): Readonly<{requestKey: string}> | undefined {
+  if (
+    !isRecord(body) ||
+    Object.keys(body).length !== 1 ||
+    typeof body.requestKey !== 'string' ||
+    !/^[A-Za-z0-9._:-]{1,80}$/u.test(body.requestKey)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({requestKey: body.requestKey});
+}
+
+function aiTagProviderNotConfigured(): M1cHttpResult {
+  return httpResult(409, {
+    status: 'rejected',
+    issue: Object.freeze({code: 'ai_provider_not_configured'}),
+  });
+}
+
+function aiTagProposalFailure(error: unknown): M1cHttpResult {
+  if (!(error instanceof AiTagProposalServiceError)) {
+    return repositoryFailure();
+  }
+  if (
+    error.code === 'ai_entry_not_found' ||
+    error.code === 'ai_proposal_not_found'
+  ) {
+    return httpResult(404, {
+      status: 'not_found',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  if (error.code === 'ai_proposal_invalid') {
+    return httpResult(422, {
+      status: 'rejected',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  if (
+    error.code === 'ai_private_entry_forbidden' ||
+    error.code === 'ai_run_conflict' ||
+    error.code === 'ai_run_invalid_state' ||
+    error.code === 'ai_proposal_terminal' ||
+    error.code === 'stale_entry_revision'
+  ) {
+    return httpResult(409, {
+      status: 'rejected',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  return httpResult(502, {
+    status: 'failed',
+    issue: Object.freeze({code: error.code}),
   });
 }
 

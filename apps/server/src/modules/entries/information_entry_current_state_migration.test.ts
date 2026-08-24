@@ -42,6 +42,14 @@ describe('Information Entry current-state migration', () => {
     expect(migration.indexOf('WITH ranked_legacy_scores')).toBeLessThan(
       migration.indexOf('DROP COLUMN revision_number'),
     );
+    expect(migration.indexOf('SET CONSTRAINTS ALL IMMEDIATE')).toBeGreaterThan(
+      migration.indexOf('WITH ranked_legacy_scores'),
+    );
+    expect(migration.indexOf('SET CONSTRAINTS ALL IMMEDIATE')).toBeLessThan(
+      migration.indexOf(
+        'ALTER TABLE struinfo.information_entry\n  ALTER COLUMN document_order SET NOT NULL',
+      ),
+    );
     expect(migration.indexOf('WITH legacy_keyword_candidates')).toBeLessThan(
       migration.indexOf('DROP COLUMN revision_number'),
     );

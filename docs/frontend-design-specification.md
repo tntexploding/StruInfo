@@ -243,9 +243,11 @@ It does not need the full long-term navigation or a synthetic dashboard.
 
 The Web application and narrow loopback API expose one owner workflow:
 Evidence/Blob import, Entry materialization, current Entry/Document tagging,
-explainable associations, privacy-aware Entry search, external preferences and
-complete personal-data-package transfer. AI remains visibly unavailable until
-an admitted adapter has real run state.
+explainable associations, privacy-aware Entry search, external preferences,
+complete personal-data-package transfer, and provider-neutral ProcessingRun
+read/cancel. ADR 0013 additionally exposes one optional OpenAI tag-proposal
+surface for a user-selected public Entry. It must show Provider/model/prompt
+origin, privacy disclosure and explicit accept/reject without hiding the manual path.
 
 Manual Curation, the old formal Knowledge writer/current-item reader and the old
 Knowledge search are not current product capabilities. Their pages, client
@@ -291,9 +293,11 @@ keywords and custom names come from the active workspace and MUST NOT be
 compiled into frontend fixtures or defaults.
 
 Privacy remains action-scoped. Ordinary Entry lists, counts, suggestions,
-related-item sections, and search exclude private content. The user must
-explicitly enable `查询隐私文档` for the current view before any private Entry or
-association becomes visible, and the expanded scope must remain visibly marked.
+related-item sections, search, and complete-document results exclude private
+content. The user must explicitly enable `查询隐私文档` for the current view
+before any private Entry, association, or complete document becomes visible, and
+the expanded scope must remain visibly marked. Complete private documents use a
+separate result channel and reveal full evidence only after an explicit action.
 
 The minimal slice may omit document-tag aggregation and automatic association
 scoring, but it MUST present those absent capabilities honestly instead of
@@ -311,8 +315,10 @@ secondary maintenance routes.
 Each workspace has one dominant task and a visibly subordinate context area:
 
 - `总览` shows current external-workspace counts, the five processing stages,
-  and a separate AI progress rail. It MUST show `AI 未启用` or the absence of
-  actual run data rather than inventing a percentage, queue, or current step;
+  and a separate provider-neutral task rail backed by the public recent-run
+  boundary. It derives stage, percentage, current step, proposal count and cancel
+  eligibility only from actual records. Empty storage says there are no tasks;
+  absent `ai` capability separately says AI is not configured;
 - `导入` places source/privacy/alias/format/date and optional prefatory-text
   fields in the dominant panel, imported-document history in a secondary panel,
   and whole-workspace Bundle import/export in a distinct lower band;
@@ -323,22 +329,27 @@ Each workspace has one dominant task and a visibly subordinate context area:
   content, type, and domain dimensions. Full-document and private-content views
   require an explicit current-view control;
 - `联系` gives candidate associations and their evidence the main area, with
-  scoring-policy context and current-entry selection subordinate to it. A
-  versioned policy that has no public write boundary MUST be presented read-only;
-- `查询` gives the search input visual priority, results the main reading area,
+  current-entry selection subordinate to it. Its public versioned-policy editor
+  exposes content/type/domain weights, threshold, revision, save feedback, and
+  the resulting automatic rebuild; pair-specific overrides remain visibly separate;
+- `查询` gives the search input visual priority, Entry results the main reading
+  area, a distinct complete-private-document channel when explicitly enabled,
   and privacy, source, structural, keyword, and association scope a compact
   settings rail. Result details and precise evidence remain one action away.
 
 A requested capability that is not backed by the current public product boundary
 MUST be labelled unavailable or pending rather than simulated. This applies in
-particular to AI progress, AI splitting/tagging/linking, fuzzy matching, and
-global association-policy writes. Deterministic and manual paths remain fully
-usable while those capabilities are absent.
+particular to AI splitting/linking/query synthesis, automatic proposal acceptance,
+and fuzzy matching. A real imported or deterministic ProcessingRun may still be
+shown and cancelled through `processing_runs`; this MUST NOT be relabelled as generic
+AI availability. Only `ai_tags` enables the Tags proposal surface, and it MUST NOT
+unlock unavailable AI controls on Split, Associations or Query. Deterministic and
+manual paths, including association-policy writes, remain fully usable.
 
 Desktop layouts SHOULD preserve a narrow workflow timeline, a dominant work
 surface, and at most one contextual side rail. Tablet layouts MAY stack the
 context rail below the dominant task. At phone widths the navigation items
-MAY become a bottom bar, but all six labels, current-page indication, primary
+MAY become a bottom bar, but all seven labels, current-page indication, primary
 action, privacy state, errors, results, and source-return controls MUST remain
 reachable without horizontal page scrolling. Pages use natural vertical
 scrolling; they MUST NOT hide unfinished controls to force a single viewport.

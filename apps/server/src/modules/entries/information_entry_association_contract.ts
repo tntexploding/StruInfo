@@ -38,6 +38,7 @@ export interface InformationEntryGraphRelationValue {
 }
 
 export interface InformationEntryAssociationPolicy {
+  readonly revision: number;
   readonly version: string;
   readonly contentWeight: number;
   readonly typeWeight: number;

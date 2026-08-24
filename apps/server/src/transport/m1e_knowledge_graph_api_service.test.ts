@@ -206,6 +206,13 @@ function dependencies(
         Promise.resolve({projections: [], overrides: []}),
       writeAssociationOverride: () => Promise.resolve('not_found'),
     },
+    processingRunRepository: {
+      listRecentRuns: () => Promise.resolve([]),
+      createRun: () => Promise.resolve('not_found'),
+      writeProgress: () => Promise.resolve('not_found'),
+      cancelRun: () => Promise.resolve('not_found'),
+      appendProposal: () => Promise.resolve('not_found'),
+    },
     workspaceTransfer: {
       exportWorkspace: () =>
         Promise.reject(new Error('Unexpected workspace export.')),

@@ -2,6 +2,7 @@ import {useMemo, useState} from 'react';
 import type {KeyboardEvent} from 'react';
 
 import {
+  DEFAULT_REVIEW_ASSOCIATION_POLICY,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORDS,
   DEFAULT_REVIEW_VOCABULARY,
   type InformationEntry,
@@ -29,6 +30,7 @@ const DEFAULT_SESSION_PREFERENCES: Readonly<ReviewPreferencesWrite> =
     quickTags: Object.freeze([]),
     automaticKeywords: DEFAULT_REVIEW_AUTOMATIC_KEYWORDS,
     vocabulary: DEFAULT_REVIEW_VOCABULARY,
+    associationPolicy: DEFAULT_REVIEW_ASSOCIATION_POLICY,
   });
 
 export interface InformationEntryReviewControlsProps {
@@ -134,6 +136,10 @@ export function InformationEntryReviewControls({
       automaticKeywords:
         overrides.automaticKeywords ?? activePreferences.automaticKeywords,
       vocabulary: overrides.vocabulary ?? activePreferences.vocabulary,
+      associationPolicy:
+        overrides.associationPolicy ??
+        activePreferences.associationPolicy ??
+        DEFAULT_REVIEW_ASSOCIATION_POLICY,
     };
   }
 

@@ -1,9 +1,13 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 import type {
+  AiTagProposalDecisionResponse,
+  AiTagProposalListResponse,
+  AiTagProposalStartResponse,
   EvidenceSnapshotSummary,
   InformationEntryAssociationListResponse,
   InformationEntryAssociationOverrideResponse,
+  InformationEntryAssociationPolicyWriteResponse,
   InformationEntryAssociationRebuildResponse,
   InformationEntryKnowledgeGraphEdgeWriteResponse,
   InformationEntryKnowledgeGraphResponse,
@@ -13,6 +17,8 @@ import type {
   InformationEntrySearchResponse,
   InformationDocumentTagWriteResponse,
   M1cHttpResponse,
+  ProcessingRunCancelResponse,
+  ProcessingRunListResponse,
   MarkdownImportResponse,
   ReviewPreferencesResponse,
   ReviewPreferencesWrite,
@@ -260,6 +266,15 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const reviseInformationEntryAssociationPolicy = useCallback(
+    (
+      body: unknown,
+    ): Promise<
+      M1cHttpResponse<InformationEntryAssociationPolicyWriteResponse>
+    > => apiClient.reviseInformationEntryAssociationPolicy(body),
+    [apiClient],
+  );
+
   const listInformationEntryAssociations = useCallback(
     (
       entryId: string,
@@ -306,6 +321,54 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       body: unknown,
     ): Promise<M1cHttpResponse<InformationDocumentTagWriteResponse>> =>
       apiClient.reviseInformationDocumentTags(snapshotId, body),
+    [apiClient],
+  );
+
+  const listAiTagProposals = useCallback(
+    (entryId: string): Promise<M1cHttpResponse<AiTagProposalListResponse>> =>
+      apiClient.listAiTagProposals(entryId),
+    [apiClient],
+  );
+
+  const startAiTagProposal = useCallback(
+    (
+      entryId: string,
+      requestKey: string,
+    ): Promise<M1cHttpResponse<AiTagProposalStartResponse>> =>
+      apiClient.startAiTagProposal(entryId, requestKey),
+    [apiClient],
+  );
+
+  const acceptAiTagProposal = useCallback(
+    (
+      entryId: string,
+      proposalId: string,
+    ): Promise<M1cHttpResponse<AiTagProposalDecisionResponse>> =>
+      apiClient.acceptAiTagProposal(entryId, proposalId),
+    [apiClient],
+  );
+
+  const rejectAiTagProposal = useCallback(
+    (
+      entryId: string,
+      proposalId: string,
+    ): Promise<M1cHttpResponse<AiTagProposalDecisionResponse>> =>
+      apiClient.rejectAiTagProposal(entryId, proposalId),
+    [apiClient],
+  );
+
+  const listProcessingRuns = useCallback(
+    (limit: number): Promise<M1cHttpResponse<ProcessingRunListResponse>> =>
+      apiClient.listProcessingRuns(limit),
+    [apiClient],
+  );
+
+  const cancelProcessingRun = useCallback(
+    (
+      runId: string,
+      expectedVersion: number,
+    ): Promise<M1cHttpResponse<ProcessingRunCancelResponse>> =>
+      apiClient.cancelProcessingRun(runId, expectedVersion),
     [apiClient],
   );
 
@@ -426,6 +489,8 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           snapshots={snapshots}
           workspace={workspace.status === 'ready' ? workspace.value : undefined}
           onListDocuments={listInformationEntryDocuments}
+          onListProcessingRuns={listProcessingRuns}
+          onCancelProcessingRun={cancelProcessingRun}
           onNavigate={setActiveSection}
         />
       ) : null}
@@ -460,17 +525,21 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
         <InformationEntryTagsWorkspace
           aiEnabled={
             workspace.status === 'ready' &&
-            workspace.value.capabilities.includes('ai')
+            workspace.value.capabilities.includes('ai_tags')
           }
           reviewPreferences={reviewPreferences}
           reviewPreferencesOverride={reviewPreferencesOverride}
           onReviewPreferencesChange={setReviewPreferencesOverride}
+          onAcceptAiTagProposal={acceptAiTagProposal}
           onAggregateDocumentTags={aggregateInformationDocumentTags}
+          onListAiTagProposals={listAiTagProposals}
           onListDocuments={listInformationEntryDocuments}
+          onRejectAiTagProposal={rejectAiTagProposal}
           onRevise={reviseInformationEntry}
           onReviseDocumentTags={reviseInformationDocumentTags}
           onSaveReviewPreferences={saveReviewPreferences}
           onSearch={searchInformationEntries}
+          onStartAiTagProposal={startAiTagProposal}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
             void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
           }
@@ -484,6 +553,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           }
           onListAssociations={listInformationEntryAssociations}
           onRebuildAssociations={rebuildInformationEntryAssociations}
+          onReviseAssociationPolicy={reviseInformationEntryAssociationPolicy}
           onReviseAssociation={reviseInformationEntryAssociation}
           onSearch={searchInformationEntries}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>

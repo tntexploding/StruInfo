@@ -95,6 +95,40 @@ describe('parseRuntimeConfig', () => {
     ).toBe(1000);
   });
 
+  it('enables OpenAI tags only from an explicit model and environment secret pair', () => {
+    const config = parseRuntimeConfig('api', {
+      ...RUNTIME_ENVIRONMENT,
+      OPENAI_API_KEY: 'synthetic-openai-key',
+      STRUIINFO_OPENAI_MODEL: 'gpt-5-mini',
+    });
+
+    expect(config.aiTagsProvider).toEqual({
+      providerKey: 'openai-responses-v1',
+      model: 'gpt-5-mini',
+      apiKey: 'synthetic-openai-key',
+      maxOutputTokens: 800,
+      timeoutMs: 60_000,
+    });
+    expect(Object.isFrozen(config.aiTagsProvider)).toBe(true);
+  });
+
+  it.each([
+    {OPENAI_API_KEY: 'synthetic-openai-key'},
+    {STRUIINFO_OPENAI_MODEL: 'gpt-5-mini'},
+    {
+      OPENAI_API_KEY: 'contains whitespace',
+      STRUIINFO_OPENAI_MODEL: 'gpt-5-mini',
+    },
+    {
+      OPENAI_API_KEY: 'synthetic-openai-key',
+      STRUIINFO_OPENAI_MODEL: 'bad model',
+    },
+  ])('rejects partial or invalid OpenAI tag configuration', (provider) => {
+    expect(() =>
+      parseRuntimeConfig('api', {...RUNTIME_ENVIRONMENT, ...provider}),
+    ).toThrow('OPENAI_API_KEY and STRUIINFO_OPENAI_MODEL');
+  });
+
   it('rejects a missing database URL', () => {
     expect(() =>
       parseRuntimeConfig('api', {STRUIINFO_DATA_ROOT: DATA_ROOT}),

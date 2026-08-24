@@ -56,6 +56,17 @@ export interface ManualEntryAnnotationInput {
   }>[];
 }
 
+export interface AiEntryTagAnnotationInput {
+  readonly contentKeywords: readonly string[];
+  readonly typeKeyword: EntryTypeKeyword;
+  readonly typeCustomName?: string;
+  readonly domains: readonly Readonly<{
+    keyword: EntryDomainKeyword;
+    customName?: string;
+  }>[];
+  readonly originVersion: string;
+}
+
 export function prepareSplitInformationEntries(
   snapshot: Readonly<MaterializedEvidenceSnapshot>,
 ): readonly Readonly<InformationEntryMaterializeRow>[] {
@@ -105,9 +116,17 @@ export function prepareManualEntryRevision(
   input: Readonly<ManualEntryAnnotationInput>,
 ): Readonly<InformationEntryRevisionValue> | undefined {
   const body = normalizeBody(input.body);
-  const contentKeywords = normalizeContentKeywords(input.contentKeywords);
+  const contentKeywords = normalizeContentKeywords(
+    input.contentKeywords,
+    'manual',
+    ENTRY_MANUAL_ORIGIN_VERSION,
+  );
   const type = normalizeType(input.typeKeyword, input.typeCustomName);
-  const domains = normalizeDomains(input.domains);
+  const domains = normalizeDomains(
+    input.domains,
+    'manual',
+    ENTRY_MANUAL_ORIGIN_VERSION,
+  );
   if (
     body === undefined ||
     contentKeywords === undefined ||
@@ -144,6 +163,37 @@ export function prepareManualEntryRevision(
   });
 }
 
+export function prepareAiEntryTagRevision(
+  current: Readonly<CurrentInformationEntry>,
+  input: Readonly<AiEntryTagAnnotationInput>,
+): Readonly<InformationEntryRevisionValue> | undefined {
+  const originVersion = input.originVersion.trim().normalize('NFC');
+  if (originVersion.length === 0 || Array.from(originVersion).length > 512) {
+    return undefined;
+  }
+  const contentKeywords = normalizeContentKeywords(
+    input.contentKeywords,
+    'ai',
+    originVersion,
+  );
+  const type = normalizeType(input.typeKeyword, input.typeCustomName);
+  const domains = normalizeDomains(input.domains, 'ai', originVersion);
+  if (
+    contentKeywords === undefined ||
+    type === undefined ||
+    domains === undefined
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    ...current.value,
+    typeKeyword: type.keyword,
+    ...(type.customName === undefined ? {} : {typeCustomName: type.customName}),
+    contentKeywords,
+    domains,
+  });
+}
+
 export function informationEntrySearchKey(value: string): string {
   const firstNfc = value.normalize('NFC');
   let lowered = '';
@@ -171,6 +221,8 @@ function normalizeBody(value: string): string | undefined {
 
 function normalizeContentKeywords(
   values: readonly string[],
+  origin: 'manual' | 'ai',
+  originVersion: string,
 ): readonly Readonly<EntryContentKeyword>[] | undefined {
   if (
     !Array.isArray(values) ||
@@ -197,8 +249,8 @@ function normalizeContentKeywords(
       Object.freeze({
         displayValue,
         normalizedValue,
-        origin: 'manual' as const,
-        originVersion: ENTRY_MANUAL_ORIGIN_VERSION,
+        origin,
+        originVersion,
       }),
     );
   }
@@ -218,6 +270,8 @@ function normalizeDomains(
     keyword: EntryDomainKeyword;
     customName?: string;
   }>[],
+  origin: 'manual' | 'ai',
+  originVersion: string,
 ): readonly Readonly<EntryDomainAssignment>[] | undefined {
   if (values.length < 1 || values.length > 3) {
     return undefined;
@@ -237,8 +291,8 @@ function normalizeDomains(
         ...(normalized.customName === undefined
           ? {}
           : {customName: normalized.customName}),
-        origin: 'manual' as const,
-        originVersion: ENTRY_MANUAL_ORIGIN_VERSION,
+        origin,
+        originVersion,
       }),
     );
   }

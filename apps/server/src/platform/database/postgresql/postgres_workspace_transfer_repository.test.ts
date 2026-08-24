@@ -183,6 +183,7 @@ function snapshotWithEntry(
     domain: empty.domain,
     entries,
     associations: empty.associations,
+    processing: empty.processing,
   });
 }
 

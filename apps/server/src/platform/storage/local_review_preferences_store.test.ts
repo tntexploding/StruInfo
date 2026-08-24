@@ -32,6 +32,13 @@ describe('LocalReviewPreferencesStore', () => {
         excludedKeywords: [],
       },
       vocabulary: {aliases: []},
+      associationPolicy: {
+        revision: 0,
+        contentWeight: 65,
+        typeWeight: 15,
+        domainWeight: 20,
+        threshold: 1_100,
+      },
     });
   });
 
@@ -50,6 +57,13 @@ describe('LocalReviewPreferencesStore', () => {
       {
         aliases: [{source: 'Synthetic CLI', canonical: '命令行'}],
       },
+      {
+        revision: 3,
+        contentWeight: 50,
+        typeWeight: 25,
+        domainWeight: 25,
+        threshold: 2_000,
+      },
     );
 
     await expect(store.load(WORKSPACE_A)).resolves.toMatchObject({
@@ -63,6 +77,13 @@ describe('LocalReviewPreferencesStore', () => {
       vocabulary: {
         aliases: [{source: 'Synthetic CLI', canonical: '命令行'}],
       },
+      associationPolicy: {
+        revision: 3,
+        contentWeight: 50,
+        typeWeight: 25,
+        domainWeight: 25,
+        threshold: 2_000,
+      },
     });
     await expect(store.load(WORKSPACE_B)).resolves.toMatchObject({
       workspaceId: WORKSPACE_B,
@@ -75,6 +96,8 @@ describe('LocalReviewPreferencesStore', () => {
     expect(text).toContain('\n  "quickTags": [\n');
     expect(text).toContain('\n  "automaticKeywords": {\n');
     expect(text).toContain('\n  "vocabulary": {\n');
+    expect(text).toContain('\n  "associationPolicy": {\n');
+    expect(text).toContain('\n    "revision": 3,\n');
   });
 
   it('loads an existing v1 quick-tag file with safe keyword defaults', async () => {
@@ -104,6 +127,13 @@ describe('LocalReviewPreferencesStore', () => {
       },
       vocabulary: {
         aliases: [{source: 'Legacy CLI', canonical: '命令行'}],
+      },
+      associationPolicy: {
+        revision: 0,
+        contentWeight: 65,
+        typeWeight: 15,
+        domainWeight: 20,
+        threshold: 1_100,
       },
     });
   });

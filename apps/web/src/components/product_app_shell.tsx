@@ -50,7 +50,10 @@ export function ProductAppShell({
   workspace,
 }: ProductAppShellProps) {
   const healthLabel = describeHealth(health);
-  const aiEnabled = workspace?.capabilities.includes('ai') === true;
+  const aiEnabled =
+    workspace?.capabilities.some(
+      (capability) => capability === 'ai' || capability === 'ai_tags',
+    ) === true;
   return (
     <>
       <a className="skip-link" href="#main-workspace">

@@ -31,6 +31,7 @@ describe('M1C local HTTP transport', () => {
   it('serves health and product routes from the same loopback listener', async () => {
     const importedBodies: unknown[] = [];
     const entrySearches: unknown[] = [];
+    const policyWrites: unknown[] = [];
     const api = stubApi({
       importMarkdown(body) {
         importedBodies.push(body);
@@ -39,6 +40,10 @@ describe('M1C local HTTP transport', () => {
       searchInformationEntries(body) {
         entrySearches.push(body);
         return Promise.resolve(result(200, {status: 'ok', items: []}));
+      },
+      reviseInformationEntryAssociationPolicy(body) {
+        policyWrites.push(body);
+        return Promise.resolve(result(200, {status: 'applied'}));
       },
     });
     const gate = new ReadinessGate();
@@ -85,6 +90,25 @@ describe('M1C local HTTP transport', () => {
       items: [],
     });
     expect(entrySearches).toEqual([{text: 'synthetic', includePrivate: true}]);
+
+    const policyBody = {
+      expectedRevision: 0,
+      contentWeight: 50,
+      typeWeight: 25,
+      domainWeight: 25,
+      threshold: 2_000,
+    };
+    const policyResponse = await fetch(
+      `${base}/api/v1/entries/associations/policy`,
+      {
+        method: 'PUT',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify(policyBody),
+      },
+    );
+    expect(policyResponse.status).toBe(200);
+    await expect(policyResponse.json()).resolves.toEqual({status: 'applied'});
+    expect(policyWrites).toEqual([policyBody]);
 
     const healthResponse = await fetch(`${base}/health/ready`);
     expect(healthResponse.status).toBe(200);
@@ -153,6 +177,8 @@ function stubApi(
       Promise.resolve(result(200, {status: 'applied'})),
     rebuildInformationEntryAssociations: () =>
       Promise.resolve(result(200, {status: 'rebuilt'})),
+    reviseInformationEntryAssociationPolicy: () =>
+      Promise.resolve(result(200, {status: 'applied'})),
     listInformationEntryAssociations: () =>
       Promise.resolve(result(200, {status: 'ok', associations: []})),
     reviseInformationEntryAssociation: () =>
@@ -163,6 +189,24 @@ function stubApi(
       Promise.resolve(result(200, {status: 'applied'})),
     reviseInformationDocumentTags: () =>
       Promise.resolve(result(200, {status: 'applied'})),
+    listAiTagProposals: () =>
+      Promise.resolve(result(200, {status: 'ok', proposals: []})),
+    startAiTagProposal: () =>
+      Promise.resolve(result(409, {status: 'rejected'})),
+    acceptAiTagProposal: () =>
+      Promise.resolve(result(409, {status: 'rejected'})),
+    rejectAiTagProposal: () =>
+      Promise.resolve(result(409, {status: 'rejected'})),
+    listProcessingRuns: () =>
+      Promise.resolve(result(200, {status: 'ok', runs: []})),
+    cancelProcessingRun: () =>
+      Promise.resolve(
+        result(200, {
+          status: 'cancelled',
+          runId: '11111111-1111-4111-8111-111111111111',
+          version: 2,
+        }),
+      ),
     exportWorkspaceBundle: () =>
       Promise.resolve(result(201, {status: 'exported'})),
     restoreWorkspaceBundle: () =>

@@ -34,6 +34,7 @@ import {
   M1D_ENTRY_TABLES,
   normalizeM1dEntrySnapshot,
 } from './m1d_entry_bundle.js';
+import {createEmptyM1eProcessingSnapshot} from './m1e_processing_bundle.js';
 import {
   type M1cDomainTransferRepositoryPort,
   M1cDomainTransferRepositoryError,
@@ -101,6 +102,8 @@ describe('M1C workspace transfer', () => {
     expect(serialized).not.toContain('synthetic external Blob bytes');
     expect(serialized).toContain(Buffer.from(BLOB_BYTES).toString('base64'));
     expect(serialized).toContain('struinfo.personal-data');
+    expect(serialized).toContain('"associationPolicy"');
+    expect(serialized).toContain('"contentWeight":50');
     expect(new TextDecoder().decode(storedBytes)).toContain(
       'struinfo.m1d-entry',
     );
@@ -521,7 +524,12 @@ function syntheticSnapshot(): M1cWorkspaceTransferSnapshot {
           : [],
     })),
   });
-  return Object.freeze({domain, entries, associations});
+  return Object.freeze({
+    domain,
+    entries,
+    associations,
+    processing: createEmptyM1eProcessingSnapshot(),
+  });
 }
 
 function currentEntryRow(
@@ -553,14 +561,32 @@ function currentEntryRow(
 }
 
 function memoryReviewPreferences(): ReviewPreferencesStore {
-  let preferences = createReviewPreferences(WORKSPACE_ID, ['synthetic']);
+  let preferences = createReviewPreferences(
+    WORKSPACE_ID,
+    ['synthetic'],
+    undefined,
+    undefined,
+    {
+      revision: 2,
+      contentWeight: 50,
+      typeWeight: 25,
+      domainWeight: 25,
+      threshold: 2_000,
+    },
+  );
   return {
     load(workspaceId) {
       if (workspaceId !== WORKSPACE_ID)
         return Promise.reject(new Error('workspace'));
       return Promise.resolve(preferences);
     },
-    save(workspaceId, quickTags, automaticKeywords, vocabulary) {
+    save(
+      workspaceId,
+      quickTags,
+      automaticKeywords,
+      vocabulary,
+      associationPolicy,
+    ) {
       if (workspaceId !== WORKSPACE_ID)
         return Promise.reject(new Error('workspace'));
       preferences = createReviewPreferences(
@@ -568,6 +594,7 @@ function memoryReviewPreferences(): ReviewPreferencesStore {
         quickTags,
         automaticKeywords,
         vocabulary,
+        associationPolicy,
       );
       return Promise.resolve(preferences);
     },

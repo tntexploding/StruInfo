@@ -147,6 +147,17 @@ export class M1cApiController {
     );
   }
 
+  @Put('entries/associations/policy')
+  public async reviseInformationEntryAssociationPolicy(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.reviseInformationEntryAssociationPolicy(body),
+    );
+  }
+
   @Post('entries/associations/rebuild')
   public async rebuildInformationEntryAssociations(
     @Body() body: unknown,
@@ -224,6 +235,76 @@ export class M1cApiController {
     writeLocalApiResponse(
       response,
       await this.#service.reviseInformationDocumentTags(snapshotId, body),
+    );
+  }
+
+  @Get('entries/:entryId/tag-proposals')
+  public async aiTagProposals(
+    @Param('entryId') entryId: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.listAiTagProposals(entryId),
+    );
+  }
+
+  @Post('entries/:entryId/tag-proposals/start')
+  public async startAiTagProposal(
+    @Param('entryId') entryId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.startAiTagProposal(entryId, body),
+    );
+  }
+
+  @Post('entries/:entryId/tag-proposals/:proposalId/accept')
+  public async acceptAiTagProposal(
+    @Param('entryId') entryId: string,
+    @Param('proposalId') proposalId: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.acceptAiTagProposal(entryId, proposalId),
+    );
+  }
+
+  @Post('entries/:entryId/tag-proposals/:proposalId/reject')
+  public async rejectAiTagProposal(
+    @Param('entryId') entryId: string,
+    @Param('proposalId') proposalId: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.rejectAiTagProposal(entryId, proposalId),
+    );
+  }
+
+  @Get('processing-runs')
+  public async processingRuns(
+    @Query('limit') limit: string | undefined,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.listProcessingRuns(limit),
+    );
+  }
+
+  @Post('processing-runs/:runId/cancel')
+  public async cancelProcessingRun(
+    @Param('runId') runId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.cancelProcessingRun(runId, body),
     );
   }
 

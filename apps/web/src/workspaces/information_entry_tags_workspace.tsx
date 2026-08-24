@@ -11,6 +11,7 @@ import {
   InformationEntryResults,
   type InformationEntryServices,
 } from './information_entry_components.js';
+import {InformationEntryAiTags} from './information_entry_ai_tags.js';
 import {InformationDocumentNavigator} from './information_entry_document_navigation.js';
 import {
   InformationDocumentPanel,
@@ -20,13 +21,17 @@ import {useInformationEntryController} from './use_information_entry_controller.
 
 export interface InformationEntryTagsWorkspaceProps extends Pick<
   InformationEntryServices,
+  | 'onAcceptAiTagProposal'
   | 'onAggregateDocumentTags'
+  | 'onListAiTagProposals'
   | 'onListDocuments'
   | 'onOpenEvidence'
+  | 'onRejectAiTagProposal'
   | 'onRevise'
   | 'onReviseDocumentTags'
   | 'onSaveReviewPreferences'
   | 'onSearch'
+  | 'onStartAiTagProposal'
 > {
   readonly aiEnabled: boolean;
   readonly reviewPreferences: Loadable<Readonly<ReviewPreferencesResponse>>;
@@ -39,13 +44,17 @@ export interface InformationEntryTagsWorkspaceProps extends Pick<
 
 export function InformationEntryTagsWorkspace({
   aiEnabled,
+  onAcceptAiTagProposal,
   onAggregateDocumentTags,
+  onListAiTagProposals,
   onListDocuments,
   onOpenEvidence,
+  onRejectAiTagProposal,
   onRevise,
   onReviseDocumentTags,
   onSaveReviewPreferences,
   onSearch,
+  onStartAiTagProposal,
   reviewPreferences,
   reviewPreferencesOverride,
   onReviewPreferencesChange,
@@ -112,7 +121,9 @@ export function InformationEntryTagsWorkspace({
           <p>在一个连续审核队列中完成评分、关键词、类型和领域标注。</p>
         </div>
         <span className="origin-label origin-label--manual">
-          {aiEnabled ? '确定性候选 + 人工确认' : '确定性候选 · 无需 AI'}
+          {aiEnabled
+            ? '确定性候选 + OpenAI 提案 + 人工接受'
+            : '确定性候选 · 无需 AI'}
         </span>
       </header>
 
@@ -229,29 +240,44 @@ export function InformationEntryTagsWorkspace({
         }}
       >
         {controller.selectedEntry === undefined ? undefined : (
-          <InformationEntryEditor
-            key={`${controller.selectedEntry.entryId}:${controller.selectedEntry.revision.toString()}`}
-            entry={controller.selectedEntry}
-            includePrivate={controller.includePrivate}
-            onOpenEvidence={onOpenEvidence}
-            onLocateDocument={() => {
-              controller.setSnapshotId(
-                controller.selectedEntry?.snapshotId ?? '',
-              );
-            }}
-            onPrevious={canGoPrevious ? showPreviousEntry : undefined}
-            onNext={canGoNext ? showNextEntry : undefined}
-            onRevise={onRevise}
-            onSavePreferences={onSaveReviewPreferences}
-            reviewPreferences={reviewPreferences}
-            onPreferencesChange={onReviewPreferencesChange}
-            overridePreferences={reviewPreferencesOverride}
-            onSaved={async (nextFeedback) => {
-              setFeedback(nextFeedback);
-              await controller.executeSearch();
-              await controller.refreshDocuments();
-            }}
-          />
+          <>
+            <InformationEntryAiTags
+              key={`ai:${controller.selectedEntry.entryId}:${controller.selectedEntry.revision.toString()}`}
+              enabled={aiEnabled}
+              entry={controller.selectedEntry}
+              onListAiTagProposals={onListAiTagProposals}
+              onStartAiTagProposal={onStartAiTagProposal}
+              onAcceptAiTagProposal={onAcceptAiTagProposal}
+              onRejectAiTagProposal={onRejectAiTagProposal}
+              onAccepted={async () => {
+                await controller.executeSearch();
+                await controller.refreshDocuments();
+              }}
+            />
+            <InformationEntryEditor
+              key={`${controller.selectedEntry.entryId}:${controller.selectedEntry.revision.toString()}`}
+              entry={controller.selectedEntry}
+              includePrivate={controller.includePrivate}
+              onOpenEvidence={onOpenEvidence}
+              onLocateDocument={() => {
+                controller.setSnapshotId(
+                  controller.selectedEntry?.snapshotId ?? '',
+                );
+              }}
+              onPrevious={canGoPrevious ? showPreviousEntry : undefined}
+              onNext={canGoNext ? showNextEntry : undefined}
+              onRevise={onRevise}
+              onSavePreferences={onSaveReviewPreferences}
+              reviewPreferences={reviewPreferences}
+              onPreferencesChange={onReviewPreferencesChange}
+              overridePreferences={reviewPreferencesOverride}
+              onSaved={async (nextFeedback) => {
+                setFeedback(nextFeedback);
+                await controller.executeSearch();
+                await controller.refreshDocuments();
+              }}
+            />
+          </>
         )}
       </InformationEntryResults>
     </div>

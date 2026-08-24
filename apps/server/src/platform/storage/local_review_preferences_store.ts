@@ -4,6 +4,7 @@ import {join} from 'node:path';
 
 import {
   createReviewPreferences,
+  decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
   decodeReviewQuickTags,
   decodeReviewVocabularyPreferences,
@@ -13,6 +14,7 @@ import {
   REVIEW_PREFERENCES_VERSION,
   ReviewPreferencesStoreError,
   type ReviewPreferences,
+  type ReviewAssociationPolicyPreferences,
   type ReviewAutomaticKeywordPreferences,
   type ReviewPreferencesStore,
   type ReviewVocabularyPreferences,
@@ -72,16 +74,23 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     quickTags: readonly string[],
     automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences> = DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
     vocabulary: Readonly<ReviewVocabularyPreferences> = DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+    associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>,
   ): Promise<Readonly<ReviewPreferences>> {
     validateWorkspaceId(workspaceId);
     const decoded = decodeReviewQuickTags(quickTags);
     const decodedAutomaticKeywords =
       decodeReviewAutomaticKeywordPreferences(automaticKeywords);
     const decodedVocabulary = decodeReviewVocabularyPreferences(vocabulary);
+    const decodedAssociationPolicy =
+      associationPolicy === undefined
+        ? undefined
+        : decodeReviewAssociationPolicyPreferences(associationPolicy);
     if (
       decoded === undefined ||
       decodedAutomaticKeywords === undefined ||
-      decodedVocabulary === undefined
+      decodedVocabulary === undefined ||
+      (associationPolicy !== undefined &&
+        decodedAssociationPolicy === undefined)
     ) {
       throw invalid();
     }
@@ -90,6 +99,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       decoded,
       decodedAutomaticKeywords,
       decodedVocabulary,
+      decodedAssociationPolicy,
     );
     const bytes = new TextEncoder().encode(
       `${JSON.stringify(preferences, undefined, 2)}\n`,
@@ -142,11 +152,22 @@ function decodePreferences(
       ? DEFAULT_REVIEW_VOCABULARY_PREFERENCES
       : decodeReviewVocabularyPreferences(value.vocabulary);
   if (vocabulary === undefined) throw invalid();
+  const associationPolicy =
+    value.associationPolicy === undefined
+      ? undefined
+      : decodeReviewAssociationPolicyPreferences(value.associationPolicy);
+  if (
+    value.associationPolicy !== undefined &&
+    associationPolicy === undefined
+  ) {
+    throw invalid();
+  }
   return createReviewPreferences(
     workspaceId,
     quickTags,
     automaticKeywords,
     vocabulary,
+    associationPolicy,
   );
 }
 

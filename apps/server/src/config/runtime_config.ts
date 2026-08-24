@@ -10,6 +10,14 @@ export type ProcessRole = 'api' | 'scheduler' | 'worker' | 'all';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
+export interface AiTagsProviderConfig {
+  readonly providerKey: 'openai-responses-v1';
+  readonly model: string;
+  readonly apiKey: string;
+  readonly maxOutputTokens: 800;
+  readonly timeoutMs: 60_000;
+}
+
 export interface RuntimeConfig {
   readonly role: ProcessRole;
   readonly database: Readonly<PostgresConnectionConfig>;
@@ -22,6 +30,7 @@ export interface RuntimeConfig {
   readonly databaseReadinessTimeoutMs: number;
   readonly shutdownTimeoutMs: number;
   readonly logLevel: LogLevel;
+  readonly aiTagsProvider?: Readonly<AiTagsProviderConfig>;
 }
 
 export class ConfigurationError extends Error {
@@ -79,6 +88,10 @@ export function parseRuntimeConfig(
     MAX_SHUTDOWN_TIMEOUT_MS,
   );
   const logLevel = parseLogLevel(environment.STRUIINFO_LOG_LEVEL);
+  const aiTagsProvider = parseAiTagsProvider(
+    environment.OPENAI_API_KEY,
+    environment.STRUIINFO_OPENAI_MODEL,
+  );
 
   return Object.freeze({
     role,
@@ -92,9 +105,47 @@ export function parseRuntimeConfig(
     databaseReadinessTimeoutMs: DEFAULT_DATABASE_READINESS_TIMEOUT_MS,
     shutdownTimeoutMs,
     logLevel,
+    ...(aiTagsProvider === undefined ? {} : {aiTagsProvider}),
   });
 }
 
+function parseAiTagsProvider(
+  apiKey: string | undefined,
+  model: string | undefined,
+): Readonly<AiTagsProviderConfig> | undefined {
+  if (apiKey === undefined && model === undefined) return undefined;
+  if (
+    apiKey === undefined ||
+    model === undefined ||
+    apiKey.length < 1 ||
+    apiKey.length > 4_096 ||
+    containsWhitespaceOrControl(apiKey) ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/u.test(model)
+  ) {
+    throw new ConfigurationError(
+      'OPENAI_API_KEY and STRUIINFO_OPENAI_MODEL must both be supplied to enable AI tags.',
+    );
+  }
+  return Object.freeze({
+    providerKey: 'openai-responses-v1' as const,
+    model,
+    apiKey,
+    maxOutputTokens: 800 as const,
+    timeoutMs: 60_000 as const,
+  });
+}
+
+function containsWhitespaceOrControl(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0);
+    return (
+      character.trim().length === 0 ||
+      codePoint === undefined ||
+      codePoint <= 0x1f ||
+      codePoint === 0x7f
+    );
+  });
+}
 function parseWorkspaceId(value: string | undefined): string {
   if (value === undefined || !CANONICAL_UUID_PATTERN.test(value)) {
     throw new ConfigurationError(

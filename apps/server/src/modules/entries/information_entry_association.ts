@@ -12,6 +12,7 @@ import {informationEntrySearchKey} from './information_entry.js';
 
 export const INFORMATION_ENTRY_ASSOCIATION_POLICY: Readonly<InformationEntryAssociationPolicy> =
   Object.freeze({
+    revision: 0,
     version: 'struinfo.entry-association.local-index.v1',
     contentWeight: 65,
     typeWeight: 15,
@@ -468,7 +469,16 @@ function assertPolicy(
   policy: Readonly<InformationEntryAssociationPolicy>,
 ): void {
   if (
+    !Number.isSafeInteger(policy.revision) ||
+    policy.revision < 0 ||
+    !Number.isSafeInteger(policy.contentWeight) ||
+    !Number.isSafeInteger(policy.typeWeight) ||
+    !Number.isSafeInteger(policy.domainWeight) ||
+    policy.contentWeight < 0 ||
+    policy.typeWeight < 0 ||
+    policy.domainWeight < 0 ||
     policy.contentWeight + policy.typeWeight + policy.domainWeight !== 100 ||
+    !Number.isSafeInteger(policy.threshold) ||
     policy.threshold < 0 ||
     policy.threshold > SCORE_SCALE ||
     !Number.isSafeInteger(policy.candidateLimit) ||
