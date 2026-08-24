@@ -2,6 +2,8 @@ import {createHash} from 'node:crypto';
 
 import type {
   CurrentInformationEntry,
+  EntryTextSearchField,
+  EntryTextSearchMode,
   InformationEntryAssociationMatch,
   InformationEntryAssociationPathStep,
   InformationEntryFilterReason,
@@ -21,6 +23,10 @@ export class InformationEntrySearchCursorError extends Error {
     this.name = 'InformationEntrySearchCursorError';
   }
 }
+
+const DEFAULT_TEXT_SEARCH_FIELDS: readonly EntryTextSearchField[] =
+  Object.freeze(['title', 'body', 'tags']);
+export const ENTRY_FUZZY_MINIMUM_SCORE = 4_500;
 
 interface AssociationVisit {
   readonly depth: number;
@@ -57,18 +63,33 @@ export function searchCurrentInformationEntries(
           request.association,
         );
   const query = informationEntrySearchKey(request.text ?? '');
+  const textMode = request.textMode ?? 'substring';
+  const textFields = canonicalTextSearchFields(request.textFields);
   const matches = visibleEntries.flatMap((entry) => {
     const filterReasons = structuralFilterReasons(entry, request);
     if (filterReasons === undefined) return [];
     const association = associationMatches?.get(entry.entryId);
     if (associationMatches !== undefined && association === undefined)
       return [];
-    const matchReasons = textMatchReasons(entry, query);
-    if (query !== '' && matchReasons.length === 0) return [];
+    const textMatch = matchInformationEntryText(
+      entry,
+      query,
+      textMode,
+      textFields,
+    );
+    if (query !== '' && textMatch === undefined) return [];
     return [
       Object.freeze({
         entry,
-        matchReasons: Object.freeze(matchReasons),
+        matchReasons: textMatch?.reasons ?? Object.freeze([]),
+        ...(textMatch === undefined
+          ? {}
+          : {
+              textMatch: Object.freeze({
+                mode: textMode,
+                score: textMatch.score,
+              }),
+            }),
         filterReasons: Object.freeze(filterReasons),
         ...(association === undefined ? {} : {association}),
       }),
@@ -96,8 +117,12 @@ export function informationEntryQuerySha256(
   request: Readonly<InformationEntrySearchRequest>,
 ): string {
   const projection = {
-    schemaVersion: 'struinfo.information-entry-search.v1',
-    text: informationEntrySearchKey(request.text ?? ''),
+    schemaVersion: 'struinfo.information-entry-search.v2',
+    text: Object.freeze({
+      value: informationEntrySearchKey(request.text ?? ''),
+      mode: request.textMode ?? 'substring',
+      fields: canonicalTextSearchFields(request.textFields),
+    }),
     contentKeyword: informationEntrySearchKey(request.contentKeyword ?? ''),
     sourceKey: request.sourceKey ?? '',
     snapshotId: request.snapshotId ?? '',
@@ -195,45 +220,238 @@ function structuralFilterReasons(
   return reasons;
 }
 
-function textMatchReasons(
-  entry: Readonly<CurrentInformationEntry>,
-  query: string,
-): InformationEntryMatchReason[] {
-  if (query === '') return [];
-  const reasons: InformationEntryMatchReason[] = [];
-  if (informationEntrySearchKey(entry.value.titlePath).includes(query)) {
-    reasons.push('title');
-  }
-  if (informationEntrySearchKey(entry.value.body).includes(query)) {
-    reasons.push('body');
-  }
-  if (
-    entry.value.contentKeywords.some((keyword) =>
-      keyword.normalizedValue.includes(query),
-    )
-  ) {
-    reasons.push('content_keyword');
-  }
-  if (
-    entry.value.typeKeyword !== undefined &&
-    informationEntrySearchKey(
-      entry.value.typeCustomName ?? entry.value.typeKeyword,
-    ).includes(query)
-  ) {
-    reasons.push('type_keyword');
-  }
-  if (
-    entry.value.domains.some((domain) =>
-      informationEntrySearchKey(domain.customName ?? domain.keyword).includes(
-        query,
-      ),
-    )
-  ) {
-    reasons.push('domain_keyword');
-  }
-  return reasons;
+function canonicalTextSearchFields(
+  fields: readonly EntryTextSearchField[] | undefined,
+): readonly EntryTextSearchField[] {
+  if (fields === undefined) return DEFAULT_TEXT_SEARCH_FIELDS;
+  return Object.freeze(
+    DEFAULT_TEXT_SEARCH_FIELDS.filter((field) => fields.includes(field)),
+  );
+}
+interface InformationEntryTextMatchEvaluation {
+  readonly reasons: readonly InformationEntryMatchReason[];
+  readonly score: number;
 }
 
+function matchInformationEntryText(
+  entry: Readonly<CurrentInformationEntry>,
+  query: string,
+  mode: EntryTextSearchMode,
+  fields: readonly EntryTextSearchField[],
+): Readonly<InformationEntryTextMatchEvaluation> | undefined {
+  if (query === '') return undefined;
+  const selected = new Set(fields);
+  const reasons: InformationEntryMatchReason[] = [];
+  let score = 0;
+  const addReason = (
+    reason: InformationEntryMatchReason,
+    candidates: readonly string[],
+  ): void => {
+    const candidateScore = maximumCandidateScore(candidates, query, mode);
+    if (candidateScore === undefined) return;
+    reasons.push(reason);
+    score = Math.max(score, candidateScore);
+  };
+
+  if (selected.has('title')) {
+    addReason('title', [entry.value.titlePath]);
+  }
+  if (selected.has('body')) {
+    addReason('body', [entry.value.body]);
+  }
+  if (selected.has('tags')) {
+    addReason(
+      'content_keyword',
+      entry.value.contentKeywords.map((keyword) => keyword.normalizedValue),
+    );
+    if (entry.value.typeKeyword !== undefined) {
+      addReason('type_keyword', [
+        entry.value.typeCustomName ?? entry.value.typeKeyword,
+      ]);
+    }
+    addReason(
+      'domain_keyword',
+      entry.value.domains.map((domain) => domain.customName ?? domain.keyword),
+    );
+  }
+
+  return reasons.length === 0
+    ? undefined
+    : Object.freeze({reasons: Object.freeze(reasons), score});
+}
+
+function maximumCandidateScore(
+  candidates: readonly string[],
+  query: string,
+  mode: EntryTextSearchMode,
+): number | undefined {
+  let maximum: number | undefined;
+  for (const candidate of candidates) {
+    const score = scoreInformationEntrySearchText(candidate, query, mode);
+    if (score !== undefined && (maximum === undefined || score > maximum)) {
+      maximum = score;
+    }
+  }
+  return maximum;
+}
+
+/**
+ * Scores one candidate with the same deterministic lexical semantics used by
+ * Entry and complete-private-document search. The result is basis points.
+ */
+export function scoreInformationEntrySearchText(
+  candidate: string,
+  query: string,
+  mode: EntryTextSearchMode,
+): number | undefined {
+  const normalizedCandidate = informationEntrySearchKey(candidate);
+  const normalizedQuery = informationEntrySearchKey(query);
+  if (normalizedQuery === '') return undefined;
+  if (normalizedCandidate === normalizedQuery) return 10_000;
+  if (mode === 'exact') return undefined;
+  if (normalizedCandidate.includes(normalizedQuery)) return 9_000;
+  if (mode === 'substring') return undefined;
+
+  const score = fuzzySubstringScore(normalizedCandidate, normalizedQuery);
+  return score < ENTRY_FUZZY_MINIMUM_SCORE ? undefined : score;
+}
+
+function fuzzySubstringScore(candidate: string, query: string): number {
+  const candidatePoints = Array.from(candidate);
+  const queryPoints = Array.from(query);
+  if (queryPoints.length < 3 || candidatePoints.length < 2) return 0;
+  let maximum = 0;
+  for (const windowLength of [
+    queryPoints.length - 1,
+    queryPoints.length,
+    queryPoints.length + 1,
+  ]) {
+    if (windowLength < 2 || windowLength > candidatePoints.length) continue;
+    maximum = Math.max(
+      maximum,
+      maximumWindowGramScore(queryPoints, candidatePoints, windowLength),
+    );
+  }
+  return Math.min(8_999, maximum);
+}
+
+function maximumWindowGramScore(
+  query: readonly string[],
+  candidate: readonly string[],
+  windowLength: number,
+): number {
+  const queryCharacters = multiset(query);
+  const queryBigrams = multiset(bigrams(query));
+  const windowCharacters = multiset(candidate.slice(0, windowLength));
+  const windowBigrams = multiset(bigrams(candidate.slice(0, windowLength)));
+  let characterOverlap = multisetOverlap(queryCharacters, windowCharacters);
+  let bigramOverlap = multisetOverlap(queryBigrams, windowBigrams);
+  let maximum = combinedGramScore(
+    query.length,
+    windowLength,
+    characterOverlap,
+    bigramOverlap,
+  );
+
+  for (let start = 1; start + windowLength <= candidate.length; start += 1) {
+    characterOverlap = adjustWindowCount(
+      windowCharacters,
+      candidate[start - 1] ?? '',
+      -1,
+      queryCharacters,
+      characterOverlap,
+    );
+    characterOverlap = adjustWindowCount(
+      windowCharacters,
+      candidate[start + windowLength - 1] ?? '',
+      1,
+      queryCharacters,
+      characterOverlap,
+    );
+    bigramOverlap = adjustWindowCount(
+      windowBigrams,
+      bigramKey(candidate[start - 1] ?? '', candidate[start] ?? ''),
+      -1,
+      queryBigrams,
+      bigramOverlap,
+    );
+    bigramOverlap = adjustWindowCount(
+      windowBigrams,
+      bigramKey(
+        candidate[start + windowLength - 2] ?? '',
+        candidate[start + windowLength - 1] ?? '',
+      ),
+      1,
+      queryBigrams,
+      bigramOverlap,
+    );
+    maximum = Math.max(
+      maximum,
+      combinedGramScore(
+        query.length,
+        windowLength,
+        characterOverlap,
+        bigramOverlap,
+      ),
+    );
+  }
+  return maximum;
+}
+
+function combinedGramScore(
+  queryLength: number,
+  windowLength: number,
+  characterOverlap: number,
+  bigramOverlap: number,
+): number {
+  const characterDice = (2 * characterOverlap) / (queryLength + windowLength);
+  const bigramDice = (2 * bigramOverlap) / (queryLength + windowLength - 2);
+  return Math.floor(characterDice * 4_000 + bigramDice * 6_000);
+}
+
+function multiset(values: readonly string[]): Map<string, number> {
+  const result = new Map<string, number>();
+  for (const value of values) result.set(value, (result.get(value) ?? 0) + 1);
+  return result;
+}
+
+function multisetOverlap(
+  left: ReadonlyMap<string, number>,
+  right: ReadonlyMap<string, number>,
+): number {
+  let overlap = 0;
+  for (const [key, count] of left) {
+    overlap += Math.min(count, right.get(key) ?? 0);
+  }
+  return overlap;
+}
+
+function adjustWindowCount(
+  counts: Map<string, number>,
+  key: string,
+  delta: -1 | 1,
+  queryCounts: ReadonlyMap<string, number>,
+  overlap: number,
+): number {
+  const previous = counts.get(key) ?? 0;
+  const expected = queryCounts.get(key) ?? 0;
+  const next = previous + delta;
+  if (next === 0) counts.delete(key);
+  else counts.set(key, next);
+  return overlap - Math.min(previous, expected) + Math.min(next, expected);
+}
+
+function bigrams(values: readonly string[]): string[] {
+  const result: string[] = [];
+  for (let index = 0; index + 1 < values.length; index += 1) {
+    result.push(bigramKey(values[index] ?? '', values[index + 1] ?? ''));
+  }
+  return result;
+}
+
+function bigramKey(left: string, right: string): string {
+  return `${left.codePointAt(0)?.toString(16) ?? ''}:${right.codePointAt(0)?.toString(16) ?? ''}`;
+}
 function buildAssociationMatches(
   entries: readonly Readonly<CurrentInformationEntry>[],
   snapshot: Readonly<InformationEntryAssociationRepositorySnapshot>,
@@ -323,6 +541,9 @@ function compareSearchItems(
   const leftDepth = left.association?.depth ?? 0;
   const rightDepth = right.association?.depth ?? 0;
   if (leftDepth !== rightDepth) return leftDepth - rightDepth;
+  const leftTextScore = left.textMatch?.score ?? 0;
+  const rightTextScore = right.textMatch?.score ?? 0;
+  if (leftTextScore !== rightTextScore) return rightTextScore - leftTextScore;
   if (left.matchReasons.length !== right.matchReasons.length) {
     return right.matchReasons.length - left.matchReasons.length;
   }
@@ -345,6 +566,8 @@ function compareSearchItemToCursor(
 ): number {
   const depth = item.association?.depth ?? 0;
   if (depth !== cursor.associationDepth) return depth - cursor.associationDepth;
+  const textScore = item.textMatch?.score ?? 0;
+  if (textScore !== cursor.textScore) return cursor.textScore - textScore;
   if (item.matchReasons.length !== cursor.matchReasonCount) {
     return cursor.matchReasonCount - item.matchReasons.length;
   }
@@ -363,9 +586,10 @@ function searchCursorFor(
   querySha256: string,
 ): Readonly<InformationEntrySearchCursor> {
   return Object.freeze({
-    schemaVersion: 1 as const,
+    schemaVersion: 2 as const,
     querySha256,
     associationDepth: item.association?.depth ?? 0,
+    textScore: item.textMatch?.score ?? 0,
     matchReasonCount: item.matchReasons.length,
     associationScore: item.association?.effectiveScore ?? 0,
     capturedAt: item.entry.capturedAt,

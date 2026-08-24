@@ -58,6 +58,12 @@ export function PrivateDocumentResults({
                           .map(privateDocumentMatchReasonLabel)
                           .join(' · ')}
                   </span>
+                  {item.textMatch === undefined ? null : (
+                    <span>
+                      {privateDocumentTextModeLabel(item.textMatch.mode)}匹配 ·{' '}
+                      词法分 {scoreOutOfOneHundred(item.textMatch.score)}/100
+                    </span>
+                  )}{' '}
                   <span>
                     {item.entryMatchCount > 0
                       ? `${item.entryMatchCount.toString()} 个 Entry 同时符合结构条件`
@@ -92,5 +98,23 @@ function privateDocumentMatchReasonLabel(
       return '来源命中';
     case 'uri':
       return '来源地址命中';
+    case 'entry_tags':
+      return '文档内 Entry 标签命中';
   }
+}
+function privateDocumentTextModeLabel(value: string): string {
+  switch (value) {
+    case 'exact':
+      return '精确';
+    case 'substring':
+      return '包含';
+    case 'fuzzy':
+      return '近似';
+    default:
+      return value;
+  }
+}
+
+function scoreOutOfOneHundred(value: number): string {
+  return (value / 100).toFixed(value % 100 === 0 ? 0 : 1);
 }

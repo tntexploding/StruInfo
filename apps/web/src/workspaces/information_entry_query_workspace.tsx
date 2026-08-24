@@ -14,7 +14,10 @@ import {
   type InformationEntryServices,
 } from './information_entry_components.js';
 import {DOMAIN_LABELS, TYPE_LABELS} from './information_entry_shared.js';
-import {InformationEntryAdvancedSearchFields} from './information_entry_search_controls.js';
+import {
+  InformationEntryAdvancedSearchFields,
+  InformationEntryTextSearchOptions,
+} from './information_entry_search_controls.js';
 import {useInformationEntryController} from './use_information_entry_controller.js';
 import {PrivateDocumentResults} from './private_document_results.js';
 
@@ -51,7 +54,9 @@ export function InformationEntryQueryWorkspace({
           <p>按正文、标签、来源、时间与有限邻域检索，并返回精确来源。</p>
         </div>
         <span className="origin-label origin-label--deterministic">
-          {aiEnabled ? '确定性搜索 · AI 联想未接入' : '确定性搜索 · 可离线使用'}
+          {aiEnabled
+            ? '本地词法搜索 · AI 查询未接入'
+            : '本地词法搜索 · 可离线使用'}
         </span>
       </header>
 
@@ -64,7 +69,7 @@ export function InformationEntryQueryWorkspace({
         <div className="workflow-capability-strip__options">
           <span data-active="true">标题 / 正文 / 标签</span>
           <span data-active="true">精确结构筛选</span>
-          <span data-active="false">模糊 / 联想 · 待接入</span>
+          <span data-active="true">精确 / 包含 / 模糊</span>
         </div>
       </section>
 
@@ -91,16 +96,22 @@ export function InformationEntryQueryWorkspace({
           onSubmit={submitSearch}
         >
           <label className="field entry-search-query">
-            <span>正文或关键词</span>
+            <span>搜索文字</span>
             <input
               type="search"
               value={controller.query}
               onChange={(event) => {
                 controller.setQuery(event.currentTarget.value);
               }}
-              placeholder="留空浏览当前 Entry"
+              placeholder="输入标题、正文或标签；留空浏览当前 Entry"
             />
           </label>
+          <InformationEntryTextSearchOptions
+            mode={controller.textMode}
+            fields={controller.textFields}
+            onModeChange={controller.setTextMode}
+            onFieldsChange={controller.setTextFields}
+          />
           <label className="field entry-source-filter">
             <span>来源文档</span>
             <select

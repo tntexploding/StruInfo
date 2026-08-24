@@ -39,6 +39,7 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0017](0017-manual-within-fragment-entry-boundaries.md) | Accepted | Exact manual Unicode-scalar boundaries inside immutable Fragments before first Entry materialization |
 | [0018](0018-local-text-file-import.md) | Accepted | Explicit local Markdown/plain-text file capture through the existing Evidence import |
 | [0019](0019-local-html-pdf-import.md) | Accepted | Exact raw HTML/PDF evidence with a deterministic local text projection for the existing Split path |
+| [0020](0020-explainable-lexical-entry-search.md) | Accepted | Explainable exact, substring and spelling-tolerant Entry search without AI or a new search stack |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -68,4 +69,4 @@ adds an explicitly selected public-Snapshot split proposal whose exact Fragment
 groups materialize only after manual acceptance through the existing Entry
 boundary. ADR 0016 adds the complete no-Provider owner path for grouping those
 same immutable Fragments before the first Entry structure is committed. ADR 0017
-extends that path to exact Unicode-scalar ranges without rewriting source evidence. ADR 0018 accepts explicit local Markdown/plain-text capture; ADR 0019 extends the same Evidence path to semantic HTML and PDF text-layer projections while retaining exact raw files externally.
+extends that path to exact Unicode-scalar ranges without rewriting source evidence. ADR 0018 accepts explicit local Markdown/plain-text capture; ADR 0019 extends the same Evidence path to semantic HTML and PDF text-layer projections while retaining exact raw files externally. ADR 0020 extends the existing deterministic Entry query with explicit exact, substring and spelling-tolerant lexical modes, field scope, visible scores and cursor binding without AI, a migration or another search service.

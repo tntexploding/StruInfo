@@ -1,9 +1,97 @@
 import type {
   EntryDomainKeyword,
+  EntryTextSearchField,
+  EntryTextSearchMode,
   EntryTypeKeyword,
   EvidenceSnapshotSummary,
 } from '../api/m1c_api_contract.js';
 
+const TEXT_SEARCH_MODE_OPTIONS: readonly Readonly<{
+  value: EntryTextSearchMode;
+  label: string;
+}>[] = Object.freeze([
+  Object.freeze({value: 'exact', label: '精确一致'}),
+  Object.freeze({value: 'substring', label: '包含文字'}),
+  Object.freeze({value: 'fuzzy', label: '近似匹配'}),
+]);
+
+const TEXT_SEARCH_FIELD_OPTIONS: readonly Readonly<{
+  value: EntryTextSearchField;
+  label: string;
+}>[] = Object.freeze([
+  Object.freeze({value: 'title', label: '标题'}),
+  Object.freeze({value: 'body', label: '正文'}),
+  Object.freeze({value: 'tags', label: '标签'}),
+]);
+
+export function InformationEntryTextSearchOptions({
+  fields,
+  mode,
+  onFieldsChange,
+  onModeChange,
+}: {
+  readonly fields: readonly EntryTextSearchField[];
+  readonly mode: EntryTextSearchMode;
+  readonly onFieldsChange: (fields: readonly EntryTextSearchField[]) => void;
+  readonly onModeChange: (mode: EntryTextSearchMode) => void;
+}) {
+  return (
+    <fieldset className="entry-text-search-options">
+      <legend>文本匹配</legend>
+      <div className="entry-text-search-options__group">
+        <span>方式</span>
+        <div className="entry-text-search-options__choices">
+          {TEXT_SEARCH_MODE_OPTIONS.map((option) => (
+            <label key={option.value}>
+              <input
+                type="radio"
+                name="entry-text-search-mode"
+                value={option.value}
+                checked={mode === option.value}
+                onChange={() => {
+                  onModeChange(option.value);
+                }}
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="entry-text-search-options__group">
+        <span>范围</span>
+        <div className="entry-text-search-options__choices">
+          {TEXT_SEARCH_FIELD_OPTIONS.map((option) => {
+            const checked = fields.includes(option.value);
+            return (
+              <label key={option.value}>
+                <input
+                  type="checkbox"
+                  value={option.value}
+                  checked={checked}
+                  disabled={checked && fields.length === 1}
+                  onChange={() => {
+                    onFieldsChange(
+                      Object.freeze(
+                        checked
+                          ? fields.filter((field) => field !== option.value)
+                          : [...fields, option.value],
+                      ),
+                    );
+                  }}
+                />
+                <span>{option.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+      <p>
+        近似匹配只比较本地规范化字符片段并显示分数，不调用
+        AI，也不表示语义相同。
+      </p>
+    </fieldset>
+  );
+}
 export interface EntrySearchAssociationFilter {
   readonly entryId: string;
   readonly label: string;

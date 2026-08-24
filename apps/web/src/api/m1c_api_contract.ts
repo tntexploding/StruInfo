@@ -297,6 +297,8 @@ export const ENTRY_DOMAIN_KEYWORDS = [
 
 export type EntryTypeKeyword = (typeof ENTRY_TYPE_KEYWORDS)[number];
 export type EntryDomainKeyword = (typeof ENTRY_DOMAIN_KEYWORDS)[number];
+export type EntryTextSearchMode = 'exact' | 'substring' | 'fuzzy';
+export type EntryTextSearchField = 'title' | 'body' | 'tags';
 
 export interface InformationEntryContentKeyword {
   readonly displayValue: string;
@@ -453,9 +455,10 @@ export interface InformationEntryAssociationMatch {
 }
 
 export interface InformationEntrySearchCursor {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly querySha256: string;
   readonly associationDepth: number;
+  readonly textScore: number;
   readonly matchReasonCount: number;
   readonly associationScore: number;
   readonly capturedAt: string;
@@ -465,7 +468,11 @@ export interface InformationEntrySearchCursor {
 
 export interface PrivateDocumentSearchItem {
   readonly snapshot: Readonly<EvidenceSnapshotSummary>;
-  readonly matchReasons: readonly ('body' | 'source' | 'uri')[];
+  readonly matchReasons: readonly ('body' | 'source' | 'uri' | 'entry_tags')[];
+  readonly textMatch?: Readonly<{
+    mode: EntryTextSearchMode;
+    score: number;
+  }>;
   readonly entryMatchCount: number;
   readonly excerpt?: string;
 }
@@ -478,6 +485,10 @@ export type InformationEntrySearchResponse =
       items: readonly Readonly<{
         entry: Readonly<InformationEntry>;
         matchReasons: readonly InformationEntryMatchReason[];
+        textMatch?: Readonly<{
+          mode: EntryTextSearchMode;
+          score: number;
+        }>;
         filterReasons: readonly InformationEntryFilterReason[];
         association?: Readonly<InformationEntryAssociationMatch>;
       }>[];
@@ -575,6 +586,10 @@ export type InformationEntryKnowledgeGraphResponse =
       candidates: readonly Readonly<{
         entry: Readonly<InformationEntry>;
         matchReasons: readonly InformationEntryMatchReason[];
+        textMatch?: Readonly<{
+          mode: EntryTextSearchMode;
+          score: number;
+        }>;
         filterReasons: readonly InformationEntryFilterReason[];
       }>[];
       graph: Readonly<{

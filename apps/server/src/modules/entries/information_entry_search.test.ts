@@ -59,6 +59,107 @@ describe('complete InformationEntry search', () => {
     expect(result.querySha256).toMatch(/^[0-9a-f]{64}$/u);
   });
 
+  it('supports exact, substring, and field-scoped matching', () => {
+    const entry = currentEntry('00000000-0000-4000-8000-000000000001', {
+      titlePath: 'Synthetic Atlas',
+      body: 'A local body about deterministic retrieval',
+      contentKeywords: ['Graph Index'],
+    });
+
+    const exactTitle = searchCurrentInformationEntries([entry], {
+      text: 'synthetic atlas',
+      textMode: 'exact',
+      textFields: ['title'],
+      includePrivate: false,
+      limit: 25,
+    });
+    expect(exactTitle.items[0]).toMatchObject({
+      matchReasons: ['title'],
+      textMatch: {mode: 'exact', score: 10_000},
+    });
+    expect(
+      searchCurrentInformationEntries([entry], {
+        text: 'synthetic',
+        textMode: 'exact',
+        textFields: ['title'],
+        includePrivate: false,
+        limit: 25,
+      }).totalCount,
+    ).toBe(0);
+
+    const tagOnly = searchCurrentInformationEntries([entry], {
+      text: 'graph',
+      textMode: 'substring',
+      textFields: ['tags'],
+      includePrivate: false,
+      limit: 25,
+    });
+    expect(tagOnly.items[0]).toMatchObject({
+      matchReasons: ['content_keyword'],
+      textMatch: {mode: 'substring', score: 9_000},
+    });
+    expect(
+      searchCurrentInformationEntries([entry], {
+        text: 'graph',
+        textMode: 'substring',
+        textFields: ['body'],
+        includePrivate: false,
+        limit: 25,
+      }).totalCount,
+    ).toBe(0);
+  });
+
+  it('uses a bounded local fuzzy score and orders stronger text matches first', () => {
+    const fuzzy = currentEntry('00000000-0000-4000-8000-000000000001', {
+      documentOrder: 0,
+      body: '这里说明结构俭索的本地实现。',
+    });
+    const exact = currentEntry('00000000-0000-4000-8000-000000000002', {
+      documentOrder: 1,
+      body: '结构检索',
+    });
+
+    const substring = searchCurrentInformationEntries([fuzzy], {
+      text: '结构检索',
+      textMode: 'substring',
+      textFields: ['body'],
+      includePrivate: false,
+      limit: 25,
+    });
+    expect(substring.totalCount).toBe(0);
+
+    const first = searchCurrentInformationEntries([fuzzy, exact], {
+      text: '结构检索',
+      textMode: 'fuzzy',
+      textFields: ['body'],
+      includePrivate: false,
+      limit: 1,
+    });
+    expect(first.totalCount).toBe(2);
+    expect(first.items[0]).toMatchObject({
+      entry: {entryId: exact.entryId},
+      matchReasons: ['body'],
+      textMatch: {mode: 'fuzzy', score: 10_000},
+    });
+    expect(first.nextCursor).toMatchObject({
+      schemaVersion: 2,
+      textScore: 10_000,
+    });
+    if (first.nextCursor === undefined) throw new Error('cursor missing');
+
+    const second = searchCurrentInformationEntries([fuzzy, exact], {
+      text: '结构检索',
+      textMode: 'fuzzy',
+      textFields: ['body'],
+      includePrivate: false,
+      limit: 1,
+      after: first.nextCursor,
+    });
+    expect(second.items[0]).toMatchObject({
+      entry: {entryId: fuzzy.entryId},
+      textMatch: {mode: 'fuzzy', score: 5_000},
+    });
+  });
   it('uses a query-bound exclusive cursor for stable pages', () => {
     const entries = [1, 2, 3].map((value) =>
       currentEntry(
@@ -194,6 +295,9 @@ function currentEntry(
   entryId: string,
   overrides: Readonly<{
     documentOrder?: number;
+    titlePath?: string;
+    body?: string;
+    contentKeywords?: readonly string[];
     publishedAt?: string;
     typeKeyword?: 'knowledge_explanation' | 'other';
     typeCustomName?: string;
@@ -215,8 +319,8 @@ function currentEntry(
       : {publishedAt: overrides.publishedAt}),
     value: Object.freeze({
       documentOrder: overrides.documentOrder ?? 0,
-      titlePath: 'Synthetic Entry',
-      body: 'PostgreSQL-backed searchable body',
+      titlePath: overrides.titlePath ?? 'Synthetic Entry',
+      body: overrides.body ?? 'PostgreSQL-backed searchable body',
       bodySha256: 'a'.repeat(64),
       chunkMode: 'split' as const,
       splitRuleVersion: 'struinfo.entry-split.section.v1',
@@ -225,14 +329,16 @@ function currentEntry(
       ...(overrides.typeCustomName === undefined
         ? {}
         : {typeCustomName: overrides.typeCustomName}),
-      contentKeywords: Object.freeze([
-        Object.freeze({
-          displayValue: 'PostgreSQL',
-          normalizedValue: 'postgresql',
-          origin: 'manual' as const,
-          originVersion: 'manual-entry-editor.v1',
-        }),
-      ]),
+      contentKeywords: Object.freeze(
+        (overrides.contentKeywords ?? ['PostgreSQL']).map((value) =>
+          Object.freeze({
+            displayValue: value,
+            normalizedValue: value.toLowerCase().normalize('NFC'),
+            origin: 'manual' as const,
+            originVersion: 'manual-entry-editor.v1',
+          }),
+        ),
+      ),
       domains:
         overrides.domains ?? Object.freeze([domain('engineering_computing')]),
       fragmentIds: Object.freeze(['55555555-5555-4555-8555-555555555555']),

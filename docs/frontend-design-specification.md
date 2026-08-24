@@ -365,8 +365,11 @@ Each workspace has one dominant task and a visibly subordinate context area:
 
 A requested capability that is not backed by the current public product boundary
 MUST be labelled unavailable or pending rather than simulated. This applies in
-particular to AI query synthesis, automatic proposal acceptance, and fuzzy
-matching. A real imported or deterministic ProcessingRun may still be shown and
+particular to AI query synthesis, automatic proposal acceptance, semantic/vector
+matching and RAG. Query's implemented exact, contains and approximate controls
+MUST be described as local lexical matching; approximate results show a bounded
+lexical score and MUST NOT be styled as probability, confidence or semantic
+equivalence. A real imported or deterministic ProcessingRun may still be shown and
 cancelled through `processing_runs`; this MUST NOT be relabelled as generic AI
 availability. `ai_split`, `ai_tags`, and `ai_associations` independently enable
 only their Split, Tags, and selected-pair Formal Knowledge proposal surfaces;

@@ -179,6 +179,23 @@ record of why that unissued harness never blocked product work.
   material set, prepares a deployment/distribution candidate, or new evidence
   shows a reachable current-product blocker.
 
+### DH-011: Random Fetch-Forbidden Ephemeral Port in Local HTTP Integration
+
+- Source: M1F-1 complete verification on 2026-08-24
+- Owner: Test tooling
+- Status: Deferred, non-blocking
+- Scope: `tests/integration/m1c-local-http.integration.test.ts` ephemeral listener
+- Evidence: One complete verification assigned the local synthetic server a port
+  rejected by Node Fetch as `bad port` before any HTTP request. The unchanged
+  integration command immediately passed 4/4, followed by a complete clean
+  verification with 93 unit files / 686 tests, 2 integration files / 4 tests,
+  build and artifact verification.
+- Current product impact: None. The application listener and request handling
+  were not reached in the failing attempt; M1F-1 code and all supported product
+  behavior passed on the subsequent complete run.
+- Revisit when: The collision recurs often enough to destabilize CI or a product
+  listener, rather than a test-assigned Fetch-forbidden port, becomes affected.
+
 ## Entry Template
 
 ### DH-NNN: Short Title

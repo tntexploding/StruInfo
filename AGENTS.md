@@ -345,6 +345,12 @@ now complete. The next product task must come from direct owner use or another
 explicitly accepted narrow boundary; do not infer a generic AI,
 automatic-acceptance, private-content transfer, query synthesis, Embedding, or
 RAG capability from these proposal paths.
+ADR 0020 completes M1F-1 without another persistence or Provider boundary.
+Entry Query now offers explicit exact, substring and spelling-tolerant local
+lexical modes across title, body and the three keyword dimensions. Results expose
+a bounded lexical score, query-bound cursor v2 and the same semantics for the
+explicit complete-private-document channel. This is not semantic search, AI,
+Embedding or RAG; it adds no migration, dependency, index or search service.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
