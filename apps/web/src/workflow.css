@@ -1490,3 +1490,207 @@
     inline-size: 100%;
   }
 }
+
+/* M1E-4A: local, user-owned Fragment grouping before Entry materialization. */
+
+.workflow-stage-workspace[data-workflow-page='split'] > .entry-manual-split {
+  grid-column: 1 / -1;
+  grid-row: 4;
+}
+
+.workflow-stage-workspace[data-workflow-page='split'] > .entry-batch-panel {
+  grid-column: 1;
+  grid-row: 5;
+}
+
+.workflow-stage-workspace[data-workflow-page='split'] > .entry-command-panel {
+  grid-column: 1;
+  grid-row: 6;
+}
+
+.workflow-stage-workspace[data-workflow-page='split'] > .entry-workbench,
+.workflow-stage-workspace[data-workflow-page='split'] > .entry-state,
+.workflow-stage-workspace[data-workflow-page='split'] > .entry-loading {
+  grid-column: 2;
+  grid-row: 5 / span 2;
+}
+
+.workflow-stage-workspace[data-workflow-page='split'] > .entry-ai-split {
+  grid-column: 1 / -1;
+  grid-row: 7;
+}
+
+.entry-manual-split {
+  display: grid;
+  gap: var(--si-space-5);
+  min-inline-size: 0;
+  padding: var(--si-space-6);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  border-inline-start: var(--si-space-1) solid var(--si-color-signal);
+  background: var(--workflow-panel);
+}
+
+.entry-manual-split__boundary,
+.entry-manual-split__state,
+.entry-manual-split__commit > span {
+  margin: 0;
+  color: var(--si-color-text-muted);
+  line-height: 1.6;
+}
+
+.entry-manual-split__state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--si-space-4);
+  padding: var(--si-space-5);
+  border: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  background: var(--si-color-bg-shell);
+}
+
+.entry-manual-split__toolbar,
+.entry-manual-split__commit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--si-space-3);
+}
+
+.entry-manual-split__full-text {
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-bg-shell);
+}
+
+.entry-manual-split__full-text summary {
+  min-block-size: var(--si-target-desktop);
+  padding: var(--si-space-3) var(--si-space-4);
+  cursor: pointer;
+  color: var(--si-color-text-secondary);
+}
+
+.entry-manual-split__full-text pre,
+.entry-manual-split__fragments pre {
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--si-font-body);
+  line-height: 1.65;
+}
+
+.entry-manual-split__full-text pre {
+  max-block-size: 26rem;
+  padding: var(--si-space-5);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.entry-manual-split__groups {
+  display: grid;
+  gap: var(--si-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry-manual-split__groups > li {
+  display: grid;
+  gap: var(--si-space-2);
+}
+
+.entry-manual-split__merge,
+.entry-manual-split__cut {
+  justify-self: center;
+  min-block-size: var(--si-target-desktop);
+  padding-inline: var(--si-space-4);
+  border: var(--si-rule-thin) dashed var(--si-color-border-strong);
+  background: var(--si-color-bg-shell);
+  color: var(--si-color-signal);
+}
+
+.entry-manual-split__group {
+  display: grid;
+  gap: var(--si-space-4);
+  min-inline-size: 0;
+  padding: var(--si-space-5);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-surface-1);
+}
+
+.entry-manual-split__group > header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--si-space-4);
+}
+
+.entry-manual-split__group > header span,
+.entry-manual-split__fragments article > span {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-caption);
+}
+
+.entry-manual-split__group > label {
+  display: grid;
+  gap: var(--si-space-2);
+  color: var(--si-color-text-secondary);
+}
+
+.entry-manual-split__group input {
+  min-block-size: var(--si-target-desktop);
+  min-inline-size: 0;
+  padding-inline: var(--si-space-3);
+}
+
+.entry-manual-split__fragments,
+.entry-manual-split__fragments > div,
+.entry-manual-split__fragments article {
+  display: grid;
+  gap: var(--si-space-3);
+  min-inline-size: 0;
+}
+
+.entry-manual-split__fragments pre {
+  max-block-size: 18rem;
+  padding: var(--si-space-4);
+  border-inline-start: 2px solid var(--si-color-border-strong);
+  background: var(--si-color-bg-shell);
+  color: var(--si-color-text-secondary);
+}
+
+.entry-manual-split__commit {
+  padding-block-start: var(--si-space-4);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+@media (max-width: 74.9375rem) {
+  .workflow-stage-workspace[data-workflow-page='split'] > .entry-manual-split,
+  .workflow-stage-workspace[data-workflow-page='split'] > .entry-batch-panel,
+  .workflow-stage-workspace[data-workflow-page='split'] > .entry-command-panel,
+  .workflow-stage-workspace[data-workflow-page='split'] > .entry-workbench,
+  .workflow-stage-workspace[data-workflow-page='split'] > .entry-state,
+  .workflow-stage-workspace[data-workflow-page='split'] > .entry-loading,
+  .workflow-stage-workspace[data-workflow-page='split'] > .entry-ai-split {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}
+
+@media (max-width: 47.9375rem), (orientation: portrait) {
+  .entry-manual-split {
+    padding: var(--si-space-5);
+  }
+
+  .entry-manual-split__state,
+  .entry-manual-split__toolbar,
+  .entry-manual-split__commit,
+  .entry-manual-split__group > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .entry-manual-split__toolbar .secondary-action,
+  .entry-manual-split__commit .primary-action,
+  .entry-manual-split__state .text-action {
+    inline-size: 100%;
+  }
+}

@@ -1,7 +1,7 @@
 # StruInfo Frontend Design Specification
 
 - Status: Project frontend baseline
-- Version: 1.5
+- Version: 1.6
 - Effective date: 2026-08-24
 - Scope: StruInfo web application design, implementation, and review
 
@@ -242,14 +242,35 @@ It does not need the full long-term navigation or a synthetic dashboard.
 ### 5.4 Current product boundary
 
 The Web application and narrow loopback API expose one owner workflow:
-Evidence/Blob import, Entry materialization, current Entry/Document tagging,
-explainable associations, privacy-aware Entry search, external preferences,
-complete personal-data-package transfer, and provider-neutral ProcessingRun
-read/cancel. ADR 0013 through ADR 0015 additionally expose three optional OpenAI
+Evidence/Blob import, deterministic or local-manual Entry materialization,
+current Entry/Document tagging, explainable associations, privacy-aware Entry
+search, external preferences, complete personal-data-package transfer, and
+provider-neutral ProcessingRun read/cancel. ADR 0013 through ADR 0015 additionally
+expose three optional OpenAI
 proposal surfaces: one selected public Snapshot for split, one selected public
 Entry for tags, and one selected public Entry pair for association. Each surface
 must show Provider/model/prompt origin, privacy disclosure and explicit
 accept/reject without hiding its deterministic or manual path.
+
+ADR 0016 adds a dedicated local manual grouping workbench to the Split page. It
+MUST:
+
+- operate only on a selected Snapshot that has no Entry structure;
+- show an explicit empty, private-locked, loading, load-failure and already-
+  materialized state;
+- begin with ordered section Fragments and permit only adjacent merge, split at
+  an existing Fragment boundary, reset, merge-all and bounded title editing;
+- keep full-document and exact per-Fragment text inspectable without forcing a
+  fixed-height viewport or hiding actions;
+- submit only titles and Fragment identities, never browser-authored Entry body
+  text;
+- retain a monotonically increasing load generation so a late Snapshot response
+  cannot replace a newer selection; and
+- recompose into one column below 1200 CSS pixels while preserving natural
+  vertical scrolling and target sizes.
+
+The manual workbench MUST NOT imply arbitrary character selection, source-text
+editing, reordering or replacement of already materialized Entries.
 
 Manual Curation, the old formal Knowledge writer/current-item reader and the old
 Knowledge search are not current product capabilities. Their pages, client

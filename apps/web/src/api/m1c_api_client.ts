@@ -77,6 +77,10 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryMaterializeResponse>>;
+  materializeManualInformationEntries(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryMaterializeResponse>>;
   reviseInformationEntry(
     entryId: string,
     body: unknown,
@@ -228,6 +232,7 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     saveReviewPreferences: reject,
     importMarkdown: reject,
     materializeInformationEntries: reject,
+    materializeManualInformationEntries: reject,
     reviseInformationEntry: reject,
     searchInformationEntries: reject,
     readInformationEntryKnowledgeGraph: reject,
@@ -313,6 +318,12 @@ export function createM1cApiClient(
     materializeInformationEntries: (body, options) =>
       post<InformationEntryMaterializeResponse>(
         'api/v1/entries/materialize',
+        body,
+        options,
+      ),
+    materializeManualInformationEntries: (body, options) =>
+      post<InformationEntryMaterializeResponse>(
+        'api/v1/entries/materialize/manual',
         body,
         options,
       ),

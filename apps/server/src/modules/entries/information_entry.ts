@@ -1,7 +1,7 @@
 import {
   ENTRY_DOMAIN_KEYWORDS,
   ENTRY_TYPE_KEYWORDS,
-  type AiSplitEntryGroupInput,
+  type EntryFragmentGroupInput,
   type CurrentInformationEntry,
   type EntryAssessmentScore,
   type EntryContentKeyword,
@@ -19,6 +19,8 @@ import {
 
 export const ENTRY_SPLIT_RULE_VERSION = 'struinfo.entry-split.section.v1';
 export const AI_ENTRY_SPLIT_RULE_VERSION = 'struinfo.entry-split.ai-group.v1';
+export const MANUAL_ENTRY_SPLIT_RULE_VERSION =
+  'struinfo.entry-split.manual-group.v1';
 export const ENTRY_MANUAL_ORIGIN_VERSION = 'manual-entry-editor.v1';
 export const MAXIMUM_ENTRY_BODY_CODE_POINTS = 200_000;
 export const MAXIMUM_CONTENT_KEYWORDS = 32;
@@ -115,7 +117,37 @@ export function prepareSplitInformationEntries(
 
 export function prepareAiSplitInformationEntries(
   snapshot: Readonly<MaterializedEvidenceSnapshot>,
-  groups: readonly Readonly<AiSplitEntryGroupInput>[],
+  groups: readonly Readonly<EntryFragmentGroupInput>[],
+): readonly Readonly<InformationEntryMaterializeRow>[] | undefined {
+  return prepareGroupedInformationEntries(snapshot, groups, {
+    splitRuleVersion: AI_ENTRY_SPLIT_RULE_VERSION,
+    identityVersion: 'ai-group-v1',
+    includeTitleInIdentity: false,
+    isPrivate: false,
+  });
+}
+
+export function prepareManualSplitInformationEntries(
+  snapshot: Readonly<MaterializedEvidenceSnapshot>,
+  groups: readonly Readonly<EntryFragmentGroupInput>[],
+): readonly Readonly<InformationEntryMaterializeRow>[] | undefined {
+  return prepareGroupedInformationEntries(snapshot, groups, {
+    splitRuleVersion: MANUAL_ENTRY_SPLIT_RULE_VERSION,
+    identityVersion: 'manual-group-v1',
+    includeTitleInIdentity: true,
+    isPrivate: snapshot.isPrivate === true,
+  });
+}
+
+function prepareGroupedInformationEntries(
+  snapshot: Readonly<MaterializedEvidenceSnapshot>,
+  groups: readonly Readonly<EntryFragmentGroupInput>[],
+  options: Readonly<{
+    splitRuleVersion: string;
+    identityVersion: string;
+    includeTitleInIdentity: boolean;
+    isPrivate: boolean;
+  }>,
 ): readonly Readonly<InformationEntryMaterializeRow>[] | undefined {
   const structure = snapshot.structures[0];
   if (structure === undefined || groups.length < 1) return undefined;
@@ -139,7 +171,7 @@ export function prepareAiSplitInformationEntries(
   );
   const rows: Readonly<InformationEntryMaterializeRow>[] = [];
   for (const [documentOrder, group] of groups.entries()) {
-    const titlePath = normalizeAiSplitTitle(group.titlePath);
+    const titlePath = normalizeSplitTitle(group.titlePath);
     if (titlePath === undefined || group.fragmentIds.length < 1) {
       return undefined;
     }
@@ -156,8 +188,11 @@ export function prepareAiSplitInformationEntries(
     ) {
       return undefined;
     }
-    const sourceIdentity = `ai-group-v1:${informationEntryBodySha256(
-      group.fragmentIds.join('\n'),
+    const identityInput = options.includeTitleInIdentity
+      ? [titlePath, ...group.fragmentIds].join('\n')
+      : group.fragmentIds.join('\n');
+    const sourceIdentity = `${options.identityVersion}:${informationEntryBodySha256(
+      identityInput,
     )}`;
     const entryId = deriveInformationEntryId(
       snapshot.snapshotId,
@@ -177,8 +212,8 @@ export function prepareAiSplitInformationEntries(
           body,
           bodySha256: informationEntryBodySha256(body),
           chunkMode: 'split' as const,
-          splitRuleVersion: AI_ENTRY_SPLIT_RULE_VERSION,
-          isPrivate: false,
+          splitRuleVersion: options.splitRuleVersion,
+          isPrivate: options.isPrivate,
           contentKeywords: Object.freeze([]),
           domains: Object.freeze([]),
           fragmentIds: Object.freeze([...group.fragmentIds]),
@@ -397,7 +432,7 @@ function normalizeFixedOrOther<Keyword extends string>(
   return Object.freeze({keyword, customName: normalizedCustomName});
 }
 
-function normalizeAiSplitTitle(value: string): string | undefined {
+function normalizeSplitTitle(value: string): string | undefined {
   if (typeof value !== 'string') return undefined;
   const normalized = value.trim().normalize('NFC');
   if (

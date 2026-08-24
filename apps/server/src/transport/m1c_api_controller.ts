@@ -142,6 +142,16 @@ export class M1cApiController {
     );
   }
 
+  @Post('entries/materialize/manual')
+  public async materializeManualInformationEntries(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.materializeManualInformationEntries(body),
+    );
+  }
   @Put('entries/:entryId')
   public async reviseInformationEntry(
     @Param('entryId') entryId: string,

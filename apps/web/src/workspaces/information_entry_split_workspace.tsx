@@ -2,6 +2,10 @@ import {type ComponentProps, useMemo, useState} from 'react';
 
 import {ActionNotice} from '../components/action_notice.js';
 import {InformationEntryAiSplit} from './information_entry_ai_split.js';
+import {
+  InformationEntryManualSplit,
+  type InformationEntryManualSplitProps,
+} from './information_entry_manual_split.js';
 import type {ActionFeedback} from '../components/product_types.js';
 import {
   InformationEntryReadOnlyDetail,
@@ -17,12 +21,14 @@ import {describeInformationEntryFailure} from './information_entry_shared.js';
 
 export interface InformationEntrySplitWorkspaceProps extends Pick<
   InformationEntryServices,
-  'onListDocuments' | 'onMaterialize' | 'onOpenEvidence' | 'onSearch'
+  | 'onListDocuments'
+  | 'onMaterialize'
+  | 'onMaterializeManual'
+  | 'onOpenEvidence'
+  | 'onSearch'
 > {
   readonly aiEnabled: boolean;
-  readonly onLoadEvidenceSnapshot: ComponentProps<
-    typeof InformationEntryAiSplit
-  >['onLoadSnapshot'];
+  readonly onLoadEvidenceSnapshot: InformationEntryManualSplitProps['onLoadSnapshot'];
   readonly onListAiSplitProposals: ComponentProps<
     typeof InformationEntryAiSplit
   >['onList'];
@@ -44,6 +50,7 @@ export function InformationEntrySplitWorkspace({
   onListDocuments,
   onLoadEvidenceSnapshot,
   onMaterialize,
+  onMaterializeManual,
   onOpenEvidence,
   onRejectAiSplitProposal,
   onSearch,
@@ -231,10 +238,11 @@ export function InformationEntrySplitWorkspace({
       <section className="workflow-capability-strip" aria-label="拆分能力">
         <div className="workflow-capability-strip__primary">
           <p className="section-index">SPLIT MODE</p>
-          <strong>按文档结构确定性拆分</strong>
-          <span>原始 Snapshot 不变；生成结果可在下方逐条检查。</span>
+          <strong>人工分组优先，确定性规则随时可用</strong>
+          <span>在 Fragment 边界合并或拆开；原始 Snapshot 始终不变。</span>
         </div>
         <div className="workflow-capability-strip__options">
+          <span data-active="true">人工拆分 / 合并</span>
           <span data-active="true">结构规则</span>
           <span data-active="true">明确批量选择</span>
           <span data-active={aiEnabled}>OpenAI 提案 · 手动接受</span>
@@ -251,6 +259,18 @@ export function InformationEntrySplitWorkspace({
         onRetry={() => void controller.refreshDocuments()}
       />
 
+      <InformationEntryManualSplit
+        snapshotId={controller.snapshotId}
+        isPrivate={selectedDocument?.isPrivate === true}
+        includePrivate={controller.includePrivate}
+        alreadyMaterialized={(selectedDocument?.entryCount ?? 0) > 0}
+        onLoadSnapshot={onLoadEvidenceSnapshot}
+        onMaterialize={onMaterializeManual}
+        onCommitted={async () => {
+          await controller.executeSearch();
+          await controller.refreshDocuments();
+        }}
+      />
       <InformationEntryBatchMaterializer
         state={controller.documentView}
         busy={materializing}
@@ -295,7 +315,11 @@ export function InformationEntrySplitWorkspace({
             <button
               className="primary-action entry-materialize-action"
               type="button"
-              disabled={materializing || controller.snapshotId === ''}
+              disabled={
+                materializing ||
+                controller.snapshotId === '' ||
+                (selectedDocument?.entryCount ?? 0) > 0
+              }
               onClick={() => void materialize(controller.snapshotId)}
             >
               {materializing ? '正在生成…' : '按结构生成条目'}

@@ -1,6 +1,6 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1E-3D 活动接口
+- 状态：M1E-4A 活动接口
 - 最近核对：2026-08-24
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
@@ -9,7 +9,7 @@
 
 ## 1. 接口边界
 
-本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、Document 标签、Entry 联系、正式 Entry 图谱、Provider-neutral ProcessingRun、可选 OpenAI Snapshot 拆分/Entry 标签/selected-pair 联系提案、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、通用 AI 执行、自动接受或公共扩展 API。
+本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、确定性/人工首次物化、Document 标签、Entry 联系、正式 Entry 图谱、Provider-neutral ProcessingRun、可选 OpenAI Snapshot 拆分/Entry 标签/selected-pair 联系提案、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、通用 AI 执行、自动接受或公共扩展 API。
 
 当前工作区由包体外运行配置中的 `STRUIINFO_WORKSPACE_ID` 选择。请求不能提交或切换 `workspaceId`；服务端把固定工作区注入所有领域操作。切换资料集需要停止当前进程、替换外部配置或数据根并重新启动。
 
@@ -27,7 +27,8 @@ Markdown 正文作为 JSON 字符串提交。原始和规范化字节写入外�
 | `GET`  | `/api/v1/preferences/review`                                                          | 读取外部工作区的快捷标签、自动关键词开关/过滤、别名和联系策略                    |
 | `PUT`  | `/api/v1/preferences/review`                                                          | 整体保存当前偏好文件                                                             |
 | `POST` | `/api/v1/imports/markdown`                                                            | 原子导入 Markdown、来源、Blob、结构和 Fragment                                   |
-| `POST` | `/api/v1/entries/materialize`                                                         | 从一个用户选择的 Snapshot 幂等生成 section Entry                                 |
+| `POST` | `/api/v1/entries/materialize`                                                         | 从一个用户选择的空 Snapshot 按 section 规则原子生成 Entry                        |
+| `POST` | `/api/v1/entries/materialize/manual`                                                  | 从标题和完整有序 Fragment 分组原子生成人工 Entry 结构                            |
 | `GET`  | `/api/v1/evidence/snapshots/:snapshotId/split-proposals`                              | 列出一个 Snapshot 的有界拆分提案                                                 |
 | `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/start`                        | 用户显式请求一个公开 Snapshot 的 OpenAI 拆分提案                                 |
 | `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/accept`           | 接受提案并从本地 Fragment 物化 Entry                                             |
@@ -73,9 +74,17 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 ### 3.2 拆分
 
-`POST /entries/materialize` 当前只接受 `snapshotId`、可选的 `chunkMode: "split"` 和 `includePrivate`。服务端读取已经导入的 CommonMark 结构，把 section 节点确定性转换为 Entry。
+`POST /entries/materialize` 接受 `snapshotId`、可选的 `chunkMode: "split"` 和 `includePrivate`。服务端读取已经导入的 CommonMark 结构，把 section 节点确定性转换为 Entry，并只在 Snapshot 尚无 Entry 时原子提交。
 
-四个 `/evidence/snapshots/:snapshotId/split-proposals` 路由提供列表、显式启动、接受和拒绝。start 只允许用户当前选择的公开、尚未物化 Entry 的 Snapshot；Provider 只收到按结构顺序排列的 section Fragment ordinal 与正文，不收到任何本地标识。响应是连续、不重叠、完整覆盖的闭合分组；界面用本地精确 Fragment 审阅。accept 从本地 Fragment 重建标题/正文并调用既有空 Snapshot Entry 物化边界，reject 不创建 Entry。私密 Snapshot 在 Blob 读取和 fetch 前拒绝。当前仍没有自定义范围、全文保存修改或可替换拆分规则接口。
+`POST /entries/materialize/manual` 接受：
+
+- `snapshotId`；
+- 明确布尔值 `includePrivate`；
+- 非空 `groups`，每组包含 1–200 Unicode scalar 的 `titlePath` 和非空 canonical Fragment UUID 列表。
+
+所有分组展平后必须与第一结构按来源排序的全部 section Fragment 完全相等。客户端不提交正文；服务端从本地 Fragment 以两个换行重建每组正文，保留 Snapshot 隐私并记录 `struinfo.entry-split.manual-group.v1`。成功返回 `created` 或稳定重放 `existing` 及生成的当前 Entry。无效覆盖返回 `422/manual_split_invalid`；确定性、人工或已接受 AI 路径已先生成结构时返回 `409/split_structure_already_materialized`，已有 Entry 不变。
+
+四个 `/evidence/snapshots/:snapshotId/split-proposals` 路由提供列表、显式启动、接受和拒绝。start 只允许用户当前选择的公开、尚未物化 Entry 的 Snapshot；Provider 只收到按结构顺序排列的 section Fragment ordinal 与正文，不收到任何本地标识。响应是连续、不重叠、完整覆盖的闭合分组；界面用本地精确 Fragment 审阅。accept 从本地 Fragment 重建标题/正文并调用同一空 Snapshot Entry 物化边界，reject 不创建 Entry。私密 Snapshot 在 Blob 读取和 fetch 前拒绝。当前仍没有 Fragment 内任意字符范围、来源重排、全文保存修改、可替换拆分规则或已有 Entry 结构迁移接口。
 
 ### 3.3 标签
 

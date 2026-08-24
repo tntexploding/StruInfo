@@ -225,6 +225,13 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const materializeManualInformationEntries = useCallback(
+    (
+      body: unknown,
+    ): Promise<M1cHttpResponse<InformationEntryMaterializeResponse>> =>
+      apiClient.materializeManualInformationEntries(body),
+    [apiClient],
+  );
   const reviseInformationEntry = useCallback(
     (
       entryId: string,
@@ -366,7 +373,8 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
   );
 
   const loadEvidenceSnapshotForSplit = useCallback(
-    (snapshotId: string) => apiClient.loadEvidenceSnapshot(snapshotId),
+    (snapshotId: string, includePrivate = false) =>
+      apiClient.loadEvidenceSnapshot(snapshotId, {includePrivate}),
     [apiClient],
   );
 
@@ -610,6 +618,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onListDocuments={listInformationEntryDocuments}
           onLoadEvidenceSnapshot={loadEvidenceSnapshotForSplit}
           onMaterialize={materializeInformationEntries}
+          onMaterializeManual={materializeManualInformationEntries}
           onRejectAiSplitProposal={rejectAiSplitProposal}
           onSearch={searchInformationEntries}
           onStartAiSplitProposal={startAiSplitProposal}

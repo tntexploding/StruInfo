@@ -32,6 +32,8 @@ describe('M1E Knowledge graph local API', () => {
         informationEntryRepository: {
           materializeEntries: () =>
             Promise.resolve({outcome: 'existing', createdCount: 0}),
+          materializeEntriesIfSnapshotEmpty: () =>
+            Promise.resolve({outcome: 'existing', createdCount: 0}),
           reviseEntry: () => Promise.resolve('not_found'),
           loadCurrentEntries: (_workspaceId, includePrivate) =>
             Promise.resolve(includePrivate ? allEntries : publicEntries),
@@ -192,6 +194,8 @@ function dependencies(
     },
     informationEntryRepository: {
       materializeEntries: () =>
+        Promise.resolve({outcome: 'existing', createdCount: 0}),
+      materializeEntriesIfSnapshotEmpty: () =>
         Promise.resolve({outcome: 'existing', createdCount: 0}),
       reviseEntry: () => Promise.resolve('not_found'),
       loadCurrentEntries: () => Promise.resolve([]),

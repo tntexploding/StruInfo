@@ -421,7 +421,7 @@ describe('M1cApiService', () => {
     const selectedText = '## Synthetic Entry\n\nPrivate source body.';
     const identity = await blobs.put(new TextEncoder().encode(selectedText));
     let materialized: readonly Readonly<InformationEntryMaterializeRow>[] = [];
-    const materializeEntries = vi.fn(
+    const materializeEntriesIfSnapshotEmpty = vi.fn(
       (entries: readonly Readonly<InformationEntryMaterializeRow>[]) => {
         materialized = entries;
         return Promise.resolve({
@@ -494,7 +494,9 @@ describe('M1cApiService', () => {
           }),
       },
       informationEntryRepository: {
-        materializeEntries,
+        materializeEntries: () =>
+          Promise.reject(new Error('Unexpected legacy materialization.')),
+        materializeEntriesIfSnapshotEmpty,
         reviseEntry: () => Promise.resolve('not_found'),
         loadCurrentEntries,
       },
@@ -532,10 +534,138 @@ describe('M1cApiService', () => {
         ],
       },
     });
-    expect(materializeEntries).toHaveBeenCalledTimes(1);
+    expect(materializeEntriesIfSnapshotEmpty).toHaveBeenCalledTimes(1);
     expect(loadCurrentEntries).toHaveBeenCalledWith(WORKSPACE_ID, true);
   });
 
+  it('materializes one complete manual Fragment grouping through the public service', async () => {
+    const blobs = new MemoryBlobStore();
+    const firstId = FRAGMENT_ID;
+    const secondId = '00000000-0000-4000-8000-000000000007';
+    const firstText = '## First section\n\nFirst body.';
+    const secondText = '## Second section\n\nSecond body.';
+    const normalizedText = `${firstText}\n\n${secondText}`;
+    const identity = await blobs.put(new TextEncoder().encode(normalizedText));
+    let materialized: readonly Readonly<InformationEntryMaterializeRow>[] = [];
+    const materializeEntriesIfSnapshotEmpty = vi.fn(
+      (entries: readonly Readonly<InformationEntryMaterializeRow>[]) => {
+        materialized = entries;
+        return Promise.resolve({
+          outcome: 'created' as const,
+          createdCount: entries.length,
+        });
+      },
+    );
+    const service = createService({
+      blobStore: blobs,
+      evidenceReadRepository: {
+        listSnapshots: () => Promise.resolve([]),
+        loadSnapshot: () =>
+          Promise.resolve({
+            workspaceId: WORKSPACE_ID,
+            snapshotId: SNAPSHOT_ID,
+            resourceId: RESOURCE_ID,
+            resourceKind: 'manual_text' as const,
+            sourceKey: 'manual:synthetic-split',
+            capturedAt: '2040-01-02T03:04:05.000Z',
+            fragmentCount: 2,
+            rawSha256: identity.digest,
+            canonicalContentSha256: identity.digest,
+            canonicalizationVersion: 'utf8-lf-v1',
+            structures: [
+              {
+                structureId: STRUCTURE_ID,
+                parserName: 'struinfo-commonmark',
+                parserVersion: '1',
+                textNormalizationVersion: 'utf8-lf-v1',
+                structureSha256: 'b'.repeat(64),
+                textBlob: identity,
+                fragments: [
+                  {
+                    fragmentId: firstId,
+                    structureId: STRUCTURE_ID,
+                    nodeId: NODE_ID,
+                    nodeKind: 'section' as const,
+                    codePointRange: {start: 0, end: firstText.length},
+                    selectedTextSha256: createHash('sha256')
+                      .update(firstText)
+                      .digest('hex'),
+                  },
+                  {
+                    fragmentId: secondId,
+                    structureId: STRUCTURE_ID,
+                    nodeId: '00000000-0000-4000-8000-000000000008',
+                    nodeKind: 'section' as const,
+                    codePointRange: {
+                      start: firstText.length + 2,
+                      end: normalizedText.length,
+                    },
+                    selectedTextSha256: createHash('sha256')
+                      .update(secondText)
+                      .digest('hex'),
+                  },
+                ],
+              },
+            ],
+          }),
+      },
+      informationEntryRepository: {
+        materializeEntries: () =>
+          Promise.reject(new Error('Unexpected legacy materialization.')),
+        materializeEntriesIfSnapshotEmpty,
+        reviseEntry: () => Promise.resolve('not_found'),
+        loadCurrentEntries: () =>
+          Promise.resolve(
+            materialized.map((entry) => ({
+              workspaceId: entry.workspaceId,
+              entryId: entry.entryId,
+              resourceId: entry.resourceId,
+              snapshotId: entry.snapshotId,
+              revision: 1,
+              revisionId: entry.revisionId,
+              sourceKey: 'manual:synthetic-split',
+              capturedAt: '2040-01-02T03:04:05.000Z',
+              value: entry.value,
+            })),
+          ),
+      },
+    });
+
+    await expect(
+      service.materializeManualInformationEntries({
+        snapshotId: SNAPSHOT_ID,
+        groups: [
+          {titlePath: 'Combined entry', fragmentIds: [firstId, secondId]},
+        ],
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 201,
+      body: {
+        status: 'created',
+        createdCount: 1,
+        entries: [
+          {
+            value: {
+              titlePath: 'Combined entry',
+              body: `${firstText}\n\n${secondText}`,
+              splitRuleVersion: 'struinfo.entry-split.manual-group.v1',
+              fragmentIds: [firstId, secondId],
+            },
+          },
+        ],
+      },
+    });
+    await expect(
+      service.materializeManualInformationEntries({
+        snapshotId: SNAPSHOT_ID,
+        groups: [{titlePath: 'Wrong order', fragmentIds: [secondId, firstId]}],
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 422,
+      body: {status: 'rejected', issue: {code: 'manual_split_invalid'}},
+    });
+    expect(materializeEntriesIfSnapshotEmpty).toHaveBeenCalledTimes(1);
+  });
   it('binds structural Entry filters, association traversal, and pagination to the public search cursor', async () => {
     const entryAId = '00000000-0000-4000-8000-000000000011';
     const entryBId = '00000000-0000-4000-8000-000000000013';
@@ -632,6 +762,8 @@ describe('M1cApiService', () => {
     const service = createService({
       informationEntryRepository: {
         materializeEntries: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        materializeEntriesIfSnapshotEmpty: () =>
           Promise.resolve({outcome: 'existing', createdCount: 0}),
         reviseEntry: () => Promise.resolve('not_found'),
         loadCurrentEntries: () => Promise.resolve(entries),
@@ -807,6 +939,8 @@ describe('M1cApiService', () => {
     const service = createService({
       informationEntryRepository: {
         materializeEntries: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        materializeEntriesIfSnapshotEmpty: () =>
           Promise.resolve({outcome: 'existing', createdCount: 0}),
         reviseEntry: () => Promise.resolve('not_found'),
         loadCurrentEntries: () => Promise.resolve(entries),
@@ -1075,6 +1209,8 @@ describe('M1cApiService', () => {
       },
       informationEntryRepository: {
         materializeEntries: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        materializeEntriesIfSnapshotEmpty: () =>
           Promise.resolve({outcome: 'existing', createdCount: 0}),
         reviseEntry: () => Promise.resolve('not_found'),
         loadCurrentEntries: () => Promise.resolve([entry]),
@@ -1495,6 +1631,8 @@ function createService(
     },
     informationEntryRepository: {
       materializeEntries: () =>
+        Promise.resolve({outcome: 'existing', createdCount: 0}),
+      materializeEntriesIfSnapshotEmpty: () =>
         Promise.resolve({outcome: 'existing', createdCount: 0}),
       reviseEntry: () => Promise.resolve('not_found'),
       loadCurrentEntries: () => Promise.resolve([]),

@@ -4,8 +4,10 @@
 - 最近更新：2026-08-20
 - 范围：文档摄取、条目生成、关键词标注、关联、检索及人工/AI 协作
 - 上位约束：[产品需求](product-requirements.md)、[知识核心架构](knowledge-core-architecture.md)、
-  [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)和
-  [ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)
+  [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、
+  [ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、
+  [ADR 0007](adr/0007-information-entry-first-document-processing.md)和
+  [ADR 0016](adr/0016-manual-entry-fragment-grouping.md)
 
 ## 1. 目标
 
@@ -47,8 +49,11 @@ PostgreSQL 保存规范关系数据，包体外 Blob 存储保存原始文档和
 - 正文、内容哈希及相关媒体位置；
 - 当前拆分版本以及与拆分、合并前条目的沿袭关系。
 
-用户可以手工拆分、合并、调整边界或顺序。
-修改只创建新版本或沿袭关系，不修改原始 Snapshot。
+长期产品允许用户手工拆分、合并、调整边界或顺序，但每一步都不能修改原始 Snapshot。
+M1E-4A 的首个可运行子集只处理尚未生成 Entry 的 Snapshot：用户可在既有 `section`
+Fragment 边界合并连续分组、重新拆开分组并编辑标题；全部 Fragment 必须保持来源顺序且恰好
+覆盖一次。任意 Fragment 内字符级边界、重排和已物化 Entry 的结构重组仍需后续版本与沿袭
+边界，当前实现不会用新结构覆盖已有标签、联系或查询身份。
 
 文档具有两个相互独立、只能由用户选择的特殊字段：
 

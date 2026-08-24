@@ -386,6 +386,17 @@ export type InformationDocumentTagWriteResponse =
   | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
   | DomainFailure;
 
+export interface InformationEntryFragmentGroup {
+  readonly titlePath: string;
+  readonly fragmentIds: readonly string[];
+}
+
+export interface InformationEntryManualMaterializeRequest {
+  readonly snapshotId: string;
+  readonly includePrivate: boolean;
+  readonly groups: readonly Readonly<InformationEntryFragmentGroup>[];
+}
+
 export type InformationEntryMaterializeResponse =
   | Readonly<{
       status: 'created' | 'existing';
