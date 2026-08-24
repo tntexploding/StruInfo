@@ -65,7 +65,7 @@ export function InformationEntryAdvancedSearchFields({
               update({sourceKey: event.currentTarget.value});
             }}
             list="entry-source-keys"
-            placeholder="例如：git:ruanyf/weekly"
+            placeholder="例如：git:example.invalid/synthetic-source"
           />
           <datalist id="entry-source-keys">
             {[...new Set(snapshots.map((snapshot) => snapshot.sourceKey))]

@@ -1,4 +1,6 @@
 import type {RuntimeConfig} from '../config/runtime_config.js';
+import {AiTagProposalService} from '../modules/processing/index.js';
+import {OpenAiEntryTagProvider} from '../platform/ai/index.js';
 import {
   createRuntimeDatabase,
   type DatabasePoolFactory,
@@ -101,6 +103,15 @@ export async function startRoleRuntime(
   const listenerFactory =
     dependencies.healthListenerFactory ?? new NestHealthListenerFactory();
   const address = listenerAddress(config);
+  const aiTagProposals =
+    config.aiTagsProvider === undefined
+      ? undefined
+      : new AiTagProposalService({
+          workspaceId: config.workspaceId,
+          entries: repositories.informationEntries,
+          processing: repositories.processingRuns,
+          provider: new OpenAiEntryTagProvider(config.aiTagsProvider),
+        });
   const api =
     config.role === 'api' || config.role === 'all'
       ? new M1cApiService({
@@ -114,6 +125,8 @@ export async function startRoleRuntime(
             repositories.informationDocumentTags,
           informationEntryAssociationRepository:
             repositories.informationEntryAssociations,
+          processingRunRepository: repositories.processingRuns,
+          ...(aiTagProposals === undefined ? {} : {aiTagProposals}),
           workspaceTransfer: new M1cWorkspaceTransfer({
             repository: repositories.workspaceTransfer,
             blobStore: storage.blobStore,

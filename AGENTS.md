@@ -21,11 +21,25 @@ Before frontend implementation or frontend design review, also read:
 
 ## Current Phase
 
+### Data-Free Owner Audit
+
+The active workspace is intentionally empty for owner review. The former
+external validation corpus, database rows, Blob bytes, preferences and exports
+have been moved to a recovery archive outside the repository and application
+data root. Until the owner explicitly ends this audit, do not import, restore,
+fetch, seed or otherwise introduce any real document, entry, personal
+configuration or derived knowledge. Product and integration tests must use
+synthetic, value-free fixtures only. Continue development in this same main
+project and workspace after the audit; do not create a replacement workspace.
+
+Historical evidence below records completed engineering work. It does not
+authorize restoring the former corpus into the active workspace.
+
 The foundational architecture, non-browser/non-container engineering
 foundation, and first product authority model are accepted in ADR 0001 through
-ADR 0004. The repository has fixed `ruanyf/weekly` issues 398 through 407 at one
-upstream commit and has a candidate 345-unit structural inventory. ADR 0005
-accepts the canonical versioned knowledge model and AI-optional operations;
+ADR 0004. A former external corpus was used for historical validation and is no
+longer part of the active project state. ADR 0005 accepts the canonical
+versioned knowledge model and AI-optional operations;
 ADR 0006 accepts external configuration and personal-data isolation. Slice 0
 has established external configuration, fixed data areas, local Blob storage,
 candidate-package auditing, and the versioned workspace-bundle envelope. The
@@ -230,6 +244,40 @@ v3. Migration `000012` adds only the missing current override metadata; it MUST
 NOT restore the retired M1C Knowledge runtime or portray similarity as verified
 factual assertion.
 
+The direct-use increment after M1E-2 adds two reachable owner features without a
+new database migration. Entry Query returns complete private documents in a
+separate response channel only after explicit current-request privacy opt-in;
+full bytes remain in the external Blob store. Associations exposes versioned
+content/type/domain weights and threshold through a narrow public write boundary.
+That policy is stored in the external personal preference file and carried by the
+personal-data package; saving it rebuilds automatic projections but MUST NOT
+overwrite pair-specific overrides or Formal Knowledge graph relationships.
+
+ADR 0012 starts M1E-3A with a provider-neutral durable task boundary. Forward
+migration `000013` adds current ProcessingRun records, typed proposal envelopes
+and exact Fragment evidence. The public local API lists recent runs and cancels
+a queued/running run with an expected version; Overview derives its task rail
+only from these records. There is no public start-AI route, no proposal accept
+command, no Provider SDK and no opaque payload. New personal-data packages carry
+the three processing tables while older packages restore them empty. The next AI
+slice must explicitly select one Provider boundary and one closed proposal kind.
+
+ADR 0013 completes M1E-3B with one optional OpenAI Responses API boundary and
+one closed `tags` proposal for a user-selected public InformationEntry. Forward
+migration `000014` adds a typed proposal header plus content-keyword and
+domain-keyword tables; arbitrary Provider JSON, prompts, secrets and raw errors
+MUST NOT be stored. The adapter uses native `fetch` and is enabled only when an
+environment-only `OPENAI_API_KEY` and external `STRUIINFO_OPENAI_MODEL` are both
+present. Private Entries MUST be rejected before any Provider call. The public
+local API and Tags page may list, explicitly start, accept or reject tag
+proposals; acceptance MUST use the existing Entry revision command and preserve
+body, scores, privacy and exact Fragment evidence. The Provider has no direct
+Entry, association or graph write port. Processing Bundle v2 carries all six
+processing tables and upgrades v1 with empty tag-proposal state. `ai_tags` MUST
+NOT be interpreted as generic AI capability. Until direct owner use supplies
+evidence, do not add a second Provider, automatic acceptance, AI split,
+association, query synthesis, Embedding or RAG.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2
@@ -237,8 +285,8 @@ or deployment certification. Do not represent a deferred formal gate as passed
 or make it mandatory before its dependency and distribution review is accepted.
 
 Do not change the accepted language, application shape, or persistence model
-without a superseding ADR. Cloud deployment vendors and AI providers remain
-unselected. Do not reuse M0-P probe candidate source as production code; carry
+without a superseding ADR. Cloud deployment vendors remain unselected; OpenAI
+is selected only for ADR 0013 tag proposals. Do not reuse M0-P probe candidate source as production code; carry
 the tracked provenance, workspace, idempotency, fencing, and recovery
 invariants into fresh implementation and tests.
 

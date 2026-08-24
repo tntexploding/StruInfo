@@ -4,9 +4,12 @@ import type {
   EvidenceSnapshotSummary,
   InformationEntryDocumentListResponse,
   M1cHttpResponse,
+  ProcessingRunCancelResponse,
+  ProcessingRunListResponse,
   WorkspaceResponse,
 } from '../api/m1c_api_contract.js';
 import type {Loadable, ProductSection} from '../components/product_types.js';
+import {ProcessingRunRail} from './processing_run_rail.js';
 
 type OverviewDataState =
   | Readonly<{status: 'loading'}>
@@ -22,6 +25,13 @@ export interface WorkflowOverviewProps {
   readonly onListDocuments: (
     includePrivate: boolean,
   ) => Promise<M1cHttpResponse<InformationEntryDocumentListResponse>>;
+  readonly onListProcessingRuns: (
+    limit: number,
+  ) => Promise<M1cHttpResponse<ProcessingRunListResponse>>;
+  readonly onCancelProcessingRun: (
+    runId: string,
+    expectedVersion: number,
+  ) => Promise<M1cHttpResponse<ProcessingRunCancelResponse>>;
   readonly onNavigate: (section: ProductSection) => void;
 }
 
@@ -67,13 +77,16 @@ export function WorkflowOverview({
   onListDocuments,
   onNavigate,
   snapshots,
+  onCancelProcessingRun,
   workspace,
+  onListProcessingRuns,
 }: WorkflowOverviewProps) {
   const [data, setData] = useState<OverviewDataState>({status: 'loading'});
-  const aiEnabled = workspace?.capabilities.includes('ai') === true;
+  const [processingRefreshToken, setProcessingRefreshToken] = useState(0);
 
   const refresh = useCallback(async () => {
     setData({status: 'loading'});
+    setProcessingRefreshToken((value) => value + 1);
     try {
       const response = await onListDocuments(false);
       setData(
@@ -148,47 +161,12 @@ export function WorkflowOverview({
       </header>
 
       <div className="workflow-overview__layout">
-        <aside
-          className="workflow-overview__ai"
-          aria-labelledby="ai-flow-title"
-        >
-          <header>
-            <p className="section-index">AI WORKFLOW</p>
-            <h2 id="ai-flow-title">AI 处理进度</h2>
-            <span
-              className="status-chip"
-              data-state={aiEnabled ? 'ready' : 'neutral'}
-            >
-              {aiEnabled ? '已配置 · 暂无任务数据' : 'AI 未启用'}
-            </span>
-          </header>
-          <ol className="ai-stage-list">
-            {STAGES.map((stage) => (
-              <li key={stage.section}>
-                <span className="ai-stage-list__node" aria-hidden="true" />
-                <div>
-                  <strong>
-                    {stage.index} / {stage.label}
-                  </strong>
-                  <small>
-                    {aiEnabled ? '等待真实运行状态' : '人工与确定性通道可用'}
-                  </small>
-                </div>
-              </li>
-            ))}
-          </ol>
-          <div className="ai-operation-status" aria-live="polite">
-            <span>当前操作</span>
-            <strong>
-              {aiEnabled ? '没有可读取的 AI 处理任务' : '无模型任务'}
-            </strong>
-            <p>
-              {aiEnabled
-                ? '尚未接入处理运行进度接口，因此不会虚构阶段百分比。'
-                : '导入、拆分、手工标签、联系和查询均可继续使用。'}
-            </p>
-          </div>
-        </aside>
+        <ProcessingRunRail
+          workspace={workspace}
+          refreshToken={processingRefreshToken}
+          onListRuns={onListProcessingRuns}
+          onCancelRun={onCancelProcessingRun}
+        />
 
         <div className="workflow-overview__main">
           <section

@@ -441,6 +441,12 @@ button {
   color: var(--si-color-info-text);
 }
 
+.origin-label--ai {
+  border-color: var(--si-color-topic);
+  background: var(--si-color-surface-ai);
+  color: var(--si-color-topic-text);
+}
+
 .field {
   min-inline-size: 0;
   display: flex;

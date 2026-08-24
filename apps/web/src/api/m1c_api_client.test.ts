@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest';
 
+import {DEFAULT_REVIEW_ASSOCIATION_POLICY} from './m1c_api_contract.js';
 import {
   createM1cApiClient,
   type M1cApiFetch,
@@ -112,6 +113,13 @@ describe('M1cApiClient', () => {
       },
     );
     await client.rebuildInformationEntryAssociations({includePrivate: true});
+    await client.reviseInformationEntryAssociationPolicy({
+      expectedRevision: 0,
+      contentWeight: 50,
+      typeWeight: 25,
+      domainWeight: 25,
+      threshold: 2_000,
+    });
     await client.listInformationEntryAssociations('synthetic/entry', {
       includePrivate: true,
     });
@@ -128,6 +136,12 @@ describe('M1cApiClient', () => {
       expectedRevision: 1,
       tags: ['synthetic'],
     });
+    await client.listAiTagProposals('synthetic/entry');
+    await client.startAiTagProposal('synthetic/entry', 'synthetic-request');
+    await client.acceptAiTagProposal('synthetic/entry', 'synthetic/proposal');
+    await client.rejectAiTagProposal('synthetic/entry', 'synthetic/proposal');
+    await client.listProcessingRuns(12);
+    await client.cancelProcessingRun('synthetic/run', 3);
 
     expect(requests).toEqual([
       {
@@ -173,6 +187,17 @@ describe('M1cApiClient', () => {
         body: JSON.stringify({includePrivate: true}),
       },
       {
+        url: 'http://127.0.0.1:3000/api/v1/entries/associations/policy',
+        method: 'PUT',
+        body: JSON.stringify({
+          expectedRevision: 0,
+          contentWeight: 50,
+          typeWeight: 25,
+          domainWeight: 25,
+          threshold: 2_000,
+        }),
+      },
+      {
         url: 'http://127.0.0.1:3000/api/v1/entries/synthetic%2Fentry/associations?includePrivate=true',
         method: 'GET',
       },
@@ -201,6 +226,34 @@ describe('M1cApiClient', () => {
           expectedRevision: 1,
           tags: ['synthetic'],
         }),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/synthetic%2Fentry/tag-proposals',
+        method: 'GET',
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/synthetic%2Fentry/tag-proposals/start',
+        method: 'POST',
+        body: JSON.stringify({requestKey: 'synthetic-request'}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/synthetic%2Fentry/tag-proposals/synthetic%2Fproposal/accept',
+        method: 'POST',
+        body: JSON.stringify({}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/synthetic%2Fentry/tag-proposals/synthetic%2Fproposal/reject',
+        method: 'POST',
+        body: JSON.stringify({}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/processing-runs?limit=12',
+        method: 'GET',
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/processing-runs/synthetic%2Frun/cancel',
+        method: 'POST',
+        body: JSON.stringify({expectedVersion: 3}),
       },
     ]);
   });
@@ -273,6 +326,7 @@ describe('M1cApiClient', () => {
                 excludedKeywords: [],
               },
               vocabulary: {aliases: []},
+              associationPolicy: DEFAULT_REVIEW_ASSOCIATION_POLICY,
             }),
             {headers: {'content-type': 'application/json'}},
           ),

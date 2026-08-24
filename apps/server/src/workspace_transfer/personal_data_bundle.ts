@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 
 import {
   createReviewPreferences,
+  decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
   decodeReviewQuickTags,
   decodeReviewVocabularyPreferences,
@@ -161,13 +162,18 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     value.automaticKeywords,
   );
   const vocabulary = decodeReviewVocabularyPreferences(value.vocabulary);
+  const associationPolicy =
+    value.associationPolicy === undefined
+      ? undefined
+      : decodeReviewAssociationPolicyPreferences(value.associationPolicy);
   if (
     value.format !== 'struinfo.review-preferences' ||
     value.version !== 1 ||
     typeof value.workspaceId !== 'string' ||
     quickTags === undefined ||
     automaticKeywords === undefined ||
-    vocabulary === undefined
+    vocabulary === undefined ||
+    (value.associationPolicy !== undefined && associationPolicy === undefined)
   ) {
     fail();
   }
@@ -176,6 +182,7 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     quickTags,
     automaticKeywords,
     vocabulary,
+    associationPolicy,
   );
 }
 

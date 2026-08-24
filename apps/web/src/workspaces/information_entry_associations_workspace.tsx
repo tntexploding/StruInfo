@@ -15,6 +15,7 @@ export interface InformationEntryAssociationsWorkspaceProps extends Pick<
   | 'onListAssociations'
   | 'onOpenEvidence'
   | 'onRebuildAssociations'
+  | 'onReviseAssociationPolicy'
   | 'onReviseAssociation'
   | 'onSearch'
 > {
@@ -26,6 +27,7 @@ export function InformationEntryAssociationsWorkspace({
   onListAssociations,
   onOpenEvidence,
   onRebuildAssociations,
+  onReviseAssociationPolicy,
   onReviseAssociation,
   onSearch,
 }: InformationEntryAssociationsWorkspaceProps) {
@@ -158,6 +160,7 @@ export function InformationEntryAssociationsWorkspace({
             onList={onListAssociations}
             onOpenEvidence={onOpenEvidence}
             onRebuild={onRebuildAssociations}
+            onRevisePolicy={onReviseAssociationPolicy}
             onRevise={onReviseAssociation}
             onSearchNeighborhood={() => {
               controller.setAdvancedFilters((current) =>

@@ -7,7 +7,10 @@ import type {
 } from '../api/m1c_api_contract.js';
 import {ActionNotice} from '../components/action_notice.js';
 import type {ActionFeedback} from '../components/product_types.js';
-import {AssociationPolicyPanel} from './association_policy_panel.js';
+import {
+  AssociationPolicyPanel,
+  type AssociationPolicyDraft,
+} from './association_policy_panel.js';
 import type {InformationEntryServices} from './information_entry_components.js';
 import {describeInformationEntryFailure} from './information_entry_shared.js';
 import {createLatestRequestTracker} from './latest_request.js';
@@ -29,6 +32,7 @@ export function InformationEntryAssociationPanel({
   onList,
   onOpenEvidence,
   onRebuild,
+  onRevisePolicy,
   onRevise,
   onSearchNeighborhood,
 }: {
@@ -37,12 +41,14 @@ export function InformationEntryAssociationPanel({
   readonly onList: InformationEntryServices['onListAssociations'];
   readonly onOpenEvidence: InformationEntryServices['onOpenEvidence'];
   readonly onRebuild: InformationEntryServices['onRebuildAssociations'];
+  readonly onRevisePolicy: InformationEntryServices['onReviseAssociationPolicy'];
   readonly onRevise: InformationEntryServices['onReviseAssociation'];
   readonly onSearchNeighborhood: () => void;
 }) {
   const [view, setView] = useState<AssociationViewState>({status: 'loading'});
   const [feedback, setFeedback] = useState<ActionFeedback>();
   const [rebuilding, setRebuilding] = useState(false);
+  const [savingPolicy, setSavingPolicy] = useState(false);
   const [updatingId, setUpdatingId] = useState<string>();
   const listRequests = useRef(createLatestRequestTracker());
 
@@ -112,6 +118,63 @@ export function InformationEntryAssociationPanel({
     }
   }
 
+  async function savePolicy(draft: Readonly<AssociationPolicyDraft>) {
+    if (savingPolicy || view.status !== 'ready') return;
+    setSavingPolicy(true);
+    setFeedback(undefined);
+    try {
+      const saved = await onRevisePolicy({
+        expectedRevision: view.response.policy.revision,
+        ...draft,
+      });
+      if (
+        saved.body.status !== 'applied' &&
+        saved.body.status !== 'unchanged'
+      ) {
+        setFeedback({
+          kind: 'error',
+          title: '联系策略没有保存',
+          detail: describeInformationEntryFailure(saved.body),
+        });
+        return;
+      }
+      if (saved.body.status === 'unchanged') {
+        setFeedback({
+          kind: 'success',
+          title: '联系策略没有变化',
+          detail: '当前自动候选继续使用现有权重；人工决定保持不变。',
+        });
+        return;
+      }
+      const rebuilt = await onRebuild({includePrivate});
+      if (rebuilt.body.status !== 'rebuilt') {
+        setFeedback({
+          kind: 'error',
+          title: '策略已保存，但自动联系尚未重建',
+          detail:
+            '外部权重配置已经更新；请在接口恢复后使用“重建当前范围关联”，人工决定未受影响。',
+        });
+        await refresh();
+        return;
+      }
+      setFeedback({
+        kind: 'success',
+        title: '联系策略已保存并生效',
+        detail: `${rebuilt.body.entryCount.toString()} 个 Entry 已按新权重重建为 ${rebuilt.body.projectedCount.toString()} 条自动联系；人工决定保持不变。`,
+      });
+      await refresh();
+    } catch {
+      setFeedback({
+        kind: 'error',
+        title: '联系策略没有完整应用',
+        detail:
+          '本地接口当前不可达。若策略已经落盘，页面会在重试后显示其修订；人工决定保持不变。',
+      });
+    } finally {
+      setSavingPolicy(false);
+    }
+  }
+
   async function revise(
     relatedEntryId: string,
     expectedRevision: number,
@@ -173,7 +236,14 @@ export function InformationEntryAssociationPanel({
       </header>
 
       {view.status === 'ready' ? (
-        <AssociationPolicyPanel policy={view.response.policy} />
+        <AssociationPolicyPanel
+          key={view.response.policy.revision}
+          policy={view.response.policy}
+          saving={savingPolicy}
+          onSave={(draft) => {
+            void savePolicy(draft);
+          }}
+        />
       ) : null}
 
       <div className="entry-association-toolbar">

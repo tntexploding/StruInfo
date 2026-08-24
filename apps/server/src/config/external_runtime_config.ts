@@ -31,10 +31,12 @@ const FILE_CONFIG_KEYS = [
   'STRUIINFO_HEALTH_PORT',
   'STRUIINFO_SHUTDOWN_TIMEOUT_MS',
   'STRUIINFO_LOG_LEVEL',
+  'STRUIINFO_OPENAI_MODEL',
 ] as const;
 const FILE_CONFIG_KEY_SET = new Set<string>(FILE_CONFIG_KEYS);
 const ENVIRONMENT_ONLY_KEYS = new Set([
   'DATABASE_URL',
+  'OPENAI_API_KEY',
   'STRUIINFO_MIGRATION_DATABASE_URL',
   RUNTIME_CONFIG_PATH_VARIABLE,
 ]);
@@ -197,6 +199,7 @@ function mergeRuntimeEnvironment(
 ): Readonly<Record<string, string | undefined>> {
   const merged: Record<string, string | undefined> = {
     DATABASE_URL: processEnvironment.DATABASE_URL,
+    OPENAI_API_KEY: processEnvironment.OPENAI_API_KEY,
   };
   for (const key of FILE_CONFIG_KEYS) {
     merged[key] = processEnvironment[key] ?? fileEnvironment[key];

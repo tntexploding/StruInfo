@@ -97,6 +97,24 @@ describe('loadRuntimeConfig', () => {
     expect(firstConfig.workspaceId).not.toBe(secondConfig.workspaceId);
   });
 
+  it('loads the model from the external file and the OpenAI secret only from environment', () => {
+    const fixture = createRuntimeFixture();
+    writeRuntimeConfig(fixture.configPath, fixture.dataRoot, [
+      'STRUIINFO_OPENAI_MODEL=gpt-5-mini',
+    ]);
+
+    const config = loadRuntimeConfig('api', {
+      ...runtimeEnvironment(fixture),
+      OPENAI_API_KEY: 'synthetic-openai-key',
+    });
+
+    expect(config.aiTagsProvider).toMatchObject({
+      providerKey: 'openai-responses-v1',
+      model: 'gpt-5-mini',
+      apiKey: 'synthetic-openai-key',
+    });
+  });
+
   it('requires an absolute external configuration file path', () => {
     expect(() => loadRuntimeConfig('api', {DATABASE_URL})).toThrow(
       `${RUNTIME_CONFIG_PATH_VARIABLE} is required.`,
@@ -114,6 +132,7 @@ describe('loadRuntimeConfig', () => {
   it.each([
     ['DATABASE_URL', 'database-secret-in-file'],
     ['STRUIINFO_MIGRATION_DATABASE_URL', 'migration-secret-in-file'],
+    ['OPENAI_API_KEY', 'openai-secret-in-file'],
     ['STRUIINFO_CONFIG_PATH', 'recursive-path-in-file'],
   ])(
     'rejects environment-only key %s without echoing its value',

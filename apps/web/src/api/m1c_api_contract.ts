@@ -4,12 +4,113 @@ export interface WorkspaceResponse {
   readonly capabilities: readonly string[];
 }
 
+export type ProcessingStage =
+  'import' | 'split' | 'tags' | 'associations' | 'query';
+
+export interface ProcessingTagProposalPayloadView {
+  readonly expectedEntryRevision: number;
+  readonly providerModel: string;
+  readonly promptVersion: string;
+  readonly contentKeywords: readonly Readonly<{
+    displayValue: string;
+    normalizedValue: string;
+  }>[];
+  readonly typeKeyword: EntryTypeKeyword;
+  readonly typeCustomName?: string;
+  readonly domains: readonly Readonly<{
+    keyword: EntryDomainKeyword;
+    customName?: string;
+  }>[];
+}
+
+export interface ProcessingProposalView {
+  readonly proposalId: string;
+  readonly runId: string;
+  readonly ordinal: number;
+  readonly stage: Extract<ProcessingStage, 'split' | 'tags' | 'associations'>;
+  readonly kind: 'split' | 'tags' | 'association';
+  readonly targetSnapshotId?: string;
+  readonly targetEntryId?: string;
+  readonly relatedEntryId?: string;
+  readonly status: 'pending_review' | 'accepted' | 'rejected' | 'superseded';
+  readonly summary: string;
+  readonly fragmentIds: readonly string[];
+  readonly tagPayload?: Readonly<ProcessingTagProposalPayloadView>;
+  readonly createdAt: string;
+  readonly decidedAt?: string;
+}
+
+export interface ProcessingRunView {
+  readonly runId: string;
+  readonly origin: 'deterministic' | 'ai';
+  readonly providerKey?: string;
+  readonly status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  readonly targetSnapshotId?: string;
+  readonly privacyScope: 'public_only' | 'include_private' | 'private_only';
+  readonly currentStage: ProcessingStage;
+  readonly currentStep?: string;
+  readonly completedUnits: number;
+  readonly totalUnits?: number;
+  readonly attempt: number;
+  readonly version: number;
+  readonly errorCode?: string;
+  readonly createdAt: string;
+  readonly startedAt?: string;
+  readonly finishedAt?: string;
+  readonly updatedAt: string;
+  readonly proposals: readonly Readonly<ProcessingProposalView>[];
+}
+
+export type ProcessingRunListResponse =
+  | Readonly<{status: 'ok'; runs: readonly Readonly<ProcessingRunView>[]}>
+  | Readonly<{status: 'failed'; issue: Readonly<{code: string}>}>;
+
+export type ProcessingRunCancelResponse =
+  | Readonly<{status: 'cancelled'; runId: string; version: number}>
+  | Readonly<{
+      status: 'not_found' | 'rejected' | 'failed';
+      issue: Readonly<{code: string}>;
+    }>;
+
+export type AiTagProposalListResponse =
+  | Readonly<{
+      status: 'ok';
+      proposals: readonly Readonly<ProcessingProposalView>[];
+    }>
+  | Readonly<{
+      status: 'not_found' | 'rejected' | 'failed';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
+export type AiTagProposalStartResponse =
+  | Readonly<{
+      status: 'created' | 'existing';
+      run: Readonly<ProcessingRunView>;
+    }>
+  | Readonly<{
+      status: 'not_found' | 'rejected' | 'failed';
+      issue: Readonly<{code: string; path?: string}>;
+      run?: Readonly<ProcessingRunView>;
+    }>;
+
+export type AiTagProposalDecisionResponse =
+  | Readonly<{
+      status: 'accepted' | 'rejected' | 'unchanged';
+      proposal: Readonly<ProcessingProposalView>;
+      entry?: Readonly<InformationEntry>;
+    }>
+  | Readonly<{
+      status: 'not_found' | 'rejected' | 'failed';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
 export interface ReviewPreferencesResponse {
   readonly status: 'ok';
   readonly workspaceId: string;
   readonly quickTags: readonly string[];
   readonly automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences>;
   readonly vocabulary: Readonly<ReviewVocabularyPreferences>;
+  readonly associationPolicy: Readonly<ReviewAssociationPolicyPreferences>;
 }
 
 export interface ReviewAutomaticKeywordPreferences {
@@ -22,6 +123,15 @@ export interface ReviewPreferencesWrite {
   readonly quickTags: readonly string[];
   readonly automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences>;
   readonly vocabulary: Readonly<ReviewVocabularyPreferences>;
+  readonly associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>;
+}
+
+export interface ReviewAssociationPolicyPreferences {
+  readonly revision: number;
+  readonly contentWeight: number;
+  readonly typeWeight: number;
+  readonly domainWeight: number;
+  readonly threshold: number;
 }
 
 export interface ReviewVocabularyPreferences {
@@ -40,6 +150,15 @@ export const DEFAULT_REVIEW_AUTOMATIC_KEYWORDS: Readonly<ReviewAutomaticKeywordP
 export const DEFAULT_REVIEW_VOCABULARY: Readonly<ReviewVocabularyPreferences> =
   Object.freeze({
     aliases: Object.freeze([]),
+  });
+
+export const DEFAULT_REVIEW_ASSOCIATION_POLICY: Readonly<ReviewAssociationPolicyPreferences> =
+  Object.freeze({
+    revision: 0,
+    contentWeight: 65,
+    typeWeight: 15,
+    domainWeight: 20,
+    threshold: 1_100,
   });
 export interface PublicationState {
   readonly instant?: string;
@@ -286,6 +405,13 @@ export interface InformationEntrySearchCursor {
   readonly entryId: string;
 }
 
+export interface PrivateDocumentSearchItem {
+  readonly snapshot: Readonly<EvidenceSnapshotSummary>;
+  readonly matchReasons: readonly ('body' | 'source' | 'uri')[];
+  readonly entryMatchCount: number;
+  readonly excerpt?: string;
+}
+
 export type InformationEntrySearchResponse =
   | Readonly<{
       status: 'ok';
@@ -297,6 +423,10 @@ export type InformationEntrySearchResponse =
         filterReasons: readonly InformationEntryFilterReason[];
         association?: Readonly<InformationEntryAssociationMatch>;
       }>[];
+      privateDocuments: Readonly<{
+        totalCount: number;
+        items: readonly Readonly<PrivateDocumentSearchItem>[];
+      }>;
       nextCursor?: Readonly<InformationEntrySearchCursor>;
     }>
   | DomainFailure;
@@ -308,6 +438,7 @@ export type InformationEntryAssociationBasis =
   'content_keyword' | 'text_term' | 'type_keyword' | 'domain_keyword';
 
 export interface InformationEntryAssociationPolicy {
+  readonly revision: number;
   readonly version: string;
   readonly contentWeight: number;
   readonly typeWeight: number;
@@ -408,6 +539,13 @@ export type InformationEntryAssociationRebuildResponse =
       status: 'rebuilt';
       entryCount: number;
       projectedCount: number;
+      policy: Readonly<InformationEntryAssociationPolicy>;
+    }>
+  | DomainFailure;
+
+export type InformationEntryAssociationPolicyWriteResponse =
+  | Readonly<{
+      status: 'applied' | 'unchanged';
       policy: Readonly<InformationEntryAssociationPolicy>;
     }>
   | DomainFailure;

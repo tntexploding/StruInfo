@@ -4,6 +4,24 @@ export const MAX_REVIEW_QUICK_TAGS = 24;
 export const MAX_REVIEW_QUICK_TAG_CODE_POINTS = 120;
 export const MAX_REVIEW_KEYWORD_EXCLUSIONS = 64;
 export const MAX_REVIEW_VOCABULARY_ALIASES = 128;
+
+export interface ReviewAssociationPolicyPreferences {
+  readonly revision: number;
+  readonly contentWeight: number;
+  readonly typeWeight: number;
+  readonly domainWeight: number;
+  readonly threshold: number;
+}
+
+export const DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES: Readonly<ReviewAssociationPolicyPreferences> =
+  Object.freeze({
+    revision: 0,
+    contentWeight: 65,
+    typeWeight: 15,
+    domainWeight: 20,
+    threshold: 1_100,
+  });
+
 export interface ReviewVocabularyPreferences {
   readonly aliases: readonly Readonly<{
     source: string;
@@ -36,6 +54,7 @@ export interface ReviewPreferences {
   readonly quickTags: readonly string[];
   readonly automaticKeywords?: Readonly<ReviewAutomaticKeywordPreferences>;
   readonly vocabulary?: Readonly<ReviewVocabularyPreferences>;
+  readonly associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>;
 }
 
 export interface ReviewPreferencesStore {
@@ -45,6 +64,7 @@ export interface ReviewPreferencesStore {
     quickTags: readonly string[],
     automaticKeywords?: Readonly<ReviewAutomaticKeywordPreferences>,
     vocabulary?: Readonly<ReviewVocabularyPreferences>,
+    associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>,
   ): Promise<Readonly<ReviewPreferences>>;
 }
 
@@ -97,6 +117,44 @@ export function decodeReviewVocabularyPreferences(
   if (aliases === undefined) return undefined;
   return Object.freeze({aliases});
 }
+
+export function decodeReviewAssociationPolicyPreferences(
+  value: unknown,
+): Readonly<ReviewAssociationPolicyPreferences> | undefined {
+  if (!isRecord(value)) return undefined;
+  const values = [
+    value.revision,
+    value.contentWeight,
+    value.typeWeight,
+    value.domainWeight,
+    value.threshold,
+  ];
+  if (
+    values.some(
+      (candidate) =>
+        typeof candidate !== 'number' || !Number.isSafeInteger(candidate),
+    ) ||
+    (value.revision as number) < 0 ||
+    (value.contentWeight as number) < 0 ||
+    (value.typeWeight as number) < 0 ||
+    (value.domainWeight as number) < 0 ||
+    (value.contentWeight as number) +
+      (value.typeWeight as number) +
+      (value.domainWeight as number) !==
+      100 ||
+    (value.threshold as number) < 0 ||
+    (value.threshold as number) > 10_000
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    revision: value.revision as number,
+    contentWeight: value.contentWeight as number,
+    typeWeight: value.typeWeight as number,
+    domainWeight: value.domainWeight as number,
+    threshold: value.threshold as number,
+  });
+}
 function decodeKeywordList(
   value: unknown,
   maximumItems: number,
@@ -134,6 +192,7 @@ export function createReviewPreferences(
   quickTags: readonly string[],
   automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences> = DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
   vocabulary: Readonly<ReviewVocabularyPreferences> = DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+  associationPolicy: Readonly<ReviewAssociationPolicyPreferences> = DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
 ): Readonly<ReviewPreferences> {
   return Object.freeze({
     format: REVIEW_PREFERENCES_FORMAT,
@@ -150,6 +209,7 @@ export function createReviewPreferences(
         vocabulary.aliases.map((rule) => Object.freeze({...rule})),
       ),
     }),
+    associationPolicy: Object.freeze({...associationPolicy}),
   });
 }
 

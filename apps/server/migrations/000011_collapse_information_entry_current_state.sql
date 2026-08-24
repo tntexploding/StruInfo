@@ -78,6 +78,11 @@ SET
 FROM legacy_scores AS legacy
 WHERE legacy.workspace_id = entry.workspace_id
   AND legacy.entry_id = entry.entry_id;
+
+-- Flush deferred foreign-key checks raised by the compatibility updates before
+-- changing the participating table shape in the same transaction.
+SET CONSTRAINTS ALL IMMEDIATE;
+
 ALTER TABLE struinfo.information_entry
   ALTER COLUMN document_order SET NOT NULL,
   ALTER COLUMN title_path SET NOT NULL,

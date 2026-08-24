@@ -1,8 +1,12 @@
 import type {
+  AiTagProposalDecisionResponse,
+  AiTagProposalListResponse,
+  AiTagProposalStartResponse,
   EvidenceSnapshot,
   EvidenceSnapshotSummary,
   InformationEntryAssociationListResponse,
   InformationEntryAssociationOverrideResponse,
+  InformationEntryAssociationPolicyWriteResponse,
   InformationEntryAssociationRebuildResponse,
   InformationEntryDocumentListResponse,
   InformationEntryKnowledgeGraphEdgeWriteResponse,
@@ -13,6 +17,8 @@ import type {
   InformationDocumentTagWriteResponse,
   M1cHttpResponse,
   MarkdownImportResponse,
+  ProcessingRunCancelResponse,
+  ProcessingRunListResponse,
   ReviewPreferencesWrite,
   ReviewPreferencesResponse,
   WorkspaceResponse,
@@ -88,6 +94,10 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryAssociationRebuildResponse>>;
+  reviseInformationEntryAssociationPolicy(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryAssociationPolicyWriteResponse>>;
   listInformationEntryAssociations(
     entryId: string,
     options?: M1cApiRequestOptions,
@@ -111,6 +121,34 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationDocumentTagWriteResponse>>;
+  listAiTagProposals(
+    entryId: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<AiTagProposalListResponse>>;
+  startAiTagProposal(
+    entryId: string,
+    requestKey: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<AiTagProposalStartResponse>>;
+  acceptAiTagProposal(
+    entryId: string,
+    proposalId: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<AiTagProposalDecisionResponse>>;
+  rejectAiTagProposal(
+    entryId: string,
+    proposalId: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<AiTagProposalDecisionResponse>>;
+  listProcessingRuns(
+    limit?: number,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<ProcessingRunListResponse>>;
+  cancelProcessingRun(
+    runId: string,
+    expectedVersion: number,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<ProcessingRunCancelResponse>>;
   exportWorkspaceBundle(
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<WorkspaceBundleTransferResponse>>;
@@ -147,11 +185,18 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     readInformationEntryKnowledgeGraph: reject,
     reviseInformationEntryKnowledgeGraphEdge: reject,
     rebuildInformationEntryAssociations: reject,
+    reviseInformationEntryAssociationPolicy: reject,
     listInformationEntryAssociations: reject,
     reviseInformationEntryAssociation: reject,
     listInformationEntryDocuments: reject,
     aggregateInformationDocumentTags: reject,
     reviseInformationDocumentTags: reject,
+    listAiTagProposals: reject,
+    startAiTagProposal: reject,
+    acceptAiTagProposal: reject,
+    rejectAiTagProposal: reject,
+    listProcessingRuns: reject,
+    cancelProcessingRun: reject,
     exportWorkspaceBundle: reject,
     restoreWorkspaceBundle: reject,
   });
@@ -250,6 +295,12 @@ export function createM1cApiClient(
         body,
         options,
       ),
+    reviseInformationEntryAssociationPolicy: (body, options) =>
+      put<InformationEntryAssociationPolicyWriteResponse>(
+        'api/v1/entries/associations/policy',
+        body,
+        options,
+      ),
     listInformationEntryAssociations: (entryId, options) =>
       get<InformationEntryAssociationListResponse>(
         `api/v1/entries/${encodeURIComponent(entryId)}/associations${privateOnlyQuery(options?.includePrivate === true)}`,
@@ -281,6 +332,40 @@ export function createM1cApiClient(
       put<InformationDocumentTagWriteResponse>(
         `api/v1/entry-documents/${encodeURIComponent(snapshotId)}/tags`,
         body,
+        options,
+      ),
+    listAiTagProposals: (entryId, options) =>
+      get<AiTagProposalListResponse>(
+        `api/v1/entries/${encodeURIComponent(entryId)}/tag-proposals`,
+        options,
+      ),
+    startAiTagProposal: (entryId, requestKey, options) =>
+      post<AiTagProposalStartResponse>(
+        `api/v1/entries/${encodeURIComponent(entryId)}/tag-proposals/start`,
+        {requestKey},
+        options,
+      ),
+    acceptAiTagProposal: (entryId, proposalId, options) =>
+      post<AiTagProposalDecisionResponse>(
+        `api/v1/entries/${encodeURIComponent(entryId)}/tag-proposals/${encodeURIComponent(proposalId)}/accept`,
+        {},
+        options,
+      ),
+    rejectAiTagProposal: (entryId, proposalId, options) =>
+      post<AiTagProposalDecisionResponse>(
+        `api/v1/entries/${encodeURIComponent(entryId)}/tag-proposals/${encodeURIComponent(proposalId)}/reject`,
+        {},
+        options,
+      ),
+    listProcessingRuns: (limit = 20, options) =>
+      get<ProcessingRunListResponse>(
+        `api/v1/processing-runs?limit=${encodeURIComponent(limit.toString())}`,
+        options,
+      ),
+    cancelProcessingRun: (runId, expectedVersion, options) =>
+      post<ProcessingRunCancelResponse>(
+        `api/v1/processing-runs/${encodeURIComponent(runId)}/cancel`,
+        {expectedVersion},
         options,
       ),
     exportWorkspaceBundle: (options) =>
@@ -385,7 +470,8 @@ function decodeReviewPreferencesResponse(
     !body.automaticKeywords.excludedKeywords.every(
       (value) => typeof value === 'string',
     ) ||
-    !isReviewVocabularyPreferences(body.vocabulary)
+    !isReviewVocabularyPreferences(body.vocabulary) ||
+    !isReviewAssociationPolicyPreferences(body.associationPolicy)
   ) {
     throw new M1cApiClientError('本地产品接口未提供可识别的个人审核偏好。');
   }
@@ -407,8 +493,44 @@ function decodeReviewPreferencesResponse(
           body.vocabulary.aliases.map((rule) => Object.freeze({...rule})),
         ),
       }),
+      associationPolicy: Object.freeze({...body.associationPolicy}),
     }),
   });
+}
+
+function isReviewAssociationPolicyPreferences(
+  value: unknown,
+): value is Readonly<{
+  revision: number;
+  contentWeight: number;
+  typeWeight: number;
+  domainWeight: number;
+  threshold: number;
+}> {
+  if (!isRecord(value)) return false;
+  const numbers = [
+    value.revision,
+    value.contentWeight,
+    value.typeWeight,
+    value.domainWeight,
+    value.threshold,
+  ];
+  return (
+    numbers.every(
+      (candidate) =>
+        typeof candidate === 'number' && Number.isSafeInteger(candidate),
+    ) &&
+    (value.revision as number) >= 0 &&
+    (value.contentWeight as number) >= 0 &&
+    (value.typeWeight as number) >= 0 &&
+    (value.domainWeight as number) >= 0 &&
+    (value.contentWeight as number) +
+      (value.typeWeight as number) +
+      (value.domainWeight as number) ===
+      100 &&
+    (value.threshold as number) >= 0 &&
+    (value.threshold as number) <= 10_000
+  );
 }
 
 function isReviewVocabularyPreferences(value: unknown): value is Readonly<{

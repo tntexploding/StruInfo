@@ -1,15 +1,18 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
 
-import type {
-  EvidenceSnapshot,
-  InformationEntry,
+import {
+  DEFAULT_REVIEW_ASSOCIATION_POLICY,
+  type EvidenceSnapshot,
+  type InformationEntry,
 } from '../api/m1c_api_contract.js';
 import {READY_HEALTH_FIXTURE} from '../health/mock_health_client.js';
 import {MaterialsWorkspace} from '../workspaces/materials_workspace.js';
 import {InformationEntryPrivacyScope} from '../workspaces/information_entry_components.js';
 import {InformationEntrySplitWorkspace} from '../workspaces/information_entry_split_workspace.js';
 import {InformationEntryReviewControls} from '../workspaces/information_entry_review_controls.js';
+import {AssociationPolicyPanel} from '../workspaces/association_policy_panel.js';
+import {PrivateDocumentResults} from '../workspaces/private_document_results.js';
 import {FormalKnowledgeWorkspace} from '../workspaces/formal_knowledge_workspace.js';
 
 import {WorkflowOverview} from '../workspaces/workflow_overview.js';
@@ -98,6 +101,28 @@ describe('M1D product workspaces', () => {
     expect(markup).toContain('aria-current="page"');
   });
 
+  it('shows the optional tag Provider as enabled without unlocking other AI workspaces', () => {
+    const markup = renderToStaticMarkup(
+      <ProductAppShell
+        activeSection="tags"
+        health={{kind: 'ready', response: READY_HEALTH_FIXTURE}}
+        transportMode="live"
+        workspace={{
+          status: 'ok',
+          workspaceId: '11111111-1111-4111-8111-111111111111',
+          capabilities: ['manual-core', 'processing_runs', 'ai_tags'],
+        }}
+        onNavigate={() => undefined}
+        evidencePanel={null}
+      >
+        <h1>标签</h1>
+      </ProductAppShell>,
+    );
+
+    expect(markup).toContain('<dt>AI</dt><dd>已启用</dd>');
+    expect(markup).toContain('aria-current="page"');
+  });
+
   it('renders the closed three-state privacy query scope', () => {
     const markup = renderToStaticMarkup(
       <InformationEntryPrivacyScope
@@ -128,13 +153,29 @@ describe('M1D product workspaces', () => {
             body: {status: 'ok', totalCount: 0, documents: []},
           })
         }
+        onListProcessingRuns={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {status: 'ok', runs: []},
+          })
+        }
+        onCancelProcessingRun={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {
+              status: 'cancelled',
+              runId: '11111111-1111-4111-8111-111111111111',
+              version: 2,
+            },
+          })
+        }
         onNavigate={() => undefined}
       />,
     );
 
-    expect(markup).toContain('AI 处理进度');
-    expect(markup).toContain('AI 未启用');
-    expect(markup).toContain('无模型任务');
+    expect(markup).toContain('处理任务进度');
+    expect(markup).toContain('AI 未配置 · 暂无任务');
+    expect(markup).toContain('没有处理任务');
     expect(markup).toContain('当前项目数据');
     expect(markup).toContain('来源片段');
     expect(markup).toContain('继续当前工作');
@@ -181,6 +222,7 @@ describe('M1D product workspaces', () => {
               querySha256: 'a'.repeat(64),
               totalCount: 0,
               items: [],
+              privateDocuments: {totalCount: 0, items: []},
             },
           })
         }
@@ -259,6 +301,7 @@ describe('M1D product workspaces', () => {
             vocabulary: {
               aliases: [{source: 'Postgres', canonical: 'PostgreSQL'}],
             },
+            associationPolicy: DEFAULT_REVIEW_ASSOCIATION_POLICY,
           },
         }}
         onContentKeywordsChange={() => undefined}
@@ -279,6 +322,7 @@ describe('M1D product workspaces', () => {
               vocabulary: {
                 aliases: [{source: 'Postgres', canonical: 'PostgreSQL'}],
               },
+              associationPolicy: DEFAULT_REVIEW_ASSOCIATION_POLICY,
             },
           })
         }
@@ -316,6 +360,7 @@ describe('M1D product workspaces', () => {
                 excludedKeywords: [],
               },
               vocabulary: {aliases: []},
+              associationPolicy: DEFAULT_REVIEW_ASSOCIATION_POLICY,
             },
           })
         }
@@ -363,5 +408,55 @@ describe('M1D product workspaces', () => {
     expect(formal).toContain('打开最高匹配图谱');
     expect(formal).toContain('关系列表');
     expect(formal).not.toContain('当前不会写入数据');
+  });
+
+  it('renders editable association weights and a separate complete-private-document channel', () => {
+    const policy = renderToStaticMarkup(
+      <AssociationPolicyPanel
+        policy={{
+          revision: 2,
+          version: 'struinfo.entry-association.local-index.v1',
+          contentWeight: 50,
+          typeWeight: 25,
+          domainWeight: 25,
+          threshold: 2_000,
+          candidateLimit: 24,
+          adjustmentStep: 500,
+        }}
+        saving={false}
+        onSave={() => undefined}
+      />,
+    );
+    const privateDocuments = renderToStaticMarkup(
+      <PrivateDocumentResults
+        totalCount={1}
+        items={[
+          {
+            snapshot: {
+              workspaceId: REVIEW_EVIDENCE.workspaceId,
+              resourceId: REVIEW_EVIDENCE.resourceId,
+              snapshotId: REVIEW_EVIDENCE.snapshotId,
+              resourceKind: 'manual_text',
+              sourceKey: 'manual:private-synthetic',
+              capturedAt: REVIEW_EVIDENCE.capturedAt,
+              fragmentCount: 0,
+              isPrivate: true,
+            },
+            matchReasons: ['body'],
+            entryMatchCount: 2,
+            excerpt: 'Synthetic private document excerpt',
+          },
+        ]}
+        onOpenEvidence={() => undefined}
+      />,
+    );
+
+    expect(policy).toContain('联系策略权重');
+    expect(policy).toContain('修订 2');
+    expect(policy).toContain('内容相似度');
+    expect(policy).toContain('保存权重并重建联系');
+    expect(privateDocuments).toContain('完整隐私文档');
+    expect(privateDocuments).toContain('独立于 Entry 的全文结果');
+    expect(privateDocuments).toContain('查看完整隐私文档');
   });
 });

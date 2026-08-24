@@ -45,7 +45,7 @@ M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁
 [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化正式知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求；[ADR 0007](adr/0007-information-entry-first-document-processing.md) 把普通文档主线重定向为 Entry-first。ADR 0008 随后把普通 Entry、文档标签和人工联系收敛为当前成品态与可携带个人数据，ADR 0009 删除了没有活动调用方的旧 Curation/Knowledge 应用运行时。ADR 0010 将新的所有者正式知识页定义为有界中心图谱；ADR 0011 进一步允许确定性相似联系
 直接成为可编辑图谱边，并让用户编辑或 block 优先于后续重建。
 
-当前产品已经用固定 398–407 期形成 345 个 Entry 和可重建联系，并提供导入、拆分、标签、联系、查询、正式 Entry 图谱、精确来源、隐私范围与完整个人数据包。M1E-2 复用 Association 投影与 override，实现最高匹配中心、有界图/列表、用户关系命令和 Association Bundle v3。旧正式 Knowledge 表和历史数据只作兼容保留；旧高级编辑器、AI、模糊/向量检索、报告和公网部署仍未实现。
+当前产品已经提供导入、拆分、标签、联系、查询、正式 Entry 图谱、精确来源、隐私范围与完整个人数据包。M1E-2 复用 Association 投影与 override，实现最高匹配中心、有界图/列表、用户关系命令和 Association Bundle v3；M1E-3B 增加可选标签提案。活动工作区目前按所有者要求保持零业务数据，旧资料只存在于项目目录外的恢复归档。
 
 ## 2. 为什么选择这个形态
 
@@ -304,7 +304,7 @@ Blob 边界只接受通过 intrinsic brand 检查的普通字节视图，并立�
 大型正文和媒体优先保留为 Blob 引用，不能通过反复嵌套 base64 形成不可读的 current-version 工件。
 writer contract 与边界测试必须证明每个成功输出都能由相同版本的公开 reader 往返读取；若确定性 encoder 与精确 preflight 已提供同等保证，运行时不要求为每次写入重复解析。
 
-切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload。当前四分区个人数据包包含 36 表 M1C 兼容分区、7 表 Entry v2、2 表 Association v3，以及引用 Blob 字节和偏好，共覆盖 45 张当前工作区表。Association v3 携带 M1E-2 关系来源、名称和方向；v1/v2 继续可读并补为空元数据。所有文件仍只落到外部 `exports/`。跨工作区克隆、非空合并和生产灾难恢复仍是独立后续能力。
+切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload。当前五分区个人数据包包含 36 表 M1C 兼容分区、7 表 Entry v2、2 表 Association v3、6 表 Processing v2，以及引用 Blob 字节和偏好，共覆盖 51 张当前工作区表。Association v3 携带 M1E-2 关系来源、名称和方向；v1/v2 继续可读并补为空元数据。所有文件仍只落到外部 `exports/`。跨工作区克隆、非空合并和生产灾难恢复仍是独立后续能力。
 
 Linux 单机部署可先使用受备份保护的持久卷。
 需要多机或对象存储服务时，再增加 S3 兼容适配器；迁移不能改变 Resource、Snapshot 或 Citation ID。
@@ -633,7 +633,7 @@ import -> snapshot -> document nodes/fragments/media
 6. 联系页重建可解释投影，并逐对增强、削弱、屏蔽或恢复；
 7. 查询页按文本、标签、来源、时间、隐私和最多两跳联系稳定分页，并返回精确证据；
 8. 正式知识页搜索最高匹配 Entry，组合有界自动/用户关系图谱，支持图/列表、编辑、隐藏、恢复、创建和来源回看；
-9. 个人数据包导出/恢复 45 张当前表、引用 Blob 字节、当前偏好和 Association v3 图谱元数据。
+9. 个人数据包导出/恢复 51 张当前表、引用 Blob 字节、当前偏好、Association v3 图谱元数据和 Processing v2 状态。
 
 旧 Curation、正式 Knowledge 写入/读取和旧 Knowledge 检索应用运行时已经删除；迁移与历史数据只为兼容保留。M1E-2 不恢复这些入口，而是在 Entry/Association 边界完成正式图谱。下一步来自直接使用或明确的 M1E-3；AI、RAG、向量、自动采集、容器/公网认证和历史测试框架强化都不是当前使用的前置条件。阻断分类继续以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
 

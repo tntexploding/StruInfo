@@ -1,8 +1,12 @@
 import type {ReactNode} from 'react';
 
 import type {
+  AiTagProposalDecisionResponse,
+  AiTagProposalListResponse,
+  AiTagProposalStartResponse,
   InformationEntryAssociationListResponse,
   InformationEntryAssociationOverrideResponse,
+  InformationEntryAssociationPolicyWriteResponse,
   InformationEntryAssociationRebuildResponse,
   InformationDocumentTagWriteResponse,
   InformationEntry,
@@ -46,6 +50,9 @@ export interface InformationEntryServices {
   readonly onRebuildAssociations: (
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationEntryAssociationRebuildResponse>>;
+  readonly onReviseAssociationPolicy: (
+    body: unknown,
+  ) => Promise<M1cHttpResponse<InformationEntryAssociationPolicyWriteResponse>>;
   readonly onListAssociations: (
     entryId: string,
     includePrivate: boolean,
@@ -66,6 +73,21 @@ export interface InformationEntryServices {
     snapshotId: string,
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationDocumentTagWriteResponse>>;
+  readonly onListAiTagProposals: (
+    entryId: string,
+  ) => Promise<M1cHttpResponse<AiTagProposalListResponse>>;
+  readonly onStartAiTagProposal: (
+    entryId: string,
+    requestKey: string,
+  ) => Promise<M1cHttpResponse<AiTagProposalStartResponse>>;
+  readonly onAcceptAiTagProposal: (
+    entryId: string,
+    proposalId: string,
+  ) => Promise<M1cHttpResponse<AiTagProposalDecisionResponse>>;
+  readonly onRejectAiTagProposal: (
+    entryId: string,
+    proposalId: string,
+  ) => Promise<M1cHttpResponse<AiTagProposalDecisionResponse>>;
   readonly onSaveReviewPreferences: (
     value: Readonly<ReviewPreferencesWrite>,
   ) => Promise<M1cHttpResponse<ReviewPreferencesResponse>>;

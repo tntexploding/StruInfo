@@ -47,6 +47,17 @@ import {
   type PersonalDataBundleSection,
 } from './personal_data_bundle.js';
 import {
+  assertM1eProcessingWorkspace,
+  createEmptyM1eProcessingSnapshot,
+  M1E_PROCESSING_BUNDLE_CODEC,
+  M1E_PROCESSING_LEGACY_BUNDLE_CODEC,
+  M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+  M1E_PROCESSING_BUNDLE_SECTION_VERSION,
+  m1eProcessingTableCounts,
+  normalizeM1eProcessingSnapshot,
+  type M1eProcessingSnapshot,
+} from './m1e_processing_bundle.js';
+import {
   readWorkspaceBundle,
   WorkspaceBundleError,
   writeWorkspaceBundle,
@@ -70,6 +81,7 @@ export interface M1cWorkspaceTransferSnapshot {
   readonly domain: Readonly<M1cDomainSnapshot>;
   readonly entries: Readonly<M1dEntrySnapshot>;
   readonly associations: Readonly<M1dAssociationSnapshot>;
+  readonly processing: Readonly<M1eProcessingSnapshot>;
 }
 
 export type M1cDomainTransferRepositoryErrorCode =
@@ -140,6 +152,8 @@ const BUNDLE_CODECS = Object.freeze([
   M1D_ASSOCIATION_LEGACY_BUNDLE_CODEC,
   M1D_ASSOCIATION_VERSION_TWO_BUNDLE_CODEC,
   M1D_ASSOCIATION_BUNDLE_CODEC,
+  M1E_PROCESSING_LEGACY_BUNDLE_CODEC,
+  M1E_PROCESSING_BUNDLE_CODEC,
   PERSONAL_DATA_BUNDLE_CODEC,
 ]);
 
@@ -218,6 +232,11 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
               value: snapshot.associations,
             },
             {
+              type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+              version: M1E_PROCESSING_BUNDLE_SECTION_VERSION,
+              value: snapshot.processing,
+            },
+            {
               type: PERSONAL_DATA_BUNDLE_SECTION_TYPE,
               version: PERSONAL_DATA_BUNDLE_SECTION_VERSION,
               value: personalData,
@@ -284,13 +303,18 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
       const associationSection = bundle.sections.find(
         (section) => section.type === M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
       );
+      const processingSection = bundle.sections.find(
+        (section) => section.type === M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+      );
       const personalSection = bundle.sections.find(
         (section) => section.type === PERSONAL_DATA_BUNDLE_SECTION_TYPE,
       );
       if (
         domainSection === undefined ||
-        bundle.sections.length > 4 ||
-        (associationSection !== undefined && entrySection === undefined)
+        bundle.sections.length > 5 ||
+        ((associationSection !== undefined ||
+          processingSection !== undefined) &&
+          entrySection === undefined)
       ) {
         throw new M1cWorkspaceTransferError('bundle_invalid');
       }
@@ -305,6 +329,10 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
             associationSection === undefined
               ? createEmptyM1dAssociationSnapshot()
               : normalizeM1dAssociationSnapshot(associationSection.value),
+          processing:
+            processingSection === undefined
+              ? createEmptyM1eProcessingSnapshot()
+              : normalizeM1eProcessingSnapshot(processingSection.value),
         },
         workspaceId,
       );
@@ -390,10 +418,12 @@ function normalizeTransferSnapshot(
   const domain = normalizeM1cDomainSnapshot(value.domain);
   const entries = normalizeM1dEntrySnapshot(value.entries);
   const associations = normalizeM1dAssociationSnapshot(value.associations);
+  const processing = normalizeM1eProcessingSnapshot(value.processing);
   assertM1cDomainWorkspace(domain, workspaceId);
   assertM1dEntryWorkspace(entries, workspaceId);
   assertM1dAssociationWorkspace(associations, workspaceId);
-  return Object.freeze({domain, entries, associations});
+  assertM1eProcessingWorkspace(processing, workspaceId);
+  return Object.freeze({domain, entries, associations, processing});
 }
 
 function transferTableCounts(
@@ -403,6 +433,7 @@ function transferTableCounts(
     ...m1cDomainTableCounts(snapshot.domain),
     ...m1dEntryTableCounts(snapshot.entries),
     ...m1dAssociationTableCounts(snapshot.associations),
+    ...m1eProcessingTableCounts(snapshot.processing),
   });
 }
 
@@ -446,6 +477,7 @@ async function saveReviewPreferences(
     preferences.quickTags,
     preferences.automaticKeywords,
     preferences.vocabulary,
+    preferences.associationPolicy,
   );
 }
 async function restorePortableBlobs(
@@ -522,5 +554,6 @@ export function createEmptyM1cWorkspaceTransferSnapshot(
     domain: createEmptyM1cDomainSnapshot(workspaceId, createdAt),
     entries: createEmptyM1dEntrySnapshot(),
     associations: createEmptyM1dAssociationSnapshot(),
+    processing: createEmptyM1eProcessingSnapshot(),
   });
 }

@@ -1,11 +1,13 @@
 # StruInfo 个人数据包（Workspace Bundle v1）合同
 
-- 状态：当前四分区个人数据导出/空工作区恢复已实现
-- 最近更新：2026-08-23
+- 状态：当前五分区个人数据导出/空工作区恢复已实现
+- 最近更新：2026-08-24
 - 对应决策：[ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md)、
   [ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、
   [ADR 0007](adr/0007-information-entry-first-document-processing.md)、
-  [ADR 0008](adr/0008-current-entry-state-and-portable-personal-data.md)
+  [ADR 0008](adr/0008-current-entry-state-and-portable-personal-data.md)、
+  [ADR 0012](adr/0012-provider-neutral-processing-runs-and-proposals.md)、
+  [ADR 0013](adr/0013-openai-entry-tag-proposals.md)
 - 信封 Schema：[`workspace-bundle.v1.schema.json`](../packages/contracts/json-schema/workspace-bundle.v1.schema.json)
 
 ## 1. 目标
@@ -15,10 +17,11 @@ Workspace Bundle v1 现在是“当前已实现的全部工作区个人数据”
 - 36 张 Evidence、Curation 与正式 Knowledge 工作区表；
 - 7 张当前成品态 Entry / Document 标签表；
 - 2 张 Entry 联系投影与当前控制表；
+- 6 张处理任务、提案信封及 AI 标签提案表；
 - 所有被 Evidence 引用的原始/规范化 Blob 字节；
 - 当前工作区的快捷标签、自动标签筛选与标签别名偏好。
 
-共计 45 张数据库表。运行配置、数据库 URL、密码、API key、访问令牌、外部工作区路径和其他秘密不属于个人数据包，继续由外部配置/秘密机制提供。
+共计 51 张数据库表。运行配置、数据库 URL、密码、API key、访问令牌、外部工作区路径和其他秘密不属于个人数据包，继续由外部配置/秘密机制提供。
 
 真实包文件只能位于用户选择的外部数据根 `exports/`，不得进入 Git、源码目录、安装包、容器镜像或测试 fixture。tracked 测试只能使用合成且无个人价值的数据。
 
@@ -43,11 +46,12 @@ Workspace Bundle v1 现在是“当前已实现的全部工作区个人数据”
 | `struinfo.m1c-domain`      |       1 | `struinfo.m1c-domain.v1`      | Evidence、Curation、正式 Knowledge 与命令历史，36 表                          |
 | `struinfo.m1d-entry`       |       2 | `struinfo.m1d-entry.v2`       | 当前 Entry、Fragment 输入、内容/类型/领域标签、lineage 与 Document 标签，7 表 |
 | `struinfo.m1d-association` |       3 | `struinfo.m1d-association.v3` | 可重建联系投影、当前人工控制与正式图谱关系元数据，2 表                        |
+| `struinfo.m1e-processing`  |       2 | `struinfo.m1e-processing.v2`  | 处理任务、提案信封、精确 Fragment 输入与 AI 标签提案载荷，6 表                |
 | `struinfo.personal-data`   |       1 | `struinfo.personal-data.v1`   | 引用 Blob 的完整字节与当前审核/标签个人偏好                                   |
 
 每个 codec 都使用闭合 schema，显式列出允许的字段并拒绝未知表、未知列、重复身份、跨工作区引用和错误 scalar。通用信封不会把任意 JSON 直接当作领域事实。
 
-Entry v2 和 Association v3 反映迁移 `000011`/`000012` 之后的当前成品态。Association v3 在当前 override 上增加关系来源、名称和方向；Entry 的 `current_revision` / `current_revision_id` 只作为乐观并发版本令牌，不再指向一张普通编辑历史表。不可变 Snapshot、Fragment 以及正式 Knowledge 修订历史仍由 M1C domain 分区原样保留。
+Entry v2、Association v3 和 Processing v2 反映迁移 `000011` 至 `000014` 之后的当前成品态。Association v3 在当前 override 上增加关系来源、名称和方向；Entry 的 `current_revision` / `current_revision_id` 只作为乐观并发版本令牌，不再指向一张普通编辑历史表。Processing v2 在 provider-neutral 任务/提案之上增加闭合的 AI 标签提案载荷；它不保存 API key、提示全文、原始模型响应或任意 JSON。不可变 Snapshot、Fragment 以及正式 Knowledge 修订历史仍由 M1C domain 分区原样保留。
 
 ## 4. 规范编码与隐私
 
@@ -67,11 +71,11 @@ Writer 输出确定性 UTF-8 JSON：
 
 一次导出按以下顺序执行：
 
-1. 在 PostgreSQL `REPEATABLE READ READ ONLY` 快照中读取当前 45 张工作区表；
-2. 规范化三个数据库分区并核对同一 `workspaceId`；
+1. 在 PostgreSQL `REPEATABLE READ READ ONLY` 快照中读取当前 51 张工作区表；
+2. 规范化四个数据库分区并核对同一 `workspaceId`；
 3. 从 Evidence 行导出精确 Blob 引用清单，并从外部 Blob store 读取每个引用的字节；
 4. 从外部 `preferences/` 读取当前快捷标签、自动筛选和别名；
-5. 编码四个分区，核验预算、秘密边界和引用闭包；
+5. 编码五个分区，核验预算、秘密边界和引用闭包；
 6. 在外部 `exports/` 通过临时文件、flush 和原子 rename 写入 `*.personal-data.json`。
 
 若任一数据库、Blob、偏好或文件写入失败，导出不返回成功摘要。
@@ -95,9 +99,10 @@ Reader 继续接受历史 Bundle：
 - 只含 `struinfo.m1c-domain.v1`：Entry 与联系状态按空处理；
 - 带 `struinfo.m1d-entry.v1`：只保留旧指针选中的当前 Entry/Document 标签值，转换为 v2；
 - 带 `struinfo.m1d-association.v1` 或 `.v2`：保留当前人工控制并转换为 v3；缺失的图谱关系元数据为 `null`；
+- 缺少 `struinfo.m1e-processing`：处理任务和提案状态按空处理；带 Processing v1 时保留任务、提案信封和 Fragment 输入，新增 AI 标签提案表按空处理并转换为 v2；
 - 缺少 `struinfo.personal-data.v1`：仍要求外部 Blob store 已存在全部引用字节，且不覆盖当前个人偏好。
 
-新 writer 只生成四分区形式。未知或重复分区、Association 存在但 Entry 缺失、Blob manifest 与 personal-data 字节不一致时一律拒绝。
+新 writer 只生成五分区形式。未知或重复分区、Association 存在但 Entry 缺失、Blob manifest 与 personal-data 字节不一致时一律拒绝。
 
 旧扩展名 `*.workspace-bundle.json` 只作为兼容导入名继续读取；新导出使用 `*.personal-data.json`。
 
@@ -105,7 +110,7 @@ Reader 继续接受历史 Bundle：
 
 该功能是当前个人工作区的完整可移植导入导出，不是 PostgreSQL 集群灾难恢复：
 
-- 只覆盖当前产品已经持久化的个人数据；尚未实现的 saved view、AI job、模型缓存或账号系统不会被虚构进包；
+- 只覆盖当前产品已经持久化的个人数据；未持久化的 saved view、模型缓存、账号系统或原始供应商响应不会被虚构进包；
 - 不包含运行配置、秘密、数据库角色、服务器设置或第三方凭据；
 - 不支持非空目标合并、跨工作区 UUID 重写、增量同步或冲突解决；
 - Blob/preference 与数据库是两个外部存储介质，采用预验证、内容寻址幂等和失败补偿，而不是宣称跨介质 ACID；

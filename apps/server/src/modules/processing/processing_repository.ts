@@ -1,0 +1,58 @@
+import type {
+  ProcessingProposal,
+  ProcessingProposalAppend,
+  ProcessingProposalDecision,
+  ProcessingProposalDecisionOutcome,
+  ProcessingRun,
+  ProcessingRunCreate,
+  ProcessingRunProgressWrite,
+  ProcessingRunWriteOutcome,
+} from './processing_contract.js';
+
+export interface ProcessingRunRepositoryPort {
+  listRecentRuns(
+    workspaceId: string,
+    limit: number,
+  ): Promise<readonly Readonly<ProcessingRun>[]>;
+
+  createRun(
+    create: Readonly<ProcessingRunCreate>,
+  ): Promise<ProcessingRunWriteOutcome>;
+
+  writeProgress(
+    write: Readonly<ProcessingRunProgressWrite>,
+  ): Promise<ProcessingRunWriteOutcome>;
+
+  cancelRun(
+    workspaceId: string,
+    runId: string,
+    expectedVersion: number,
+  ): Promise<ProcessingRunWriteOutcome>;
+
+  appendProposal(
+    proposal: Readonly<ProcessingProposalAppend>,
+  ): Promise<ProcessingRunWriteOutcome>;
+}
+
+export interface AiTagProposalRepositoryPort extends ProcessingRunRepositoryPort {
+  loadRun(
+    workspaceId: string,
+    runId: string,
+  ): Promise<Readonly<ProcessingRun> | undefined>;
+
+  listTagProposalsForEntry(
+    workspaceId: string,
+    entryId: string,
+    limit: number,
+  ): Promise<readonly Readonly<ProcessingProposal>[]>;
+
+  appendTagProposal(
+    proposal: Readonly<ProcessingProposalAppend>,
+  ): Promise<ProcessingRunWriteOutcome>;
+
+  decideProposal(
+    workspaceId: string,
+    proposalId: string,
+    decision: ProcessingProposalDecision,
+  ): Promise<ProcessingProposalDecisionOutcome>;
+}

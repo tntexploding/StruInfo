@@ -16,6 +16,7 @@ import {
 import {DOMAIN_LABELS, TYPE_LABELS} from './information_entry_shared.js';
 import {InformationEntryAdvancedSearchFields} from './information_entry_search_controls.js';
 import {useInformationEntryController} from './use_information_entry_controller.js';
+import {PrivateDocumentResults} from './private_document_results.js';
 
 export interface InformationEntryQueryWorkspaceProps extends Pick<
   InformationEntryServices,
@@ -78,7 +79,9 @@ export function InformationEntryQueryWorkspace({
           </div>
           <span className="record-count">
             {controller.view.status === 'ready'
-              ? `${controller.view.response.totalCount.toString()} 条`
+              ? controller.includePrivate
+                ? `${controller.view.response.totalCount.toString()} Entry · ${controller.view.response.privateDocuments.totalCount.toString()} 完整隐私文档`
+                : `${controller.view.response.totalCount.toString()} 条`
               : '读取中'}
           </span>
         </header>
@@ -172,11 +175,21 @@ export function InformationEntryQueryWorkspace({
               清除筛选
             </button>
             <button className="primary-action entry-query-action" type="submit">
-              查找 Entry
+              {controller.includePrivate
+                ? '查找 Entry 与完整文档'
+                : '查找 Entry'}
             </button>
           </div>
         </form>
       </section>
+
+      {controller.view.status === 'ready' && controller.includePrivate ? (
+        <PrivateDocumentResults
+          items={controller.view.response.privateDocuments.items}
+          totalCount={controller.view.response.privateDocuments.totalCount}
+          onOpenEvidence={onOpenEvidence}
+        />
+      ) : null}
 
       <InformationEntryResults
         ariaLabel="Entry 查询结果"

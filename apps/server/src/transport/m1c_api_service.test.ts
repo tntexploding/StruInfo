@@ -18,6 +18,14 @@ import type {
 } from '../modules/entries/index.js';
 import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
 import {
+  DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
+  DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+  DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+  type ReviewAssociationPolicyPreferences,
+  type ReviewAutomaticKeywordPreferences,
+  type ReviewVocabularyPreferences,
+} from '../storage/review_preferences_store.js';
+import {
   LOCAL_API_CACHE_CONTROL,
   LOCAL_API_CONTENT_TYPE,
   M1cApiController,
@@ -76,17 +84,14 @@ describe('M1cApiService', () => {
 
   it('loads and saves workspace-scoped review quick tags', async () => {
     let quickTags: readonly string[] = [];
-    let automaticKeywords = {
+    let automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences> = {
       enabled: true,
       includeLinkDomains: false,
-      excludedKeywords: [] as readonly string[],
+      excludedKeywords: [],
     };
-    let vocabulary = {
-      aliases: [] as readonly Readonly<{
-        source: string;
-        canonical: string;
-      }>[],
-    };
+    let vocabulary: Readonly<ReviewVocabularyPreferences> = {aliases: []};
+    let associationPolicy: Readonly<ReviewAssociationPolicyPreferences> =
+      DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES;
     const load = vi.fn((workspaceId: string) =>
       Promise.resolve({
         format: 'struinfo.review-preferences' as const,
@@ -95,18 +100,21 @@ describe('M1cApiService', () => {
         quickTags,
         automaticKeywords,
         vocabulary,
+        associationPolicy,
       }),
     );
     const save = vi.fn(
       (
         workspaceId: string,
         next: readonly string[],
-        nextAutomaticKeywords: typeof automaticKeywords,
-        nextVocabulary: typeof vocabulary,
+        nextAutomaticKeywords: Readonly<ReviewAutomaticKeywordPreferences>,
+        nextVocabulary: Readonly<ReviewVocabularyPreferences>,
+        nextAssociationPolicy: Readonly<ReviewAssociationPolicyPreferences> = associationPolicy,
       ) => {
         quickTags = next;
         automaticKeywords = nextAutomaticKeywords;
         vocabulary = nextVocabulary;
+        associationPolicy = nextAssociationPolicy;
         return Promise.resolve({
           format: 'struinfo.review-preferences' as const,
           version: 1 as const,
@@ -114,6 +122,7 @@ describe('M1cApiService', () => {
           quickTags,
           automaticKeywords,
           vocabulary,
+          associationPolicy,
         });
       },
     );
@@ -131,6 +140,7 @@ describe('M1cApiService', () => {
           excludedKeywords: [],
         },
         vocabulary: {aliases: []},
+        associationPolicy: DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
       },
     });
     await expect(
@@ -149,7 +159,9 @@ describe('M1cApiService', () => {
       statusCode: 200,
       body: {quickTags: ['实用工具', '命令行']},
     });
-    expect(load).toHaveBeenCalledExactlyOnceWith(WORKSPACE_ID);
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(load).toHaveBeenNthCalledWith(1, WORKSPACE_ID);
+    expect(load).toHaveBeenNthCalledWith(2, WORKSPACE_ID);
     expect(save).toHaveBeenCalledExactlyOnceWith(
       WORKSPACE_ID,
       ['实用工具', '命令行'],
@@ -161,6 +173,7 @@ describe('M1cApiService', () => {
       {
         aliases: [{source: 'Synthetic CLI', canonical: '工具'}],
       },
+      DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
     );
   });
 
@@ -180,6 +193,99 @@ describe('M1cApiService', () => {
       body: {issue: {path: 'body.quickTags'}},
     });
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it('versions association weights in external personal preferences and rejects stale writes', async () => {
+    let policy: Readonly<ReviewAssociationPolicyPreferences> =
+      DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES;
+    const save = vi.fn(
+      (
+        workspaceId: string,
+        quickTags: readonly string[],
+        automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences> = DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+        vocabulary: Readonly<ReviewVocabularyPreferences> = DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+        associationPolicy: Readonly<ReviewAssociationPolicyPreferences> = policy,
+      ) => {
+        policy = associationPolicy;
+        return Promise.resolve({
+          format: 'struinfo.review-preferences' as const,
+          version: 1 as const,
+          workspaceId,
+          quickTags,
+          automaticKeywords,
+          vocabulary,
+          associationPolicy: policy,
+        });
+      },
+    );
+    const service = createService({
+      reviewPreferences: {
+        load: (workspaceId) =>
+          Promise.resolve({
+            format: 'struinfo.review-preferences' as const,
+            version: 1 as const,
+            workspaceId,
+            quickTags: ['保留标签'],
+            automaticKeywords: DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+            vocabulary: DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+            associationPolicy: policy,
+          }),
+        save,
+      },
+    });
+
+    await expect(
+      service.reviseInformationEntryAssociationPolicy({
+        expectedRevision: 0,
+        contentWeight: 50,
+        typeWeight: 25,
+        domainWeight: 25,
+        threshold: 2_000,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'applied',
+        policy: {
+          revision: 1,
+          contentWeight: 50,
+          typeWeight: 25,
+          domainWeight: 25,
+          threshold: 2_000,
+        },
+      },
+    });
+    expect(save).toHaveBeenCalledWith(
+      WORKSPACE_ID,
+      ['保留标签'],
+      DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+      DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+      {
+        revision: 1,
+        contentWeight: 50,
+        typeWeight: 25,
+        domainWeight: 25,
+        threshold: 2_000,
+      },
+    );
+    await expect(
+      service.reviseInformationEntryAssociationPolicy({
+        expectedRevision: 0,
+        contentWeight: 60,
+        typeWeight: 20,
+        domainWeight: 20,
+        threshold: 1_100,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 409,
+      body: {issue: {code: 'stale_association_policy_revision'}},
+    });
+    await expect(
+      service.rebuildInformationEntryAssociations({includePrivate: false}),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'rebuilt', policy: {revision: 1, threshold: 2_000}},
+    });
   });
 
   it('imports JSON Markdown into the selected workspace without accepting a path', async () => {
@@ -788,6 +894,7 @@ describe('M1cApiService', () => {
         }),
       ]),
     });
+    const loadSnapshot = vi.fn(() => Promise.resolve(privateSnapshot));
     const service = createService({
       blobStore: blobs,
       evidenceReadRepository: {
@@ -804,7 +911,7 @@ describe('M1cApiService', () => {
               isPrivate: true,
             },
           ]),
-        loadSnapshot: () => Promise.resolve(privateSnapshot),
+        loadSnapshot,
       },
     });
 
@@ -824,6 +931,56 @@ describe('M1cApiService', () => {
       body: {
         snapshot: {structures: [{normalizedText}]},
       },
+    });
+    const loadCountBeforePublicSearch = loadSnapshot.mock.calls.length;
+    await expect(
+      service.searchInformationEntries({
+        text: 'complete document',
+        includePrivate: false,
+        limit: 20,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        totalCount: 0,
+        privateDocuments: {totalCount: 0, items: []},
+      },
+    });
+    expect(loadSnapshot).toHaveBeenCalledTimes(loadCountBeforePublicSearch);
+    await expect(
+      service.searchInformationEntries({
+        text: 'complete document',
+        includePrivate: true,
+        onlyPrivate: true,
+        limit: 20,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        totalCount: 0,
+        privateDocuments: {
+          totalCount: 1,
+          items: [
+            {
+              snapshot: {snapshotId: SNAPSHOT_ID, isPrivate: true},
+              matchReasons: ['body'],
+              entryMatchCount: 0,
+              excerpt: 'Private complete document',
+            },
+          ],
+        },
+      },
+    });
+    await expect(
+      service.searchInformationEntries({
+        text: 'does not occur',
+        includePrivate: true,
+        limit: 20,
+      }),
+    ).resolves.toMatchObject({
+      body: {privateDocuments: {totalCount: 0, items: []}},
     });
   });
 
@@ -1050,6 +1207,178 @@ describe('M1cApiService', () => {
   });
 });
 
+describe('M1E provider-neutral processing API', () => {
+  it('lists real task state without exposing idempotency internals', async () => {
+    const service = createService({
+      processingRunRepository: {
+        listRecentRuns: () =>
+          Promise.resolve([
+            {
+              workspaceId: WORKSPACE_ID,
+              runId: '22222222-2222-4222-8222-222222222222',
+              idempotencyKey: 'internal-command-key',
+              origin: 'deterministic',
+              status: 'running',
+              privacyScope: 'public_only',
+              currentStage: 'tags',
+              currentStep: '生成标签提案',
+              completedUnits: 1,
+              totalUnits: 3,
+              attempt: 1,
+              version: 2,
+              createdAt: '2040-01-02T03:04:05.000Z',
+              startedAt: '2040-01-02T03:04:06.000Z',
+              updatedAt: '2040-01-02T03:04:07.000Z',
+              proposals: [],
+            },
+          ]),
+        createRun: () => Promise.resolve('not_found'),
+        writeProgress: () => Promise.resolve('not_found'),
+        cancelRun: () => Promise.resolve('not_found'),
+        appendProposal: () => Promise.resolve('not_found'),
+      },
+    });
+
+    const response = await service.listProcessingRuns(20);
+    expect(response).toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        runs: [
+          {
+            origin: 'deterministic',
+            status: 'running',
+            currentStage: 'tags',
+            version: 2,
+          },
+        ],
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain('internal-command-key');
+  });
+
+  it('cancels only the expected non-terminal run version', async () => {
+    const cancelRun = vi.fn(() => Promise.resolve('applied' as const));
+    const service = createService({
+      processingRunRepository: {
+        listRecentRuns: () => Promise.resolve([]),
+        createRun: () => Promise.resolve('not_found'),
+        writeProgress: () => Promise.resolve('not_found'),
+        cancelRun,
+        appendProposal: () => Promise.resolve('not_found'),
+      },
+    });
+
+    await expect(
+      service.cancelProcessingRun('22222222-2222-4222-8222-222222222222', {
+        expectedVersion: 2,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'cancelled', version: 3},
+    });
+    expect(cancelRun).toHaveBeenCalledWith(
+      WORKSPACE_ID,
+      '22222222-2222-4222-8222-222222222222',
+      2,
+    );
+  });
+
+  it('exposes configured tag proposals while keeping acceptance explicit', async () => {
+    const proposal = Object.freeze({
+      workspaceId: WORKSPACE_ID,
+      proposalId: '33333333-3333-4333-8333-333333333333',
+      runId: '22222222-2222-4222-8222-222222222222',
+      ordinal: 0,
+      stage: 'tags' as const,
+      kind: 'tags' as const,
+      targetEntryId: '44444444-4444-4444-8444-444444444444',
+      status: 'pending_review' as const,
+      summary: 'Synthetic proposal',
+      fragmentIds: Object.freeze(['55555555-5555-4555-8555-555555555555']),
+      tagPayload: Object.freeze({
+        expectedEntryRevision: 1,
+        providerModel: 'gpt-5-mini',
+        promptVersion: 'struinfo.openai-entry-tags.v1',
+        contentKeywords: Object.freeze([
+          Object.freeze({
+            displayValue: 'Synthetic',
+            normalizedValue: 'synthetic',
+          }),
+        ]),
+        typeKeyword: 'knowledge_explanation' as const,
+        domains: Object.freeze([
+          Object.freeze({keyword: 'engineering_computing' as const}),
+        ]),
+      }),
+      createdAt: '2040-01-02T03:04:05.000Z',
+    });
+    const listForEntry = vi.fn(() => Promise.resolve([proposal]));
+    const accept = vi.fn(() =>
+      Promise.resolve({outcome: 'accepted' as const, proposal}),
+    );
+    const service = createService({
+      aiTagProposals: {
+        providerKey: 'openai-responses-v1',
+        model: 'gpt-5-mini',
+        listForEntry,
+        start: () => Promise.reject(new Error('unused')),
+        accept,
+        reject: () => Promise.reject(new Error('unused')),
+      },
+    });
+
+    const workspace = service.workspace().body as Readonly<{
+      status: 'ok';
+      capabilities: readonly string[];
+    }>;
+    expect(workspace.status).toBe('ok');
+    expect(workspace.capabilities).toContain('ai_tags');
+    await expect(
+      service.listAiTagProposals('44444444-4444-4444-8444-444444444444'),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        proposals: [{tagPayload: {providerModel: 'gpt-5-mini'}}],
+      },
+    });
+    await expect(
+      service.acceptAiTagProposal(
+        '44444444-4444-4444-8444-444444444444',
+        proposal.proposalId,
+      ),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'accepted'},
+    });
+    expect(listForEntry).toHaveBeenCalledWith(
+      '44444444-4444-4444-8444-444444444444',
+    );
+    expect(accept).toHaveBeenCalledWith(
+      '44444444-4444-4444-8444-444444444444',
+      proposal.proposalId,
+    );
+  });
+
+  it('keeps AI tag routes visibly unavailable without Provider configuration', async () => {
+    const service = createService();
+    const workspace = service.workspace().body as Readonly<{
+      status: 'ok';
+      capabilities: readonly string[];
+    }>;
+    expect(workspace.status).toBe('ok');
+    expect(workspace.capabilities).not.toContain('ai_tags');
+    await expect(
+      service.startAiTagProposal('44444444-4444-4444-8444-444444444444', {
+        requestKey: 'synthetic-request',
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 409,
+      body: {status: 'rejected', issue: {code: 'ai_provider_not_configured'}},
+    });
+  });
+});
 describe('M1cApiController', () => {
   it('writes local API responses as no-store JSON', () => {
     const service = createService();
@@ -1116,6 +1445,13 @@ function createService(
       loadAssociationSnapshot: () =>
         Promise.resolve({projections: [], overrides: []}),
       writeAssociationOverride: () => Promise.resolve('not_found'),
+    },
+    processingRunRepository: {
+      listRecentRuns: () => Promise.resolve([]),
+      createRun: () => Promise.resolve('not_found'),
+      writeProgress: () => Promise.resolve('not_found'),
+      cancelRun: () => Promise.resolve('not_found'),
+      appendProposal: () => Promise.resolve('not_found'),
     },
     workspaceTransfer: {
       exportWorkspace: () =>
