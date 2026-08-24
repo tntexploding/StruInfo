@@ -1,6 +1,6 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1E-4B 活动接口
+- 状态：M1E-5A 活动接口
 - 最近核对：2026-08-24
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
@@ -13,49 +13,49 @@
 
 当前工作区由包体外运行配置中的 `STRUIINFO_WORKSPACE_ID` 选择。请求不能提交或切换 `workspaceId`；服务端把固定工作区注入所有领域操作。切换资料集需要停止当前进程、替换外部配置或数据根并重新启动。
 
-Markdown 正文作为 JSON 字符串提交。原始和规范化字节写入外部内容寻址 Blob 根，PostgreSQL 只保存身份、摘要、定位和结构关系。接口不接受服务器文件路径，也不会把正文写入 Git、安装目录或日志。
+手动/Git Markdown 以 `sourceText` JSON 字符串提交；浏览器选择的本地 UTF-8 Markdown/文本文件以 canonical `sourceBase64` 字符串提交。两者恰好出现一个。原始和规范化字节写入外部内容寻址 Blob 根，PostgreSQL 只保存身份、摘要、定位和结构关系。接口不接受服务器文件路径，也不会把正文写入 Git、安装目录或日志。
 
 所有产品路由位于 `/api/v1`，响应使用 `application/json`、`Cache-Control: no-store` 和 `X-Content-Type-Options: nosniff`。健康检查位于 `/health/live` 与 `/health/ready`。
 
 ## 2. 当前活动路由
 
-| 方法   | 路由                                                                                  | 当前用途                                                                         |
-| ------ | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `GET`  | `/api/v1/workspace`                                                                   | 返回固定工作区身份及实际启用的能力                                               |
-| `GET`  | `/api/v1/evidence`                                                                    | 列出当前 Evidence Snapshot 摘要                                                  |
-| `GET`  | `/api/v1/evidence/snapshots/:snapshotId`                                              | 返回 Snapshot、完整规范正文、结构和 Fragment；隐私内容要求 `includePrivate=true` |
-| `GET`  | `/api/v1/preferences/review`                                                          | 读取外部工作区的快捷标签、自动关键词开关/过滤、别名和联系策略                    |
-| `PUT`  | `/api/v1/preferences/review`                                                          | 整体保存当前偏好文件                                                             |
-| `POST` | `/api/v1/imports/markdown`                                                            | 原子导入 Markdown、来源、Blob、结构和 Fragment                                   |
-| `POST` | `/api/v1/entries/materialize`                                                         | 从一个用户选择的空 Snapshot 按 section 规则原子生成 Entry                        |
-| `POST` | `/api/v1/entries/materialize/manual`                                                  | 从标题和完整有序 Fragment 标量区间原子生成人工 Entry 结构                        |
-| `GET`  | `/api/v1/evidence/snapshots/:snapshotId/split-proposals`                              | 列出一个 Snapshot 的有界拆分提案                                                 |
-| `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/start`                        | 用户显式请求一个公开 Snapshot 的 OpenAI 拆分提案                                 |
-| `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/accept`           | 接受提案并从本地 Fragment 物化 Entry                                             |
-| `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/reject`           | 拒绝提案且不创建 Entry                                                           |
-| `PUT`  | `/api/v1/entries/:entryId`                                                            | 以期望版本更新当前 Entry 成品态                                                  |
-| `POST` | `/api/v1/entries/search`                                                              | 查询 Entry，并在显式隐私范围下返回独立完整私密文档通道                           |
-| `GET`  | `/api/v1/entries/:entryId/tag-proposals`                                              | 列出一个 Entry 的有界 tags 提案                                                  |
-| `POST` | `/api/v1/entries/:entryId/tag-proposals/start`                                        | 用户显式请求一个公开 Entry 的 OpenAI 标签提案                                    |
-| `POST` | `/api/v1/entries/:entryId/tag-proposals/:proposalId/accept`                           | 接受提案并通过现有 Entry revision 保存标签                                       |
-| `POST` | `/api/v1/entries/:entryId/tag-proposals/:proposalId/reject`                           | 拒绝提案且不修改 Entry                                                           |
-| `PUT`  | `/api/v1/entries/associations/policy`                                                 | 以期望修订保存外部联系权重/阈值并返回当前策略                                    |
-| `POST` | `/api/v1/entries/associations/rebuild`                                                | 按当前 Entry 与当前外部策略重建可替换关联投影                                    |
-| `GET`  | `/api/v1/entries/:entryId/associations`                                               | 读取一个 Entry 的可见联系、分项得分和人工控制                                    |
-| `PUT`  | `/api/v1/entries/:entryId/associations/:relatedEntryId`                               | 追加增强、削弱、屏蔽或恢复控制                                                   |
-| `POST` | `/api/v1/knowledge-graph/view`                                                        | 选择最高匹配或指定中心，并读取隐私过滤后的有界 Entry 图谱                        |
-| `PUT`  | `/api/v1/knowledge-graph/edges/:entryId/:relatedEntryId`                              | 修改、隐藏、恢复自动边，或创建用户关系                                           |
-| `GET`  | `/api/v1/knowledge-graph/edges/:entryId/:relatedEntryId/proposals`                    | 列出当前 Entry 对的有界 AI 联系提案                                              |
-| `POST` | `/api/v1/knowledge-graph/edges/:entryId/:relatedEntryId/proposals/start`              | 用户显式请求两个公开 Entry 的 OpenAI 联系提案                                    |
-| `POST` | `/api/v1/knowledge-graph/edges/:entryId/:relatedEntryId/proposals/:proposalId/accept` | 人工接受提案并通过现有 graph edge command 保存                                   |
-| `POST` | `/api/v1/knowledge-graph/edges/:entryId/:relatedEntryId/proposals/:proposalId/reject` | 拒绝提案且不修改图谱                                                             |
-| `GET`  | `/api/v1/entry-documents`                                                             | 读取 Document、Entry 数量和当前文档标签                                          |
-| `POST` | `/api/v1/entry-documents/:snapshotId/tags/aggregate`                                  | 从当前 Entry 确定性聚合文档标签                                                  |
-| `PUT`  | `/api/v1/entry-documents/:snapshotId/tags`                                            | 保存人工文档标签当前态                                                           |
-| `GET`  | `/api/v1/processing-runs?limit=`                                                      | 列出最近 1–100 个真实 ProcessingRun 及有界提案信封                               |
-| `POST` | `/api/v1/processing-runs/:runId/cancel`                                               | 以 `expectedVersion` 取消 queued/running 任务                                    |
-| `POST` | `/api/v1/workspace-bundles/export`                                                    | 将当前工作区个人数据写入外部 `exports/`                                          |
-| `POST` | `/api/v1/workspace-bundles/restore`                                                   | 从安全文件名恢复同 ID 的空工作区                                                 |
+| 方法   | 路由                                                                                  | 当前用途                                                                              |
+| ------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `GET`  | `/api/v1/workspace`                                                                   | 返回固定工作区身份及实际启用的能力                                                    |
+| `GET`  | `/api/v1/evidence`                                                                    | 列出当前 Evidence Snapshot 摘要                                                       |
+| `GET`  | `/api/v1/evidence/snapshots/:snapshotId`                                              | 返回 Snapshot、完整规范正文、结构和 Fragment；隐私内容要求 `includePrivate=true`      |
+| `GET`  | `/api/v1/preferences/review`                                                          | 读取外部工作区的快捷标签、自动关键词开关/过滤、别名和联系策略                         |
+| `PUT`  | `/api/v1/preferences/review`                                                          | 整体保存当前偏好文件                                                                  |
+| `POST` | `/api/v1/imports/markdown`                                                            | 原子导入手动/Git Markdown 或本地 UTF-8 Markdown/文本文件、来源、Blob、结构和 Fragment |
+| `POST` | `/api/v1/entries/materialize`                                                         | 从一个用户选择的空 Snapshot 按 section 规则原子生成 Entry                             |
+| `POST` | `/api/v1/entries/materialize/manual`                                                  | 从标题和完整有序 Fragment 标量区间原子生成人工 Entry 结构                             |
+| `GET`  | `/api/v1/evidence/snapshots/:snapshotId/split-proposals`                              | 列出一个 Snapshot 的有界拆分提案                                                      |
+| `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/start`                        | 用户显式请求一个公开 Snapshot 的 OpenAI 拆分提案                                      |
+| `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/accept`           | 接受提案并从本地 Fragment 物化 Entry                                                  |
+| `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/reject`           | 拒绝提案且不创建 Entry                                                                |
+| `PUT`  | `/api/v1/entries/:entryId`                                                            | 以期望版本更新当前 Entry 成品态                                                       |
+| `POST` | `/api/v1/entries/search`                                                              | 查询 Entry，并在显式隐私范围下返回独立完整私密文档通道                                |
+| `GET`  | `/api/v1/entries/:entryId/tag-proposals`                                              | 列出一个 Entry 的有界 tags 提案                                                       |
+| `POST` | `/api/v1/entries/:entryId/tag-proposals/start`                                        | 用户显式请求一个公开 Entry 的 OpenAI 标签提案                                         |
+| `POST` | `/api/v1/entries/:entryId/tag-proposals/:proposalId/accept`                           | 接受提案并通过现有 Entry revision 保存标签                                            |
+| `POST` | `/api/v1/entries/:entryId/tag-proposals/:proposalId/reject`                           | 拒绝提案且不修改 Entry                                                                |
+| `PUT`  | `/api/v1/entries/associations/policy`                                                 | 以期望修订保存外部联系权重/阈值并返回当前策略                                         |
+| `POST` | `/api/v1/entries/associations/rebuild`                                                | 按当前 Entry 与当前外部策略重建可替换关联投影                                         |
+| `GET`  | `/api/v1/entries/:entryId/associations`                                               | 读取一个 Entry 的可见联系、分项得分和人工控制                                         |
+| `PUT`  | `/api/v1/entries/:entryId/associations/:relatedEntryId`                               | 追加增强、削弱、屏蔽或恢复控制                                                        |
+| `POST` | `/api/v1/knowledge-graph/view`                                                        | 选择最高匹配或指定中心，并读取隐私过滤后的有界 Entry 图谱                             |
+| `PUT`  | `/api/v1/knowledge-graph/edges/:entryId/:relatedEntryId`                              | 修改、隐藏、恢复自动边，或创建用户关系                                                |
+| `GET`  | `/api/v1/knowledge-graph/edges/:entryId/:relatedEntryId/proposals`                    | 列出当前 Entry 对的有界 AI 联系提案                                                   |
+| `POST` | `/api/v1/knowledge-graph/edges/:entryId/:relatedEntryId/proposals/start`              | 用户显式请求两个公开 Entry 的 OpenAI 联系提案                                         |
+| `POST` | `/api/v1/knowledge-graph/edges/:entryId/:relatedEntryId/proposals/:proposalId/accept` | 人工接受提案并通过现有 graph edge command 保存                                        |
+| `POST` | `/api/v1/knowledge-graph/edges/:entryId/:relatedEntryId/proposals/:proposalId/reject` | 拒绝提案且不修改图谱                                                                  |
+| `GET`  | `/api/v1/entry-documents`                                                             | 读取 Document、Entry 数量和当前文档标签                                               |
+| `POST` | `/api/v1/entry-documents/:snapshotId/tags/aggregate`                                  | 从当前 Entry 确定性聚合文档标签                                                       |
+| `PUT`  | `/api/v1/entry-documents/:snapshotId/tags`                                            | 保存人工文档标签当前态                                                                |
+| `GET`  | `/api/v1/processing-runs?limit=`                                                      | 列出最近 1–100 个真实 ProcessingRun 及有界提案信封                                    |
+| `POST` | `/api/v1/processing-runs/:runId/cancel`                                               | 以 `expectedVersion` 取消 queued/running 任务                                         |
+| `POST` | `/api/v1/workspace-bundles/export`                                                    | 将当前工作区个人数据写入外部 `exports/`                                               |
+| `POST` | `/api/v1/workspace-bundles/restore`                                                   | 从安全文件名恢复同 ID 的空工作区                                                      |
 
 API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单页应用。scheduler/worker 角色只提供健康路由；它们的存在不表示自动采集已经实现。ProcessingRun 读取/取消是独立任务状态边界；OpenAI split、tags 与 selected-pair association 只在 API/`all` 且配置完整时装配。
 
@@ -66,11 +66,11 @@ API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单�
 `POST /imports/markdown` 接收：
 
 - `commandIdempotencyKey`；
-- `sourceText`；
+- `sourceText` 或 `sourceBase64`，恰好一个；`sourceBase64` 只允许搭配 `resourceKind: "uploaded_file"`；
 - 带服务端固定工作区覆盖的 `resource`、`snapshot` 和 `gitObservations`；
 - 可选 `gitResource`、`profile` 与 `documentBaseUri`。
 
-Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和正文前置文字映射到这些字段。相同命令可重放；同键异内容返回冲突。
+Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和正文前置文字映射到这些字段。本地文件默认使用基础文件名加 SHA-256 作为 portable source key，不提交目录路径；无前置文字时 Base64 解码后的字节保持原样。相同命令可重放；同键异内容返回冲突。
 
 ### 3.2 拆分
 
@@ -169,5 +169,5 @@ Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不�
 - JSON 请求体上限为 2 MiB，Markdown 导入上限为 1 MiB；
 - Evidence 列表当前最多返回最近 200 个 Snapshot；
 - 接口仅面向回环单用户产品，没有公开认证或 CSRF 完整边界；
-- 没有文件上传、多格式解析、抓取、订阅、AI 查询综合、自动接受、模糊/向量搜索或在线检索接口；OpenAI 目前只提供用户选中公开 Snapshot 的 split、公开 Entry 的 tags 和用户选中公开 Entry 对的 association 提案；
+- 没有 multipart/服务器路径上传、HTML/PDF/Office/OCR、多文件批量导入、目录监视、抓取、订阅、AI 查询综合、自动接受、模糊/向量搜索或在线检索接口；OpenAI 目前只提供用户选中公开 Snapshot 的 split、公开 Entry 的 tags 和用户选中公开 Entry 对的 association 提案；
 - 当前正式知识只实现 Entry 中心关系图谱；不恢复 `/curation`、旧 `/knowledge` 写入/读取或旧 `/search` 路由，也不把历史 Knowledge 表当作当前产品入口。

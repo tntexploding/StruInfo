@@ -348,6 +348,100 @@ describe('M1cApiService', () => {
     expect(captures[0]?.capture.resource.isPrivate).toBe(true);
   });
 
+  it('imports canonical Base64 upload bytes without changing their raw identity', async () => {
+    const blobs = new MemoryBlobStore();
+    const captures: EvidenceCaptureRepositoryRequest[] = [];
+    const service = createService({
+      blobStore: blobs,
+      evidenceRepository: {
+        saveCapture(request) {
+          captures.push(request);
+          return Promise.resolve(Object.freeze({status: 'created'}));
+        },
+      },
+    });
+    const sourceBytes = new TextEncoder().encode(
+      '# Synthetic upload\r\n\r\nPlain body.\r\n',
+    );
+    const rawSha256 = createHash('sha256').update(sourceBytes).digest('hex');
+
+    const result = await service.importMarkdown({
+      commandIdempotencyKey: 'local-api-upload-1',
+      resource: {
+        resourceId: RESOURCE_ID,
+        resourceKind: 'uploaded_file',
+        sourceKey: `synthetic.txt#sha256:${rawSha256}`,
+      },
+      snapshot: {
+        snapshotId: SNAPSHOT_ID,
+        resourceId: RESOURCE_ID,
+        capturedAt: '2040-01-02T03:04:05Z',
+        mediaType: 'text/plain',
+      },
+      gitObservations: [],
+      profile: 'commonmark-v1',
+      sourceBase64: Buffer.from(sourceBytes).toString('base64'),
+    });
+
+    expect(result.statusCode).toBe(201);
+    expect(result.body).toMatchObject({
+      status: 'created',
+      resourceId: RESOURCE_ID,
+      snapshotId: SNAPSHOT_ID,
+    });
+    expect(captures).toHaveLength(1);
+    expect(captures[0]?.capture.resource.resourceKind).toBe('uploaded_file');
+    expect(captures[0]?.capture.snapshot.rawSha256).toBe(rawSha256);
+    expect(captures[0]?.capture.snapshot.mediaType).toBe('text/plain');
+    await expect(
+      blobs.read({
+        algorithm: 'sha256',
+        digest: rawSha256,
+        byteLength: sourceBytes.byteLength,
+      }),
+    ).resolves.toEqual(sourceBytes);
+  });
+
+  it('rejects malformed or non-upload Base64 import requests before persistence', async () => {
+    const saveCapture = vi.fn(() =>
+      Promise.resolve(Object.freeze({status: 'created' as const})),
+    );
+    const service = createService({evidenceRepository: {saveCapture}});
+    const base = {
+      commandIdempotencyKey: 'local-api-upload-invalid',
+      resource: {
+        resourceId: RESOURCE_ID,
+        resourceKind: 'uploaded_file',
+        sourceKey: 'synthetic-upload',
+      },
+      snapshot: {
+        snapshotId: SNAPSHOT_ID,
+        resourceId: RESOURCE_ID,
+        capturedAt: '2040-01-02T03:04:05Z',
+        mediaType: 'text/markdown',
+      },
+      gitObservations: [],
+      profile: 'commonmark-v1',
+    } as const;
+
+    await expect(
+      service.importMarkdown({...base, sourceBase64: 'not canonical'}),
+    ).resolves.toMatchObject({
+      statusCode: 422,
+      body: {issue: {code: 'invalid_http_input', path: 'body'}},
+    });
+    await expect(
+      service.importMarkdown({
+        ...base,
+        resource: {...base.resource, resourceKind: 'manual_text'},
+        sourceBase64: Buffer.from('# Synthetic').toString('base64'),
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 422,
+      body: {issue: {code: 'invalid_http_input', path: 'body'}},
+    });
+    expect(saveCapture).not.toHaveBeenCalled();
+  });
   it('reads normalized evidence and verifies the returned excerpt', async () => {
     const blobs = new MemoryBlobStore();
     const normalizedText = 'Synthetic evidence\n';

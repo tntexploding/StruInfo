@@ -1,6 +1,6 @@
 # StruInfo 开发大纲
 
-- 状态：M1E-4B Fragment 内人工边界与原子 Entry 物化已实现
+- 状态：M1E-5A 本地 UTF-8 文本文件导入已实现
 - 最近更新：2026-08-24
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
@@ -51,7 +51,7 @@ M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁
 [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化正式知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求；[ADR 0007](adr/0007-information-entry-first-document-processing.md) 把普通文档主线重定向为 Entry-first。ADR 0008 随后把普通 Entry、文档标签和人工联系收敛为当前成品态与可携带个人数据，ADR 0009 删除了没有活动调用方的旧 Curation/Knowledge 应用运行时。ADR 0010 将新的所有者正式知识页定义为有界中心图谱；ADR 0011 进一步允许确定性相似联系
 直接成为可编辑图谱边，并让用户编辑或 block 优先于后续重建。
 
-当前产品已经提供导入、确定性/人工拆分、标签、联系、查询、正式 Entry 图谱、精确来源、隐私范围与完整个人数据包。M1E-2 复用 Association 投影与 override，实现最高匹配中心、有界图/列表、用户关系命令和 Association Bundle v3；M1E-3A–D 增加任务状态及可选的拆分、标签和 selected-pair 联系提案；M1E-4A/4B 让用户在首次 Entry 物化前直接合并既有 Fragment、在既有边界或 Fragment 内 Unicode 标量边界拆开并编辑标题。活动工作区目前按所有者要求保持零业务数据，旧资料只存在于项目目录外的恢复归档。
+当前产品已经提供导入、确定性/人工拆分、标签、联系、查询、正式 Entry 图谱、精确来源、隐私范围与完整个人数据包。M1E-2 复用 Association 投影与 override，实现最高匹配中心、有界图/列表、用户关系命令和 Association Bundle v3；M1E-3A–D 增加任务状态及可选的拆分、标签和 selected-pair 联系提案；M1E-4A/4B 让用户在首次 Entry 物化前直接合并既有 Fragment、在既有边界或 Fragment 内 Unicode 标量边界拆开并编辑标题；M1E-5A 让一份本地 UTF-8 Markdown/文本文件直接进入既有 Evidence 与 Split 主线。活动工作区目前按所有者要求保持零业务数据，旧资料只存在于项目目录外的恢复归档。
 
 ## 2. 为什么选择这个形态
 
@@ -146,7 +146,7 @@ flowchart LR
 ### 6.1 采集与入库
 
 ```text
-Watch / Endpoint / ManualInput
+Watch / Endpoint / ManualInput / LocalTextFile
   -> FetchRun (when acquisition is remote)
   -> Resource
   -> immutable Snapshot
@@ -632,7 +632,7 @@ import -> snapshot -> document nodes/fragments/media
 本节以前的准备门、切片 0、A、B1、M1C 和 M1D 记录保留为历史证据，不再要求为没有当前产品影响的合同或测试工具反复返工。当前运行时只保留以下纵向路径：
 
 1. 外部配置选择工作区和数据根；
-2. Markdown/固定 Git 文件进入 Blob、Resource、Snapshot、DocumentNode 与 Fragment；
+2. 手工 Markdown、固定 Git 文件或本地 UTF-8 Markdown/文本文件进入 Blob、Resource、Snapshot、DocumentNode 与 Fragment；
 3. 用户选择 Snapshot，把 section 以确定性规则、人工 Fragment/标量区间分组或已接受 AI 提案物化为 InformationEntry；
 4. 标签页编辑 Entry 成品态、三维标签和有用/有趣评分，并维护外部偏好；
 5. Document 标签从当前 Entry 聚合或由用户覆盖；
@@ -641,7 +641,7 @@ import -> snapshot -> document nodes/fragments/media
 8. 正式知识页搜索最高匹配 Entry，组合有界自动/用户关系图谱，支持图/列表、编辑、隐藏、恢复、创建和来源回看；
 9. 个人数据包导出/恢复 56 张当前表、引用 Blob 字节、当前偏好、Entry v3 精确区间、Association v3 图谱元数据和 Processing v4 状态。
 
-旧 Curation、正式 Knowledge 写入/读取和旧 Knowledge 检索应用运行时已经删除；迁移与历史数据只为兼容保留。M1E-2 不恢复这些入口，而是在 Entry/Association 边界完成正式图谱。M1E-3A–D 已完成中性任务、公开 Entry 标签、selected-pair 联系和 selected-Snapshot 拆分提案；M1E-4A/4B 已完成首次物化前的既有 Fragment 与 Fragment 内标量边界人工分组；下一步来自直接使用或另行接受的窄边界。AI 查询、RAG、向量、自动采集、容器/公网认证和历史测试框架强化都不是当前使用的前置条件。阻断分类继续以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
+旧 Curation、正式 Knowledge 写入/读取和旧 Knowledge 检索应用运行时已经删除；迁移与历史数据只为兼容保留。M1E-2 不恢复这些入口，而是在 Entry/Association 边界完成正式图谱。M1E-3A–D 已完成中性任务、公开 Entry 标签、selected-pair 联系和 selected-Snapshot 拆分提案；M1E-4A/4B 已完成首次物化前的既有 Fragment 与 Fragment 内标量边界人工分组；M1E-5A 已完成单份本地 UTF-8 Markdown/文本文件导入；下一步来自直接使用或另行接受的窄边界。AI 查询、RAG、向量、自动采集、容器/公网认证和历史测试框架强化都不是当前使用的前置条件。阻断分类继续以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
 
 ### 准备门：基础架构（已完成）
 

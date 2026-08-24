@@ -1,3 +1,5 @@
+import {Buffer} from 'node:buffer';
+
 import {expect, test, type Page} from '@playwright/test';
 
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
@@ -91,7 +93,10 @@ const SYNTHETIC_ENTRY = {
 
 async function installCurrentProductApi(
   page: Page,
-  options?: Readonly<{manualSplitRequests?: string[]}>,
+  options?: Readonly<{
+    manualSplitRequests?: string[];
+    importRequests?: string[];
+  }>,
 ) {
   const productRequests: string[] = [];
   const manualSplitEnabled = options?.manualSplitRequests !== undefined;
@@ -137,6 +142,15 @@ async function installCurrentProductApi(
         contentType: 'application/json',
         json: {status: 'ok', workspaceId: WORKSPACE_ID, capabilities: []},
         status: 200,
+      });
+      return;
+    }
+    if (path === '/api/v1/imports/markdown' && request.method() === 'POST') {
+      options?.importRequests?.push(request.postData() ?? '');
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {status: 'conflict', code: 'synthetic_conflict'},
+        status: 409,
       });
       return;
     }
@@ -352,6 +366,55 @@ test('exposes only the current document-to-entry workflow', async ({page}) => {
     ),
   ).toBe(false);
   expect(productRequests).toContain('POST /api/v1/entries/search');
+});
+
+test('imports exact local UTF-8 bytes and preserves retry identity', async ({
+  page,
+}) => {
+  const importRequests: string[] = [];
+  await installCurrentProductApi(page, {importRequests});
+  await page.goto('/');
+
+  const navigation = page.getByRole('navigation', {name: '产品工作区'});
+  await navigation.getByRole('button', {name: '导入', exact: true}).click();
+  await page.getByRole('radio', {name: '本地文件', exact: true}).check();
+  await page.locator('#local-text-file').setInputFiles({
+    name: 'synthetic.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('Synthetic\r\nBody 😀\r\n', 'utf8'),
+  });
+
+  await expect(page.getByText('synthetic.txt', {exact: true})).toBeVisible();
+  await expect(page.getByLabel('文件正文预览')).toHaveValue(
+    'Synthetic\nBody 😀\n',
+  );
+  await page.getByRole('checkbox', {name: /作为隐私文档录入/u}).check();
+  await page
+    .getByRole('button', {name: '保存来源 Snapshot', exact: true})
+    .click();
+  await expect(page.getByText('导入命令发生冲突', {exact: true})).toBeVisible();
+
+  await page
+    .getByRole('button', {name: '保存来源 Snapshot', exact: true})
+    .click();
+  expect(importRequests).toHaveLength(2);
+
+  const first = JSON.parse(importRequests[0] ?? 'null') as unknown;
+  const second = JSON.parse(importRequests[1] ?? 'null') as unknown;
+  expect(first).toMatchObject({
+    resource: {
+      resourceKind: 'uploaded_file',
+      sourceKey:
+        'synthetic.txt#sha256:a1c3cc0c426a448cde3c4f92b73a887e7d95c4a88487d4cf51df28047ffc499c',
+      isPrivate: true,
+    },
+    snapshot: {mediaType: 'text/plain'},
+    profile: 'commonmark-v1',
+    sourceBase64: 'U3ludGhldGljDQpCb2R5IPCfmIANCg==',
+  });
+  expect(first).not.toHaveProperty('sourceText');
+  expect(JSON.stringify(first)).not.toContain('C:\\');
+  expect(second).toEqual(first);
 });
 
 test('edits association weights and opens the complete private-document channel', async ({
