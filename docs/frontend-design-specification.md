@@ -1,8 +1,8 @@
 # StruInfo Frontend Design Specification
 
 - Status: Project frontend baseline
-- Version: 1.4
-- Effective date: 2026-08-23
+- Version: 1.5
+- Effective date: 2026-08-24
 - Scope: StruInfo web application design, implementation, and review
 
 ## 1. Purpose and Authority
@@ -245,9 +245,11 @@ The Web application and narrow loopback API expose one owner workflow:
 Evidence/Blob import, Entry materialization, current Entry/Document tagging,
 explainable associations, privacy-aware Entry search, external preferences,
 complete personal-data-package transfer, and provider-neutral ProcessingRun
-read/cancel. ADR 0013 additionally exposes one optional OpenAI tag-proposal
-surface for a user-selected public Entry. It must show Provider/model/prompt
-origin, privacy disclosure and explicit accept/reject without hiding the manual path.
+read/cancel. ADR 0013 through ADR 0015 additionally expose three optional OpenAI
+proposal surfaces: one selected public Snapshot for split, one selected public
+Entry for tags, and one selected public Entry pair for association. Each surface
+must show Provider/model/prompt origin, privacy disclosure and explicit
+accept/reject without hiding its deterministic or manual path.
 
 Manual Curation, the old formal Knowledge writer/current-item reader and the old
 Knowledge search are not current product capabilities. Their pages, client
@@ -318,16 +320,19 @@ Each workspace has one dominant task and a visibly subordinate context area:
   and a separate provider-neutral task rail backed by the public recent-run
   boundary. It derives stage, percentage, current step, proposal count and cancel
   eligibility only from actual records. Empty storage says there are no tasks;
-  absent `ai` capability separately says AI is not configured;
+  absence of all AI capability values separately says AI is not configured;
 - `导入` places source/privacy/alias/format/date and optional prefatory-text
   fields in the dominant panel, imported-document history in a secondary panel,
   and whole-workspace Bundle import/export in a distinct lower band;
 - `拆分` separates structure/rule controls and generated Entry order from the
   full-text or selected-segment inspection surface. Immutable Snapshot evidence
-  MUST NOT be presented as destructively editable source data;
+  MUST NOT be presented as destructively editable source data. When `ai_split`
+  is available, the selected public Snapshot may explicitly start one proposal,
+  inspect groups through local exact Fragment text, and accept or reject it;
 - `标签` keeps Entry/Document selection beside an editor for the independent
-  content, type, and domain dimensions. Full-document and private-content views
-  require an explicit current-view control;
+  content, type, and domain dimensions. When `ai_tags` is available, one selected
+  public Entry may explicitly start, inspect, accept or reject a proposal.
+  Full-document and private-content views require an explicit current-view control;
 - `联系` gives candidate associations and their evidence the main area, with
   current-entry selection subordinate to it. Its public versioned-policy editor
   exposes content/type/domain weights, threshold, revision, save feedback, and
@@ -339,11 +344,12 @@ Each workspace has one dominant task and a visibly subordinate context area:
 
 A requested capability that is not backed by the current public product boundary
 MUST be labelled unavailable or pending rather than simulated. This applies in
-particular to AI splitting/linking/query synthesis, automatic proposal acceptance,
-and fuzzy matching. A real imported or deterministic ProcessingRun may still be
-shown and cancelled through `processing_runs`; this MUST NOT be relabelled as generic
-AI availability. Only `ai_tags` enables the Tags proposal surface, and it MUST NOT
-unlock unavailable AI controls on Split, Associations or Query. Deterministic and
+particular to AI query synthesis, automatic proposal acceptance, and fuzzy
+matching. A real imported or deterministic ProcessingRun may still be shown and
+cancelled through `processing_runs`; this MUST NOT be relabelled as generic AI
+availability. `ai_split`, `ai_tags`, and `ai_associations` independently enable
+only their Split, Tags, and selected-pair Formal Knowledge proposal surfaces;
+none unlocks unavailable AI controls on Query or another page. Deterministic and
 manual paths, including association-policy writes, remain fully usable.
 
 Desktop layouts SHOULD preserve a narrow workflow timeline, a dominant work
@@ -400,7 +406,7 @@ as a drawer or routed detail. Search, centre selection, adjacent-node traversal,
 edge selection, recenter, bounded expansion and evidence return MUST be keyboard
 operable.
 
-The M1E-2 implementation uses a dedicated workspace component and stylesheet rather than routing graph behavior through Query or Associations page modes. Empty workspaces show an honest no-match state; active controls are backed by the public graph read/edit routes. The first slice remains bounded to direct neighbours and does not fabricate AI activity, full-workspace layout, facts, or unsupported graph analytics.
+The M1E-2 implementation uses a dedicated workspace component and stylesheet rather than routing graph behavior through Query or Associations page modes. Empty workspaces show an honest no-match state; active controls are backed by the public graph read/edit routes. The base graph remains bounded to direct neighbours; M1E-3C may add only the explicit selected-pair association proposal described in section 9.5. The page does not fabricate full-workspace layout, facts, or unsupported graph analytics.
 
 ## 6. Design Tokens
 

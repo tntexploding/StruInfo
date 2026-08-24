@@ -1,7 +1,7 @@
 # StruInfo 开发大纲
 
-- 状态：M1E-2 Entry-first 正式关系图谱可运行基线
-- 最近更新：2026-08-23
+- 状态：M1E-3D 可选 OpenAI 拆分/标签/联系提案已实现
+- 最近更新：2026-08-24
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
 - 当前实现：[当前项目状态与实现清单](current-project-state.md)
@@ -15,7 +15,11 @@
   [ADR 0008](adr/0008-current-entry-state-and-portable-personal-data.md)、
   [ADR 0009](adr/0009-retire-superseded-m1c-runtime.md)、
   [ADR 0010](adr/0010-entry-centered-formal-knowledge-graph.md)、
-  [ADR 0011](adr/0011-association-derived-formal-graph-edges.md)
+  [ADR 0011](adr/0011-association-derived-formal-graph-edges.md)、
+  [ADR 0012](adr/0012-provider-neutral-processing-runs-and-proposals.md)、
+  [ADR 0013](adr/0013-openai-entry-tag-proposals.md)、
+  [ADR 0014](adr/0014-openai-entry-association-proposals.md)、
+  [ADR 0015](adr/0015-openai-entry-split-proposals.md)
 
 ## 1. 结论
 
@@ -45,7 +49,7 @@ M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁
 [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化正式知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求；[ADR 0007](adr/0007-information-entry-first-document-processing.md) 把普通文档主线重定向为 Entry-first。ADR 0008 随后把普通 Entry、文档标签和人工联系收敛为当前成品态与可携带个人数据，ADR 0009 删除了没有活动调用方的旧 Curation/Knowledge 应用运行时。ADR 0010 将新的所有者正式知识页定义为有界中心图谱；ADR 0011 进一步允许确定性相似联系
 直接成为可编辑图谱边，并让用户编辑或 block 优先于后续重建。
 
-当前产品已经提供导入、拆分、标签、联系、查询、正式 Entry 图谱、精确来源、隐私范围与完整个人数据包。M1E-2 复用 Association 投影与 override，实现最高匹配中心、有界图/列表、用户关系命令和 Association Bundle v3；M1E-3B 增加可选标签提案。活动工作区目前按所有者要求保持零业务数据，旧资料只存在于项目目录外的恢复归档。
+当前产品已经提供导入、拆分、标签、联系、查询、正式 Entry 图谱、精确来源、隐私范围与完整个人数据包。M1E-2 复用 Association 投影与 override，实现最高匹配中心、有界图/列表、用户关系命令和 Association Bundle v3；M1E-3A–D 增加任务状态及可选的拆分、标签和 selected-pair 联系提案。活动工作区目前按所有者要求保持零业务数据，旧资料只存在于项目目录外的恢复归档。
 
 ## 2. 为什么选择这个形态
 
@@ -621,7 +625,7 @@ import -> snapshot -> document nodes/fragments/media
 
 ## 16. 实施顺序
 
-### 当前可运行主线：M1E-2 Entry 工作台与正式图谱
+### 当前可运行主线：M1E Entry 工作台、正式图谱与可选提案
 
 本节以前的准备门、切片 0、A、B1、M1C 和 M1D 记录保留为历史证据，不再要求为没有当前产品影响的合同或测试工具反复返工。当前运行时只保留以下纵向路径：
 

@@ -9,7 +9,7 @@
 
 ## 1. 接口边界
 
-本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、Document 标签、Entry 联系、正式 Entry 图谱、Provider-neutral ProcessingRun、可选 OpenAI Entry 标签/selected-pair 联系提案、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、通用 AI 执行、自动接受或公共扩展 API。
+本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、Document 标签、Entry 联系、正式 Entry 图谱、Provider-neutral ProcessingRun、可选 OpenAI Snapshot 拆分/Entry 标签/selected-pair 联系提案、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、通用 AI 执行、自动接受或公共扩展 API。
 
 当前工作区由包体外运行配置中的 `STRUIINFO_WORKSPACE_ID` 选择。请求不能提交或切换 `workspaceId`；服务端把固定工作区注入所有领域操作。切换资料集需要停止当前进程、替换外部配置或数据根并重新启动。
 
@@ -28,6 +28,10 @@ Markdown 正文作为 JSON 字符串提交。原始和规范化字节写入外�
 | `PUT`  | `/api/v1/preferences/review`                                                          | 整体保存当前偏好文件                                                             |
 | `POST` | `/api/v1/imports/markdown`                                                            | 原子导入 Markdown、来源、Blob、结构和 Fragment                                   |
 | `POST` | `/api/v1/entries/materialize`                                                         | 从一个用户选择的 Snapshot 幂等生成 section Entry                                 |
+| `GET`  | `/api/v1/evidence/snapshots/:snapshotId/split-proposals`                              | 列出一个 Snapshot 的有界拆分提案                                                 |
+| `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/start`                        | 用户显式请求一个公开 Snapshot 的 OpenAI 拆分提案                                 |
+| `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/accept`           | 接受提案并从本地 Fragment 物化 Entry                                             |
+| `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/reject`           | 拒绝提案且不创建 Entry                                                           |
 | `PUT`  | `/api/v1/entries/:entryId`                                                            | 以期望版本更新当前 Entry 成品态                                                  |
 | `POST` | `/api/v1/entries/search`                                                              | 查询 Entry，并在显式隐私范围下返回独立完整私密文档通道                           |
 | `GET`  | `/api/v1/entries/:entryId/tag-proposals`                                              | 列出一个 Entry 的有界 tags 提案                                                  |
@@ -52,7 +56,7 @@ Markdown 正文作为 JSON 字符串提交。原始和规范化字节写入外�
 | `POST` | `/api/v1/workspace-bundles/export`                                                    | 将当前工作区个人数据写入外部 `exports/`                                          |
 | `POST` | `/api/v1/workspace-bundles/restore`                                                   | 从安全文件名恢复同 ID 的空工作区                                                 |
 
-API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单页应用。scheduler/worker 角色只提供健康路由；它们的存在不表示自动采集已经实现。ProcessingRun 读取/取消是独立任务状态边界；OpenAI tags 与 selected-pair association 只在 API/`all` 且配置完整时装配。
+API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单页应用。scheduler/worker 角色只提供健康路由；它们的存在不表示自动采集已经实现。ProcessingRun 读取/取消是独立任务状态边界；OpenAI split、tags 与 selected-pair association 只在 API/`all` 且配置完整时装配。
 
 ## 3. 五步主线如何调用接口
 

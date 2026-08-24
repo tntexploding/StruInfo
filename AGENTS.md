@@ -259,10 +259,11 @@ ADR 0012 starts M1E-3A with a provider-neutral durable task boundary. Forward
 migration `000013` adds current ProcessingRun records, typed proposal envelopes
 and exact Fragment evidence. The public local API lists recent runs and cancels
 a queued/running run with an expected version; Overview derives its task rail
-only from these records. There is no public start-AI route, no proposal accept
-command, no Provider SDK and no opaque payload. New personal-data packages carry
-the three processing tables while older packages restore them empty. The next AI
-slice must explicitly select one Provider boundary and one closed proposal kind.
+only from these records. At that boundary there was no public start-AI route, no
+proposal accept command, no Provider SDK and no opaque payload. New personal-data
+packages carry the three processing tables while older packages restore them
+empty. Any later AI slice still has to select one Provider boundary and one
+closed proposal kind.
 
 ADR 0013 completes M1E-3B with one optional OpenAI Responses API boundary and
 one closed `tags` proposal for a user-selected public InformationEntry. Forward
@@ -306,6 +307,11 @@ Entries. Processing Bundle v4 carries all ten processing tables and upgrades
 v1-v3 with empty split-proposal state. `ai_split` is independent from `ai_tags`
 and `ai_associations`, and the deterministic split path remains complete when
 no Provider is configured.
+
+The planned M1E-3A-D provider increment is now complete. The next product task
+must come from direct owner use or another explicitly accepted narrow boundary;
+do not infer a generic AI, automatic-acceptance, private-content, query-synthesis,
+Embedding, or RAG capability from these three proposal paths.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable

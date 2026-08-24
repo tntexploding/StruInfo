@@ -1,7 +1,7 @@
 # StruInfo 当前项目状态与实现清单
 
 - 状态：M1E-3D 已实现；活动工作区保持无数据，所有审核流程延期且不阻塞开发
-- 实现基线：无数据开发基线与 M1E-3D 候选
+- 实现基线：无数据开发基线与 M1E-3D 当前实现
 - 最近核对：2026-08-24
 - 需求边界：[产品需求](product-requirements.md)
 - 交付顺序：[分阶段计划](roadmap.md)
@@ -97,7 +97,7 @@ ADR 0009、ADR 0010、ADR 0011、ADR 0012、ADR 0013、ADR 0014、ADR 0015 和�
 - InformationEntry 当前态；
 - InformationDocumentTag 当前态；
 - InformationEntryAssociation 投影、当前人工控制与正式图谱组合读写；
-- Provider-neutral ProcessingRun/提案信封，以及 typed tags/association payload；
+- Provider-neutral ProcessingRun/提案信封，以及 typed split/tags/association payload；
 - Workspace/个人数据包传输。
 
 活动 HTTP 面只有健康检查和 [`m1c-local-http-api.md`](m1c-local-http-api.md) 中列出的当前路由。
@@ -106,13 +106,13 @@ ADR 0009、ADR 0010、ADR 0011、ADR 0012、ADR 0013、ADR 0014、ADR 0015 和�
 ### 5.2 必要支持模块
 
 - 外部运行配置、数据根路径隔离和 PostgreSQL 连接；
-- 十五份前向迁移及独立迁移进程；
+- 十六份前向迁移及独立迁移进程；
 - 本地内容寻址 Blob、偏好文件和导出文件存储；
 - 健康检查、结构化日志、生命周期与优雅关闭；
 - API、scheduler、worker 和 `all` 运行角色及共享队列基础；
 - React/Vite Web 外壳、同源本地 API 客户端、单元/集成/E2E 与制品审计。
 
-队列和多运行角色目前是基础设施能力，不表示自动采集已实现。ProcessingRun 是独立的持久任务状态边界；公开 tags 与 selected-pair association 提案可以显式启动、接受或拒绝；split 仍没有启动入口。
+队列和多运行角色目前是基础设施能力，不表示自动采集已实现。ProcessingRun 是独立的持久任务状态边界；公开 split、tags 与 selected-pair association 提案都可以显式启动、接受或拒绝。
 
 ## 6. 兼容保留而非活动产品能力
 
@@ -136,7 +136,7 @@ M1E-2 已复用 AssociationProjection/override 作为自动边，并通过前向
 
 ### 7.2 已完成基础：M1E-3A Provider-neutral 任务与提案
 
-前向迁移 `000013` 增加当前 ProcessingRun、类型化提案信封和精确 Fragment 输入。服务端提供幂等创建、闭合进度转换、提案追加、期望版本取消和最近任务读取；公开 API 开放列表与取消，总览只显示真实记录。个人数据包新增兼容分区并携带这三张表。该中性任务边界继续承载 M1E-3B，而不是让模型直接写 Entry 或图谱。
+前向迁移 `000013` 增加当前 ProcessingRun、类型化提案信封和精确 Fragment 输入。服务端提供幂等创建、闭合进度转换、提案追加、期望版本取消和最近任务读取；公开 API 开放列表与取消，总览只显示真实记录。个人数据包新增兼容分区并携带这三张表。该中性任务边界承载 M1E-3B/C/D，而不是让模型直接写 Entry 或图谱。
 
 ### 7.3 已完成纵向链：M1E-3B OpenAI Entry 标签提案
 
@@ -180,7 +180,7 @@ ADR 0015 只扩展同一 OpenAI Responses API 与 `split` 闭合提案。前向�
 
 ## 8. 当前验证快照
 
-M1E-3D 当前候选通过：
+M1E-3D 当前实现已通过：
 
 - M1E-3D 领域、Provider、API、客户端、界面与 Bundle 聚焦回归；
 - 88 个单元测试文件、661 项单元测试；

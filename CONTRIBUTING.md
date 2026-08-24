@@ -5,10 +5,13 @@ decisions. M1C remains the compatibility baseline, while M1E-1 is the cleaned
 runnable InformationEntry-first product baseline. ADR 0011 governs the shipped
 M1E-2 Entry-centred formal relation graph. Its direct-use increment now also
 provides a separate complete-private-document query channel and versioned external
-association weights/thresholds. ADR 0012 now governs the accepted M1E-3A
-provider-neutral ProcessingRun/proposal foundation. The next AI increment must
-select one Provider boundary and one closed proposal payload rather than adding a
-generic model write path; reachable owner-use feedback may still be inserted first.
+association weights/thresholds. ADR 0012 governs the accepted M1E-3A
+provider-neutral ProcessingRun/proposal foundation, while ADR 0013 through ADR
+0015 govern the shipped OpenAI split, tags, and selected-pair association
+proposal slices. The planned M1E-3 provider increment is complete. A later AI
+increment must still select one narrow Provider boundary and one closed proposal
+payload rather than adding a generic model write path; reachable owner-use
+feedback takes priority.
 An accepted ADR does not bypass a reachable product, dependency, or release
 obligation, but deferred hardening and test-tooling certification do not block
 unrelated product work.

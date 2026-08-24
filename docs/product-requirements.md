@@ -775,7 +775,7 @@ M1E-3A 已完成任务生命周期与提案信封基础；M1E-3B/M1E-3C/M1E-3D �
 - 无 AI 模式是正式支持的基础能力，偏好学习不阻塞知识数据库和确定性检索；
 - 工程代码、外部运行配置、个人工作区数据、Blob/备份和秘密存储完全分离。
 - 隐私文档完整保留，并通过显式查询范围把全文、派生条目和相关关系一起默认隐藏。
-- Provider-neutral ProcessingRun 与提案信封独立于具体 AI Provider；可选 OpenAI tags 通过窄适配接入，无 Provider 时五步主线完整可用。
+- Provider-neutral ProcessingRun 与提案信封独立于具体 AI Provider；可选 OpenAI split、tags 与 selected-pair association 通过三个窄适配接入，无 Provider 时五步主线完整可用。
 
 以下事项在使用相应能力前补齐，不再组成 M1C 的联合实现前置门：
 
