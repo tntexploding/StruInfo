@@ -40,6 +40,9 @@ export interface InformationEntryServices {
   readonly onMaterialize: (
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationEntryMaterializeResponse>>;
+  readonly onMaterializeManual: (
+    body: unknown,
+  ) => Promise<M1cHttpResponse<InformationEntryMaterializeResponse>>;
   readonly onRevise: (
     entryId: string,
     body: unknown,

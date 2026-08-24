@@ -93,6 +93,16 @@ describe('M1cApiClient', () => {
       snapshotId: 'synthetic-snapshot',
       chunkMode: 'split',
     });
+    await client.materializeManualInformationEntries({
+      snapshotId: 'synthetic-snapshot',
+      includePrivate: false,
+      groups: [
+        {
+          titlePath: 'Synthetic group',
+          fragmentIds: ['synthetic-fragment'],
+        },
+      ],
+    });
     await client.reviseInformationEntry('synthetic/id', {
       expectedRevision: 1,
     });
@@ -179,6 +189,20 @@ describe('M1cApiClient', () => {
         body: JSON.stringify({
           snapshotId: 'synthetic-snapshot',
           chunkMode: 'split',
+        }),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/materialize/manual',
+        method: 'POST',
+        body: JSON.stringify({
+          snapshotId: 'synthetic-snapshot',
+          includePrivate: false,
+          groups: [
+            {
+              titlePath: 'Synthetic group',
+              fragmentIds: ['synthetic-fragment'],
+            },
+          ],
         }),
       },
       {

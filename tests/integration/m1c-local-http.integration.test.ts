@@ -30,12 +30,17 @@ describe('M1C local HTTP transport', () => {
 
   it('serves health and product routes from the same loopback listener', async () => {
     const importedBodies: unknown[] = [];
+    const manualSplits: unknown[] = [];
     const entrySearches: unknown[] = [];
     const policyWrites: unknown[] = [];
     const api = stubApi({
       importMarkdown(body) {
         importedBodies.push(body);
         return Promise.resolve(result(201, {status: 'created'}));
+      },
+      materializeManualInformationEntries(body) {
+        manualSplits.push(body);
+        return Promise.resolve(result(201, {status: 'created', entries: []}));
       },
       searchInformationEntries(body) {
         entrySearches.push(body);
@@ -78,6 +83,31 @@ describe('M1C local HTTP transport', () => {
     expect(importResponse.status).toBe(201);
     await expect(importResponse.json()).resolves.toEqual({status: 'created'});
     expect(importedBodies).toEqual([{sourceText}]);
+
+    const manualSplitBody = {
+      snapshotId: '11111111-1111-4111-8111-111111111111',
+      includePrivate: false,
+      groups: [
+        {
+          titlePath: 'Synthetic group',
+          fragmentIds: ['22222222-2222-4222-8222-222222222222'],
+        },
+      ],
+    };
+    const manualSplitResponse = await fetch(
+      `${base}/api/v1/entries/materialize/manual`,
+      {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify(manualSplitBody),
+      },
+    );
+    expect(manualSplitResponse.status).toBe(201);
+    await expect(manualSplitResponse.json()).resolves.toEqual({
+      status: 'created',
+      entries: [],
+    });
+    expect(manualSplits).toEqual([manualSplitBody]);
 
     const entrySearchResponse = await fetch(`${base}/api/v1/entries/search`, {
       method: 'POST',
@@ -166,6 +196,8 @@ function stubApi(
       Promise.resolve(result(200, {status: 'ok', quickTags: []})),
     importMarkdown: () => Promise.resolve(result(201, {status: 'created'})),
     materializeInformationEntries: () =>
+      Promise.resolve(result(201, {status: 'created'})),
+    materializeManualInformationEntries: () =>
       Promise.resolve(result(201, {status: 'created'})),
     reviseInformationEntry: () =>
       Promise.resolve(result(200, {status: 'applied'})),

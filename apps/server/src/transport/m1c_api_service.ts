@@ -22,10 +22,12 @@ import {
   prepareInformationEntryGraphVisibility,
   prepareManualInformationDocumentTags,
   prepareManualEntryRevision,
+  prepareManualSplitInformationEntries,
   prepareSplitInformationEntries,
   searchCurrentInformationEntries,
   type CurrentInformationEntry,
   type EntryDomainKeyword,
+  type EntryFragmentGroupInput,
   type EntryTypeKeyword,
   type InformationEntryAssociationAction,
   type InformationEntryAssociationPolicy,
@@ -34,7 +36,7 @@ import {
   type InformationEntryGraphDirection,
   type InformationDocumentTagRepositoryPort,
   type InformationEntryDocumentView,
-  type InformationEntryRepositoryPort,
+  type InformationEntryEmptySnapshotRepositoryPort,
   type InformationEntrySearchRequest,
 } from '../modules/entries/index.js';
 import {
@@ -82,7 +84,7 @@ export interface M1cApiServiceDependencies {
   readonly reviewPreferences: ReviewPreferencesStore;
   readonly evidenceRepository: EvidenceRepositoryPort;
   readonly evidenceReadRepository: EvidenceReadRepositoryPort;
-  readonly informationEntryRepository: InformationEntryRepositoryPort;
+  readonly informationEntryRepository: InformationEntryEmptySnapshotRepositoryPort;
   readonly informationDocumentTagRepository: InformationDocumentTagRepositoryPort;
   readonly informationEntryAssociationRepository: InformationEntryAssociationRepositoryPort;
   readonly processingRunRepository: ProcessingRunRepositoryPort;
@@ -108,6 +110,7 @@ export interface M1cApiServicePort {
   saveReviewPreferences(body: unknown): Promise<M1cHttpResult>;
   importMarkdown(body: unknown): Promise<M1cHttpResult>;
   materializeInformationEntries(body: unknown): Promise<M1cHttpResult>;
+  materializeManualInformationEntries(body: unknown): Promise<M1cHttpResult>;
   reviseInformationEntry(
     entryId: string,
     body: unknown,
@@ -557,9 +560,15 @@ export class M1cApiService implements M1cApiServicePort {
         });
       }
       const persisted =
-        await this.#dependencies.informationEntryRepository.materializeEntries(
+        await this.#dependencies.informationEntryRepository.materializeEntriesIfSnapshotEmpty(
           entries,
         );
+      if (persisted.outcome === 'snapshot_not_empty') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'split_structure_already_materialized'}),
+        });
+      }
       const current =
         await this.#dependencies.informationEntryRepository.loadCurrentEntries(
           this.#dependencies.workspaceId,
@@ -579,6 +588,68 @@ export class M1cApiService implements M1cApiServicePort {
     }
   }
 
+  public async materializeManualInformationEntries(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const input = decodeManualEntrySplitBody(body);
+    if (input === undefined) return inputFailure('body');
+    try {
+      const snapshot =
+        await this.#dependencies.evidenceReadRepository.loadSnapshot(
+          this.#dependencies.workspaceId,
+          input.snapshotId,
+        );
+      if (
+        snapshot === undefined ||
+        (snapshot.isPrivate === true && !input.includePrivate)
+      ) {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'snapshot_not_found'}),
+        });
+      }
+      const materialized = await materializeEvidenceSnapshot(
+        snapshot,
+        this.#dependencies.blobStore,
+      );
+      const entries = prepareManualSplitInformationEntries(
+        materialized,
+        input.groups,
+      );
+      if (entries === undefined || entries.length === 0) {
+        return httpResult(422, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'manual_split_invalid'}),
+        });
+      }
+      const persisted =
+        await this.#dependencies.informationEntryRepository.materializeEntriesIfSnapshotEmpty(
+          entries,
+        );
+      if (persisted.outcome === 'snapshot_not_empty') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'split_structure_already_materialized'}),
+        });
+      }
+      const current =
+        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          input.includePrivate,
+        );
+      const entryIds = new Set(entries.map((entry) => entry.entryId));
+      return httpResult(persisted.outcome === 'created' ? 201 : 200, {
+        status: persisted.outcome,
+        snapshotId: input.snapshotId,
+        createdCount: persisted.createdCount,
+        entries: Object.freeze(
+          current.filter((entry) => entryIds.has(entry.entryId)),
+        ),
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
   public async reviseInformationEntry(
     entryId: string,
     body: unknown,
@@ -1666,6 +1737,55 @@ function mapMarkdownImportBody(
   );
 }
 
+function decodeManualEntrySplitBody(body: unknown):
+  | Readonly<{
+      snapshotId: string;
+      includePrivate: boolean;
+      groups: readonly Readonly<EntryFragmentGroupInput>[];
+    }>
+  | undefined {
+  if (
+    !isRecord(body) ||
+    typeof body.snapshotId !== 'string' ||
+    !CANONICAL_UUID.test(body.snapshotId) ||
+    (typeof body.includePrivate !== 'boolean' &&
+      body.includePrivate !== undefined) ||
+    !Array.isArray(body.groups) ||
+    body.groups.length < 1
+  ) {
+    return undefined;
+  }
+  const groups: Readonly<EntryFragmentGroupInput>[] = [];
+  for (const value of body.groups) {
+    if (
+      !isRecord(value) ||
+      typeof value.titlePath !== 'string' ||
+      !Array.isArray(value.fragmentIds) ||
+      value.fragmentIds.length < 1
+    ) {
+      return undefined;
+    }
+    const rawFragmentIds: unknown[] = value.fragmentIds;
+    const fragmentIds: string[] = [];
+    for (const fragmentId of rawFragmentIds) {
+      if (typeof fragmentId !== 'string' || !CANONICAL_UUID.test(fragmentId)) {
+        return undefined;
+      }
+      fragmentIds.push(fragmentId);
+    }
+    groups.push(
+      Object.freeze({
+        titlePath: value.titlePath,
+        fragmentIds: Object.freeze(fragmentIds),
+      }),
+    );
+  }
+  return Object.freeze({
+    snapshotId: body.snapshotId,
+    includePrivate: body.includePrivate === true,
+    groups: Object.freeze(groups),
+  });
+}
 function decodeEntryRevisionBody(body: unknown):
   | Readonly<{
       expectedRevision: number;

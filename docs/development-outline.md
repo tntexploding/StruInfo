@@ -1,6 +1,6 @@
 # StruInfo 开发大纲
 
-- 状态：M1E-3D 可选 OpenAI 拆分/标签/联系提案已实现
+- 状态：M1E-4A 人工 Fragment 分组与原子 Entry 物化已实现
 - 最近更新：2026-08-24
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
@@ -19,7 +19,8 @@
   [ADR 0012](adr/0012-provider-neutral-processing-runs-and-proposals.md)、
   [ADR 0013](adr/0013-openai-entry-tag-proposals.md)、
   [ADR 0014](adr/0014-openai-entry-association-proposals.md)、
-  [ADR 0015](adr/0015-openai-entry-split-proposals.md)
+  [ADR 0015](adr/0015-openai-entry-split-proposals.md)、
+  [ADR 0016](adr/0016-manual-entry-fragment-grouping.md)
 
 ## 1. 结论
 
@@ -49,7 +50,7 @@ M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁
 [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化正式知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求；[ADR 0007](adr/0007-information-entry-first-document-processing.md) 把普通文档主线重定向为 Entry-first。ADR 0008 随后把普通 Entry、文档标签和人工联系收敛为当前成品态与可携带个人数据，ADR 0009 删除了没有活动调用方的旧 Curation/Knowledge 应用运行时。ADR 0010 将新的所有者正式知识页定义为有界中心图谱；ADR 0011 进一步允许确定性相似联系
 直接成为可编辑图谱边，并让用户编辑或 block 优先于后续重建。
 
-当前产品已经提供导入、拆分、标签、联系、查询、正式 Entry 图谱、精确来源、隐私范围与完整个人数据包。M1E-2 复用 Association 投影与 override，实现最高匹配中心、有界图/列表、用户关系命令和 Association Bundle v3；M1E-3A–D 增加任务状态及可选的拆分、标签和 selected-pair 联系提案。活动工作区目前按所有者要求保持零业务数据，旧资料只存在于项目目录外的恢复归档。
+当前产品已经提供导入、确定性/人工拆分、标签、联系、查询、正式 Entry 图谱、精确来源、隐私范围与完整个人数据包。M1E-2 复用 Association 投影与 override，实现最高匹配中心、有界图/列表、用户关系命令和 Association Bundle v3；M1E-3A–D 增加任务状态及可选的拆分、标签和 selected-pair 联系提案；M1E-4A 让用户在首次 Entry 物化前直接合并或重新拆开既有 Fragment 分组并编辑标题。活动工作区目前按所有者要求保持零业务数据，旧资料只存在于项目目录外的恢复归档。
 
 ## 2. 为什么选择这个形态
 

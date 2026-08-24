@@ -4,6 +4,7 @@ import type {CurrentInformationEntry} from './information_entry_contract.js';
 import {
   informationEntrySearchKey,
   prepareManualEntryRevision,
+  prepareManualSplitInformationEntries,
   prepareSplitInformationEntries,
 } from './information_entry.js';
 import {searchCurrentInformationEntries} from './information_entry_search.js';
@@ -64,6 +65,60 @@ describe('InformationEntry', () => {
     expect(first[0]?.value.bodySha256).toMatch(/^[0-9a-f]{64}$/u);
   });
 
+  it('groups every section exactly once for stable manual split materialization', () => {
+    const firstId = '55555555-5555-4555-8555-555555555555';
+    const secondId = '66666666-6666-4666-8666-666666666666';
+    const snapshot = Object.freeze({
+      workspaceId: WORKSPACE_ID,
+      resourceId: RESOURCE_ID,
+      snapshotId: SNAPSHOT_ID,
+      isPrivate: true as const,
+      structures: [
+        {
+          structureId: STRUCTURE_ID,
+          fragments: [
+            fragment(secondId, 'section', 40, '## Second\n\nSecond body.'),
+            fragment(firstId, 'section', 0, '## First\n\nFirst body.'),
+          ],
+        },
+      ],
+    });
+
+    const rows = prepareManualSplitInformationEntries(snapshot, [
+      {titlePath: ' Combined entry ', fragmentIds: [firstId, secondId]},
+    ]);
+    const replay = prepareManualSplitInformationEntries(snapshot, [
+      {titlePath: 'Combined entry', fragmentIds: [firstId, secondId]},
+    ]);
+
+    expect(rows).toEqual(replay);
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0]).toMatchObject({
+      value: {
+        documentOrder: 0,
+        titlePath: 'Combined entry',
+        body: '## First\n\nFirst body.\n\n## Second\n\nSecond body.',
+        splitRuleVersion: 'struinfo.entry-split.manual-group.v1',
+        isPrivate: true,
+        fragmentIds: [firstId, secondId],
+      },
+    });
+    expect(
+      prepareManualSplitInformationEntries(snapshot, [
+        {titlePath: 'Second first', fragmentIds: [secondId, firstId]},
+      ]),
+    ).toBeUndefined();
+    expect(
+      prepareManualSplitInformationEntries(snapshot, [
+        {titlePath: 'Missing section', fragmentIds: [firstId]},
+      ]),
+    ).toBeUndefined();
+    expect(
+      prepareManualSplitInformationEntries(snapshot, [
+        {titlePath: 'Different title', fragmentIds: [firstId, secondId]},
+      ])?.[0]?.entryId,
+    ).not.toBe(rows?.[0]?.entryId);
+  });
   it('normalizes manual keywords independently and preserves immutable source facts', () => {
     const current = currentEntry({isPrivate: true});
     const revision = prepareManualEntryRevision(current, {

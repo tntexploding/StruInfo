@@ -1,6 +1,6 @@
 # StruInfo 产品需求
 
-- 状态：M1E-3D selected-Snapshot OpenAI 拆分提案已实现；无 AI 完整主线不变
+- 状态：M1E-4A 人工 Fragment 分组已实现；无 AI 五步主线完整可用
 - 最近更新：2026-08-24
 - 目的：定义“来源可追溯、AI 可增强且无 AI 仍完整可用的个人知识摄取与维护系统”的产品边界和首个验证切片
 - 历史基线：[产品需求 v0.1](archive/product-requirements-v0.1.md)
@@ -185,13 +185,18 @@ StruInfo 的价值不是“收藏更多网页”，而是降低五种成本：
 
 当前导入只接受手工 Markdown 或固定 Git Markdown。导入时选择 `commonmark-v1` 或
 `ruanyf-weekly-v1`，由确定性解析器保存完整结构。拆分页让用户选择尚未生成 Entry 的
-Snapshot，并把已识别的 section 幂等物化为 Entry。对于公开 Snapshot，用户还可显式发起 OpenAI
-Fragment 分组提案，并在逐组核对精确本地正文后人工应用；没有 Provider 时确定性物化仍完整可用。
-它尚不支持保存拆分前全文修改、任意选区拆分/合并或替换自定义规则。
+Snapshot：可以直接按 section 确定性物化，也可以在本地查看全文和精确 Fragment，在既有
+边界合并/重新拆开连续分组、编辑标题后一次提交。对于公开 Snapshot，用户还可显式发起
+OpenAI Fragment 分组提案，并在逐组核对精确本地正文后人工应用；没有 Provider 时人工与
+确定性物化均完整可用。
+
+人工分组必须按来源顺序完整覆盖全部 section Fragment；客户端不提交 Entry 正文，服务端从
+不可变证据重建。确定性、人工和 AI 接受共用同一空 Snapshot 原子边界，已经物化的结构不会被
+覆盖。当前尚不支持保存拆分前全文修改、Fragment 内任意字符级选区、来源重排、替换自定义规则
+或重组已有 Entry。
 
 普通 Entry 更新只保留一个当前成品态和并发版本，不重复保存每次中间输入；原始 Snapshot、
-Fragment 与 Blob 仍不可变。结构结果出错时可以返回完整证据，但新的手工结构编辑器属于
-未完成能力。
+Fragment 与 Blob 仍不可变。
 
 用户在导入时可以标记隐私文档。系统保存完整原始和规范化字节，默认 Entry、联系、查询和
 完整文档通道都排除隐私内容；只有当次显式选择才扩大范围。查询页在 Entry 分页之外提供独立
@@ -239,14 +244,14 @@ AI 可以参与：
 无 AI 仍是完整的正式运行方式，已实现：
 
 - 手工 Markdown 与固定 Git Markdown 导入、不可变证据和确定性结构解析；
-- 用户选择文档并物化 Entry，编辑当前正文、三维标签和两项五档评价；
+- 用户选择文档，以确定性规则或本地人工 Fragment 分组物化 Entry，再编辑当前正文、三维标签和两项五档评价；
 - 确定性关键词候选、用户快捷标签、排除词、URL 过滤和确认别名；
 - 文档标签聚合、可解释 Entry 联系及人工增强/削弱/屏蔽/恢复；
 - 文本子串、结构、来源、时间、隐私和一至两跳联系查询；
 - 含 55 张工作区表、引用 Blob 字节和偏好的个人数据包导出/空工作区恢复；
 - 最高匹配 Entry 中心、有界图谱/列表、边来源、用户关系编辑和三种隐私范围。
 
-尚未实现的是任意选区拆分、集合/树/时间线、复杂事实关系类型、模糊或向量检索、
+尚未实现的是 Fragment 内任意字符级拆分和已物化结构重组、集合/树/时间线、复杂事实关系类型、模糊或向量检索、
 在线查询、AI 查询提案和自动维护。系统不得因为这些未来能力缺席而把当前工作区显示为故障。
 
 ### 5.5 入库自动化与权限等级
@@ -448,7 +453,7 @@ QQ 中的普通自然语言不能直接执行批量批准、合并、删除等�
 | `PreferenceProfile` | 从用户反馈总结出的当前偏好及其样本、规则和版本 |
 | `ExplorationPolicy` | 独立于当前偏好的探索类型、预算、展示规则和版本 |
 | `ProcessingRun` | 当前已实现的 Provider-neutral 任务状态：稳定身份、来源、五阶段进度、隐私范围、期望版本取消、错误码和可选 Snapshot 目标 |
-| `ProcessingProposal` | 当前只保存 split/tags/association 类型、目标、摘要、状态和精确 Fragment 输入；尚无闭合 payload 或接受命令 |
+| `ProcessingProposal` | 保存 split/tags/association 类型、目标、摘要、状态和精确 Fragment 输入；闭合载荷位于 typed 子表，用户接受后转换为既有 Entry/图谱命令 |
 | `KnowledgeChangeSet` | 一次处理提出的新增、修订、关联、冲突或人工审核变更，以及授权来源和提交结果 |
 | `Candidate` | 尚未获用户或策略授权、存在不确定性或必须人工审核的知识变更 |
 | `KnowledgeItem / Revision` | 有稳定 ID 和不可变修订的实体、概念、陈述、总结、推断、笔记、事件、方法或框架 |
@@ -496,7 +501,7 @@ QQ 中的普通自然语言不能直接执行批量批准、合并、删除等�
 - 单用户、本机回环地址的浏览器界面；
 - “总览、导入、拆分、标签、联系、查询、正式知识”七页活动主线；
 - 手工 Markdown/固定 Git Markdown、Resource、Snapshot、DocumentNode、Fragment 和基本去重；
-- 当前 InformationEntry、内容/类型/领域标签、两项评分和当前 Document 标签；
+- 当前 InformationEntry、确定性/人工/AI 首次结构物化、内容/类型/领域标签、两项评分和当前 Document 标签；
 - 确定性联系投影、逐对人工控制，以及正式图谱中的用户编辑/创建关系；
 - 文本/结构/来源/时间/隐私/有限联系查询、Entry 中心图谱和精确证据返回；
 - 包体外 Blob、偏好与完整个人数据包；
@@ -660,6 +665,14 @@ ADR 0015 和前向迁移 `000016` 已实现第三个可选 Provider 纵向链。
 
 closed split payload 只能把 1–64 个输入 Fragment 分成连续、不重叠且完整覆盖的分组，并冻结模型、Prompt 版本和拆分规则版本。界面逐组显示本地精确 Fragment 与外部 AI 来源；人工接受后才从本地 Fragment 重建标题/正文，并复用既有空 Snapshot Entry 物化和 workspace lock。拒绝不创建 Entry；确定性物化赢得并发时，过期提案不会覆盖现有结构。Processing Bundle v4 携带十张处理表，旧 v1/v2/v3 恢复为空拆分提案状态。后台扫描、证据改写、私密外发、自动接受、查询综合、第二 Provider、Embedding 和 RAG 不属于本切片。
 
+### 7.1.8 M1E-4A 人工 Fragment 分组
+
+ADR 0016 已实现不依赖 Provider 的人工拆分工作台。用户选择一个尚未生成 Entry 的 Snapshot 后，页面从本地读取规范全文和按来源排序的 section Fragment。初始状态是一 Fragment 一组；用户可把当前组并入上一组、在任一既有 Fragment 前重新拆开、重置结构、全部合并并编辑每组标题。
+
+提交只携带标题和 Fragment ID。服务端要求分组按来源顺序完整覆盖全部 section Fragment，从本地证据以两个换行重建组正文，并保存 `struinfo.entry-split.manual-group.v1`。隐私 Snapshot 需要当次 `includePrivate`；确定性、人工和已接受 AI 物化共享同一 workspace lock 与空 Snapshot 原子检查，先提交者唯一生效。该能力没有新增迁移、依赖、偏好或 Bundle section，也不覆盖已有 Entry 结构。
+
+任意 Fragment 内字符级边界、重排、拆分前保存全文修改、自定义解析/拆分规则和已物化 Entry 的结构重组不属于 M1E-4A。
+
 ### 7.2 MVP-1：偏好学习与每周自适应摄取
 
 MVP-0 证明知识核心可用后，再让系统持续处理该信源并逐步学习用户偏好：
@@ -707,6 +720,7 @@ MVP-0 证明知识核心可用后，再让系统持续处理该信源并逐步�
 12. **已完成**：配置完整时可对公开 Entry 显式启动 OpenAI 标签提案并人工接受/拒绝；私密 Entry 不外发，接受沿用 Entry revision，无 Provider 时无 AI 主线不降级。
 13. **已完成**：可对明确选中的两个公开 Entry 显式启动 OpenAI 联系提案；人工接受沿用 graph edge CAS，拒绝不改图谱，任一隐私端点不外发，AI 来源在界面和图谱结果中可见。
 14. **已完成**：可对明确选中的公开 Snapshot 显式启动 OpenAI 拆分提案；精确 Fragment 分组由用户审阅，接受沿用 Entry 物化边界，拒绝不创建 Entry，私密 Snapshot 不读取 Blob 或外发。
+15. **已完成**：无 Provider 时可在拆分页查看全文和精确 Fragment，在既有边界合并或重新拆开、编辑标题并原子生成唯一 Entry 结构；隐私范围显式，已有结构不被覆盖。
 
 以上状态只描述清理基线的当前产品能力。历史 M1C smoke 证明过的正式知识或旧检索行为不再
 被计作活动功能；发布、容器和生产等价数据库认证也不会因本机功能通过而自动变成 PASS。

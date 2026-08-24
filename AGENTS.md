@@ -308,10 +308,26 @@ v1-v3 with empty split-proposal state. `ai_split` is independent from `ai_tags`
 and `ai_associations`, and the deterministic split path remains complete when
 no Provider is configured.
 
-The planned M1E-3A-D provider increment is now complete. The next product task
-must come from direct owner use or another explicitly accepted narrow boundary;
-do not infer a generic AI, automatic-acceptance, private-content, query-synthesis,
-Embedding, or RAG capability from these three proposal paths.
+ADR 0016 completes M1E-4A with a local manual Entry-grouping path. Before a
+Snapshot has any Entry, the Split page may load its exact ordered `section`
+Fragments, merge adjacent groups, split a merged group again at an existing
+Fragment boundary, edit group titles and submit the complete source-order
+partition. The server reconstructs every body from local Fragment text and
+uses `struinfo.entry-split.manual-group.v1`; it never trusts client-authored
+body text or changes Snapshot/Fragment evidence. Deterministic, manual and
+accepted AI materialization all use the same atomic empty-Snapshot repository
+boundary, so the first committed structure wins without duplicate Entry sets.
+Private material requires explicit local `includePrivate` scope. This increment
+adds no migration, dependency or Bundle section and does not replace already
+materialized Entry structure. Arbitrary within-Fragment cutting, reordering,
+pre-split source editing, custom parsers/rules and post-materialization
+restructuring remain later boundaries.
+
+The planned M1E-3A-D provider increment and M1E-4A manual grouping increment are
+now complete. The next product task must come from direct owner use or another
+explicitly accepted narrow boundary; do not infer a generic AI,
+automatic-acceptance, private-content transfer, query synthesis, Embedding, or
+RAG capability from these proposal paths.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
@@ -321,7 +337,8 @@ or make it mandatory before its dependency and distribution review is accepted.
 
 Do not change the accepted language, application shape, or persistence model
 without a superseding ADR. Cloud deployment vendors remain unselected; OpenAI
-is selected only for ADR 0013 tag proposals. Do not reuse M0-P probe candidate source as production code; carry
+is selected only for the optional proposal paths accepted by ADR 0013 through
+ADR 0015. Do not reuse M0-P probe candidate source as production code; carry
 the tracked provenance, workspace, idempotency, fencing, and recovery
 invariants into fresh implementation and tests.
 
