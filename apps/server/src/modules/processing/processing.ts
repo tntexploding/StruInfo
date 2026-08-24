@@ -4,6 +4,7 @@ import {
   PROCESSING_RUN_ORIGINS,
   PROCESSING_RUN_STATUSES,
   PROCESSING_STAGES,
+  type ProcessingAssociationProposalPayload,
   type ProcessingProposalAppend,
   type ProcessingTagProposalPayload,
   type ProcessingRunCreate,
@@ -82,6 +83,7 @@ export function assertProcessingProposalAppend(
       fail();
     }
     if (value.tagPayload !== undefined) fail();
+    if (value.associationPayload !== undefined) fail();
     uuid(value.targetSnapshotId);
     return;
   }
@@ -98,6 +100,7 @@ export function assertProcessingProposalAppend(
     if (value.tagPayload !== undefined) {
       assertProcessingTagProposalPayload(value.tagPayload);
     }
+    if (value.associationPayload !== undefined) fail();
     return;
   }
   if (
@@ -112,6 +115,21 @@ export function assertProcessingProposalAppend(
   if (value.tagPayload !== undefined) fail();
   uuid(value.targetEntryId);
   uuid(value.relatedEntryId);
+  if (value.associationPayload !== undefined) {
+    assertProcessingAssociationProposalPayload(value.associationPayload);
+  }
+}
+
+export function assertProcessingAssociationProposalPayload(
+  value: Readonly<ProcessingAssociationProposalPayload>,
+): void {
+  positiveInteger(value.expectedEntryLowRevision);
+  positiveInteger(value.expectedEntryHighRevision);
+  nonNegativeInteger(value.expectedOverrideRevision);
+  boundedText(value.providerModel, 120);
+  boundedText(value.promptVersion, 120);
+  boundedText(value.relationLabel, 80);
+  member(value.direction, ['symmetric', 'low_to_high', 'high_to_low'] as const);
 }
 
 export function assertProcessingTagProposalPayload(

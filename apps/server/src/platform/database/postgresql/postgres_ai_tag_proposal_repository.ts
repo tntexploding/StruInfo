@@ -197,7 +197,12 @@ export class PostgresAiTagProposalRepository implements AiTagProposalRepositoryP
   public appendProposal(
     proposal: Readonly<ProcessingProposalAppend>,
   ): Promise<ProcessingRunWriteOutcome> {
-    if (proposal.tagPayload !== undefined) throw new PostgresAdapterError();
+    if (
+      proposal.tagPayload !== undefined ||
+      proposal.associationPayload !== undefined
+    ) {
+      throw new PostgresAdapterError();
+    }
     return this.#base.appendProposal(proposal);
   }
 

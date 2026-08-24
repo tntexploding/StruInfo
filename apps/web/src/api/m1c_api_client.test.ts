@@ -140,6 +140,22 @@ describe('M1cApiClient', () => {
     await client.startAiTagProposal('synthetic/entry', 'synthetic-request');
     await client.acceptAiTagProposal('synthetic/entry', 'synthetic/proposal');
     await client.rejectAiTagProposal('synthetic/entry', 'synthetic/proposal');
+    await client.listAiAssociationProposals('synthetic/entry', 'related/id');
+    await client.startAiAssociationProposal(
+      'synthetic/entry',
+      'related/id',
+      'synthetic-association-request',
+    );
+    await client.acceptAiAssociationProposal(
+      'synthetic/entry',
+      'related/id',
+      'synthetic/proposal',
+    );
+    await client.rejectAiAssociationProposal(
+      'synthetic/entry',
+      'related/id',
+      'synthetic/proposal',
+    );
     await client.listProcessingRuns(12);
     await client.cancelProcessingRun('synthetic/run', 3);
 
@@ -243,6 +259,25 @@ describe('M1cApiClient', () => {
       },
       {
         url: 'http://127.0.0.1:3000/api/v1/entries/synthetic%2Fentry/tag-proposals/synthetic%2Fproposal/reject',
+        method: 'POST',
+        body: JSON.stringify({}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/knowledge-graph/edges/synthetic%2Fentry/related%2Fid/proposals',
+        method: 'GET',
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/knowledge-graph/edges/synthetic%2Fentry/related%2Fid/proposals/start',
+        method: 'POST',
+        body: JSON.stringify({requestKey: 'synthetic-association-request'}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/knowledge-graph/edges/synthetic%2Fentry/related%2Fid/proposals/synthetic%2Fproposal/accept',
+        method: 'POST',
+        body: JSON.stringify({}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/knowledge-graph/edges/synthetic%2Fentry/related%2Fid/proposals/synthetic%2Fproposal/reject',
         method: 'POST',
         body: JSON.stringify({}),
       },

@@ -10,8 +10,11 @@ import {
 import type {WorkspaceBundleSectionCodec} from './workspace_bundle.js';
 
 export const M1E_PROCESSING_BUNDLE_SECTION_TYPE = 'struinfo.m1e-processing';
-export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 2;
-export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v2';
+export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 3;
+export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v3';
+export const M1E_PROCESSING_VERSION_TWO_BUNDLE_SECTION_VERSION = 2;
+export const M1E_PROCESSING_VERSION_TWO_BUNDLE_SCHEMA =
+  'struinfo.m1e-processing.v2';
 export const M1E_PROCESSING_LEGACY_BUNDLE_SECTION_VERSION = 1;
 export const M1E_PROCESSING_LEGACY_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v1';
 
@@ -104,7 +107,21 @@ export const M1E_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescript
       'domain_keyword',
       'custom_name',
     ]),
+    table('processing_association_proposal', [
+      'workspace_id',
+      'proposal_id',
+      'expected_entry_low_revision',
+      'expected_entry_high_revision',
+      'expected_override_revision',
+      'provider_model',
+      'prompt_version',
+      'relation_label',
+      'graph_direction',
+    ]),
   ]);
+
+const VERSION_TWO_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
+  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 6));
 
 const LEGACY_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
   Object.freeze(M1E_PROCESSING_TABLES.slice(0, 3));
@@ -117,6 +134,15 @@ export const M1E_PROCESSING_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     decode: normalizeM1eProcessingSnapshot,
   });
 
+export const M1E_PROCESSING_VERSION_TWO_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: M1E_PROCESSING_VERSION_TWO_BUNDLE_SECTION_VERSION,
+    encode: normalizeVersionTwoSnapshot,
+    decode(payload: JsonValue): unknown {
+      return upgradeVersionTwoSnapshot(normalizeVersionTwoSnapshot(payload));
+    },
+  });
 export const M1E_PROCESSING_LEGACY_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
   Object.freeze({
     type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
@@ -137,6 +163,34 @@ export function normalizeM1eProcessingSnapshot(
   ) as M1eProcessingSnapshot;
 }
 
+function normalizeVersionTwoSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1E_PROCESSING_VERSION_TWO_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1E_PROCESSING_VERSION_TWO_BUNDLE_SCHEMA,
+    VERSION_TWO_PROCESSING_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1E_PROCESSING_VERSION_TWO_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+  }>;
+}
+
+function upgradeVersionTwoSnapshot(
+  versionTwo: ReturnType<typeof normalizeVersionTwoSnapshot>,
+): M1eProcessingSnapshot {
+  return normalizeM1eProcessingSnapshot({
+    schemaVersion: M1E_PROCESSING_BUNDLE_SCHEMA,
+    tables: [
+      ...versionTwo.tables,
+      {
+        name: 'processing_association_proposal',
+        rows: [],
+      },
+    ],
+  });
+}
 function normalizeLegacySnapshot(value: unknown): Readonly<{
   schemaVersion: typeof M1E_PROCESSING_LEGACY_BUNDLE_SCHEMA;
   tables: readonly Readonly<M1eProcessingTableSnapshot>[];

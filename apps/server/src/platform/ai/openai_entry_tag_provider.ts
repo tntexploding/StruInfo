@@ -9,7 +9,7 @@ import {
   type AiTagProposalProviderPort,
   type AiTagProposalProviderResult,
 } from '../../modules/processing/index.js';
-import type {AiTagsProviderConfig} from '../../config/runtime_config.js';
+import type {AiProposalProviderConfig} from '../../config/runtime_config.js';
 
 export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses';
 export const OPENAI_TAG_PROMPT_VERSION = 'struinfo.openai-entry-tags.v1';
@@ -27,11 +27,11 @@ export class OpenAiEntryTagProvider implements AiTagProposalProviderPort {
   public readonly providerKey = 'openai-responses-v1' as const;
   public readonly promptVersion = OPENAI_TAG_PROMPT_VERSION;
   public readonly model: string;
-  readonly #config: Readonly<AiTagsProviderConfig>;
+  readonly #config: Readonly<AiProposalProviderConfig>;
   readonly #fetch: OpenAiFetch;
 
   public constructor(
-    config: Readonly<AiTagsProviderConfig>,
+    config: Readonly<AiProposalProviderConfig>,
     fetchImplementation: OpenAiFetch = globalThis.fetch,
   ) {
     this.#config = config;
@@ -98,7 +98,7 @@ export class OpenAiEntryTagProvider implements AiTagProposalProviderPort {
 }
 
 function createRequest(
-  config: Readonly<AiTagsProviderConfig>,
+  config: Readonly<AiProposalProviderConfig>,
   entry: Readonly<CurrentInformationEntry>,
 ): Readonly<Record<string, unknown>> {
   return Object.freeze({

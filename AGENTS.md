@@ -21,16 +21,18 @@ Before frontend implementation or frontend design review, also read:
 
 ## Current Phase
 
-### Data-Free Owner Audit
+### Data-Free Development Baseline
 
-The active workspace is intentionally empty for owner review. The former
-external validation corpus, database rows, Blob bytes, preferences and exports
-have been moved to a recovery archive outside the repository and application
-data root. Until the owner explicitly ends this audit, do not import, restore,
-fetch, seed or otherwise introduce any real document, entry, personal
-configuration or derived knowledge. Product and integration tests must use
-synthetic, value-free fixtures only. Continue development in this same main
-project and workspace after the audit; do not create a replacement workspace.
+The active workspace is intentionally empty for continued product development. The
+former external validation corpus, database rows, Blob bytes, preferences and
+exports have been moved to a recovery archive outside the repository and
+application data root. Owner, formal-gate, release and broader product reviews
+are deferred and MUST NOT block unrelated product development. Until the owner
+explicitly authorizes material use, do not import, restore, fetch, seed or
+otherwise introduce any real document, entry, personal configuration or derived
+knowledge. Product and integration tests must use synthetic, value-free fixtures
+only. Continue development in this same main project and workspace; do not create
+a replacement workspace.
 
 Historical evidence below records completed engineering work. It does not
 authorize restoring the former corpus into the active workspace.
@@ -274,9 +276,22 @@ proposals; acceptance MUST use the existing Entry revision command and preserve
 body, scores, privacy and exact Fragment evidence. The Provider has no direct
 Entry, association or graph write port. Processing Bundle v2 carries all six
 processing tables and upgrades v1 with empty tag-proposal state. `ai_tags` MUST
-NOT be interpreted as generic AI capability. Until direct owner use supplies
-evidence, do not add a second Provider, automatic acceptance, AI split,
-association, query synthesis, Embedding or RAG.
+NOT be interpreted as generic AI capability.
+
+ADR 0014 completes M1E-3C with one closed OpenAI `association` proposal for an
+explicitly selected pair of public InformationEntry records. Forward migration
+`000015` adds one typed association-payload table and admits `ai` as a graph
+override origin. The provider receives only the selected pair's Entry content
+and current annotations; either private endpoint is rejected before any network
+call. A proposal freezes both Entry revisions, the pair's override revision,
+model, prompt version, relation label and direction. Accepting uses the existing
+graph-edge write command and CAS boundary; rejecting changes only proposal
+state. Processing Bundle v3 carries all seven processing tables and upgrades v1
+or v2 with empty association-proposal state. `ai_associations` is separate from
+`ai_tags`; neither means generic AI capability. The UI MUST label a pending
+proposal as AI-generated and require an explicit accept action. Do not add a
+second Provider, automatic acceptance, private-content transfer, AI split,
+query synthesis, Embedding or RAG without a later accepted increment.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable

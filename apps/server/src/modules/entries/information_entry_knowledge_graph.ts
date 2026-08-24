@@ -135,8 +135,9 @@ function graphViewPriority(
   view: ReturnType<typeof listInformationEntryAssociations>[number],
 ): number {
   if (view.override?.value.graph?.origin === 'user') return 0;
-  if (view.override?.value.graph?.origin === 'association') return 1;
-  return 2;
+  if (view.override?.value.graph?.origin === 'ai') return 1;
+  if (view.override?.value.graph?.origin === 'association') return 2;
+  return 3;
 }
 
 function toGraphEdge(
@@ -158,9 +159,11 @@ function toGraphEdge(
     origin:
       graph?.origin === 'user'
         ? 'user_created'
-        : graph === undefined
-          ? 'automatically_calculated'
-          : 'user_edited',
+        : graph?.origin === 'ai'
+          ? 'ai_assisted'
+          : graph === undefined
+            ? 'automatically_calculated'
+            : 'user_edited',
     effectiveScore: view.effectiveScore,
     isBlocked: view.isBlocked,
     overrideRevision: override?.revision ?? 0,

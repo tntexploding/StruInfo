@@ -1,6 +1,9 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import type {
+  AiAssociationProposalDecisionResponse,
+  AiAssociationProposalListResponse,
+  AiAssociationProposalStartResponse,
   InformationEntry,
   InformationEntryGraphDirection,
   InformationEntryGraphEdge,
@@ -11,6 +14,7 @@ import type {
 import {ActionNotice} from '../components/action_notice.js';
 import type {ActionFeedback} from '../components/product_types.js';
 import {describeInformationEntryFailure} from './information_entry_shared.js';
+import {InformationEntryAiAssociations} from './information_entry_ai_associations.js';
 import {createLatestRequestTracker} from './latest_request.js';
 
 type ReadyGraphResponse = Extract<
@@ -29,9 +33,24 @@ type NewRelationDirection =
   'symmetric' | 'center_to_related' | 'related_to_center';
 
 export interface FormalKnowledgeGraphWorkspaceProps {
+  readonly aiAssociationEnabled: boolean;
+  readonly onAcceptAiAssociationProposal: (
+    entryId: string,
+    relatedEntryId: string,
+    proposalId: string,
+  ) => Promise<M1cHttpResponse<AiAssociationProposalDecisionResponse>>;
+  readonly onListAiAssociationProposals: (
+    entryId: string,
+    relatedEntryId: string,
+  ) => Promise<M1cHttpResponse<AiAssociationProposalListResponse>>;
   readonly onReadGraph: (
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationEntryKnowledgeGraphResponse>>;
+  readonly onRejectAiAssociationProposal: (
+    entryId: string,
+    relatedEntryId: string,
+    proposalId: string,
+  ) => Promise<M1cHttpResponse<AiAssociationProposalDecisionResponse>>;
   readonly onReviseEdge: (
     entryId: string,
     relatedEntryId: string,
@@ -39,6 +58,11 @@ export interface FormalKnowledgeGraphWorkspaceProps {
   ) => Promise<
     M1cHttpResponse<InformationEntryKnowledgeGraphEdgeWriteResponse>
   >;
+  readonly onStartAiAssociationProposal: (
+    entryId: string,
+    relatedEntryId: string,
+    requestKey: string,
+  ) => Promise<M1cHttpResponse<AiAssociationProposalStartResponse>>;
   readonly onOpenEvidence: (
     snapshotId: string,
     fragmentId: string | undefined,
@@ -47,9 +71,14 @@ export interface FormalKnowledgeGraphWorkspaceProps {
 }
 
 export function FormalKnowledgeGraphWorkspace({
+  aiAssociationEnabled,
+  onAcceptAiAssociationProposal,
+  onListAiAssociationProposals,
   onOpenEvidence,
   onReadGraph,
+  onRejectAiAssociationProposal,
   onReviseEdge,
+  onStartAiAssociationProposal,
 }: FormalKnowledgeGraphWorkspaceProps) {
   const [queryDraft, setQueryDraft] = useState('');
   const [activeQuery, setActiveQuery] = useState('');
@@ -439,12 +468,26 @@ export function FormalKnowledgeGraphWorkspace({
                 ) : (
                   <EdgeInspector
                     key={edgeKey(selectedEdge)}
-                    centerEntryId={graph.center.entryId}
+                    aiAssociationEnabled={aiAssociationEnabled}
+                    centerEntry={graph.center}
                     edge={selectedEdge}
                     relatedEntry={nodesById.get(
                       otherEndpoint(selectedEdge, graph.center.entryId),
                     )}
                     writing={writing}
+                    onAcceptAiAssociationProposal={
+                      onAcceptAiAssociationProposal
+                    }
+                    onListAiAssociationProposals={onListAiAssociationProposals}
+                    onProposalAccepted={() =>
+                      readGraph(graph.center.entryId, {
+                        preserveFeedback: true,
+                      })
+                    }
+                    onRejectAiAssociationProposal={
+                      onRejectAiAssociationProposal
+                    }
+                    onStartAiAssociationProposal={onStartAiAssociationProposal}
                     onWrite={writeEdge}
                   />
                 )}
@@ -728,14 +771,26 @@ function NodeInspector({
 }
 
 function EdgeInspector({
-  centerEntryId,
+  aiAssociationEnabled,
+  centerEntry,
   edge,
+  onAcceptAiAssociationProposal,
+  onListAiAssociationProposals,
+  onProposalAccepted,
+  onRejectAiAssociationProposal,
+  onStartAiAssociationProposal,
   onWrite,
   relatedEntry,
   writing,
 }: {
-  readonly centerEntryId: string;
+  readonly aiAssociationEnabled: boolean;
+  readonly centerEntry: Readonly<InformationEntry>;
   readonly edge: Readonly<InformationEntryGraphEdge>;
+  readonly onAcceptAiAssociationProposal: FormalKnowledgeGraphWorkspaceProps['onAcceptAiAssociationProposal'];
+  readonly onListAiAssociationProposals: FormalKnowledgeGraphWorkspaceProps['onListAiAssociationProposals'];
+  readonly onProposalAccepted: () => Promise<void>;
+  readonly onRejectAiAssociationProposal: FormalKnowledgeGraphWorkspaceProps['onRejectAiAssociationProposal'];
+  readonly onStartAiAssociationProposal: FormalKnowledgeGraphWorkspaceProps['onStartAiAssociationProposal'];
   readonly onWrite: (
     edge: Readonly<InformationEntryGraphEdge>,
     operation: 'edit' | 'block' | 'restore',
@@ -756,7 +811,7 @@ function EdgeInspector({
       </header>
       <p>
         {relatedEntry === undefined ? '相关 Entry' : entryTitle(relatedEntry)} ·{' '}
-        {directionLabel(edge, centerEntryId)}
+        {directionLabel(edge, centerEntry.entryId)}
       </p>
       {edge.projection === undefined ? null : (
         <dl className="knowledge-edge-metrics">
@@ -778,6 +833,18 @@ function EdgeInspector({
           </div>
         </dl>
       )}
+      {relatedEntry === undefined ? null : (
+        <InformationEntryAiAssociations
+          enabled={aiAssociationEnabled}
+          entry={centerEntry}
+          relatedEntry={relatedEntry}
+          onAccepted={onProposalAccepted}
+          onAcceptAiAssociationProposal={onAcceptAiAssociationProposal}
+          onListAiAssociationProposals={onListAiAssociationProposals}
+          onRejectAiAssociationProposal={onRejectAiAssociationProposal}
+          onStartAiAssociationProposal={onStartAiAssociationProposal}
+        />
+      )}
       <label className="field">
         <span>关系名称</span>
         <input
@@ -798,7 +865,7 @@ function EdgeInspector({
             );
           }}
         >
-          {directionOptions(centerEntryId, edge).map((option) => (
+          {directionOptions(centerEntry.entryId, edge).map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
@@ -891,6 +958,7 @@ function CreateRelationPanel({
           </select>
         </label>
       ) : null}
+
       <label className="field">
         <span>关系名称</span>
         <input
@@ -911,9 +979,9 @@ function CreateRelationPanel({
             );
           }}
         >
-          <option value="symmetric">双向</option>\n{' '}
-          <option value="center_to_related">中心指向目标</option>\n{' '}
-          <option value="related_to_center">目标指向中心</option>\n{' '}
+          <option value="symmetric">双向</option>
+          <option value="center_to_related">中心指向目标</option>
+          <option value="related_to_center">目标指向中心</option>
         </select>
       </label>
       <button
@@ -1023,6 +1091,7 @@ function directionGlyph(
 function originLabel(origin: InformationEntryGraphEdge['origin']): string {
   if (origin === 'user_created') return '用户创建';
   if (origin === 'user_edited') return '用户编辑';
+  if (origin === 'ai_assisted') return 'AI 辅助';
   return '自动计算';
 }
 

@@ -670,20 +670,31 @@ The graph uses a dark bounded grid and restrained node colours. It MUST NOT
 resemble a decorative 3D star field, use physics motion as semantic evidence, or
 load the whole workspace by default.
 
-Visible edges may be deterministic similarity associations or user relationships.
-They enter the maintained graph without a per-edge confirmation queue, while
-meaning and origin require more than colour:
+Visible edges may be deterministic similarity associations, user relationships
+or accepted AI-assisted relationships. Deterministic similarity enters the
+maintained graph without a per-edge confirmation queue; an AI proposal remains
+outside graph state until the user accepts it through the normal relation
+command. Meaning and origin require more than colour:
 
-- every edge states whether it is automatically calculated, user-edited or
-  user-created;
+- every edge states whether it is automatically calculated, AI-assisted,
+  user-edited or user-created;
 - an automatic edge exposes its `similarity` kind, score and explanation;
+- an accepted AI edge keeps a visible AI origin until a later user edit;
 - a user label is readable on selection and in the equivalent list/tree;
 - direction has an arrow, endpoint wording and accessible text; automatic
-  similarity is explicitly symmetric;
+  similarity is explicitly symmetric; and
 - hidden/deleted edges are absent until the user restores them, and the UI makes
-  durable blocking distinct from temporary filtering; and
-- a future AI proposal carries an AI-origin label until the normal command or an
-  enabled versioned policy commits it.
+  durable blocking distinct from temporary filtering.
+
+When the optional OpenAI association capability is configured, the selected-edge
+inspector MAY offer “生成联系提案” only for the two currently selected public
+Entries. It MUST state that exactly those two Entries are sent, MUST reject a
+private endpoint before any Provider action, and MUST label output as
+`AI 生成 · 待审核`. The proposed relation label, direction, explanation, model
+and Prompt version remain visually separate from the committed edge. Accept and
+reject are explicit adjacent actions; dismissing, navigating or rejecting MUST
+NOT modify graph state. Without Provider configuration the same inspector keeps
+all manual edit, block, restore and create actions.
 
 The highest deterministic Entry search match is the initial centre. Zoom, pan,
 filter, focus, bounded expand, recenter, selection, relation editing, and open-

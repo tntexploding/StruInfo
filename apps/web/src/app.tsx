@@ -1,6 +1,9 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 import type {
+  AiAssociationProposalDecisionResponse,
+  AiAssociationProposalListResponse,
+  AiAssociationProposalStartResponse,
   AiTagProposalDecisionResponse,
   AiTagProposalListResponse,
   AiTagProposalStartResponse,
@@ -357,6 +360,52 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const listAiAssociationProposals = useCallback(
+    (
+      entryId: string,
+      relatedEntryId: string,
+    ): Promise<M1cHttpResponse<AiAssociationProposalListResponse>> =>
+      apiClient.listAiAssociationProposals(entryId, relatedEntryId),
+    [apiClient],
+  );
+
+  const startAiAssociationProposal = useCallback(
+    (
+      entryId: string,
+      relatedEntryId: string,
+      requestKey: string,
+    ): Promise<M1cHttpResponse<AiAssociationProposalStartResponse>> =>
+      apiClient.startAiAssociationProposal(entryId, relatedEntryId, requestKey),
+    [apiClient],
+  );
+
+  const acceptAiAssociationProposal = useCallback(
+    (
+      entryId: string,
+      relatedEntryId: string,
+      proposalId: string,
+    ): Promise<M1cHttpResponse<AiAssociationProposalDecisionResponse>> =>
+      apiClient.acceptAiAssociationProposal(
+        entryId,
+        relatedEntryId,
+        proposalId,
+      ),
+    [apiClient],
+  );
+
+  const rejectAiAssociationProposal = useCallback(
+    (
+      entryId: string,
+      relatedEntryId: string,
+      proposalId: string,
+    ): Promise<M1cHttpResponse<AiAssociationProposalDecisionResponse>> =>
+      apiClient.rejectAiAssociationProposal(
+        entryId,
+        relatedEntryId,
+        proposalId,
+      ),
+    [apiClient],
+  );
   const listProcessingRuns = useCallback(
     (limit: number): Promise<M1cHttpResponse<ProcessingRunListResponse>> =>
       apiClient.listProcessingRuns(limit),
@@ -576,8 +625,16 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       ) : null}
       {activeSection === 'knowledge' ? (
         <FormalKnowledgeWorkspace
+          aiAssociationEnabled={
+            workspace.status === 'ready' &&
+            workspace.value.capabilities.includes('ai_associations')
+          }
+          onAcceptAiAssociationProposal={acceptAiAssociationProposal}
+          onListAiAssociationProposals={listAiAssociationProposals}
           onReadGraph={readInformationEntryKnowledgeGraph}
+          onRejectAiAssociationProposal={rejectAiAssociationProposal}
           onReviseEdge={reviseInformationEntryKnowledgeGraphEdge}
+          onStartAiAssociationProposal={startAiAssociationProposal}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
             void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
           }

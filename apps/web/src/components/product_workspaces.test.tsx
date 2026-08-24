@@ -368,6 +368,19 @@ describe('M1D product workspaces', () => {
     );
     const formal = renderToStaticMarkup(
       <FormalKnowledgeWorkspace
+        aiAssociationEnabled={false}
+        onAcceptAiAssociationProposal={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
+        onListAiAssociationProposals={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {status: 'ok', proposals: []},
+          })
+        }
         onReadGraph={() =>
           Promise.resolve({
             statusCode: 200,
@@ -380,8 +393,20 @@ describe('M1D product workspaces', () => {
             },
           })
         }
+        onRejectAiAssociationProposal={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
         onReviseEdge={() =>
           Promise.resolve({statusCode: 200, body: {status: 'applied'}})
+        }
+        onStartAiAssociationProposal={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
         }
         onOpenEvidence={() => undefined}
       />,
