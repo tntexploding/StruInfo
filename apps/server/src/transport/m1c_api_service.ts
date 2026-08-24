@@ -43,11 +43,13 @@ import {
 } from '../modules/entries/index.js';
 import {
   importMarkdownEvidence,
+  importStructuredDocumentEvidence,
   materializeEvidenceSnapshot,
   type EvidenceReadRepositoryPort,
   type EvidenceRepositoryPort,
   type EvidenceSnapshotSummary,
   type ImportMarkdownEvidenceInput,
+  type ImportStructuredDocumentEvidenceInput,
 } from '../modules/evidence/index.js';
 import {
   AiAssociationProposalServiceError,
@@ -111,6 +113,7 @@ export interface M1cApiServicePort {
   loadReviewPreferences(): Promise<M1cHttpResult>;
   saveReviewPreferences(body: unknown): Promise<M1cHttpResult>;
   importMarkdown(body: unknown): Promise<M1cHttpResult>;
+  importDocument(body: unknown): Promise<M1cHttpResult>;
   materializeInformationEntries(body: unknown): Promise<M1cHttpResult>;
   materializeManualInformationEntries(body: unknown): Promise<M1cHttpResult>;
   reviseInformationEntry(
@@ -515,6 +518,28 @@ export class M1cApiService implements M1cApiServicePort {
       input,
     );
     return httpResult(statusForImport(result.status), result);
+  }
+
+  public async importDocument(body: unknown): Promise<M1cHttpResult> {
+    if (
+      isRecord(body) &&
+      (body.documentFormat === 'html' || body.documentFormat === 'pdf')
+    ) {
+      const input = mapStructuredDocumentImportBody(
+        body,
+        this.#dependencies.workspaceId,
+      );
+      if (input === undefined) return inputFailure('body');
+      const result = await importStructuredDocumentEvidence(
+        {
+          blobStore: this.#dependencies.blobStore,
+          evidenceRepository: this.#dependencies.evidenceRepository,
+        },
+        input,
+      );
+      return httpResult(statusForImport(result.status), result);
+    }
+    return this.importMarkdown(body);
   }
 
   public async materializeInformationEntries(
@@ -1699,6 +1724,57 @@ function reviewPreferencesFailure(): M1cHttpResult {
     status: 'failed',
     issue: Object.freeze({code: 'review_preferences_failed'}),
   });
+}
+
+function mapStructuredDocumentImportBody(
+  body: Readonly<Record<string, unknown>>,
+  workspaceId: string,
+): Readonly<ImportStructuredDocumentEvidenceInput> | undefined {
+  if (!isRecord(body.resource) || !isRecord(body.snapshot)) return undefined;
+  if (body.resource.resourceKind !== 'uploaded_file') return undefined;
+  if (
+    !Array.isArray(body.gitObservations) ||
+    body.gitObservations.length !== 0
+  ) {
+    return undefined;
+  }
+  if (body.gitResource !== undefined || body.sourceText !== undefined) {
+    return undefined;
+  }
+  if (body.profile !== undefined && body.profile !== 'commonmark-v1') {
+    return undefined;
+  }
+  if (
+    body.sourcePreface !== undefined &&
+    (typeof body.sourcePreface !== 'string' ||
+      Array.from(body.sourcePreface).length > 20_000)
+  ) {
+    return undefined;
+  }
+  const sourceBytes = decodeMarkdownImportSource(body);
+  if (sourceBytes === undefined) return undefined;
+  const expectedMediaType =
+    body.documentFormat === 'html' ? 'text/html' : 'application/pdf';
+  if (body.snapshot.mediaType !== expectedMediaType) return undefined;
+  const snapshot = Object.freeze({...body.snapshot, workspaceId});
+  const input = {
+    workspaceId,
+    commandIdempotencyKey: body.commandIdempotencyKey,
+    resource: Object.freeze({...body.resource, workspaceId}),
+    snapshot,
+    gitObservations: Object.freeze([]),
+    documentFormat: body.documentFormat,
+    sourceBytes,
+    ...(body.sourcePreface === undefined
+      ? {}
+      : {sourcePreface: body.sourcePreface}),
+    ...(body.documentBaseUri === undefined
+      ? {}
+      : {documentBaseUri: body.documentBaseUri}),
+  };
+  return Object.freeze(
+    input as unknown as Readonly<ImportStructuredDocumentEvidenceInput>,
+  );
 }
 
 function mapMarkdownImportBody(

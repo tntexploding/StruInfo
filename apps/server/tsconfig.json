@@ -3,6 +3,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
+    "lib": ["ES2023", "DOM"],
+    "lib": ["ES2023", "DOM"],
     "types": ["node"],
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true

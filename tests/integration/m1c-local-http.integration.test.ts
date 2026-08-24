@@ -30,12 +30,17 @@ describe('M1C local HTTP transport', () => {
 
   it('serves health and product routes from the same loopback listener', async () => {
     const importedBodies: unknown[] = [];
+    const documentBodies: unknown[] = [];
     const manualSplits: unknown[] = [];
     const entrySearches: unknown[] = [];
     const policyWrites: unknown[] = [];
     const api = stubApi({
       importMarkdown(body) {
         importedBodies.push(body);
+        return Promise.resolve(result(201, {status: 'created'}));
+      },
+      importDocument(body) {
+        documentBodies.push(body);
         return Promise.resolve(result(201, {status: 'created'}));
       },
       materializeManualInformationEntries(body) {
@@ -83,6 +88,19 @@ describe('M1C local HTTP transport', () => {
     expect(importResponse.status).toBe(201);
     await expect(importResponse.json()).resolves.toEqual({status: 'created'});
     expect(importedBodies).toEqual([{sourceText}]);
+
+    const documentBody = {
+      documentFormat: 'html',
+      sourceBase64: 'PHRpdGxlPlN5bnRoZXRpYzwvdGl0bGU+',
+    };
+    const documentResponse = await fetch(`${base}/api/v1/imports/document`, {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify(documentBody),
+    });
+    expect(documentResponse.status).toBe(201);
+    await expect(documentResponse.json()).resolves.toEqual({status: 'created'});
+    expect(documentBodies).toEqual([documentBody]);
 
     const manualSplitBody = {
       snapshotId: '11111111-1111-4111-8111-111111111111',
@@ -195,6 +213,7 @@ function stubApi(
     saveReviewPreferences: () =>
       Promise.resolve(result(200, {status: 'ok', quickTags: []})),
     importMarkdown: () => Promise.resolve(result(201, {status: 'created'})),
+    importDocument: () => Promise.resolve(result(201, {status: 'created'})),
     materializeInformationEntries: () =>
       Promise.resolve(result(201, {status: 'created'})),
     materializeManualInformationEntries: () =>

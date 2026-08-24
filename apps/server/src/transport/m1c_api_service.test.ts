@@ -402,6 +402,60 @@ describe('M1cApiService', () => {
     ).resolves.toEqual(sourceBytes);
   });
 
+  it('imports HTML through a textual projection while retaining exact raw bytes', async () => {
+    const blobs = new MemoryBlobStore();
+    const captures: EvidenceCaptureRepositoryRequest[] = [];
+    const service = createService({
+      blobStore: blobs,
+      evidenceRepository: {
+        saveCapture(request) {
+          captures.push(request);
+          return Promise.resolve(Object.freeze({status: 'created'}));
+        },
+      },
+    });
+    const sourceBytes = new TextEncoder().encode(
+      '<!doctype html><html><head><title>Synthetic</title></head><body><main><h1>Heading</h1><p>Body.</p></main></body></html>',
+    );
+    const rawSha256 = createHash('sha256').update(sourceBytes).digest('hex');
+
+    const result = await service.importDocument({
+      commandIdempotencyKey: 'local-api-html-upload-1',
+      documentFormat: 'html',
+      resource: {
+        resourceId: RESOURCE_ID,
+        resourceKind: 'uploaded_file',
+        sourceKey: `synthetic.html#sha256:${rawSha256}`,
+      },
+      snapshot: {
+        snapshotId: SNAPSHOT_ID,
+        resourceId: RESOURCE_ID,
+        capturedAt: '2040-01-02T03:04:05Z',
+        mediaType: 'text/html',
+      },
+      gitObservations: [],
+      profile: 'commonmark-v1',
+      sourceBase64: Buffer.from(sourceBytes).toString('base64'),
+      sourcePreface: '# Imported HTML',
+    });
+
+    expect(result.statusCode).toBe(201);
+    expect(result.body).toMatchObject({status: 'created'});
+    expect(captures).toHaveLength(1);
+    expect(captures[0]?.capture.snapshot.rawSha256).toBe(rawSha256);
+    expect(captures[0]?.capture.snapshot.mediaType).toBe('text/html');
+    expect(captures[0]?.capture.snapshot.canonicalContentSha256).not.toBe(
+      rawSha256,
+    );
+    await expect(
+      blobs.read({
+        algorithm: 'sha256',
+        digest: rawSha256,
+        byteLength: sourceBytes.byteLength,
+      }),
+    ).resolves.toEqual(sourceBytes);
+  });
+
   it('rejects malformed or non-upload Base64 import requests before persistence', async () => {
     const saveCapture = vi.fn(() =>
       Promise.resolve(Object.freeze({status: 'created' as const})),

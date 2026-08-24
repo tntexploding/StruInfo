@@ -1,21 +1,24 @@
-export const LOCAL_TEXT_FILE_MAX_BYTES = 1_048_576;
+export const LOCAL_DOCUMENT_FILE_MAX_BYTES = 1_048_576;
 
 const LOCAL_FILE_NAME_MAX_CODE_POINTS = 255;
 const BASE64_ALPHABET =
   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
-export type LocalTextFileMediaType = 'text/markdown' | 'text/plain';
+export type LocalDocumentFormat = 'markdown' | 'html' | 'pdf';
+export type LocalDocumentMediaType =
+  'text/markdown' | 'text/plain' | 'text/html' | 'application/pdf';
 
-export interface PreparedLocalTextFile {
+export interface PreparedLocalDocumentFile {
   readonly fileName: string;
-  readonly mediaType: LocalTextFileMediaType;
+  readonly documentFormat: LocalDocumentFormat;
+  readonly mediaType: LocalDocumentMediaType;
   readonly byteLength: number;
   readonly sourceText: string;
   readonly sourceBytes: Uint8Array;
 }
 
-export type PrepareLocalTextFileResult =
-  | Readonly<{status: 'ready'; value: Readonly<PreparedLocalTextFile>}>
+export type PrepareLocalDocumentFileResult =
+  | Readonly<{status: 'ready'; value: Readonly<PreparedLocalDocumentFile>}>
   | Readonly<{
       status: 'rejected';
       code:
@@ -23,33 +26,41 @@ export type PrepareLocalTextFileResult =
         | 'file_type_unsupported'
         | 'file_too_large'
         | 'file_utf8_invalid'
-        | 'file_text_invalid';
+        | 'file_content_invalid';
     }>;
 
-export interface ComposedLocalTextFileSource {
+export interface ComposedLocalDocumentSource {
   readonly sourceBase64: string;
   readonly byteLength: number;
   readonly sha256: string;
   readonly defaultSourceKey: string;
+  readonly documentFormat: LocalDocumentFormat;
+  readonly sourcePreface?: string;
   readonly composed: boolean;
 }
 
-export function prepareLocalTextFile(
+export function prepareLocalDocumentFile(
   fileName: string,
   bytes: Uint8Array,
-): PrepareLocalTextFileResult {
+): PrepareLocalDocumentFileResult {
   const normalizedName = normalizeFileName(fileName);
   if (normalizedName === undefined) {
     return Object.freeze({status: 'rejected', code: 'file_name_invalid'});
   }
-  const mediaType = mediaTypeForFileName(normalizedName);
-  if (mediaType === undefined) {
+  const format = formatForFileName(normalizedName);
+  if (format === undefined) {
     return Object.freeze({status: 'rejected', code: 'file_type_unsupported'});
   }
-  if (bytes.byteLength > LOCAL_TEXT_FILE_MAX_BYTES) {
+  if (bytes.byteLength > LOCAL_DOCUMENT_FILE_MAX_BYTES) {
     return Object.freeze({status: 'rejected', code: 'file_too_large'});
   }
   const ownedBytes = Uint8Array.from(bytes);
+  if (format.documentFormat === 'pdf') {
+    if (!startsWithPdfMagic(ownedBytes)) {
+      return Object.freeze({status: 'rejected', code: 'file_content_invalid'});
+    }
+    return readyFile(normalizedName, format, ownedBytes, '');
+  }
   let sourceText: string;
   try {
     sourceText = new TextDecoder('utf-8', {fatal: true}).decode(ownedBytes);
@@ -57,37 +68,55 @@ export function prepareLocalTextFile(
     return Object.freeze({status: 'rejected', code: 'file_utf8_invalid'});
   }
   if (sourceText.includes('\u0000') || sourceText.trim().length === 0) {
-    return Object.freeze({status: 'rejected', code: 'file_text_invalid'});
+    return Object.freeze({status: 'rejected', code: 'file_content_invalid'});
   }
-  return Object.freeze({
-    status: 'ready' as const,
-    value: Object.freeze({
-      fileName: normalizedName,
-      mediaType,
-      byteLength: ownedBytes.byteLength,
-      sourceText,
-      sourceBytes: ownedBytes,
-    }),
-  });
+  return readyFile(normalizedName, format, ownedBytes, sourceText);
 }
 
-export async function composeLocalTextFileSource(
-  file: Readonly<PreparedLocalTextFile>,
+export async function composeLocalDocumentSource(
+  file: Readonly<PreparedLocalDocumentFile>,
   prefix: string,
-): Promise<Readonly<ComposedLocalTextFileSource> | undefined> {
+): Promise<Readonly<ComposedLocalDocumentSource> | undefined> {
   const normalizedPrefix = prefix.trim();
-  const composed = normalizedPrefix !== '';
-  const bytes = composed
+  const composeIntoRaw =
+    file.documentFormat === 'markdown' && normalizedPrefix !== '';
+  const bytes = composeIntoRaw
     ? new TextEncoder().encode(`${normalizedPrefix}\n\n${file.sourceText}`)
     : Uint8Array.from(file.sourceBytes);
-  if (bytes.byteLength > LOCAL_TEXT_FILE_MAX_BYTES) return undefined;
+  if (bytes.byteLength > LOCAL_DOCUMENT_FILE_MAX_BYTES) return undefined;
   const sha256 = await sha256Hex(bytes);
   return Object.freeze({
     sourceBase64: encodeBase64(bytes),
     byteLength: bytes.byteLength,
     sha256,
     defaultSourceKey: `${file.fileName}#sha256:${sha256}`,
-    composed,
+    documentFormat: file.documentFormat,
+    ...(file.documentFormat === 'markdown' || normalizedPrefix === ''
+      ? {}
+      : {sourcePreface: normalizedPrefix}),
+    composed: composeIntoRaw,
+  });
+}
+
+function readyFile(
+  fileName: string,
+  format: Readonly<{
+    documentFormat: LocalDocumentFormat;
+    mediaType: LocalDocumentMediaType;
+  }>,
+  sourceBytes: Uint8Array,
+  sourceText: string,
+): PrepareLocalDocumentFileResult {
+  return Object.freeze({
+    status: 'ready' as const,
+    value: Object.freeze({
+      fileName,
+      documentFormat: format.documentFormat,
+      mediaType: format.mediaType,
+      byteLength: sourceBytes.byteLength,
+      sourceText,
+      sourceBytes,
+    }),
   });
 }
 
@@ -105,14 +134,49 @@ function normalizeFileName(value: string): string | undefined {
   return normalized;
 }
 
-function mediaTypeForFileName(
-  fileName: string,
-): LocalTextFileMediaType | undefined {
+function formatForFileName(fileName: string):
+  | Readonly<{
+      documentFormat: LocalDocumentFormat;
+      mediaType: LocalDocumentMediaType;
+    }>
+  | undefined {
   const lower = fileName.toLowerCase();
   if (lower.endsWith('.md') || lower.endsWith('.markdown')) {
-    return 'text/markdown';
+    return Object.freeze({
+      documentFormat: 'markdown' as const,
+      mediaType: 'text/markdown' as const,
+    });
   }
-  return lower.endsWith('.txt') ? 'text/plain' : undefined;
+  if (lower.endsWith('.txt')) {
+    return Object.freeze({
+      documentFormat: 'markdown' as const,
+      mediaType: 'text/plain' as const,
+    });
+  }
+  if (lower.endsWith('.html') || lower.endsWith('.htm')) {
+    return Object.freeze({
+      documentFormat: 'html' as const,
+      mediaType: 'text/html' as const,
+    });
+  }
+  if (lower.endsWith('.pdf')) {
+    return Object.freeze({
+      documentFormat: 'pdf' as const,
+      mediaType: 'application/pdf' as const,
+    });
+  }
+  return undefined;
+}
+
+function startsWithPdfMagic(bytes: Uint8Array): boolean {
+  return (
+    bytes.byteLength >= 5 &&
+    bytes[0] === 0x25 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x44 &&
+    bytes[3] === 0x46 &&
+    bytes[4] === 0x2d
+  );
 }
 
 function encodeBase64(bytes: Uint8Array): string {

@@ -43,6 +43,12 @@ export interface ImportMarkdownEvidenceInput {
   readonly gitObservations: readonly Readonly<GitSnapshotObservationInput>[];
   readonly profile: MarkdownProfile;
   readonly sourceUtf8: Uint8Array;
+  /**
+   * Optional exact source bytes when sourceUtf8 is a deterministic textual
+   * projection. Original bytes remain the Snapshot raw Blob while the
+   * projection continues through the accepted Markdown materializer.
+   */
+  readonly rawSourceBytes?: Uint8Array;
   readonly documentBaseUri?: string;
 }
 
@@ -85,9 +91,17 @@ export async function importMarkdownEvidence(
   dependencies: Readonly<MarkdownImportDependencies>,
   input: Readonly<ImportMarkdownEvidenceInput>,
 ): Promise<ImportMarkdownEvidenceResult> {
+  const rawSourceBytes = input.rawSourceBytes ?? input.sourceUtf8;
   let rawPhysicalBlob: Readonly<BlobIdentity>;
+  let projectionPhysicalBlob: Readonly<BlobIdentity>;
   try {
-    rawPhysicalBlob = await dependencies.blobStore.put(input.sourceUtf8);
+    rawPhysicalBlob = await dependencies.blobStore.put(rawSourceBytes);
+    projectionPhysicalBlob =
+      rawSourceBytes === input.sourceUtf8 ||
+      (rawPhysicalBlob.byteLength === input.sourceUtf8.byteLength &&
+        rawPhysicalBlob.digest === digestBytes(input.sourceUtf8))
+        ? rawPhysicalBlob
+        : await dependencies.blobStore.put(input.sourceUtf8);
   } catch (error) {
     return mapBlobFailure(error);
   }
@@ -99,11 +113,21 @@ export async function importMarkdownEvidence(
     digest: rawPhysicalBlob.digest,
     byteLength: rawPhysicalBlob.byteLength,
   });
+  const projectionBlob = Object.freeze({
+    workspaceId: input.workspaceId,
+    blobId: deriveEvidenceBlobId(
+      input.workspaceId,
+      projectionPhysicalBlob.digest,
+    ),
+    digestAlgorithm: 'sha256' as const,
+    digest: projectionPhysicalBlob.digest,
+    byteLength: projectionPhysicalBlob.byteLength,
+  });
   const parsed = parseMarkdownStructure({
     workspaceId: input.workspaceId,
     resourceId: input.resource.resourceId,
     snapshotId: input.snapshot.snapshotId,
-    rawBlob,
+    rawBlob: projectionBlob,
     profile: input.profile,
     sourceUtf8: input.sourceUtf8,
     ...(input.documentBaseUri === undefined
@@ -114,10 +138,14 @@ export async function importMarkdownEvidence(
     return markdownIssueResult(parsed.issue);
   }
 
-  const snapshot = createSnapshot(input.snapshot, rawBlob, parsed.value);
+  const projectionSnapshot = createSnapshot(
+    input.snapshot,
+    projectionBlob,
+    parsed.value,
+  );
   const materialized = materializeMarkdownEvidence({
     parsed: parsed.value,
-    snapshot,
+    snapshot: projectionSnapshot,
     mediaPolicy: 'external_reference_only',
     sourceUtf8: input.sourceUtf8,
   });
@@ -127,7 +155,7 @@ export async function importMarkdownEvidence(
 
   const normalizedIdentity = await persistNormalizedText(
     dependencies.blobStore,
-    rawPhysicalBlob,
+    projectionPhysicalBlob,
     materialized.value.structure.normalizedTextUtf8,
   );
   if (normalizedIdentity.status === 'failed') {
@@ -154,6 +182,7 @@ export async function importMarkdownEvidence(
     rawEvidenceBlob.blobId === materialized.value.textBlob.blobId
       ? [rawEvidenceBlob]
       : [rawEvidenceBlob, materialized.value.textBlob];
+  const snapshot = createSnapshot(input.snapshot, rawBlob, parsed.value);
   const writeResult = await executeCaptureEvidence(
     dependencies.evidenceRepository,
     {

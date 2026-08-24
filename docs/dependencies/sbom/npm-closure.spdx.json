@@ -2,15 +2,16 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "StruInfo-M1A-markdown-dependency-99F261C35311919380BF6AEF018E0B2A9D076DC7937A5EDE1E0D7F26F56192A0",
-  "documentNamespace": "https://struinfo.invalid/spdx/m1a/markdown-dependency/99F261C35311919380BF6AEF018E0B2A9D076DC7937A5EDE1E0D7F26F56192A0",
+  "name": "StruInfo-M1E-5B-document-import-10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A",
+  "documentNamespace": "https://struinfo.invalid/spdx/m1e/document-import/10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A",
   "creationInfo": {
-    "created": "2026-08-11T00:00:00Z",
+    "created": "2026-08-24T00:00:00Z",
     "creators": [
       "Tool: StruInfo M0-S Maintenance audit-npm-closure.mjs",
       "Tool: M0-S-FOUNDATION-MAINT-001 exact-closure materialization",
       "Tool: StruInfo M1A-MD-DEP-MAINT-001 audit-mdast-closure.mjs",
-      "Tool: StruInfo M1A-MD-DEP-MAINT-001 materialize-dependency-increment.mjs"
+      "Tool: StruInfo M1A-MD-DEP-MAINT-001 materialize-dependency-increment.mjs",
+      "Tool: StruInfo M1E-5B exact document-import dependency materialization"
     ],
     "licenseListVersion": "3.27"
   },
@@ -4092,6 +4093,37 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
+      "SPDXID": "SPDXRef-Package-2e887580fed655ab",
+      "name": "entities",
+      "versionInfo": "8.0.0",
+      "downloadLocation": "https://registry.npmjs.org/entities/-/entities-8.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "Copyright (c) Felix Böhm | All rights reserved.",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "8E8B16388E19C12FC80F9F75F518A0F83D99428BE6765A38F04C264A078CC25B"
+        },
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "CF07F325E710FD47A3EADBAC32AC00A94FFA28BD97681D95676260E7825EE9A84D046347E8493A8378E33421747C6F4459028664D75D3635391756509FFB019C"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/entities@8.0.0"
+        }
+      ],
+      "supplier": "Person: Felix Böhm",
+      "originator": "NOASSERTION",
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity admitted by M1E-5B; legal material retained under docs/dependencies/licenses/npm/."
+    },
+    {
       "SPDXID": "SPDXRef-Package-6a37646cc624feb0",
       "name": "es-define-property",
       "versionInfo": "1.0.1",
@@ -7905,6 +7937,37 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
+      "SPDXID": "SPDXRef-Package-e18dc8ba2437a39c",
+      "name": "parse5",
+      "versionInfo": "8.0.1",
+      "downloadLocation": "https://registry.npmjs.org/parse5/-/parse5-8.0.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2013-2019 Ivan Nikulin (ifaaan@gmail.com, https://github.com/inikulin)",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "D94EC8606E3CEF24B8EC001AC121DF5D7938F015BE69615DA27B53A082F86832"
+        },
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "CF57BF1CC1BDD286D219E89D9658B7863EDC6E8728BB4FF06B91DA72F237012C77E0F79C36335079A1CDA395886695A87CDF64824A95D6AE58BD77B71741683F"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/parse5@8.0.1"
+        }
+      ],
+      "supplier": "Person: Ivan Nikulin",
+      "originator": "NOASSERTION",
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "Role=runtime; category=ROUTINE_REVIEW; exact tarball identity admitted by M1E-5B; legal material retained under docs/dependencies/licenses/npm/."
+    },
+    {
       "SPDXID": "SPDXRef-Package-c3fdd1b6fb725cb3",
       "name": "parseurl",
       "versionInfo": "1.3.3",
@@ -8058,6 +8121,37 @@
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-62d398829a7647cd",
+      "name": "pdfjs-dist",
+      "versionInfo": "6.2.108",
+      "downloadLocation": "https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-6.2.108.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "Apache-2.0",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA256",
+          "checksumValue": "B3E68D5CDA70551A90B3F771419D379E20FC788CE056FA32DE73608E01DF47F4"
+        },
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "63115BF9241CA1D376AE75FD4E7DDD1D896A7DBECD8E5CF37CE34FA4977E00AA0AB548C475EBD37DB0B4EDDE5371CCF338AEB6EB56AE4643FF33C3811ECF6F15"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/pdfjs-dist@6.2.108"
+        }
+      ],
+      "supplier": "Organization: Mozilla",
+      "originator": "NOASSERTION",
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "Role=runtime; category=ROUTINE_REVIEW; exact tarball identity admitted by M1E-5B; optional native Canvas dependency is excluded because text-layer extraction does not use it; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
       "SPDXID": "SPDXRef-Package-7683462a532876db",
@@ -11088,6 +11182,16 @@
       "spdxElementId": "SPDXRef-RootPackage",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-7d43ffc0d6d0b86c"
+    },
+    {
+      "spdxElementId": "SPDXRef-RootPackage",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-e18dc8ba2437a39c"
+    },
+    {
+      "spdxElementId": "SPDXRef-RootPackage",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-62d398829a7647cd"
     }
   ]
 }

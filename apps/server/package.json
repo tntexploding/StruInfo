@@ -17,6 +17,8 @@
     "@nestjs/platform-express": "11.1.28",
     "drizzle-orm": "0.45.2",
     "mdast-util-from-markdown": "2.0.3",
+    "parse5": "8.0.1",
+    "pdfjs-dist": "6.2.108",
     "pg": "8.22.0",
     "pg-boss": "12.26.3",
     "reflect-metadata": "0.2.2",

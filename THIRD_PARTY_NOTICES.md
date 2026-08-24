@@ -1,9 +1,10 @@
 # Third-Party Notices
 
 - Foundation task: `M0-S-FOUNDATION-MAINT-001`
-- Dependency increment: `M1A-MD-DEP-MAINT-001`
-- Tracked lock SHA-256: `99F261C35311919380BF6AEF018E0B2A9D076DC7937A5EDE1E0D7F26F56192A0`
-- Pre-increment baseline lock SHA-256: `A783E1C5B2DADD8B653D8E16446847530473D5569BB08830D7FC03D79400880B`
+- Dependency increments: `M1A-MD-DEP-MAINT-001`, `M1E-5B-DOCUMENT-IMPORT`
+- Tracked lock SHA-256: `10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A`
+- M1E-5B pre-increment lock SHA-256: `99F261C35311919380BF6AEF018E0B2A9D076DC7937A5EDE1E0D7F26F56192A0`
+- Foundation pre-M1A lock SHA-256: `A783E1C5B2DADD8B653D8E16446847530473D5569BB08830D7FC03D79400880B`
 - Scope: tracked Windows x64 and Linux x64/glibc npm closure plus the two
   pinned GitHub Actions
 - Status: dependency attribution index; not a public-release authorization
@@ -147,6 +148,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `ee-first@1.1.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ee-first@1.1.1/LICENSE` |
 | `electron-to-chromium@1.5.402` | transitive | `ISC` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/electron-to-chromium@1.5.402/LICENSE` |
 | `encodeurl@2.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/encodeurl@2.0.0/LICENSE` |
+| `entities@8.0.0` | transitive | `BSD-2-Clause` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/entities@8.0.0/LICENSE` |
 | `es-define-property@1.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/es-define-property@1.0.1/LICENSE` |
 | `es-errors@1.3.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/es-errors@1.3.0/LICENSE` |
 | `es-module-lexer@2.3.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/es-module-lexer@2.3.1/LICENSE` |
@@ -270,11 +272,13 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `optionator@0.9.4` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/optionator@0.9.4/LICENSE` |
 | `p-limit@3.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/p-limit@3.1.0/license` |
 | `p-locate@5.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/p-locate@5.0.0/license` |
+| `parse5@8.0.1` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/parse5@8.0.1/LICENSE` |
 | `parseurl@1.3.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/parseurl@1.3.3/LICENSE` |
 | `path-exists@4.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/path-exists@4.0.0/license` |
 | `path-key@3.1.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/path-key@3.1.1/license` |
 | `path-to-regexp@8.4.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/path-to-regexp@8.4.2/LICENSE` |
 | `pathe@2.0.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/pathe@2.0.3/LICENSE` |
+| `pdfjs-dist@6.2.108` | runtime | `Apache-2.0` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/pdfjs-dist@6.2.108/LICENSE` |
 | `pg-boss@12.26.3` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/pg-boss@12.26.3/LICENSE` |
 | `pg-cloudflare@1.4.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/pg-cloudflare@1.4.0/LICENSE` |
 | `pg-connection-string@2.14.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/pg-connection-string@2.14.0/LICENSE` |

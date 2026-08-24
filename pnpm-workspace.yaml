@@ -14,6 +14,8 @@ minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
 
 blockExoticSubdeps: true
+ignoredOptionalDependencies:
+  - '@napi-rs/canvas'
 strictDepBuilds: true
 allowBuilds:
   esbuild@0.28.1: false

@@ -85,6 +85,14 @@ export class M1cApiController {
     writeLocalApiResponse(response, await this.#service.importMarkdown(body));
   }
 
+  @Post('imports/document')
+  public async importDocument(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(response, await this.#service.importDocument(body));
+  }
+
   @Get('evidence/snapshots/:snapshotId/split-proposals')
   public async aiSplitProposals(
     @Param('snapshotId') snapshotId: string,

@@ -22,6 +22,7 @@ import type {
   InformationEntrySearchResponse,
   InformationDocumentTagWriteResponse,
   M1cHttpResponse,
+  DocumentImportResponse,
   MarkdownImportResponse,
   ProcessingRunCancelResponse,
   ProcessingRunListResponse,
@@ -73,6 +74,10 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<MarkdownImportResponse>>;
+  importDocument(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<DocumentImportResponse>>;
   materializeInformationEntries(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -231,6 +236,7 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     loadReviewPreferences: reject,
     saveReviewPreferences: reject,
     importMarkdown: reject,
+    importDocument: reject,
     materializeInformationEntries: reject,
     materializeManualInformationEntries: reject,
     reviseInformationEntry: reject,
@@ -315,6 +321,8 @@ export function createM1cApiClient(
       ),
     importMarkdown: (body, options) =>
       post<MarkdownImportResponse>('api/v1/imports/markdown', body, options),
+    importDocument: (body, options) =>
+      post<DocumentImportResponse>('api/v1/imports/document', body, options),
     materializeInformationEntries: (body, options) =>
       post<InformationEntryMaterializeResponse>(
         'api/v1/entries/materialize',

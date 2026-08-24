@@ -25,7 +25,7 @@ import type {
   M1cHttpResponse,
   ProcessingRunCancelResponse,
   ProcessingRunListResponse,
-  MarkdownImportResponse,
+  DocumentImportResponse,
   ReviewPreferencesResponse,
   ReviewPreferencesWrite,
   WorkspaceResponse,
@@ -487,9 +487,9 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     );
   }
 
-  async function importMarkdown(body: unknown): Promise<ActionFeedback> {
+  async function importDocument(body: unknown): Promise<ActionFeedback> {
     try {
-      const response = await apiClient.importMarkdown(body);
+      const response = await apiClient.importDocument(body);
       const feedback = importFeedback(response.body);
       if (
         response.body.status === 'created' ||
@@ -598,7 +598,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
         <MaterialsWorkspace
           snapshots={snapshots}
           selectedSnapshotId={selectedEvidence?.snapshotId}
-          onImport={importMarkdown}
+          onImport={importDocument}
           onOpenEvidence={(snapshotId, target, includePrivate) =>
             void openEvidence(snapshotId, target, undefined, includePrivate)
           }
@@ -738,7 +738,7 @@ function RuntimeNotice({
   );
 }
 
-function importFeedback(body: MarkdownImportResponse): ActionFeedback {
+function importFeedback(body: DocumentImportResponse): ActionFeedback {
   if (body.status === 'created') {
     return {
       kind: 'success',

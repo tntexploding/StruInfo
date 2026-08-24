@@ -1,6 +1,6 @@
 # StruInfo 产品需求
 
-- 状态：M1E-5A 本地 UTF-8 文本文件导入已实现；无 AI 五步主线完整可用
+- 状态：M1E-5B 本地 HTML/PDF 文字层导入已实现；无 AI 五步主线完整可用
 - 最近更新：2026-08-24
 - 目的：定义“来源可追溯、AI 可增强且无 AI 仍完整可用的个人知识摄取与维护系统”的产品边界和首个验证切片
 - 历史基线：[产品需求 v0.1](archive/product-requirements-v0.1.md)
@@ -82,7 +82,7 @@ StruInfo 的价值不是“收藏更多网页”，而是降低五种成本：
 ### 3.1 当前资料进入与条目评价闭环
 
 ```text
-手工 Markdown / 固定 Git Markdown / 本地 UTF-8 Markdown 或文本文件
+手工 Markdown / 固定 Git Markdown / 本地 Markdown、文本、HTML 或带文字层 PDF
   → 保存包体外原始 Blob、来源身份和不可变 Snapshot
   → 用确定性 profile 生成 DocumentNode / Fragment
   → 用户选择 Snapshot，按 section 结构物化当前 InformationEntry
@@ -183,7 +183,7 @@ StruInfo 的价值不是“收藏更多网页”，而是降低五种成本：
 | 正式知识层 | Entry 节点、自动相似边与用户关系；历史 Knowledge 表兼容保留 | M1E-2 中心图谱入口已实现 |
 | 控制层 | 外部个人标签偏好、版本化联系策略、当前联系 override；旧准入/判断/变更集行 | 前三项活动，旧行仅兼容 |
 
-当前导入接受手工 Markdown、固定 Git Markdown，或用户明确选择的一份本地 UTF-8 `.md`、`.markdown`、`.txt` 文件。导入时选择 `commonmark-v1` 或
+当前导入接受手工 Markdown、固定 Git Markdown，或用户明确选择的一份本地 `.md`、`.markdown`、`.txt`、`.html`、`.htm`、`.pdf` 文件。HTML/PDF 原始字节作为外部 Blob 证据保存，服务端生成单独文本投影供现有结构与拆分管线使用。导入时选择 `commonmark-v1` 或
 `ruanyf-weekly-v1`，由确定性解析器保存完整结构。拆分页让用户选择尚未生成 Entry 的
 Snapshot：可以直接按 section 确定性物化，也可以在本地查看全文和精确 Fragment，在既有
 边界或 Fragment 内 Unicode 标量边界合并/重新拆开连续分组、编辑标题后一次提交。对于公开 Snapshot，用户还可显式发起
@@ -499,7 +499,7 @@ QQ 中的普通自然语言不能直接执行批量批准、合并、删除等�
 
 - 单用户、本机回环地址的浏览器界面；
 - “总览、导入、拆分、标签、联系、查询、正式知识”七页活动主线；
-- 手工 Markdown、固定 Git Markdown、本地 UTF-8 Markdown/文本文件、Resource、Snapshot、DocumentNode、Fragment 和基本去重；
+- 手工 Markdown、固定 Git Markdown、本地 Markdown/文本/HTML/带文字层 PDF、Resource、Snapshot、DocumentNode、Fragment 和基本去重；
 - 当前 InformationEntry、确定性/人工/AI 首次结构物化、内容/类型/领域标签、两项评分和当前 Document 标签；
 - 确定性联系投影、逐对人工控制，以及正式图谱中的用户编辑/创建关系；
 - 文本/结构/来源/时间/隐私/有限联系查询、Entry 中心图谱和精确证据返回；
@@ -684,8 +684,13 @@ M1E-4B 不修改 Snapshot/Fragment，不新增依赖，不把个人数据放入�
 
 ADR 0018 已把单份本地 `.md`、`.markdown` 或 `.txt` 文件接入现有导入页。浏览器只读取用户明确选择/拖入的文件，检查基础文件名、严格 UTF-8、空文本/NUL 和现有 1 MiB 上限，不发送本机目录路径。无前置文字时，canonical Base64 解码后的字节必须与外部 Blob 中的 Snapshot 原始字节一致；默认来源身份使用基础文件名与 SHA-256。用户填写前置文字时，界面必须明确这是组合后的新 Snapshot。
 
-服务端只允许 `uploaded_file` 使用 Base64 请求字段，并在写入前完成闭合解码；随后继续使用既有 Evidence、Blob、CommonMark 结构、Fragment、隐私传播和空 Snapshot Split 队列。失败重试复用同一 command/resource/snapshot/capturedAt 身份，成功后才刷新列表和生成下一份身份。本切片不包括 PDF/DOCX/OCR、任意二进制、多文件批量、目录监视、云同步或仓库内上传目录。
+服务端只允许 `uploaded_file` 使用 Base64 请求字段，并在写入前完成闭合解码；随后继续使用既有 Evidence、Blob、CommonMark 结构、Fragment、隐私传播和空 Snapshot Split 队列。失败重试复用同一 command/resource/snapshot/capturedAt 身份，成功后才刷新列表和生成下一份身份。M1E-5A 本身不接受二进制格式；后继 M1E-5B 通过独立投影边界接入 HTML/PDF。多文件批量、目录监视、云同步或仓库内上传目录仍不在该切片。
 
+### 7.1.11 M1E-5B 本地 HTML/PDF 文字层导入
+
+ADR 0019 已把单份 `.html`、`.htm` 和带文字层 `.pdf` 接入同一 Import → Split 主链。浏览器发送原始文件的 canonical Base64；服务端保留完整原始 Blob，并在任何数据库写入前生成 UTF-8 Markdown 投影。HTML 只提取标题、语义正文、列表、引用、预格式文本、表格行、链接和图片替代文字，跳过脚本、样式、表单、嵌入/隐藏内容且不访问网络。PDF 按页读取已有文字层并加入页标记。
+
+原始文件与文本投影都遵守现有 1 MiB 边界。HTML 必须是严格 UTF-8；PDF 必须有合法签名、无需密码且至少有可用文字。可选前置文字只加入 HTML/PDF 文本投影，不改写所选原始文件。隐私、来源身份、幂等导入、Fragment、人工/确定性/AI Split 和个人数据包语义保持不变。首版不声称 OCR、版面复原、表格/公式/图片理解，也不包含 Office、批量导入、目录监视或远程网页抓取。
 ### 7.2 MVP-1：偏好学习与每周自适应摄取
 
 MVP-0 证明知识核心可用后，再让系统持续处理该信源并逐步学习用户偏好：

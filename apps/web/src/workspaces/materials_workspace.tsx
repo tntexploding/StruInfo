@@ -13,10 +13,10 @@ import type {
   WorkspaceTransferFeedback,
 } from '../components/product_types.js';
 import {
-  LOCAL_TEXT_FILE_MAX_BYTES,
-  composeLocalTextFileSource,
-  prepareLocalTextFile,
-  type PreparedLocalTextFile,
+  LOCAL_DOCUMENT_FILE_MAX_BYTES,
+  composeLocalDocumentSource,
+  prepareLocalDocumentFile,
+  type PreparedLocalDocumentFile,
 } from './local_file_import.js';
 
 interface ImportIdentity {
@@ -32,7 +32,7 @@ type SourceMode = 'manual_text' | 'git_file' | 'uploaded_file';
 type LocalFileState =
   | Readonly<{status: 'idle'}>
   | Readonly<{status: 'loading'; fileName: string}>
-  | Readonly<{status: 'ready'; value: Readonly<PreparedLocalTextFile>}>
+  | Readonly<{status: 'ready'; value: Readonly<PreparedLocalDocumentFile>}>
   | Readonly<{status: 'error'; fileName: string; message: string}>;
 
 export interface MaterialsWorkspaceProps {
@@ -94,7 +94,7 @@ export function MaterialsWorkspace({
     localFileReadGeneration.current = generation;
     setLocalFile({status: 'loading', fileName: file.name});
     try {
-      const prepared = prepareLocalTextFile(
+      const prepared = prepareLocalDocumentFile(
         file.name,
         new Uint8Array(await file.arrayBuffer()),
       );
@@ -108,7 +108,10 @@ export function MaterialsWorkspace({
         return;
       }
       setLocalFile({status: 'ready', value: prepared.value});
-      if (prepared.value.mediaType === 'text/plain') {
+      if (
+        prepared.value.documentFormat !== 'markdown' ||
+        prepared.value.mediaType === 'text/plain'
+      ) {
         setProfile('commonmark-v1');
       }
     } catch {
@@ -139,6 +142,8 @@ export function MaterialsWorkspace({
       const uploadedSource = sourceMode === 'uploaded_file';
       let resolvedSourceKey: string;
       let mediaType = 'text/markdown';
+      let documentFormat: 'markdown' | 'html' | 'pdf' = 'markdown';
+      let projectedSourcePreface: string | undefined;
       let sourcePayload: Readonly<
         {sourceText: string} | {sourceBase64: string}
       >;
@@ -147,11 +152,11 @@ export function MaterialsWorkspace({
           setFeedback({
             kind: 'error',
             title: '尚未选择可导入文件',
-            detail: '请选择一个有效的 UTF-8 Markdown 或文本文件。',
+            detail: '请选择有效的 Markdown、TXT、HTML 或含文字层的 PDF。',
           });
           return;
         }
-        const composed = await composeLocalTextFileSource(
+        const composed = await composeLocalDocumentSource(
           localFile.value,
           sourcePreface,
         );
@@ -166,6 +171,8 @@ export function MaterialsWorkspace({
         resolvedSourceKey = sourceKey.trim() || composed.defaultSourceKey;
         mediaType = localFile.value.mediaType;
         sourcePayload = {sourceBase64: composed.sourceBase64};
+        documentFormat = composed.documentFormat;
+        projectedSourcePreface = composed.sourcePreface;
       } else {
         resolvedSourceKey =
           sourceKey.trim() || `import-${identity.snapshotId.slice(0, 8)}`;
@@ -227,8 +234,12 @@ export function MaterialsWorkspace({
               },
             ]
           : [],
+        documentFormat,
         profile,
         ...sourcePayload,
+        ...(projectedSourcePreface === undefined
+          ? {}
+          : {sourcePreface: projectedSourcePreface}),
         ...(canonicalUri.trim() === ''
           ? {}
           : {documentBaseUri: canonicalUri.trim()}),
@@ -369,8 +380,10 @@ export function MaterialsWorkspace({
             >
               <div className="local-file-import__heading">
                 <div>
-                  <h3 id="local-file-import-title">选择本地文本文件</h3>
-                  <p>.md / .markdown / .txt · UTF-8 · 最大 1 MiB</p>
+                  <h3 id="local-file-import-title">选择本地文档</h3>
+                  <p>
+                    .md / .markdown / .txt / .html / .htm / .pdf · 最大 1 MiB
+                  </p>
                 </div>
                 {localFile.status === 'ready' ? (
                   <button
@@ -385,9 +398,9 @@ export function MaterialsWorkspace({
               <input
                 ref={fileInput}
                 className="local-file-input"
-                id="local-text-file"
+                id="local-document-file"
                 type="file"
-                accept=".md,.markdown,.txt,text/markdown,text/plain"
+                accept=".md,.markdown,.txt,.html,.htm,.pdf,text/markdown,text/plain,text/html,application/pdf"
                 onChange={(event) => {
                   void readLocalFile(
                     event.currentTarget.files?.item(0) ?? undefined,
@@ -407,7 +420,10 @@ export function MaterialsWorkspace({
                   );
                 }}
               >
-                <label className="secondary-action" htmlFor="local-text-file">
+                <label
+                  className="secondary-action"
+                  htmlFor="local-document-file"
+                >
                   选择文件
                 </label>
                 <span>或将一份文件拖到这里</span>
@@ -546,7 +562,8 @@ export function MaterialsWorkspace({
               disabled={
                 sourceMode === 'uploaded_file' &&
                 localFile.status === 'ready' &&
-                localFile.value.mediaType === 'text/plain'
+                (localFile.value.mediaType === 'text/plain' ||
+                  localFile.value.documentFormat !== 'markdown')
               }
               onChange={(event) => {
                 setProfile(
@@ -581,15 +598,18 @@ export function MaterialsWorkspace({
             />
             {sourceMode === 'uploaded_file' ? (
               <small>
-                留空时保留所选文件的精确原始字节；填写后会明确生成一份组合后的新
-                Snapshot。
+                HTML/PDF 始终保留精确原始字节；前置文字只加入可拆分文字投影。
+                Markdown/TXT 填写后会生成一份组合后的新 Snapshot。
               </small>
             ) : null}
           </label>
           <label className="field field--full">
             <span>
               {sourceMode === 'uploaded_file'
-                ? '文件正文预览'
+                ? localFile.status === 'ready' &&
+                  localFile.value.documentFormat === 'pdf'
+                  ? 'PDF 导入说明'
+                  : '文件正文预览'
                 : 'Markdown 正文'}
             </span>
             <textarea
@@ -610,7 +630,10 @@ export function MaterialsWorkspace({
               }}
               placeholder={
                 sourceMode === 'uploaded_file'
-                  ? '选择文件后在这里检查正文；编辑请使用前置文字或后续拆分流程。'
+                  ? localFile.status === 'ready' &&
+                    localFile.value.documentFormat === 'pdf'
+                    ? 'PDF 文字层将在本地服务导入时按页提取；导入后请在“拆分”页检查和修改。扫描件暂不支持 OCR。'
+                    : '选择文件后在这里检查正文；编辑请使用前置文字或后续拆分流程。'
                   : '粘贴或输入待保存的 Markdown；内容不会写入 Git 或前端包体。'
               }
             />
@@ -866,15 +889,15 @@ function describeLocalFileIssue(
     | 'file_type_unsupported'
     | 'file_too_large'
     | 'file_utf8_invalid'
-    | 'file_text_invalid',
+    | 'file_content_invalid',
 ): string {
   if (code === 'file_name_invalid') return '文件名无效；请选择普通文件名。';
   if (code === 'file_type_unsupported')
-    return '仅支持 .md、.markdown 和 .txt。';
+    return '仅支持 .md、.markdown、.txt、.html、.htm 和 .pdf。';
   if (code === 'file_too_large')
-    return `文件超过 ${formatLocalFileBytes(LOCAL_TEXT_FILE_MAX_BYTES)} 上限。`;
+    return `文件超过 ${formatLocalFileBytes(LOCAL_DOCUMENT_FILE_MAX_BYTES)} 上限。`;
   if (code === 'file_utf8_invalid') return '文件不是有效的 UTF-8 文本。';
-  return '文件为空或含有不允许的 NUL 字符。';
+  return '文件为空、PDF 标识无效，或文本含有不允许的 NUL 字符。';
 }
 
 function formatLocalFileBytes(value: number): string {
