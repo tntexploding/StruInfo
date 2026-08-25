@@ -1,6 +1,6 @@
 # StruInfo 分阶段计划
 
-- 状态：M1F-2 已冻结为当前开发基线；实际审核统一在项目开发完成后开始
+- 状态：M1F-3 证据约束的 AI 综合查询已冻结为开发基线；下一产品增量待明确
 - 最近更新：2026-08-25
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
@@ -31,7 +31,8 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 | 旧 Curation/Knowledge 运行时 | 已退役 | 迁移和数据兼容保留，活动代码/HTTP/Web 已删除                                                                                           |
 | 正式知识页面                 | 已实现 | 最高匹配中心、有界图/列表、来源、用户关系编辑、隐私范围与 selected-pair AI 联系提案                                                    |
 | ProcessingRun / AI 提案      | 已实现 | 中性任务状态、取消；OpenAI split/tags/selected-pair association 的启动、列表、接受与拒绝                                               |
-| 其他 AI、向量/RAG、采集      | 未实现 | AI 查询综合、语义/向量检索、Embedding 与自动采集仍不作为主线前置条件                                                                   |
+| AI 综合查询                  | 已实现 | 用户显式综合当前公开确定性查询的前 8 条证据；claim 映射本地精确来源，不含私密外发、检索接管或持久化答案                                |
+| 其他 AI、向量/RAG、采集      | 未实现 | 语义/向量检索、Embedding、RAG、第二 Provider 与自动采集仍不作为主线前置条件                                                            |
 | 公网/容器/生产发布           | 未完成 | 进入相应部署或分发阶段时独立验收                                                                                                       |
 
 ## 当前开发停点
@@ -40,7 +41,7 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 
 M1E-3B、M1E-3C 和 M1E-3D 已依次完成单个公开 Entry 标签提案、用户明确选择的公开 Entry 对联系提案，以及用户明确选择的公开 Snapshot 拆分提案。三者都只创建 typed proposal，只有人工接受才调用现有 Entry/图谱命令；私密内容在网络前拒绝。
 
-M1E-4A/4B 已补齐无 Provider 的人工拆分：用户可在首次 Entry 物化前按既有 Fragment 边界或 Fragment 内 Unicode 标量边界合并、重新拆开并改标题，服务端从本地证据重建正文，三种物化方式共享唯一空 Snapshot 原子边界。M1E-5A/5B 又把一份本地 Markdown、纯文本、HTML 或带文字层 PDF 接入相同 Blob → Snapshot → Fragment → Split 主链；HTML/PDF 保留完整原始 Blob并产生本地文本投影，失败重试身份保持稳定。M1F-1 在现有查询上补齐标题/正文/标签的精确、包含和近似词法模式、可见分数与游标绑定；M1F-2 又把既有一至两跳 Association 过滤接入查询页，并提供同一查询范围内最多两条结果的事实比较。两者都没有增加迁移或第二检索服务。M1F-2 现已冻结为开发基线；下一增量来自另行接受的窄开发边界或可达 `PRODUCT_BLOCKER`，第二 Provider、自动接受、私密外发、查询综合、Embedding 和 RAG 继续后置。
+M1E-4A/4B 已补齐无 Provider 的人工拆分：用户可在首次 Entry 物化前按既有 Fragment 边界或 Fragment 内 Unicode 标量边界合并、重新拆开并改标题，服务端从本地证据重建正文，三种物化方式共享唯一空 Snapshot 原子边界。M1E-5A/5B 又把一份本地 Markdown、纯文本、HTML 或带文字层 PDF 接入相同 Blob → Snapshot → Fragment → Split 主链；HTML/PDF 保留完整原始 Blob并产生本地文本投影，失败重试身份保持稳定。M1F-1 在现有查询上补齐标题/正文/标签的精确、包含和近似词法模式、可见分数与游标绑定；M1F-2 又把既有一至两跳 Association 过滤接入查询页，并提供同一查询范围内最多两条结果的事实比较。M1F-3 现已在同一查询页接通公开证据的会话内 AI 综合。三者均未增加第二检索服务；M1F-3 也没有迁移、答案持久化或写权限。第二 Provider、自动接受、私密外发、Provider 检索、Embedding 和 RAG 继续后置。
 
 ## 已完成主线：M1D Entry 网络
 
@@ -208,6 +209,15 @@ ADR 0012 将任务生命周期、产品提案语义和具体 Provider 分开；A
 2. **M1F-2B 双条事实比较（已完成）**：同一语义查询范围内最多保留两条结果，并列显示来源、修订、隐私、词法命中、拆分、评分、类型、领域、关键词、正文和精确来源；不生成胜负、综合评分、摘要或新关系；
 3. **M1F-2C 查询与隐私约束（已完成）**：比较可跨 cursor 页面保留，但文字、字段、结构筛选、Association 或隐私范围一旦改变便立即不可见；状态只在当前浏览器会话内，不写入偏好、数据库或个人数据包；
 4. **M1F-2D 边界保持（已完成）**：复用现有公开查询响应和 Association 过滤，不新增服务端协议、迁移、依赖、Provider、搜索服务或真实资料。
+
+## 已完成增量：M1F-3 证据约束的 AI 综合查询
+
+1. **M1F-3A 合同与 Provider（已完成）**：独立 `ai_query_synthesis` capability、闭合请求/结果、公开查询证据包和 OpenAI Responses API adapter 已接通；确定性查询仍负责筛选与排序，Provider 只接收前 8 条请求内句柄、标题、正文摘录和三维公开标签；
+2. **M1F-3B 产品接线（已完成）**：`POST /api/v1/entries/search/synthesize`、应用服务与 Web client 已实现；Query 在本地结果之后提供次级“AI 综合当前结果”动作，逐条 claim 映射回本地 Entry 与精确来源；
+3. **M1F-3C 隐私与会话约束（已完成）**：`includePrivate` 和 `onlyPrivate` 在 Blob/Provider 前拒绝；答案只留在当前页面会话，查询语义变化立即失效，迟到响应不得覆盖新范围；
+4. **M1F-3D 边界保持与关闭（已完成）**：复用现有环境配置、native `fetch`、`store: false`、无 tools 和现有超时；没有新增迁移、SDK、Bundle section、答案历史、Entry/图谱写入、第二 Provider、Web 搜索、向量或 RAG。合成测试和 320/390/768/1024/1440 CSS 像素响应式浏览器检查已完成。
+
+M1F-3 后不自动推导 M1F-4。下一产品任务应来自所有者明确选择的窄边界；真实 Provider 答案质量与费用仍留待统一审核。
 
 ## 历史基线：M1C 可运行核心闭环（运行时已退役）
 

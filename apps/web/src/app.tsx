@@ -21,6 +21,7 @@ import type {
   InformationEntryDocumentListResponse,
   InformationEntryRevisionResponse,
   InformationEntrySearchResponse,
+  InformationEntryQuerySynthesisResponse,
   InformationDocumentTagWriteResponse,
   M1cHttpResponse,
   ProcessingRunCancelResponse,
@@ -244,6 +245,15 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
   const searchInformationEntries = useCallback(
     (body: unknown): Promise<M1cHttpResponse<InformationEntrySearchResponse>> =>
       apiClient.searchInformationEntries(body),
+    [apiClient],
+  );
+
+  const synthesizeInformationEntryQuery = useCallback(
+    (
+      body: unknown,
+      signal: AbortSignal,
+    ): Promise<M1cHttpResponse<InformationEntryQuerySynthesisResponse>> =>
+      apiClient.synthesizeInformationEntryQuery(body, {signal}),
     [apiClient],
   );
 
@@ -669,12 +679,13 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       ) : null}
       {activeSection === 'query' ? (
         <InformationEntryQueryWorkspace
-          aiEnabled={
+          aiQuerySynthesisEnabled={
             workspace.status === 'ready' &&
-            workspace.value.capabilities.includes('ai')
+            workspace.value.capabilities.includes('ai_query_synthesis')
           }
           snapshots={snapshotValues}
           onSearch={searchInformationEntries}
+          onSynthesize={synthesizeInformationEntryQuery}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
             void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
           }

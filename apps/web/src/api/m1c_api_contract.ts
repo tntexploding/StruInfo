@@ -500,6 +500,48 @@ export type InformationEntrySearchResponse =
     }>
   | DomainFailure;
 
+export type InformationEntryQuerySynthesisEvidenceStatus =
+  'supported' | 'partial' | 'insufficient';
+
+export interface InformationEntryQuerySynthesisEvidence {
+  readonly handle: string;
+  readonly entryId: string;
+  readonly entryRevision: number;
+  readonly snapshotId: string;
+  readonly fragmentIds: readonly string[];
+  readonly titlePath: string;
+  readonly excerpt: string;
+  readonly truncated: boolean;
+  readonly contentKeywords: readonly string[];
+  readonly typeKeyword?: Readonly<{
+    keyword: EntryTypeKeyword;
+    customName?: string;
+  }>;
+  readonly domains: readonly Readonly<{
+    keyword: EntryDomainKeyword;
+    customName?: string;
+  }>[];
+}
+
+export type InformationEntryQuerySynthesisResponse =
+  | Readonly<{
+      status: 'ok';
+      requestId: string;
+      querySha256: string;
+      providerKey: 'openai-responses-v1';
+      model: string;
+      promptVersion: string;
+      answer: string;
+      evidenceStatus: InformationEntryQuerySynthesisEvidenceStatus;
+      claims: readonly Readonly<{
+        statement: string;
+        evidenceRefs: readonly string[];
+      }>[];
+      limitations: readonly string[];
+      evidence: readonly Readonly<InformationEntryQuerySynthesisEvidence>[];
+    }>
+  | DomainFailure;
+
 export type InformationEntryAssociationAction =
   'enhance' | 'weaken' | 'block' | 'restore';
 

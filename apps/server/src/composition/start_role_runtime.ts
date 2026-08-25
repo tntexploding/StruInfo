@@ -1,4 +1,5 @@
 import type {RuntimeConfig} from '../config/runtime_config.js';
+import {InformationEntryQuerySynthesisService} from '../modules/entries/index.js';
 import {
   AiAssociationProposalService,
   AiSplitProposalService,
@@ -8,6 +9,7 @@ import {
   OpenAiEntryAssociationProvider,
   OpenAiEntrySplitProvider,
   OpenAiEntryTagProvider,
+  OpenAiInformationEntryQuerySynthesisProvider,
 } from '../platform/ai/index.js';
 import {
   createRuntimeDatabase,
@@ -143,6 +145,17 @@ export async function startRoleRuntime(
             config.aiProposalProvider,
           ),
         });
+  const aiQuerySynthesis =
+    config.aiProposalProvider === undefined
+      ? undefined
+      : new InformationEntryQuerySynthesisService({
+          workspaceId: config.workspaceId,
+          entries: repositories.informationEntries,
+          associations: repositories.informationEntryAssociations,
+          provider: new OpenAiInformationEntryQuerySynthesisProvider(
+            config.aiProposalProvider,
+          ),
+        });
   const api =
     config.role === 'api' || config.role === 'all'
       ? new M1cApiService({
@@ -162,6 +175,7 @@ export async function startRoleRuntime(
           ...(aiAssociationProposals === undefined
             ? {}
             : {aiAssociationProposals}),
+          ...(aiQuerySynthesis === undefined ? {} : {aiQuerySynthesis}),
           workspaceTransfer: new M1cWorkspaceTransfer({
             repository: repositories.workspaceTransfer,
             blobStore: storage.blobStore,

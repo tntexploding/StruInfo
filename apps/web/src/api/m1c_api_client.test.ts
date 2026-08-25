@@ -48,6 +48,49 @@ describe('M1cApiClient', () => {
     });
   });
 
+  it('posts AI query synthesis through the narrow route and forwards cancellation', async () => {
+    let request: Readonly<{url: string; init?: RequestInit}> | undefined;
+    const fetchImplementation: M1cApiFetch = (input, init) => {
+      request = {url: requestUrl(input), ...(init === undefined ? {} : {init})};
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: 'failed',
+            issue: {code: 'ai_provider_not_configured'},
+          }),
+          {status: 503, headers: {'content-type': 'application/json'}},
+        ),
+      );
+    };
+    const client = createM1cApiClient(
+      'http://127.0.0.1:3000/',
+      fetchImplementation,
+    );
+    const controller = new AbortController();
+    const body = {
+      requestId: 'query-synthesis:1',
+      question: '这些证据说明了什么？',
+      query: {text: 'synthetic', includePrivate: false, onlyPrivate: false},
+    };
+
+    const result = await client.synthesizeInformationEntryQuery(body, {
+      signal: controller.signal,
+    });
+
+    expect(result.body).toEqual({
+      status: 'failed',
+      issue: {code: 'ai_provider_not_configured'},
+    });
+    expect(request?.url).toBe(
+      'http://127.0.0.1:3000/api/v1/entries/search/synthesize',
+    );
+    expect(request?.init).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  });
+
   it('encodes snapshot identity as one path segment', async () => {
     let requestedUrl = '';
     const client = createM1cApiClient('https://localhost:3000', (input) => {

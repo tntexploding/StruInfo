@@ -20,6 +20,7 @@ import type {
   InformationEntryMaterializeResponse,
   InformationEntryRevisionResponse,
   InformationEntrySearchResponse,
+  InformationEntryQuerySynthesisResponse,
   InformationDocumentTagWriteResponse,
   M1cHttpResponse,
   DocumentImportResponse,
@@ -95,6 +96,10 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntrySearchResponse>>;
+  synthesizeInformationEntryQuery(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryQuerySynthesisResponse>>;
   readInformationEntryKnowledgeGraph(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -241,6 +246,7 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     materializeManualInformationEntries: reject,
     reviseInformationEntry: reject,
     searchInformationEntries: reject,
+    synthesizeInformationEntryQuery: reject,
     readInformationEntryKnowledgeGraph: reject,
     reviseInformationEntryKnowledgeGraphEdge: reject,
     rebuildInformationEntryAssociations: reject,
@@ -344,6 +350,12 @@ export function createM1cApiClient(
     searchInformationEntries: (body, options) =>
       post<InformationEntrySearchResponse>(
         'api/v1/entries/search',
+        body,
+        options,
+      ),
+    synthesizeInformationEntryQuery: (body, options) =>
+      post<InformationEntryQuerySynthesisResponse>(
+        'api/v1/entries/search/synthesize',
         body,
         options,
       ),
