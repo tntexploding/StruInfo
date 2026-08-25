@@ -12,12 +12,11 @@ import {
 import type {BlobStore} from '../../storage/blob_store.js';
 import {
   decodeReviewSourceSubscriptionPreferences,
-  DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
-  DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
-  DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
-  DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+  patchReviewPreferences,
+  updateReviewPreferences,
   type ReviewPreferences,
+  type ReviewPreferencesUpdater,
   type ReviewPreferencesStore,
   type ReviewSourceSubscription,
   type ReviewSourceSubscriptionPreferences,
@@ -162,56 +161,67 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
     if (decoded === undefined) {
       throw new SourceSubscriptionServiceError('source_subscription_invalid');
     }
-    const preferences = await this.#loadPreferences();
-    const current =
-      preferences.sourceSubscriptions ??
-      DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES;
-    if (current.revision !== expectedRevision) {
-      throw new SourceSubscriptionServiceError('source_subscription_stale');
-    }
-    const previousById = new Map(
-      current.subscriptions.map((subscription) => [
-        subscription.subscriptionId,
-        subscription,
-      ]),
-    );
-    const merged = Object.freeze(
-      decoded.subscriptions.map((subscription) => {
-        const previous = previousById.get(subscription.subscriptionId);
-        return previous !== undefined &&
-          sourceConfigurationIdentity(previous) ===
-            sourceConfigurationIdentity(subscription)
-          ? Object.freeze({
-              ...subscription,
-              ...(previous.lastAttemptAt === undefined
-                ? {}
-                : {lastAttemptAt: previous.lastAttemptAt}),
-              ...(previous.lastSuccessAt === undefined
-                ? {}
-                : {lastSuccessAt: previous.lastSuccessAt}),
-              ...(previous.lastRunId === undefined
-                ? {}
-                : {lastRunId: previous.lastRunId}),
-              ...(previous.cursor === undefined
-                ? {}
-                : {cursor: Object.freeze({...previous.cursor})}),
-            })
-          : subscription;
-      }),
-    );
-    if (sameSubscriptionConfigurations(current.subscriptions, merged)) {
-      return Object.freeze({outcome: 'unchanged', value: current});
-    }
-    const next = Object.freeze({
-      revision: current.revision + 1,
-      subscriptions: merged,
-    });
-    const saved = await this.#savePreferences(preferences, next);
-    return Object.freeze({
-      outcome: 'applied',
-      value:
-        saved.sourceSubscriptions ??
-        DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
+    return this.#updatePreferences<
+      Readonly<{
+        outcome: 'applied' | 'unchanged';
+        value: Readonly<ReviewSourceSubscriptionPreferences>;
+      }>
+    >((preferences) => {
+      const current =
+        preferences.sourceSubscriptions ??
+        DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES;
+      if (current.revision !== expectedRevision) {
+        throw new SourceSubscriptionServiceError('source_subscription_stale');
+      }
+      const previousById = new Map(
+        current.subscriptions.map((subscription) => [
+          subscription.subscriptionId,
+          subscription,
+        ]),
+      );
+      const merged = Object.freeze(
+        decoded.subscriptions.map((subscription) => {
+          const previous = previousById.get(subscription.subscriptionId);
+          return previous !== undefined &&
+            sourceConfigurationIdentity(previous) ===
+              sourceConfigurationIdentity(subscription)
+            ? Object.freeze({
+                ...subscription,
+                ...(previous.lastAttemptAt === undefined
+                  ? {}
+                  : {lastAttemptAt: previous.lastAttemptAt}),
+                ...(previous.lastSuccessAt === undefined
+                  ? {}
+                  : {lastSuccessAt: previous.lastSuccessAt}),
+                ...(previous.lastRunId === undefined
+                  ? {}
+                  : {lastRunId: previous.lastRunId}),
+                ...(previous.cursor === undefined
+                  ? {}
+                  : {cursor: Object.freeze({...previous.cursor})}),
+              })
+            : subscription;
+        }),
+      );
+      if (sameSubscriptionConfigurations(current.subscriptions, merged)) {
+        return Object.freeze({
+          next: preferences,
+          result: Object.freeze({
+            outcome: 'unchanged' as const,
+            value: current,
+          }),
+        });
+      }
+      const next = Object.freeze({
+        revision: current.revision + 1,
+        subscriptions: merged,
+      });
+      return Object.freeze({
+        next: patchReviewPreferences(preferences, {
+          sourceSubscriptions: next,
+        }),
+        result: Object.freeze({outcome: 'applied' as const, value: next}),
+      });
     });
   }
 
@@ -454,32 +464,36 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
         Partial<Pick<ReviewSourceSubscription, 'lastSuccessAt' | 'cursor'>>
     >,
   ): Promise<void> {
-    const preferences = await this.#loadPreferences();
-    const current =
-      preferences.sourceSubscriptions ??
-      DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES;
-    const index = current.subscriptions.findIndex(
-      (candidate) => candidate.subscriptionId === original.subscriptionId,
-    );
-    const candidate = current.subscriptions[index];
-    if (
-      candidate === undefined ||
-      sourceConfigurationIdentity(candidate) !== configurationIdentity
-    ) {
-      throw new SourceSubscriptionServiceError('source_subscription_changed');
-    }
-    const subscriptions = current.subscriptions.map((subscription, ordinal) =>
-      ordinal === index
-        ? Object.freeze({...subscription, ...state})
-        : subscription,
-    );
-    await this.#savePreferences(
-      preferences,
-      Object.freeze({
-        revision: current.revision + 1,
-        subscriptions: Object.freeze(subscriptions),
-      }),
-    );
+    await this.#updatePreferences((preferences) => {
+      const current =
+        preferences.sourceSubscriptions ??
+        DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES;
+      const index = current.subscriptions.findIndex(
+        (candidate) => candidate.subscriptionId === original.subscriptionId,
+      );
+      const candidate = current.subscriptions[index];
+      if (
+        candidate === undefined ||
+        sourceConfigurationIdentity(candidate) !== configurationIdentity
+      ) {
+        throw new SourceSubscriptionServiceError('source_subscription_changed');
+      }
+      const subscriptions = current.subscriptions.map(
+        (subscription, ordinal) =>
+          ordinal === index
+            ? Object.freeze({...subscription, ...state})
+            : subscription,
+      );
+      return Object.freeze({
+        next: patchReviewPreferences(preferences, {
+          sourceSubscriptions: Object.freeze({
+            revision: current.revision + 1,
+            subscriptions: Object.freeze(subscriptions),
+          }),
+        }),
+        result: undefined,
+      });
+    });
   }
 
   async #loadPreferences(): Promise<Readonly<ReviewPreferences>> {
@@ -494,24 +508,19 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
     }
   }
 
-  async #savePreferences(
-    current: Readonly<ReviewPreferences>,
-    sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences>,
-  ): Promise<Readonly<ReviewPreferences>> {
+  async #updatePreferences<T>(
+    updater: ReviewPreferencesUpdater<T>,
+  ): Promise<T> {
     try {
-      return await this.#dependencies.preferences.save(
-        this.#dependencies.workspaceId,
-        current.quickTags,
-        current.automaticKeywords ??
-          DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
-        current.vocabulary ?? DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
-        current.associationPolicy ??
-          DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
-        current.explorationPolicy ??
-          DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
-        sourceSubscriptions,
-      );
-    } catch {
+      return (
+        await updateReviewPreferences(
+          this.#dependencies.preferences,
+          this.#dependencies.workspaceId,
+          updater,
+        )
+      ).result;
+    } catch (error) {
+      if (error instanceof SourceSubscriptionServiceError) throw error;
       throw new SourceSubscriptionServiceError(
         'source_subscription_preferences_unavailable',
       );

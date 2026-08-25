@@ -33,6 +33,8 @@ import {
   prepareSplitInformationEntries,
   searchCurrentInformationEntries,
   scoreInformationEntrySearchText,
+  suggestInformationEntryPreferenceRules,
+  trialInformationEntryPreferenceProfile,
   type CurrentInformationEntry,
   type EntryDomainKeyword,
   type EntryTextSearchField,
@@ -46,6 +48,7 @@ import {
   type InformationEntryAssociationRepositoryPort,
   type InformationEntryAssociationRepositorySnapshot,
   type InformationEntryGraphDirection,
+  type InformationEntryPreferenceTrialExpectedEntry,
   type InformationDocumentTagRepositoryPort,
   type InformationEntryDocumentView,
   type InformationEntryEmptySnapshotRepositoryPort,
@@ -83,17 +86,21 @@ import type {BlobStore} from '../storage/blob_store.js';
 import {
   decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
+  decodeEntryPreferenceProfile,
   decodeReviewExplorationPolicyPreferences,
   decodeReviewSourceSubscriptionPreferences,
   decodeReviewQuickTags,
   decodeReviewVocabularyPreferences,
+  DEFAULT_ENTRY_PREFERENCE_PROFILE,
   DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
   DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
-  DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+  patchReviewPreferences,
+  updateReviewPreferences,
   type ReviewAssociationPolicyPreferences,
   type ReviewExplorationPolicyPreferences,
+  type EntryPreferenceProfile,
   type ReviewPreferencesStore,
 } from '../storage/review_preferences_store.js';
 import {
@@ -136,6 +143,12 @@ export interface M1cApiServicePort {
   ): Promise<M1cHttpResult>;
   loadReviewPreferences(): Promise<M1cHttpResult>;
   saveReviewPreferences(body: unknown): Promise<M1cHttpResult>;
+  loadInformationEntryPreferenceProfile(): Promise<M1cHttpResult>;
+  saveInformationEntryPreferenceProfile(body: unknown): Promise<M1cHttpResult>;
+  suggestInformationEntryPreferenceProfile(
+    body: unknown,
+  ): Promise<M1cHttpResult>;
+  trialInformationEntryPreferenceProfile(body: unknown): Promise<M1cHttpResult>;
   importMarkdown(body: unknown): Promise<M1cHttpResult>;
   importDocument(body: unknown): Promise<M1cHttpResult>;
   materializeInformationEntries(body: unknown): Promise<M1cHttpResult>;
@@ -611,27 +624,39 @@ export class M1cApiService implements M1cApiServicePort {
       return inputFailure('body.explorationPolicy');
     }
     try {
-      const current = await this.#dependencies.reviewPreferences.load(
+      const update = await updateReviewPreferences<
+        Readonly<{
+          associationPolicy: Readonly<ReviewAssociationPolicyPreferences>;
+          explorationPolicy: Readonly<ReviewExplorationPolicyPreferences>;
+        }>
+      >(
+        this.#dependencies.reviewPreferences,
         this.#dependencies.workspaceId,
+        (current) => {
+          const effectiveAssociationPolicy =
+            associationPolicy ??
+            current.associationPolicy ??
+            DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES;
+          const effectiveExplorationPolicy =
+            explorationPolicy ??
+            current.explorationPolicy ??
+            DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES;
+          return Object.freeze({
+            next: patchReviewPreferences(current, {
+              quickTags,
+              automaticKeywords,
+              vocabulary,
+              associationPolicy: effectiveAssociationPolicy,
+              explorationPolicy: effectiveExplorationPolicy,
+            }),
+            result: Object.freeze({
+              associationPolicy: effectiveAssociationPolicy,
+              explorationPolicy: effectiveExplorationPolicy,
+            }),
+          });
+        },
       );
-      const effectiveAssociationPolicy =
-        associationPolicy ??
-        current.associationPolicy ??
-        DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES;
-      const effectiveExplorationPolicy =
-        explorationPolicy ??
-        current.explorationPolicy ??
-        DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES;
-      const preferences = await this.#dependencies.reviewPreferences.save(
-        this.#dependencies.workspaceId,
-        quickTags,
-        automaticKeywords,
-        vocabulary,
-        effectiveAssociationPolicy,
-        effectiveExplorationPolicy,
-        current.sourceSubscriptions ??
-          DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
-      );
+      const preferences = update.preferences;
       return httpResult(200, {
         status: 'ok',
         workspaceId: preferences.workspaceId,
@@ -639,12 +664,193 @@ export class M1cApiService implements M1cApiServicePort {
         automaticKeywords: preferences.automaticKeywords ?? automaticKeywords,
         vocabulary: preferences.vocabulary ?? vocabulary,
         associationPolicy:
-          preferences.associationPolicy ?? effectiveAssociationPolicy,
+          preferences.associationPolicy ?? update.result.associationPolicy,
         explorationPolicy:
-          preferences.explorationPolicy ?? effectiveExplorationPolicy,
+          preferences.explorationPolicy ?? update.result.explorationPolicy,
       });
     } catch {
       return reviewPreferencesFailure();
+    }
+  }
+
+  public async loadInformationEntryPreferenceProfile(): Promise<M1cHttpResult> {
+    try {
+      const preferences = await this.#dependencies.reviewPreferences.load(
+        this.#dependencies.workspaceId,
+      );
+      return httpResult(200, {
+        status: 'ok',
+        profile:
+          preferences.entryPreferenceProfile ??
+          DEFAULT_ENTRY_PREFERENCE_PROFILE,
+      });
+    } catch {
+      return entryPreferenceProfileFailure();
+    }
+  }
+
+  public async saveInformationEntryPreferenceProfile(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (
+      !isRecord(body) ||
+      typeof body.expectedRevision !== 'number' ||
+      !Number.isSafeInteger(body.expectedRevision) ||
+      body.expectedRevision < 0
+    ) {
+      return inputFailure('body.expectedRevision');
+    }
+    const draft = decodeEntryPreferenceProfile({
+      revision: body.expectedRevision,
+      enabled: body.enabled,
+      rules: body.rules,
+    });
+    if (draft === undefined) return inputFailure('body');
+
+    try {
+      const update = await updateReviewPreferences<
+        Readonly<{
+          outcome: 'applied' | 'stale' | 'unchanged';
+          profile: Readonly<EntryPreferenceProfile>;
+        }>
+      >(
+        this.#dependencies.reviewPreferences,
+        this.#dependencies.workspaceId,
+        (preferences) => {
+          const current =
+            preferences.entryPreferenceProfile ??
+            DEFAULT_ENTRY_PREFERENCE_PROFILE;
+          if (current.revision !== body.expectedRevision) {
+            return Object.freeze({
+              next: preferences,
+              result: Object.freeze({
+                outcome: 'stale' as const,
+                profile: current,
+              }),
+            });
+          }
+          const unchanged = entryPreferenceProfilesHaveSameValue(
+            current,
+            draft,
+          );
+          const next: Readonly<EntryPreferenceProfile> = unchanged
+            ? current
+            : Object.freeze({
+                revision: current.revision + 1,
+                enabled: draft.enabled,
+                rules: draft.rules,
+              });
+          return Object.freeze({
+            next: unchanged
+              ? preferences
+              : patchReviewPreferences(preferences, {
+                  entryPreferenceProfile: next,
+                }),
+            result: Object.freeze({
+              outcome: unchanged
+                ? ('unchanged' as const)
+                : ('applied' as const),
+              profile: next,
+            }),
+          });
+        },
+      );
+      if (update.result.outcome === 'stale') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'stale_entry_preference_profile_revision',
+          }),
+        });
+      }
+      return httpResult(200, {
+        status: update.result.outcome,
+        profile: update.result.profile,
+      });
+    } catch {
+      return entryPreferenceProfileFailure();
+    }
+  }
+
+  public async suggestInformationEntryPreferenceProfile(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (!isRecord(body) || typeof body.includePrivate !== 'boolean') {
+      return inputFailure('body.includePrivate');
+    }
+    try {
+      const entries =
+        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          body.includePrivate,
+        );
+      return httpResult(200, {
+        status: 'ok',
+        ...suggestInformationEntryPreferenceRules(entries, {
+          includePrivate: body.includePrivate,
+        }),
+      });
+    } catch {
+      return entryPreferenceProfileFailure();
+    }
+  }
+
+  public async trialInformationEntryPreferenceProfile(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (
+      !isRecord(body) ||
+      typeof body.includePrivate !== 'boolean' ||
+      typeof body.expectedProfileRevision !== 'number' ||
+      !Number.isSafeInteger(body.expectedProfileRevision) ||
+      body.expectedProfileRevision < 0 ||
+      (body.expectedEntries !== undefined &&
+        !Array.isArray(body.expectedEntries))
+    ) {
+      return inputFailure('body');
+    }
+    try {
+      const [preferences, entries] = await Promise.all([
+        this.#dependencies.reviewPreferences.load(
+          this.#dependencies.workspaceId,
+        ),
+        this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          body.includePrivate,
+        ),
+      ]);
+      const currentProfile =
+        preferences.entryPreferenceProfile ?? DEFAULT_ENTRY_PREFERENCE_PROFILE;
+      const result = trialInformationEntryPreferenceProfile(
+        entries,
+        currentProfile.revision,
+        body.profile,
+        {
+          includePrivate: body.includePrivate,
+          expectedProfileRevision: body.expectedProfileRevision,
+          ...(body.expectedEntries === undefined
+            ? {}
+            : {
+                expectedEntries:
+                  body.expectedEntries as readonly Readonly<InformationEntryPreferenceTrialExpectedEntry>[],
+              }),
+        },
+      );
+      if (result.status === 'invalid_profile') {
+        return httpResult(422, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'invalid_entry_preference_profile',
+            path: 'body.profile',
+          }),
+        });
+      }
+      if (result.status === 'invalid_request') {
+        return inputFailure('body');
+      }
+      return httpResult(result.status === 'complete' ? 200 : 409, result);
+    } catch {
+      return entryPreferenceProfileFailure();
     }
   }
 
@@ -1192,13 +1398,57 @@ export class M1cApiService implements M1cApiServicePort {
     const input = decodeInformationEntryAssociationPolicyWrite(body);
     if (input === undefined) return inputFailure('body');
     try {
-      const preferences = await this.#dependencies.reviewPreferences.load(
+      const update = await updateReviewPreferences<
+        Readonly<{
+          outcome: 'applied' | 'stale' | 'unchanged';
+          policy: Readonly<ReviewAssociationPolicyPreferences>;
+        }>
+      >(
+        this.#dependencies.reviewPreferences,
         this.#dependencies.workspaceId,
+        (preferences) => {
+          const current =
+            preferences.associationPolicy ??
+            DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES;
+          if (current.revision !== input.expectedRevision) {
+            return Object.freeze({
+              next: preferences,
+              result: Object.freeze({
+                outcome: 'stale' as const,
+                policy: current,
+              }),
+            });
+          }
+          const unchanged =
+            current.contentWeight === input.contentWeight &&
+            current.typeWeight === input.typeWeight &&
+            current.domainWeight === input.domainWeight &&
+            current.threshold === input.threshold;
+          const next = unchanged
+            ? current
+            : Object.freeze({
+                revision: current.revision + 1,
+                contentWeight: input.contentWeight,
+                typeWeight: input.typeWeight,
+                domainWeight: input.domainWeight,
+                threshold: input.threshold,
+              });
+          return Object.freeze({
+            next: unchanged
+              ? preferences
+              : patchReviewPreferences(preferences, {
+                  associationPolicy: next,
+                }),
+            result: Object.freeze({
+              outcome: unchanged
+                ? ('unchanged' as const)
+                : ('applied' as const),
+              policy: next,
+            }),
+          });
+        },
       );
-      const current =
-        preferences.associationPolicy ??
-        DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES;
-      if (current.revision !== input.expectedRevision) {
+      if (update.result.outcome === 'stale') {
         return httpResult(409, {
           status: 'rejected',
           issue: Object.freeze({
@@ -1206,37 +1456,11 @@ export class M1cApiService implements M1cApiServicePort {
           }),
         });
       }
-      const unchanged =
-        current.contentWeight === input.contentWeight &&
-        current.typeWeight === input.typeWeight &&
-        current.domainWeight === input.domainWeight &&
-        current.threshold === input.threshold;
-      const next = unchanged
-        ? current
-        : Object.freeze({
-            revision: current.revision + 1,
-            contentWeight: input.contentWeight,
-            typeWeight: input.typeWeight,
-            domainWeight: input.domainWeight,
-            threshold: input.threshold,
-          });
-      if (!unchanged) {
-        await this.#dependencies.reviewPreferences.save(
-          this.#dependencies.workspaceId,
-          preferences.quickTags,
-          preferences.automaticKeywords ??
-            DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
-          preferences.vocabulary ?? DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
-          next,
-          preferences.explorationPolicy ??
-            DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
-          preferences.sourceSubscriptions ??
-            DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
-        );
-      }
       return httpResult(200, {
-        status: unchanged ? 'unchanged' : 'applied',
-        policy: informationEntryAssociationPolicyFromPreferences(next),
+        status: update.result.outcome,
+        policy: informationEntryAssociationPolicyFromPreferences(
+          update.result.policy,
+        ),
       });
     } catch {
       return reviewPreferencesFailure();
@@ -1249,13 +1473,59 @@ export class M1cApiService implements M1cApiServicePort {
     const input = decodeInformationEntryExplorationPolicyWrite(body);
     if (input === undefined) return inputFailure('body');
     try {
-      const preferences = await this.#dependencies.reviewPreferences.load(
+      const update = await updateReviewPreferences<
+        Readonly<{
+          outcome: 'applied' | 'stale' | 'unchanged';
+          policy: Readonly<ReviewExplorationPolicyPreferences>;
+        }>
+      >(
+        this.#dependencies.reviewPreferences,
         this.#dependencies.workspaceId,
+        (preferences) => {
+          const current =
+            preferences.explorationPolicy ??
+            DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES;
+          if (current.revision !== input.expectedRevision) {
+            return Object.freeze({
+              next: preferences,
+              result: Object.freeze({
+                outcome: 'stale' as const,
+                policy: current,
+              }),
+            });
+          }
+          const unchanged =
+            current.enabled === input.enabled &&
+            current.resultShare === input.resultShare &&
+            current.neighborExpansion === input.neighborExpansion &&
+            current.crossDomain === input.crossDomain &&
+            current.serendipity === input.serendipity;
+          const next = unchanged
+            ? current
+            : Object.freeze({
+                revision: current.revision + 1,
+                enabled: input.enabled,
+                resultShare: input.resultShare,
+                neighborExpansion: input.neighborExpansion,
+                crossDomain: input.crossDomain,
+                serendipity: input.serendipity,
+              });
+          return Object.freeze({
+            next: unchanged
+              ? preferences
+              : patchReviewPreferences(preferences, {
+                  explorationPolicy: next,
+                }),
+            result: Object.freeze({
+              outcome: unchanged
+                ? ('unchanged' as const)
+                : ('applied' as const),
+              policy: next,
+            }),
+          });
+        },
       );
-      const current =
-        preferences.explorationPolicy ??
-        DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES;
-      if (current.revision !== input.expectedRevision) {
+      if (update.result.outcome === 'stale') {
         return httpResult(409, {
           status: 'rejected',
           issue: Object.freeze({
@@ -1263,39 +1533,11 @@ export class M1cApiService implements M1cApiServicePort {
           }),
         });
       }
-      const unchanged =
-        current.enabled === input.enabled &&
-        current.resultShare === input.resultShare &&
-        current.neighborExpansion === input.neighborExpansion &&
-        current.crossDomain === input.crossDomain &&
-        current.serendipity === input.serendipity;
-      const next = unchanged
-        ? current
-        : Object.freeze({
-            revision: current.revision + 1,
-            enabled: input.enabled,
-            resultShare: input.resultShare,
-            neighborExpansion: input.neighborExpansion,
-            crossDomain: input.crossDomain,
-            serendipity: input.serendipity,
-          });
-      if (!unchanged) {
-        await this.#dependencies.reviewPreferences.save(
-          this.#dependencies.workspaceId,
-          preferences.quickTags,
-          preferences.automaticKeywords ??
-            DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
-          preferences.vocabulary ?? DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
-          preferences.associationPolicy ??
-            DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
-          next,
-          preferences.sourceSubscriptions ??
-            DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
-        );
-      }
       return httpResult(200, {
-        status: unchanged ? 'unchanged' : 'applied',
-        policy: informationEntryExplorationPolicyFromPreferences(next),
+        status: update.result.outcome,
+        policy: informationEntryExplorationPolicyFromPreferences(
+          update.result.policy,
+        ),
       });
     } catch {
       return reviewPreferencesFailure();
@@ -2040,6 +2282,37 @@ function reviewPreferencesFailure(): M1cHttpResult {
   return httpResult(503, {
     status: 'failed',
     issue: Object.freeze({code: 'review_preferences_failed'}),
+  });
+}
+
+function entryPreferenceProfileFailure(): M1cHttpResult {
+  return httpResult(503, {
+    status: 'failed',
+    issue: Object.freeze({code: 'entry_preference_profile_failed'}),
+  });
+}
+
+function entryPreferenceProfilesHaveSameValue(
+  current: Readonly<EntryPreferenceProfile>,
+  draft: Readonly<EntryPreferenceProfile>,
+): boolean {
+  if (
+    current.enabled !== draft.enabled ||
+    current.rules.length !== draft.rules.length
+  ) {
+    return false;
+  }
+  return current.rules.every((rule, index) => {
+    const candidate = draft.rules[index];
+    return (
+      candidate?.ruleId === rule.ruleId &&
+      rule.dimension === candidate.dimension &&
+      rule.featureKind === candidate.featureKind &&
+      rule.featureIdentity === candidate.featureIdentity &&
+      rule.displayValue === candidate.displayValue &&
+      rule.effect === candidate.effect &&
+      rule.weight === candidate.weight
+    );
   });
 }
 

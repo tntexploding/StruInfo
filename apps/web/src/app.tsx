@@ -21,6 +21,9 @@ import type {
   InformationEntryKnowledgeGraphResponse,
   InformationEntryMaterializeResponse,
   InformationEntryDocumentListResponse,
+  InformationEntryPreferenceProfileResponse,
+  InformationEntryPreferenceSuggestionResponse,
+  InformationEntryPreferenceTrialResponse,
   InformationEntryRevisionResponse,
   InformationEntrySearchResponse,
   InformationEntryQuerySynthesisResponse,
@@ -29,6 +32,8 @@ import type {
   ProcessingRunCancelResponse,
   ProcessingRunListResponse,
   DocumentImportResponse,
+  EntryPreferenceProfile,
+  EntryPreferenceRule,
   ReviewPreferencesResponse,
   ReviewPreferencesWrite,
   SourceSubscriptionListResponse,
@@ -81,6 +86,11 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
   const [reviewPreferencesOverride, setReviewPreferencesOverride] = useState<
     Readonly<ReviewPreferencesWrite> | undefined
   >();
+  const [entryPreferenceProfile, setEntryPreferenceProfile] = useState<
+    Loadable<Readonly<InformationEntryPreferenceProfileResponse>>
+  >({status: 'loading'});
+  const reviewPreferencesRequestId = useRef(0);
+  const entryPreferenceProfileRequestId = useRef(0);
   const [evidencePanel, setEvidencePanel] = useState<EvidencePanelState>({
     status: 'closed',
   });
@@ -137,15 +147,22 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
 
   const refreshReviewPreferences = useCallback(
     async (signal?: AbortSignal) => {
+      const requestId = ++reviewPreferencesRequestId.current;
       try {
         const response = await apiClient.loadReviewPreferences(
           signal === undefined ? undefined : {signal},
         );
-        if (!signal?.aborted) {
+        if (
+          !signal?.aborted &&
+          requestId === reviewPreferencesRequestId.current
+        ) {
           setReviewPreferences({status: 'ready', value: response.body});
         }
       } catch {
-        if (!signal?.aborted) {
+        if (
+          !signal?.aborted &&
+          requestId === reviewPreferencesRequestId.current
+        ) {
           setReviewPreferences({
             status: 'error',
             message: '无法读取外部个人标签设置；Entry 数据仍可继续查看。',
@@ -158,10 +175,87 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
 
   const saveReviewPreferences = useCallback(
     async (value: Readonly<ReviewPreferencesWrite>) => {
+      const requestId = ++reviewPreferencesRequestId.current;
       const response = await apiClient.saveReviewPreferences(value);
-      setReviewPreferences({status: 'ready', value: response.body});
+      if (requestId === reviewPreferencesRequestId.current) {
+        setReviewPreferences({status: 'ready', value: response.body});
+      }
       return response;
     },
+    [apiClient],
+  );
+
+  const refreshEntryPreferenceProfile = useCallback(
+    async (signal?: AbortSignal) => {
+      const requestId = ++entryPreferenceProfileRequestId.current;
+      try {
+        const response = await apiClient.loadInformationEntryPreferenceProfile(
+          signal === undefined ? undefined : {signal},
+        );
+        if (
+          !signal?.aborted &&
+          requestId === entryPreferenceProfileRequestId.current
+        ) {
+          setEntryPreferenceProfile({status: 'ready', value: response.body});
+        }
+      } catch {
+        if (
+          !signal?.aborted &&
+          requestId === entryPreferenceProfileRequestId.current
+        ) {
+          setEntryPreferenceProfile({
+            status: 'error',
+            message: '无法读取外部偏好规则；逐条评分和标签编辑仍可继续使用。',
+          });
+        }
+      }
+    },
+    [apiClient],
+  );
+
+  const saveEntryPreferenceProfile = useCallback(
+    async (
+      body: Readonly<{
+        expectedRevision: number;
+        enabled: boolean;
+        rules: readonly Readonly<EntryPreferenceRule>[];
+      }>,
+    ) => {
+      const requestId = ++entryPreferenceProfileRequestId.current;
+      const response =
+        await apiClient.saveInformationEntryPreferenceProfile(body);
+      if (
+        requestId === entryPreferenceProfileRequestId.current &&
+        (response.body.status === 'applied' ||
+          response.body.status === 'unchanged')
+      ) {
+        setEntryPreferenceProfile({
+          status: 'ready',
+          value: {status: 'ok', profile: response.body.profile},
+        });
+      }
+      return response;
+    },
+    [apiClient],
+  );
+
+  const suggestEntryPreferenceProfile = useCallback(
+    (
+      includePrivate: boolean,
+    ): Promise<M1cHttpResponse<InformationEntryPreferenceSuggestionResponse>> =>
+      apiClient.suggestInformationEntryPreferenceProfile(includePrivate),
+    [apiClient],
+  );
+
+  const trialEntryPreferenceProfile = useCallback(
+    (
+      body: Readonly<{
+        includePrivate: boolean;
+        expectedProfileRevision: number;
+        profile: Readonly<EntryPreferenceProfile>;
+      }>,
+    ): Promise<M1cHttpResponse<InformationEntryPreferenceTrialResponse>> =>
+      apiClient.trialInformationEntryPreferenceProfile(body),
     [apiClient],
   );
 
@@ -171,11 +265,17 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       void refreshWorkspace(controller.signal);
       void refreshEvidence(controller.signal);
       void refreshReviewPreferences(controller.signal);
+      void refreshEntryPreferenceProfile(controller.signal);
     });
     return () => {
       controller.abort();
     };
-  }, [refreshEvidence, refreshReviewPreferences, refreshWorkspace]);
+  }, [
+    refreshEntryPreferenceProfile,
+    refreshEvidence,
+    refreshReviewPreferences,
+    refreshWorkspace,
+  ]);
 
   const openEvidence = useCallback(
     async (
@@ -724,6 +824,13 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onRevise={reviseInformationEntry}
           onReviseDocumentTags={reviseInformationDocumentTags}
           onSaveReviewPreferences={saveReviewPreferences}
+          entryPreferenceProfile={entryPreferenceProfile}
+          onReloadEntryPreferenceProfile={() => {
+            void refreshEntryPreferenceProfile();
+          }}
+          onSaveEntryPreferenceProfile={saveEntryPreferenceProfile}
+          onSuggestEntryPreferenceProfile={suggestEntryPreferenceProfile}
+          onTrialEntryPreferenceProfile={trialEntryPreferenceProfile}
           onSearch={searchInformationEntries}
           onStartAiTagProposal={startAiTagProposal}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>

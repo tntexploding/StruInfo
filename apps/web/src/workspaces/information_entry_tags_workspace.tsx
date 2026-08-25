@@ -2,6 +2,7 @@ import type {SyntheticEvent} from 'react';
 import {useState} from 'react';
 
 import type {
+  InformationEntryPreferenceProfileResponse,
   ReviewPreferencesResponse,
   ReviewPreferencesWrite,
 } from '../api/m1c_api_contract.js';
@@ -12,6 +13,7 @@ import {
   type InformationEntryServices,
 } from './information_entry_components.js';
 import {InformationEntryAiTags} from './information_entry_ai_tags.js';
+import {InformationEntryPreferenceProfilePanel} from './information_entry_preference_profile_panel.js';
 import {InformationDocumentNavigator} from './information_entry_document_navigation.js';
 import {
   InformationDocumentPanel,
@@ -29,11 +31,18 @@ export interface InformationEntryTagsWorkspaceProps extends Pick<
   | 'onRejectAiTagProposal'
   | 'onRevise'
   | 'onReviseDocumentTags'
+  | 'onSaveEntryPreferenceProfile'
   | 'onSaveReviewPreferences'
   | 'onSearch'
+  | 'onSuggestEntryPreferenceProfile'
   | 'onStartAiTagProposal'
+  | 'onTrialEntryPreferenceProfile'
 > {
   readonly aiEnabled: boolean;
+  readonly entryPreferenceProfile: Loadable<
+    Readonly<InformationEntryPreferenceProfileResponse>
+  >;
+  readonly onReloadEntryPreferenceProfile: () => void;
   readonly reviewPreferences: Loadable<Readonly<ReviewPreferencesResponse>>;
   readonly reviewPreferencesOverride?:
     Readonly<ReviewPreferencesWrite> | undefined;
@@ -52,9 +61,14 @@ export function InformationEntryTagsWorkspace({
   onRejectAiTagProposal,
   onRevise,
   onReviseDocumentTags,
+  onSaveEntryPreferenceProfile,
   onSaveReviewPreferences,
   onSearch,
+  onSuggestEntryPreferenceProfile,
   onStartAiTagProposal,
+  onTrialEntryPreferenceProfile,
+  entryPreferenceProfile,
+  onReloadEntryPreferenceProfile,
   reviewPreferences,
   reviewPreferencesOverride,
   onReviewPreferencesChange,
@@ -280,6 +294,14 @@ export function InformationEntryTagsWorkspace({
           </>
         )}
       </InformationEntryResults>
+
+      <InformationEntryPreferenceProfilePanel
+        state={entryPreferenceProfile}
+        onReload={onReloadEntryPreferenceProfile}
+        onSave={onSaveEntryPreferenceProfile}
+        onSuggest={onSuggestEntryPreferenceProfile}
+        onTrial={onTrialEntryPreferenceProfile}
+      />
     </div>
   );
 }

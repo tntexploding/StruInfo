@@ -610,6 +610,111 @@ describe('M1cApiClient', () => {
     ]);
   });
 
+  it('uses the narrow Entry preference profile read, write, suggestion and trial routes', async () => {
+    const requests: {
+      url: string;
+      method: string | undefined;
+      body: unknown;
+    }[] = [];
+    const profile = {
+      revision: 2,
+      enabled: true,
+      rules: [
+        {
+          ruleId: '77777777-7777-4777-8777-777777777777',
+          dimension: 'usefulness' as const,
+          featureKind: 'content_keyword' as const,
+          featureIdentity: 'postgresql',
+          displayValue: 'PostgreSQL',
+          effect: 'prefer' as const,
+          weight: 4 as const,
+        },
+      ],
+    };
+    const client = createM1cApiClient(
+      'http://127.0.0.1:3000/',
+      (input, init) => {
+        const requestBody = init?.body;
+        if (
+          requestBody !== undefined &&
+          requestBody !== null &&
+          typeof requestBody !== 'string'
+        ) {
+          throw new Error('Expected synthetic JSON request body.');
+        }
+        requests.push({
+          url: requestUrl(input),
+          method: init?.method,
+          body:
+            requestBody === undefined || requestBody === null
+              ? undefined
+              : JSON.parse(requestBody),
+        });
+        return Promise.resolve(
+          new Response(JSON.stringify({status: 'ok', profile}), {
+            headers: {'content-type': 'application/json'},
+          }),
+        );
+      },
+    );
+
+    await client.loadInformationEntryPreferenceProfile();
+    await client.saveInformationEntryPreferenceProfile({
+      expectedRevision: 2,
+      enabled: profile.enabled,
+      rules: profile.rules,
+    });
+    await client.suggestInformationEntryPreferenceProfile(true);
+    await client.trialInformationEntryPreferenceProfile({
+      includePrivate: false,
+      expectedProfileRevision: 2,
+      profile,
+      expectedEntries: [
+        {
+          entryId: '88888888-8888-4888-8888-888888888888',
+          revision: 1,
+        },
+      ],
+    });
+
+    expect(requests).toEqual([
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/preferences/profile',
+        method: 'GET',
+        body: undefined,
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/preferences/profile',
+        method: 'PUT',
+        body: {
+          expectedRevision: 2,
+          enabled: true,
+          rules: profile.rules,
+        },
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/preferences/profile/suggestions',
+        method: 'POST',
+        body: {includePrivate: true},
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/preferences/profile/trial',
+        method: 'POST',
+        body: {
+          includePrivate: false,
+          expectedProfileRevision: 2,
+          profile,
+          expectedEntries: [
+            {
+              entryId: '88888888-8888-4888-8888-888888888888',
+              revision: 1,
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
   it('rejects a stale server without the review-preferences route', async () => {
     const client = createM1cApiClient('http://127.0.0.1:3000/', () =>
       Promise.resolve(

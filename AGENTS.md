@@ -396,6 +396,24 @@ dependency, generic crawler, repository execution, automatic Entry/tag/link
 processing, AI acceptance or real fixture. Do not infer RSS/API/web crawling,
 private-repository access, preference learning or an autonomous pipeline.
 
+ADR 0025 accepts the M1G-3 development boundary. M1G-3A provides the closed,
+default-off external Entry PreferenceProfile state, ordered-rule limits,
+workspace preference persistence and backward-compatible personal-data-package
+transport. M1G-3B adds the pure local deterministic suggestion and bounded
+read-only trial core over injected current Entry snapshots. It keeps usefulness
+and interest separate, filters privacy before counting, reports malformed or
+stale inputs, and writes no product state. M1G-3C exposes the narrow
+get/save/suggest/trial local API and a secondary Tags panel for explicit rule
+editing, candidate evidence and bounded draft trials. Only Profile save writes
+external preferences; suggestions and trials remain read-only and local.
+M1G-3D serializes sibling preference writes per workspace, moves optimistic
+checks inside the atomic update, rejects late UI responses and completes
+privacy, backward-package, responsive-browser and artifact checks. M1G-3 is
+complete. These slices must not restore the retired Curation PreferenceProfile runtime, record
+implicit behavior, alter Query ranking, call a Provider, or grant automatic
+split/tag/link/ignore authority. Automatic routing remains a later
+`AutomationPolicy` decision.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

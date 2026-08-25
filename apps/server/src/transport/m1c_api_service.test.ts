@@ -19,14 +19,17 @@ import type {
 } from '../modules/entries/index.js';
 import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
 import {
+  DEFAULT_ENTRY_PREFERENCE_PROFILE,
   DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
   DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+  type EntryPreferenceProfile,
   type ReviewAssociationPolicyPreferences,
   type ReviewAutomaticKeywordPreferences,
   type ReviewExplorationPolicyPreferences,
+  type ReviewSourceSubscriptionPreferences,
   type ReviewVocabularyPreferences,
 } from '../storage/review_preferences_store.js';
 import {
@@ -180,6 +183,7 @@ describe('M1cApiService', () => {
       DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
       DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
+      DEFAULT_ENTRY_PREFERENCE_PROFILE,
     );
   });
 
@@ -199,6 +203,213 @@ describe('M1cApiService', () => {
       body: {issue: {path: 'body.quickTags'}},
     });
     expect(save).not.toHaveBeenCalled();
+  });
+
+  it('serves the versioned Entry preference profile, suggestions and read-only trial', async () => {
+    let profile: Readonly<EntryPreferenceProfile> =
+      DEFAULT_ENTRY_PREFERENCE_PROFILE;
+    const entries = Object.freeze([
+      syntheticPreferenceServiceEntry(71),
+      syntheticPreferenceServiceEntry(72),
+      syntheticPreferenceServiceEntry(73),
+    ]);
+    const privateEntry = syntheticPreferenceServiceEntry(74);
+    const privateEntries = Object.freeze([
+      ...entries,
+      Object.freeze({
+        ...privateEntry,
+        value: Object.freeze({...privateEntry.value, isPrivate: true}),
+      }),
+    ]);
+    const loadCurrentEntries = vi.fn(
+      (_workspaceId: string, includePrivate: boolean) =>
+        Promise.resolve(includePrivate ? privateEntries : entries),
+    );
+    const load = vi.fn((workspaceId: string) =>
+      Promise.resolve({
+        format: 'struinfo.review-preferences' as const,
+        version: 1 as const,
+        workspaceId,
+        quickTags: ['保留快捷标记'],
+        automaticKeywords: DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+        vocabulary: DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+        associationPolicy: DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
+        explorationPolicy: DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
+        sourceSubscriptions: DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
+        entryPreferenceProfile: profile,
+      }),
+    );
+    const save = vi.fn(
+      (
+        workspaceId: string,
+        quickTags: readonly string[],
+        automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences>,
+        vocabulary: Readonly<ReviewVocabularyPreferences>,
+        associationPolicy: Readonly<ReviewAssociationPolicyPreferences>,
+        explorationPolicy: Readonly<ReviewExplorationPolicyPreferences>,
+        sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences>,
+        nextProfile: Readonly<EntryPreferenceProfile>,
+      ) => {
+        profile = nextProfile;
+        return Promise.resolve({
+          format: 'struinfo.review-preferences' as const,
+          version: 1 as const,
+          workspaceId,
+          quickTags,
+          automaticKeywords,
+          vocabulary,
+          associationPolicy,
+          explorationPolicy,
+          sourceSubscriptions,
+          entryPreferenceProfile: nextProfile,
+        });
+      },
+    );
+    const service = createService({
+      reviewPreferences: {load, save},
+      informationEntryRepository: {
+        materializeEntries: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        materializeEntriesIfSnapshotEmpty: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        reviseEntry: () => Promise.resolve('not_found'),
+        loadCurrentEntries,
+      },
+    });
+    const rule = Object.freeze({
+      ruleId: '77777777-7777-4777-8777-777777777777',
+      dimension: 'usefulness' as const,
+      featureKind: 'content_keyword' as const,
+      featureIdentity: 'postgresql',
+      displayValue: 'PostgreSQL',
+      effect: 'prefer' as const,
+      weight: 4 as const,
+    });
+
+    await expect(
+      service.loadInformationEntryPreferenceProfile(),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'ok', profile: {revision: 0, enabled: false, rules: []}},
+    });
+    await expect(
+      service.saveInformationEntryPreferenceProfile({
+        expectedRevision: 0,
+        enabled: true,
+        rules: [rule],
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'applied',
+        profile: {revision: 1, enabled: true, rules: [rule]},
+      },
+    });
+    expect(save).toHaveBeenCalledExactlyOnceWith(
+      WORKSPACE_ID,
+      ['保留快捷标记'],
+      DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+      DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+      DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
+      DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
+      DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
+      {revision: 1, enabled: true, rules: [rule]},
+    );
+    await expect(
+      service.saveInformationEntryPreferenceProfile({
+        expectedRevision: 0,
+        enabled: false,
+        rules: [],
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 409,
+      body: {
+        status: 'rejected',
+        issue: {code: 'stale_entry_preference_profile_revision'},
+      },
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+
+    await expect(
+      service.suggestInformationEntryPreferenceProfile({
+        includePrivate: false,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        visibleEntryCount: 3,
+        totalCandidateCount: 6,
+        candidates: [
+          {
+            dimension: 'usefulness',
+            featureKind: 'content_keyword',
+            featureIdentity: 'postgresql',
+            positiveCount: 3,
+          },
+          {
+            dimension: 'usefulness',
+            featureKind: 'type',
+            featureIdentity: 'knowledge_explanation',
+          },
+          {
+            dimension: 'usefulness',
+            featureKind: 'domain',
+            featureIdentity: 'engineering_computing',
+          },
+          {
+            dimension: 'interest',
+            featureKind: 'content_keyword',
+            featureIdentity: 'postgresql',
+          },
+          {
+            dimension: 'interest',
+            featureKind: 'type',
+            featureIdentity: 'knowledge_explanation',
+          },
+          {
+            dimension: 'interest',
+            featureKind: 'domain',
+            featureIdentity: 'engineering_computing',
+          },
+        ],
+      },
+    });
+    await expect(
+      service.trialInformationEntryPreferenceProfile({
+        includePrivate: false,
+        expectedProfileRevision: 1,
+        profile,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'complete',
+        visibleEntryCount: 3,
+        evaluatedEntryCount: 3,
+        items: [
+          {totals: {usefulness: 4, interest: 0}},
+          {totals: {usefulness: 4, interest: 0}},
+          {totals: {usefulness: 4, interest: 0}},
+        ],
+      },
+    });
+    await expect(
+      service.suggestInformationEntryPreferenceProfile({
+        includePrivate: true,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        includePrivate: true,
+        visibleEntryCount: 4,
+      },
+    });
+    expect(loadCurrentEntries).toHaveBeenCalledTimes(3);
+    expect(loadCurrentEntries).toHaveBeenNthCalledWith(1, WORKSPACE_ID, false);
+    expect(loadCurrentEntries).toHaveBeenNthCalledWith(2, WORKSPACE_ID, false);
+    expect(loadCurrentEntries).toHaveBeenNthCalledWith(3, WORKSPACE_ID, true);
   });
 
   it('versions association weights in external personal preferences and rejects stale writes', async () => {
@@ -275,6 +486,7 @@ describe('M1cApiService', () => {
       },
       DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
+      DEFAULT_ENTRY_PREFERENCE_PROFILE,
     );
     await expect(
       service.reviseInformationEntryAssociationPolicy({
@@ -299,6 +511,21 @@ describe('M1cApiService', () => {
   it('versions the external exploration policy and preserves it across unrelated preference writes', async () => {
     let explorationPolicy: Readonly<ReviewExplorationPolicyPreferences> =
       DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES;
+    const entryPreferenceProfile = Object.freeze({
+      revision: 2,
+      enabled: true,
+      rules: Object.freeze([
+        Object.freeze({
+          ruleId: '44444444-4444-4444-8444-444444444444',
+          dimension: 'usefulness' as const,
+          featureKind: 'content_keyword' as const,
+          featureIdentity: 'postgresql',
+          displayValue: 'PostgreSQL',
+          effect: 'prefer' as const,
+          weight: 5 as const,
+        }),
+      ]),
+    });
     const load = vi.fn((workspaceId: string) =>
       Promise.resolve({
         format: 'struinfo.review-preferences' as const,
@@ -309,6 +536,7 @@ describe('M1cApiService', () => {
         vocabulary: DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
         associationPolicy: DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
         explorationPolicy,
+        entryPreferenceProfile,
       }),
     );
     const save = vi.fn(
@@ -319,6 +547,8 @@ describe('M1cApiService', () => {
         vocabulary: Readonly<ReviewVocabularyPreferences>,
         associationPolicy: Readonly<ReviewAssociationPolicyPreferences>,
         nextExplorationPolicy: Readonly<ReviewExplorationPolicyPreferences>,
+        sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences> = DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
+        nextEntryPreferenceProfile: Readonly<EntryPreferenceProfile> = DEFAULT_ENTRY_PREFERENCE_PROFILE,
       ) => {
         explorationPolicy = nextExplorationPolicy;
         return Promise.resolve({
@@ -330,6 +560,8 @@ describe('M1cApiService', () => {
           vocabulary,
           associationPolicy,
           explorationPolicy,
+          sourceSubscriptions,
+          entryPreferenceProfile: nextEntryPreferenceProfile,
         });
       },
     );
@@ -371,6 +603,7 @@ describe('M1cApiService', () => {
         serendipity: true,
       },
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
+      entryPreferenceProfile,
     );
 
     await expect(
@@ -429,6 +662,7 @@ describe('M1cApiService', () => {
       DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
       explorationPolicy,
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
+      entryPreferenceProfile,
     );
   });
 
@@ -2446,6 +2680,28 @@ function syntheticExplorationEntry(
         }),
       ]),
       fragmentIds: Object.freeze([FRAGMENT_ID]),
+    }),
+  });
+}
+
+function syntheticPreferenceServiceEntry(
+  ordinal: number,
+): Readonly<CurrentInformationEntry> {
+  const base = syntheticExplorationEntry(ordinal, SNAPSHOT_ID);
+  return Object.freeze({
+    ...base,
+    value: Object.freeze({
+      ...base.value,
+      usefulnessScore: 5 as const,
+      interestScore: 4 as const,
+      contentKeywords: Object.freeze([
+        Object.freeze({
+          displayValue: 'PostgreSQL',
+          normalizedValue: 'postgresql',
+          origin: 'manual' as const,
+          originVersion: 'synthetic.v1',
+        }),
+      ]),
     }),
   });
 }

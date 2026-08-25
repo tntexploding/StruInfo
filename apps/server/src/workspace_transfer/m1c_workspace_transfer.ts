@@ -486,6 +486,7 @@ async function saveReviewPreferences(
     preferences.associationPolicy,
     preferences.explorationPolicy,
     preferences.sourceSubscriptions,
+    preferences.entryPreferenceProfile,
   );
 }
 async function restorePortableBlobs(

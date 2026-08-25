@@ -5,11 +5,51 @@ export const MAX_REVIEW_QUICK_TAG_CODE_POINTS = 120;
 export const MAX_REVIEW_KEYWORD_EXCLUSIONS = 64;
 export const MAX_REVIEW_VOCABULARY_ALIASES = 128;
 export const MAX_SOURCE_SUBSCRIPTIONS = 32;
+export const MAX_ENTRY_PREFERENCE_RULES = 64;
+export const MAX_ENTRY_PREFERENCE_FEATURE_CODE_POINTS = 96;
+export const MAX_ENTRY_PREFERENCE_DISPLAY_CODE_POINTS = 80;
+
+export const ENTRY_PREFERENCE_DIMENSIONS = ['usefulness', 'interest'] as const;
+export const ENTRY_PREFERENCE_FEATURE_KINDS = [
+  'content_keyword',
+  'type',
+  'domain',
+] as const;
+export const ENTRY_PREFERENCE_EFFECTS = ['prefer', 'deprioritize'] as const;
 
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const SHA1 = /^[0-9a-f]{40}$/u;
 const SHA256 = /^[0-9a-f]{64}$/u;
+
+export type EntryPreferenceDimension =
+  (typeof ENTRY_PREFERENCE_DIMENSIONS)[number];
+export type EntryPreferenceFeatureKind =
+  (typeof ENTRY_PREFERENCE_FEATURE_KINDS)[number];
+export type EntryPreferenceEffect = (typeof ENTRY_PREFERENCE_EFFECTS)[number];
+
+export interface EntryPreferenceRule {
+  readonly ruleId: string;
+  readonly dimension: EntryPreferenceDimension;
+  readonly featureKind: EntryPreferenceFeatureKind;
+  readonly featureIdentity: string;
+  readonly displayValue: string;
+  readonly effect: EntryPreferenceEffect;
+  readonly weight: 1 | 2 | 3 | 4 | 5;
+}
+
+export interface EntryPreferenceProfile {
+  readonly revision: number;
+  readonly enabled: boolean;
+  readonly rules: readonly Readonly<EntryPreferenceRule>[];
+}
+
+export const DEFAULT_ENTRY_PREFERENCE_PROFILE: Readonly<EntryPreferenceProfile> =
+  Object.freeze({
+    revision: 0,
+    enabled: false,
+    rules: Object.freeze([]),
+  });
 
 export interface ReviewSourceSubscriptionCursor {
   readonly commitSha: string;
@@ -113,6 +153,7 @@ export interface ReviewPreferences {
   readonly associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>;
   readonly explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>;
   readonly sourceSubscriptions?: Readonly<ReviewSourceSubscriptionPreferences>;
+  readonly entryPreferenceProfile?: Readonly<EntryPreferenceProfile>;
 }
 
 export interface ReviewPreferencesStore {
@@ -125,7 +166,96 @@ export interface ReviewPreferencesStore {
     associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>,
     explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>,
     sourceSubscriptions?: Readonly<ReviewSourceSubscriptionPreferences>,
+    entryPreferenceProfile?: Readonly<EntryPreferenceProfile>,
   ): Promise<Readonly<ReviewPreferences>>;
+  update?<T>(
+    workspaceId: string,
+    updater: ReviewPreferencesUpdater<T>,
+  ): Promise<Readonly<ReviewPreferencesUpdateResult<T>>>;
+}
+
+export interface ReviewPreferencesUpdate<T> {
+  readonly next: Readonly<ReviewPreferences>;
+  readonly result: T;
+}
+
+export interface ReviewPreferencesUpdateResult<T> {
+  readonly preferences: Readonly<ReviewPreferences>;
+  readonly result: T;
+}
+
+export type ReviewPreferencesUpdater<T> = (
+  current: Readonly<ReviewPreferences>,
+) => Readonly<ReviewPreferencesUpdate<T>>;
+
+export interface ReviewPreferencesPatch {
+  readonly quickTags?: readonly string[];
+  readonly automaticKeywords?: Readonly<ReviewAutomaticKeywordPreferences>;
+  readonly vocabulary?: Readonly<ReviewVocabularyPreferences>;
+  readonly associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>;
+  readonly explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>;
+  readonly sourceSubscriptions?: Readonly<ReviewSourceSubscriptionPreferences>;
+  readonly entryPreferenceProfile?: Readonly<EntryPreferenceProfile>;
+}
+
+export function patchReviewPreferences(
+  current: Readonly<ReviewPreferences>,
+  patch: Readonly<ReviewPreferencesPatch>,
+): Readonly<ReviewPreferences> {
+  return createReviewPreferences(
+    current.workspaceId,
+    patch.quickTags ?? current.quickTags,
+    patch.automaticKeywords ??
+      current.automaticKeywords ??
+      DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+    patch.vocabulary ??
+      current.vocabulary ??
+      DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+    patch.associationPolicy ??
+      current.associationPolicy ??
+      DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
+    patch.explorationPolicy ??
+      current.explorationPolicy ??
+      DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
+    patch.sourceSubscriptions ??
+      current.sourceSubscriptions ??
+      DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
+    patch.entryPreferenceProfile ??
+      current.entryPreferenceProfile ??
+      DEFAULT_ENTRY_PREFERENCE_PROFILE,
+  );
+}
+
+/**
+ * Applies one read-modify-write operation.
+ *
+ * The external-file implementation serializes this operation per workspace.
+ * Small in-memory test ports may omit update and use the compatibility fallback.
+ */
+export async function updateReviewPreferences<T>(
+  store: ReviewPreferencesStore,
+  workspaceId: string,
+  updater: ReviewPreferencesUpdater<T>,
+): Promise<Readonly<ReviewPreferencesUpdateResult<T>>> {
+  if (store.update !== undefined) {
+    return store.update(workspaceId, updater);
+  }
+  const current = await store.load(workspaceId);
+  const update = updater(current);
+  const preferences =
+    update.next === current
+      ? current
+      : await store.save(
+          workspaceId,
+          update.next.quickTags,
+          update.next.automaticKeywords,
+          update.next.vocabulary,
+          update.next.associationPolicy,
+          update.next.explorationPolicy,
+          update.next.sourceSubscriptions,
+          update.next.entryPreferenceProfile,
+        );
+  return Object.freeze({preferences, result: update.result});
 }
 
 export class ReviewPreferencesStoreError extends Error {
@@ -276,6 +406,45 @@ export function decodeReviewSourceSubscriptionPreferences(
     subscriptions: Object.freeze(subscriptions),
   });
 }
+
+export function decodeEntryPreferenceProfile(
+  value: unknown,
+): Readonly<EntryPreferenceProfile> | undefined {
+  if (
+    !isClosedRecord(value, ['enabled', 'revision', 'rules']) ||
+    typeof value.revision !== 'number' ||
+    !Number.isSafeInteger(value.revision) ||
+    value.revision < 0 ||
+    (value.enabled !== true && value.enabled !== false) ||
+    !Array.isArray(value.rules) ||
+    value.rules.length > MAX_ENTRY_PREFERENCE_RULES
+  ) {
+    return undefined;
+  }
+  const rules: Readonly<EntryPreferenceRule>[] = [];
+  const ruleIds = new Set<string>();
+  const featureRules = new Set<string>();
+  for (const candidate of value.rules) {
+    const rule = decodeEntryPreferenceRule(candidate);
+    if (rule === undefined) return undefined;
+    const featureRule = [
+      rule.dimension,
+      rule.featureKind,
+      rule.featureIdentity,
+    ].join(':');
+    if (ruleIds.has(rule.ruleId) || featureRules.has(featureRule)) {
+      return undefined;
+    }
+    ruleIds.add(rule.ruleId);
+    featureRules.add(featureRule);
+    rules.push(rule);
+  }
+  return Object.freeze({
+    revision: value.revision,
+    enabled: value.enabled,
+    rules: Object.freeze(rules),
+  });
+}
 function decodeKeywordList(
   value: unknown,
   maximumItems: number,
@@ -316,6 +485,7 @@ export function createReviewPreferences(
   associationPolicy: Readonly<ReviewAssociationPolicyPreferences> = DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   explorationPolicy: Readonly<ReviewExplorationPolicyPreferences> = DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences> = DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
+  entryPreferenceProfile: Readonly<EntryPreferenceProfile> = DEFAULT_ENTRY_PREFERENCE_PROFILE,
 ): Readonly<ReviewPreferences> {
   return Object.freeze({
     format: REVIEW_PREFERENCES_FORMAT,
@@ -347,7 +517,94 @@ export function createReviewPreferences(
         ),
       ),
     }),
+    entryPreferenceProfile: Object.freeze({
+      revision: entryPreferenceProfile.revision,
+      enabled: entryPreferenceProfile.enabled,
+      rules: Object.freeze(
+        entryPreferenceProfile.rules.map((rule) => Object.freeze({...rule})),
+      ),
+    }),
   });
+}
+
+function decodeEntryPreferenceRule(
+  value: unknown,
+): Readonly<EntryPreferenceRule> | undefined {
+  if (
+    !isClosedRecord(value, [
+      'dimension',
+      'displayValue',
+      'effect',
+      'featureIdentity',
+      'featureKind',
+      'ruleId',
+      'weight',
+    ]) ||
+    typeof value.ruleId !== 'string' ||
+    !CANONICAL_UUID.test(value.ruleId) ||
+    typeof value.dimension !== 'string' ||
+    !ENTRY_PREFERENCE_DIMENSIONS.includes(
+      value.dimension as EntryPreferenceDimension,
+    ) ||
+    typeof value.featureKind !== 'string' ||
+    !ENTRY_PREFERENCE_FEATURE_KINDS.includes(
+      value.featureKind as EntryPreferenceFeatureKind,
+    ) ||
+    typeof value.featureIdentity !== 'string' ||
+    typeof value.displayValue !== 'string' ||
+    typeof value.effect !== 'string' ||
+    !ENTRY_PREFERENCE_EFFECTS.includes(value.effect as EntryPreferenceEffect) ||
+    typeof value.weight !== 'number' ||
+    !Number.isInteger(value.weight) ||
+    value.weight < 1 ||
+    value.weight > 5
+  ) {
+    return undefined;
+  }
+  const displayValue = decodeBoundedText(
+    value.displayValue,
+    MAX_ENTRY_PREFERENCE_DISPLAY_CODE_POINTS,
+  );
+  const featureIdentity = decodeEntryPreferenceFeatureIdentity(
+    value.featureIdentity,
+  );
+  if (displayValue === undefined || featureIdentity === undefined) {
+    return undefined;
+  }
+  return Object.freeze({
+    ruleId: value.ruleId,
+    dimension: value.dimension as EntryPreferenceDimension,
+    featureKind: value.featureKind as EntryPreferenceFeatureKind,
+    featureIdentity,
+    displayValue,
+    effect: value.effect as EntryPreferenceEffect,
+    weight: value.weight as EntryPreferenceRule['weight'],
+  });
+}
+
+function decodeEntryPreferenceFeatureIdentity(
+  value: string,
+): string | undefined {
+  const normalized = normalizeEntryPreferenceFeatureIdentity(value);
+  return normalized.length > 0 &&
+    Array.from(normalized).length <= MAX_ENTRY_PREFERENCE_FEATURE_CODE_POINTS &&
+    !containsControlCodePoint(normalized) &&
+    value === normalized
+    ? normalized
+    : undefined;
+}
+
+export function normalizeEntryPreferenceFeatureIdentity(value: string): string {
+  const firstNfc = value.trim().normalize('NFC');
+  let lowered = '';
+  for (const codePoint of firstNfc) {
+    const code = codePoint.codePointAt(0);
+    lowered +=
+      code !== undefined && code >= 0x41 && code <= 0x5a
+        ? String.fromCodePoint(code + 0x20)
+        : codePoint;
+  }
+  return lowered.normalize('NFC');
 }
 
 function decodeSourceSubscription(
@@ -580,4 +837,17 @@ function hasAliasCycle(
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isClosedRecord(
+  value: unknown,
+  expectedKeys: readonly string[],
+): value is Readonly<Record<string, unknown>> {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value).sort();
+  const expected = [...expectedKeys].sort();
+  return (
+    keys.length === expected.length &&
+    keys.every((key, index) => key === expected[index])
+  );
 }

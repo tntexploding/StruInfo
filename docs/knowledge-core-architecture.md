@@ -1,8 +1,8 @@
 # StruInfo 知识核心架构
 
-- 状态：M1G-2 版本化 Git 信源订阅已完成
+- 状态：M1G-3 可解释 Entry PreferenceProfile 已完成
 - 最近更新：2026-08-25
-- 相关决策：[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、[ADR 0007](adr/0007-information-entry-first-document-processing.md)、[ADR 0008](adr/0008-current-entry-state-and-portable-personal-data.md)、[ADR 0009](adr/0009-retire-superseded-m1c-runtime.md)、[ADR 0010](adr/0010-entry-centered-formal-knowledge-graph.md)、[ADR 0011](adr/0011-association-derived-formal-graph-edges.md)、[ADR 0012](adr/0012-provider-neutral-processing-runs-and-proposals.md)、[ADR 0013](adr/0013-openai-entry-tag-proposals.md)、[ADR 0014](adr/0014-openai-entry-association-proposals.md)、[ADR 0015](adr/0015-openai-entry-split-proposals.md)、[ADR 0016](adr/0016-manual-entry-fragment-grouping.md)、[ADR 0017](adr/0017-manual-within-fragment-entry-boundaries.md)、[ADR 0018](adr/0018-local-text-file-import.md)、[ADR 0019](adr/0019-local-html-pdf-import.md)、[ADR 0020](adr/0020-explainable-lexical-entry-search.md)、[ADR 0021](adr/0021-query-association-and-result-comparison.md)、[ADR 0022](adr/0022-evidence-bounded-ai-query-synthesis.md)、[ADR 0023](adr/0023-deterministic-entry-exploration-policy.md)、[ADR 0024](adr/0024-versioned-git-source-subscriptions.md)
+- 相关决策：[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、[ADR 0007](adr/0007-information-entry-first-document-processing.md)、[ADR 0008](adr/0008-current-entry-state-and-portable-personal-data.md)、[ADR 0009](adr/0009-retire-superseded-m1c-runtime.md)、[ADR 0010](adr/0010-entry-centered-formal-knowledge-graph.md)、[ADR 0011](adr/0011-association-derived-formal-graph-edges.md)、[ADR 0012](adr/0012-provider-neutral-processing-runs-and-proposals.md)、[ADR 0013](adr/0013-openai-entry-tag-proposals.md)、[ADR 0014](adr/0014-openai-entry-association-proposals.md)、[ADR 0015](adr/0015-openai-entry-split-proposals.md)、[ADR 0016](adr/0016-manual-entry-fragment-grouping.md)、[ADR 0017](adr/0017-manual-within-fragment-entry-boundaries.md)、[ADR 0018](adr/0018-local-text-file-import.md)、[ADR 0019](adr/0019-local-html-pdf-import.md)、[ADR 0020](adr/0020-explainable-lexical-entry-search.md)、[ADR 0021](adr/0021-query-association-and-result-comparison.md)、[ADR 0022](adr/0022-evidence-bounded-ai-query-synthesis.md)、[ADR 0023](adr/0023-deterministic-entry-exploration-policy.md)、[ADR 0024](adr/0024-versioned-git-source-subscriptions.md)、[ADR 0025](adr/0025-explainable-entry-preference-profile.md)
 - 当前实现与未完成项：[当前项目状态与实现清单](current-project-state.md)
 
 ## 1. 核心结论
@@ -16,7 +16,7 @@ M1E-2 正式图谱的节点。当前 Entry 采用一个成品态和并发版本�
 现有 Curation 和旧 `KnowledgeItem`/`KnowledgeRelation` 表及历史行只为既有数据和个人
 数据包兼容保留；ADR 0009 已经删除它们的活动命令、repository adapter、HTTP 和 Web 入口。
 
-当前无 AI 路径已实现：来源/快照/结构证据、精确公开 GitHub Markdown 单文件订阅、确定性 Entry 物化、既有 Fragment 与 Fragment 内 Unicode 标量边界的人工分组、三维标签与两项评分、文档标签、可解释联系、精确/包含/近似词法组合查询、查询页一至两跳联想、同查询双条比较、基于可见直接联系的独立探索候选、精确来源回看、完整个人数据包和 M1E-2 正式图谱。ADR 0012 建立不依赖 Provider 的 ProcessingRun/提案信封、读取/取消和真实总览轨道；M1G-2 复用它记录订阅检查。ADR 0013、0014、0015 分别为用户明确选择的公开 Entry、公开 Entry 对和公开 Snapshot 增加可选 OpenAI tags、association 与 split 提案；三者都必须人工接受并复用现有写边界。ADR 0022 又实现公开查询结果上的显式会话内 AI 综合，但不向模型授予检索或写权限。知识树/集合、复杂事实核验、语义向量/RAG、通用网页抓取或报告仍未实现。
+当前无 AI 路径已实现：来源/快照/结构证据、精确公开 GitHub Markdown 单文件订阅、确定性 Entry 物化、既有 Fragment 与 Fragment 内 Unicode 标量边界的人工分组、三维标签与两项评分、文档标签、可解释联系、精确/包含/近似词法组合查询、查询页一至两跳联想、同查询双条比较、基于可见直接联系的独立探索候选、从显式评分生成可解释偏好候选和有界只读试运行、精确来源回看、完整个人数据包和 M1E-2 正式图谱。ADR 0012 建立不依赖 Provider 的 ProcessingRun/提案信封、读取/取消和真实总览轨道；M1G-2 复用它记录订阅检查。ADR 0013、0014、0015 分别为用户明确选择的公开 Entry、公开 Entry 对和公开 Snapshot 增加可选 OpenAI tags、association 与 split 提案；三者都必须人工接受并复用现有写边界。ADR 0022 又实现公开查询结果上的显式会话内 AI 综合，但不向模型授予检索或写权限。知识树/集合、复杂事实核验、语义向量/RAG、通用网页抓取或报告仍未实现。
 
 ## 2. 当前数据类别与目标派生物
 
@@ -26,7 +26,7 @@ M1E-2 正式图谱的节点。当前 Entry 采用一个成品态和并发版本�
 | 信息条目    | InformationEntry 当前成品态、三维标签、两项评分和 Fragment 输入                                                                          | 活动规范数据                              |
 | 文档标签    | Snapshot 级当前标签及全文/Entry 覆盖证据                                                                                                 | 活动规范数据                              |
 | Entry 联系  | 可重建相似度投影和当前人工 override                                                                                                      | 投影活动；人工控制是规范数据              |
-| 用户偏好    | 快捷标签、提取开关、排除词、URL 规则、确认别名、版本化联系/探索策略，以及 Git 信源订阅与成功游标                                         | 活动；包体外文件                          |
+| 用户偏好    | 快捷标签、提取开关、排除词、URL 规则、确认别名、版本化联系/探索/Entry 偏好规则，以及 Git 信源订阅与成功游标                              | 活动；包体外文件；Preference UI 已接入    |
 | 正式知识    | Entry 节点、自动相似边、用户关系和精确来源；历史 Knowledge 表                                                                            | M1E-2 活动；旧表兼容保留                  |
 | 处理任务    | 当前 ProcessingRun、三类提案信封、精确 Fragment 输入和 typed split/tags/association payload                                              | 活动；三类提案均可启动、接受或拒绝        |
 | 高级控制    | IntakeDecision、ConflictCase、集合、树、SavedView、自动策略                                                                              | 历史兼容或未实现                          |
@@ -537,6 +537,19 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 - Import 页面负责编辑、保存和立即检查，Overview 继续只从 ProcessingRun 显示真实进度；
 - 该边界不自动拆分、标签化、建立联系或接受 AI，不新增数据库迁移、依赖或真实 fixture。
 
-### 12.15 延期审核与环境门
+### 12.15 M1G-3 可解释 Entry PreferenceProfile 边界（已实现）
+
+- Profile 位于外部个人偏好并随个人数据包携带，默认关闭、使用期望修订，最多 64 条规则；不恢复旧 Curation `PreferenceProfile` 运行时或新增数据库表；
+- M1G-3A 已实现闭合 decoder、revision 0 空默认、规则身份/重复/权重边界、外部文件保存和旧包升级；现有偏好写入保留 Profile；
+- 规则严格分为 usefulness/interest 两个维度，并只匹配规范化 content/type/domain 身份；它不改变人工评分、ExplorationPolicy、AssociationPolicy 或 Query 排序；
+- M1G-3B 已实现纯本地建议：只统计显式人工评分；至少三项观察且正负差至少两项才产生候选，中性样本只展示；权重为正负差绝对值并封顶 5，候选未被用户接受前不持久化；
+- M1G-3B 的草稿/已保存 Profile 有界试运行只返回最多 100 个稳定 Entry 的匹配规则及两个独立净值，显式返回格式错误和 Profile/Entry 过期，不写 Entry、标签、联系、图谱、Processing 或行为历史；
+- M1G-3C 已提供 Profile get/save/suggest/trial 公共操作和 Tags 次级面板；规则接受先进入草稿，只有显式保存写外部个人偏好，普通逐条标注仍是主任务；
+- M1G-3D 已让外部偏好存储按 workspace 串行执行原子读改写；Profile、标签偏好、联系/探索策略和来源订阅配置或游标只替换自己拥有的字段，乐观修订检查位于同一操作内；
+- 应用读取/保存以及面板建议/试运行都使用递增请求标识；切换隐私范围、改动或保存草稿、放弃并重读、发起新请求都会使旧响应失效；
+- 私密样本必须由当次显式本地范围纳入，过滤先于计数且禁止 Provider；旧偏好/旧包、320–1440px 浏览器布局和应用制品隔离均有合成回归；
+- 自动分流、下游处理、AI Profile、噪声/不确定性/可靠性等新评估维度属于后续独立边界。
+
+### 12.16 延期审核与环境门
 
 实际内容和所有者体验、真实 Provider 质量/费用、真实 PostgreSQL 正式 TM2、容器/Linux 等价性、公开网络部署、认证授权、生产资源限制、备份恢复演练和发布分发均在项目开发完成后统一开始，当前保持延期或未签发。它们必须如实报告状态，但不能在没有当前产品阻断证据时拖停 Entry 主线开发；活动工作区仍禁止恢复真实资料。单元、集成、构建和合成浏览器验证继续作为开发质量门运行。

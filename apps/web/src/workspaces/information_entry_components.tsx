@@ -10,6 +10,9 @@ import type {
   InformationEntryAssociationRebuildResponse,
   InformationEntryExplorationPolicyWriteResponse,
   InformationEntryExplorationResponse,
+  InformationEntryPreferenceProfileWriteResponse,
+  InformationEntryPreferenceSuggestionResponse,
+  InformationEntryPreferenceTrialResponse,
   InformationDocumentTagWriteResponse,
   InformationEntry,
   InformationEntryDocumentListResponse,
@@ -19,6 +22,8 @@ import type {
   M1cHttpResponse,
   ReviewPreferencesResponse,
   ReviewPreferencesWrite,
+  EntryPreferenceProfile,
+  EntryPreferenceRule,
 } from '../api/m1c_api_contract.js';
 import {DOMAIN_LABELS, TYPE_LABELS} from './information_entry_shared.js';
 
@@ -102,6 +107,23 @@ export interface InformationEntryServices {
   readonly onSaveReviewPreferences: (
     value: Readonly<ReviewPreferencesWrite>,
   ) => Promise<M1cHttpResponse<ReviewPreferencesResponse>>;
+  readonly onSaveEntryPreferenceProfile: (
+    body: Readonly<{
+      expectedRevision: number;
+      enabled: boolean;
+      rules: readonly Readonly<EntryPreferenceRule>[];
+    }>,
+  ) => Promise<M1cHttpResponse<InformationEntryPreferenceProfileWriteResponse>>;
+  readonly onSuggestEntryPreferenceProfile: (
+    includePrivate: boolean,
+  ) => Promise<M1cHttpResponse<InformationEntryPreferenceSuggestionResponse>>;
+  readonly onTrialEntryPreferenceProfile: (
+    body: Readonly<{
+      includePrivate: boolean;
+      expectedProfileRevision: number;
+      profile: Readonly<EntryPreferenceProfile>;
+    }>,
+  ) => Promise<M1cHttpResponse<InformationEntryPreferenceTrialResponse>>;
   readonly onOpenEvidence: (
     snapshotId: string,
     fragmentId: string | undefined,

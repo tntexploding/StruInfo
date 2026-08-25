@@ -12,6 +12,7 @@ import {InformationEntryPrivacyScope} from '../workspaces/information_entry_comp
 import {InformationEntryTextSearchOptions} from '../workspaces/information_entry_search_controls.js';
 import {InformationEntrySplitWorkspace} from '../workspaces/information_entry_split_workspace.js';
 import {InformationEntryReviewControls} from '../workspaces/information_entry_review_controls.js';
+import {InformationEntryPreferenceProfilePanel} from '../workspaces/information_entry_preference_profile_panel.js';
 import {AssociationPolicyPanel} from '../workspaces/association_policy_panel.js';
 import {PrivateDocumentResults} from '../workspaces/private_document_results.js';
 import {FormalKnowledgeWorkspace} from '../workspaces/formal_knowledge_workspace.js';
@@ -560,5 +561,71 @@ describe('M1D product workspaces', () => {
     expect(privateDocuments).toContain('完整隐私文档');
     expect(privateDocuments).toContain('独立于 Entry 的全文结果');
     expect(privateDocuments).toContain('查看完整隐私文档');
+  });
+
+  it('renders the explainable Entry preference profile as a secondary Tags tool', () => {
+    const profile = {
+      revision: 2,
+      enabled: false,
+      rules: [
+        {
+          ruleId: '77777777-7777-4777-8777-777777777777',
+          dimension: 'usefulness' as const,
+          featureKind: 'content_keyword' as const,
+          featureIdentity: 'postgresql',
+          displayValue: 'PostgreSQL',
+          effect: 'prefer' as const,
+          weight: 4 as const,
+        },
+      ],
+    };
+    const markup = renderToStaticMarkup(
+      <InformationEntryPreferenceProfilePanel
+        state={{status: 'ready', value: {status: 'ok', profile}}}
+        onReload={() => undefined}
+        onSave={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {status: 'unchanged', profile},
+          })
+        }
+        onSuggest={(includePrivate) =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {
+              status: 'ok',
+              includePrivate,
+              visibleEntryCount: 0,
+              totalCandidateCount: 0,
+              truncated: false,
+              candidates: [],
+            },
+          })
+        }
+        onTrial={({includePrivate}) =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {
+              status: 'complete',
+              profile,
+              includePrivate,
+              visibleEntryCount: 0,
+              evaluatedEntryCount: 0,
+              truncated: false,
+              items: [],
+            },
+          })
+        }
+      />,
+    );
+
+    expect(markup).toContain('可解释偏好规则');
+    expect(markup).toContain('SECONDARY / PREFERENCE PROFILE');
+    expect(markup).toContain('本地确定性 · 默认关闭');
+    expect(markup).toContain('手动新增规则');
+    expect(markup).toContain('从明确评分生成候选');
+    expect(markup).toContain('只读试运行');
+    expect(markup).toContain('本次候选与试运行包含隐私 Entry');
+    expect(markup).toContain('不会替你修改条目、重排查询或自动接受 AI 结果');
   });
 });

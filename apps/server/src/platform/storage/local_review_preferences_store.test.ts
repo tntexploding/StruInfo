@@ -5,6 +5,7 @@ import {join} from 'node:path';
 
 import {afterEach, describe, expect, it} from 'vitest';
 
+import {patchReviewPreferences} from '../../storage/review_preferences_store.js';
 import {LocalReviewPreferencesStore} from './local_review_preferences_store.js';
 
 const roots: string[] = [];
@@ -50,6 +51,11 @@ describe('LocalReviewPreferencesStore', () => {
       sourceSubscriptions: {
         revision: 0,
         subscriptions: [],
+      },
+      entryPreferenceProfile: {
+        revision: 0,
+        enabled: false,
+        rules: [],
       },
     });
   });
@@ -101,6 +107,30 @@ describe('LocalReviewPreferencesStore', () => {
           },
         ],
       },
+      {
+        revision: 2,
+        enabled: true,
+        rules: [
+          {
+            ruleId: '44444444-4444-4444-8444-444444444444',
+            dimension: 'usefulness',
+            featureKind: 'content_keyword',
+            featureIdentity: 'postgresql',
+            displayValue: 'PostgreSQL',
+            effect: 'prefer',
+            weight: 5,
+          },
+          {
+            ruleId: '55555555-5555-4555-8555-555555555555',
+            dimension: 'interest',
+            featureKind: 'domain',
+            featureIdentity: 'culture_arts',
+            displayValue: '文化与艺术',
+            effect: 'deprioritize',
+            weight: 2,
+          },
+        ],
+      },
     );
 
     await expect(store.load(WORKSPACE_A)).resolves.toMatchObject({
@@ -139,6 +169,30 @@ describe('LocalReviewPreferencesStore', () => {
           },
         ],
       },
+      entryPreferenceProfile: {
+        revision: 2,
+        enabled: true,
+        rules: [
+          {
+            ruleId: '44444444-4444-4444-8444-444444444444',
+            dimension: 'usefulness',
+            featureKind: 'content_keyword',
+            featureIdentity: 'postgresql',
+            displayValue: 'PostgreSQL',
+            effect: 'prefer',
+            weight: 5,
+          },
+          {
+            ruleId: '55555555-5555-4555-8555-555555555555',
+            dimension: 'interest',
+            featureKind: 'domain',
+            featureIdentity: 'culture_arts',
+            displayValue: '文化与艺术',
+            effect: 'deprioritize',
+            weight: 2,
+          },
+        ],
+      },
     });
     await expect(store.load(WORKSPACE_B)).resolves.toMatchObject({
       workspaceId: WORKSPACE_B,
@@ -154,6 +208,7 @@ describe('LocalReviewPreferencesStore', () => {
     expect(text).toContain('\n  "associationPolicy": {\n');
     expect(text).toContain('\n  "explorationPolicy": {\n');
     expect(text).toContain('\n  "sourceSubscriptions": {\n');
+    expect(text).toContain('\n  "entryPreferenceProfile": {\n');
     expect(text).toContain('\n    "revision": 3,\n');
   });
 
@@ -204,6 +259,80 @@ describe('LocalReviewPreferencesStore', () => {
         revision: 0,
         subscriptions: [],
       },
+      entryPreferenceProfile: {
+        revision: 0,
+        enabled: false,
+        rules: [],
+      },
+    });
+  });
+
+  it('serializes sibling preference updates without losing either field', async () => {
+    const {store} = createStore();
+    const profileUpdate = store.update(WORKSPACE_A, (current) => ({
+      next: patchReviewPreferences(current, {
+        entryPreferenceProfile: {
+          revision: 1,
+          enabled: true,
+          rules: [
+            {
+              ruleId: '44444444-4444-4444-8444-444444444444',
+              dimension: 'usefulness',
+              featureKind: 'content_keyword',
+              featureIdentity: 'postgresql',
+              displayValue: 'PostgreSQL',
+              effect: 'prefer',
+              weight: 5,
+            },
+          ],
+        },
+      }),
+      result: 'profile',
+    }));
+    const subscriptionUpdate = store.update(WORKSPACE_A, (current) => ({
+      next: patchReviewPreferences(current, {
+        sourceSubscriptions: {
+          revision: 1,
+          subscriptions: [
+            {
+              subscriptionId: '33333333-3333-4333-8333-333333333333',
+              label: 'Synthetic source',
+              enabled: false,
+              repositoryUri: 'https://github.com/example/project',
+              repositoryRef: 'main',
+              repositoryPath: 'docs/source.md',
+              profile: 'commonmark-v1',
+              sourceAlias: 'synthetic-source',
+              isPrivate: false,
+              intervalMinutes: 1_440,
+              cursor: {
+                commitSha: '1'.repeat(40),
+                sourceSha256: '2'.repeat(64),
+              },
+            },
+          ],
+        },
+      }),
+      result: 'subscription',
+    }));
+
+    await expect(
+      Promise.all([profileUpdate, subscriptionUpdate]),
+    ).resolves.toMatchObject([{result: 'profile'}, {result: 'subscription'}]);
+    await expect(store.load(WORKSPACE_A)).resolves.toMatchObject({
+      entryPreferenceProfile: {revision: 1, enabled: true},
+      sourceSubscriptions: {
+        revision: 1,
+        subscriptions: [
+          {
+            subscriptionId: '33333333-3333-4333-8333-333333333333',
+            cursor: {
+              commitSha: '1'.repeat(40),
+              sourceSha256: '2'.repeat(64),
+            },
+          },
+        ],
+      },
     });
   });
 
@@ -226,6 +355,40 @@ describe('LocalReviewPreferencesStore', () => {
     await expect(store.save(WORKSPACE_A, ['one', 'ONE'])).rejects.toMatchObject(
       {code: 'preferences_invalid'},
     );
+  });
+
+  it('rejects non-canonical or open preference profile rules', async () => {
+    const {root, store} = createStore();
+    writeFileSync(
+      join(root, WORKSPACE_A + '.review-preferences.json'),
+      JSON.stringify({
+        format: 'struinfo.review-preferences',
+        version: 1,
+        workspaceId: WORKSPACE_A,
+        quickTags: [],
+        entryPreferenceProfile: {
+          revision: 1,
+          enabled: true,
+          rules: [
+            {
+              ruleId: '44444444-4444-4444-8444-444444444444',
+              dimension: 'usefulness',
+              featureKind: 'content_keyword',
+              featureIdentity: 'PostgreSQL',
+              displayValue: 'PostgreSQL',
+              effect: 'prefer',
+              weight: 5,
+              unknown: true,
+            },
+          ],
+        },
+      }),
+      'utf8',
+    );
+
+    await expect(store.load(WORKSPACE_A)).rejects.toMatchObject({
+      code: 'preferences_invalid',
+    });
   });
 });
 

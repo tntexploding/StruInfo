@@ -77,6 +77,49 @@ export class M1cApiController {
     );
   }
 
+  @Get('entries/preferences/profile')
+  public async informationEntryPreferenceProfile(
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.loadInformationEntryPreferenceProfile(),
+    );
+  }
+
+  @Put('entries/preferences/profile')
+  public async saveInformationEntryPreferenceProfile(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.saveInformationEntryPreferenceProfile(body),
+    );
+  }
+
+  @Post('entries/preferences/profile/suggestions')
+  public async suggestInformationEntryPreferenceProfile(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.suggestInformationEntryPreferenceProfile(body),
+    );
+  }
+
+  @Post('entries/preferences/profile/trial')
+  public async trialInformationEntryPreferenceProfile(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.trialInformationEntryPreferenceProfile(body),
+    );
+  }
+
   @Post('imports/markdown')
   public async importMarkdown(
     @Body() body: unknown,

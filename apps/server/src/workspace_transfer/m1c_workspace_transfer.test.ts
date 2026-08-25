@@ -106,6 +106,8 @@ describe('M1C workspace transfer', () => {
     expect(serialized).toContain('"contentWeight":50');
     expect(serialized).toContain('"explorationPolicy"');
     expect(serialized).toContain('"resultShare":30');
+    expect(serialized).toContain('"entryPreferenceProfile"');
+    expect(serialized).toContain('"featureIdentity":"postgresql"');
     expect(new TextDecoder().decode(storedBytes)).toContain(
       'struinfo.m1d-entry',
     );
@@ -583,6 +585,22 @@ function memoryReviewPreferences(): ReviewPreferencesStore {
       crossDomain: false,
       serendipity: true,
     },
+    undefined,
+    {
+      revision: 2,
+      enabled: true,
+      rules: [
+        {
+          ruleId: '77777777-7777-4777-8777-777777777777',
+          dimension: 'usefulness',
+          featureKind: 'content_keyword',
+          featureIdentity: 'postgresql',
+          displayValue: 'PostgreSQL',
+          effect: 'prefer',
+          weight: 5,
+        },
+      ],
+    },
   );
   return {
     load(workspaceId) {
@@ -597,6 +615,8 @@ function memoryReviewPreferences(): ReviewPreferencesStore {
       vocabulary,
       associationPolicy,
       explorationPolicy,
+      sourceSubscriptions,
+      entryPreferenceProfile,
     ) {
       if (workspaceId !== WORKSPACE_ID)
         return Promise.reject(new Error('workspace'));
@@ -607,6 +627,8 @@ function memoryReviewPreferences(): ReviewPreferencesStore {
         vocabulary,
         associationPolicy,
         explorationPolicy,
+        sourceSubscriptions,
+        entryPreferenceProfile,
       );
       return Promise.resolve(preferences);
     },

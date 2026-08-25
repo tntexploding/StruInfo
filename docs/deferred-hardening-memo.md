@@ -79,7 +79,7 @@ record of why that unissued harness never blocked product work.
 
 - Source: M1C-USE-1 local browser verification
 - Owner: Test tooling
-- Status: Deferred hardening
+- Status: Closed for the supported single-process local workflow in M1G-3D
 - Scope: Playwright-owned Vite process cleanup on the current Windows host
 - Evidence: All nine configured browser scenarios completed and reported PASS,
   including the persisted review queue, reviewed-Fragment-to-searchable-knowledge
@@ -208,15 +208,17 @@ record of why that unissued harness never blocked product work.
   independent writers that overlap after reading the same prior revision could
   preserve their own field while replacing a concurrently changed sibling
   field.
-- Current product impact: No loss has reproduced through the supported
-  single-user interface or synthetic M1G-2 checks. Explicit preference actions
-  are serialized by the current UI, each scheduler instance runs subscription
-  checks sequentially, and subscription content import remains independently
-  idempotent. This is a future multi-writer robustness improvement, not a
-  reachable blocker for the current local workflow.
-- Revisit when: A preference lost update is reproduced, another background
-  preference writer is introduced, multiple application processes may share one
-  workspace, or preferences gain a shared compare-and-swap write boundary.
+- Resolution: M1G-3D adds one per-workspace atomic read-modify-write boundary
+  to the external preference store and moves all current API, policy and source-
+  subscription cursor writers onto it. Optimistic revision checks now occur
+  inside the same serialized operation, and synthetic overlap tests prove that
+  sibling fields survive.
+- Remaining boundary: The lock is owned by one runtime composition. Coordinating
+  separate operating-system processes that intentionally share one external
+  workspace remains deferred because the ordinary local product runs the
+  combined `all` role and no cross-process lost update is currently reachable.
+- Revisit when: Separate API and scheduler processes are admitted for one shared
+  workspace, or a cross-process preference lost update is reproduced.
 
 ## Entry Template
 
