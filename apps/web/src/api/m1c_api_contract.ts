@@ -198,6 +198,113 @@ export type AiAssociationProposalListResponse = AiTagProposalListResponse;
 export type AiAssociationProposalStartResponse = AiTagProposalStartResponse;
 export type AiAssociationProposalDecisionResponse =
   AiTagProposalDecisionResponse;
+
+export type EntryPreferenceDimension = 'usefulness' | 'interest';
+export type EntryPreferenceFeatureKind = 'content_keyword' | 'type' | 'domain';
+export type EntryPreferenceEffect = 'prefer' | 'deprioritize';
+export type EntryPreferenceWeight = 1 | 2 | 3 | 4 | 5;
+
+export interface EntryPreferenceRule {
+  readonly ruleId: string;
+  readonly dimension: EntryPreferenceDimension;
+  readonly featureKind: EntryPreferenceFeatureKind;
+  readonly featureIdentity: string;
+  readonly displayValue: string;
+  readonly effect: EntryPreferenceEffect;
+  readonly weight: EntryPreferenceWeight;
+}
+
+export interface EntryPreferenceProfile {
+  readonly revision: number;
+  readonly enabled: boolean;
+  readonly rules: readonly Readonly<EntryPreferenceRule>[];
+}
+
+export interface InformationEntryPreferenceProfileResponse {
+  readonly status: 'ok';
+  readonly profile: Readonly<EntryPreferenceProfile>;
+}
+
+export type InformationEntryPreferenceProfileWriteResponse =
+  | Readonly<{
+      status: 'applied' | 'unchanged';
+      profile: Readonly<EntryPreferenceProfile>;
+    }>
+  | Readonly<{
+      status: 'rejected' | 'failed';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
+export interface InformationEntryPreferenceSuggestion {
+  readonly dimension: EntryPreferenceDimension;
+  readonly featureKind: EntryPreferenceFeatureKind;
+  readonly featureIdentity: string;
+  readonly displayValue: string;
+  readonly effect: EntryPreferenceEffect;
+  readonly suggestedWeight: EntryPreferenceWeight;
+  readonly positiveCount: number;
+  readonly neutralCount: number;
+  readonly negativeCount: number;
+  readonly positiveEntryIds: readonly string[];
+  readonly neutralEntryIds: readonly string[];
+  readonly negativeEntryIds: readonly string[];
+}
+
+export type InformationEntryPreferenceSuggestionResponse =
+  | Readonly<{
+      status: 'ok';
+      includePrivate: boolean;
+      visibleEntryCount: number;
+      totalCandidateCount: number;
+      truncated: boolean;
+      candidates: readonly Readonly<InformationEntryPreferenceSuggestion>[];
+    }>
+  | Readonly<{
+      status: 'failed' | 'rejected';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
+export interface InformationEntryPreferenceTrialItem {
+  readonly entryId: string;
+  readonly revision: number;
+  readonly usefulnessScore?: EntryPreferenceWeight;
+  readonly interestScore?: EntryPreferenceWeight;
+  readonly matchedRules: readonly Readonly<{
+    readonly rule: Readonly<EntryPreferenceRule>;
+    readonly signedWeight: number;
+  }>[];
+  readonly totals: Readonly<{usefulness: number; interest: number}>;
+}
+
+export type InformationEntryPreferenceTrialResponse =
+  | Readonly<{
+      status: 'complete';
+      profile: Readonly<EntryPreferenceProfile>;
+      includePrivate: boolean;
+      visibleEntryCount: number;
+      evaluatedEntryCount: number;
+      truncated: boolean;
+      items: readonly Readonly<InformationEntryPreferenceTrialItem>[];
+    }>
+  | Readonly<{
+      status: 'stale_profile';
+      expectedProfileRevision: number;
+      draftProfileRevision: number;
+      currentProfileRevision: number;
+    }>
+  | Readonly<{
+      status: 'stale_entries';
+      entries: readonly Readonly<{
+        entryId: string;
+        expectedRevision: number;
+        currentRevision?: number;
+      }>[];
+    }>
+  | Readonly<{
+      status: 'rejected' | 'failed';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
 export interface ReviewPreferencesResponse {
   readonly status: 'ok';
   readonly workspaceId: string;

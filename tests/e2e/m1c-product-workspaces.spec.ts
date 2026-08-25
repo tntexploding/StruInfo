@@ -105,11 +105,26 @@ const SYNTHETIC_EXPLORATION_ENTRY = {
   },
 };
 
+function controlledGate(): Readonly<{
+  promise: Promise<void>;
+  release: () => void;
+}> {
+  let release: () => void = () => undefined;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return Object.freeze({promise, release});
+}
+
 async function installCurrentProductApi(
   page: Page,
   options?: Readonly<{
     manualSplitRequests?: string[];
     importRequests?: string[];
+    preferenceSuggestionGate?: Promise<void>;
+    preferenceSuggestionScopes?: boolean[];
+    preferenceTrialGate?: Promise<void>;
+    preferenceTrialScopes?: boolean[];
   }>,
 ) {
   const productRequests: string[] = [];
@@ -132,6 +147,13 @@ async function installCurrentProductApi(
     crossDomain: true,
     serendipity: true,
   };
+  const entryPreferenceProfile = {
+    revision: 0,
+    enabled: false,
+    rules: [],
+  };
+  let preferenceSuggestionRequestCount = 0;
+  let preferenceTrialRequestCount = 0;
 
   await page.route('**/*', async (route) => {
     const request = route.request();
@@ -241,6 +263,105 @@ async function installCurrentProductApi(
             threshold: associationPolicy.threshold,
           },
           explorationPolicy,
+        },
+        status: 200,
+      });
+      return;
+    }
+    if (
+      path === '/api/v1/entries/preferences/profile' &&
+      request.method() === 'GET'
+    ) {
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {status: 'ok', profile: entryPreferenceProfile},
+        status: 200,
+      });
+      return;
+    }
+    if (
+      path === '/api/v1/entries/preferences/profile/suggestions' &&
+      request.method() === 'POST'
+    ) {
+      const body = JSON.parse(request.postData() ?? 'null') as Readonly<{
+        includePrivate: boolean;
+      }>;
+      const requestIndex = preferenceSuggestionRequestCount++;
+      options?.preferenceSuggestionScopes?.push(body.includePrivate);
+      if (
+        requestIndex === 0 &&
+        options?.preferenceSuggestionGate !== undefined
+      ) {
+        await options.preferenceSuggestionGate;
+      }
+      const displayValue = body.includePrivate
+        ? '当前隐私候选'
+        : '迟到公开候选';
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {
+          status: 'ok',
+          includePrivate: body.includePrivate,
+          visibleEntryCount: body.includePrivate ? 2 : 1,
+          totalCandidateCount: 1,
+          truncated: false,
+          candidates: [
+            {
+              dimension: 'usefulness',
+              featureKind: 'content_keyword',
+              featureIdentity: body.includePrivate
+                ? 'current-private'
+                : 'late-public',
+              displayValue,
+              effect: 'prefer',
+              suggestedWeight: 4,
+              positiveCount: 3,
+              neutralCount: 0,
+              negativeCount: 0,
+              positiveEntryIds: [ENTRY_ID],
+              neutralEntryIds: [],
+              negativeEntryIds: [],
+            },
+          ],
+        },
+        status: 200,
+      });
+      return;
+    }
+    if (
+      path === '/api/v1/entries/preferences/profile/trial' &&
+      request.method() === 'POST'
+    ) {
+      const body = JSON.parse(request.postData() ?? 'null') as Readonly<{
+        includePrivate: boolean;
+      }>;
+      const requestIndex = preferenceTrialRequestCount++;
+      options?.preferenceTrialScopes?.push(body.includePrivate);
+      if (requestIndex === 0 && options?.preferenceTrialGate !== undefined) {
+        await options.preferenceTrialGate;
+      }
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {
+          status: 'complete',
+          profile: entryPreferenceProfile,
+          includePrivate: body.includePrivate,
+          visibleEntryCount: 1,
+          evaluatedEntryCount: 1,
+          truncated: false,
+          items: [
+            {
+              entryId:
+                requestIndex === 0
+                  ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+                  : 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+              revision: 1,
+              usefulnessScore: 5,
+              interestScore: 4,
+              matchedRules: [],
+              totals: {usefulness: 0, interest: 0},
+            },
+          ],
         },
         status: 200,
       });
@@ -612,6 +733,85 @@ test('keeps exploration separate, explicit, and responsive across target widths'
   expect(productRequests).toContain(
     'POST /api/v1/entries/exploration/candidates',
   );
+});
+
+test('keeps the preference panel responsive and ignores superseded local results', async ({
+  page,
+}) => {
+  const suggestionGate = controlledGate();
+  const trialGate = controlledGate();
+  const suggestionScopes: boolean[] = [];
+  const trialScopes: boolean[] = [];
+  await installCurrentProductApi(page, {
+    preferenceSuggestionGate: suggestionGate.promise,
+    preferenceSuggestionScopes: suggestionScopes,
+    preferenceTrialGate: trialGate.promise,
+    preferenceTrialScopes: trialScopes,
+  });
+  await page.setViewportSize({width: 320, height: 720});
+  await page.goto('/');
+
+  const navigation = page.getByRole('navigation', {name: '产品工作区'});
+  await navigation.getByRole('button', {name: '标签', exact: true}).click();
+  await expect(
+    page.getByRole('heading', {name: '可解释偏好规则', exact: true}),
+  ).toBeVisible();
+
+  const privateScope = page.getByRole('checkbox', {
+    name: '本次候选与试运行包含隐私 Entry',
+    exact: true,
+  });
+  const generate = page.getByRole('button', {
+    name: '生成候选',
+    exact: true,
+  });
+  await generate.click();
+  await expect.poll(() => suggestionScopes.length).toBe(1);
+  await privateScope.check();
+  await generate.click();
+  await expect(page.getByText('当前隐私候选', {exact: true})).toBeVisible();
+  const lateSuggestionResponse = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname ===
+      '/api/v1/entries/preferences/profile/suggestions',
+  );
+  suggestionGate.release();
+  await lateSuggestionResponse;
+  await expect(page.getByText('迟到公开候选', {exact: true})).toHaveCount(0);
+  expect(suggestionScopes).toEqual([false, true]);
+
+  const trial = page.getByRole('button', {name: /试算最多 100 条/u});
+  await trial.click();
+  await expect.poll(() => trialScopes.length).toBe(1);
+  await privateScope.uncheck();
+  await trial.click();
+  await expect(page.getByText('bbbbbbbb…', {exact: true})).toBeVisible();
+  const lateTrialResponse = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname ===
+      '/api/v1/entries/preferences/profile/trial',
+  );
+  trialGate.release();
+  await lateTrialResponse;
+  await expect(page.getByText('aaaaaaaa…', {exact: true})).toHaveCount(0);
+  expect(trialScopes).toEqual([true, false]);
+
+  for (const viewport of [
+    {width: 320, height: 720},
+    {width: 390, height: 844},
+    {width: 768, height: 900},
+    {width: 1024, height: 900},
+    {width: 1440, height: 1000},
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(
+      page.getByRole('heading', {name: '可解释偏好规则', exact: true}),
+    ).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+  }
 });
 
 test('splits one immutable Fragment at an explicit caret and submits exact scalar ranges', async ({

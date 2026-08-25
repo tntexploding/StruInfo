@@ -243,6 +243,7 @@ function memoryPreferences(): ReviewPreferencesStore {
       associationPolicy,
       explorationPolicy,
       sourceSubscriptions,
+      entryPreferenceProfile,
     ) => {
       current = createReviewPreferences(
         workspaceId,
@@ -252,6 +253,7 @@ function memoryPreferences(): ReviewPreferencesStore {
         associationPolicy,
         explorationPolicy,
         sourceSubscriptions,
+        entryPreferenceProfile,
       );
       return Promise.resolve(current);
     },

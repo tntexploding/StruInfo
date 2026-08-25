@@ -1,6 +1,6 @@
 # StruInfo 开发大纲
 
-- 状态：M1G-2 版本化 Git 信源订阅已完成
+- 状态：M1G-3 可解释 Entry PreferenceProfile 已完成
 - 最近更新：2026-08-25
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
@@ -28,7 +28,8 @@
   [ADR 0021](adr/0021-query-association-and-result-comparison.md)、
   [ADR 0022](adr/0022-evidence-bounded-ai-query-synthesis.md)、
   [ADR 0023](adr/0023-deterministic-entry-exploration-policy.md)、
-  [ADR 0024](adr/0024-versioned-git-source-subscriptions.md)
+  [ADR 0024](adr/0024-versioned-git-source-subscriptions.md)、
+  [ADR 0025](adr/0025-explainable-entry-preference-profile.md)
 
 ## 1. 结论
 
@@ -648,8 +649,9 @@ import -> snapshot -> document nodes/fragments/media
 8. 正式知识页搜索最高匹配 Entry，组合有界自动/用户关系图谱，支持图/列表、编辑、隐藏、恢复、创建和来源回看；
 9. 个人数据包导出/恢复 56 张当前表、引用 Blob 字节、当前偏好、Entry v3 精确区间、Association v3 图谱元数据和 Processing v4 状态。
 10. 导入页管理外部版本化的精确 GitHub Markdown 单文件订阅；手动或默认关闭的间隔检查创建真实 ProcessingRun，变化时复用既有 Evidence 导入。
+11. M1G-3A 已实现闭合、默认关闭、带修订的外部 PreferenceProfile 状态及个人数据包兼容；M1G-3B 已实现从显式评分生成确定性候选和最多 100 个 Entry 的纯只读试运行；M1G-3C 已实现期望修订公共保存、候选/试运行操作和标签页次级规则面板；M1G-3D 已完成按 workspace 原子串行的偏好读改写、乐观修订检查、迟到响应防护、隐私/旧包/响应式浏览器及制品隔离回归。
 
-旧 Curation、正式 Knowledge 写入/读取和旧 Knowledge 检索应用运行时已经删除；迁移与历史数据只为兼容保留。M1E-2 不恢复这些入口，而是在 Entry/Association 边界完成正式图谱。M1E-3A–D 已完成中性任务、公开 Entry 标签、selected-pair 联系和 selected-Snapshot 拆分提案；M1E-4A/4B 已完成首次物化前的既有 Fragment 与 Fragment 内标量边界人工分组；M1E-5A/5B 已完成单份本地 Markdown、文本、HTML 和带文字层 PDF 导入；M1F-1/2/3 已完成可解释词法查询、查询内 Association 联想、双条事实比较和显式公开证据综合；M1G-1 已完成与普通排序隔离的本地探索；M1G-2 已完成精确公开 GitHub Markdown 单文件订阅、变化检查和既有 Evidence 导入复用。后两者都不代表偏好学习、通用网页采集、自动下游处理、私密外发、Provider 检索、RAG、向量、容器/公网认证或历史测试框架强化。阻断分类继续以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
+旧 Curation、正式 Knowledge 写入/读取和旧 Knowledge 检索应用运行时已经删除；迁移与历史数据只为兼容保留。M1E-2 不恢复这些入口，而是在 Entry/Association 边界完成正式图谱。M1E-3A–D 已完成中性任务、公开 Entry 标签、selected-pair 联系和 selected-Snapshot 拆分提案；M1E-4A/4B 已完成首次物化前的既有 Fragment 与 Fragment 内标量边界人工分组；M1E-5A/5B 已完成单份本地 Markdown、文本、HTML 和带文字层 PDF 导入；M1F-1/2/3 已完成可解释词法查询、查询内 Association 联想、双条事实比较和显式公开证据综合；M1G-1 已完成与普通排序隔离的本地探索；M1G-2 已完成精确公开 GitHub Markdown 单文件订阅、变化检查和既有 Evidence 导入复用；M1G-3A–D 已完成外部 Profile 状态、确定性建议、只读试运行、公共命令、Tags 次级面板以及并发/隔离回归。现有能力都不代表自动下游处理、通用网页采集、私密外发、Provider 检索、RAG、向量、容器/公网认证或历史测试框架强化。阻断分类继续以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
 
 ### 准备门：基础架构（已完成）
 

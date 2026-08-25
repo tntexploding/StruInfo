@@ -10,6 +10,8 @@ import type {
   AiTagProposalStartResponse,
   EvidenceSnapshot,
   EvidenceSnapshotSummary,
+  EntryPreferenceProfile,
+  EntryPreferenceRule,
   InformationEntryAssociationListResponse,
   InformationEntryAssociationOverrideResponse,
   InformationEntryAssociationPolicyWriteResponse,
@@ -23,6 +25,10 @@ import type {
   InformationEntryRevisionResponse,
   InformationEntrySearchResponse,
   InformationEntryQuerySynthesisResponse,
+  InformationEntryPreferenceProfileResponse,
+  InformationEntryPreferenceProfileWriteResponse,
+  InformationEntryPreferenceSuggestionResponse,
+  InformationEntryPreferenceTrialResponse,
   InformationDocumentTagWriteResponse,
   M1cHttpResponse,
   DocumentImportResponse,
@@ -77,6 +83,33 @@ export interface M1cApiClient {
     preferences: Readonly<ReviewPreferencesWrite>,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<ReviewPreferencesResponse>>;
+  loadInformationEntryPreferenceProfile(
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryPreferenceProfileResponse>>;
+  saveInformationEntryPreferenceProfile(
+    body: Readonly<{
+      expectedRevision: number;
+      enabled: boolean;
+      rules: readonly Readonly<EntryPreferenceRule>[];
+    }>,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryPreferenceProfileWriteResponse>>;
+  suggestInformationEntryPreferenceProfile(
+    includePrivate: boolean,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryPreferenceSuggestionResponse>>;
+  trialInformationEntryPreferenceProfile(
+    body: Readonly<{
+      includePrivate: boolean;
+      expectedProfileRevision: number;
+      profile: Readonly<EntryPreferenceProfile>;
+      expectedEntries?: readonly Readonly<{
+        entryId: string;
+        revision: number;
+      }>[];
+    }>,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryPreferenceTrialResponse>>;
   importMarkdown(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -267,6 +300,10 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     loadEvidenceSnapshot: reject,
     loadReviewPreferences: reject,
     saveReviewPreferences: reject,
+    loadInformationEntryPreferenceProfile: reject,
+    saveInformationEntryPreferenceProfile: reject,
+    suggestInformationEntryPreferenceProfile: reject,
+    trialInformationEntryPreferenceProfile: reject,
     importMarkdown: reject,
     importDocument: reject,
     materializeInformationEntries: reject,
@@ -356,6 +393,29 @@ export function createM1cApiClient(
     saveReviewPreferences: async (preferences, options) =>
       decodeReviewPreferencesResponse(
         await put<unknown>('api/v1/preferences/review', preferences, options),
+      ),
+    loadInformationEntryPreferenceProfile: (options) =>
+      get<InformationEntryPreferenceProfileResponse>(
+        'api/v1/entries/preferences/profile',
+        options,
+      ),
+    saveInformationEntryPreferenceProfile: (body, options) =>
+      put<InformationEntryPreferenceProfileWriteResponse>(
+        'api/v1/entries/preferences/profile',
+        body,
+        options,
+      ),
+    suggestInformationEntryPreferenceProfile: (includePrivate, options) =>
+      post<InformationEntryPreferenceSuggestionResponse>(
+        'api/v1/entries/preferences/profile/suggestions',
+        {includePrivate},
+        options,
+      ),
+    trialInformationEntryPreferenceProfile: (body, options) =>
+      post<InformationEntryPreferenceTrialResponse>(
+        'api/v1/entries/preferences/profile/trial',
+        body,
+        options,
       ),
     importMarkdown: (body, options) =>
       post<MarkdownImportResponse>('api/v1/imports/markdown', body, options),

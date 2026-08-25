@@ -244,6 +244,43 @@ function stubApi(
       Promise.resolve(result(200, {status: 'ok', quickTags: []})),
     saveReviewPreferences: () =>
       Promise.resolve(result(200, {status: 'ok', quickTags: []})),
+    loadInformationEntryPreferenceProfile: () =>
+      Promise.resolve(
+        result(200, {
+          status: 'ok',
+          profile: {revision: 0, enabled: false, rules: []},
+        }),
+      ),
+    saveInformationEntryPreferenceProfile: () =>
+      Promise.resolve(
+        result(200, {
+          status: 'unchanged',
+          profile: {revision: 0, enabled: false, rules: []},
+        }),
+      ),
+    suggestInformationEntryPreferenceProfile: () =>
+      Promise.resolve(
+        result(200, {
+          status: 'ok',
+          includePrivate: false,
+          visibleEntryCount: 0,
+          totalCandidateCount: 0,
+          truncated: false,
+          candidates: [],
+        }),
+      ),
+    trialInformationEntryPreferenceProfile: () =>
+      Promise.resolve(
+        result(200, {
+          status: 'complete',
+          profile: {revision: 0, enabled: false, rules: []},
+          includePrivate: false,
+          visibleEntryCount: 0,
+          evaluatedEntryCount: 0,
+          truncated: false,
+          items: [],
+        }),
+      ),
     importMarkdown: () => Promise.resolve(result(201, {status: 'created'})),
     importDocument: () => Promise.resolve(result(201, {status: 'created'})),
     materializeInformationEntries: () =>

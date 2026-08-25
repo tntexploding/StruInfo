@@ -4,6 +4,7 @@ import {join} from 'node:path';
 
 import {
   createReviewPreferences,
+  decodeEntryPreferenceProfile,
   decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
   decodeReviewExplorationPolicyPreferences,
@@ -11,6 +12,7 @@ import {
   decodeReviewQuickTags,
   decodeReviewVocabularyPreferences,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+  DEFAULT_ENTRY_PREFERENCE_PROFILE,
   DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
@@ -18,10 +20,13 @@ import {
   REVIEW_PREFERENCES_VERSION,
   ReviewPreferencesStoreError,
   type ReviewPreferences,
+  type EntryPreferenceProfile,
   type ReviewAssociationPolicyPreferences,
   type ReviewAutomaticKeywordPreferences,
   type ReviewExplorationPolicyPreferences,
   type ReviewPreferencesStore,
+  type ReviewPreferencesUpdater,
+  type ReviewPreferencesUpdateResult,
   type ReviewSourceSubscriptionPreferences,
   type ReviewVocabularyPreferences,
 } from '../../storage/review_preferences_store.js';
@@ -33,6 +38,7 @@ const MAXIMUM_PREFERENCES_FILE_BYTES = 512 * 1024;
 /** Workspace-scoped personal UI preferences under the external data root. */
 export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
   readonly #preferencesRoot: string;
+  readonly #writeTails = new Map<string, Promise<void>>();
 
   public constructor(preferencesRoot: string) {
     this.#preferencesRoot = preferencesRoot;
@@ -83,8 +89,62 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>,
     explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>,
     sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences> = DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
+    entryPreferenceProfile: Readonly<EntryPreferenceProfile> = DEFAULT_ENTRY_PREFERENCE_PROFILE,
   ): Promise<Readonly<ReviewPreferences>> {
     validateWorkspaceId(workspaceId);
+    return this.#serializeWrite(workspaceId, () =>
+      this.#saveUnlocked(
+        workspaceId,
+        quickTags,
+        automaticKeywords,
+        vocabulary,
+        associationPolicy,
+        explorationPolicy,
+        sourceSubscriptions,
+        entryPreferenceProfile,
+      ),
+    );
+  }
+
+  public async update<T>(
+    workspaceId: string,
+    updater: ReviewPreferencesUpdater<T>,
+  ): Promise<Readonly<ReviewPreferencesUpdateResult<T>>> {
+    validateWorkspaceId(workspaceId);
+    return this.#serializeWrite(workspaceId, async () => {
+      const current = await this.load(workspaceId);
+      const update = updater(current);
+      if (update.next.workspaceId !== workspaceId) throw invalid();
+      const preferences =
+        update.next === current
+          ? current
+          : await this.#saveUnlocked(
+              workspaceId,
+              update.next.quickTags,
+              update.next.automaticKeywords ??
+                DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+              update.next.vocabulary ?? DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+              update.next.associationPolicy,
+              update.next.explorationPolicy,
+              update.next.sourceSubscriptions ??
+                DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
+              update.next.entryPreferenceProfile ??
+                DEFAULT_ENTRY_PREFERENCE_PROFILE,
+            );
+      return Object.freeze({preferences, result: update.result});
+    });
+  }
+
+  async #saveUnlocked(
+    workspaceId: string,
+    quickTags: readonly string[],
+    automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences>,
+    vocabulary: Readonly<ReviewVocabularyPreferences>,
+    associationPolicy: Readonly<ReviewAssociationPolicyPreferences> | undefined,
+    explorationPolicy: Readonly<ReviewExplorationPolicyPreferences> | undefined,
+    sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences>,
+    entryPreferenceProfile: Readonly<EntryPreferenceProfile>,
+  ): Promise<Readonly<ReviewPreferences>> {
     const decoded = decodeReviewQuickTags(quickTags);
     const decodedAutomaticKeywords =
       decodeReviewAutomaticKeywordPreferences(automaticKeywords);
@@ -99,6 +159,9 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
         : decodeReviewExplorationPolicyPreferences(explorationPolicy);
     const decodedSourceSubscriptions =
       decodeReviewSourceSubscriptionPreferences(sourceSubscriptions);
+    const decodedEntryPreferenceProfile = decodeEntryPreferenceProfile(
+      entryPreferenceProfile,
+    );
     if (
       decoded === undefined ||
       decodedAutomaticKeywords === undefined ||
@@ -107,7 +170,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
         decodedAssociationPolicy === undefined) ||
       (explorationPolicy !== undefined &&
         decodedExplorationPolicy === undefined) ||
-      decodedSourceSubscriptions === undefined
+      decodedSourceSubscriptions === undefined ||
+      decodedEntryPreferenceProfile === undefined
     ) {
       throw invalid();
     }
@@ -119,6 +183,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       decodedAssociationPolicy,
       decodedExplorationPolicy,
       decodedSourceSubscriptions,
+      decodedEntryPreferenceProfile,
     );
     const bytes = new TextEncoder().encode(
       `${JSON.stringify(preferences, undefined, 2)}\n`,
@@ -136,6 +201,28 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       await removeIfPresent(temporaryPath);
       if (error instanceof ReviewPreferencesStoreError) throw error;
       throw unavailable();
+    }
+  }
+
+  async #serializeWrite<T>(
+    workspaceId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.#writeTails.get(workspaceId) ?? Promise.resolve();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.catch(() => undefined).then(() => gate);
+    this.#writeTails.set(workspaceId, tail);
+    await previous.catch(() => undefined);
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (this.#writeTails.get(workspaceId) === tail) {
+        this.#writeTails.delete(workspaceId);
+      }
     }
   }
 
@@ -183,13 +270,21 @@ function decodePreferences(
     value.sourceSubscriptions === undefined
       ? DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES
       : decodeReviewSourceSubscriptionPreferences(value.sourceSubscriptions);
+  const entryPreferenceProfile =
+    value.entryPreferenceProfile === undefined
+      ? DEFAULT_ENTRY_PREFERENCE_PROFILE
+      : decodeEntryPreferenceProfile(value.entryPreferenceProfile);
   if (
     value.associationPolicy !== undefined &&
     associationPolicy === undefined
   ) {
     throw invalid();
   }
-  if (explorationPolicy === undefined || sourceSubscriptions === undefined)
+  if (
+    explorationPolicy === undefined ||
+    sourceSubscriptions === undefined ||
+    entryPreferenceProfile === undefined
+  )
     throw invalid();
   return createReviewPreferences(
     workspaceId,
@@ -199,6 +294,7 @@ function decodePreferences(
     associationPolicy,
     explorationPolicy,
     sourceSubscriptions,
+    entryPreferenceProfile,
   );
 }
 

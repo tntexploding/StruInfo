@@ -16,3 +16,5 @@ export * from './information_entry_query_synthesis_contract.js';
 export * from './information_entry_query_synthesis.js';
 export * from './information_entry_exploration_contract.js';
 export * from './information_entry_exploration.js';
+export * from './information_entry_preference_profile_contract.js';
+export * from './information_entry_preference_profile.js';

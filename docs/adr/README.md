@@ -44,6 +44,7 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0022](0022-evidence-bounded-ai-query-synthesis.md) | Accepted | Explicit public-only AI synthesis over bounded deterministic Entry query evidence |
 | [0023](0023-deterministic-entry-exploration-policy.md) | Accepted | Default-off explainable Entry exploration over current visible direct Associations |
 | [0024](0024-versioned-git-source-subscriptions.md) | Accepted | Versioned exact GitHub Markdown subscriptions through external preferences and existing Evidence import |
+| [0025](0025-explainable-entry-preference-profile.md) | Accepted | Complete local explainable Entry preference rules, read-only trial evaluation and integration boundary before automation authority |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -79,3 +80,10 @@ ADR 0023 adds a default-off local exploration lane without changing ordinary
 retrieval. ADR 0024 adds one exact public-GitHub Markdown subscription through
 external preferences, real ProcessingRun records and the existing Evidence
 import authority; it does not add a generic crawler or Provider boundary.
+ADR 0025 governs the current product increment: M1G-3A implements its
+default-off external Entry PreferenceProfile state and package compatibility,
+M1G-3B implements deterministic suggestions and bounded read-only trials, and
+M1G-3C exposes the narrow commands and secondary Tags panel. M1G-3D completes
+atomic sibling-preference updates, stale-response protection and the privacy,
+backward-package, responsive-browser and artifact checks. The accepted boundary
+does not grant automatic routing or Provider authority.
