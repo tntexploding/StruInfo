@@ -1,26 +1,28 @@
 # Contributing to StruInfo
 
 StruInfo has accepted its foundational development outline and architecture
-decisions. M1C remains the compatibility baseline, while M1E-1 is the cleaned
-runnable InformationEntry-first product baseline. ADR 0011 governs the shipped
-M1E-2 Entry-centred formal relation graph. Its direct-use increment now also
-provides a separate complete-private-document query channel and versioned external
-association weights/thresholds. ADR 0012 governs the accepted M1E-3A
-provider-neutral ProcessingRun/proposal foundation, while ADR 0013 through ADR
-0015 govern the shipped OpenAI split, tags, and selected-pair association
-proposal slices. The planned M1E-3 provider increment is complete. A later AI
-increment must still select one narrow Provider boundary and one closed proposal
-payload rather than adding a generic model write path; reachable owner-use
-feedback takes priority.
+decisions. M1C remains the compatibility baseline, while the active product is
+the cleaned InformationEntry-first flow. ADR 0011 governs the shipped M1E-2
+Entry-centred formal relation graph; ADR 0012 through ADR 0015 govern the
+provider-neutral task boundary and the shipped OpenAI split, tags and
+selected-pair association proposal slices. ADR 0016 through ADR 0019 complete
+manual split and local text/HTML/PDF import, while ADR 0020 and ADR 0021 complete
+the M1F-2 exact/substring/fuzzy query, Association traversal and two-result
+comparison baseline. A later AI increment must still select one narrow Provider
+boundary and one closed proposal payload rather than adding a generic model
+write path.
 An accepted ADR does not bypass a reachable product, dependency, or release
 obligation, but deferred hardening and test-tooling certification do not block
 unrelated product work.
 
-The active workspace is currently frozen as a data-free owner-audit baseline.
-Until the owner explicitly lifts that freeze, contributors must not import,
-restore, fetch or add real documents, entries, preferences or derived knowledge.
-Use synthetic value-free fixtures only, and continue in the same main project
-and workspace rather than creating a replacement workspace.
+The active workspace is frozen as a data-free development baseline. Actual
+owner-content review and broader formal review begin only after product
+development is complete. Until the owner explicitly authorizes material use,
+contributors must not import, restore, fetch or add real documents, entries,
+preferences or derived knowledge. Use synthetic value-free fixtures only, and
+continue in the same main project and workspace rather than creating a
+replacement workspace. Ordinary tests and reachable product-blocker fixes remain
+part of development; deferred review is not permission to skip them.
 
 ## Sources of Truth
 

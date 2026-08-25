@@ -26,8 +26,9 @@ Before frontend implementation or frontend design review, also read:
 The active workspace is intentionally empty for continued product development. The
 former external validation corpus, database rows, Blob bytes, preferences and
 exports have been moved to a recovery archive outside the repository and
-application data root. Owner, formal-gate, release and broader product reviews
-are deferred and MUST NOT block unrelated product development. Until the owner
+application data root. Actual owner-content review, formal gates, release review
+and broader product review start only after product development is complete and
+MUST NOT block unrelated product development before then. Until the owner
 explicitly authorizes material use, do not import, restore, fetch, seed or
 otherwise introduce any real document, entry, personal configuration or derived
 knowledge. Product and integration tests must use synthetic, value-free fixtures
@@ -351,6 +352,15 @@ lexical modes across title, body and the three keyword dimensions. Results expos
 a bounded lexical score, query-bound cursor v2 and the same semantics for the
 explicit complete-private-document channel. This is not semantic search, AI,
 Embedding or RAG; it adds no migration, dependency, index or search service.
+
+ADR 0021 completes M1F-2 at the Query surface. The selected visible Entry can
+now become the existing one- or two-hop Association anchor without leaving
+Query, and at most two results from the same semantic query scope can be compared
+side by side with exact source return. Comparison is session-only, survives only
+cursor pagination within that scope and becomes invisible immediately when
+filters, Association or privacy scope change. It does not persist a saved view,
+infer a winner or relation, add an API/migration/dependency, or turn local
+Association traversal into AI or semantic retrieval.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable

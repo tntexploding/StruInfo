@@ -258,7 +258,7 @@ export function InformationEntryAdvancedSearchFields({
         </label>
         {association === undefined ? (
           <p className="entry-search-association-hint">
-            先在结果中选择 Entry，再于“可能相关”区域点击“从此条目展开”。
+            先在结果中选择 Entry，再于“结果操作”开启关联联想。
           </p>
         ) : (
           <div className="entry-search-association-filter">

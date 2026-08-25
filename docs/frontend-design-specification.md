@@ -376,6 +376,17 @@ only their Split, Tags, and selected-pair Formal Knowledge proposal surfaces;
 none unlocks unavailable AI controls on Query or another page. Deterministic and
 manual paths, including association-policy writes, remain fully usable.
 
+ADR 0021 adds two Query-owned result tools. An explicit Association switch uses
+the currently selected visible Entry as the existing one- or two-hop anchor and
+must show that this is local deterministic traversal rather than AI or semantic
+equivalence. Query may also compare at most two results from the same semantic
+query scope. The comparison shows separate source, revision, privacy, lexical
+match, structure, usefulness, interest, tag, body and evidence facts; it must not
+invent a winner, combined score, summary or relation. It may persist across
+cursor pages only while the semantic query and privacy scope remain unchanged,
+and becomes invisible immediately when either changes. At widths below 1024 CSS
+pixels comparison cards stack in one column and retain natural page scrolling.
+
 Desktop layouts SHOULD preserve a narrow workflow timeline, a dominant work
 surface, and at most one contextual side rail. Tablet layouts MAY stack the
 context rail below the dominant task. At phone widths the navigation items
