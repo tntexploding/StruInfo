@@ -471,6 +471,37 @@ export class M1cApiController {
     );
   }
 
+  @Get('source-subscriptions')
+  public async sourceSubscriptions(@Res() response: Response): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.listSourceSubscriptions(),
+    );
+  }
+
+  @Put('source-subscriptions')
+  public async replaceSourceSubscriptions(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.replaceSourceSubscriptions(body),
+    );
+  }
+
+  @Post('source-subscriptions/:subscriptionId/run')
+  public async runSourceSubscription(
+    @Param('subscriptionId') subscriptionId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.runSourceSubscription(subscriptionId, body),
+    );
+  }
+
   @Post('workspace-bundles/export')
   public async exportWorkspaceBundle(@Res() response: Response): Promise<void> {
     writeLocalApiResponse(

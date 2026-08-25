@@ -4,6 +4,43 @@ export const MAX_REVIEW_QUICK_TAGS = 24;
 export const MAX_REVIEW_QUICK_TAG_CODE_POINTS = 120;
 export const MAX_REVIEW_KEYWORD_EXCLUSIONS = 64;
 export const MAX_REVIEW_VOCABULARY_ALIASES = 128;
+export const MAX_SOURCE_SUBSCRIPTIONS = 32;
+
+const CANONICAL_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+const SHA1 = /^[0-9a-f]{40}$/u;
+const SHA256 = /^[0-9a-f]{64}$/u;
+
+export interface ReviewSourceSubscriptionCursor {
+  readonly commitSha: string;
+  readonly sourceSha256: string;
+}
+
+export interface ReviewSourceSubscription {
+  readonly subscriptionId: string;
+  readonly label: string;
+  /** Enables periodic checks. Explicit run-now remains available when false. */
+  readonly enabled: boolean;
+  readonly repositoryUri: string;
+  readonly repositoryRef: string;
+  readonly repositoryPath: string;
+  readonly profile: 'commonmark-v1' | 'ruanyf-weekly-v1';
+  readonly sourceAlias: string;
+  readonly isPrivate: boolean;
+  readonly intervalMinutes: number;
+  readonly lastAttemptAt?: string;
+  readonly lastSuccessAt?: string;
+  readonly lastRunId?: string;
+  readonly cursor?: Readonly<ReviewSourceSubscriptionCursor>;
+}
+
+export interface ReviewSourceSubscriptionPreferences {
+  readonly revision: number;
+  readonly subscriptions: readonly Readonly<ReviewSourceSubscription>[];
+}
+
+export const DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES: Readonly<ReviewSourceSubscriptionPreferences> =
+  Object.freeze({revision: 0, subscriptions: Object.freeze([])});
 
 export interface ReviewExplorationPolicyPreferences {
   readonly revision: number;
@@ -75,6 +112,7 @@ export interface ReviewPreferences {
   readonly vocabulary?: Readonly<ReviewVocabularyPreferences>;
   readonly associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>;
   readonly explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>;
+  readonly sourceSubscriptions?: Readonly<ReviewSourceSubscriptionPreferences>;
 }
 
 export interface ReviewPreferencesStore {
@@ -86,6 +124,7 @@ export interface ReviewPreferencesStore {
     vocabulary?: Readonly<ReviewVocabularyPreferences>,
     associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>,
     explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>,
+    sourceSubscriptions?: Readonly<ReviewSourceSubscriptionPreferences>,
   ): Promise<Readonly<ReviewPreferences>>;
 }
 
@@ -205,6 +244,38 @@ export function decodeReviewExplorationPolicyPreferences(
     serendipity: value.serendipity,
   });
 }
+
+export function decodeReviewSourceSubscriptionPreferences(
+  value: unknown,
+): Readonly<ReviewSourceSubscriptionPreferences> | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.revision !== 'number' ||
+    !Number.isSafeInteger(value.revision) ||
+    value.revision < 0 ||
+    !Array.isArray(value.subscriptions) ||
+    value.subscriptions.length > MAX_SOURCE_SUBSCRIPTIONS
+  ) {
+    return undefined;
+  }
+  const subscriptions: ReviewSourceSubscription[] = [];
+  const identities = new Set<string>();
+  for (const candidate of value.subscriptions) {
+    const subscription = decodeSourceSubscription(candidate);
+    if (
+      subscription === undefined ||
+      identities.has(subscription.subscriptionId)
+    ) {
+      return undefined;
+    }
+    identities.add(subscription.subscriptionId);
+    subscriptions.push(subscription);
+  }
+  return Object.freeze({
+    revision: value.revision,
+    subscriptions: Object.freeze(subscriptions),
+  });
+}
 function decodeKeywordList(
   value: unknown,
   maximumItems: number,
@@ -244,6 +315,7 @@ export function createReviewPreferences(
   vocabulary: Readonly<ReviewVocabularyPreferences> = DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
   associationPolicy: Readonly<ReviewAssociationPolicyPreferences> = DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   explorationPolicy: Readonly<ReviewExplorationPolicyPreferences> = DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
+  sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences> = DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
 ): Readonly<ReviewPreferences> {
   return Object.freeze({
     format: REVIEW_PREFERENCES_FORMAT,
@@ -262,7 +334,191 @@ export function createReviewPreferences(
     }),
     associationPolicy: Object.freeze({...associationPolicy}),
     explorationPolicy: Object.freeze({...explorationPolicy}),
+    sourceSubscriptions: Object.freeze({
+      revision: sourceSubscriptions.revision,
+      subscriptions: Object.freeze(
+        sourceSubscriptions.subscriptions.map((subscription) =>
+          Object.freeze({
+            ...subscription,
+            ...(subscription.cursor === undefined
+              ? {}
+              : {cursor: Object.freeze({...subscription.cursor})}),
+          }),
+        ),
+      ),
+    }),
   });
+}
+
+function decodeSourceSubscription(
+  value: unknown,
+): Readonly<ReviewSourceSubscription> | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.subscriptionId !== 'string' ||
+    !CANONICAL_UUID.test(value.subscriptionId) ||
+    typeof value.label !== 'string' ||
+    (value.enabled !== true && value.enabled !== false) ||
+    typeof value.repositoryUri !== 'string' ||
+    typeof value.repositoryRef !== 'string' ||
+    typeof value.repositoryPath !== 'string' ||
+    (value.profile !== 'commonmark-v1' &&
+      value.profile !== 'ruanyf-weekly-v1') ||
+    typeof value.sourceAlias !== 'string' ||
+    (value.isPrivate !== true && value.isPrivate !== false) ||
+    typeof value.intervalMinutes !== 'number' ||
+    !Number.isSafeInteger(value.intervalMinutes) ||
+    value.intervalMinutes < 15 ||
+    value.intervalMinutes > 10_080 ||
+    !optionalInstant(value.lastAttemptAt) ||
+    !optionalInstant(value.lastSuccessAt) ||
+    (value.lastRunId !== undefined &&
+      (typeof value.lastRunId !== 'string' ||
+        !CANONICAL_UUID.test(value.lastRunId)))
+  ) {
+    return undefined;
+  }
+  const label = decodeBoundedText(value.label, 120);
+  const sourceAlias = decodeBoundedText(value.sourceAlias, 500);
+  const repositoryUri = decodeGithubRepositoryUri(value.repositoryUri);
+  const repositoryRef = decodeRepositoryRef(value.repositoryRef);
+  const repositoryPath = decodeRepositoryPath(value.repositoryPath);
+  const cursor = decodeSourceSubscriptionCursor(value.cursor);
+  if (
+    label === undefined ||
+    sourceAlias === undefined ||
+    repositoryUri === undefined ||
+    repositoryRef === undefined ||
+    repositoryPath === undefined ||
+    (value.cursor !== undefined && cursor === undefined)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    subscriptionId: value.subscriptionId,
+    label,
+    enabled: value.enabled,
+    repositoryUri,
+    repositoryRef,
+    repositoryPath,
+    profile: value.profile,
+    sourceAlias,
+    isPrivate: value.isPrivate,
+    intervalMinutes: value.intervalMinutes,
+    ...(typeof value.lastAttemptAt === 'string'
+      ? {lastAttemptAt: value.lastAttemptAt}
+      : {}),
+    ...(typeof value.lastSuccessAt === 'string'
+      ? {lastSuccessAt: value.lastSuccessAt}
+      : {}),
+    ...(typeof value.lastRunId === 'string'
+      ? {lastRunId: value.lastRunId}
+      : {}),
+    ...(cursor === undefined ? {} : {cursor}),
+  });
+}
+
+function decodeSourceSubscriptionCursor(
+  value: unknown,
+): Readonly<ReviewSourceSubscriptionCursor> | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !isRecord(value) ||
+    typeof value.commitSha !== 'string' ||
+    !SHA1.test(value.commitSha) ||
+    typeof value.sourceSha256 !== 'string' ||
+    !SHA256.test(value.sourceSha256)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    commitSha: value.commitSha,
+    sourceSha256: value.sourceSha256,
+  });
+}
+
+function decodeGithubRepositoryUri(value: string): string | undefined {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return undefined;
+  }
+  if (
+    parsed.protocol !== 'https:' ||
+    parsed.hostname !== 'github.com' ||
+    parsed.port !== '' ||
+    parsed.username !== '' ||
+    parsed.password !== '' ||
+    parsed.search !== '' ||
+    parsed.hash !== ''
+  ) {
+    return undefined;
+  }
+  const segments = parsed.pathname.split('/').filter(Boolean);
+  if (segments.length !== 2) return undefined;
+  const [owner, rawRepository] = segments;
+  const repository = rawRepository?.endsWith('.git')
+    ? rawRepository.slice(0, -4)
+    : rawRepository;
+  if (
+    owner === undefined ||
+    repository === undefined ||
+    !/^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,99})$/u.test(owner) ||
+    !/^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,99})$/u.test(repository)
+  ) {
+    return undefined;
+  }
+  return `https://github.com/${owner}/${repository}`;
+}
+
+function decodeRepositoryRef(value: string): string | undefined {
+  const normalized = value.normalize('NFC').trim();
+  return normalized.length > 0 &&
+    Array.from(normalized).length <= 200 &&
+    /^[A-Za-z0-9][A-Za-z0-9._/-]*$/u.test(normalized) &&
+    !normalized.includes('..') &&
+    !normalized.includes('//') &&
+    !normalized.endsWith('/') &&
+    !normalized.endsWith('.lock')
+    ? normalized
+    : undefined;
+}
+
+function decodeRepositoryPath(value: string): string | undefined {
+  const normalized = value.normalize('NFC').trim();
+  if (
+    normalized.length === 0 ||
+    Array.from(normalized).length > 500 ||
+    normalized.startsWith('/') ||
+    normalized.endsWith('/') ||
+    normalized.includes('\\') ||
+    normalized.includes('//') ||
+    normalized
+      .split('/')
+      .some((segment) => segment === '.' || segment === '..') ||
+    !/\.(?:md|markdown)$/iu.test(normalized) ||
+    containsControlCodePoint(normalized)
+  ) {
+    return undefined;
+  }
+  return normalized;
+}
+
+function decodeBoundedText(value: string, maximum: number): string | undefined {
+  const normalized = value.normalize('NFC').trim();
+  return normalized.length > 0 &&
+    Array.from(normalized).length <= maximum &&
+    !containsControlCodePoint(normalized)
+    ? normalized
+    : undefined;
+}
+
+function optionalInstant(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (typeof value !== 'string') return false;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.valueOf()) && parsed.toISOString() === value;
 }
 
 function decodeAliases(

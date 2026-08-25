@@ -1,7 +1,14 @@
 import {useRef, useState} from 'react';
 import type {DragEvent, SyntheticEvent} from 'react';
 
-import type {EvidenceSnapshotSummary} from '../api/m1c_api_contract.js';
+import type {
+  EvidenceSnapshotSummary,
+  M1cHttpResponse,
+  SourceSubscriptionListResponse,
+  SourceSubscriptionReplaceResponse,
+  SourceSubscriptionRunResponse,
+  SourceSubscriptionWrite,
+} from '../api/m1c_api_contract.js';
 import {ActionNotice} from '../components/action_notice.js';
 import {
   createClientUuid,
@@ -18,6 +25,7 @@ import {
   prepareLocalDocumentFile,
   type PreparedLocalDocumentFile,
 } from './local_file_import.js';
+import {SourceSubscriptionPanel} from './source_subscription_panel.js';
 
 interface ImportIdentity {
   readonly commandIdempotencyKey: string;
@@ -47,6 +55,18 @@ export interface MaterialsWorkspaceProps {
   readonly onRestore: (fileName: string) => Promise<WorkspaceTransferFeedback>;
   readonly selectedSnapshotId?: string | undefined;
   readonly snapshots: Loadable<readonly Readonly<EvidenceSnapshotSummary>[]>;
+  readonly sourceSubscriptionsEnabled: boolean;
+  readonly onListSourceSubscriptions: () => Promise<
+    M1cHttpResponse<SourceSubscriptionListResponse>
+  >;
+  readonly onReplaceSourceSubscriptions: (
+    expectedRevision: number,
+    subscriptions: readonly Readonly<SourceSubscriptionWrite>[],
+  ) => Promise<M1cHttpResponse<SourceSubscriptionReplaceResponse>>;
+  readonly onRunSourceSubscription: (
+    subscriptionId: string,
+    requestKey: string,
+  ) => Promise<M1cHttpResponse<SourceSubscriptionRunResponse>>;
 }
 
 export function MaterialsWorkspace({
@@ -57,6 +77,10 @@ export function MaterialsWorkspace({
   onRestore,
   selectedSnapshotId,
   snapshots,
+  sourceSubscriptionsEnabled,
+  onListSourceSubscriptions,
+  onReplaceSourceSubscriptions,
+  onRunSourceSubscription,
 }: MaterialsWorkspaceProps) {
   const importHeading = useRef<HTMLHeadingElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -700,6 +724,13 @@ export function MaterialsWorkspace({
           showPrivateDocuments={showPrivateDocuments}
         />
       </section>
+
+      <SourceSubscriptionPanel
+        enabled={sourceSubscriptionsEnabled}
+        onList={onListSourceSubscriptions}
+        onReplace={onReplaceSourceSubscriptions}
+        onRun={onRunSourceSubscription}
+      />
 
       <section
         className="workspace-transfer-section"

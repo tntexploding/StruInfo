@@ -31,6 +31,10 @@ import type {
   ProcessingRunListResponse,
   ReviewPreferencesWrite,
   ReviewPreferencesResponse,
+  SourceSubscriptionListResponse,
+  SourceSubscriptionReplaceResponse,
+  SourceSubscriptionRunResponse,
+  SourceSubscriptionWrite,
   WorkspaceResponse,
   WorkspaceBundleTransferResponse,
 } from './m1c_api_contract.js';
@@ -221,6 +225,19 @@ export interface M1cApiClient {
     expectedVersion: number,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<ProcessingRunCancelResponse>>;
+  listSourceSubscriptions(
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<SourceSubscriptionListResponse>>;
+  replaceSourceSubscriptions(
+    expectedRevision: number,
+    subscriptions: readonly Readonly<SourceSubscriptionWrite>[],
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<SourceSubscriptionReplaceResponse>>;
+  runSourceSubscription(
+    subscriptionId: string,
+    requestKey: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<SourceSubscriptionRunResponse>>;
   exportWorkspaceBundle(
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<WorkspaceBundleTransferResponse>>;
@@ -282,6 +299,9 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     rejectAiAssociationProposal: reject,
     listProcessingRuns: reject,
     cancelProcessingRun: reject,
+    listSourceSubscriptions: reject,
+    replaceSourceSubscriptions: reject,
+    runSourceSubscription: reject,
     exportWorkspaceBundle: reject,
     restoreWorkspaceBundle: reject,
   });
@@ -570,6 +590,23 @@ export function createM1cApiClient(
       post<ProcessingRunCancelResponse>(
         `api/v1/processing-runs/${encodeURIComponent(runId)}/cancel`,
         {expectedVersion},
+        options,
+      ),
+    listSourceSubscriptions: (options) =>
+      get<SourceSubscriptionListResponse>(
+        'api/v1/source-subscriptions',
+        options,
+      ),
+    replaceSourceSubscriptions: (expectedRevision, subscriptions, options) =>
+      put<SourceSubscriptionReplaceResponse>(
+        'api/v1/source-subscriptions',
+        {expectedRevision, subscriptions},
+        options,
+      ),
+    runSourceSubscription: (subscriptionId, requestKey, options) =>
+      post<SourceSubscriptionRunResponse>(
+        `api/v1/source-subscriptions/${encodeURIComponent(subscriptionId)}/run`,
+        {requestKey},
         options,
       ),
     exportWorkspaceBundle: (options) =>

@@ -31,6 +31,10 @@ import type {
   DocumentImportResponse,
   ReviewPreferencesResponse,
   ReviewPreferencesWrite,
+  SourceSubscriptionListResponse,
+  SourceSubscriptionReplaceResponse,
+  SourceSubscriptionRunResponse,
+  SourceSubscriptionWrite,
   WorkspaceResponse,
   WorkspaceBundleTransferResponse,
 } from './api/m1c_api_contract.js';
@@ -511,6 +515,36 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const listSourceSubscriptions = useCallback(
+    (): Promise<M1cHttpResponse<SourceSubscriptionListResponse>> =>
+      apiClient.listSourceSubscriptions(),
+    [apiClient],
+  );
+
+  const replaceSourceSubscriptions = useCallback(
+    (
+      expectedRevision: number,
+      subscriptions: readonly Readonly<SourceSubscriptionWrite>[],
+    ): Promise<M1cHttpResponse<SourceSubscriptionReplaceResponse>> =>
+      apiClient.replaceSourceSubscriptions(expectedRevision, subscriptions),
+    [apiClient],
+  );
+
+  const runSourceSubscription = useCallback(
+    async (
+      subscriptionId: string,
+      requestKey: string,
+    ): Promise<M1cHttpResponse<SourceSubscriptionRunResponse>> => {
+      const response = await apiClient.runSourceSubscription(
+        subscriptionId,
+        requestKey,
+      );
+      if (response.body.status === 'imported') await refreshEvidence();
+      return response;
+    },
+    [apiClient, refreshEvidence],
+  );
+
   function closeEvidence() {
     setEvidencePanel({status: 'closed'});
     const target = evidenceReturnTarget.current;
@@ -644,6 +678,13 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onRefresh={() => void refreshEvidence()}
           onExport={exportWorkspaceBundle}
           onRestore={restoreWorkspaceBundle}
+          sourceSubscriptionsEnabled={
+            workspace.status === 'ready' &&
+            workspace.value.capabilities.includes('source_subscriptions')
+          }
+          onListSourceSubscriptions={listSourceSubscriptions}
+          onReplaceSourceSubscriptions={replaceSourceSubscriptions}
+          onRunSourceSubscription={runSourceSubscription}
         />
       ) : null}
       {activeSection === 'split' ? (

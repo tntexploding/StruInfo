@@ -319,6 +319,16 @@ describe('M1D product workspaces', () => {
         onRestore={() =>
           Promise.resolve({kind: 'success', title: 'synthetic', detail: ''})
         }
+        sourceSubscriptionsEnabled={false}
+        onListSourceSubscriptions={() =>
+          Promise.reject(new Error('subscription boundary disabled'))
+        }
+        onReplaceSourceSubscriptions={() =>
+          Promise.reject(new Error('subscription boundary disabled'))
+        }
+        onRunSourceSubscription={() =>
+          Promise.reject(new Error('subscription boundary disabled'))
+        }
       />,
     );
     const entry: Readonly<InformationEntry> = {
@@ -345,6 +355,8 @@ describe('M1D product workspaces', () => {
         fragmentIds: ['55555555-5555-4555-8555-555555555555'],
       },
     };
+    expect(materials).toContain('信源订阅');
+    expect(materials).toContain('当前服务未启用信源订阅边界');
     const review = renderToStaticMarkup(
       <InformationEntryReviewControls
         entry={entry}

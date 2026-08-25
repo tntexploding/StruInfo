@@ -47,6 +47,10 @@ describe('LocalReviewPreferencesStore', () => {
         crossDomain: true,
         serendipity: true,
       },
+      sourceSubscriptions: {
+        revision: 0,
+        subscriptions: [],
+      },
     });
   });
 
@@ -80,6 +84,23 @@ describe('LocalReviewPreferencesStore', () => {
         crossDomain: false,
         serendipity: true,
       },
+      {
+        revision: 1,
+        subscriptions: [
+          {
+            subscriptionId: '33333333-3333-4333-8333-333333333333',
+            label: 'Synthetic source',
+            enabled: false,
+            repositoryUri: 'https://github.com/example/project',
+            repositoryRef: 'main',
+            repositoryPath: 'docs/source.md',
+            profile: 'commonmark-v1',
+            sourceAlias: 'synthetic-source',
+            isPrivate: false,
+            intervalMinutes: 1_440,
+          },
+        ],
+      },
     );
 
     await expect(store.load(WORKSPACE_A)).resolves.toMatchObject({
@@ -108,6 +129,16 @@ describe('LocalReviewPreferencesStore', () => {
         crossDomain: false,
         serendipity: true,
       },
+      sourceSubscriptions: {
+        revision: 1,
+        subscriptions: [
+          {
+            subscriptionId: '33333333-3333-4333-8333-333333333333',
+            repositoryUri: 'https://github.com/example/project',
+            repositoryPath: 'docs/source.md',
+          },
+        ],
+      },
     });
     await expect(store.load(WORKSPACE_B)).resolves.toMatchObject({
       workspaceId: WORKSPACE_B,
@@ -122,6 +153,7 @@ describe('LocalReviewPreferencesStore', () => {
     expect(text).toContain('\n  "vocabulary": {\n');
     expect(text).toContain('\n  "associationPolicy": {\n');
     expect(text).toContain('\n  "explorationPolicy": {\n');
+    expect(text).toContain('\n  "sourceSubscriptions": {\n');
     expect(text).toContain('\n    "revision": 3,\n');
   });
 
@@ -167,6 +199,10 @@ describe('LocalReviewPreferencesStore', () => {
         neighborExpansion: true,
         crossDomain: true,
         serendipity: true,
+      },
+      sourceSubscriptions: {
+        revision: 0,
+        subscriptions: [],
       },
     });
   });

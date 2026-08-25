@@ -1,6 +1,6 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1G-1 活动接口
+- 状态：M1G-2 活动接口
 - 最近核对：2026-08-25
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
@@ -9,7 +9,7 @@
 
 ## 1. 接口边界
 
-本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、确定性/人工首次物化、Document 标签、Entry 联系、正式 Entry 图谱、确定性探索、Provider-neutral ProcessingRun、可选 OpenAI Snapshot 拆分/Entry 标签/selected-pair 联系提案与公开 Query 证据综合、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、通用 AI 执行、自动接受或公共扩展 API。
+本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、确定性/人工首次物化、Document 标签、Entry 联系、正式 Entry 图谱、确定性探索、精确 GitHub Markdown 信源订阅、Provider-neutral ProcessingRun、可选 OpenAI Snapshot 拆分/Entry 标签/selected-pair 联系提案与公开 Query 证据综合、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、任意 URL 抓取、通用 AI 执行、自动接受或公共扩展 API。
 
 当前工作区由包体外运行配置中的 `STRUIINFO_WORKSPACE_ID` 选择。请求不能提交或切换 `workspaceId`；服务端把固定工作区注入所有领域操作。切换资料集需要停止当前进程、替换外部配置或数据根并重新启动。
 
@@ -26,6 +26,9 @@
 | `GET`  | `/api/v1/evidence/snapshots/:snapshotId`                                              | 返回 Snapshot、完整规范正文、结构和 Fragment；隐私内容要求 `includePrivate=true`      |
 | `GET`  | `/api/v1/preferences/review`                                                          | 读取外部工作区的快捷标签、自动关键词开关/过滤、别名、联系和探索策略                   |
 | `PUT`  | `/api/v1/preferences/review`                                                          | 整体保存当前偏好文件；未提交的版本化策略保持现值                                      |
+| `GET`  | `/api/v1/source-subscriptions`                                                        | 读取外部版本化 GitHub Markdown 单文件订阅、运行状态和成功游标                         |
+| `PUT`  | `/api/v1/source-subscriptions`                                                        | 以期望修订整体替换订阅配置；运行状态与游标由服务端维护                                |
+| `POST` | `/api/v1/source-subscriptions/:subscriptionId/run`                                    | 使用 `requestKey` 立即检查一个已保存订阅并在变化时复用 Evidence 导入                  |
 | `POST` | `/api/v1/imports/markdown`                                                            | 原子导入手动/Git Markdown 或本地 UTF-8 Markdown/文本文件、来源、Blob、结构和 Fragment |
 | `POST` | `/api/v1/entries/materialize`                                                         | 从一个用户选择的空 Snapshot 按 section 规则原子生成 Entry                             |
 | `POST` | `/api/v1/entries/materialize/manual`                                                  | 从标题和完整有序 Fragment 标量区间原子生成人工 Entry 结构                             |
@@ -60,7 +63,7 @@
 | `POST` | `/api/v1/workspace-bundles/export`                                                    | 将当前工作区个人数据写入外部 `exports/`                                               |
 | `POST` | `/api/v1/workspace-bundles/restore`                                                   | 从安全文件名恢复同 ID 的空工作区                                                      |
 
-API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单页应用。scheduler/worker 角色只提供健康路由；它们的存在不表示自动采集已经实现。ProcessingRun 读取/取消是独立任务状态边界；OpenAI split、tags、selected-pair association 与 Query synthesis 只在 API/`all` 且配置完整时装配。确定性探索始终是本地无 Provider 读路径。
+API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单页应用。`scheduler`/`all` 角色还运行顺序且非重叠的到期订阅检查；worker 只提供健康路由。该能力只代表精确 GitHub Markdown 单文件订阅，不表示通用自动采集。ProcessingRun 读取/取消是独立任务状态边界；OpenAI split、tags、selected-pair association 与 Query synthesis 只在 API/`all` 且配置完整时装配。确定性探索始终是本地无 Provider 读路径。
 
 ## 3. 五步主线如何调用接口
 
@@ -74,6 +77,10 @@ API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单�
 - 可选 `gitResource`、`profile` 与 `documentBaseUri`。
 
 Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和正文前置文字映射到这些字段。本地文件默认使用基础文件名加 SHA-256 作为 portable source key，不提交目录路径；无前置文字时 Base64 解码后的字节保持原样。相同命令可重放；同键异内容返回冲突。
+
+三个 `/source-subscriptions` 操作只管理精确公开 GitHub repository/ref 下的单个 Markdown 路径。GET 返回 revision、可编辑字段和服务端维护的 last-attempt/last-success/run/cursor；PUT 接受 `{expectedRevision, subscriptions}`，每个写入项必须完整给出稳定 UUID、标签、enabled、repositoryUri、repositoryRef、repositoryPath、profile、sourceAlias、isPrivate 和 15–10080 分钟间隔，不能伪造运行字段。POST 只接受 `{requestKey}`；即使 enabled 为 false 也可手动运行。
+
+每次运行先建立 import 阶段 ProcessingRun，再读取 Git commit 与精确文件。字节变化时调用同一个 Markdown Evidence import；相同字节只推进 cursor，不重复生成 Snapshot。失败只返回稳定 source-subscription code，保留最后成功 cursor。`source_subscriptions` capability 表示这三个本地边界可用；它不允许任意 URL、仓库目录扫描、仓库代码执行、自动 Entry/标签/联系或 AI 接受。
 
 ### 3.2 拆分
 
