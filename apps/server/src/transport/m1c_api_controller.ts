@@ -183,6 +183,17 @@ export class M1cApiController {
     );
   }
 
+  @Post('entries/search/synthesize')
+  public async synthesizeInformationEntryQuery(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.synthesizeInformationEntryQuery(body),
+    );
+  }
+
   @Post('knowledge-graph/view')
   public async informationEntryKnowledgeGraph(
     @Body() body: unknown,

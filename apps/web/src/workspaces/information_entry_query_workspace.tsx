@@ -19,6 +19,8 @@ import {
   InformationEntryTextSearchOptions,
 } from './information_entry_search_controls.js';
 import {InformationEntryQueryComparison} from './information_entry_query_comparison.js';
+import {InformationEntryQuerySynthesis} from './information_entry_query_synthesis.js';
+import type {InformationEntryQuerySynthesisAction} from './use_information_entry_query_synthesis.js';
 import {
   EMPTY_INFORMATION_ENTRY_COMPARISON_STATE,
   clearInformationEntryComparisons,
@@ -36,14 +38,16 @@ export interface InformationEntryQueryWorkspaceProps extends Pick<
   InformationEntryServices,
   'onOpenEvidence' | 'onSearch'
 > {
-  readonly aiEnabled: boolean;
+  readonly aiQuerySynthesisEnabled: boolean;
+  readonly onSynthesize: InformationEntryQuerySynthesisAction;
   readonly snapshots: readonly Readonly<EvidenceSnapshotSummary>[];
 }
 
 export function InformationEntryQueryWorkspace({
-  aiEnabled,
+  aiQuerySynthesisEnabled,
   onOpenEvidence,
   onSearch,
+  onSynthesize,
   snapshots,
 }: InformationEntryQueryWorkspaceProps) {
   const controller = useInformationEntryController({onSearch});
@@ -104,8 +108,8 @@ export function InformationEntryQueryWorkspace({
           <p>按正文、标签、来源、时间与有限邻域检索，并返回精确来源。</p>
         </div>
         <span className="origin-label origin-label--deterministic">
-          {aiEnabled
-            ? '本地词法搜索 · AI 查询未接入'
+          {aiQuerySynthesisEnabled
+            ? '本地词法搜索 · 可选 AI 证据综合'
             : '本地词法搜索 · 可离线使用'}
         </span>
       </header>
@@ -121,6 +125,7 @@ export function InformationEntryQueryWorkspace({
           <span data-active="true">精确结构筛选</span>
           <span data-active="true">精确 / 包含 / 模糊</span>
           <span data-active="true">关联联想 / 双条比较</span>
+          <span data-active={aiQuerySynthesisEnabled}>可选 AI 证据综合</span>
         </div>
       </section>
 
@@ -267,6 +272,8 @@ export function InformationEntryQueryWorkspace({
         }}
         onOpenEvidence={onOpenEvidence}
         onReplaceAssociationAnchor={setSelectedAssociationAnchor}
+        aiQuerySynthesisEnabled={aiQuerySynthesisEnabled}
+        onSynthesize={onSynthesize}
       />
     </div>
   );
@@ -279,6 +286,8 @@ function InformationEntryQueryResults({
   onAssociationToggle,
   onOpenEvidence,
   onReplaceAssociationAnchor,
+  aiQuerySynthesisEnabled,
+  onSynthesize,
 }: {
   readonly comparisonScopeKey: string;
   readonly controller: ReturnType<typeof useInformationEntryController>;
@@ -286,6 +295,8 @@ function InformationEntryQueryResults({
   readonly onAssociationToggle: (enabled: boolean) => void;
   readonly onOpenEvidence: InformationEntryServices['onOpenEvidence'];
   readonly onReplaceAssociationAnchor: () => void;
+  readonly aiQuerySynthesisEnabled: boolean;
+  readonly onSynthesize: InformationEntryQuerySynthesisAction;
 }) {
   const [comparisonState, setComparisonState] = useState(
     EMPTY_INFORMATION_ENTRY_COMPARISON_STATE,
@@ -350,6 +361,21 @@ function InformationEntryQueryResults({
           />
         )}
       </InformationEntryResults>
+
+      <InformationEntryQuerySynthesis
+        key={comparisonScopeKey}
+        enabled={aiQuerySynthesisEnabled}
+        includePrivate={controller.includePrivate}
+        onlyPrivate={controller.onlyPrivate}
+        resultCount={
+          controller.view.status === 'ready'
+            ? controller.view.response.totalCount
+            : 0
+        }
+        searchRequest={controller.searchRequest}
+        onOpenEvidence={onOpenEvidence}
+        onSynthesize={onSynthesize}
+      />
 
       <InformationEntryQueryComparison
         items={comparisonItems}

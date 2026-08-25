@@ -33,6 +33,7 @@ describe('M1C local HTTP transport', () => {
     const documentBodies: unknown[] = [];
     const manualSplits: unknown[] = [];
     const entrySearches: unknown[] = [];
+    const querySyntheses: unknown[] = [];
     const policyWrites: unknown[] = [];
     const api = stubApi({
       importMarkdown(body) {
@@ -50,6 +51,16 @@ describe('M1C local HTTP transport', () => {
       searchInformationEntries(body) {
         entrySearches.push(body);
         return Promise.resolve(result(200, {status: 'ok', items: []}));
+      },
+      synthesizeInformationEntryQuery(body) {
+        querySyntheses.push(body);
+        return Promise.resolve(
+          result(200, {
+            status: 'ok',
+            requestId: 'query-synthesis:1',
+            answer: 'Synthetic answer.',
+          }),
+        );
       },
       reviseInformationEntryAssociationPolicy(body) {
         policyWrites.push(body);
@@ -139,6 +150,27 @@ describe('M1C local HTTP transport', () => {
     });
     expect(entrySearches).toEqual([{text: 'synthetic', includePrivate: true}]);
 
+    const synthesisBody = {
+      requestId: 'query-synthesis:1',
+      question: 'What does the public evidence show?',
+      query: {text: 'synthetic', includePrivate: false},
+    };
+    const synthesisResponse = await fetch(
+      `${base}/api/v1/entries/search/synthesize`,
+      {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify(synthesisBody),
+      },
+    );
+    expect(synthesisResponse.status).toBe(200);
+    await expect(synthesisResponse.json()).resolves.toEqual({
+      status: 'ok',
+      requestId: 'query-synthesis:1',
+      answer: 'Synthetic answer.',
+    });
+    expect(querySyntheses).toEqual([synthesisBody]);
+
     const policyBody = {
       expectedRevision: 0,
       contentWeight: 50,
@@ -222,6 +254,8 @@ function stubApi(
       Promise.resolve(result(200, {status: 'applied'})),
     searchInformationEntries: () =>
       Promise.resolve(result(200, {status: 'ok', entries: []})),
+    synthesizeInformationEntryQuery: () =>
+      Promise.resolve(result(503, {status: 'rejected'})),
     readInformationEntryKnowledgeGraph: () =>
       Promise.resolve(result(200, {status: 'ok', candidates: [], graph: null})),
     reviseInformationEntryKnowledgeGraphEdge: () =>

@@ -1,8 +1,8 @@
 # StruInfo Frontend Design Specification
 
 - Status: Project frontend baseline
-- Version: 1.6
-- Effective date: 2026-08-24
+- Version: 1.7
+- Effective date: 2026-08-25
 - Scope: StruInfo web application design, implementation, and review
 
 ## 1. Purpose and Authority
@@ -364,17 +364,20 @@ Each workspace has one dominant task and a visibly subordinate context area:
   settings rail. Result details and precise evidence remain one action away.
 
 A requested capability that is not backed by the current public product boundary
-MUST be labelled unavailable or pending rather than simulated. This applies in
-particular to AI query synthesis, automatic proposal acceptance, semantic/vector
-matching and RAG. Query's implemented exact, contains and approximate controls
+MUST be labelled unavailable or pending rather than simulated. The M1F-3 panel
+MUST remain visibly unavailable unless `ai_query_synthesis` is returned; this
+always applies to automatic proposal acceptance, semantic/vector matching and
+RAG. Query's implemented exact, contains and approximate controls
 MUST be described as local lexical matching; approximate results show a bounded
 lexical score and MUST NOT be styled as probability, confidence or semantic
 equivalence. A real imported or deterministic ProcessingRun may still be shown and
 cancelled through `processing_runs`; this MUST NOT be relabelled as generic AI
 availability. `ai_split`, `ai_tags`, and `ai_associations` independently enable
-only their Split, Tags, and selected-pair Formal Knowledge proposal surfaces;
-none unlocks unavailable AI controls on Query or another page. Deterministic and
-manual paths, including association-policy writes, remain fully usable.
+only their Split, Tags, and selected-pair Formal Knowledge proposal surfaces.
+`ai_query_synthesis` independently enables only the ADR 0022 Query result
+synthesis surface; none of these capabilities unlocks another AI control.
+Deterministic and manual paths, including association-policy writes, remain
+fully usable.
 
 ADR 0021 adds two Query-owned result tools. An explicit Association switch uses
 the currently selected visible Entry as the existing one- or two-hop anchor and
@@ -386,6 +389,43 @@ invent a winner, combined score, summary or relation. It may persist across
 cursor pages only while the semantic query and privacy scope remain unchanged,
 and becomes invisible immediately when either changes. At widths below 1024 CSS
 pixels comparison cards stack in one column and retain natural page scrolling.
+
+ADR 0022 defines the current Query-owned AI surface. Search remains the only
+primary action. After a non-empty public result, a secondary “AI 综合当前结果”
+action opens one answer panel below the local result controls. It MUST NOT
+run on typing, filter changes, paging, result selection or page entry.
+
+Before the first Provider call in a page session, the panel MUST state that
+bounded text from the current public result set will be sent to the configured
+OpenAI model. When `includePrivate` or `onlyPrivate` is active, the action is
+disabled with a plain-language reason; a local privacy opt-in MUST NOT be styled
+as external-transfer permission. Provider absence, empty evidence, timeout,
+invalid output and stale scope are actionable visible states rather than blank
+panels or generic failures.
+
+A successful panel hierarchy is:
+
+```text
+AI 综合 · 仅基于当前公开查询结果
+answer
+evidence status + model + prompt version
+claim list with local E01..E08 evidence actions
+limitations and truncation notices
+```
+
+The answer is visually subordinate to retrieved records and MUST be labelled as
+AI-generated without relying on colour. Claim evidence chips open the
+application's local Entry/source view; they are not model-authored Web citations.
+The panel does not present a chat composer, autonomous tool state, confidence
+percentage, “verified” badge or save-to-knowledge shortcut. Search/filter,
+Association or privacy changes immediately remove the old answer, and request
+identity prevents a late response from reappearing.
+
+At widths below 1,024 CSS pixels, answer, claims and evidence stack into one
+column with natural page scrolling. The primary search, privacy state, AI
+disclosure, status announcement, retry and evidence actions remain keyboard
+reachable. Loading uses an in-place status/skeleton and MUST NOT replace or hide
+the deterministic result set.
 
 Desktop layouts SHOULD preserve a narrow workflow timeline, a dominant work
 surface, and at most one contextual side rail. Tablet layouts MAY stack the

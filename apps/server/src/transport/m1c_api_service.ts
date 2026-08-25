@@ -11,6 +11,7 @@ import {
   INFORMATION_ENTRY_GRAPH_DIRECTIONS,
   INFORMATION_ENTRY_GRAPH_MAXIMUM_NEIGHBORS,
   InformationEntrySearchCursorError,
+  InformationEntryQuerySynthesisServiceError,
   buildInformationEntryKnowledgeGraph,
   buildInformationEntryAssociationProjection,
   deriveInformationDocumentTagRevisionId,
@@ -45,6 +46,8 @@ import {
   type InformationEntryDocumentView,
   type InformationEntryEmptySnapshotRepositoryPort,
   type InformationEntrySearchRequest,
+  type InformationEntryQuerySynthesisRequest,
+  type InformationEntryQuerySynthesisServicePort,
 } from '../modules/entries/index.js';
 import {
   importMarkdownEvidence,
@@ -100,6 +103,7 @@ export interface M1cApiServiceDependencies {
   readonly aiSplitProposals?: AiSplitProposalServicePort;
   readonly aiTagProposals?: AiTagProposalServicePort;
   readonly aiAssociationProposals?: AiAssociationProposalServicePort;
+  readonly aiQuerySynthesis?: InformationEntryQuerySynthesisServicePort;
   readonly workspaceTransfer: M1cWorkspaceTransferPort;
 }
 
@@ -126,6 +130,7 @@ export interface M1cApiServicePort {
     body: unknown,
   ): Promise<M1cHttpResult>;
   searchInformationEntries(body: unknown): Promise<M1cHttpResult>;
+  synthesizeInformationEntryQuery(body: unknown): Promise<M1cHttpResult>;
   readInformationEntryKnowledgeGraph(body: unknown): Promise<M1cHttpResult>;
   reviseInformationEntryKnowledgeGraphEdge(
     entryId: string,
@@ -435,6 +440,9 @@ export class M1cApiService implements M1cApiServicePort {
         ...(this.#dependencies.aiAssociationProposals === undefined
           ? []
           : ['ai_associations']),
+        ...(this.#dependencies.aiQuerySynthesis === undefined
+          ? []
+          : ['ai_query_synthesis']),
       ]),
     });
   }
@@ -849,6 +857,27 @@ export class M1cApiService implements M1cApiServicePort {
         });
       }
       return repositoryFailure();
+    }
+  }
+
+  public async synthesizeInformationEntryQuery(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (querySynthesisRequestsPrivateScope(body)) {
+      return httpResult(409, {
+        status: 'rejected',
+        issue: Object.freeze({code: 'ai_query_private_scope_forbidden'}),
+      });
+    }
+    const input = decodeInformationEntryQuerySynthesisBody(body);
+    if (input === undefined) return inputFailure('body');
+    const service = this.#dependencies.aiQuerySynthesis;
+    if (service === undefined) return aiProviderNotConfigured();
+    try {
+      const result = await service.synthesize(input);
+      return httpResult(200, {status: 'ok', ...result});
+    } catch (error) {
+      return informationEntryQuerySynthesisFailure(error);
     }
   }
 
@@ -1481,7 +1510,7 @@ export class M1cApiService implements M1cApiServicePort {
     if (!CANONICAL_UUID.test(snapshotId))
       return inputFailure('path.snapshotId');
     const service = this.#dependencies.aiSplitProposals;
-    if (service === undefined) return aiTagProviderNotConfigured();
+    if (service === undefined) return aiProviderNotConfigured();
     try {
       const proposals = await service.listForSnapshot(snapshotId);
       return httpResult(200, {
@@ -1502,7 +1531,7 @@ export class M1cApiService implements M1cApiServicePort {
     const input = decodeAiTagProposalStart(body);
     if (input === undefined) return inputFailure('body.requestKey');
     const service = this.#dependencies.aiSplitProposals;
-    if (service === undefined) return aiTagProviderNotConfigured();
+    if (service === undefined) return aiProviderNotConfigured();
     try {
       const result = await service.start(snapshotId, input.requestKey);
       const response = processingRunResponse(result.run);
@@ -1548,7 +1577,7 @@ export class M1cApiService implements M1cApiServicePort {
     if (!CANONICAL_UUID.test(proposalId))
       return inputFailure('path.proposalId');
     const service = this.#dependencies.aiSplitProposals;
-    if (service === undefined) return aiTagProviderNotConfigured();
+    if (service === undefined) return aiProviderNotConfigured();
     try {
       const result =
         decision === 'accepted'
@@ -1566,7 +1595,7 @@ export class M1cApiService implements M1cApiServicePort {
   public async listAiTagProposals(entryId: string): Promise<M1cHttpResult> {
     if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
     const service = this.#dependencies.aiTagProposals;
-    if (service === undefined) return aiTagProviderNotConfigured();
+    if (service === undefined) return aiProviderNotConfigured();
     try {
       const proposals = await service.listForEntry(entryId);
       return httpResult(200, {
@@ -1586,7 +1615,7 @@ export class M1cApiService implements M1cApiServicePort {
     const input = decodeAiTagProposalStart(body);
     if (input === undefined) return inputFailure('body.requestKey');
     const service = this.#dependencies.aiTagProposals;
-    if (service === undefined) return aiTagProviderNotConfigured();
+    if (service === undefined) return aiProviderNotConfigured();
     try {
       const result = await service.start(entryId, input.requestKey);
       const response = processingRunResponse(result.run);
@@ -1632,7 +1661,7 @@ export class M1cApiService implements M1cApiServicePort {
       return inputFailure('path.proposalId');
     }
     const service = this.#dependencies.aiTagProposals;
-    if (service === undefined) return aiTagProviderNotConfigured();
+    if (service === undefined) return aiProviderNotConfigured();
     try {
       const result =
         decision === 'accepted'
@@ -1657,7 +1686,7 @@ export class M1cApiService implements M1cApiServicePort {
       return inputFailure('path.relatedEntryId');
     }
     const service = this.#dependencies.aiAssociationProposals;
-    if (service === undefined) return aiTagProviderNotConfigured();
+    if (service === undefined) return aiProviderNotConfigured();
     try {
       const proposals = await service.listForPair(entryId, relatedEntryId);
       return httpResult(200, {
@@ -1681,7 +1710,7 @@ export class M1cApiService implements M1cApiServicePort {
     const input = decodeAiTagProposalStart(body);
     if (input === undefined) return inputFailure('body.requestKey');
     const service = this.#dependencies.aiAssociationProposals;
-    if (service === undefined) return aiTagProviderNotConfigured();
+    if (service === undefined) return aiProviderNotConfigured();
     try {
       const result = await service.start(
         entryId,
@@ -1747,7 +1776,7 @@ export class M1cApiService implements M1cApiServicePort {
       return inputFailure('path.proposalId');
     }
     const service = this.#dependencies.aiAssociationProposals;
-    if (service === undefined) return aiTagProviderNotConfigured();
+    if (service === undefined) return aiProviderNotConfigured();
     try {
       const result =
         decision === 'accepted'
@@ -2164,6 +2193,59 @@ function decodeEntrySearchBody(
     limit,
     ...(after === undefined ? {} : {after}),
   });
+}
+
+const INFORMATION_ENTRY_QUERY_SYNTHESIS_QUERY_KEYS = new Set([
+  'text',
+  'textMode',
+  'textFields',
+  'contentKeyword',
+  'sourceKey',
+  'snapshotId',
+  'typeKeyword',
+  'typeCustomName',
+  'domainKeyword',
+  'domainCustomName',
+  'domainScope',
+  'chunkMode',
+  'time',
+  'association',
+  'includePrivate',
+  'onlyPrivate',
+]);
+
+function decodeInformationEntryQuerySynthesisBody(
+  body: unknown,
+): Readonly<InformationEntryQuerySynthesisRequest> | undefined {
+  if (
+    !isRecord(body) ||
+    Object.keys(body).length !== 3 ||
+    !Object.hasOwn(body, 'requestId') ||
+    !Object.hasOwn(body, 'question') ||
+    !Object.hasOwn(body, 'query') ||
+    typeof body.requestId !== 'string' ||
+    !/^[A-Za-z0-9._:-]{1,80}$/u.test(body.requestId) ||
+    !isRecord(body.query) ||
+    Object.keys(body.query).some(
+      (key) => !INFORMATION_ENTRY_QUERY_SYNTHESIS_QUERY_KEYS.has(key),
+    )
+  ) {
+    return undefined;
+  }
+  const question = optionalBoundedText(body.question, 600);
+  const query = decodeEntrySearchBody({...body.query, limit: 8});
+  if (question === undefined || question === null || query === undefined) {
+    return undefined;
+  }
+  return Object.freeze({requestId: body.requestId, question, query});
+}
+
+function querySynthesisRequestsPrivateScope(body: unknown): boolean {
+  return (
+    isRecord(body) &&
+    isRecord(body.query) &&
+    (body.query.includePrivate === true || body.query.onlyPrivate === true)
+  );
 }
 
 function decodeEntrySearchTextFields(
@@ -2725,10 +2807,32 @@ function decodeAiTagProposalStart(
   return Object.freeze({requestKey: body.requestKey});
 }
 
-function aiTagProviderNotConfigured(): M1cHttpResult {
+function aiProviderNotConfigured(): M1cHttpResult {
   return httpResult(409, {
     status: 'rejected',
     issue: Object.freeze({code: 'ai_provider_not_configured'}),
+  });
+}
+
+function informationEntryQuerySynthesisFailure(error: unknown): M1cHttpResult {
+  if (!(error instanceof InformationEntryQuerySynthesisServiceError)) {
+    return repositoryFailure();
+  }
+  if (error.code === 'ai_query_private_scope_forbidden') {
+    return httpResult(409, {
+      status: 'rejected',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  if (error.code === 'ai_query_no_evidence') {
+    return httpResult(422, {
+      status: 'rejected',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  return httpResult(502, {
+    status: 'failed',
+    issue: Object.freeze({code: error.code}),
   });
 }
 

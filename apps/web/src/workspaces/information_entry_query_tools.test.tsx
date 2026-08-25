@@ -152,9 +152,18 @@ describe('M1F-2 query result tools', () => {
   it('wires the query-owned tools into the ordinary Query workspace', () => {
     const markup = renderToStaticMarkup(
       <InformationEntryQueryWorkspace
-        aiEnabled={false}
+        aiQuerySynthesisEnabled={false}
         snapshots={[]}
         onOpenEvidence={() => undefined}
+        onSynthesize={() =>
+          Promise.resolve({
+            statusCode: 503,
+            body: {
+              status: 'failed',
+              issue: {code: 'ai_provider_not_configured'},
+            },
+          })
+        }
         onSearch={() =>
           Promise.resolve({
             statusCode: 200,
@@ -174,6 +183,8 @@ describe('M1F-2 query result tools', () => {
     expect(markup).toContain('结果操作');
     expect(markup).toContain('结果比较');
     expect(markup).toContain('先选择一条查询结果');
+    expect(markup).toContain('AI 综合 · 仅基于当前公开查询结果');
+    expect(markup).toContain('AI 未启用');
   });
 });
 

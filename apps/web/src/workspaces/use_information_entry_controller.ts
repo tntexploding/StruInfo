@@ -71,6 +71,75 @@ export function useInformationEntryController({
   const searchRequests = useRef(createLatestRequestTracker());
   const documentRequests = useRef(createLatestRequestTracker());
 
+  const searchRequest = useMemo(
+    () =>
+      Object.freeze({
+        ...(query.trim() === ''
+          ? {}
+          : {
+              text: query.trim(),
+              textMode,
+              textFields,
+            }),
+        ...(advancedFilters.contentKeyword.trim() === ''
+          ? {}
+          : {contentKeyword: advancedFilters.contentKeyword.trim()}),
+        ...(advancedFilters.sourceKey.trim() === ''
+          ? {}
+          : {sourceKey: advancedFilters.sourceKey.trim()}),
+        ...(snapshotId === '' ? {} : {snapshotId}),
+        ...(typeKeyword === '' ? {} : {typeKeyword}),
+        ...(typeKeyword !== 'other' ||
+        advancedFilters.typeCustomName.trim() === ''
+          ? {}
+          : {typeCustomName: advancedFilters.typeCustomName.trim()}),
+        ...(domainKeyword === '' ? {} : {domainKeyword}),
+        ...(domainKeyword !== 'other' ||
+        advancedFilters.domainCustomName.trim() === ''
+          ? {}
+          : {domainCustomName: advancedFilters.domainCustomName.trim()}),
+        domainScope: domainKeyword === '' ? 'any' : advancedFilters.domainScope,
+        ...(advancedFilters.chunkMode === ''
+          ? {}
+          : {chunkMode: advancedFilters.chunkMode}),
+        ...(advancedFilters.timeFrom === '' && advancedFilters.timeTo === ''
+          ? {}
+          : {
+              time: {
+                field: advancedFilters.timeField,
+                ...(advancedFilters.timeFrom === ''
+                  ? {}
+                  : {from: advancedFilters.timeFrom}),
+                ...(advancedFilters.timeTo === ''
+                  ? {}
+                  : {to: advancedFilters.timeTo}),
+              },
+            }),
+        ...(advancedFilters.association === undefined
+          ? {}
+          : {
+              association: {
+                entryId: advancedFilters.association.entryId,
+                maximumDepth: advancedFilters.association.maximumDepth,
+                minimumScore: advancedFilters.association.minimumScore,
+              },
+            }),
+        includePrivate,
+        onlyPrivate,
+      }),
+    [
+      advancedFilters,
+      domainKeyword,
+      includePrivate,
+      onlyPrivate,
+      query,
+      snapshotId,
+      textFields,
+      textMode,
+      typeKeyword,
+    ],
+  );
+
   useEffect(
     () => () => {
       searchRequests.current.invalidate();
@@ -112,59 +181,7 @@ export function useInformationEntryController({
       setView({status: 'loading'});
       try {
         const response = await onSearch({
-          ...(query.trim() === ''
-            ? {}
-            : {
-                text: query.trim(),
-                textMode,
-                textFields,
-              }),
-          ...(advancedFilters.contentKeyword.trim() === ''
-            ? {}
-            : {contentKeyword: advancedFilters.contentKeyword.trim()}),
-          ...(advancedFilters.sourceKey.trim() === ''
-            ? {}
-            : {sourceKey: advancedFilters.sourceKey.trim()}),
-          ...(snapshotId === '' ? {} : {snapshotId}),
-          ...(typeKeyword === '' ? {} : {typeKeyword}),
-          ...(typeKeyword !== 'other' ||
-          advancedFilters.typeCustomName.trim() === ''
-            ? {}
-            : {typeCustomName: advancedFilters.typeCustomName.trim()}),
-          ...(domainKeyword === '' ? {} : {domainKeyword}),
-          ...(domainKeyword !== 'other' ||
-          advancedFilters.domainCustomName.trim() === ''
-            ? {}
-            : {domainCustomName: advancedFilters.domainCustomName.trim()}),
-          domainScope:
-            domainKeyword === '' ? 'any' : advancedFilters.domainScope,
-          ...(advancedFilters.chunkMode === ''
-            ? {}
-            : {chunkMode: advancedFilters.chunkMode}),
-          ...(advancedFilters.timeFrom === '' && advancedFilters.timeTo === ''
-            ? {}
-            : {
-                time: {
-                  field: advancedFilters.timeField,
-                  ...(advancedFilters.timeFrom === ''
-                    ? {}
-                    : {from: advancedFilters.timeFrom}),
-                  ...(advancedFilters.timeTo === ''
-                    ? {}
-                    : {to: advancedFilters.timeTo}),
-                },
-              }),
-          ...(advancedFilters.association === undefined
-            ? {}
-            : {
-                association: {
-                  entryId: advancedFilters.association.entryId,
-                  maximumDepth: advancedFilters.association.maximumDepth,
-                  minimumScore: advancedFilters.association.minimumScore,
-                },
-              }),
-          includePrivate,
-          onlyPrivate,
+          ...searchRequest,
           limit: 20,
           ...(after === undefined ? {} : {after}),
         });
@@ -186,18 +203,7 @@ export function useInformationEntryController({
         });
       }
     },
-    [
-      advancedFilters,
-      domainKeyword,
-      includePrivate,
-      onlyPrivate,
-      onSearch,
-      query,
-      snapshotId,
-      textFields,
-      textMode,
-      typeKeyword,
-    ],
+    [onSearch, searchRequest],
   );
 
   useEffect(() => {
@@ -305,6 +311,7 @@ export function useInformationEntryController({
     selectedEntry,
     selectedEntryId,
     selectedEntryIndex,
+    searchRequest,
     setAdvancedFilters,
     setDomainKeyword,
     setIncludePrivate,

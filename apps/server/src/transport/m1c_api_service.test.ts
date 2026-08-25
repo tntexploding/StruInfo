@@ -14,6 +14,7 @@ import type {
   InformationEntryAssociationOverrideWrite,
   InformationEntryAssociationProjection,
   InformationEntryMaterializeRow,
+  InformationEntryQuerySynthesisServicePort,
   InformationEntrySearchCursor,
 } from '../modules/entries/index.js';
 import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
@@ -1101,6 +1102,121 @@ describe('M1cApiService', () => {
       (second.body as {querySha256?: string}).querySha256,
     );
   });
+
+  it('publishes and executes the closed public-only query synthesis boundary', async () => {
+    const synthesize = vi.fn<
+      InformationEntryQuerySynthesisServicePort['synthesize']
+    >(() =>
+      Promise.resolve(
+        Object.freeze({
+          requestId: 'query-synthesis:1',
+          querySha256: 'a'.repeat(64),
+          providerKey: 'openai-responses-v1' as const,
+          model: 'gpt-5-mini',
+          promptVersion: 'synthetic-query-v1',
+          answer: '合成回答',
+          evidenceStatus: 'supported' as const,
+          claims: Object.freeze([
+            Object.freeze({
+              statement: '合成事实',
+              evidenceRefs: Object.freeze(['E01']),
+            }),
+          ]),
+          limitations: Object.freeze([]),
+          evidence: Object.freeze([]),
+        }),
+      ),
+    );
+    const service = createService({
+      aiQuerySynthesis: {
+        providerKey: 'openai-responses-v1',
+        model: 'gpt-5-mini',
+        promptVersion: 'synthetic-query-v1',
+        synthesize,
+      },
+    });
+
+    const workspaceBody = service.workspace().body;
+    if (
+      typeof workspaceBody !== 'object' ||
+      workspaceBody === null ||
+      !('capabilities' in workspaceBody)
+    )
+      throw new Error('Expected a workspace capability response.');
+    const capabilities: unknown = workspaceBody.capabilities;
+    if (!Array.isArray(capabilities))
+      throw new Error('Expected workspace capabilities.');
+    expect(
+      capabilities.some(
+        (capability: unknown) => capability === 'ai_query_synthesis',
+      ),
+    ).toBe(true);
+    await expect(
+      service.synthesizeInformationEntryQuery({
+        requestId: 'query-synthesis:1',
+        question: '这些公开结果说明什么？',
+        query: {
+          text: '合成',
+          textMode: 'substring',
+          textFields: ['title', 'body'],
+          includePrivate: false,
+          onlyPrivate: false,
+        },
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        requestId: 'query-synthesis:1',
+        answer: '合成回答',
+      },
+    });
+    expect(synthesize).toHaveBeenCalledTimes(1);
+    const synthesisRequest = synthesize.mock.calls[0]?.[0];
+    expect(synthesisRequest?.requestId).toBe('query-synthesis:1');
+    expect(synthesisRequest?.question).toBe('这些公开结果说明什么？');
+    expect(synthesisRequest?.query.includePrivate).toBe(false);
+    expect(synthesisRequest?.query.onlyPrivate).toBe(false);
+    expect(synthesisRequest?.query.limit).toBe(8);
+  });
+
+  it('rejects private synthesis scope before the service and never accepts caller pagination', async () => {
+    const synthesize = vi.fn(() => Promise.reject(new Error('unexpected')));
+    const service = createService({
+      aiQuerySynthesis: {
+        providerKey: 'openai-responses-v1',
+        model: 'gpt-5-mini',
+        promptVersion: 'synthetic-query-v1',
+        synthesize,
+      },
+    });
+
+    await expect(
+      service.synthesizeInformationEntryQuery({
+        requestId: 'query-synthesis:private',
+        question: '不应外发',
+        query: {includePrivate: true, onlyPrivate: false},
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 409,
+      body: {
+        status: 'rejected',
+        issue: {code: 'ai_query_private_scope_forbidden'},
+      },
+    });
+    await expect(
+      service.synthesizeInformationEntryQuery({
+        requestId: 'query-synthesis:cursor',
+        question: '不接受分页',
+        query: {includePrivate: false, limit: 1},
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 422,
+      body: {status: 'rejected', issue: {path: 'body'}},
+    });
+    expect(synthesize).not.toHaveBeenCalled();
+  });
+
   it('rebuilds selective Entry associations and preserves a separate manual override command', async () => {
     const entryLowId = '00000000-0000-4000-8000-000000000011';
     const entryHighId = '00000000-0000-4000-8000-000000000013';

@@ -362,6 +362,17 @@ filters, Association or privacy scope change. It does not persist a saved view,
 infer a winner or relation, add an API/migration/dependency, or turn local
 Association traversal into AI or semantic retrieval.
 
+ADR 0022 completes M1F-3. Query now offers an explicit secondary action that
+synthesizes only the first eight public Entries returned by the existing
+deterministic search. The Provider receives bounded request-local evidence
+handles rather than workspace identifiers; claim references map back to exact
+local source actions. Private scope is rejected before Blob or Provider access,
+and the session-only answer cannot write Entry, Association, graph, preference,
+database or package state. `ai_query_synthesis` is independent from the three
+durable proposal capabilities. This is evidence-bounded AI synthesis, not
+Provider retrieval, Web search, Embedding, vectors, RAG or a generic agent
+capability.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2
@@ -371,7 +382,8 @@ or make it mandatory before its dependency and distribution review is accepted.
 Do not change the accepted language, application shape, or persistence model
 without a superseding ADR. Cloud deployment vendors remain unselected; OpenAI
 is selected only for the optional proposal paths accepted by ADR 0013 through
-ADR 0015. Do not reuse M0-P probe candidate source as production code; carry
+ADR 0015 and the bounded public Query synthesis accepted by ADR 0022. Do not
+reuse M0-P probe candidate source as production code; carry
 the tracked provenance, workspace, idempotency, fencing, and recovery
 invariants into fresh implementation and tests.
 
