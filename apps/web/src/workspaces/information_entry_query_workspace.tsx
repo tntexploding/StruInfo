@@ -1,4 +1,4 @@
-import type {SyntheticEvent} from 'react';
+import {useState, type SyntheticEvent} from 'react';
 
 import {
   ENTRY_DOMAIN_KEYWORDS,
@@ -18,6 +18,17 @@ import {
   InformationEntryAdvancedSearchFields,
   InformationEntryTextSearchOptions,
 } from './information_entry_search_controls.js';
+import {InformationEntryQueryComparison} from './information_entry_query_comparison.js';
+import {
+  EMPTY_INFORMATION_ENTRY_COMPARISON_STATE,
+  clearInformationEntryComparisons,
+  informationEntryQueryScopeKey,
+  removeInformationEntryComparison,
+  toggleInformationEntryComparison,
+  visibleInformationEntryComparisons,
+  type InformationEntrySearchItem,
+} from './information_entry_query_state.js';
+import {InformationEntryQueryTools} from './information_entry_query_tools.js';
 import {useInformationEntryController} from './use_information_entry_controller.js';
 import {PrivateDocumentResults} from './private_document_results.js';
 
@@ -36,10 +47,49 @@ export function InformationEntryQueryWorkspace({
   snapshots,
 }: InformationEntryQueryWorkspaceProps) {
   const controller = useInformationEntryController({onSearch});
+  const comparisonScopeKey = informationEntryQueryScopeKey({
+    query: controller.query,
+    textMode: controller.textMode,
+    textFields: controller.textFields,
+    snapshotId: controller.snapshotId,
+    typeKeyword: controller.typeKeyword,
+    domainKeyword: controller.domainKeyword,
+    advancedFilters: controller.advancedFilters,
+    includePrivate: controller.includePrivate,
+    onlyPrivate: controller.onlyPrivate,
+  });
+  const selectedItem =
+    controller.view.status === 'ready'
+      ? controller.view.response.items.find(
+          (item) => item.entry.entryId === controller.selectedEntryId,
+        )
+      : undefined;
 
   function submitSearch(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     void controller.executeSearch();
+  }
+
+  function setSelectedAssociationAnchor(): void {
+    if (selectedItem === undefined) return;
+    const currentAssociation = controller.advancedFilters.association;
+    controller.setAdvancedFilters(
+      Object.freeze({
+        ...controller.advancedFilters,
+        association: Object.freeze({
+          entryId: selectedItem.entry.entryId,
+          label: selectedItem.entry.value.titlePath || '未命名条目',
+          maximumDepth: currentAssociation?.maximumDepth ?? 2,
+          minimumScore: currentAssociation?.minimumScore ?? 0,
+        }),
+      }),
+    );
+  }
+
+  function clearAssociationAnchor(): void {
+    const next = {...controller.advancedFilters};
+    delete next.association;
+    controller.setAdvancedFilters(Object.freeze(next));
   }
 
   return (
@@ -70,6 +120,7 @@ export function InformationEntryQueryWorkspace({
           <span data-active="true">标题 / 正文 / 标签</span>
           <span data-active="true">精确结构筛选</span>
           <span data-active="true">精确 / 包含 / 模糊</span>
+          <span data-active="true">关联联想 / 双条比较</span>
         </div>
       </section>
 
@@ -202,6 +253,80 @@ export function InformationEntryQueryWorkspace({
         />
       ) : null}
 
+      <InformationEntryQueryResults
+        key={comparisonScopeKey}
+        comparisonScopeKey={comparisonScopeKey}
+        controller={controller}
+        selectedItem={selectedItem}
+        onAssociationToggle={(enabled) => {
+          if (enabled) {
+            setSelectedAssociationAnchor();
+          } else {
+            clearAssociationAnchor();
+          }
+        }}
+        onOpenEvidence={onOpenEvidence}
+        onReplaceAssociationAnchor={setSelectedAssociationAnchor}
+      />
+    </div>
+  );
+}
+
+function InformationEntryQueryResults({
+  comparisonScopeKey,
+  controller,
+  selectedItem,
+  onAssociationToggle,
+  onOpenEvidence,
+  onReplaceAssociationAnchor,
+}: {
+  readonly comparisonScopeKey: string;
+  readonly controller: ReturnType<typeof useInformationEntryController>;
+  readonly selectedItem: Readonly<InformationEntrySearchItem> | undefined;
+  readonly onAssociationToggle: (enabled: boolean) => void;
+  readonly onOpenEvidence: InformationEntryServices['onOpenEvidence'];
+  readonly onReplaceAssociationAnchor: () => void;
+}) {
+  const [comparisonState, setComparisonState] = useState(
+    EMPTY_INFORMATION_ENTRY_COMPARISON_STATE,
+  );
+  const comparisonItems = visibleInformationEntryComparisons(
+    comparisonState,
+    comparisonScopeKey,
+  );
+  const selectedIsCompared =
+    selectedItem !== undefined &&
+    comparisonItems.some(
+      (item) => item.entry.entryId === selectedItem.entry.entryId,
+    );
+
+  return (
+    <>
+      <InformationEntryQueryTools
+        association={controller.advancedFilters.association}
+        comparisonCount={comparisonItems.length}
+        comparisonFull={comparisonItems.length >= 2}
+        selectedItem={selectedItem}
+        selectedIsCompared={selectedIsCompared}
+        onAssociationToggle={onAssociationToggle}
+        onReplaceAssociationAnchor={onReplaceAssociationAnchor}
+        onToggleComparison={() => {
+          if (selectedItem === undefined) return;
+          setComparisonState((current) =>
+            toggleInformationEntryComparison(
+              current,
+              comparisonScopeKey,
+              selectedItem,
+            ),
+          );
+        }}
+        onClearComparisons={() => {
+          setComparisonState(
+            clearInformationEntryComparisons(comparisonScopeKey),
+          );
+        }}
+      />
+
       <InformationEntryResults
         ariaLabel="Entry 查询结果"
         emptyDescription="当前查询没有匹配条目；可清除部分筛选后重试。"
@@ -225,6 +350,20 @@ export function InformationEntryQueryWorkspace({
           />
         )}
       </InformationEntryResults>
-    </div>
+
+      <InformationEntryQueryComparison
+        items={comparisonItems}
+        onOpenEvidence={onOpenEvidence}
+        onRemove={(entryId) => {
+          setComparisonState((current) =>
+            removeInformationEntryComparison(
+              current,
+              comparisonScopeKey,
+              entryId,
+            ),
+          );
+        }}
+      />
+    </>
   );
 }
