@@ -5,6 +5,7 @@ import {
   createReviewPreferences,
   decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
+  decodeReviewExplorationPolicyPreferences,
   decodeReviewQuickTags,
   decodeReviewVocabularyPreferences,
   type ReviewPreferences,
@@ -166,6 +167,10 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     value.associationPolicy === undefined
       ? undefined
       : decodeReviewAssociationPolicyPreferences(value.associationPolicy);
+  const explorationPolicy =
+    value.explorationPolicy === undefined
+      ? undefined
+      : decodeReviewExplorationPolicyPreferences(value.explorationPolicy);
   if (
     value.format !== 'struinfo.review-preferences' ||
     value.version !== 1 ||
@@ -173,7 +178,9 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     quickTags === undefined ||
     automaticKeywords === undefined ||
     vocabulary === undefined ||
-    (value.associationPolicy !== undefined && associationPolicy === undefined)
+    (value.associationPolicy !== undefined &&
+      associationPolicy === undefined) ||
+    (value.explorationPolicy !== undefined && explorationPolicy === undefined)
   ) {
     fail();
   }
@@ -183,6 +190,7 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     automaticKeywords,
     vocabulary,
     associationPolicy,
+    explorationPolicy,
   );
 }
 

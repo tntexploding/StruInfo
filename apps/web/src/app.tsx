@@ -15,6 +15,8 @@ import type {
   InformationEntryAssociationOverrideResponse,
   InformationEntryAssociationPolicyWriteResponse,
   InformationEntryAssociationRebuildResponse,
+  InformationEntryExplorationPolicyWriteResponse,
+  InformationEntryExplorationResponse,
   InformationEntryKnowledgeGraphEdgeWriteResponse,
   InformationEntryKnowledgeGraphResponse,
   InformationEntryMaterializeResponse,
@@ -248,6 +250,14 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const exploreInformationEntries = useCallback(
+    (
+      body: unknown,
+    ): Promise<M1cHttpResponse<InformationEntryExplorationResponse>> =>
+      apiClient.exploreInformationEntries(body),
+    [apiClient],
+  );
+
   const synthesizeInformationEntryQuery = useCallback(
     (
       body: unknown,
@@ -296,6 +306,25 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       M1cHttpResponse<InformationEntryAssociationPolicyWriteResponse>
     > => apiClient.reviseInformationEntryAssociationPolicy(body),
     [apiClient],
+  );
+
+  const reviseInformationEntryExplorationPolicy = useCallback(
+    async (
+      body: unknown,
+    ): Promise<
+      M1cHttpResponse<InformationEntryExplorationPolicyWriteResponse>
+    > => {
+      const response =
+        await apiClient.reviseInformationEntryExplorationPolicy(body);
+      if (
+        response.body.status === 'applied' ||
+        response.body.status === 'unchanged'
+      ) {
+        await refreshReviewPreferences();
+      }
+      return response;
+    },
+    [apiClient, refreshReviewPreferences],
   );
 
   const listInformationEntryAssociations = useCallback(
@@ -684,6 +713,9 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
             workspace.value.capabilities.includes('ai_query_synthesis')
           }
           snapshots={snapshotValues}
+          reviewPreferences={reviewPreferences}
+          onExplore={exploreInformationEntries}
+          onReviseExplorationPolicy={reviseInformationEntryExplorationPolicy}
           onSearch={searchInformationEntries}
           onSynthesize={synthesizeInformationEntryQuery}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>

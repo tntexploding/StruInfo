@@ -1,6 +1,9 @@
 import {describe, expect, it} from 'vitest';
 
-import {DEFAULT_REVIEW_ASSOCIATION_POLICY} from './m1c_api_contract.js';
+import {
+  DEFAULT_REVIEW_ASSOCIATION_POLICY,
+  DEFAULT_REVIEW_EXPLORATION_POLICY,
+} from './m1c_api_contract.js';
 import {
   createM1cApiClient,
   type M1cApiFetch,
@@ -89,6 +92,58 @@ describe('M1cApiClient', () => {
       body: JSON.stringify(body),
       signal: controller.signal,
     });
+  });
+
+  it('uses separate candidate-read and policy-write routes for exploration', async () => {
+    const requests: Readonly<{url: string; method?: string; body?: string}>[] =
+      [];
+    const client = createM1cApiClient(
+      'http://127.0.0.1:3000/',
+      (input, init) => {
+        requests.push({
+          url: requestUrl(input),
+          ...(init?.method === undefined ? {} : {method: init.method}),
+          ...(typeof init?.body === 'string' ? {body: init.body} : {}),
+        });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({status: 'failed', issue: {code: 'synthetic'}}),
+            {status: 503, headers: {'content-type': 'application/json'}},
+          ),
+        );
+      },
+    );
+    const candidateRequest = {
+      anchorEntryId: '00000000-0000-4000-8000-000000000001',
+      excludeEntryIds: [],
+      pageResultCount: 20,
+      includePrivate: false,
+      onlyPrivate: false,
+    };
+    const policyRequest = {
+      expectedRevision: 0,
+      enabled: true,
+      resultShare: 20,
+      neighborExpansion: true,
+      crossDomain: true,
+      serendipity: true,
+    };
+
+    await client.exploreInformationEntries(candidateRequest);
+    await client.reviseInformationEntryExplorationPolicy(policyRequest);
+
+    expect(requests).toEqual([
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/exploration/candidates',
+        method: 'POST',
+        body: JSON.stringify(candidateRequest),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/exploration/policy',
+        method: 'PUT',
+        body: JSON.stringify(policyRequest),
+      },
+    ]);
   });
 
   it('encodes snapshot identity as one path segment', async () => {
@@ -461,6 +516,7 @@ describe('M1cApiClient', () => {
               },
               vocabulary: {aliases: []},
               associationPolicy: DEFAULT_REVIEW_ASSOCIATION_POLICY,
+              explorationPolicy: DEFAULT_REVIEW_EXPLORATION_POLICY,
             }),
             {headers: {'content-type': 'application/json'}},
           ),

@@ -104,6 +104,8 @@ describe('M1C workspace transfer', () => {
     expect(serialized).toContain('struinfo.personal-data');
     expect(serialized).toContain('"associationPolicy"');
     expect(serialized).toContain('"contentWeight":50');
+    expect(serialized).toContain('"explorationPolicy"');
+    expect(serialized).toContain('"resultShare":30');
     expect(new TextDecoder().decode(storedBytes)).toContain(
       'struinfo.m1d-entry',
     );
@@ -573,6 +575,14 @@ function memoryReviewPreferences(): ReviewPreferencesStore {
       domainWeight: 25,
       threshold: 2_000,
     },
+    {
+      revision: 4,
+      enabled: true,
+      resultShare: 30,
+      neighborExpansion: true,
+      crossDomain: false,
+      serendipity: true,
+    },
   );
   return {
     load(workspaceId) {
@@ -586,6 +596,7 @@ function memoryReviewPreferences(): ReviewPreferencesStore {
       automaticKeywords,
       vocabulary,
       associationPolicy,
+      explorationPolicy,
     ) {
       if (workspaceId !== WORKSPACE_ID)
         return Promise.reject(new Error('workspace'));
@@ -595,6 +606,7 @@ function memoryReviewPreferences(): ReviewPreferencesStore {
         automaticKeywords,
         vocabulary,
         associationPolicy,
+        explorationPolicy,
       );
       return Promise.resolve(preferences);
     },

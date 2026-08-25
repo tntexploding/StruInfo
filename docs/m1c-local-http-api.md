@@ -1,7 +1,7 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1E-5A 活动接口
-- 最近核对：2026-08-24
+- 状态：M1G-1 活动接口
+- 最近核对：2026-08-25
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
 
@@ -9,7 +9,7 @@
 
 ## 1. 接口边界
 
-本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、确定性/人工首次物化、Document 标签、Entry 联系、正式 Entry 图谱、Provider-neutral ProcessingRun、可选 OpenAI Snapshot 拆分/Entry 标签/selected-pair 联系提案、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、通用 AI 执行、自动接受或公共扩展 API。
+本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、确定性/人工首次物化、Document 标签、Entry 联系、正式 Entry 图谱、确定性探索、Provider-neutral ProcessingRun、可选 OpenAI Snapshot 拆分/Entry 标签/selected-pair 联系提案与公开 Query 证据综合、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、通用 AI 执行、自动接受或公共扩展 API。
 
 当前工作区由包体外运行配置中的 `STRUIINFO_WORKSPACE_ID` 选择。请求不能提交或切换 `workspaceId`；服务端把固定工作区注入所有领域操作。切换资料集需要停止当前进程、替换外部配置或数据根并重新启动。
 
@@ -24,8 +24,8 @@
 | `GET`  | `/api/v1/workspace`                                                                   | 返回固定工作区身份及实际启用的能力                                                    |
 | `GET`  | `/api/v1/evidence`                                                                    | 列出当前 Evidence Snapshot 摘要                                                       |
 | `GET`  | `/api/v1/evidence/snapshots/:snapshotId`                                              | 返回 Snapshot、完整规范正文、结构和 Fragment；隐私内容要求 `includePrivate=true`      |
-| `GET`  | `/api/v1/preferences/review`                                                          | 读取外部工作区的快捷标签、自动关键词开关/过滤、别名和联系策略                         |
-| `PUT`  | `/api/v1/preferences/review`                                                          | 整体保存当前偏好文件                                                                  |
+| `GET`  | `/api/v1/preferences/review`                                                          | 读取外部工作区的快捷标签、自动关键词开关/过滤、别名、联系和探索策略                   |
+| `PUT`  | `/api/v1/preferences/review`                                                          | 整体保存当前偏好文件；未提交的版本化策略保持现值                                      |
 | `POST` | `/api/v1/imports/markdown`                                                            | 原子导入手动/Git Markdown 或本地 UTF-8 Markdown/文本文件、来源、Blob、结构和 Fragment |
 | `POST` | `/api/v1/entries/materialize`                                                         | 从一个用户选择的空 Snapshot 按 section 规则原子生成 Entry                             |
 | `POST` | `/api/v1/entries/materialize/manual`                                                  | 从标题和完整有序 Fragment 标量区间原子生成人工 Entry 结构                             |
@@ -35,6 +35,9 @@
 | `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/reject`           | 拒绝提案且不创建 Entry                                                                |
 | `PUT`  | `/api/v1/entries/:entryId`                                                            | 以期望版本更新当前 Entry 成品态                                                       |
 | `POST` | `/api/v1/entries/search`                                                              | 查询 Entry，并在显式隐私范围下返回独立完整私密文档通道                                |
+| `POST` | `/api/v1/entries/search/synthesize`                                                   | 显式综合当前公开确定性 Query 证据；答案只属于本次页面会话                             |
+| `POST` | `/api/v1/entries/exploration/candidates`                                              | 从选定 Entry 的当前可见直接联系生成独立页外探索候选                                   |
+| `PUT`  | `/api/v1/entries/exploration/policy`                                                  | 以期望修订保存外部探索开关、页额份额和三类候选开关                                    |
 | `GET`  | `/api/v1/entries/:entryId/tag-proposals`                                              | 列出一个 Entry 的有界 tags 提案                                                       |
 | `POST` | `/api/v1/entries/:entryId/tag-proposals/start`                                        | 用户显式请求一个公开 Entry 的 OpenAI 标签提案                                         |
 | `POST` | `/api/v1/entries/:entryId/tag-proposals/:proposalId/accept`                           | 接受提案并通过现有 Entry revision 保存标签                                            |
@@ -57,7 +60,7 @@
 | `POST` | `/api/v1/workspace-bundles/export`                                                    | 将当前工作区个人数据写入外部 `exports/`                                               |
 | `POST` | `/api/v1/workspace-bundles/restore`                                                   | 从安全文件名恢复同 ID 的空工作区                                                      |
 
-API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单页应用。scheduler/worker 角色只提供健康路由；它们的存在不表示自动采集已经实现。ProcessingRun 读取/取消是独立任务状态边界；OpenAI split、tags 与 selected-pair association 只在 API/`all` 且配置完整时装配。
+API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单页应用。scheduler/worker 角色只提供健康路由；它们的存在不表示自动采集已经实现。ProcessingRun 读取/取消是独立任务状态边界；OpenAI split、tags、selected-pair association 与 Query synthesis 只在 API/`all` 且配置完整时装配。确定性探索始终是本地无 Provider 读路径。
 
 ## 3. 五步主线如何调用接口
 
@@ -97,7 +100,7 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 - 可选的有用程度与有趣程度 1–5 评分；
 - 隐私 Entry 的当次 `includePrivate`。
 
-文档级标签通过 aggregate 接口确定性重算，或通过 tags 接口人工覆盖。快捷标签、排除词、域名策略、已确认别名和联系策略由 preferences 边界写入外部偏好文件，不进入数据库迁移、Git 或应用包。旧客户端不传 `associationPolicy` 时保留现值。
+文档级标签通过 aggregate 接口确定性重算，或通过 tags 接口人工覆盖。快捷标签、排除词、域名策略、已确认别名、联系策略和探索策略由 preferences 边界写入外部偏好文件，不进入数据库迁移、Git 或应用包。旧客户端不传 `associationPolicy` 或 `explorationPolicy` 时分别保留现值。
 
 ### 3.4 联系
 
@@ -116,7 +119,11 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 - 指定 Entry 的一至两跳联系范围和最低分；
 - `limit` 1–100 与查询绑定排他游标 `after`。
 
-结果返回稳定 Entry 分页、匹配原因、0–10000 整数词法分、关联路径和精确 Fragment/Snapshot 证据。query digest v2 绑定规范化文字、模式和字段集合；cursor schema v2 另含词法分，旧临时 cursor 会被拒绝。响应还包含 `privateDocuments: { totalCount, items }`；默认及未勾选隐私时该通道为空，显式 `includePrivate=true` 后才按同一模式从外部 Blob 匹配完整规范正文、来源 key/URI 或私密 Entry 标签，并返回独立文档摘要与全文入口。当前实现是完整加载后的确定性词法查询，不是 SQL query pushdown、语义/向量检索、RAG 或答案生成。
+结果返回稳定 Entry 分页、匹配原因、0–10000 整数词法分、关联路径和精确 Fragment/Snapshot 证据。query digest v2 绑定规范化文字、模式和字段集合；cursor schema v2 另含词法分，旧临时 cursor 会被拒绝。响应还包含 `privateDocuments: { totalCount, items }`；默认及未勾选隐私时该通道为空，显式 `includePrivate=true` 后才按同一模式从外部 Blob 匹配完整规范正文、来源 key/URI 或私密 Entry 标签，并返回独立文档摘要与全文入口。当前实现是完整加载后的确定性词法查询，不是 SQL query pushdown、语义/向量检索或 RAG。
+
+`POST /entries/exploration/candidates` 接受一个当前可见 `anchorEntryId`、当前页排除 ID、当前页结果数和显式隐私范围。服务端先读取已保存的外部探索策略；关闭或 0% 时返回空结果，否则把页数乘以 0–50% 份额向上取整并限制最多 12 条。候选只来自锚点当前可见的直接 Association，按隐私先行排除当前页、blocked、过期和不可见端点，再按邻域扩展、跨领域连接、偶然发现三个启用桶稳定轮转。该结果不插入普通分页，不改变 query digest、排序、总数或游标，也不写搜索历史、行为画像、Entry、联系或图谱。
+
+`POST /entries/search/synthesize` 是 Query 的次级显式操作，只接收同一公开查询及页面请求身份。服务端重新运行确定性查询，最多打包前 8 条公开 Entry 的有界本地证据，私密范围在 Blob 和 Provider 前拒绝。返回答案、claim 证据句柄、模型/Prompt 版本和局限，但不保存答案，也不赋予模型检索或写权限。
 
 ### 3.6 正式知识
 
@@ -130,7 +137,7 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 `GET /processing-runs?limit=N` 返回最近任务、真实阶段/步骤/进度、状态、版本和有界提案信封；不会返回 idempotency key、正文、Prompt、凭据或原始 Provider 错误。`POST /processing-runs/:runId/cancel` 只接受 `{expectedVersion}`，queued/running 可取消，终态、过期版本和缺失任务返回稳定冲突/不存在结果。
 
-`processing_runs` capability 只表示读取/取消可用。只有 `OPENAI_API_KEY` 与 `STRUIINFO_OPENAI_MODEL` 同时有效时，工作区才分别发布 `ai_split`、`ai_tags` 与 `ai_associations`；通用 `ai` 仍缺席，因此查询页不会错误解锁 AI 占位。
+`processing_runs` capability 只表示读取/取消可用。只有 `OPENAI_API_KEY` 与 `STRUIINFO_OPENAI_MODEL` 同时有效时，工作区才分别发布 `ai_split`、`ai_tags`、`ai_associations` 与 `ai_query_synthesis`；通用 `ai` 仍缺席，四项能力互不解锁。
 
 `POST /entries/:entryId/tag-proposals/start` 接受 `{requestKey}`，只把一个公开 Entry 的标题路径和正文交给 Provider。响应先落为真实 ProcessingRun，再保存闭合的内容关键词、类型、领域、说明、模型和 Prompt 版本。私密 Entry 在 fetch 前返回拒绝；API key、Blob、其他 Entry、偏好和数据库信息不会进入请求或响应。
 
@@ -146,7 +153,7 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 ## 5. 个人数据包
 
-export 接口生成当前五分区 Bundle，包含 56 张当前工作区表、被引用的 Blob 字节和含版本化联系策略的当前偏好文件。Entry v3 section 携带可选精确 Fragment 标量区间；Processing v4 section 携带三张任务表、三张 typed tag proposal 表、一张 typed association proposal 表和三张 typed split proposal 表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1/v2/v3 保持可读，缺失的新表恢复为空状态。
+export 接口生成当前五分区 Bundle，包含 56 张当前工作区表、被引用的 Blob 字节和含版本化联系策略、探索策略的当前偏好文件。Entry v3 section 携带可选精确 Fragment 标量区间；Processing v4 section 携带三张任务表、三张 typed tag proposal 表、一张 typed association proposal 表和三张 typed split proposal 表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1/v2/v3 保持可读，缺失的新表和探索字段恢复为空/关闭状态。
 
 Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不进入 Git 或应用安装树。
 
@@ -169,5 +176,5 @@ Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不�
 - JSON 请求体上限为 2 MiB，Markdown 导入上限为 1 MiB；
 - Evidence 列表当前最多返回最近 200 个 Snapshot；
 - 接口仅面向回环单用户产品，没有公开认证或 CSRF 完整边界；
-- 没有 multipart/服务器路径上传、Office/OCR、多文件批量导入、目录监视、抓取、订阅、AI 查询综合、自动接受、语义/向量搜索或在线检索接口；OpenAI 目前只提供用户选中公开 Snapshot 的 split、公开 Entry 的 tags 和用户选中公开 Entry 对的 association 提案；
+- 没有 multipart/服务器路径上传、Office/OCR、多文件批量导入、目录监视、抓取、订阅、自动接受、语义/向量搜索或在线检索接口；OpenAI 目前只提供用户选中公开 Snapshot 的 split、公开 Entry 的 tags、用户选中公开 Entry 对的 association 提案，以及当前公开 Query 结果的会话内证据综合；
 - 当前正式知识只实现 Entry 中心关系图谱；不恢复 `/curation`、旧 `/knowledge` 写入/读取或旧 `/search` 路由，也不把历史 Knowledge 表当作当前产品入口。

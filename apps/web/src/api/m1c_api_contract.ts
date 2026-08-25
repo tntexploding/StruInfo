@@ -150,6 +150,7 @@ export interface ReviewPreferencesResponse {
   readonly automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences>;
   readonly vocabulary: Readonly<ReviewVocabularyPreferences>;
   readonly associationPolicy: Readonly<ReviewAssociationPolicyPreferences>;
+  readonly explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>;
 }
 
 export interface ReviewAutomaticKeywordPreferences {
@@ -163,6 +164,16 @@ export interface ReviewPreferencesWrite {
   readonly automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences>;
   readonly vocabulary: Readonly<ReviewVocabularyPreferences>;
   readonly associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>;
+  readonly explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>;
+}
+
+export interface ReviewExplorationPolicyPreferences {
+  readonly revision: number;
+  readonly enabled: boolean;
+  readonly resultShare: number;
+  readonly neighborExpansion: boolean;
+  readonly crossDomain: boolean;
+  readonly serendipity: boolean;
 }
 
 export interface ReviewAssociationPolicyPreferences {
@@ -198,6 +209,15 @@ export const DEFAULT_REVIEW_ASSOCIATION_POLICY: Readonly<ReviewAssociationPolicy
     typeWeight: 15,
     domainWeight: 20,
     threshold: 1_100,
+  });
+export const DEFAULT_REVIEW_EXPLORATION_POLICY: Readonly<ReviewExplorationPolicyPreferences> =
+  Object.freeze({
+    revision: 0,
+    enabled: false,
+    resultShare: 20,
+    neighborExpansion: true,
+    crossDomain: true,
+    serendipity: true,
   });
 export interface PublicationState {
   readonly instant?: string;
@@ -497,6 +517,39 @@ export type InformationEntrySearchResponse =
         items: readonly Readonly<PrivateDocumentSearchItem>[];
       }>;
       nextCursor?: Readonly<InformationEntrySearchCursor>;
+    }>
+  | DomainFailure;
+
+export type InformationEntryExplorationReason =
+  'neighbor_expansion' | 'cross_domain' | 'serendipity';
+
+export interface InformationEntryExplorationPolicy extends ReviewExplorationPolicyPreferences {
+  readonly version: 'struinfo.entry-exploration.local-association.v1';
+}
+
+export type InformationEntryExplorationResponse =
+  | Readonly<{
+      status: 'ok';
+      policy: Readonly<InformationEntryExplorationPolicy>;
+      anchorEntryId: string;
+      candidateLimit: number;
+      totalEligibleCount: number;
+      items: readonly Readonly<{
+        entry: Readonly<InformationEntry>;
+        reason: InformationEntryExplorationReason;
+        effectiveScore: number;
+        candidateBasis: readonly InformationEntryAssociationBasis[];
+        manualAction?: InformationEntryAssociationAction;
+        differentSnapshot: boolean;
+      }>[];
+    }>
+  | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
+  | DomainFailure;
+
+export type InformationEntryExplorationPolicyWriteResponse =
+  | Readonly<{
+      status: 'applied' | 'unchanged';
+      policy: Readonly<InformationEntryExplorationPolicy>;
     }>
   | DomainFailure;
 

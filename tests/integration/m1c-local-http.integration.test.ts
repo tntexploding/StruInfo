@@ -254,6 +254,8 @@ function stubApi(
       Promise.resolve(result(200, {status: 'applied'})),
     searchInformationEntries: () =>
       Promise.resolve(result(200, {status: 'ok', entries: []})),
+    exploreInformationEntries: () =>
+      Promise.resolve(result(200, {status: 'ok', items: []})),
     synthesizeInformationEntryQuery: () =>
       Promise.resolve(result(503, {status: 'rejected'})),
     readInformationEntryKnowledgeGraph: () =>
@@ -263,6 +265,8 @@ function stubApi(
     rebuildInformationEntryAssociations: () =>
       Promise.resolve(result(200, {status: 'rebuilt'})),
     reviseInformationEntryAssociationPolicy: () =>
+      Promise.resolve(result(200, {status: 'applied'})),
+    reviseInformationEntryExplorationPolicy: () =>
       Promise.resolve(result(200, {status: 'applied'})),
     listInformationEntryAssociations: () =>
       Promise.resolve(result(200, {status: 'ok', associations: []})),

@@ -21,9 +21,11 @@ import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
 import {
   DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+  DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
   type ReviewAssociationPolicyPreferences,
   type ReviewAutomaticKeywordPreferences,
+  type ReviewExplorationPolicyPreferences,
   type ReviewVocabularyPreferences,
 } from '../storage/review_preferences_store.js';
 import {
@@ -175,6 +177,7 @@ describe('M1cApiService', () => {
         aliases: [{source: 'Synthetic CLI', canonical: '工具'}],
       },
       DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
+      DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
     );
   });
 
@@ -268,6 +271,7 @@ describe('M1cApiService', () => {
         domainWeight: 25,
         threshold: 2_000,
       },
+      DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
     );
     await expect(
       service.reviseInformationEntryAssociationPolicy({
@@ -286,6 +290,287 @@ describe('M1cApiService', () => {
     ).resolves.toMatchObject({
       statusCode: 200,
       body: {status: 'rebuilt', policy: {revision: 1, threshold: 2_000}},
+    });
+  });
+
+  it('versions the external exploration policy and preserves it across unrelated preference writes', async () => {
+    let explorationPolicy: Readonly<ReviewExplorationPolicyPreferences> =
+      DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES;
+    const load = vi.fn((workspaceId: string) =>
+      Promise.resolve({
+        format: 'struinfo.review-preferences' as const,
+        version: 1 as const,
+        workspaceId,
+        quickTags: ['保留标签'],
+        automaticKeywords: DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+        vocabulary: DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+        associationPolicy: DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
+        explorationPolicy,
+      }),
+    );
+    const save = vi.fn(
+      (
+        workspaceId: string,
+        quickTags: readonly string[],
+        automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences>,
+        vocabulary: Readonly<ReviewVocabularyPreferences>,
+        associationPolicy: Readonly<ReviewAssociationPolicyPreferences>,
+        nextExplorationPolicy: Readonly<ReviewExplorationPolicyPreferences>,
+      ) => {
+        explorationPolicy = nextExplorationPolicy;
+        return Promise.resolve({
+          format: 'struinfo.review-preferences' as const,
+          version: 1 as const,
+          workspaceId,
+          quickTags,
+          automaticKeywords,
+          vocabulary,
+          associationPolicy,
+          explorationPolicy,
+        });
+      },
+    );
+    const service = createService({reviewPreferences: {load, save}});
+
+    await expect(
+      service.reviseInformationEntryExplorationPolicy({
+        expectedRevision: 0,
+        enabled: true,
+        resultShare: 30,
+        neighborExpansion: true,
+        crossDomain: false,
+        serendipity: true,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'applied',
+        policy: {
+          revision: 1,
+          enabled: true,
+          resultShare: 30,
+          crossDomain: false,
+        },
+      },
+    });
+    expect(save).toHaveBeenLastCalledWith(
+      WORKSPACE_ID,
+      ['保留标签'],
+      DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+      DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+      DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
+      {
+        revision: 1,
+        enabled: true,
+        resultShare: 30,
+        neighborExpansion: true,
+        crossDomain: false,
+        serendipity: true,
+      },
+    );
+
+    await expect(
+      service.reviseInformationEntryExplorationPolicy({
+        expectedRevision: 1,
+        enabled: true,
+        resultShare: 30,
+        neighborExpansion: true,
+        crossDomain: false,
+        serendipity: true,
+      }),
+    ).resolves.toMatchObject({statusCode: 200, body: {status: 'unchanged'}});
+    expect(save).toHaveBeenCalledTimes(1);
+    await expect(
+      service.reviseInformationEntryExplorationPolicy({
+        expectedRevision: 0,
+        enabled: false,
+        resultShare: 20,
+        neighborExpansion: true,
+        crossDomain: true,
+        serendipity: true,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 409,
+      body: {issue: {code: 'stale_exploration_policy_revision'}},
+    });
+    await expect(
+      service.reviseInformationEntryExplorationPolicy({
+        expectedRevision: 1,
+        enabled: true,
+        resultShare: 51,
+        neighborExpansion: true,
+        crossDomain: true,
+        serendipity: true,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 422,
+      body: {issue: {path: 'body'}},
+    });
+
+    await expect(
+      service.saveReviewPreferences({
+        quickTags: ['新快捷标记'],
+        automaticKeywords: DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+        vocabulary: DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {explorationPolicy: {revision: 1, resultShare: 30}},
+    });
+    expect(save).toHaveBeenLastCalledWith(
+      WORKSPACE_ID,
+      ['新快捷标记'],
+      DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+      DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+      DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
+      explorationPolicy,
+    );
+  });
+
+  it('serves explainable exploration candidates through the public application boundary', async () => {
+    const anchor = syntheticExplorationEntry(21, SNAPSHOT_ID);
+    const candidate = syntheticExplorationEntry(
+      22,
+      '00000000-0000-4000-8000-000000000023',
+    );
+    const entries = Object.freeze([anchor, candidate]);
+    const projection: Readonly<InformationEntryAssociationProjection> =
+      Object.freeze({
+        workspaceId: WORKSPACE_ID,
+        entryLowId: anchor.entryId,
+        entryHighId: candidate.entryId,
+        entryLowRevision: anchor.revision,
+        entryLowRevisionId: anchor.revisionId,
+        entryHighRevision: candidate.revision,
+        entryHighRevisionId: candidate.revisionId,
+        contentSimilarity: 0,
+        typeSimilarity: 10_000,
+        domainSimilarity: 10_000,
+        baseScore: 7_000,
+        algorithmVersion: 'synthetic.v1',
+        candidateBasis: Object.freeze(['text_term' as const]),
+        candidateRank: 1,
+      });
+    const loadCurrentEntries = vi.fn(() => Promise.resolve(entries));
+    const loadAssociationSnapshot = vi.fn(() =>
+      Promise.resolve({projections: [projection], overrides: []}),
+    );
+    const service = createService({
+      reviewPreferences: {
+        load: (workspaceId) =>
+          Promise.resolve({
+            format: 'struinfo.review-preferences' as const,
+            version: 1 as const,
+            workspaceId,
+            quickTags: [],
+            explorationPolicy: {
+              revision: 2,
+              enabled: true,
+              resultShare: 50,
+              neighborExpansion: true,
+              crossDomain: true,
+              serendipity: true,
+            },
+          }),
+        save: () => Promise.reject(new Error('Unexpected preference write.')),
+      },
+      informationEntryRepository: {
+        materializeEntries: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        materializeEntriesIfSnapshotEmpty: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        reviseEntry: () => Promise.resolve('not_found'),
+        loadCurrentEntries,
+      },
+      informationEntryAssociationRepository: {
+        replaceAssociationProjections: () => Promise.resolve(0),
+        loadAssociationSnapshot,
+        writeAssociationOverride: () => Promise.resolve('not_found'),
+      },
+    });
+
+    const workspace = service.workspace().body as Readonly<{
+      capabilities: readonly string[];
+    }>;
+    expect(workspace.capabilities).toContain('information_entry_exploration');
+    await expect(
+      service.exploreInformationEntries({
+        anchorEntryId: 'not-a-uuid',
+        excludeEntryIds: [],
+        pageResultCount: 20,
+        includePrivate: false,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 422,
+      body: {issue: {path: 'body'}},
+    });
+    expect(loadCurrentEntries).not.toHaveBeenCalled();
+
+    await expect(
+      service.exploreInformationEntries({
+        anchorEntryId: '00000000-0000-4000-8000-000000000099',
+        excludeEntryIds: [],
+        pageResultCount: 20,
+        includePrivate: false,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 404,
+      body: {issue: {code: 'information_entry_not_found'}},
+    });
+    await expect(
+      service.exploreInformationEntries({
+        anchorEntryId: anchor.entryId,
+        excludeEntryIds: [],
+        pageResultCount: 2,
+        includePrivate: false,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        policy: {revision: 2},
+        candidateLimit: 1,
+        totalEligibleCount: 1,
+        items: [
+          {
+            entry: {entryId: candidate.entryId},
+            reason: 'serendipity',
+            effectiveScore: 7_000,
+            differentSnapshot: true,
+          },
+        ],
+      },
+    });
+    expect(loadCurrentEntries).toHaveBeenLastCalledWith(WORKSPACE_ID, false);
+    expect(loadAssociationSnapshot).toHaveBeenLastCalledWith(
+      WORKSPACE_ID,
+      false,
+    );
+  });
+
+  it('reports exploration repository failures without changing ordinary search', async () => {
+    const service = createService({
+      informationEntryRepository: {
+        materializeEntries: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        materializeEntriesIfSnapshotEmpty: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        reviseEntry: () => Promise.resolve('not_found'),
+        loadCurrentEntries: () =>
+          Promise.reject(new Error('Synthetic repository failure.')),
+      },
+    });
+
+    await expect(
+      service.exploreInformationEntries({
+        anchorEntryId: '00000000-0000-4000-8000-000000000021',
+        excludeEntryIds: [],
+        pageResultCount: 20,
+        includePrivate: false,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 503,
+      body: {status: 'failed'},
     });
   });
 
@@ -2042,6 +2327,46 @@ function createService(
     ...overrides,
   };
   return new M1cApiService(dependencies);
+}
+
+function syntheticExplorationEntry(
+  ordinal: number,
+  snapshotId: string,
+): Readonly<CurrentInformationEntry> {
+  const entryId = `00000000-0000-4000-8000-${ordinal
+    .toString()
+    .padStart(12, '0')}`;
+  return Object.freeze({
+    workspaceId: WORKSPACE_ID,
+    entryId,
+    resourceId: RESOURCE_ID,
+    snapshotId,
+    revision: 1,
+    revisionId: `10000000-0000-4000-8000-${ordinal
+      .toString()
+      .padStart(12, '0')}`,
+    sourceKey: 'synthetic:exploration-service',
+    capturedAt: '2040-01-02T03:04:05.000Z',
+    value: Object.freeze({
+      documentOrder: ordinal,
+      titlePath: `Synthetic exploration ${ordinal.toString()}`,
+      body: 'Synthetic exploration service body',
+      bodySha256: ordinal.toString(16).padStart(64, '0'),
+      chunkMode: 'split' as const,
+      splitRuleVersion: 'synthetic.v1',
+      isPrivate: false,
+      typeKeyword: 'knowledge_explanation' as const,
+      contentKeywords: Object.freeze([]),
+      domains: Object.freeze([
+        Object.freeze({
+          keyword: 'engineering_computing' as const,
+          origin: 'manual' as const,
+          originVersion: 'synthetic.v1',
+        }),
+      ]),
+      fragmentIds: Object.freeze([FRAGMENT_ID]),
+    }),
+  });
 }
 
 function responseRecorder(): Readonly<{

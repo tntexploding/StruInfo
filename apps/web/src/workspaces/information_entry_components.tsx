@@ -8,6 +8,8 @@ import type {
   InformationEntryAssociationOverrideResponse,
   InformationEntryAssociationPolicyWriteResponse,
   InformationEntryAssociationRebuildResponse,
+  InformationEntryExplorationPolicyWriteResponse,
+  InformationEntryExplorationResponse,
   InformationDocumentTagWriteResponse,
   InformationEntry,
   InformationEntryDocumentListResponse,
@@ -50,12 +52,18 @@ export interface InformationEntryServices {
   readonly onSearch: (
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationEntrySearchResponse>>;
+  readonly onExplore: (
+    body: unknown,
+  ) => Promise<M1cHttpResponse<InformationEntryExplorationResponse>>;
   readonly onRebuildAssociations: (
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationEntryAssociationRebuildResponse>>;
   readonly onReviseAssociationPolicy: (
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationEntryAssociationPolicyWriteResponse>>;
+  readonly onReviseExplorationPolicy: (
+    body: unknown,
+  ) => Promise<M1cHttpResponse<InformationEntryExplorationPolicyWriteResponse>>;
   readonly onListAssociations: (
     entryId: string,
     includePrivate: boolean,
