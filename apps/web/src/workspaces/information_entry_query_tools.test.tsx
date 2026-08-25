@@ -1,7 +1,13 @@
 import {renderToStaticMarkup} from 'react-dom/server';
 import {describe, expect, it} from 'vitest';
 
-import type {InformationEntry} from '../api/m1c_api_contract.js';
+import {
+  DEFAULT_REVIEW_ASSOCIATION_POLICY,
+  DEFAULT_REVIEW_AUTOMATIC_KEYWORDS,
+  DEFAULT_REVIEW_EXPLORATION_POLICY,
+  DEFAULT_REVIEW_VOCABULARY,
+  type InformationEntry,
+} from '../api/m1c_api_contract.js';
 import {InformationEntryQueryComparison} from './information_entry_query_comparison.js';
 import {InformationEntryQueryWorkspace} from './information_entry_query_workspace.js';
 import {
@@ -154,7 +160,47 @@ describe('M1F-2 query result tools', () => {
       <InformationEntryQueryWorkspace
         aiQuerySynthesisEnabled={false}
         snapshots={[]}
+        reviewPreferences={{
+          status: 'ready',
+          value: {
+            status: 'ok',
+            workspaceId: '11111111-1111-4111-8111-111111111111',
+            quickTags: [],
+            automaticKeywords: DEFAULT_REVIEW_AUTOMATIC_KEYWORDS,
+            vocabulary: DEFAULT_REVIEW_VOCABULARY,
+            associationPolicy: DEFAULT_REVIEW_ASSOCIATION_POLICY,
+            explorationPolicy: DEFAULT_REVIEW_EXPLORATION_POLICY,
+          },
+        }}
+        onExplore={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {
+              status: 'ok',
+              policy: {
+                ...DEFAULT_REVIEW_EXPLORATION_POLICY,
+                version: 'struinfo.entry-exploration.local-association.v1',
+              },
+              anchorEntryId: ENTRY_A.entry.entryId,
+              candidateLimit: 0,
+              totalEligibleCount: 0,
+              items: [],
+            },
+          })
+        }
         onOpenEvidence={() => undefined}
+        onReviseExplorationPolicy={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {
+              status: 'unchanged',
+              policy: {
+                ...DEFAULT_REVIEW_EXPLORATION_POLICY,
+                version: 'struinfo.entry-exploration.local-association.v1',
+              },
+            },
+          })
+        }
         onSynthesize={() =>
           Promise.resolve({
             statusCode: 503,
@@ -185,6 +231,14 @@ describe('M1F-2 query result tools', () => {
     expect(markup).toContain('先选择一条查询结果');
     expect(markup).toContain('AI 综合 · 仅基于当前公开查询结果');
     expect(markup).toContain('AI 未启用');
+    expect(markup).toContain('探索候选');
+    expect(markup).toContain('独立于搜索排序');
+    expect(markup).toContain('启用独立探索');
+    expect(markup).toContain('当前页探索份额');
+    expect(markup).toContain('邻域扩展');
+    expect(markup).toContain('跨领域连接');
+    expect(markup).toContain('偶然发现');
+    expect(markup).toContain('探索不会自动运行');
   });
 });
 

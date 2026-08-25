@@ -6,6 +6,7 @@ const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 const RESOURCE_ID = '22222222-2222-4222-8222-222222222222';
 const SNAPSHOT_ID = '33333333-3333-4333-8333-333333333333';
 const ENTRY_ID = '44444444-4444-4444-8444-444444444444';
+const EXPLORATION_ENTRY_ID = '44444444-4444-4444-8444-444444444445';
 const REVISION_ID = '55555555-5555-4555-8555-555555555555';
 const FRAGMENT_ID = '66666666-6666-4666-8666-666666666666';
 const STRUCTURE_ID = '77777777-7777-4777-8777-777777777777';
@@ -91,6 +92,19 @@ const SYNTHETIC_ENTRY = {
   },
 };
 
+const SYNTHETIC_EXPLORATION_ENTRY = {
+  ...SYNTHETIC_ENTRY,
+  entryId: EXPLORATION_ENTRY_ID,
+  revisionId: '55555555-5555-4555-8555-555555555556',
+  sourceKey: 'synthetic-exploration',
+  value: {
+    ...SYNTHETIC_ENTRY.value,
+    documentOrder: 1,
+    titlePath: '合成探索 Entry',
+    body: '用于浏览器探索回归的合成页外正文。',
+  },
+};
+
 async function installCurrentProductApi(
   page: Page,
   options?: Readonly<{
@@ -109,6 +123,14 @@ async function installCurrentProductApi(
     threshold: 1_100,
     candidateLimit: 12,
     adjustmentStep: 1_500,
+  };
+  let explorationPolicy = {
+    revision: 0,
+    enabled: false,
+    resultShare: 20,
+    neighborExpansion: true,
+    crossDomain: true,
+    serendipity: true,
   };
 
   await page.route('**/*', async (route) => {
@@ -145,7 +167,11 @@ async function installCurrentProductApi(
       });
       return;
     }
-    if (path === '/api/v1/imports/markdown' && request.method() === 'POST') {
+    if (
+      (path === '/api/v1/imports/markdown' ||
+        path === '/api/v1/imports/document') &&
+      request.method() === 'POST'
+    ) {
       options?.importRequests?.push(request.postData() ?? '');
       await route.fulfill({
         contentType: 'application/json',
@@ -214,6 +240,68 @@ async function installCurrentProductApi(
             domainWeight: associationPolicy.domainWeight,
             threshold: associationPolicy.threshold,
           },
+          explorationPolicy,
+        },
+        status: 200,
+      });
+      return;
+    }
+    if (
+      path === '/api/v1/entries/exploration/policy' &&
+      request.method() === 'PUT'
+    ) {
+      const body = JSON.parse(request.postData() ?? 'null') as Readonly<{
+        enabled: boolean;
+        resultShare: number;
+        neighborExpansion: boolean;
+        crossDomain: boolean;
+        serendipity: boolean;
+      }>;
+      explorationPolicy = {
+        revision: explorationPolicy.revision + 1,
+        enabled: body.enabled,
+        resultShare: body.resultShare,
+        neighborExpansion: body.neighborExpansion,
+        crossDomain: body.crossDomain,
+        serendipity: body.serendipity,
+      };
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {
+          status: 'applied',
+          policy: {
+            ...explorationPolicy,
+            version: 'struinfo.entry-exploration.local-association.v1',
+          },
+        },
+        status: 200,
+      });
+      return;
+    }
+    if (
+      path === '/api/v1/entries/exploration/candidates' &&
+      request.method() === 'POST'
+    ) {
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {
+          status: 'ok',
+          policy: {
+            ...explorationPolicy,
+            version: 'struinfo.entry-exploration.local-association.v1',
+          },
+          anchorEntryId: ENTRY_ID,
+          candidateLimit: 1,
+          totalEligibleCount: 1,
+          items: [
+            {
+              entry: SYNTHETIC_EXPLORATION_ENTRY,
+              reason: 'neighbor_expansion',
+              effectiveScore: 7_500,
+              candidateBasis: ['content_keyword'],
+              differentSnapshot: false,
+            },
+          ],
         },
         status: 200,
       });
@@ -378,7 +466,7 @@ test('imports exact local UTF-8 bytes and preserves retry identity', async ({
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
   await navigation.getByRole('button', {name: '导入', exact: true}).click();
   await page.getByRole('radio', {name: '本地文件', exact: true}).check();
-  await page.locator('#local-text-file').setInputFiles({
+  await page.locator('#local-document-file').setInputFiles({
     name: 'synthetic.txt',
     mimeType: 'text/plain',
     buffer: Buffer.from('Synthetic\r\nBody 😀\r\n', 'utf8'),
@@ -458,6 +546,71 @@ test('edits association weights and opens the complete private-document channel'
   expect(productRequests).toContain('PUT /api/v1/entries/associations/policy');
   expect(productRequests).toContain(
     'POST /api/v1/entries/associations/rebuild',
+  );
+});
+
+test('keeps exploration separate, explicit, and responsive across target widths', async ({
+  page,
+}) => {
+  const productRequests = await installCurrentProductApi(page);
+  await page.setViewportSize({width: 390, height: 844});
+  await page.goto('/');
+
+  const navigation = page.getByRole('navigation', {name: '产品工作区'});
+  await navigation.getByRole('button', {name: '查询', exact: true}).click();
+
+  await expect(
+    page.getByRole('heading', {name: '探索候选', exact: true}),
+  ).toBeVisible();
+  const generate = page.getByRole('button', {
+    name: '生成探索候选',
+    exact: true,
+  });
+  await expect(generate).toBeDisabled();
+  await page.getByRole('checkbox', {name: /启用独立探索/u}).check();
+  await page.getByLabel('当前页探索份额').fill('50');
+  await page.getByRole('button', {name: '保存探索策略', exact: true}).click();
+  await expect(generate).toBeEnabled();
+  await generate.click();
+
+  await expect(
+    page.getByRole('heading', {name: '合成探索 Entry', exact: true}),
+  ).toBeVisible();
+  await expect(
+    page.locator('.entry-exploration-card__reason', {
+      hasText: '邻域扩展',
+    }),
+  ).toBeVisible();
+  await expect(page.getByText('独立于搜索排序', {exact: false})).toBeVisible();
+  for (const viewport of [
+    {width: 320, height: 720},
+    {width: 390, height: 844},
+    {width: 768, height: 900},
+    {width: 1024, height: 900},
+    {width: 1440, height: 1000},
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(
+      page.getByRole('heading', {name: '探索候选', exact: true}),
+    ).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+  }
+  await page.setViewportSize({width: 390, height: 844});
+  await page.getByLabel('搜索文字').fill('新的查询范围');
+  await expect(
+    page.getByRole('heading', {name: '合成探索 Entry', exact: true}),
+  ).toBeHidden();
+  await expect(
+    page.getByText('探索不会自动运行；选择锚点后由你明确启动。', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(productRequests).toContain('PUT /api/v1/entries/exploration/policy');
+  expect(productRequests).toContain(
+    'POST /api/v1/entries/exploration/candidates',
   );
 });
 

@@ -183,6 +183,17 @@ export class M1cApiController {
     );
   }
 
+  @Post('entries/exploration/candidates')
+  public async exploreInformationEntries(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.exploreInformationEntries(body),
+    );
+  }
+
   @Post('entries/search/synthesize')
   public async synthesizeInformationEntryQuery(
     @Body() body: unknown,
@@ -296,6 +307,17 @@ export class M1cApiController {
     writeLocalApiResponse(
       response,
       await this.#service.reviseInformationEntryAssociationPolicy(body),
+    );
+  }
+
+  @Put('entries/exploration/policy')
+  public async reviseInformationEntryExplorationPolicy(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.reviseInformationEntryExplorationPolicy(body),
     );
   }
 

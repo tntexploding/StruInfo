@@ -6,7 +6,9 @@ import {
   type EntryDomainKeyword,
   type EntryTypeKeyword,
   type EvidenceSnapshotSummary,
+  type ReviewPreferencesResponse,
 } from '../api/m1c_api_contract.js';
+import type {Loadable} from '../components/product_types.js';
 import {
   InformationEntryPrivacyScope,
   InformationEntryReadOnlyDetail,
@@ -19,6 +21,7 @@ import {
   InformationEntryTextSearchOptions,
 } from './information_entry_search_controls.js';
 import {InformationEntryQueryComparison} from './information_entry_query_comparison.js';
+import {InformationEntryExploration} from './information_entry_exploration.js';
 import {InformationEntryQuerySynthesis} from './information_entry_query_synthesis.js';
 import type {InformationEntryQuerySynthesisAction} from './use_information_entry_query_synthesis.js';
 import {
@@ -36,18 +39,22 @@ import {PrivateDocumentResults} from './private_document_results.js';
 
 export interface InformationEntryQueryWorkspaceProps extends Pick<
   InformationEntryServices,
-  'onOpenEvidence' | 'onSearch'
+  'onExplore' | 'onOpenEvidence' | 'onReviseExplorationPolicy' | 'onSearch'
 > {
   readonly aiQuerySynthesisEnabled: boolean;
   readonly onSynthesize: InformationEntryQuerySynthesisAction;
+  readonly reviewPreferences: Loadable<Readonly<ReviewPreferencesResponse>>;
   readonly snapshots: readonly Readonly<EvidenceSnapshotSummary>[];
 }
 
 export function InformationEntryQueryWorkspace({
   aiQuerySynthesisEnabled,
+  onExplore,
   onOpenEvidence,
+  onReviseExplorationPolicy,
   onSearch,
   onSynthesize,
+  reviewPreferences,
   snapshots,
 }: InformationEntryQueryWorkspaceProps) {
   const controller = useInformationEntryController({onSearch});
@@ -68,7 +75,6 @@ export function InformationEntryQueryWorkspace({
           (item) => item.entry.entryId === controller.selectedEntryId,
         )
       : undefined;
-
   function submitSearch(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     void controller.executeSearch();
@@ -271,6 +277,9 @@ export function InformationEntryQueryWorkspace({
           }
         }}
         onOpenEvidence={onOpenEvidence}
+        onExplore={onExplore}
+        onReviseExplorationPolicy={onReviseExplorationPolicy}
+        reviewPreferences={reviewPreferences}
         onReplaceAssociationAnchor={setSelectedAssociationAnchor}
         aiQuerySynthesisEnabled={aiQuerySynthesisEnabled}
         onSynthesize={onSynthesize}
@@ -284,8 +293,11 @@ function InformationEntryQueryResults({
   controller,
   selectedItem,
   onAssociationToggle,
+  onExplore,
   onOpenEvidence,
+  onReviseExplorationPolicy,
   onReplaceAssociationAnchor,
+  reviewPreferences,
   aiQuerySynthesisEnabled,
   onSynthesize,
 }: {
@@ -293,8 +305,11 @@ function InformationEntryQueryResults({
   readonly controller: ReturnType<typeof useInformationEntryController>;
   readonly selectedItem: Readonly<InformationEntrySearchItem> | undefined;
   readonly onAssociationToggle: (enabled: boolean) => void;
+  readonly onExplore: InformationEntryServices['onExplore'];
   readonly onOpenEvidence: InformationEntryServices['onOpenEvidence'];
+  readonly onReviseExplorationPolicy: InformationEntryServices['onReviseExplorationPolicy'];
   readonly onReplaceAssociationAnchor: () => void;
+  readonly reviewPreferences: Loadable<Readonly<ReviewPreferencesResponse>>;
   readonly aiQuerySynthesisEnabled: boolean;
   readonly onSynthesize: InformationEntryQuerySynthesisAction;
 }) {
@@ -310,6 +325,14 @@ function InformationEntryQueryResults({
     comparisonItems.some(
       (item) => item.entry.entryId === selectedItem.entry.entryId,
     );
+  const explorationScopeKey =
+    controller.view.status === 'ready'
+      ? [
+          comparisonScopeKey,
+          controller.pageIndex.toString(),
+          ...controller.view.response.items.map((item) => item.entry.entryId),
+        ].join(':')
+      : `${comparisonScopeKey}:${controller.pageIndex.toString()}:${controller.view.status}`;
 
   return (
     <>
@@ -362,6 +385,22 @@ function InformationEntryQueryResults({
         )}
       </InformationEntryResults>
 
+      <InformationEntryExploration
+        key={`${explorationScopeKey}:${selectedItem?.entry.entryId ?? 'none'}:${explorationPolicyIdentity(reviewPreferences)}`}
+        includePrivate={controller.includePrivate}
+        onlyPrivate={controller.onlyPrivate}
+        pageItems={
+          controller.view.status === 'ready'
+            ? controller.view.response.items
+            : Object.freeze([])
+        }
+        reviewPreferences={reviewPreferences}
+        selectedItem={selectedItem}
+        onExplore={onExplore}
+        onOpenEvidence={onOpenEvidence}
+        onReviseExplorationPolicy={onReviseExplorationPolicy}
+      />
+
       <InformationEntryQuerySynthesis
         key={comparisonScopeKey}
         enabled={aiQuerySynthesisEnabled}
@@ -392,4 +431,12 @@ function InformationEntryQueryResults({
       />
     </>
   );
+}
+
+function explorationPolicyIdentity(
+  preferences: Loadable<Readonly<ReviewPreferencesResponse>>,
+): string {
+  return preferences.status === 'ready'
+    ? `ready:${(preferences.value.explorationPolicy?.revision ?? 0).toString()}`
+    : preferences.status;
 }

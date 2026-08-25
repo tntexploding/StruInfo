@@ -373,6 +373,17 @@ durable proposal capabilities. This is evidence-bounded AI synthesis, not
 Provider retrieval, Web search, Embedding, vectors, RAG or a generic agent
 capability.
 
+ADR 0023 completes M1G-1 with a default-off deterministic exploration lane on
+Query. An owner-selected visible Entry anchors a read-only request over current
+visible direct Associations; current-page, blocked, stale and privacy-invisible
+records are excluded before counting. A versioned external personal preference
+sets a 0–50% page-relative budget and independently enables neighbor expansion,
+cross-domain connections and serendipity. The resulting page-out candidates are
+explainable and capped at 12. They do not change ordinary search matching,
+ordering, totals, pagination or cursors, and do not write behavior history,
+Entry, Association, graph or Processing state. Do not infer preference learning,
+random retrieval, semantic search, vectors, Provider use or RAG from this lane.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2
@@ -382,7 +393,8 @@ or make it mandatory before its dependency and distribution review is accepted.
 Do not change the accepted language, application shape, or persistence model
 without a superseding ADR. Cloud deployment vendors remain unselected; OpenAI
 is selected only for the optional proposal paths accepted by ADR 0013 through
-ADR 0015 and the bounded public Query synthesis accepted by ADR 0022. Do not
+ADR 0015 and the bounded public Query synthesis accepted by ADR 0022. ADR 0023
+is entirely local and does not expand that Provider selection. Do not
 reuse M0-P probe candidate source as production code; carry
 the tracked provenance, workspace, idempotency, fencing, and recovery
 invariants into fresh implementation and tests.

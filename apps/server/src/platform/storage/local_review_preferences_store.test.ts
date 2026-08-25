@@ -39,6 +39,14 @@ describe('LocalReviewPreferencesStore', () => {
         domainWeight: 20,
         threshold: 1_100,
       },
+      explorationPolicy: {
+        revision: 0,
+        enabled: false,
+        resultShare: 20,
+        neighborExpansion: true,
+        crossDomain: true,
+        serendipity: true,
+      },
     });
   });
 
@@ -64,6 +72,14 @@ describe('LocalReviewPreferencesStore', () => {
         domainWeight: 25,
         threshold: 2_000,
       },
+      {
+        revision: 2,
+        enabled: true,
+        resultShare: 30,
+        neighborExpansion: true,
+        crossDomain: false,
+        serendipity: true,
+      },
     );
 
     await expect(store.load(WORKSPACE_A)).resolves.toMatchObject({
@@ -84,6 +100,14 @@ describe('LocalReviewPreferencesStore', () => {
         domainWeight: 25,
         threshold: 2_000,
       },
+      explorationPolicy: {
+        revision: 2,
+        enabled: true,
+        resultShare: 30,
+        neighborExpansion: true,
+        crossDomain: false,
+        serendipity: true,
+      },
     });
     await expect(store.load(WORKSPACE_B)).resolves.toMatchObject({
       workspaceId: WORKSPACE_B,
@@ -97,6 +121,7 @@ describe('LocalReviewPreferencesStore', () => {
     expect(text).toContain('\n  "automaticKeywords": {\n');
     expect(text).toContain('\n  "vocabulary": {\n');
     expect(text).toContain('\n  "associationPolicy": {\n');
+    expect(text).toContain('\n  "explorationPolicy": {\n');
     expect(text).toContain('\n    "revision": 3,\n');
   });
 
@@ -134,6 +159,14 @@ describe('LocalReviewPreferencesStore', () => {
         typeWeight: 15,
         domainWeight: 20,
         threshold: 1_100,
+      },
+      explorationPolicy: {
+        revision: 0,
+        enabled: false,
+        resultShare: 20,
+        neighborExpansion: true,
+        crossDomain: true,
+        serendipity: true,
       },
     });
   });

@@ -1,7 +1,7 @@
 # StruInfo Frontend Design Specification
 
 - Status: Project frontend baseline
-- Version: 1.7
+- Version: 1.8
 - Effective date: 2026-08-25
 - Scope: StruInfo web application design, implementation, and review
 
@@ -426,6 +426,24 @@ column with natural page scrolling. The primary search, privacy state, AI
 disclosure, status announcement, retry and evidence actions remain keyboard
 reachable. Loading uses an in-place status/skeleton and MUST NOT replace or hide
 the deterministic result set.
+
+ADR 0023 adds one separate local exploration panel after the ordinary Query
+results. It MUST remain visually and behaviorally independent from search
+matching, order, count, pagination and cursor state. Exploration is default-off
+external personal configuration; the panel shows its enabled state, an exact
+0–50% current-page share, and independent neighbor-expansion, cross-domain and
+serendipity switches. A policy change is saved explicitly before use.
+
+Exploration MUST NOT run on typing, search, paging, selection or filter changes.
+The owner selects one visible Entry and explicitly requests candidates. Each
+candidate shows one plain-language reason, local Association score/basis,
+same/cross-document scope and exact-source action. The panel labels candidates
+as local navigation suggestions rather than facts, AI recommendations or
+semantic equivalence. Query/privacy/anchor changes clear the panel immediately;
+request identity prevents late responses from restoring an obsolete scope.
+Disabled, loading, empty and failed states stay visible without hiding or
+changing the ordinary result list. On narrow screens policy controls and cards
+stack with natural page scrolling and no horizontal overflow.
 
 Desktop layouts SHOULD preserve a narrow workflow timeline, a dominant work
 surface, and at most one contextual side rail. Tablet layouts MAY stack the

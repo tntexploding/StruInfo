@@ -13,6 +13,8 @@ import type {
   InformationEntryAssociationListResponse,
   InformationEntryAssociationOverrideResponse,
   InformationEntryAssociationPolicyWriteResponse,
+  InformationEntryExplorationPolicyWriteResponse,
+  InformationEntryExplorationResponse,
   InformationEntryAssociationRebuildResponse,
   InformationEntryDocumentListResponse,
   InformationEntryKnowledgeGraphEdgeWriteResponse,
@@ -96,6 +98,10 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntrySearchResponse>>;
+  exploreInformationEntries(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryExplorationResponse>>;
   synthesizeInformationEntryQuery(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -118,6 +124,10 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryAssociationPolicyWriteResponse>>;
+  reviseInformationEntryExplorationPolicy(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryExplorationPolicyWriteResponse>>;
   listInformationEntryAssociations(
     entryId: string,
     options?: M1cApiRequestOptions,
@@ -246,11 +256,13 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     materializeManualInformationEntries: reject,
     reviseInformationEntry: reject,
     searchInformationEntries: reject,
+    exploreInformationEntries: reject,
     synthesizeInformationEntryQuery: reject,
     readInformationEntryKnowledgeGraph: reject,
     reviseInformationEntryKnowledgeGraphEdge: reject,
     rebuildInformationEntryAssociations: reject,
     reviseInformationEntryAssociationPolicy: reject,
+    reviseInformationEntryExplorationPolicy: reject,
     listInformationEntryAssociations: reject,
     reviseInformationEntryAssociation: reject,
     listInformationEntryDocuments: reject,
@@ -353,6 +365,12 @@ export function createM1cApiClient(
         body,
         options,
       ),
+    exploreInformationEntries: (body, options) =>
+      post<InformationEntryExplorationResponse>(
+        'api/v1/entries/exploration/candidates',
+        body,
+        options,
+      ),
     synthesizeInformationEntryQuery: (body, options) =>
       post<InformationEntryQuerySynthesisResponse>(
         'api/v1/entries/search/synthesize',
@@ -385,6 +403,12 @@ export function createM1cApiClient(
     reviseInformationEntryAssociationPolicy: (body, options) =>
       put<InformationEntryAssociationPolicyWriteResponse>(
         'api/v1/entries/associations/policy',
+        body,
+        options,
+      ),
+    reviseInformationEntryExplorationPolicy: (body, options) =>
+      put<InformationEntryExplorationPolicyWriteResponse>(
+        'api/v1/entries/exploration/policy',
         body,
         options,
       ),
@@ -651,7 +675,8 @@ function decodeReviewPreferencesResponse(
       (value) => typeof value === 'string',
     ) ||
     !isReviewVocabularyPreferences(body.vocabulary) ||
-    !isReviewAssociationPolicyPreferences(body.associationPolicy)
+    !isReviewAssociationPolicyPreferences(body.associationPolicy) ||
+    !isReviewExplorationPolicyPreferences(body.explorationPolicy)
   ) {
     throw new M1cApiClientError('本地产品接口未提供可识别的个人审核偏好。');
   }
@@ -674,8 +699,35 @@ function decodeReviewPreferencesResponse(
         ),
       }),
       associationPolicy: Object.freeze({...body.associationPolicy}),
+      explorationPolicy: Object.freeze({...body.explorationPolicy}),
     }),
   });
+}
+
+function isReviewExplorationPolicyPreferences(
+  value: unknown,
+): value is Readonly<{
+  revision: number;
+  enabled: boolean;
+  resultShare: number;
+  neighborExpansion: boolean;
+  crossDomain: boolean;
+  serendipity: boolean;
+}> {
+  return (
+    isRecord(value) &&
+    typeof value.revision === 'number' &&
+    Number.isSafeInteger(value.revision) &&
+    value.revision >= 0 &&
+    typeof value.enabled === 'boolean' &&
+    typeof value.resultShare === 'number' &&
+    Number.isSafeInteger(value.resultShare) &&
+    value.resultShare >= 0 &&
+    value.resultShare <= 50 &&
+    typeof value.neighborExpansion === 'boolean' &&
+    typeof value.crossDomain === 'boolean' &&
+    typeof value.serendipity === 'boolean'
+  );
 }
 
 function isReviewAssociationPolicyPreferences(

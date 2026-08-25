@@ -6,9 +6,11 @@ import {
   createReviewPreferences,
   decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
+  decodeReviewExplorationPolicyPreferences,
   decodeReviewQuickTags,
   decodeReviewVocabularyPreferences,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+  DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
   REVIEW_PREFERENCES_FORMAT,
   REVIEW_PREFERENCES_VERSION,
@@ -16,6 +18,7 @@ import {
   type ReviewPreferences,
   type ReviewAssociationPolicyPreferences,
   type ReviewAutomaticKeywordPreferences,
+  type ReviewExplorationPolicyPreferences,
   type ReviewPreferencesStore,
   type ReviewVocabularyPreferences,
 } from '../../storage/review_preferences_store.js';
@@ -75,6 +78,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences> = DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
     vocabulary: Readonly<ReviewVocabularyPreferences> = DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
     associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>,
+    explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>,
   ): Promise<Readonly<ReviewPreferences>> {
     validateWorkspaceId(workspaceId);
     const decoded = decodeReviewQuickTags(quickTags);
@@ -85,12 +89,18 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       associationPolicy === undefined
         ? undefined
         : decodeReviewAssociationPolicyPreferences(associationPolicy);
+    const decodedExplorationPolicy =
+      explorationPolicy === undefined
+        ? undefined
+        : decodeReviewExplorationPolicyPreferences(explorationPolicy);
     if (
       decoded === undefined ||
       decodedAutomaticKeywords === undefined ||
       decodedVocabulary === undefined ||
       (associationPolicy !== undefined &&
-        decodedAssociationPolicy === undefined)
+        decodedAssociationPolicy === undefined) ||
+      (explorationPolicy !== undefined &&
+        decodedExplorationPolicy === undefined)
     ) {
       throw invalid();
     }
@@ -100,6 +110,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       decodedAutomaticKeywords,
       decodedVocabulary,
       decodedAssociationPolicy,
+      decodedExplorationPolicy,
     );
     const bytes = new TextEncoder().encode(
       `${JSON.stringify(preferences, undefined, 2)}\n`,
@@ -156,18 +167,24 @@ function decodePreferences(
     value.associationPolicy === undefined
       ? undefined
       : decodeReviewAssociationPolicyPreferences(value.associationPolicy);
+  const explorationPolicy =
+    value.explorationPolicy === undefined
+      ? DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES
+      : decodeReviewExplorationPolicyPreferences(value.explorationPolicy);
   if (
     value.associationPolicy !== undefined &&
     associationPolicy === undefined
   ) {
     throw invalid();
   }
+  if (explorationPolicy === undefined) throw invalid();
   return createReviewPreferences(
     workspaceId,
     quickTags,
     automaticKeywords,
     vocabulary,
     associationPolicy,
+    explorationPolicy,
   );
 }
 

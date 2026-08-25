@@ -5,6 +5,25 @@ export const MAX_REVIEW_QUICK_TAG_CODE_POINTS = 120;
 export const MAX_REVIEW_KEYWORD_EXCLUSIONS = 64;
 export const MAX_REVIEW_VOCABULARY_ALIASES = 128;
 
+export interface ReviewExplorationPolicyPreferences {
+  readonly revision: number;
+  readonly enabled: boolean;
+  readonly resultShare: number;
+  readonly neighborExpansion: boolean;
+  readonly crossDomain: boolean;
+  readonly serendipity: boolean;
+}
+
+export const DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES: Readonly<ReviewExplorationPolicyPreferences> =
+  Object.freeze({
+    revision: 0,
+    enabled: false,
+    resultShare: 20,
+    neighborExpansion: true,
+    crossDomain: true,
+    serendipity: true,
+  });
+
 export interface ReviewAssociationPolicyPreferences {
   readonly revision: number;
   readonly contentWeight: number;
@@ -55,6 +74,7 @@ export interface ReviewPreferences {
   readonly automaticKeywords?: Readonly<ReviewAutomaticKeywordPreferences>;
   readonly vocabulary?: Readonly<ReviewVocabularyPreferences>;
   readonly associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>;
+  readonly explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>;
 }
 
 export interface ReviewPreferencesStore {
@@ -65,6 +85,7 @@ export interface ReviewPreferencesStore {
     automaticKeywords?: Readonly<ReviewAutomaticKeywordPreferences>,
     vocabulary?: Readonly<ReviewVocabularyPreferences>,
     associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>,
+    explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>,
   ): Promise<Readonly<ReviewPreferences>>;
 }
 
@@ -155,6 +176,35 @@ export function decodeReviewAssociationPolicyPreferences(
     threshold: value.threshold as number,
   });
 }
+
+export function decodeReviewExplorationPolicyPreferences(
+  value: unknown,
+): Readonly<ReviewExplorationPolicyPreferences> | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.revision !== 'number' ||
+    !Number.isSafeInteger(value.revision) ||
+    value.revision < 0 ||
+    (value.enabled !== true && value.enabled !== false) ||
+    typeof value.resultShare !== 'number' ||
+    !Number.isSafeInteger(value.resultShare) ||
+    value.resultShare < 0 ||
+    value.resultShare > 50 ||
+    (value.neighborExpansion !== true && value.neighborExpansion !== false) ||
+    (value.crossDomain !== true && value.crossDomain !== false) ||
+    (value.serendipity !== true && value.serendipity !== false)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    revision: value.revision,
+    enabled: value.enabled,
+    resultShare: value.resultShare,
+    neighborExpansion: value.neighborExpansion,
+    crossDomain: value.crossDomain,
+    serendipity: value.serendipity,
+  });
+}
 function decodeKeywordList(
   value: unknown,
   maximumItems: number,
@@ -193,6 +243,7 @@ export function createReviewPreferences(
   automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences> = DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
   vocabulary: Readonly<ReviewVocabularyPreferences> = DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
   associationPolicy: Readonly<ReviewAssociationPolicyPreferences> = DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
+  explorationPolicy: Readonly<ReviewExplorationPolicyPreferences> = DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
 ): Readonly<ReviewPreferences> {
   return Object.freeze({
     format: REVIEW_PREFERENCES_FORMAT,
@@ -210,6 +261,7 @@ export function createReviewPreferences(
       ),
     }),
     associationPolicy: Object.freeze({...associationPolicy}),
+    explorationPolicy: Object.freeze({...explorationPolicy}),
   });
 }
 

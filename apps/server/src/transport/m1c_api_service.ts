@@ -8,12 +8,14 @@ import {
   ENTRY_TYPE_KEYWORDS,
   INFORMATION_ENTRY_ASSOCIATION_ACTIONS,
   INFORMATION_ENTRY_ASSOCIATION_POLICY,
+  INFORMATION_ENTRY_EXPLORATION_POLICY_VERSION,
   INFORMATION_ENTRY_GRAPH_DIRECTIONS,
   INFORMATION_ENTRY_GRAPH_MAXIMUM_NEIGHBORS,
   InformationEntrySearchCursorError,
   InformationEntryQuerySynthesisServiceError,
   buildInformationEntryKnowledgeGraph,
   buildInformationEntryAssociationProjection,
+  exploreCurrentInformationEntries,
   deriveInformationDocumentTagRevisionId,
   deriveInformationEntryAssociationOverrideRevisionId,
   deriveInformationEntryRevisionId,
@@ -39,6 +41,8 @@ import {
   type ManualEntryFragmentGroupInput,
   type InformationEntryAssociationAction,
   type InformationEntryAssociationPolicy,
+  type InformationEntryExplorationPolicy,
+  type InformationEntryExplorationRequest,
   type InformationEntryAssociationRepositoryPort,
   type InformationEntryAssociationRepositorySnapshot,
   type InformationEntryGraphDirection,
@@ -74,12 +78,15 @@ import type {BlobStore} from '../storage/blob_store.js';
 import {
   decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
+  decodeReviewExplorationPolicyPreferences,
   decodeReviewQuickTags,
   decodeReviewVocabularyPreferences,
   DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+  DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
   type ReviewAssociationPolicyPreferences,
+  type ReviewExplorationPolicyPreferences,
   type ReviewPreferencesStore,
 } from '../storage/review_preferences_store.js';
 import {
@@ -130,6 +137,7 @@ export interface M1cApiServicePort {
     body: unknown,
   ): Promise<M1cHttpResult>;
   searchInformationEntries(body: unknown): Promise<M1cHttpResult>;
+  exploreInformationEntries(body: unknown): Promise<M1cHttpResult>;
   synthesizeInformationEntryQuery(body: unknown): Promise<M1cHttpResult>;
   readInformationEntryKnowledgeGraph(body: unknown): Promise<M1cHttpResult>;
   reviseInformationEntryKnowledgeGraphEdge(
@@ -139,6 +147,9 @@ export interface M1cApiServicePort {
   ): Promise<M1cHttpResult>;
   rebuildInformationEntryAssociations(body: unknown): Promise<M1cHttpResult>;
   reviseInformationEntryAssociationPolicy(
+    body: unknown,
+  ): Promise<M1cHttpResult>;
+  reviseInformationEntryExplorationPolicy(
     body: unknown,
   ): Promise<M1cHttpResult>;
   listInformationEntryAssociations(
@@ -226,6 +237,18 @@ export class M1cApiService implements M1cApiServicePort {
     return informationEntryAssociationPolicyFromPreferences(
       preferences.associationPolicy ??
         DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
+    );
+  }
+
+  async #loadInformationEntryExplorationPolicy(): Promise<
+    Readonly<InformationEntryExplorationPolicy>
+  > {
+    const preferences = await this.#dependencies.reviewPreferences.load(
+      this.#dependencies.workspaceId,
+    );
+    return informationEntryExplorationPolicyFromPreferences(
+      preferences.explorationPolicy ??
+        DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
     );
   }
 
@@ -428,6 +451,7 @@ export class M1cApiService implements M1cApiServicePort {
         'information_document_tags',
         'information_entry_knowledge_graph',
         'information_entry_association_policy',
+        'information_entry_exploration',
         'private_documents',
         'processing_runs',
         'review_preferences',
@@ -522,6 +546,9 @@ export class M1cApiService implements M1cApiServicePort {
         associationPolicy:
           preferences.associationPolicy ??
           DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
+        explorationPolicy:
+          preferences.explorationPolicy ??
+          DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
       });
     } catch {
       return reviewPreferencesFailure();
@@ -556,21 +583,35 @@ export class M1cApiService implements M1cApiServicePort {
     ) {
       return inputFailure('body.associationPolicy');
     }
+    const explorationPolicy =
+      body.explorationPolicy === undefined
+        ? undefined
+        : decodeReviewExplorationPolicyPreferences(body.explorationPolicy);
+    if (
+      body.explorationPolicy !== undefined &&
+      explorationPolicy === undefined
+    ) {
+      return inputFailure('body.explorationPolicy');
+    }
     try {
+      const current = await this.#dependencies.reviewPreferences.load(
+        this.#dependencies.workspaceId,
+      );
       const effectiveAssociationPolicy =
         associationPolicy ??
-        (
-          await this.#dependencies.reviewPreferences.load(
-            this.#dependencies.workspaceId,
-          )
-        ).associationPolicy ??
+        current.associationPolicy ??
         DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES;
+      const effectiveExplorationPolicy =
+        explorationPolicy ??
+        current.explorationPolicy ??
+        DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES;
       const preferences = await this.#dependencies.reviewPreferences.save(
         this.#dependencies.workspaceId,
         quickTags,
         automaticKeywords,
         vocabulary,
         effectiveAssociationPolicy,
+        effectiveExplorationPolicy,
       );
       return httpResult(200, {
         status: 'ok',
@@ -580,6 +621,8 @@ export class M1cApiService implements M1cApiServicePort {
         vocabulary: preferences.vocabulary ?? vocabulary,
         associationPolicy:
           preferences.associationPolicy ?? effectiveAssociationPolicy,
+        explorationPolicy:
+          preferences.explorationPolicy ?? effectiveExplorationPolicy,
       });
     } catch {
       return reviewPreferencesFailure();
@@ -860,6 +903,41 @@ export class M1cApiService implements M1cApiServicePort {
     }
   }
 
+  public async exploreInformationEntries(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const request = decodeInformationEntryExplorationRequest(body);
+    if (request === undefined) return inputFailure('body');
+    try {
+      const [entries, associationSnapshot, policy] = await Promise.all([
+        this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          request.includePrivate,
+        ),
+        this.#dependencies.informationEntryAssociationRepository.loadAssociationSnapshot(
+          this.#dependencies.workspaceId,
+          request.includePrivate,
+        ),
+        this.#loadInformationEntryExplorationPolicy(),
+      ]);
+      const result = exploreCurrentInformationEntries(
+        entries,
+        associationSnapshot,
+        request,
+        policy,
+      );
+      if (result === undefined) {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'information_entry_not_found'}),
+        });
+      }
+      return httpResult(200, {status: 'ok', ...result});
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
   public async synthesizeInformationEntryQuery(
     body: unknown,
   ): Promise<M1cHttpResult> {
@@ -1131,11 +1209,70 @@ export class M1cApiService implements M1cApiServicePort {
             DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
           preferences.vocabulary ?? DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
           next,
+          preferences.explorationPolicy ??
+            DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
         );
       }
       return httpResult(200, {
         status: unchanged ? 'unchanged' : 'applied',
         policy: informationEntryAssociationPolicyFromPreferences(next),
+      });
+    } catch {
+      return reviewPreferencesFailure();
+    }
+  }
+
+  public async reviseInformationEntryExplorationPolicy(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const input = decodeInformationEntryExplorationPolicyWrite(body);
+    if (input === undefined) return inputFailure('body');
+    try {
+      const preferences = await this.#dependencies.reviewPreferences.load(
+        this.#dependencies.workspaceId,
+      );
+      const current =
+        preferences.explorationPolicy ??
+        DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES;
+      if (current.revision !== input.expectedRevision) {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'stale_exploration_policy_revision',
+          }),
+        });
+      }
+      const unchanged =
+        current.enabled === input.enabled &&
+        current.resultShare === input.resultShare &&
+        current.neighborExpansion === input.neighborExpansion &&
+        current.crossDomain === input.crossDomain &&
+        current.serendipity === input.serendipity;
+      const next = unchanged
+        ? current
+        : Object.freeze({
+            revision: current.revision + 1,
+            enabled: input.enabled,
+            resultShare: input.resultShare,
+            neighborExpansion: input.neighborExpansion,
+            crossDomain: input.crossDomain,
+            serendipity: input.serendipity,
+          });
+      if (!unchanged) {
+        await this.#dependencies.reviewPreferences.save(
+          this.#dependencies.workspaceId,
+          preferences.quickTags,
+          preferences.automaticKeywords ??
+            DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+          preferences.vocabulary ?? DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+          preferences.associationPolicy ??
+            DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
+          next,
+        );
+      }
+      return httpResult(200, {
+        status: unchanged ? 'unchanged' : 'applied',
+        policy: informationEntryExplorationPolicyFromPreferences(next),
       });
     } catch {
       return reviewPreferencesFailure();
@@ -2686,6 +2823,90 @@ function decodeInformationEntryAssociationPolicyWrite(body: unknown):
   });
 }
 
+function decodeInformationEntryExplorationRequest(
+  body: unknown,
+): Readonly<InformationEntryExplorationRequest> | undefined {
+  if (!isRecord(body)) return undefined;
+  const excludeEntryIds = decodeExplorationExcludedEntryIds(
+    body.excludeEntryIds,
+  );
+  if (
+    typeof body.anchorEntryId !== 'string' ||
+    !CANONICAL_UUID.test(body.anchorEntryId) ||
+    excludeEntryIds === undefined ||
+    typeof body.pageResultCount !== 'number' ||
+    !Number.isSafeInteger(body.pageResultCount) ||
+    body.pageResultCount < 0 ||
+    body.pageResultCount > 100 ||
+    typeof body.includePrivate !== 'boolean' ||
+    (body.onlyPrivate !== undefined && typeof body.onlyPrivate !== 'boolean') ||
+    (body.onlyPrivate === true && !body.includePrivate)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    anchorEntryId: body.anchorEntryId,
+    excludeEntryIds,
+    pageResultCount: body.pageResultCount,
+    includePrivate: body.includePrivate,
+    onlyPrivate: body.onlyPrivate === true,
+  });
+}
+
+function decodeExplorationExcludedEntryIds(
+  value: unknown,
+): readonly string[] | undefined {
+  if (!Array.isArray(value) || value.length > 100) return undefined;
+  const decoded: string[] = [];
+  for (const entryId of value as readonly unknown[]) {
+    if (typeof entryId !== 'string' || !CANONICAL_UUID.test(entryId)) {
+      return undefined;
+    }
+    decoded.push(entryId);
+  }
+  return new Set(decoded).size === decoded.length
+    ? Object.freeze(decoded)
+    : undefined;
+}
+
+function decodeInformationEntryExplorationPolicyWrite(body: unknown):
+  | Readonly<{
+      expectedRevision: number;
+      enabled: boolean;
+      resultShare: number;
+      neighborExpansion: boolean;
+      crossDomain: boolean;
+      serendipity: boolean;
+    }>
+  | undefined {
+  if (
+    !isRecord(body) ||
+    typeof body.expectedRevision !== 'number' ||
+    !Number.isSafeInteger(body.expectedRevision) ||
+    body.expectedRevision < 0
+  ) {
+    return undefined;
+  }
+  const decoded = decodeReviewExplorationPolicyPreferences({
+    revision: body.expectedRevision,
+    enabled: body.enabled,
+    resultShare: body.resultShare,
+    neighborExpansion: body.neighborExpansion,
+    crossDomain: body.crossDomain,
+    serendipity: body.serendipity,
+  });
+  return decoded === undefined
+    ? undefined
+    : Object.freeze({
+        expectedRevision: decoded.revision,
+        enabled: decoded.enabled,
+        resultShare: decoded.resultShare,
+        neighborExpansion: decoded.neighborExpansion,
+        crossDomain: decoded.crossDomain,
+        serendipity: decoded.serendipity,
+      });
+}
+
 function informationEntryAssociationPolicyFromPreferences(
   preferences: Readonly<ReviewAssociationPolicyPreferences>,
 ): Readonly<InformationEntryAssociationPolicy> {
@@ -2698,6 +2919,15 @@ function informationEntryAssociationPolicyFromPreferences(
     threshold: preferences.threshold,
     candidateLimit: INFORMATION_ENTRY_ASSOCIATION_POLICY.candidateLimit,
     adjustmentStep: INFORMATION_ENTRY_ASSOCIATION_POLICY.adjustmentStep,
+  });
+}
+
+function informationEntryExplorationPolicyFromPreferences(
+  preferences: Readonly<ReviewExplorationPolicyPreferences>,
+): Readonly<InformationEntryExplorationPolicy> {
+  return Object.freeze({
+    ...preferences,
+    version: INFORMATION_ENTRY_EXPLORATION_POLICY_VERSION,
   });
 }
 
