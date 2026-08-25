@@ -6,11 +6,16 @@ import {
   AiTagProposalService,
 } from '../modules/processing/index.js';
 import {
+  SourceSubscriptionService,
+  type GitSourceSubscriptionReaderPort,
+} from '../modules/subscriptions/index.js';
+import {
   OpenAiEntryAssociationProvider,
   OpenAiEntrySplitProvider,
   OpenAiEntryTagProvider,
   OpenAiInformationEntryQuerySynthesisProvider,
 } from '../platform/ai/index.js';
+import {GithubGitSourceSubscriptionReader} from '../platform/sources/index.js';
 import {
   createRuntimeDatabase,
   type DatabasePoolFactory,
@@ -20,6 +25,10 @@ import {
   OperationalHealthService,
 } from '../health/operational_health.js';
 import {NodeTimerScheduler, SystemDeadline} from '../lifecycle/deadline.js';
+import {
+  SourceSubscriptionScheduler,
+  type SourceSubscriptionSchedulerDependencies,
+} from '../lifecycle/source_subscription_scheduler.js';
 import {
   ProcessExitDecision,
   ProcessSignalSource,
@@ -74,6 +83,10 @@ export interface RoleRuntimeDependencies {
   readonly signalSource?: SignalSource;
   readonly exitDecision?: ExitDecision;
   readonly storageServicesFactory?: StorageServicesFactory;
+  readonly sourceSubscriptionReader?: GitSourceSubscriptionReaderPort;
+  readonly sourceSubscriptionSchedulerStarter?: (
+    dependencies: Readonly<SourceSubscriptionSchedulerDependencies>,
+  ) => Promise<RuntimeResource>;
 }
 
 export async function startRoleRuntime(
@@ -156,6 +169,27 @@ export async function startRoleRuntime(
             config.aiProposalProvider,
           ),
         });
+  const sourceSubscriptions = new SourceSubscriptionService({
+    workspaceId: config.workspaceId,
+    preferences: storage.reviewPreferences,
+    processing: repositories.processingRuns,
+    reader:
+      dependencies.sourceSubscriptionReader ??
+      new GithubGitSourceSubscriptionReader(),
+    blobStore: storage.blobStore,
+    evidence: repositories.evidence,
+  });
+  if (config.role === 'scheduler' || config.role === 'all') {
+    starters.push(() =>
+      (
+        dependencies.sourceSubscriptionSchedulerStarter ??
+        SourceSubscriptionScheduler.start
+      )({
+        subscriptions: sourceSubscriptions,
+        logger,
+      }),
+    );
+  }
   const api =
     config.role === 'api' || config.role === 'all'
       ? new M1cApiService({
@@ -170,6 +204,7 @@ export async function startRoleRuntime(
           informationEntryAssociationRepository:
             repositories.informationEntryAssociations,
           processingRunRepository: repositories.processingRuns,
+          sourceSubscriptions,
           ...(aiSplitProposals === undefined ? {} : {aiSplitProposals}),
           ...(aiTagProposals === undefined ? {} : {aiTagProposals}),
           ...(aiAssociationProposals === undefined

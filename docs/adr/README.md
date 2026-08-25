@@ -42,6 +42,8 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0020](0020-explainable-lexical-entry-search.md) | Accepted | Explainable exact, substring and spelling-tolerant Entry search without AI or a new search stack |
 | [0021](0021-query-association-and-result-comparison.md) | Accepted | Query-owned Association navigation and two-result comparison without a new backend boundary |
 | [0022](0022-evidence-bounded-ai-query-synthesis.md) | Accepted | Explicit public-only AI synthesis over bounded deterministic Entry query evidence |
+| [0023](0023-deterministic-entry-exploration-policy.md) | Accepted | Default-off explainable Entry exploration over current visible direct Associations |
+| [0024](0024-versioned-git-source-subscriptions.md) | Accepted | Versioned exact GitHub Markdown subscriptions through external preferences and existing Evidence import |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -72,3 +74,8 @@ groups materialize only after manual acceptance through the existing Entry
 boundary. ADR 0016 adds the complete no-Provider owner path for grouping those
 same immutable Fragments before the first Entry structure is committed. ADR 0017
 extends that path to exact Unicode-scalar ranges without rewriting source evidence. ADR 0018 accepts explicit local Markdown/plain-text capture; ADR 0019 extends the same Evidence path to semantic HTML and PDF text-layer projections while retaining exact raw files externally. ADR 0020 extends the existing deterministic Entry query with explicit exact, substring and spelling-tolerant lexical modes, field scope, visible scores and cursor binding without AI, a migration or another search service. ADR 0021 completes the Query workspace with an explicit Association traversal entry point and a query-bound two-result comparison surface while reusing that same public search boundary. ADR 0022 completes the next narrow Query increment: an explicit, session-only, public-only OpenAI synthesis over a bounded deterministic evidence pack, with claim-level local source references and no retrieval or write authority.
+
+ADR 0023 adds a default-off local exploration lane without changing ordinary
+retrieval. ADR 0024 adds one exact public-GitHub Markdown subscription through
+external preferences, real ProcessingRun records and the existing Evidence
+import authority; it does not add a generic crawler or Provider boundary.

@@ -74,16 +74,23 @@ import {
   type ProcessingRun,
   type ProcessingRunRepositoryPort,
 } from '../modules/processing/index.js';
+import {
+  SourceSubscriptionServiceError,
+  type SourceSubscriptionServicePort,
+  type SourceSubscriptionWrite,
+} from '../modules/subscriptions/index.js';
 import type {BlobStore} from '../storage/blob_store.js';
 import {
   decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
   decodeReviewExplorationPolicyPreferences,
+  decodeReviewSourceSubscriptionPreferences,
   decodeReviewQuickTags,
   decodeReviewVocabularyPreferences,
   DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
   DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
+  DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
   type ReviewAssociationPolicyPreferences,
   type ReviewExplorationPolicyPreferences,
@@ -107,6 +114,7 @@ export interface M1cApiServiceDependencies {
   readonly informationDocumentTagRepository: InformationDocumentTagRepositoryPort;
   readonly informationEntryAssociationRepository: InformationEntryAssociationRepositoryPort;
   readonly processingRunRepository: ProcessingRunRepositoryPort;
+  readonly sourceSubscriptions?: SourceSubscriptionServicePort;
   readonly aiSplitProposals?: AiSplitProposalServicePort;
   readonly aiTagProposals?: AiTagProposalServicePort;
   readonly aiAssociationProposals?: AiAssociationProposalServicePort;
@@ -174,6 +182,12 @@ export interface M1cApiServicePort {
   ): Promise<M1cHttpResult>;
   listProcessingRuns(limit?: unknown): Promise<M1cHttpResult>;
   cancelProcessingRun(runId: string, body: unknown): Promise<M1cHttpResult>;
+  listSourceSubscriptions(): Promise<M1cHttpResult>;
+  replaceSourceSubscriptions(body: unknown): Promise<M1cHttpResult>;
+  runSourceSubscription(
+    subscriptionId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult>;
   listAiSplitProposals(snapshotId: string): Promise<M1cHttpResult>;
   startAiSplitProposal(
     snapshotId: string,
@@ -457,6 +471,9 @@ export class M1cApiService implements M1cApiServicePort {
         'review_preferences',
         'workspace_bundle_export',
         'workspace_bundle_restore',
+        ...(this.#dependencies.sourceSubscriptions === undefined
+          ? []
+          : ['source_subscriptions']),
         ...(this.#dependencies.aiSplitProposals === undefined
           ? []
           : ['ai_split']),
@@ -612,6 +629,8 @@ export class M1cApiService implements M1cApiServicePort {
         vocabulary,
         effectiveAssociationPolicy,
         effectiveExplorationPolicy,
+        current.sourceSubscriptions ??
+          DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
       );
       return httpResult(200, {
         status: 'ok',
@@ -1211,6 +1230,8 @@ export class M1cApiService implements M1cApiServicePort {
           next,
           preferences.explorationPolicy ??
             DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
+          preferences.sourceSubscriptions ??
+            DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
         );
       }
       return httpResult(200, {
@@ -1268,6 +1289,8 @@ export class M1cApiService implements M1cApiServicePort {
           preferences.associationPolicy ??
             DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
           next,
+          preferences.sourceSubscriptions ??
+            DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
         );
       }
       return httpResult(200, {
@@ -1638,6 +1661,63 @@ export class M1cApiService implements M1cApiServicePort {
       });
     } catch {
       return repositoryFailure();
+    }
+  }
+
+  public async listSourceSubscriptions(): Promise<M1cHttpResult> {
+    const service = this.#dependencies.sourceSubscriptions;
+    if (service === undefined) return sourceSubscriptionUnavailable();
+    try {
+      const value = await service.list();
+      return httpResult(200, {status: 'ok', ...value});
+    } catch (error) {
+      return sourceSubscriptionFailure(error);
+    }
+  }
+
+  public async replaceSourceSubscriptions(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const service = this.#dependencies.sourceSubscriptions;
+    if (service === undefined) return sourceSubscriptionUnavailable();
+    const write = decodeSourceSubscriptionReplace(body);
+    if (write === undefined) return inputFailure('body');
+    try {
+      const result = await service.replace(
+        write.expectedRevision,
+        write.subscriptions,
+      );
+      return httpResult(200, {
+        status: result.outcome,
+        ...result.value,
+      });
+    } catch (error) {
+      return sourceSubscriptionFailure(error);
+    }
+  }
+
+  public async runSourceSubscription(
+    subscriptionId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const service = this.#dependencies.sourceSubscriptions;
+    if (service === undefined) return sourceSubscriptionUnavailable();
+    if (
+      !CANONICAL_UUID.test(subscriptionId) ||
+      !isRecord(body) ||
+      Object.keys(body).length !== 1 ||
+      typeof body.requestKey !== 'string'
+    ) {
+      return inputFailure('body');
+    }
+    try {
+      const result = await service.runNow(subscriptionId, body.requestKey);
+      return httpResult(result.outcome === 'imported' ? 201 : 200, {
+        status: result.outcome,
+        ...result,
+      });
+    } catch (error) {
+      return sourceSubscriptionFailure(error);
     }
   }
 
@@ -2957,6 +3037,120 @@ function decodeProcessingRunLimit(value: unknown): number | undefined {
     candidate <= 100
     ? candidate
     : undefined;
+}
+
+function decodeSourceSubscriptionReplace(body: unknown):
+  | Readonly<{
+      expectedRevision: number;
+      subscriptions: readonly Readonly<SourceSubscriptionWrite>[];
+    }>
+  | undefined {
+  if (
+    !isRecord(body) ||
+    Object.keys(body).length !== 2 ||
+    !Number.isSafeInteger(body.expectedRevision) ||
+    (body.expectedRevision as number) < 0 ||
+    !Array.isArray(body.subscriptions)
+  ) {
+    return undefined;
+  }
+  const expectedKeys = [
+    'enabled',
+    'intervalMinutes',
+    'isPrivate',
+    'label',
+    'profile',
+    'repositoryPath',
+    'repositoryRef',
+    'repositoryUri',
+    'sourceAlias',
+    'subscriptionId',
+  ];
+  if (
+    body.subscriptions.some(
+      (subscription) =>
+        !isRecord(subscription) ||
+        Object.keys(subscription).sort().join('\\u0000') !==
+          expectedKeys.join('\\u0000'),
+    )
+  ) {
+    return undefined;
+  }
+  const decoded = decodeReviewSourceSubscriptionPreferences({
+    revision: (body.expectedRevision as number) + 1,
+    subscriptions: body.subscriptions,
+  });
+  if (decoded === undefined) return undefined;
+  return Object.freeze({
+    expectedRevision: body.expectedRevision as number,
+    subscriptions: Object.freeze(
+      decoded.subscriptions.map((subscription) =>
+        Object.freeze({
+          subscriptionId: subscription.subscriptionId,
+          label: subscription.label,
+          enabled: subscription.enabled,
+          repositoryUri: subscription.repositoryUri,
+          repositoryRef: subscription.repositoryRef,
+          repositoryPath: subscription.repositoryPath,
+          profile: subscription.profile,
+          sourceAlias: subscription.sourceAlias,
+          isPrivate: subscription.isPrivate,
+          intervalMinutes: subscription.intervalMinutes,
+        }),
+      ),
+    ),
+  });
+}
+
+function sourceSubscriptionFailure(error: unknown): M1cHttpResult {
+  if (!(error instanceof SourceSubscriptionServiceError)) {
+    return sourceSubscriptionUnavailable();
+  }
+  if (error.code === 'source_subscription_not_found') {
+    return httpResult(404, {
+      status: 'not_found',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  if (
+    error.code === 'source_subscription_stale' ||
+    error.code === 'source_subscription_changed' ||
+    error.code === 'source_subscription_run_conflict' ||
+    error.code === 'source_subscription_run_invalid'
+  ) {
+    return httpResult(409, {
+      status: 'rejected',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  if (
+    error.code === 'source_subscription_invalid' ||
+    error.code === 'source_import_rejected'
+  ) {
+    return httpResult(422, {
+      status: 'rejected',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  if (
+    error.code === 'source_not_found' ||
+    error.code === 'source_too_large' ||
+    error.code === 'source_invalid' ||
+    error.code === 'source_unavailable'
+  ) {
+    return httpResult(502, {
+      status: 'failed',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  return sourceSubscriptionUnavailable();
+}
+
+function sourceSubscriptionUnavailable(): M1cHttpResult {
+  return httpResult(503, {
+    status: 'failed',
+    issue: Object.freeze({code: 'source_subscription_unavailable'}),
+  });
 }
 
 function processingRunResponse(

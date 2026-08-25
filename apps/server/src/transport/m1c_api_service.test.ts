@@ -22,6 +22,7 @@ import {
   DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
   DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
+  DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
   type ReviewAssociationPolicyPreferences,
   type ReviewAutomaticKeywordPreferences,
@@ -178,6 +179,7 @@ describe('M1cApiService', () => {
       },
       DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
       DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
+      DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
     );
   });
 
@@ -272,6 +274,7 @@ describe('M1cApiService', () => {
         threshold: 2_000,
       },
       DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
+      DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
     );
     await expect(
       service.reviseInformationEntryAssociationPolicy({
@@ -367,6 +370,7 @@ describe('M1cApiService', () => {
         crossDomain: false,
         serendipity: true,
       },
+      DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
     );
 
     await expect(
@@ -424,6 +428,7 @@ describe('M1cApiService', () => {
       DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
       DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
       explorationPolicy,
+      DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
     );
   });
 
@@ -2080,6 +2085,82 @@ describe('M1E provider-neutral processing API', () => {
       WORKSPACE_ID,
       '22222222-2222-4222-8222-222222222222',
       2,
+    );
+  });
+
+  it('exposes versioned source subscriptions and explicit run-now', async () => {
+    const subscription = Object.freeze({
+      subscriptionId: '22222222-2222-4222-8222-222222222222',
+      label: 'Synthetic source',
+      enabled: false,
+      repositoryUri: 'https://github.com/example/project',
+      repositoryRef: 'main',
+      repositoryPath: 'docs/source.md',
+      profile: 'commonmark-v1' as const,
+      sourceAlias: 'synthetic-source',
+      isPrivate: false,
+      intervalMinutes: 1_440,
+    });
+    const replace = vi.fn(() =>
+      Promise.resolve({
+        outcome: 'applied' as const,
+        value: Object.freeze({
+          revision: 1,
+          subscriptions: Object.freeze([subscription]),
+        }),
+      }),
+    );
+    const runNow = vi.fn(() =>
+      Promise.resolve({
+        outcome: 'unchanged' as const,
+        runId: '33333333-3333-4333-8333-333333333333',
+        subscriptionId: subscription.subscriptionId,
+      }),
+    );
+    const service = createService({
+      sourceSubscriptions: {
+        list: () =>
+          Promise.resolve(
+            Object.freeze({
+              revision: 1,
+              subscriptions: Object.freeze([subscription]),
+            }),
+          ),
+        replace,
+        runNow,
+        runDue: () => Promise.resolve([]),
+      },
+    });
+
+    const workspaceBody = service.workspace().body as {
+      readonly capabilities: readonly string[];
+    };
+    expect(workspaceBody.capabilities).toContain('source_subscriptions');
+    await expect(service.listSourceSubscriptions()).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'ok', revision: 1},
+    });
+    await expect(
+      service.replaceSourceSubscriptions({
+        expectedRevision: 1,
+        subscriptions: [subscription],
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'applied', revision: 1},
+    });
+    expect(replace).toHaveBeenCalledWith(1, [subscription]);
+    await expect(
+      service.runSourceSubscription(subscription.subscriptionId, {
+        requestKey: 'synthetic-check',
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'unchanged'},
+    });
+    expect(runNow).toHaveBeenCalledWith(
+      subscription.subscriptionId,
+      'synthetic-check',
     );
   });
 

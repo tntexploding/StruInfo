@@ -1,7 +1,7 @@
 # StruInfo 开发大纲
 
-- 状态：M1E-5A 本地 UTF-8 文本文件导入已实现
-- 最近更新：2026-08-24
+- 状态：M1G-2 版本化 Git 信源订阅已完成
+- 最近更新：2026-08-25
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
 - 当前实现：[当前项目状态与实现清单](current-project-state.md)
@@ -21,7 +21,14 @@
   [ADR 0014](adr/0014-openai-entry-association-proposals.md)、
   [ADR 0015](adr/0015-openai-entry-split-proposals.md)、
   [ADR 0016](adr/0016-manual-entry-fragment-grouping.md)、
-  [ADR 0017](adr/0017-manual-within-fragment-entry-boundaries.md)
+  [ADR 0017](adr/0017-manual-within-fragment-entry-boundaries.md)、
+  [ADR 0018](adr/0018-local-text-file-import.md)、
+  [ADR 0019](adr/0019-local-html-pdf-import.md)、
+  [ADR 0020](adr/0020-explainable-lexical-entry-search.md)、
+  [ADR 0021](adr/0021-query-association-and-result-comparison.md)、
+  [ADR 0022](adr/0022-evidence-bounded-ai-query-synthesis.md)、
+  [ADR 0023](adr/0023-deterministic-entry-exploration-policy.md)、
+  [ADR 0024](adr/0024-versioned-git-source-subscriptions.md)
 
 ## 1. 结论
 
@@ -640,8 +647,9 @@ import -> snapshot -> document nodes/fragments/media
 7. 查询页按文本、标签、来源、时间、隐私和最多两跳联系稳定分页，并返回精确证据；
 8. 正式知识页搜索最高匹配 Entry，组合有界自动/用户关系图谱，支持图/列表、编辑、隐藏、恢复、创建和来源回看；
 9. 个人数据包导出/恢复 56 张当前表、引用 Blob 字节、当前偏好、Entry v3 精确区间、Association v3 图谱元数据和 Processing v4 状态。
+10. 导入页管理外部版本化的精确 GitHub Markdown 单文件订阅；手动或默认关闭的间隔检查创建真实 ProcessingRun，变化时复用既有 Evidence 导入。
 
-旧 Curation、正式 Knowledge 写入/读取和旧 Knowledge 检索应用运行时已经删除；迁移与历史数据只为兼容保留。M1E-2 不恢复这些入口，而是在 Entry/Association 边界完成正式图谱。M1E-3A–D 已完成中性任务、公开 Entry 标签、selected-pair 联系和 selected-Snapshot 拆分提案；M1E-4A/4B 已完成首次物化前的既有 Fragment 与 Fragment 内标量边界人工分组；M1E-5A/5B 已完成单份本地 Markdown、文本、HTML 和带文字层 PDF 导入；M1F-1/2 已完成可解释词法查询、查询内 Association 联想和双条事实比较。ADR 0022 的 M1F-3 现已完成：Query 可由用户显式要求同一个 OpenAI Provider 综合当前公开确定性查询的有界证据，并把 claim 映射回本地精确来源。它没有引入私密外发、Provider 检索、RAG、向量、自动采集、容器/公网认证或历史测试框架强化。阻断分类继续以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
+旧 Curation、正式 Knowledge 写入/读取和旧 Knowledge 检索应用运行时已经删除；迁移与历史数据只为兼容保留。M1E-2 不恢复这些入口，而是在 Entry/Association 边界完成正式图谱。M1E-3A–D 已完成中性任务、公开 Entry 标签、selected-pair 联系和 selected-Snapshot 拆分提案；M1E-4A/4B 已完成首次物化前的既有 Fragment 与 Fragment 内标量边界人工分组；M1E-5A/5B 已完成单份本地 Markdown、文本、HTML 和带文字层 PDF 导入；M1F-1/2/3 已完成可解释词法查询、查询内 Association 联想、双条事实比较和显式公开证据综合；M1G-1 已完成与普通排序隔离的本地探索；M1G-2 已完成精确公开 GitHub Markdown 单文件订阅、变化检查和既有 Evidence 导入复用。后两者都不代表偏好学习、通用网页采集、自动下游处理、私密外发、Provider 检索、RAG、向量、容器/公网认证或历史测试框架强化。阻断分类继续以[开发规范](development-standards.md#runnable-core-priority-and-proportional-gates)为准。
 
 ### 准备门：基础架构（已完成）
 

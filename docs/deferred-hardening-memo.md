@@ -196,6 +196,28 @@ record of why that unissued harness never blocked product work.
 - Revisit when: The collision recurs often enough to destabilize CI or a product
   listener, rather than a test-assigned Fetch-forbidden port, becomes affected.
 
+### DH-012: Serialize Independent External Preference Writers
+
+- Source: M1G-2 source-subscription delivery audit
+- Owner: Platform
+- Status: Deferred hardening
+- Scope: External review-preferences file updates
+- Evidence: Preference saves use atomic temporary-file replacement, but an
+  association-policy write, exploration-policy write and source-subscription
+  cursor write each load and replace the complete preference record. Two
+  independent writers that overlap after reading the same prior revision could
+  preserve their own field while replacing a concurrently changed sibling
+  field.
+- Current product impact: No loss has reproduced through the supported
+  single-user interface or synthetic M1G-2 checks. Explicit preference actions
+  are serialized by the current UI, each scheduler instance runs subscription
+  checks sequentially, and subscription content import remains independently
+  idempotent. This is a future multi-writer robustness improvement, not a
+  reachable blocker for the current local workflow.
+- Revisit when: A preference lost update is reproduced, another background
+  preference writer is introduced, multiple application processes may share one
+  workspace, or preferences gain a shared compare-and-swap write boundary.
+
 ## Entry Template
 
 ### DH-NNN: Short Title

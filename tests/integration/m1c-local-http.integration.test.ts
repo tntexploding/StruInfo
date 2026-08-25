@@ -312,6 +312,16 @@ function stubApi(
           version: 2,
         }),
       ),
+    listSourceSubscriptions: () =>
+      Promise.resolve(
+        result(200, {status: 'ok', revision: 0, subscriptions: []}),
+      ),
+    replaceSourceSubscriptions: () =>
+      Promise.resolve(
+        result(200, {status: 'unchanged', revision: 0, subscriptions: []}),
+      ),
+    runSourceSubscription: () =>
+      Promise.resolve(result(200, {status: 'unchanged'})),
     exportWorkspaceBundle: () =>
       Promise.resolve(result(201, {status: 'exported'})),
     restoreWorkspaceBundle: () =>

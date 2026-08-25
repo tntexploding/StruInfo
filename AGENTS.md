@@ -384,6 +384,18 @@ ordering, totals, pagination or cursors, and do not write behavior history,
 Entry, Association, graph or Processing state. Do not infer preference learning,
 random retrieval, semantic search, vectors, Provider use or RAG from this lane.
 
+ADR 0024 completes M1G-2 with the first closed versioned source subscription.
+One external preference row identifies one exact Markdown file in one explicit
+public GitHub repository/ref. Manual checks and default-off interval checks
+create real import-stage ProcessingRun records; changed bytes reuse the existing
+Evidence/Blob/Snapshot/Fragment import, while unchanged bytes do not create a
+duplicate Snapshot. The Git/content cursor and schedule stay in the external
+preference file and personal-data package. The Import page owns configuration
+and run-now; Overview continues to show only stored runs. This adds no migration,
+dependency, generic crawler, repository execution, automatic Entry/tag/link
+processing, AI acceptance or real fixture. Do not infer RSS/API/web crawling,
+private-repository access, preference learning or an autonomous pipeline.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2
@@ -394,7 +406,8 @@ Do not change the accepted language, application shape, or persistence model
 without a superseding ADR. Cloud deployment vendors remain unselected; OpenAI
 is selected only for the optional proposal paths accepted by ADR 0013 through
 ADR 0015 and the bounded public Query synthesis accepted by ADR 0022. ADR 0023
-is entirely local and does not expand that Provider selection. Do not
+is entirely local and does not expand that Provider selection. ADR 0024's
+closed GitHub reader is a source adapter, not an AI Provider expansion. Do not
 reuse M0-P probe candidate source as production code; carry
 the tracked provenance, workspace, idempotency, fencing, and recovery
 invariants into fresh implementation and tests.

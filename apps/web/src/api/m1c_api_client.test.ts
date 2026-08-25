@@ -279,6 +279,25 @@ describe('M1cApiClient', () => {
     );
     await client.listProcessingRuns(12);
     await client.cancelProcessingRun('synthetic/run', 3);
+    await client.listSourceSubscriptions();
+    await client.replaceSourceSubscriptions(2, [
+      {
+        subscriptionId: '22222222-2222-4222-8222-222222222222',
+        label: 'Synthetic',
+        enabled: false,
+        repositoryUri: 'https://github.com/example/project',
+        repositoryRef: 'main',
+        repositoryPath: 'docs/source.md',
+        profile: 'commonmark-v1',
+        sourceAlias: 'synthetic-source',
+        isPrivate: false,
+        intervalMinutes: 1_440,
+      },
+    ]);
+    await client.runSourceSubscription(
+      'synthetic/subscription',
+      'synthetic-check',
+    );
 
     expect(requests).toEqual([
       {
@@ -443,6 +462,36 @@ describe('M1cApiClient', () => {
         url: 'http://127.0.0.1:3000/api/v1/processing-runs/synthetic%2Frun/cancel',
         method: 'POST',
         body: JSON.stringify({expectedVersion: 3}),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/source-subscriptions',
+        method: 'GET',
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/source-subscriptions',
+        method: 'PUT',
+        body: JSON.stringify({
+          expectedRevision: 2,
+          subscriptions: [
+            {
+              subscriptionId: '22222222-2222-4222-8222-222222222222',
+              label: 'Synthetic',
+              enabled: false,
+              repositoryUri: 'https://github.com/example/project',
+              repositoryRef: 'main',
+              repositoryPath: 'docs/source.md',
+              profile: 'commonmark-v1',
+              sourceAlias: 'synthetic-source',
+              isPrivate: false,
+              intervalMinutes: 1_440,
+            },
+          ],
+        }),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/source-subscriptions/synthetic%2Fsubscription/run',
+        method: 'POST',
+        body: JSON.stringify({requestKey: 'synthetic-check'}),
       },
     ]);
   });

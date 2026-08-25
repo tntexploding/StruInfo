@@ -410,6 +410,93 @@
   background: var(--workflow-panel);
 }
 
+.materials-workspace .source-subscription-panel {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+  padding: var(--si-space-6);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  border-inline-start: var(--si-space-1) solid var(--si-color-info);
+  background: var(--workflow-panel);
+}
+
+.source-subscription-toolbar,
+.source-subscription-commit,
+.source-subscription-options,
+.source-subscription-panel__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--si-space-5);
+}
+
+.source-subscription-toolbar {
+  margin-block: var(--si-space-6) var(--si-space-5);
+}
+
+.source-subscription-toolbar p,
+.source-subscription-commit p,
+.source-subscription-options > span,
+.source-subscription-panel__error p {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-sm);
+}
+
+.source-subscription-list {
+  display: grid;
+  gap: var(--si-space-5);
+  list-style: none;
+}
+
+.source-subscription-list > li {
+  padding: var(--si-space-5);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-bg-shell);
+}
+
+.source-subscription-list > li > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--si-space-4);
+}
+
+.source-subscription-list h3 {
+  font-family: var(--si-font-display);
+  font-size: var(--si-text-subheading);
+}
+
+.source-subscription-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--si-space-4);
+  margin-block-start: var(--si-space-5);
+}
+
+.source-subscription-options {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-block-start: var(--si-space-5);
+  padding-block-start: var(--si-space-4);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.source-subscription-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--si-space-2);
+  min-block-size: var(--si-target-touch);
+}
+
+.source-subscription-options button {
+  margin-inline-start: auto;
+}
+
+.source-subscription-commit {
+  margin-block-start: var(--si-space-6);
+  padding-block-start: var(--si-space-5);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-default);
+}
+
 .materials-workspace .record-list {
   max-block-size: 50rem;
   overflow: auto;
@@ -1629,6 +1716,29 @@
 }
 
 @media (max-width: 47.9375rem), (orientation: portrait) {
+  .source-subscription-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .source-subscription-fields .field--wide {
+    grid-column: 1;
+  }
+
+  .source-subscription-toolbar,
+  .source-subscription-commit,
+  .source-subscription-panel__error {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .source-subscription-toolbar .secondary-action,
+  .source-subscription-commit .primary-action,
+  .source-subscription-panel__error .secondary-action,
+  .source-subscription-options button {
+    inline-size: 100%;
+    margin-inline-start: 0;
+  }
+
   .private-document-results {
     padding: var(--si-space-4);
   }

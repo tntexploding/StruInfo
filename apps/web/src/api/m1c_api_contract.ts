@@ -94,6 +94,61 @@ export type ProcessingRunCancelResponse =
       issue: Readonly<{code: string}>;
     }>;
 
+export interface SourceSubscriptionWrite {
+  readonly subscriptionId: string;
+  readonly label: string;
+  readonly enabled: boolean;
+  readonly repositoryUri: string;
+  readonly repositoryRef: string;
+  readonly repositoryPath: string;
+  readonly profile: 'commonmark-v1' | 'ruanyf-weekly-v1';
+  readonly sourceAlias: string;
+  readonly isPrivate: boolean;
+  readonly intervalMinutes: number;
+}
+
+export interface SourceSubscriptionView extends SourceSubscriptionWrite {
+  readonly lastAttemptAt?: string;
+  readonly lastSuccessAt?: string;
+  readonly lastRunId?: string;
+  readonly cursor?: Readonly<{
+    commitSha: string;
+    sourceSha256: string;
+  }>;
+}
+
+export type SourceSubscriptionListResponse =
+  | Readonly<{
+      status: 'ok';
+      revision: number;
+      subscriptions: readonly Readonly<SourceSubscriptionView>[];
+    }>
+  | Readonly<{status: 'failed'; issue: Readonly<{code: string}>}>;
+
+export type SourceSubscriptionReplaceResponse =
+  | Readonly<{
+      status: 'applied' | 'unchanged';
+      revision: number;
+      subscriptions: readonly Readonly<SourceSubscriptionView>[];
+    }>
+  | Readonly<{
+      status: 'rejected' | 'failed';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
+export type SourceSubscriptionRunResponse =
+  | Readonly<{
+      status: 'existing' | 'unchanged' | 'imported';
+      outcome: 'existing' | 'unchanged' | 'imported';
+      runId: string;
+      subscriptionId: string;
+      snapshotId?: string;
+    }>
+  | Readonly<{
+      status: 'not_found' | 'rejected' | 'failed';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
 export type AiTagProposalListResponse =
   | Readonly<{
       status: 'ok';

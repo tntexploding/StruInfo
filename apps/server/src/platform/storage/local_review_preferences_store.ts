@@ -7,10 +7,12 @@ import {
   decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
   decodeReviewExplorationPolicyPreferences,
+  decodeReviewSourceSubscriptionPreferences,
   decodeReviewQuickTags,
   decodeReviewVocabularyPreferences,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
   DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
+  DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
   REVIEW_PREFERENCES_FORMAT,
   REVIEW_PREFERENCES_VERSION,
@@ -20,6 +22,7 @@ import {
   type ReviewAutomaticKeywordPreferences,
   type ReviewExplorationPolicyPreferences,
   type ReviewPreferencesStore,
+  type ReviewSourceSubscriptionPreferences,
   type ReviewVocabularyPreferences,
 } from '../../storage/review_preferences_store.js';
 
@@ -79,6 +82,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     vocabulary: Readonly<ReviewVocabularyPreferences> = DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
     associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>,
     explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>,
+    sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences> = DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
   ): Promise<Readonly<ReviewPreferences>> {
     validateWorkspaceId(workspaceId);
     const decoded = decodeReviewQuickTags(quickTags);
@@ -93,6 +97,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       explorationPolicy === undefined
         ? undefined
         : decodeReviewExplorationPolicyPreferences(explorationPolicy);
+    const decodedSourceSubscriptions =
+      decodeReviewSourceSubscriptionPreferences(sourceSubscriptions);
     if (
       decoded === undefined ||
       decodedAutomaticKeywords === undefined ||
@@ -100,7 +106,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       (associationPolicy !== undefined &&
         decodedAssociationPolicy === undefined) ||
       (explorationPolicy !== undefined &&
-        decodedExplorationPolicy === undefined)
+        decodedExplorationPolicy === undefined) ||
+      decodedSourceSubscriptions === undefined
     ) {
       throw invalid();
     }
@@ -111,6 +118,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       decodedVocabulary,
       decodedAssociationPolicy,
       decodedExplorationPolicy,
+      decodedSourceSubscriptions,
     );
     const bytes = new TextEncoder().encode(
       `${JSON.stringify(preferences, undefined, 2)}\n`,
@@ -171,13 +179,18 @@ function decodePreferences(
     value.explorationPolicy === undefined
       ? DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES
       : decodeReviewExplorationPolicyPreferences(value.explorationPolicy);
+  const sourceSubscriptions =
+    value.sourceSubscriptions === undefined
+      ? DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES
+      : decodeReviewSourceSubscriptionPreferences(value.sourceSubscriptions);
   if (
     value.associationPolicy !== undefined &&
     associationPolicy === undefined
   ) {
     throw invalid();
   }
-  if (explorationPolicy === undefined) throw invalid();
+  if (explorationPolicy === undefined || sourceSubscriptions === undefined)
+    throw invalid();
   return createReviewPreferences(
     workspaceId,
     quickTags,
@@ -185,6 +198,7 @@ function decodePreferences(
     vocabulary,
     associationPolicy,
     explorationPolicy,
+    sourceSubscriptions,
   );
 }
 
