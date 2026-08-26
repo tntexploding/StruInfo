@@ -10,6 +10,7 @@ import type {
 import type {
   CurrentInformationDocumentTags,
   CurrentInformationEntry,
+  InformationDocumentWorkingCopy,
   InformationDocumentTagWrite,
   InformationEntryAssociationOverrideWrite,
   InformationEntryAssociationProjection,
@@ -1302,6 +1303,171 @@ describe('M1cApiService', () => {
           ],
         },
       },
+    });
+  });
+
+  it('saves one private pre-split draft and confirms it through the existing Evidence importer', async () => {
+    const blobs = new MemoryBlobStore();
+    const originalText = '# Original\n\nSynthetic source.\n';
+    const originalIdentity = await blobs.put(
+      new TextEncoder().encode(originalText),
+    );
+    const captures: EvidenceCaptureRepositoryRequest[] = [];
+    let workingCopy: Readonly<InformationDocumentWorkingCopy> | undefined;
+    const snapshot = Object.freeze({
+      workspaceId: WORKSPACE_ID,
+      snapshotId: SNAPSHOT_ID,
+      resourceId: RESOURCE_ID,
+      resourceKind: 'uploaded_file' as const,
+      sourceKey: 'synthetic-private.md',
+      capturedAt: '2040-01-02T03:04:05.000Z',
+      fragmentCount: 1,
+      rawSha256: originalIdentity.digest,
+      canonicalContentSha256: originalIdentity.digest,
+      canonicalizationVersion: 'utf8-lf-v1',
+      isPrivate: true,
+      structures: Object.freeze([
+        Object.freeze({
+          structureId: STRUCTURE_ID,
+          parserName: 'struinfo-commonmark',
+          parserVersion: '1',
+          textNormalizationVersion: 'utf8-lf-v1',
+          structureSha256: 'b'.repeat(64),
+          textBlob: originalIdentity,
+          fragments: Object.freeze([
+            Object.freeze({
+              fragmentId: FRAGMENT_ID,
+              structureId: STRUCTURE_ID,
+              nodeId: NODE_ID,
+              nodeKind: 'section' as const,
+              codePointRange: Object.freeze({
+                start: 0,
+                end: Array.from(originalText).length,
+              }),
+              lineRange: Object.freeze({start: 1, end: 3}),
+              selectedTextSha256: createHash('sha256')
+                .update(originalText)
+                .digest('hex'),
+            }),
+          ]),
+        }),
+      ]),
+    });
+    const service = createService({
+      blobStore: blobs,
+      evidenceRepository: {
+        saveCapture(request) {
+          captures.push(request);
+          return Promise.resolve(Object.freeze({status: 'created'}));
+        },
+      },
+      evidenceReadRepository: {
+        listSnapshots: () => Promise.resolve([snapshot]),
+        loadSnapshot: (_workspaceId, snapshotId) =>
+          Promise.resolve(snapshotId === SNAPSHOT_ID ? snapshot : undefined),
+      },
+      informationDocumentWorkingCopyRepository: {
+        load: () => Promise.resolve(workingCopy),
+        list: () => Promise.resolve([]),
+        save: (write) => {
+          if (write.expectedRevision !== (workingCopy?.revision ?? 0)) {
+            return Promise.resolve(Object.freeze({outcome: 'stale' as const}));
+          }
+          workingCopy = Object.freeze({
+            workspaceId: write.workspaceId,
+            sourceSnapshotId: write.sourceSnapshotId,
+            revision: (workingCopy?.revision ?? 0) + 1,
+            state: 'editing' as const,
+            draftBody: write.draftBody,
+            bodySha256: write.bodySha256,
+          });
+          return Promise.resolve(
+            Object.freeze({outcome: 'applied' as const, value: workingCopy}),
+          );
+        },
+        restore: () => Promise.resolve('not_found'),
+        commit: (write) => {
+          if (
+            workingCopy?.state !== 'editing' ||
+            workingCopy.revision !== write.expectedRevision
+          ) {
+            return Promise.resolve(
+              Object.freeze({
+                outcome: 'stale' as const,
+                ...(workingCopy === undefined ? {} : {value: workingCopy}),
+              }),
+            );
+          }
+          workingCopy = Object.freeze({
+            workspaceId: write.workspaceId,
+            sourceSnapshotId: write.sourceSnapshotId,
+            revision: write.expectedRevision,
+            state: 'committed' as const,
+            bodySha256: write.bodySha256,
+            derivedResourceId: write.derivedResourceId,
+            derivedSnapshotId: write.derivedSnapshotId,
+          });
+          return Promise.resolve(
+            Object.freeze({outcome: 'committed' as const, value: workingCopy}),
+          );
+        },
+      },
+    });
+
+    await expect(
+      service.loadInformationDocumentWorkingCopy(SNAPSHOT_ID, false),
+    ).resolves.toMatchObject({
+      statusCode: 403,
+      body: {issue: {code: 'private_content_requires_opt_in'}},
+    });
+    await expect(
+      service.loadInformationDocumentWorkingCopy(SNAPSHOT_ID, true),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        workingCopy: {
+          state: 'original',
+          revision: 0,
+          currentText: originalText,
+        },
+      },
+    });
+
+    const editedText = '# Edited\n\nSynthetic final source.\n';
+    await expect(
+      service.saveInformationDocumentWorkingCopy(SNAPSHOT_ID, {
+        expectedRevision: 0,
+        includePrivate: true,
+        text: editedText,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'applied',
+        workingCopy: {state: 'editing', revision: 1, currentText: editedText},
+      },
+    });
+    const committed = await service.commitInformationDocumentWorkingCopy(
+      SNAPSHOT_ID,
+      {expectedRevision: 1, includePrivate: true},
+    );
+
+    expect(committed).toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'committed',
+        sourceSnapshotId: SNAPSHOT_ID,
+      },
+    });
+    expect(committed.body).not.toMatchObject({derivedSnapshotId: SNAPSHOT_ID});
+    expect(captures).toHaveLength(1);
+    expect(captures[0]?.capture.resource).toMatchObject({
+      resourceKind: 'manual_text',
+      isPrivate: true,
+    });
+    expect(captures[0]?.capture.snapshot).toMatchObject({
+      mediaType: 'text/markdown; charset=utf-8',
+      capturedAt: snapshot.capturedAt,
     });
   });
 
@@ -2990,6 +3156,13 @@ function createService(
     informationDocumentTagRepository: {
       writeDocumentTags: () => Promise.resolve('stale'),
       loadCurrentDocumentTags: () => Promise.resolve([]),
+    },
+    informationDocumentWorkingCopyRepository: {
+      load: () => Promise.resolve(undefined),
+      list: () => Promise.resolve([]),
+      save: () => Promise.resolve({outcome: 'stale'}),
+      restore: () => Promise.resolve('not_found'),
+      commit: () => Promise.resolve({outcome: 'not_found'}),
     },
     informationEntryAssociationRepository: {
       replaceAssociationProjections: (_workspaceId, projections) =>

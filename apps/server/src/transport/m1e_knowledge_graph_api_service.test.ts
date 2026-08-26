@@ -204,6 +204,13 @@ function dependencies(
       writeDocumentTags: () => Promise.resolve('stale'),
       loadCurrentDocumentTags: () => Promise.resolve([]),
     },
+    informationDocumentWorkingCopyRepository: {
+      load: () => Promise.resolve(undefined),
+      list: () => Promise.resolve([]),
+      save: () => Promise.resolve({outcome: 'stale'}),
+      restore: () => Promise.resolve('not_found'),
+      commit: () => Promise.resolve({outcome: 'not_found'}),
+    },
     informationEntryAssociationRepository: {
       replaceAssociationProjections: () => Promise.resolve(0),
       loadAssociationSnapshot: () =>

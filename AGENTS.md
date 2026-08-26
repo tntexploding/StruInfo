@@ -494,6 +494,17 @@ evidence and retired Entry rows remain intact. Migration `000021` adds
 `is_current_structure`; Entry Bundle v4 carries it and upgrades v1-v3 rows as
 current. AutomationPolicy and AI proposals receive no restructuring authority.
 
+ADR 0034 completes M1H-3A/B with owner-controlled editing before first Entry
+materialization. Each source Snapshot may have one current working copy; saves
+replace that current draft and restore deletes it, without keeping ordinary edit
+history or changing the original Blob/Snapshot/Fragment evidence. Explicit
+confirmation reuses the existing Evidence/CommonMark importer to create one
+deterministic immutable derived Resource/Snapshot, inheriting privacy and then
+continuing through the existing deterministic, manual or AI split paths.
+Migration `000022` adds the ninth Entry table; Entry Bundle v5 carries it and
+upgrades v1-v4 with empty working-copy state. The personal-data package now
+covers 61 workspace tables, while the active workspace remains data-free.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

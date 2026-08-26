@@ -62,6 +62,15 @@ export interface InformationEntryDocumentView {
   readonly entryCount: number;
   readonly annotatedEntryCount: number;
   readonly currentTags?: Readonly<CurrentInformationDocumentTags>;
+  readonly workingCopy?: Readonly<{
+    readonly sourceSnapshotId: string;
+    readonly revision: number;
+    readonly state: 'editing' | 'committed';
+    readonly bodySha256: string;
+    readonly derivedResourceId?: string;
+    readonly derivedSnapshotId?: string;
+  }>;
+  readonly derivedFromSnapshotId?: string;
 }
 
 export interface InformationDocumentAggregationInput {

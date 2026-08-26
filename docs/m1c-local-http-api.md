@@ -1,6 +1,6 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1H-2A/B 活动接口
+- 状态：M1H-3A/B 活动接口
 - 最近核对：2026-08-26
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
@@ -9,7 +9,7 @@
 
 ## 1. 接口边界
 
-本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、确定性/人工首次物化、Document 标签、Entry 联系、正式 Entry 图谱、确定性探索、精确 GitHub Markdown 信源订阅、Provider-neutral ProcessingRun、所有者控制的 Entry 路由执行、默认关闭的确定性标签/联系投影动作、可选 OpenAI Snapshot 拆分/Entry 标签/selected-pair 联系提案与公开 Query 证据综合、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、任意 URL 抓取、通用 AI 执行、自动接受、任意工作流或公共扩展 API。
+本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、拆分前全文工作副本/派生 Snapshot、确定性/人工首次物化、Document 标签、Entry 联系、正式 Entry 图谱、确定性探索、精确 GitHub Markdown 信源订阅、Provider-neutral ProcessingRun、所有者控制的 Entry 路由执行、默认关闭的确定性标签/联系投影动作、可选 OpenAI Snapshot 拆分/Entry 标签/selected-pair 联系提案与公开 Query 证据综合、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、任意 URL 抓取、通用 AI 执行、自动接受、任意工作流或公共扩展 API。
 
 当前工作区由包体外运行配置中的 `STRUIINFO_WORKSPACE_ID` 选择。请求不能提交或切换 `workspaceId`；服务端把固定工作区注入所有领域操作。切换资料集需要停止当前进程、替换外部配置或数据根并重新启动。
 
@@ -24,6 +24,10 @@
 | `GET`  | `/api/v1/workspace`                                                                   | 返回固定工作区身份及实际启用的能力                                                    |
 | `GET`  | `/api/v1/evidence`                                                                    | 列出当前 Evidence Snapshot 摘要                                                       |
 | `GET`  | `/api/v1/evidence/snapshots/:snapshotId`                                              | 返回 Snapshot、完整规范正文、结构和 Fragment；隐私内容要求 `includePrivate=true`      |
+| `GET`  | `/api/v1/evidence/snapshots/:snapshotId/working-copy`                                 | 读取原始全文及唯一当前草稿/已确认派生版本；隐私内容要求当次 opt-in                    |
+| `PUT`  | `/api/v1/evidence/snapshots/:snapshotId/working-copy`                                 | 以期望修订保存唯一拆分前全文草稿；不修改原始 Evidence                                 |
+| `POST` | `/api/v1/evidence/snapshots/:snapshotId/working-copy/restore`                         | 删除未确认草稿并恢复显示原始全文                                                      |
+| `POST` | `/api/v1/evidence/snapshots/:snapshotId/working-copy/commit`                          | 确认草稿并通过既有 Evidence 边界生成不可变派生 Snapshot                               |
 | `GET`  | `/api/v1/preferences/review`                                                          | 读取外部工作区的快捷标签、自动关键词开关/过滤、别名、联系和探索策略                   |
 | `PUT`  | `/api/v1/preferences/review`                                                          | 整体保存当前偏好文件；未提交的版本化策略保持现值                                      |
 | `GET`  | `/api/v1/source-subscriptions`                                                        | 读取外部版本化 GitHub Markdown 单文件订阅、运行状态和成功游标                         |
@@ -95,6 +99,8 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 ### 3.2 拆分
 
+四个 `/evidence/snapshots/:snapshotId/working-copy` 操作只面向尚未拥有 Entry 的来源 Snapshot。GET 返回原始全文、当前全文、状态和 revision；PUT 接受 `{expectedRevision, includePrivate, text}`，只保存一份当前 UTF-8 草稿；restore 删除未确认草稿；commit 只确认已保存且版本匹配的草稿。确认后服务端用确定性身份和既有 CommonMark Evidence 导入创建新的不可变 `manual_text` Resource/Snapshot，继承来源 privacy/publication/capturedAt，并返回派生 Snapshot ID。原始 Blob/Snapshot/Fragment 不变，页面切换到派生 Snapshot 后继续使用以下既有拆分接口。草稿最大 1 MiB，不保存编辑历史；私密来源每次都要求 `includePrivate=true`。
+
 `POST /entries/materialize` 接受 `snapshotId`、可选的 `chunkMode: "split"` 和 `includePrivate`。服务端读取已经导入的 CommonMark 结构，把 section 节点确定性转换为 Entry，并只在 Snapshot 尚无 Entry 时原子提交。
 
 `POST /entries/materialize/manual` 接受：
@@ -109,7 +115,7 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 `POST /entries/restructure/apply` 重新提交同一完整 `groups`、预览返回的 `planSha256`，以及 `acknowledgeAnnotationChanges` / `acknowledgeRelationshipChanges`。服务端在工作区锁事务内重新验证摘要和版本，一次切换当前结构、写 successor/lineage、重算 Document 标签、迁移有资格的人工/AI 图关系并按当次隐私范围重建可替换联系投影。Snapshot/Fragment 不变，旧 Entry 不删除，只退出普通当前读取范围。过期预览、未确认影响、关系冲突或隐私范围不足分别返回 `stale_entry_restructure_preview`、`entry_restructure_annotation_ack_required`、`entry_restructure_relationship_ack_required`、`entry_restructure_relationship_conflict` 或 `entry_restructure_private_relationship_scope_required`；整笔事务失败时不留下部分结构。
 
-四个 `/evidence/snapshots/:snapshotId/split-proposals` 路由提供列表、显式启动、接受和拒绝。start 只允许用户当前选择的公开、尚未物化 Entry 的 Snapshot；Provider 只收到按结构顺序排列的 section Fragment ordinal 与正文，不收到任何本地标识。响应是连续、不重叠、完整覆盖的闭合分组；界面用本地精确 Fragment 审阅。accept 从本地 Fragment 重建标题/正文并调用同一空 Snapshot Entry 物化边界，reject 不创建 Entry。私密 Snapshot 在 Blob 读取和 fetch 前拒绝。当前人工首次物化和后续结构纠错都支持 Fragment 内 Unicode 标量边界；AI 提案仍只处理尚未物化的公开 Snapshot，并以完整 Fragment 分组。来源重排、全文保存修改和可替换拆分规则仍未实现。
+四个 `/evidence/snapshots/:snapshotId/split-proposals` 路由提供列表、显式启动、接受和拒绝。start 只允许用户当前选择的公开、尚未物化 Entry 的 Snapshot；Provider 只收到按结构顺序排列的 section Fragment ordinal 与正文，不收到任何本地标识。响应是连续、不重叠、完整覆盖的闭合分组；界面用本地精确 Fragment 审阅。accept 从本地 Fragment 重建标题/正文并调用同一空 Snapshot Entry 物化边界，reject 不创建 Entry。私密 Snapshot 在 Blob 读取和 fetch 前拒绝。当前人工首次物化和后续结构纠错都支持 Fragment 内 Unicode 标量边界；AI 提案仍只处理尚未物化的公开 Snapshot，并以完整 Fragment 分组。来源重排和可替换拆分规则仍未实现。
 
 ### 3.3 标签
 
@@ -183,7 +189,7 @@ M1H action POST 接受 `{expectedVersion, operation: "apply" | "undo", includePr
 
 ## 5. 个人数据包
 
-export 接口生成当前五分区 Bundle，包含 60 张当前工作区表、被引用的 Blob 字节和含版本化联系、探索、Entry 偏好、AutomationPolicy 与信源串联开关的当前偏好文件。Entry v4 section 在可选精确 Fragment 标量区间之外携带 `is_current_structure`；v1–v3 Entry section 恢复时把既有 Entry 解释为当前结构。Processing v7 section 携带十张既有任务/提案表、两张 typed 自动路由执行表、一张所有者工作队列表和一张确定性动作表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1–v6 保持可读，缺失的新表和偏好字段恢复为空/关闭状态。
+export 接口生成当前五分区 Bundle，包含 61 张当前工作区表、被引用的 Blob 字节和含版本化联系、探索、Entry 偏好、AutomationPolicy 与信源串联开关的当前偏好文件。Entry v5 section 在可选精确 Fragment 标量区间和 `is_current_structure` 之外携带拆分前工作副本；v1–v4 Entry section 恢复时把既有 Entry 解释为当前结构并补空工作副本。Processing v7 section 携带十张既有任务/提案表、两张 typed 自动路由执行表、一张所有者工作队列表和一张确定性动作表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1–v6 保持可读，缺失的新表和偏好字段恢复为空/关闭状态。
 
 Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不进入 Git 或应用安装树。
 

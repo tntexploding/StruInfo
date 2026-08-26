@@ -1,4 +1,5 @@
 import type {
+  InformationDocumentWorkingCopyRepositoryPort,
   InformationDocumentTagRepositoryPort,
   InformationEntryAssociationRepositoryPort,
   InformationEntryEmptySnapshotRepositoryPort,
@@ -23,6 +24,7 @@ import type {M1cDomainTransferRepositoryPort} from '../../../workspace_transfer/
 import {PostgresEvidenceReadRepository} from './postgres_evidence_read_repository.js';
 import {PostgresEvidenceRepository} from './postgres_evidence_repository.js';
 import {PostgresInformationDocumentTagRepository} from './postgres_information_document_tag_repository.js';
+import {PostgresInformationDocumentWorkingCopyRepository} from './postgres_information_document_working_copy_repository.js';
 import {PostgresInformationEntryAssociationRepository} from './postgres_information_entry_association_repository.js';
 import {PostgresInformationEntryRepository} from './postgres_information_entry_repository.js';
 import {PostgresInformationEntryRestructureRepository} from './postgres_information_entry_restructure_repository.js';
@@ -37,6 +39,7 @@ export interface PostgresRepositorySet {
   readonly evidenceRead: EvidenceReadRepositoryPort;
   readonly informationEntries: InformationEntryRepositoryPort &
     InformationEntryEmptySnapshotRepositoryPort;
+  readonly informationDocumentWorkingCopies: InformationDocumentWorkingCopyRepositoryPort;
   readonly informationEntryRestructures: InformationEntryRestructureRepositoryPort;
   readonly informationDocumentTags: InformationDocumentTagRepositoryPort;
   readonly informationEntryAssociations: InformationEntryAssociationRepositoryPort;
@@ -58,6 +61,8 @@ export function createPostgresRepositories(
     evidence: new PostgresEvidenceRepository(pool),
     evidenceRead: new PostgresEvidenceReadRepository(pool),
     informationEntries: new PostgresInformationEntryRepository(pool),
+    informationDocumentWorkingCopies:
+      new PostgresInformationDocumentWorkingCopyRepository(pool),
     informationEntryRestructures:
       new PostgresInformationEntryRestructureRepository(pool),
     informationDocumentTags: new PostgresInformationDocumentTagRepository(pool),

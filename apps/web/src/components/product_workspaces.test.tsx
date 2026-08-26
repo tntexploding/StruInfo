@@ -217,6 +217,40 @@ describe('M1D product workspaces', () => {
             body: {status: 'ok', snapshot: REVIEW_EVIDENCE},
           })
         }
+        onLoadDocumentWorkingCopy={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {
+              status: 'ok',
+              workingCopy: {
+                sourceSnapshotId: REVIEW_EVIDENCE.snapshotId,
+                revision: 0,
+                state: 'original',
+                originalText: '## TinyPNG\n\n一项实用的图片压缩工具。',
+                currentText: '## TinyPNG\n\n一项实用的图片压缩工具。',
+                changed: false,
+              },
+            },
+          })
+        }
+        onSaveDocumentWorkingCopy={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
+        onRestoreDocumentWorkingCopy={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
+        onCommitDocumentWorkingCopy={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
         onListAiSplitProposals={() =>
           Promise.resolve({
             statusCode: 200,

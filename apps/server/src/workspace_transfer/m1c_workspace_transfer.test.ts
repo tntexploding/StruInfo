@@ -66,7 +66,7 @@ describe('M1C workspace transfer', () => {
       M1cDomainTransferRepositoryPort['restoreEmptyWorkspace']
     >((workspaceId, restoredSnapshot) => {
       expect(workspaceId).toBe(WORKSPACE_ID);
-      expect(restoredSnapshot.entries.tables).toHaveLength(8);
+      expect(restoredSnapshot.entries.tables).toHaveLength(9);
       expect(restoredSnapshot.associations.tables).toHaveLength(2);
       return Promise.resolve();
     });

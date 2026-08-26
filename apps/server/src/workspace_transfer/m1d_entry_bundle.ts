@@ -10,8 +10,10 @@ import {
 import type {WorkspaceBundleSectionCodec} from './workspace_bundle.js';
 
 export const M1D_ENTRY_BUNDLE_SECTION_TYPE = 'struinfo.m1d-entry';
-export const M1D_ENTRY_BUNDLE_SECTION_VERSION = 4;
-export const M1D_ENTRY_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v4';
+export const M1D_ENTRY_BUNDLE_SECTION_VERSION = 5;
+export const M1D_ENTRY_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v5';
+export const M1D_ENTRY_VERSION_FOUR_BUNDLE_SECTION_VERSION = 4;
+export const M1D_ENTRY_VERSION_FOUR_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v4';
 export const M1D_ENTRY_VERSION_THREE_BUNDLE_SECTION_VERSION = 3;
 export const M1D_ENTRY_VERSION_THREE_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v3';
 export const M1D_ENTRY_VERSION_TWO_BUNDLE_SECTION_VERSION = 2;
@@ -131,10 +133,25 @@ export const M1D_ENTRY_TABLES: readonly Readonly<M1dEntryTableDescriptor>[] =
       'end_code_point',
       'created_at',
     ]),
+    table('information_document_working_copy', [
+      'workspace_id',
+      'source_snapshot_id',
+      'revision',
+      'state',
+      'draft_body',
+      'body_sha256',
+      'derived_resource_id',
+      'derived_snapshot_id',
+      'created_at',
+      'updated_at',
+      'committed_at',
+    ]),
   ]);
 
+const VERSION_FOUR_ENTRY_TABLES = Object.freeze(M1D_ENTRY_TABLES.slice(0, -1));
+
 const VERSION_THREE_ENTRY_TABLES = Object.freeze(
-  M1D_ENTRY_TABLES.map((descriptor, index) =>
+  VERSION_FOUR_ENTRY_TABLES.map((descriptor, index) =>
     index === 0
       ? table(
           descriptor.name,
@@ -255,6 +272,18 @@ export const M1D_ENTRY_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     decode: normalizeM1dEntrySnapshot,
   });
 
+export const M1D_ENTRY_VERSION_FOUR_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1D_ENTRY_BUNDLE_SECTION_TYPE,
+    version: M1D_ENTRY_VERSION_FOUR_BUNDLE_SECTION_VERSION,
+    encode(value: unknown): unknown {
+      return normalizeVersionFourSnapshot(value);
+    },
+    decode(payload: JsonValue): unknown {
+      return upgradeVersionFourSnapshot(normalizeVersionFourSnapshot(payload));
+    },
+  });
+
 export const M1D_ENTRY_VERSION_THREE_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
   Object.freeze({
     type: M1D_ENTRY_BUNDLE_SECTION_TYPE,
@@ -361,23 +390,51 @@ function normalizeVersionThreeSnapshot(value: unknown): Readonly<{
   }>;
 }
 
-function upgradeVersionThreeSnapshot(
-  snapshot: ReturnType<typeof normalizeVersionThreeSnapshot>,
+function normalizeVersionFourSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1D_ENTRY_VERSION_FOUR_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1dEntryTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1D_ENTRY_VERSION_FOUR_BUNDLE_SCHEMA,
+    VERSION_FOUR_ENTRY_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1D_ENTRY_VERSION_FOUR_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1dEntryTableSnapshot>[];
+  }>;
+}
+
+function upgradeVersionFourSnapshot(
+  snapshot: ReturnType<typeof normalizeVersionFourSnapshot>,
 ): M1dEntrySnapshot {
   return normalizeM1dEntrySnapshot({
     schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
-    tables: snapshot.tables.map((tableSnapshot) =>
-      tableSnapshot.name === 'information_entry'
-        ? {
-            name: tableSnapshot.name,
-            rows: tableSnapshot.rows.map((row) => ({
-              ...row,
-              is_current_structure: true,
-            })),
-          }
-        : tableSnapshot,
-    ),
+    tables: [
+      ...snapshot.tables,
+      {name: 'information_document_working_copy', rows: []},
+    ],
   });
+}
+
+function upgradeVersionThreeSnapshot(
+  snapshot: ReturnType<typeof normalizeVersionThreeSnapshot>,
+): M1dEntrySnapshot {
+  return upgradeVersionFourSnapshot(
+    normalizeVersionFourSnapshot({
+      schemaVersion: M1D_ENTRY_VERSION_FOUR_BUNDLE_SCHEMA,
+      tables: snapshot.tables.map((tableSnapshot) =>
+        tableSnapshot.name === 'information_entry'
+          ? {
+              name: tableSnapshot.name,
+              rows: tableSnapshot.rows.map((row) => ({
+                ...row,
+                is_current_structure: true,
+              })),
+            }
+          : tableSnapshot,
+      ),
+    }),
+  );
 }
 
 function upgradeVersionTwoSnapshot(
@@ -548,6 +605,7 @@ function upgradeLegacySnapshot(
       {name: 'information_document_tag_set', rows: currentTagSets},
       {name: 'information_document_tag_value', rows: currentTagValues},
       {name: 'information_entry_fragment_range', rows: []},
+      {name: 'information_document_working_copy', rows: []},
     ],
   });
 }

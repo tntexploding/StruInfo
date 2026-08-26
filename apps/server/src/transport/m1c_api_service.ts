@@ -15,6 +15,8 @@ import {
   InformationEntryQuerySynthesisServiceError,
   buildInformationEntryKnowledgeGraph,
   buildInformationEntryAssociationProjection,
+  deriveEditedInformationDocumentResourceId,
+  deriveEditedInformationDocumentSnapshotId,
   exploreCurrentInformationEntries,
   deriveInformationDocumentTagRevisionId,
   deriveInformationEntryAssociationOverrideRevisionId,
@@ -38,6 +40,7 @@ import {
   suggestInformationEntryPreferenceRules,
   trialInformationEntryAutomationPolicy,
   trialInformationEntryPreferenceProfile,
+  validateInformationDocumentWorkingCopyText,
   type CurrentInformationEntry,
   type EntryDomainKeyword,
   type EntryTextSearchField,
@@ -53,6 +56,7 @@ import {
   type InformationEntryGraphDirection,
   type InformationEntryPreferenceTrialExpectedEntry,
   type InformationDocumentTagRepositoryPort,
+  type InformationDocumentWorkingCopyRepositoryPort,
   type InformationEntryDocumentView,
   type InformationEntryEmptySnapshotRepositoryPort,
   type InformationEntrySearchRequest,
@@ -139,6 +143,7 @@ export interface M1cApiServiceDependencies {
   readonly evidenceReadRepository: EvidenceReadRepositoryPort;
   readonly informationEntryRepository: InformationEntryEmptySnapshotRepositoryPort;
   readonly informationDocumentTagRepository: InformationDocumentTagRepositoryPort;
+  readonly informationDocumentWorkingCopyRepository: InformationDocumentWorkingCopyRepositoryPort;
   readonly informationEntryAssociationRepository: InformationEntryAssociationRepositoryPort;
   readonly informationEntryRestructureRepository?: InformationEntryRestructureRepositoryPort;
   readonly processingRunRepository: ProcessingRunRepositoryPort;
@@ -183,6 +188,22 @@ export interface M1cApiServicePort {
   loadEvidenceSnapshot(
     snapshotId: string,
     includePrivate?: unknown,
+  ): Promise<M1cHttpResult>;
+  loadInformationDocumentWorkingCopy(
+    snapshotId: string,
+    includePrivate?: unknown,
+  ): Promise<M1cHttpResult>;
+  saveInformationDocumentWorkingCopy(
+    snapshotId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult>;
+  restoreInformationDocumentWorkingCopy(
+    snapshotId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult>;
+  commitInformationDocumentWorkingCopy(
+    snapshotId: string,
+    body: unknown,
   ): Promise<M1cHttpResult>;
   loadReviewPreferences(): Promise<M1cHttpResult>;
   saveReviewPreferences(body: unknown): Promise<M1cHttpResult>;
@@ -543,6 +564,7 @@ export class M1cApiService implements M1cApiServicePort {
         'markdown_import',
         'evidence_read',
         'information_entries',
+        'information_document_working_copy',
         'information_document_tags',
         'information_entry_knowledge_graph',
         'information_entry_association_policy',
@@ -628,6 +650,355 @@ export class M1cApiService implements M1cApiServicePort {
         issue: Object.freeze({code: 'evidence_read_failed'}),
       });
     }
+  }
+
+  public async loadInformationDocumentWorkingCopy(
+    snapshotId: string,
+    includePrivate: unknown = false,
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(snapshotId)) {
+      return inputFailure('path.snapshotId');
+    }
+    if (typeof includePrivate !== 'boolean') {
+      return inputFailure('query.includePrivate');
+    }
+    try {
+      const source = await this.#loadEditableInformationDocument(
+        snapshotId,
+        includePrivate,
+      );
+      if (source.kind === 'response') return source.response;
+      const workingCopy =
+        await this.#dependencies.informationDocumentWorkingCopyRepository.load(
+          this.#dependencies.workspaceId,
+          snapshotId,
+        );
+      if (workingCopy?.state === 'committed') {
+        const derivedSnapshotId = workingCopy.derivedSnapshotId;
+        const derivedResourceId = workingCopy.derivedResourceId;
+        if (
+          derivedSnapshotId === undefined ||
+          derivedResourceId === undefined
+        ) {
+          throw new Error('Committed working copy identity missing.');
+        }
+        const derived =
+          await this.#dependencies.evidenceReadRepository.loadSnapshot(
+            this.#dependencies.workspaceId,
+            derivedSnapshotId,
+          );
+        if (derived === undefined) throw new Error('Derived Snapshot missing.');
+        const materialized = await materializeEvidenceSnapshot(
+          derived,
+          this.#dependencies.blobStore,
+        );
+        return httpResult(200, {
+          status: 'ok',
+          workingCopy: Object.freeze({
+            sourceSnapshotId: snapshotId,
+            revision: workingCopy.revision,
+            state: 'committed',
+            originalText: source.originalText,
+            currentText: informationDocumentText(materialized),
+            bodySha256: workingCopy.bodySha256,
+            changed: true,
+            derivedResourceId,
+            derivedSnapshotId,
+          }),
+        });
+      }
+      const currentText = workingCopy?.draftBody ?? source.originalText;
+      return httpResult(200, {
+        status: 'ok',
+        workingCopy: Object.freeze({
+          sourceSnapshotId: snapshotId,
+          revision: workingCopy?.revision ?? 0,
+          state: workingCopy?.state ?? 'original',
+          originalText: source.originalText,
+          currentText,
+          bodySha256: workingCopy?.bodySha256,
+          changed: currentText !== source.originalText,
+        }),
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async saveInformationDocumentWorkingCopy(
+    snapshotId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const input = decodeInformationDocumentWorkingCopyWrite(body, true);
+    if (!CANONICAL_UUID.test(snapshotId)) {
+      return inputFailure('path.snapshotId');
+    }
+    if (input?.text === undefined) {
+      return inputFailure('body');
+    }
+    const validated = validateInformationDocumentWorkingCopyText(input.text);
+    if (validated === undefined) return inputFailure('body.text');
+    try {
+      const source = await this.#loadEditableInformationDocument(
+        snapshotId,
+        input.includePrivate,
+      );
+      if (source.kind === 'response') return source.response;
+      if (validated.text === source.originalText) {
+        if (input.expectedRevision === 0) {
+          return httpResult(200, {
+            status: 'unchanged',
+            workingCopy: Object.freeze({
+              sourceSnapshotId: snapshotId,
+              revision: 0,
+              state: 'original',
+              originalText: source.originalText,
+              currentText: source.originalText,
+              changed: false,
+            }),
+          });
+        }
+        const restored =
+          await this.#dependencies.informationDocumentWorkingCopyRepository.restore(
+            this.#dependencies.workspaceId,
+            snapshotId,
+            input.expectedRevision,
+          );
+        return restored === 'restored'
+          ? httpResult(200, {
+              status: 'restored',
+              workingCopy: Object.freeze({
+                sourceSnapshotId: snapshotId,
+                revision: 0,
+                state: 'original',
+                originalText: source.originalText,
+                currentText: source.originalText,
+                changed: false,
+              }),
+            })
+          : workingCopyWriteFailure(restored);
+      }
+      const result =
+        await this.#dependencies.informationDocumentWorkingCopyRepository.save({
+          workspaceId: this.#dependencies.workspaceId,
+          sourceSnapshotId: snapshotId,
+          expectedRevision: input.expectedRevision,
+          draftBody: validated.text,
+          bodySha256: validated.sha256,
+        });
+      if (
+        result.outcome === 'stale' ||
+        result.outcome === 'committed' ||
+        result.outcome === 'source_materialized'
+      ) {
+        return workingCopyWriteFailure(result.outcome);
+      }
+      const saved = result.value;
+      if (saved?.state !== 'editing' || saved.draftBody === undefined) {
+        throw new Error('Saved working copy missing.');
+      }
+      return httpResult(200, {
+        status: result.outcome,
+        workingCopy: Object.freeze({
+          sourceSnapshotId: snapshotId,
+          revision: saved.revision,
+          state: 'editing',
+          originalText: source.originalText,
+          currentText: saved.draftBody,
+          bodySha256: saved.bodySha256,
+          changed: true,
+        }),
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async restoreInformationDocumentWorkingCopy(
+    snapshotId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const input = decodeInformationDocumentWorkingCopyWrite(body, false);
+    if (!CANONICAL_UUID.test(snapshotId))
+      return inputFailure('path.snapshotId');
+    if (input === undefined) return inputFailure('body');
+    try {
+      const source = await this.#loadEditableInformationDocument(
+        snapshotId,
+        input.includePrivate,
+      );
+      if (source.kind === 'response') return source.response;
+      const result =
+        await this.#dependencies.informationDocumentWorkingCopyRepository.restore(
+          this.#dependencies.workspaceId,
+          snapshotId,
+          input.expectedRevision,
+        );
+      if (result !== 'restored') return workingCopyWriteFailure(result);
+      return httpResult(200, {
+        status: 'restored',
+        workingCopy: Object.freeze({
+          sourceSnapshotId: snapshotId,
+          revision: 0,
+          state: 'original',
+          originalText: source.originalText,
+          currentText: source.originalText,
+          changed: false,
+        }),
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async commitInformationDocumentWorkingCopy(
+    snapshotId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const input = decodeInformationDocumentWorkingCopyWrite(body, false);
+    if (!CANONICAL_UUID.test(snapshotId))
+      return inputFailure('path.snapshotId');
+    if (input === undefined) return inputFailure('body');
+    try {
+      const source = await this.#loadEditableInformationDocument(
+        snapshotId,
+        input.includePrivate,
+      );
+      if (source.kind === 'response') return source.response;
+      const workingCopy =
+        await this.#dependencies.informationDocumentWorkingCopyRepository.load(
+          this.#dependencies.workspaceId,
+          snapshotId,
+        );
+      if (
+        workingCopy?.state !== 'editing' ||
+        workingCopy.draftBody === undefined
+      ) {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'information_document_working_copy_not_editing',
+          }),
+        });
+      }
+      if (workingCopy.revision !== input.expectedRevision) {
+        return workingCopyWriteFailure('stale');
+      }
+      const derivedResourceId =
+        deriveEditedInformationDocumentResourceId(snapshotId);
+      const derivedSnapshotId = deriveEditedInformationDocumentSnapshotId(
+        snapshotId,
+        workingCopy.bodySha256,
+      );
+      const imported = await importMarkdownEvidence(
+        {
+          blobStore: this.#dependencies.blobStore,
+          evidenceRepository: this.#dependencies.evidenceRepository,
+        },
+        {
+          workspaceId: this.#dependencies.workspaceId,
+          commandIdempotencyKey: `document-edit:${snapshotId}:${workingCopy.revision.toString()}:${workingCopy.bodySha256}`,
+          resource: Object.freeze({
+            workspaceId: this.#dependencies.workspaceId,
+            resourceId: derivedResourceId,
+            resourceKind: 'manual_text',
+            sourceKey: `edited-${snapshotId}`,
+            ...(source.snapshot.isPrivate === true
+              ? {isPrivate: true as const}
+              : {}),
+          }),
+          snapshot: Object.freeze({
+            workspaceId: this.#dependencies.workspaceId,
+            snapshotId: derivedSnapshotId,
+            resourceId: derivedResourceId,
+            capturedAt: source.snapshot.capturedAt,
+            mediaType: 'text/markdown; charset=utf-8',
+            ...(source.snapshot.publication === undefined
+              ? {}
+              : {publication: source.snapshot.publication}),
+          }),
+          gitObservations: Object.freeze([]),
+          profile: 'commonmark-v1',
+          sourceUtf8: new TextEncoder().encode(workingCopy.draftBody),
+        },
+      );
+      if (imported.status !== 'created' && imported.status !== 'existing') {
+        return httpResult(statusForImport(imported.status), imported);
+      }
+      const committed =
+        await this.#dependencies.informationDocumentWorkingCopyRepository.commit(
+          {
+            workspaceId: this.#dependencies.workspaceId,
+            sourceSnapshotId: snapshotId,
+            expectedRevision: input.expectedRevision,
+            bodySha256: workingCopy.bodySha256,
+            derivedResourceId,
+            derivedSnapshotId,
+          },
+        );
+      if (
+        committed.outcome !== 'committed' &&
+        committed.outcome !== 'existing'
+      ) {
+        return workingCopyWriteFailure(committed.outcome);
+      }
+      return httpResult(200, {
+        status: committed.outcome,
+        sourceSnapshotId: snapshotId,
+        derivedResourceId,
+        derivedSnapshotId,
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  async #loadEditableInformationDocument(
+    snapshotId: string,
+    includePrivate: boolean,
+  ): Promise<
+    | Readonly<{kind: 'response'; response: Readonly<M1cHttpResult>}>
+    | Readonly<{
+        kind: 'loaded';
+        snapshot: Readonly<EvidenceSnapshotSummary>;
+        originalText: string;
+      }>
+  > {
+    const snapshot =
+      await this.#dependencies.evidenceReadRepository.loadSnapshot(
+        this.#dependencies.workspaceId,
+        snapshotId,
+      );
+    if (snapshot === undefined) {
+      return Object.freeze({
+        kind: 'response',
+        response: httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'snapshot_not_found'}),
+        }),
+      });
+    }
+    if (snapshot.isPrivate === true && !includePrivate) {
+      return Object.freeze({
+        kind: 'response',
+        response: httpResult(403, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'private_content_requires_opt_in',
+            path: 'body.includePrivate',
+          }),
+        }),
+      });
+    }
+    const materialized = await materializeEvidenceSnapshot(
+      snapshot,
+      this.#dependencies.blobStore,
+    );
+    return Object.freeze({
+      kind: 'loaded',
+      snapshot,
+      originalText: informationDocumentText(materialized),
+    });
   }
 
   public async loadReviewPreferences(): Promise<M1cHttpResult> {
@@ -2526,19 +2897,41 @@ export class M1cApiService implements M1cApiServicePort {
       return inputFailure('query.includePrivate');
     }
     try {
-      const [snapshots, entries, currentTags] = await Promise.all([
-        this.#dependencies.evidenceReadRepository.listSnapshots(
-          this.#dependencies.workspaceId,
+      const [snapshots, entries, currentTags, workingCopies] =
+        await Promise.all([
+          this.#dependencies.evidenceReadRepository.listSnapshots(
+            this.#dependencies.workspaceId,
+          ),
+          this.#dependencies.informationEntryRepository.loadCurrentEntries(
+            this.#dependencies.workspaceId,
+            includePrivate,
+          ),
+          this.#dependencies.informationDocumentTagRepository.loadCurrentDocumentTags(
+            this.#dependencies.workspaceId,
+            includePrivate,
+          ),
+          this.#dependencies.informationDocumentWorkingCopyRepository.list(
+            this.#dependencies.workspaceId,
+          ),
+        ]);
+      const workingCopyBySource = new Map(
+        workingCopies.map((workingCopy) => [
+          workingCopy.sourceSnapshotId,
+          workingCopy,
+        ]),
+      );
+      const sourceByDerived = new Map(
+        workingCopies.flatMap((workingCopy) =>
+          workingCopy.derivedSnapshotId === undefined
+            ? []
+            : [
+                [
+                  workingCopy.derivedSnapshotId,
+                  workingCopy.sourceSnapshotId,
+                ] as const,
+              ],
         ),
-        this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          includePrivate,
-        ),
-        this.#dependencies.informationDocumentTagRepository.loadCurrentDocumentTags(
-          this.#dependencies.workspaceId,
-          includePrivate,
-        ),
-      ]);
+      );
       const documents = snapshots
         .filter((snapshot) => includePrivate || snapshot.isPrivate !== true)
         .map((snapshot): Readonly<InformationEntryDocumentView> => {
@@ -2551,6 +2944,10 @@ export class M1cApiService implements M1cApiServicePort {
           if (tags !== undefined && tags.resourceId !== snapshot.resourceId) {
             throw new Error('Document tag source identity mismatch.');
           }
+          const workingCopy = workingCopyBySource.get(snapshot.snapshotId);
+          const derivedFromSnapshotId = sourceByDerived.get(
+            snapshot.snapshotId,
+          );
           return Object.freeze({
             ...snapshot,
             entryCount: documentEntries.length,
@@ -2561,6 +2958,10 @@ export class M1cApiService implements M1cApiServicePort {
                 entry.value.domains.length > 0,
             ).length,
             ...(tags === undefined ? {} : {currentTags: tags}),
+            ...(workingCopy === undefined ? {} : {workingCopy}),
+            ...(derivedFromSnapshotId === undefined
+              ? {}
+              : {derivedFromSnapshotId}),
           });
         });
       return httpResult(200, {
@@ -4137,6 +4538,67 @@ function decodeDocumentTagWriteBody(
     expectedRevision: body.expectedRevision,
     includePrivate,
     tags: Object.freeze([...body.tags] as string[]),
+  });
+}
+
+function decodeInformationDocumentWorkingCopyWrite(
+  body: unknown,
+  requireText: boolean,
+):
+  | Readonly<{
+      expectedRevision: number;
+      includePrivate: boolean;
+      text?: string;
+    }>
+  | undefined {
+  if (
+    !isRecord(body) ||
+    typeof body.expectedRevision !== 'number' ||
+    !Number.isSafeInteger(body.expectedRevision) ||
+    body.expectedRevision < 0 ||
+    body.expectedRevision >= 2_147_483_647 ||
+    typeof (body.includePrivate ?? false) !== 'boolean' ||
+    (requireText && typeof body.text !== 'string') ||
+    (!requireText && body.text !== undefined)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    expectedRevision: body.expectedRevision,
+    includePrivate: (body.includePrivate ?? false) as boolean,
+    ...(typeof body.text === 'string' ? {text: body.text} : {}),
+  });
+}
+
+function informationDocumentText(
+  snapshot: Readonly<MaterializedEvidenceSnapshot>,
+): string {
+  if (snapshot.structures.length !== 1) {
+    throw new Error('Editable document requires one materialized structure.');
+  }
+  const structure = snapshot.structures[0];
+  if (structure === undefined) {
+    throw new Error('Editable document structure is unavailable.');
+  }
+  const normalizedText = structure.normalizedText;
+  if (typeof normalizedText !== 'string') {
+    throw new Error('Editable document text is unavailable.');
+  }
+  return normalizedText;
+}
+
+function workingCopyWriteFailure(outcome: string): M1cHttpResult {
+  const code =
+    outcome === 'stale'
+      ? 'stale_information_document_working_copy'
+      : outcome === 'committed'
+        ? 'information_document_working_copy_committed'
+        : outcome === 'source_materialized'
+          ? 'split_structure_already_materialized'
+          : 'information_document_working_copy_not_found';
+  return httpResult(outcome === 'not_found' ? 404 : 409, {
+    status: outcome === 'not_found' ? 'not_found' : 'rejected',
+    issue: Object.freeze({code}),
   });
 }
 

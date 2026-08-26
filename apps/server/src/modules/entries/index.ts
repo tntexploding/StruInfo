@@ -22,3 +22,4 @@ export * from './information_entry_preference_profile_contract.js';
 export * from './information_entry_preference_profile.js';
 export * from './information_entry_automation_policy_contract.js';
 export * from './information_entry_automation_policy.js';
+export * from './information_document_working_copy.js';

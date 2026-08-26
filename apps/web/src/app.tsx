@@ -30,6 +30,8 @@ import type {
   InformationEntrySearchResponse,
   InformationEntryQuerySynthesisResponse,
   InformationDocumentTagWriteResponse,
+  InformationDocumentWorkingCopyCommitResponse,
+  InformationDocumentWorkingCopyResponse,
   M1cHttpResponse,
   ProcessingRunCancelResponse,
   ProcessingRunListResponse,
@@ -407,6 +409,48 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       body: unknown,
     ): Promise<M1cHttpResponse<InformationEntryMaterializeResponse>> =>
       apiClient.materializeInformationEntries(body),
+    [apiClient],
+  );
+
+  const loadInformationDocumentWorkingCopy = useCallback(
+    (
+      snapshotId: string,
+      includePrivate: boolean,
+    ): Promise<M1cHttpResponse<InformationDocumentWorkingCopyResponse>> =>
+      apiClient.loadInformationDocumentWorkingCopy(snapshotId, {
+        includePrivate,
+      }),
+    [apiClient],
+  );
+
+  const saveInformationDocumentWorkingCopy = useCallback(
+    (
+      snapshotId: string,
+      body: Readonly<{
+        expectedRevision: number;
+        includePrivate: boolean;
+        text: string;
+      }>,
+    ): Promise<M1cHttpResponse<InformationDocumentWorkingCopyResponse>> =>
+      apiClient.saveInformationDocumentWorkingCopy(snapshotId, body),
+    [apiClient],
+  );
+
+  const restoreInformationDocumentWorkingCopy = useCallback(
+    (
+      snapshotId: string,
+      body: Readonly<{expectedRevision: number; includePrivate: boolean}>,
+    ): Promise<M1cHttpResponse<InformationDocumentWorkingCopyResponse>> =>
+      apiClient.restoreInformationDocumentWorkingCopy(snapshotId, body),
+    [apiClient],
+  );
+
+  const commitInformationDocumentWorkingCopy = useCallback(
+    (
+      snapshotId: string,
+      body: Readonly<{expectedRevision: number; includePrivate: boolean}>,
+    ): Promise<M1cHttpResponse<InformationDocumentWorkingCopyCommitResponse>> =>
+      apiClient.commitInformationDocumentWorkingCopy(snapshotId, body),
     [apiClient],
   );
 
@@ -889,6 +933,10 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onListAiSplitProposals={listAiSplitProposals}
           onListDocuments={listInformationEntryDocuments}
           onLoadEvidenceSnapshot={loadEvidenceSnapshotForSplit}
+          onLoadDocumentWorkingCopy={loadInformationDocumentWorkingCopy}
+          onSaveDocumentWorkingCopy={saveInformationDocumentWorkingCopy}
+          onRestoreDocumentWorkingCopy={restoreInformationDocumentWorkingCopy}
+          onCommitDocumentWorkingCopy={commitInformationDocumentWorkingCopy}
           onMaterialize={materializeInformationEntries}
           onMaterializeManual={materializeManualInformationEntries}
           onPreviewRestructure={previewInformationEntryRestructure}

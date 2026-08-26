@@ -3126,31 +3126,138 @@
 
 /* M1E-4B: local, user-owned ranges before Entry materialization. */
 
-.workflow-stage-workspace[data-workflow-page='split'] > .entry-manual-split {
+.workflow-stage-workspace[data-workflow-page='split']
+  > .information-document-working-copy {
   grid-column: 1 / -1;
   grid-row: 4;
 }
 
+.workflow-stage-workspace[data-workflow-page='split'] > .entry-manual-split {
+  grid-column: 1 / -1;
+  grid-row: 5;
+}
+
 .workflow-stage-workspace[data-workflow-page='split'] > .entry-batch-panel {
   grid-column: 1;
-  grid-row: 5;
+  grid-row: 6;
 }
 
 .workflow-stage-workspace[data-workflow-page='split'] > .entry-command-panel {
   grid-column: 1;
-  grid-row: 6;
+  grid-row: 7;
 }
 
 .workflow-stage-workspace[data-workflow-page='split'] > .entry-workbench,
 .workflow-stage-workspace[data-workflow-page='split'] > .entry-state,
 .workflow-stage-workspace[data-workflow-page='split'] > .entry-loading {
   grid-column: 2;
-  grid-row: 5 / span 2;
+  grid-row: 6 / span 2;
 }
 
 .workflow-stage-workspace[data-workflow-page='split'] > .entry-ai-split {
   grid-column: 1 / -1;
-  grid-row: 7;
+  grid-row: 8;
+}
+
+.information-document-working-copy {
+  display: grid;
+  gap: var(--si-space-5);
+  min-inline-size: 0;
+  padding: var(--si-space-6);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  border-inline-start: var(--si-space-1) solid var(--si-color-warning);
+  background: var(--workflow-panel);
+}
+
+.information-document-working-copy__boundary,
+.information-document-working-copy__state,
+.information-document-working-copy__actions > span {
+  margin: 0;
+  color: var(--si-color-text-muted);
+  line-height: 1.6;
+}
+
+.information-document-working-copy__state {
+  padding: var(--si-space-5);
+  border: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  background: var(--si-color-bg-shell);
+}
+
+.information-document-working-copy__meta,
+.information-document-working-copy__actions,
+.information-document-working-copy__actions > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--si-space-3);
+}
+
+.information-document-working-copy__meta {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-caption);
+}
+
+.information-document-working-copy__meta > span {
+  padding-inline-end: var(--si-space-3);
+  border-inline-end: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.information-document-working-copy__editor {
+  display: grid;
+  gap: var(--si-space-2);
+  color: var(--si-color-text-secondary);
+}
+
+.information-document-working-copy__editor textarea {
+  inline-size: 100%;
+  min-block-size: 22rem;
+  max-block-size: 44rem;
+  padding: var(--si-space-5);
+  resize: vertical;
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-bg-shell);
+  color: var(--si-color-text-primary);
+  font-family: var(--si-font-body);
+  line-height: 1.7;
+}
+
+.information-document-working-copy__editor textarea:focus-visible {
+  outline: 2px solid var(--si-color-signal);
+  outline-offset: 2px;
+}
+
+.information-document-working-copy__editor textarea[readonly] {
+  color: var(--si-color-text-muted);
+}
+
+.information-document-working-copy__original {
+  border: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  background: var(--si-color-bg-shell);
+}
+
+.information-document-working-copy__original summary {
+  min-block-size: var(--si-target-desktop);
+  padding: var(--si-space-3) var(--si-space-4);
+  cursor: pointer;
+  color: var(--si-color-text-secondary);
+}
+
+.information-document-working-copy__original pre {
+  max-block-size: 24rem;
+  margin: 0;
+  overflow: auto;
+  padding: var(--si-space-5);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--si-font-body);
+  line-height: 1.65;
+}
+
+.information-document-working-copy__actions {
+  justify-content: space-between;
+  padding-block-start: var(--si-space-4);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
 }
 
 .entry-manual-split {
@@ -3388,6 +3495,8 @@
 
 @media (max-width: 74.9375rem) {
   .workflow-stage-workspace[data-workflow-page='split'] > .entry-manual-split,
+  .workflow-stage-workspace[data-workflow-page='split']
+    > .information-document-working-copy,
   .workflow-stage-workspace[data-workflow-page='split'] > .entry-batch-panel,
   .workflow-stage-workspace[data-workflow-page='split'] > .entry-command-panel,
   .workflow-stage-workspace[data-workflow-page='split'] > .entry-workbench,
@@ -3410,6 +3519,14 @@
     padding: var(--si-space-5);
   }
 
+  .information-document-working-copy {
+    padding: var(--si-space-5);
+  }
+
+  .information-document-working-copy__editor textarea {
+    min-block-size: 18rem;
+  }
+
   .entry-manual-split__state,
   .entry-manual-split__toolbar,
   .entry-manual-split__commit,
@@ -3418,6 +3535,16 @@
   .entry-manual-split__piece-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .information-document-working-copy__actions,
+  .information-document-working-copy__actions > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .information-document-working-copy__actions button {
+    inline-size: 100%;
   }
 
   .entry-restructure__preview-actions,

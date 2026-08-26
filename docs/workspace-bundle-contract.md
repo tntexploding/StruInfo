@@ -29,7 +29,7 @@ Workspace Bundle v1 现在是“当前已实现的全部工作区个人数据”
 - 所有被 Evidence 引用的原始/规范化 Blob 字节；
 - 当前工作区的快捷标签、自动标签筛选、标签别名、Entry Profile、AutomationPolicy、联系/探索策略和信源订阅偏好。
 
-共计 60 张数据库表。运行配置、数据库 URL、密码、API key、访问令牌、外部工作区路径和其他秘密不属于个人数据包，继续由外部配置/秘密机制提供。
+共计 61 张数据库表。运行配置、数据库 URL、密码、API key、访问令牌、外部工作区路径和其他秘密不属于个人数据包，继续由外部配置/秘密机制提供。
 
 真实包文件只能位于用户选择的外部数据根 `exports/`，不得进入 Git、源码目录、安装包、容器镜像或测试 fixture。tracked 测试只能使用合成且无个人价值的数据。
 
@@ -59,7 +59,7 @@ Workspace Bundle v1 现在是“当前已实现的全部工作区个人数据”
 
 每个 codec 都使用闭合 schema，显式列出允许的字段并拒绝未知表、未知列、重复身份、跨工作区引用和错误 scalar。通用信封不会把任意 JSON 直接当作领域事实。
 
-Entry v4、Association v3 和 Processing v7 反映迁移 `000011` 至 `000021` 之后的当前成品态。Entry v3 为人工物化增加可选半开 Unicode 标量区间；没有区间行的输入仍表示完整 Fragment。Entry v4 在相同八张表内为每个 Entry 增加 `is_current_structure`：重组退出当前结构的旧行及 lineage 仍可完整导出，普通产品读取只使用当前行。Association v3 在当前 override 上增加关系来源、名称和方向；Entry 的 `current_revision` / `current_revision_id` 只作为乐观并发版本令牌，不再指向一张普通编辑历史表。Processing v7 在 provider-neutral 任务/提案、闭合 AI 拆分/标签/关系提案载荷、exact-policy/Profile/Entry-bound 自动路由运行/claim 和所有者工作队列之上，增加 typed 确定性动作状态；它只保存权力、规则来源、状态、修订与计数，不保存 Entry 正文、API key、提示全文、原始模型响应或任意 JSON。不可变 Snapshot、Fragment 以及正式 Knowledge 修订历史仍由 M1C domain 分区原样保留。
+Entry v5、Association v3 和 Processing v7 反映迁移 `000011` 至 `000022` 之后的当前成品态。Entry v3 为人工物化增加可选半开 Unicode 标量区间；没有区间行的输入仍表示完整 Fragment。Entry v4 在相同八张表内为每个 Entry 增加 `is_current_structure`：重组退出当前结构的旧行及 lineage 仍可完整导出，普通产品读取只使用当前行。Entry v5 增加第九张 `information_document_working_copy` 表，携带拆分前唯一当前草稿或已确认派生 Snapshot 的关系；v1–v4 恢复时该表为空。Association v3 在当前 override 上增加关系来源、名称和方向；Entry 的 `current_revision` / `current_revision_id` 只作为乐观并发版本令牌，不再指向一张普通编辑历史表。Processing v7 在 provider-neutral 任务/提案、闭合 AI 拆分/标签/关系提案载荷、exact-policy/Profile/Entry-bound 自动路由运行/claim 和所有者工作队列之上，增加 typed 确定性动作状态；它只保存权力、规则来源、状态、修订与计数，不保存 Entry 正文、API key、提示全文、原始模型响应或任意 JSON。不可变 Snapshot、Fragment 以及正式 Knowledge 修订历史仍由 M1C domain 分区原样保留。
 
 ## 4. 规范编码与隐私
 
@@ -79,7 +79,7 @@ Writer 输出确定性 UTF-8 JSON：
 
 一次导出按以下顺序执行：
 
-1. 在 PostgreSQL `REPEATABLE READ READ ONLY` 快照中读取当前 60 张工作区表；
+1. 在 PostgreSQL `REPEATABLE READ READ ONLY` 快照中读取当前 61 张工作区表；
 2. 规范化四个数据库分区并核对同一 `workspaceId`；
 3. 从 Evidence 行导出精确 Blob 引用清单，并从外部 Blob store 读取每个引用的字节；
 4. 从外部 `preferences/` 读取当前快捷标签、自动筛选和别名；
