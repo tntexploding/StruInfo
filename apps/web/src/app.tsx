@@ -25,6 +25,8 @@ import type {
   InformationEntryPreferenceSuggestionResponse,
   InformationEntryPreferenceTrialResponse,
   InformationEntryRevisionResponse,
+  InformationEntryRestructureApplyResponse,
+  InformationEntryRestructurePreviewResponse,
   InformationEntrySearchResponse,
   InformationEntryQuerySynthesisResponse,
   InformationDocumentTagWriteResponse,
@@ -413,6 +415,20 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       body: unknown,
     ): Promise<M1cHttpResponse<InformationEntryMaterializeResponse>> =>
       apiClient.materializeManualInformationEntries(body),
+    [apiClient],
+  );
+  const previewInformationEntryRestructure = useCallback(
+    (
+      body: unknown,
+    ): Promise<M1cHttpResponse<InformationEntryRestructurePreviewResponse>> =>
+      apiClient.previewInformationEntryRestructure(body),
+    [apiClient],
+  );
+  const applyInformationEntryRestructure = useCallback(
+    (
+      body: unknown,
+    ): Promise<M1cHttpResponse<InformationEntryRestructureApplyResponse>> =>
+      apiClient.applyInformationEntryRestructure(body),
     [apiClient],
   );
   const reviseInformationEntry = useCallback(
@@ -875,6 +891,8 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onLoadEvidenceSnapshot={loadEvidenceSnapshotForSplit}
           onMaterialize={materializeInformationEntries}
           onMaterializeManual={materializeManualInformationEntries}
+          onPreviewRestructure={previewInformationEntryRestructure}
+          onApplyRestructure={applyInformationEntryRestructure}
           onRejectAiSplitProposal={rejectAiSplitProposal}
           onSearch={searchInformationEntries}
           onStartAiSplitProposal={startAiSplitProposal}

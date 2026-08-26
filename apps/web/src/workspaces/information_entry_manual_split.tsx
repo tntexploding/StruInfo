@@ -194,6 +194,8 @@ export function InformationEntryManualSplit({
     }
   }
 
+  if (alreadyMaterialized) return null;
+
   return (
     <section
       className="entry-manual-split"
@@ -217,10 +219,6 @@ export function InformationEntryManualSplit({
       {snapshotId === '' ? (
         <p className="entry-manual-split__state">
           请先从上方选择一份来源文档。
-        </p>
-      ) : alreadyMaterialized ? (
-        <p className="entry-manual-split__state">
-          该文档已有 Entry。为避免覆盖现有标签与联系，本页不会重新物化结构。
         </p>
       ) : isPrivate && !includePrivate ? (
         <p className="entry-manual-split__state">

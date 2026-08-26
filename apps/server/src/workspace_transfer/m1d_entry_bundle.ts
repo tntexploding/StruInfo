@@ -10,8 +10,10 @@ import {
 import type {WorkspaceBundleSectionCodec} from './workspace_bundle.js';
 
 export const M1D_ENTRY_BUNDLE_SECTION_TYPE = 'struinfo.m1d-entry';
-export const M1D_ENTRY_BUNDLE_SECTION_VERSION = 3;
-export const M1D_ENTRY_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v3';
+export const M1D_ENTRY_BUNDLE_SECTION_VERSION = 4;
+export const M1D_ENTRY_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v4';
+export const M1D_ENTRY_VERSION_THREE_BUNDLE_SECTION_VERSION = 3;
+export const M1D_ENTRY_VERSION_THREE_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v3';
 export const M1D_ENTRY_VERSION_TWO_BUNDLE_SECTION_VERSION = 2;
 export const M1D_ENTRY_VERSION_TWO_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v2';
 export const M1D_ENTRY_LEGACY_BUNDLE_SECTION_VERSION = 1;
@@ -59,6 +61,7 @@ export const M1D_ENTRY_TABLES: readonly Readonly<M1dEntryTableDescriptor>[] =
       'type_custom_name',
       'usefulness_score',
       'interest_score',
+      'is_current_structure',
       'created_at',
       'updated_at',
     ]),
@@ -130,7 +133,22 @@ export const M1D_ENTRY_TABLES: readonly Readonly<M1dEntryTableDescriptor>[] =
     ]),
   ]);
 
-const VERSION_TWO_ENTRY_TABLES = Object.freeze(M1D_ENTRY_TABLES.slice(0, -1));
+const VERSION_THREE_ENTRY_TABLES = Object.freeze(
+  M1D_ENTRY_TABLES.map((descriptor, index) =>
+    index === 0
+      ? table(
+          descriptor.name,
+          descriptor.columns.filter(
+            (column) => column !== 'is_current_structure',
+          ),
+        )
+      : descriptor,
+  ),
+);
+
+const VERSION_TWO_ENTRY_TABLES = Object.freeze(
+  VERSION_THREE_ENTRY_TABLES.slice(0, -1),
+);
 
 const LEGACY_ENTRY_TABLES: readonly Readonly<M1dEntryTableDescriptor>[] =
   Object.freeze([
@@ -237,6 +255,20 @@ export const M1D_ENTRY_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     decode: normalizeM1dEntrySnapshot,
   });
 
+export const M1D_ENTRY_VERSION_THREE_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1D_ENTRY_BUNDLE_SECTION_TYPE,
+    version: M1D_ENTRY_VERSION_THREE_BUNDLE_SECTION_VERSION,
+    encode(value: unknown): unknown {
+      return normalizeVersionThreeSnapshot(value);
+    },
+    decode(payload: JsonValue): unknown {
+      return upgradeVersionThreeSnapshot(
+        normalizeVersionThreeSnapshot(payload),
+      );
+    },
+  });
+
 export const M1D_ENTRY_VERSION_TWO_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
   Object.freeze({
     type: M1D_ENTRY_BUNDLE_SECTION_TYPE,
@@ -315,16 +347,51 @@ function normalizeVersionTwoSnapshot(value: unknown): Readonly<{
   }>;
 }
 
-function upgradeVersionTwoSnapshot(
-  snapshot: ReturnType<typeof normalizeVersionTwoSnapshot>,
+function normalizeVersionThreeSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1D_ENTRY_VERSION_THREE_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1dEntryTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1D_ENTRY_VERSION_THREE_BUNDLE_SCHEMA,
+    VERSION_THREE_ENTRY_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1D_ENTRY_VERSION_THREE_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1dEntryTableSnapshot>[];
+  }>;
+}
+
+function upgradeVersionThreeSnapshot(
+  snapshot: ReturnType<typeof normalizeVersionThreeSnapshot>,
 ): M1dEntrySnapshot {
   return normalizeM1dEntrySnapshot({
     schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
-    tables: [
-      ...snapshot.tables,
-      {name: 'information_entry_fragment_range', rows: []},
-    ],
+    tables: snapshot.tables.map((tableSnapshot) =>
+      tableSnapshot.name === 'information_entry'
+        ? {
+            name: tableSnapshot.name,
+            rows: tableSnapshot.rows.map((row) => ({
+              ...row,
+              is_current_structure: true,
+            })),
+          }
+        : tableSnapshot,
+    ),
   });
+}
+
+function upgradeVersionTwoSnapshot(
+  snapshot: ReturnType<typeof normalizeVersionTwoSnapshot>,
+): M1dEntrySnapshot {
+  return upgradeVersionThreeSnapshot(
+    normalizeVersionThreeSnapshot({
+      schemaVersion: M1D_ENTRY_VERSION_THREE_BUNDLE_SCHEMA,
+      tables: [
+        ...snapshot.tables,
+        {name: 'information_entry_fragment_range', rows: []},
+      ],
+    }),
+  );
 }
 
 function normalizeLegacySnapshot(value: unknown): Readonly<{
@@ -380,6 +447,7 @@ function upgradeLegacySnapshot(
       created_at: requiredPrimitive(entry, 'created_at'),
       usefulness_score: null,
       interest_score: null,
+      is_current_structure: true,
       updated_at: requiredPrimitive(revision, 'created_at'),
     });
   });

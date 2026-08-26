@@ -13,7 +13,9 @@
   [ADR 0017](adr/0017-manual-within-fragment-entry-boundaries.md)、
   [ADR 0027](adr/0027-recoverable-entry-automation-routing-execution.md)、
   [ADR 0030](adr/0030-entry-automation-owner-work-queue.md)、
-  [ADR 0031](adr/0031-subscription-deterministic-entry-routing-chain.md)
+  [ADR 0031](adr/0031-subscription-deterministic-entry-routing-chain.md)、
+  [ADR 0032](adr/0032-deterministic-entry-advance-actions.md)、
+  [ADR 0033](adr/0033-post-materialization-entry-restructuring.md)
 - 信封 Schema：[`workspace-bundle.v1.schema.json`](../packages/contracts/json-schema/workspace-bundle.v1.schema.json)
 
 ## 1. 目标
@@ -47,17 +49,17 @@ Workspace Bundle v1 现在是“当前已实现的全部工作区个人数据”
 
 ## 3. 当前分区
 
-| Type                       | Version | Payload schema                | 范围                                                                             |
-| -------------------------- | ------: | ----------------------------- | -------------------------------------------------------------------------------- |
-| `struinfo.m1c-domain`      |       1 | `struinfo.m1c-domain.v1`      | Evidence、Curation、正式 Knowledge 与命令历史，36 表                             |
-| `struinfo.m1d-entry`       |       3 | `struinfo.m1d-entry.v3`       | 当前 Entry、Fragment 输入/可选精确区间、三维标签、lineage 与 Document 标签，8 表 |
-| `struinfo.m1d-association` |       3 | `struinfo.m1d-association.v3` | 可重建联系投影、当前人工控制与正式图谱关系元数据，2 表                           |
-| `struinfo.m1e-processing`  |       7 | `struinfo.m1e-processing.v7`  | 处理任务、提案载荷、typed 自动路由、所有者队列与确定性动作，14 表                |
-| `struinfo.personal-data`   |       1 | `struinfo.personal-data.v1`   | 引用 Blob 的完整字节与当前审核/标签个人偏好                                      |
+| Type                       | Version | Payload schema                | 范围                                                                                     |
+| -------------------------- | ------: | ----------------------------- | ---------------------------------------------------------------------------------------- |
+| `struinfo.m1c-domain`      |       1 | `struinfo.m1c-domain.v1`      | Evidence、Curation、正式 Knowledge 与命令历史，36 表                                     |
+| `struinfo.m1d-entry`       |       4 | `struinfo.m1d-entry.v4`       | Entry 当前结构事实、Fragment 输入/可选精确区间、三维标签、lineage 与 Document 标签，8 表 |
+| `struinfo.m1d-association` |       3 | `struinfo.m1d-association.v3` | 可重建联系投影、当前人工控制与正式图谱关系元数据，2 表                                   |
+| `struinfo.m1e-processing`  |       7 | `struinfo.m1e-processing.v7`  | 处理任务、提案载荷、typed 自动路由、所有者队列与确定性动作，14 表                        |
+| `struinfo.personal-data`   |       1 | `struinfo.personal-data.v1`   | 引用 Blob 的完整字节与当前审核/标签个人偏好                                              |
 
 每个 codec 都使用闭合 schema，显式列出允许的字段并拒绝未知表、未知列、重复身份、跨工作区引用和错误 scalar。通用信封不会把任意 JSON 直接当作领域事实。
 
-Entry v3、Association v3 和 Processing v7 反映迁移 `000011` 至 `000020` 之后的当前成品态。Entry v3 为人工首次物化增加可选半开 Unicode 标量区间；没有区间行的输入仍表示完整 Fragment。Association v3 在当前 override 上增加关系来源、名称和方向；Entry 的 `current_revision` / `current_revision_id` 只作为乐观并发版本令牌，不再指向一张普通编辑历史表。Processing v7 在 provider-neutral 任务/提案、闭合 AI 拆分/标签/关系提案载荷、exact-policy/Profile/Entry-bound 自动路由运行/claim 和所有者工作队列之上，增加 typed 确定性动作状态；它只保存权力、规则来源、状态、修订与计数，不保存 Entry 正文、API key、提示全文、原始模型响应或任意 JSON。不可变 Snapshot、Fragment 以及正式 Knowledge 修订历史仍由 M1C domain 分区原样保留。
+Entry v4、Association v3 和 Processing v7 反映迁移 `000011` 至 `000021` 之后的当前成品态。Entry v3 为人工物化增加可选半开 Unicode 标量区间；没有区间行的输入仍表示完整 Fragment。Entry v4 在相同八张表内为每个 Entry 增加 `is_current_structure`：重组退出当前结构的旧行及 lineage 仍可完整导出，普通产品读取只使用当前行。Association v3 在当前 override 上增加关系来源、名称和方向；Entry 的 `current_revision` / `current_revision_id` 只作为乐观并发版本令牌，不再指向一张普通编辑历史表。Processing v7 在 provider-neutral 任务/提案、闭合 AI 拆分/标签/关系提案载荷、exact-policy/Profile/Entry-bound 自动路由运行/claim 和所有者工作队列之上，增加 typed 确定性动作状态；它只保存权力、规则来源、状态、修订与计数，不保存 Entry 正文、API key、提示全文、原始模型响应或任意 JSON。不可变 Snapshot、Fragment 以及正式 Knowledge 修订历史仍由 M1C domain 分区原样保留。
 
 ## 4. 规范编码与隐私
 
@@ -103,7 +105,7 @@ Reader 必须先完整验证信封、全部分区、Blob 字节、SHA-256、工�
 Reader 继续接受历史 Bundle：
 
 - 只含 `struinfo.m1c-domain.v1`：Entry 与联系状态按空处理；
-- 带 `struinfo.m1d-entry.v1`：只保留旧指针选中的当前 Entry/Document 标签值，转换为 v3，并补空的 Fragment 区间表；`struinfo.m1d-entry.v2` 原样保留七张当前态表并同样补空区间表；
+- 带 `struinfo.m1d-entry.v1`：只保留旧指针选中的当前 Entry/Document 标签值，补空的 Fragment 区间表并转换为 v4；`struinfo.m1d-entry.v2` 原样保留七张当前态表并补空区间表；`struinfo.m1d-entry.v3` 保留精确区间；三种旧版本都把既有 Entry 补为 `is_current_structure=true`；
 - 带 `struinfo.m1d-association.v1` 或 `.v2`：保留当前人工控制并转换为 v3；缺失的图谱关系元数据为 `null`；
 - 缺少 `struinfo.m1e-processing`：处理任务、提案和自动路由状态按空处理；Processing v1 保留任务、提案信封和 Fragment 输入，v2 增加 AI 标签提案，v3 增加 selected-pair 联系提案，v4 增加 AI split 提案，v5 增加自动路由运行与 claim，v6 增加所有者工作队列；读取 v1–v6 时缺失的后续表按空处理并转换为 v7；
 - 缺少 `struinfo.personal-data.v1`：仍要求外部 Blob store 已存在全部引用字节，且不覆盖当前个人偏好。

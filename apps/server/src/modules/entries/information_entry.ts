@@ -22,6 +22,8 @@ export const ENTRY_SPLIT_RULE_VERSION = 'struinfo.entry-split.section.v1';
 export const AI_ENTRY_SPLIT_RULE_VERSION = 'struinfo.entry-split.ai-group.v1';
 export const MANUAL_ENTRY_SPLIT_RULE_VERSION =
   'struinfo.entry-split.manual-range.v1';
+export const MANUAL_ENTRY_RESTRUCTURE_RULE_VERSION =
+  'struinfo.entry-restructure.manual-range.v1';
 export const ENTRY_MANUAL_ORIGIN_VERSION = 'manual-entry-editor.v1';
 export const MAXIMUM_ENTRY_BODY_CODE_POINTS = 200_000;
 export const MAXIMUM_CONTENT_KEYWORDS = 32;

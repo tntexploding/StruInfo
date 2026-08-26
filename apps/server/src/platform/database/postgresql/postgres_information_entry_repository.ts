@@ -57,7 +57,8 @@ const CURRENT_ENTRY_SELECT = sql(
 
 export const READ_CURRENT_INFORMATION_ENTRIES_SQL = sql(
   CURRENT_ENTRY_SELECT,
-  'WHERE e.workspace_id = $1 AND ($2::boolean OR NOT e.is_private)',
+  'WHERE e.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
   'ORDER BY snapshot.captured_at DESC, e.snapshot_id, e.document_order, e.entry_id',
 );
 
@@ -70,7 +71,8 @@ export const READ_CURRENT_INFORMATION_ENTRY_INPUTS_SQL = sql(
   ' AND r.entry_id = i.entry_id AND r.input_ordinal = i.input_ordinal',
   'JOIN struinfo.information_entry AS e',
   '  ON e.workspace_id = i.workspace_id AND e.entry_id = i.entry_id',
-  'WHERE i.workspace_id = $1 AND ($2::boolean OR NOT e.is_private)',
+  'WHERE i.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
   'ORDER BY i.entry_id, i.input_ordinal',
 );
 
@@ -80,7 +82,8 @@ export const READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_SQL = sql(
   'FROM struinfo.information_entry_content_keyword AS k',
   'JOIN struinfo.information_entry AS e',
   '  ON e.workspace_id = k.workspace_id AND e.entry_id = k.entry_id',
-  'WHERE k.workspace_id = $1 AND ($2::boolean OR NOT e.is_private)',
+  'WHERE k.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
   'ORDER BY k.entry_id, k.keyword_ordinal',
 );
 
@@ -90,20 +93,21 @@ export const READ_CURRENT_INFORMATION_ENTRY_DOMAINS_SQL = sql(
   'FROM struinfo.information_entry_domain_keyword AS d',
   'JOIN struinfo.information_entry AS e',
   '  ON e.workspace_id = d.workspace_id AND e.entry_id = d.entry_id',
-  'WHERE d.workspace_id = $1 AND ($2::boolean OR NOT e.is_private)',
+  'WHERE d.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
   'ORDER BY d.entry_id, d.domain_ordinal',
 );
 
 const LOCK_CURRENT_ENTRY_SQL = sql(
   CURRENT_ENTRY_SELECT,
-  'WHERE e.workspace_id = $1 AND e.entry_id = $2',
+  'WHERE e.workspace_id = $1 AND e.entry_id = $2 AND e.is_current_structure',
   'FOR UPDATE OF e',
 );
 
 const READ_SNAPSHOT_ENTRY_IDS_SQL = sql(
   'SELECT entry_id::text',
   'FROM struinfo.information_entry',
-  'WHERE workspace_id = $1 AND snapshot_id = $2',
+  'WHERE workspace_id = $1 AND snapshot_id = $2 AND is_current_structure',
   'ORDER BY entry_id',
 );
 
@@ -159,6 +163,7 @@ const UPDATE_ENTRY_SQL = sql(
   '  usefulness_score = $14, interest_score = $15,',
   '  updated_at = CURRENT_TIMESTAMP',
   'WHERE workspace_id = $1 AND entry_id = $2 AND current_revision = $16',
+  '  AND is_current_structure',
 );
 
 const DELETE_FRAGMENT_INPUTS_SQL =
@@ -339,7 +344,7 @@ export class PostgresInformationEntryRepository implements InformationEntryRepos
           entryId,
           nextRevision,
           canonicalUuid(write.revisionId),
-          ...valueParameters(write.value),
+          ...informationEntryValueParameters(write.value),
           currentRevision,
         ]);
         expectOneAffected(updated.rowCount);
@@ -386,7 +391,7 @@ export class PostgresInformationEntryRepository implements InformationEntryRepos
   }
 }
 
-async function insertNewEntry(
+export async function insertNewEntry(
   client: PostgresClientBoundary,
   entry: Readonly<InformationEntryMaterializeRow>,
 ): Promise<void> {
@@ -396,7 +401,7 @@ async function insertNewEntry(
     entry.resourceId,
     entry.snapshotId,
     entry.revisionId,
-    ...valueParameters(entry.value),
+    ...informationEntryValueParameters(entry.value),
   ]);
   expectOneAffected(inserted.rowCount);
   await insertEntryChildren(
@@ -407,7 +412,7 @@ async function insertNewEntry(
   );
 }
 
-function valueParameters(
+export function informationEntryValueParameters(
   value: Readonly<InformationEntryRevisionValue>,
 ): readonly unknown[] {
   return [
@@ -425,7 +430,7 @@ function valueParameters(
   ];
 }
 
-async function replaceEntryChildren(
+export async function replaceEntryChildren(
   client: PostgresClientBoundary,
   workspaceId: string,
   entryId: string,

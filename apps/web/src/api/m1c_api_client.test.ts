@@ -346,6 +346,18 @@ describe('M1cApiClient', () => {
         },
       ],
     });
+    await client.previewInformationEntryRestructure({
+      snapshotId: 'synthetic-snapshot',
+      includePrivate: false,
+    });
+    await client.applyInformationEntryRestructure({
+      snapshotId: 'synthetic-snapshot',
+      includePrivate: false,
+      groups: [],
+      planSha256: 'a'.repeat(64),
+      acknowledgeAnnotationChanges: true,
+      acknowledgeRelationshipChanges: true,
+    });
     await client.reviseInformationEntry('synthetic/id', {
       expectedRevision: 1,
     });
@@ -466,6 +478,26 @@ describe('M1cApiClient', () => {
               fragmentIds: ['synthetic-fragment'],
             },
           ],
+        }),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/restructure/preview',
+        method: 'POST',
+        body: JSON.stringify({
+          snapshotId: 'synthetic-snapshot',
+          includePrivate: false,
+        }),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/restructure/apply',
+        method: 'POST',
+        body: JSON.stringify({
+          snapshotId: 'synthetic-snapshot',
+          includePrivate: false,
+          groups: [],
+          planSha256: 'a'.repeat(64),
+          acknowledgeAnnotationChanges: true,
+          acknowledgeRelationshipChanges: true,
         }),
       },
       {

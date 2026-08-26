@@ -89,6 +89,7 @@ const READ_CURRENT_ENTRY_REVISIONS_SQL = sql(
   'SELECT entry_id::text, current_revision, current_revision_id::text',
   'FROM struinfo.information_entry',
   'WHERE workspace_id = $1 AND entry_id = ANY($2::uuid[])',
+  '  AND is_current_structure',
   'ORDER BY entry_id',
 );
 
@@ -268,6 +269,7 @@ const LOCK_AUTOMATION_ACTION_ENTRY_SQL = sql(
   '  AND entry.entry_id = claim.entry_id',
   'WHERE action.workspace_id = $1 AND action.run_id = $2',
   '  AND action.claim_ordinal = $3',
+  '  AND entry.is_current_structure',
   'FOR UPDATE OF action, entry',
 );
 
@@ -305,6 +307,7 @@ const UPDATE_AUTOMATION_ENTRY_REVISION_SQL = sql(
   '  AND entry.entry_id = claim.entry_id',
   '  AND entry.current_revision = $6',
   '  AND entry.current_revision_id = $7',
+  '  AND entry.is_current_structure',
 );
 
 const MARK_AUTOMATION_TAGS_APPLIED_SQL = sql(

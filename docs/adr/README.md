@@ -129,3 +129,12 @@ chains a changed exact GitHub Markdown source through the existing Evidence
 import, deterministic empty-Snapshot Entry materialization and M1G-4 execution.
 The successful cursor advances only after the whole chain succeeds; no AI or
 automatic content-edit authority is implied.
+
+ADR 0032 completes M1H-1A/B with explicit default-off deterministic Entry tag
+application and replaceable Association projection rebuild for completed
+advance candidates, including typed recovery and exact-origin compensation.
+
+ADR 0033 completes M1H-2A/B with a preview-first, owner-confirmed replacement
+of an already materialized Entry partition. Snapshot/Fragment evidence remains
+immutable; retired Entries remain lineage endpoints while current reads use one
+atomic successor structure with annotation and relationship impact controls.

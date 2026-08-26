@@ -49,6 +49,7 @@ export const READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL = sql(
   ' AND high_entry.current_revision = projection.entry_high_revision',
   ' AND high_entry.current_revision_id = projection.entry_high_revision_id',
   'WHERE projection.workspace_id = $1',
+  '  AND low_entry.is_current_structure AND high_entry.is_current_structure',
   '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
   'ORDER BY projection.entry_low_id, projection.entry_high_id',
 );
@@ -67,6 +68,7 @@ export const READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL = sql(
   '  ON high_entry.workspace_id = override.workspace_id',
   ' AND high_entry.entry_id = override.entry_high_id',
   'WHERE override.workspace_id = $1',
+  '  AND low_entry.is_current_structure AND high_entry.is_current_structure',
   '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
   'ORDER BY override.entry_low_id, override.entry_high_id',
 );
@@ -83,7 +85,7 @@ export const DELETE_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL = sql(
   '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
 );
 
-const INSERT_INFORMATION_ENTRY_ASSOCIATION_PROJECTION_SQL = sql(
+export const INSERT_INFORMATION_ENTRY_ASSOCIATION_PROJECTION_SQL = sql(
   'INSERT INTO struinfo.information_entry_association_projection (',
   '  workspace_id, entry_low_id, entry_high_id,',
   '  entry_low_revision, entry_low_revision_id,',
@@ -99,6 +101,7 @@ const READ_ASSOCIATION_ENDPOINTS_SQL = sql(
   'SELECT entry_id::text, is_private',
   'FROM struinfo.information_entry',
   'WHERE workspace_id = $1 AND entry_id IN ($2, $3)',
+  '  AND is_current_structure',
   'ORDER BY entry_id',
 );
 
@@ -157,7 +160,7 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
           }
           const result = await client.query<Row>(
             INSERT_INFORMATION_ENTRY_ASSOCIATION_PROJECTION_SQL,
-            projectionParameters(projection),
+            informationEntryAssociationProjectionParameters(projection),
           );
           expectOneAffected(result.rowCount);
         }
@@ -282,7 +285,7 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
   }
 }
 
-function projectionParameters(
+export function informationEntryAssociationProjectionParameters(
   projection: Readonly<InformationEntryAssociationProjection>,
 ): readonly unknown[] {
   const basis = projection.candidateBasis.map((value) =>

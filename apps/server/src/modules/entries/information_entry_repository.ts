@@ -3,6 +3,15 @@ import type {
   InformationEntryMaterializeRow,
   InformationEntryRevisionWrite,
 } from './information_entry_contract.js';
+import type {
+  InformationEntryRestructureLineage,
+  InformationEntryRestructureOverrideTransfer,
+  InformationEntryRestructureSuccessor,
+  InformationEntryStructureExpectedEntry,
+  InformationEntryStructureExpectedOverride,
+} from './information_entry_restructuring.js';
+import type {InformationEntryAssociationProjection} from './information_entry_association_contract.js';
+import type {InformationDocumentTagRevisionValue} from './information_document_tag_contract.js';
 
 export type InformationEntryMaterializeOutcome = 'created' | 'existing';
 export type InformationEntryEmptySnapshotMaterializeOutcome =
@@ -39,4 +48,32 @@ export interface InformationEntryEmptySnapshotRepositoryPort extends Information
   materializeEntriesIfSnapshotEmpty(
     entries: readonly Readonly<InformationEntryMaterializeRow>[],
   ): Promise<Readonly<InformationEntryEmptySnapshotMaterializeResult>>;
+}
+
+export type InformationEntryRestructureOutcome =
+  'applied' | 'unchanged' | 'stale';
+
+export interface InformationEntryRestructureWrite {
+  readonly workspaceId: string;
+  readonly snapshotId: string;
+  readonly includePrivate: boolean;
+  readonly expectedEntries: readonly Readonly<InformationEntryStructureExpectedEntry>[];
+  readonly expectedOverrides: readonly Readonly<InformationEntryStructureExpectedOverride>[];
+  readonly successors: readonly Readonly<InformationEntryRestructureSuccessor>[];
+  readonly retiredEntryIds: readonly string[];
+  readonly lineage: readonly Readonly<InformationEntryRestructureLineage>[];
+  readonly overrideTransfers: readonly Readonly<InformationEntryRestructureOverrideTransfer>[];
+  readonly projections: readonly Readonly<InformationEntryAssociationProjection>[];
+  readonly documentTags?: Readonly<{
+    resourceId: string;
+    expectedRevision: number;
+    revisionId: string;
+    value: Readonly<InformationDocumentTagRevisionValue>;
+  }>;
+}
+
+export interface InformationEntryRestructureRepositoryPort {
+  applyEntryRestructure(
+    write: Readonly<InformationEntryRestructureWrite>,
+  ): Promise<InformationEntryRestructureOutcome>;
 }

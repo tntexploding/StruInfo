@@ -1,6 +1,6 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1H-1A/B 活动接口
+- 状态：M1H-2A/B 活动接口
 - 最近核对：2026-08-26
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
@@ -32,6 +32,8 @@
 | `POST` | `/api/v1/imports/markdown`                                                            | 原子导入手动/Git Markdown 或本地 UTF-8 Markdown/文本文件、来源、Blob、结构和 Fragment |
 | `POST` | `/api/v1/entries/materialize`                                                         | 从一个用户选择的空 Snapshot 按 section 规则原子生成 Entry                             |
 | `POST` | `/api/v1/entries/materialize/manual`                                                  | 从标题和完整有序 Fragment 标量区间原子生成人工 Entry 结构                             |
+| `POST` | `/api/v1/entries/restructure/preview`                                                 | 对已物化 Snapshot 的完整新分组生成只读影响预览                                        |
+| `POST` | `/api/v1/entries/restructure/apply`                                                   | 以预览摘要和显式确认原子替换当前 Entry 结构                                           |
 | `GET`  | `/api/v1/evidence/snapshots/:snapshotId/split-proposals`                              | 列出一个 Snapshot 的有界拆分提案                                                      |
 | `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/start`                        | 用户显式请求一个公开 Snapshot 的 OpenAI 拆分提案                                      |
 | `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/accept`           | 接受提案并从本地 Fragment 物化 Entry                                                  |
@@ -103,7 +105,11 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 所有区间展平后必须按来源顺序完整分割第一结构的全部 section Fragment：从零开始、相邻区间相接并在各 Fragment 标量长度处结束，不得缺失、重叠或重排。客户端不提交正文；服务端从本地 Fragment 区间重建每组正文，同一 Fragment 的相邻片段直接连接，不同 Fragment 之间保留两个换行，并记录 `struinfo.entry-split.manual-range.v1`。成功返回 `created` 或稳定重放 `existing` 及生成的当前 Entry。无效覆盖返回 `422/manual_split_invalid`；确定性、人工或已接受 AI 路径已先生成结构时返回 `409/split_structure_already_materialized`，已有 Entry 不变。
 
-四个 `/evidence/snapshots/:snapshotId/split-proposals` 路由提供列表、显式启动、接受和拒绝。start 只允许用户当前选择的公开、尚未物化 Entry 的 Snapshot；Provider 只收到按结构顺序排列的 section Fragment ordinal 与正文，不收到任何本地标识。响应是连续、不重叠、完整覆盖的闭合分组；界面用本地精确 Fragment 审阅。accept 从本地 Fragment 重建标题/正文并调用同一空 Snapshot Entry 物化边界，reject 不创建 Entry。私密 Snapshot 在 Blob 读取和 fetch 前拒绝。当前人工路径支持 Fragment 内 Unicode 标量边界；AI 提案仍以完整 Fragment 分组。来源重排、全文保存修改、可替换拆分规则和已有 Entry 结构迁移接口仍未实现。
+`POST /entries/restructure/preview` 面向已经存在当前 Entry 结构的 Snapshot。请求提交 `snapshotId`、明确的 `includePrivate`，以及可选的完整 `groups`；省略分组时服务端返回从当前精确 Fragment/标量区间重建的草稿。预览冻结当前 Entry、关系 override 和 Document 标签版本，并列出身份复用、successor lineage、标签/评分冲突、关系迁移、折叠与阻断冲突，但不写数据。
+
+`POST /entries/restructure/apply` 重新提交同一完整 `groups`、预览返回的 `planSha256`，以及 `acknowledgeAnnotationChanges` / `acknowledgeRelationshipChanges`。服务端在工作区锁事务内重新验证摘要和版本，一次切换当前结构、写 successor/lineage、重算 Document 标签、迁移有资格的人工/AI 图关系并按当次隐私范围重建可替换联系投影。Snapshot/Fragment 不变，旧 Entry 不删除，只退出普通当前读取范围。过期预览、未确认影响、关系冲突或隐私范围不足分别返回 `stale_entry_restructure_preview`、`entry_restructure_annotation_ack_required`、`entry_restructure_relationship_ack_required`、`entry_restructure_relationship_conflict` 或 `entry_restructure_private_relationship_scope_required`；整笔事务失败时不留下部分结构。
+
+四个 `/evidence/snapshots/:snapshotId/split-proposals` 路由提供列表、显式启动、接受和拒绝。start 只允许用户当前选择的公开、尚未物化 Entry 的 Snapshot；Provider 只收到按结构顺序排列的 section Fragment ordinal 与正文，不收到任何本地标识。响应是连续、不重叠、完整覆盖的闭合分组；界面用本地精确 Fragment 审阅。accept 从本地 Fragment 重建标题/正文并调用同一空 Snapshot Entry 物化边界，reject 不创建 Entry。私密 Snapshot 在 Blob 读取和 fetch 前拒绝。当前人工首次物化和后续结构纠错都支持 Fragment 内 Unicode 标量边界；AI 提案仍只处理尚未物化的公开 Snapshot，并以完整 Fragment 分组。来源重排、全文保存修改和可替换拆分规则仍未实现。
 
 ### 3.3 标签
 
@@ -177,7 +183,7 @@ M1H action POST 接受 `{expectedVersion, operation: "apply" | "undo", includePr
 
 ## 5. 个人数据包
 
-export 接口生成当前五分区 Bundle，包含 60 张当前工作区表、被引用的 Blob 字节和含版本化联系、探索、Entry 偏好、AutomationPolicy 与信源串联开关的当前偏好文件。Entry v3 section 携带可选精确 Fragment 标量区间；Processing v7 section 携带十张既有任务/提案表、两张 typed 自动路由执行表、一张所有者工作队列表和一张确定性动作表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1–v6 保持可读，缺失的新表和偏好字段恢复为空/关闭状态。
+export 接口生成当前五分区 Bundle，包含 60 张当前工作区表、被引用的 Blob 字节和含版本化联系、探索、Entry 偏好、AutomationPolicy 与信源串联开关的当前偏好文件。Entry v4 section 在可选精确 Fragment 标量区间之外携带 `is_current_structure`；v1–v3 Entry section 恢复时把既有 Entry 解释为当前结构。Processing v7 section 携带十张既有任务/提案表、两张 typed 自动路由执行表、一张所有者工作队列表和一张确定性动作表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1–v6 保持可读，缺失的新表和偏好字段恢复为空/关闭状态。
 
 Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不进入 Git 或应用安装树。
 

@@ -1,6 +1,6 @@
 # StruInfo 分阶段计划
 
-- 状态：M1H-1A/B 确定性标签动作与联系投影重建已完成
+- 状态：M1H-2A/B 已物化 Entry 结构预览与原子重组已完成
 - 最近更新：2026-08-26
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
@@ -27,7 +27,7 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 | InformationEntry             | 已实现 | 确定性/人工/AI 首次物化、当前成品态、三维标签、两项评分、文档标签、隐私和来源                                                          |
 | Entry 联系                   | 已实现 | 确定性投影、分项解释、外部版本化权重和逐对人工 override                                                                                |
 | Entry 查询                   | 已实现 | 标题/正文/标签的精确、包含和近似词法匹配，可见分数、组合筛选、绑定分页、查询页关联联想、双条比较及显式隐私范围内的独立完整文档结果     |
-| 完整个人数据包               | 已实现 | 60 表、引用 Blob 字节、偏好、Entry v3、Association v3 与 Processing v7                                                                 |
+| 完整个人数据包               | 已实现 | 60 表、引用 Blob 字节、偏好、Entry v4、Association v3 与 Processing v7                                                                 |
 | 旧 Curation/Knowledge 运行时 | 已退役 | 迁移和数据兼容保留，活动代码/HTTP/Web 已删除                                                                                           |
 | 正式知识页面                 | 已实现 | 最高匹配中心、有界图/列表、来源、用户关系编辑、隐私范围与 selected-pair AI 联系提案                                                    |
 | ProcessingRun / AI 提案      | 已实现 | 中性任务状态、取消；OpenAI split/tags/selected-pair association 的启动、列表、接受与拒绝                                               |
@@ -43,7 +43,7 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 
 M1E-3B、M1E-3C 和 M1E-3D 已依次完成单个公开 Entry 标签提案、用户明确选择的公开 Entry 对联系提案，以及用户明确选择的公开 Snapshot 拆分提案。三者都只创建 typed proposal，只有人工接受才调用现有 Entry/图谱命令；私密内容在网络前拒绝。
 
-M1E-4A/4B 已补齐无 Provider 的人工拆分：用户可在首次 Entry 物化前按既有 Fragment 边界或 Fragment 内 Unicode 标量边界合并、重新拆开并改标题，服务端从本地证据重建正文，三种物化方式共享唯一空 Snapshot 原子边界。M1E-5A/5B 又把一份本地 Markdown、纯文本、HTML 或带文字层 PDF 接入相同 Blob → Snapshot → Fragment → Split 主链；HTML/PDF 保留完整原始 Blob并产生本地文本投影，失败重试身份保持稳定。M1F-1 在现有查询上补齐标题/正文/标签的精确、包含和近似词法模式、可见分数与游标绑定；M1F-2 又把既有一至两跳 Association 过滤接入查询页，并提供同一查询范围内最多两条结果的事实比较；M1F-3 接通公开证据的会话内 AI 综合。M1G-1 进一步加入默认关闭、与搜索排序隔离的本地探索份额和三类可解释页外候选。M1G-2 则把一个精确公开 GitHub Markdown 文件接入外部版本化订阅、真实 ProcessingRun 和既有幂等 Evidence 导入。M1G-3–5 已建立外部偏好规则、独立默认关闭的自动化权力、可恢复路由执行与所有者队列；M1H-1 进一步只为推进候选开放明确启用的本地确定性标签和联系投影重建。第二 Provider、自动接受、私密外发、Provider 检索、Embedding 和 RAG 继续后置。
+M1E-4A/4B 已补齐无 Provider 的人工首次拆分；M1E-5A/5B 又把本地 Markdown、纯文本、HTML 或带文字层 PDF 接入相同 Blob → Snapshot → Fragment → Split 主链。M1F-1/2/3 完成可解释词法查询、查询内联想/比较与公开证据综合。M1G-1–5 建立探索、精确信源订阅、外部偏好规则、独立自动化权力、可恢复路由与所有者队列；M1H-1 只为推进候选开放明确启用的本地确定性标签和联系投影重建。M1H-2 再以人工预览和原子应用补齐已物化 Entry 的结构纠错。第二 Provider、自动接受、私密外发、Provider 检索、Embedding 和 RAG 继续后置。
 
 ## 已完成主线：M1D Entry 网络
 
@@ -144,7 +144,7 @@ M1E-2 按以下最小顺序实现，不恢复已删除的旧高级编辑器或�
 
 第一版不渲染全库图，不引入图数据库、AI、Embedding、RAG、复杂本体或物理布局依赖。关系
 标签属于外部工作区数据，不作为代码常量或迁移 seed。已按真实使用插入的隐私全文查询和联系
-策略编辑不新增数据库迁移或依赖。M1E-4A/4B 已补齐既有 Fragment 与 Fragment 内 Unicode 标量边界上的人工结构编辑；剩余可插入缺口是拆分前全文保存修改、来源重排、自定义规则、已物化结构重组和 Office/OCR/复杂版面还原等更多导入格式。容器/
+策略编辑不新增数据库迁移或依赖。M1E-4A/4B 已补齐既有 Fragment 与 Fragment 内 Unicode 标量边界上的人工首次结构编辑，M1H-2A/B 已补齐已物化结构的人工预览与原子重组；剩余可插入缺口是拆分前全文保存修改、来源重排、自定义规则和 Office/OCR/复杂版面还原等更多导入格式。容器/
 Linux、正式 TM2 和发布许可继续后置，除非当前产品路径出现可复现阻断。
 
 ## 已完成增量：M1E-3 Provider-neutral 任务与提案
@@ -281,7 +281,18 @@ M1G-4A 已由 [ADR 0026](adr/0026-entry-automation-policy-dry-run.md) 接受并�
 5. **订阅串联（已完成）**：`routeAfterImport` 开启时仍使用保存策略；若动作也开启，订阅成功游标在导入、物化、分流和动作全部完成后才推进；
 6. **携带性与边界（已完成）**：Processing Bundle 升为 v7/14 表，旧 v1–v6 恢复空动作状态，完整个人数据包覆盖 60 表。该阶段不接受 AI 提案、不写图谱事实、不改评分、不隐藏/删除 Entry，也不赋予通用工作流权限。
 
-M1H-1 完成后，下一产品任务必须来自直接无数据使用或另一个明确接受的窄边界；不得把“推进候选”解释为任意自动操作授权。
+M1H-1 完成时只开放了明确启用的推进动作；随后经独立窄边界接受的 M1H-2 仍是所有者手动结构纠错，不得把任一阶段解释为任意自动操作授权。
+
+## 已完成：M1H-2A/B 已物化 Entry 结构重组
+
+1. **M1H-2A 影响预览（已完成）**：[ADR 0033](adr/0033-post-materialization-entry-restructuring.md) 在拆分页复用人工 Fragment/标量范围编辑器，对完整分组计算 Entry 身份复用、successor lineage、标签/评分冲突和人工/AI 图关系迁移；预览不写数据，编辑后旧 plan 立即失效；
+2. **M1H-2B 原子应用（已完成）**：同一 plan digest 与显式确认进入工作区锁事务，一次完成当前结构切换、successor/lineage、Document 标签重算、关系迁移和可见范围 Association 投影重建；陈旧 Entry、override 或 Document 标签版本使整笔操作回滚；
+3. **证据与隐私（保持）**：正文只由服务端从本地不可变 Fragment 重建；私密来源或触及私密端点的关系必须有当前请求 opt-in，公开重组不清除无关私密投影；
+4. **身份与关系（已完成）**：精确边界复用 Entry ID，变化边界产生确定性 successor；有向关系在 low/high UUID 顺序翻转时同步反向，折叠需确认，冲突阻断；
+5. **携带性（已完成）**：迁移 `000021` 增加当前结构事实，Entry Bundle v4 向后读取 v1–v3；旧 Entry 作为 lineage 前身保留，表总数仍为 60；
+6. **边界（保持）**：没有依赖、Provider、真实数据、自动结构替换、来源重排、拆分前全文写回或自定义解析规则。
+
+M1H-2 完成后，下一产品任务继续由新的明确窄边界或开发完成后的统一实际审核决定；不得把人工结构权限扩展给 AutomationPolicy 或 AI 提案。
 
 ## 历史基线：M1C 可运行核心闭环（运行时已退役）
 

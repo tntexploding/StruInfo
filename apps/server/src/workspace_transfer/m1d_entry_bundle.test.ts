@@ -5,6 +5,8 @@ import {
   createEmptyM1dEntrySnapshot,
   M1D_ENTRY_BUNDLE_SCHEMA,
   M1D_ENTRY_TABLES,
+  M1D_ENTRY_VERSION_THREE_BUNDLE_CODEC,
+  M1D_ENTRY_VERSION_THREE_BUNDLE_SCHEMA,
   M1D_ENTRY_VERSION_TWO_BUNDLE_CODEC,
   M1D_ENTRY_VERSION_TWO_BUNDLE_SCHEMA,
   m1dEntryTableCounts,
@@ -32,17 +34,41 @@ describe('M1D Entry Bundle section', () => {
     }).not.toThrow();
   });
 
-  it('upgrades version two sections with an empty fragment-range table', () => {
+  it('upgrades version three and version two sections into current structure rows', () => {
     const current = syntheticSnapshot(false);
+    const versionThreeTables = current.tables.map((table) =>
+      table.name === 'information_entry'
+        ? {
+            ...table,
+            rows: table.rows.map((row) => {
+              const previous = {...row};
+              Reflect.deleteProperty(previous, 'is_current_structure');
+              return previous;
+            }),
+          }
+        : table,
+    );
+    const versionThree = {
+      schemaVersion: M1D_ENTRY_VERSION_THREE_BUNDLE_SCHEMA,
+      tables: versionThreeTables,
+    };
     const versionTwo = {
       schemaVersion: M1D_ENTRY_VERSION_TWO_BUNDLE_SCHEMA,
-      tables: current.tables.slice(0, -1),
+      tables: versionThreeTables.slice(0, -1),
     };
 
+    const upgradedThree = M1D_ENTRY_VERSION_THREE_BUNDLE_CODEC.decode(
+      versionThree,
+    ) as ReturnType<typeof normalizeM1dEntrySnapshot>;
     const upgraded = M1D_ENTRY_VERSION_TWO_BUNDLE_CODEC.decode(
       versionTwo,
     ) as ReturnType<typeof normalizeM1dEntrySnapshot>;
 
+    expect(
+      upgradedThree.tables[0]?.rows.every(
+        (row) => row.is_current_structure === true,
+      ),
+    ).toBe(true);
     expect(upgraded.schemaVersion).toBe(M1D_ENTRY_BUNDLE_SCHEMA);
     expect(upgraded.tables).toHaveLength(8);
     expect(upgraded.tables.at(-1)).toEqual({
@@ -176,6 +202,7 @@ function entryRow(
     chunk_mode: 'split',
     split_rule_version: 'synthetic-v1',
     is_private: false,
+    is_current_structure: true,
     type_keyword: null,
     type_custom_name: null,
     usefulness_score: null,

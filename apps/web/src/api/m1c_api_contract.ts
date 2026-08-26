@@ -860,6 +860,59 @@ export interface InformationEntryManualMaterializeRequest {
   readonly groups: readonly Readonly<InformationEntryFragmentGroup>[];
 }
 
+export interface InformationEntryRestructureRequest {
+  readonly snapshotId: string;
+  readonly includePrivate: boolean;
+  readonly groups?: readonly Readonly<InformationEntryFragmentGroup>[];
+}
+
+export interface InformationEntryRestructureApplyRequest extends InformationEntryRestructureRequest {
+  readonly groups: readonly Readonly<InformationEntryFragmentGroup>[];
+  readonly planSha256: string;
+  readonly acknowledgeAnnotationChanges: boolean;
+  readonly acknowledgeRelationshipChanges: boolean;
+}
+
+export interface InformationEntryRestructureImpact {
+  readonly snapshotId: string;
+  readonly planSha256: string;
+  readonly currentGroups: readonly Readonly<InformationEntryFragmentGroup>[];
+  readonly hasChanges: boolean;
+  readonly currentEntryCount: number;
+  readonly resultingEntryCount: number;
+  readonly insertedEntryCount: number;
+  readonly revisedEntryCount: number;
+  readonly unchangedEntryCount: number;
+  readonly retiredEntryCount: number;
+  readonly annotationReviewCount: number;
+  readonly transferredRelationshipCount: number;
+  readonly collapsedRelationshipCount: number;
+  readonly conflictingRelationshipCount: number;
+  readonly successors: readonly Readonly<{
+    entryId: string;
+    operation: 'insert' | 'revise' | 'unchanged';
+    titlePath: string;
+    documentOrder: number;
+    predecessorEntryIds: readonly string[];
+    annotationStatus: 'preserved' | 'combined' | 'requires_review';
+  }>[];
+}
+
+export type InformationEntryRestructurePreviewResponse =
+  | (Readonly<{status: 'preview'}> &
+      Readonly<InformationEntryRestructureImpact>)
+  | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
+  | DomainFailure;
+
+export type InformationEntryRestructureApplyResponse =
+  | (Readonly<{
+      status: 'applied' | 'unchanged';
+      entries?: readonly Readonly<InformationEntry>[];
+    }> &
+      Readonly<InformationEntryRestructureImpact>)
+  | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
+  | DomainFailure;
+
 export type InformationEntryMaterializeResponse =
   | Readonly<{
       status: 'created' | 'existing';

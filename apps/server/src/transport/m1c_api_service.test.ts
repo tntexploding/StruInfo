@@ -15,6 +15,7 @@ import type {
   InformationEntryAssociationProjection,
   InformationEntryMaterializeRow,
   InformationEntryQuerySynthesisServicePort,
+  InformationEntryRestructureWrite,
   InformationEntrySearchCursor,
 } from '../modules/entries/index.js';
 import type {
@@ -1591,6 +1592,161 @@ describe('M1cApiService', () => {
     });
     expect(materializeEntriesIfSnapshotEmpty).toHaveBeenCalledTimes(1);
   });
+
+  it('previews and atomically applies a post-materialization Entry merge', async () => {
+    const blobs = new MemoryBlobStore();
+    const secondFragmentId = '00000000-0000-4000-8000-000000000007';
+    const firstText = 'Alpha source.';
+    const secondText = 'Beta source.';
+    const normalizedText = `${firstText}\n\n${secondText}`;
+    const identity = await blobs.put(new TextEncoder().encode(normalizedText));
+    const currentEntries: readonly Readonly<CurrentInformationEntry>[] = [
+      currentRestructureEntry(
+        '00000000-0000-4000-8000-000000000011',
+        '00000000-0000-4000-8000-000000000012',
+        0,
+        'Alpha',
+        firstText,
+        FRAGMENT_ID,
+      ),
+      currentRestructureEntry(
+        '00000000-0000-4000-8000-000000000013',
+        '00000000-0000-4000-8000-000000000014',
+        1,
+        'Beta',
+        secondText,
+        secondFragmentId,
+      ),
+    ];
+    const applyEntryRestructure = vi.fn(
+      (write: Readonly<InformationEntryRestructureWrite>) => {
+        expect(write.workspaceId).toBe(WORKSPACE_ID);
+        return Promise.resolve('applied' as const);
+      },
+    );
+    const service = createService({
+      blobStore: blobs,
+      evidenceReadRepository: {
+        listSnapshots: () => Promise.resolve([]),
+        loadSnapshot: () =>
+          Promise.resolve({
+            workspaceId: WORKSPACE_ID,
+            snapshotId: SNAPSHOT_ID,
+            resourceId: RESOURCE_ID,
+            resourceKind: 'manual_text' as const,
+            sourceKey: 'manual:synthetic-restructure',
+            capturedAt: '2040-01-02T03:04:05.000Z',
+            fragmentCount: 2,
+            rawSha256: identity.digest,
+            canonicalContentSha256: identity.digest,
+            canonicalizationVersion: 'utf8-lf-v1',
+            structures: [
+              {
+                structureId: STRUCTURE_ID,
+                parserName: 'struinfo-commonmark',
+                parserVersion: '1',
+                textNormalizationVersion: 'utf8-lf-v1',
+                structureSha256: 'b'.repeat(64),
+                textBlob: identity,
+                fragments: [
+                  {
+                    fragmentId: FRAGMENT_ID,
+                    structureId: STRUCTURE_ID,
+                    nodeId: NODE_ID,
+                    nodeKind: 'section' as const,
+                    codePointRange: {start: 0, end: firstText.length},
+                    selectedTextSha256: createHash('sha256')
+                      .update(firstText)
+                      .digest('hex'),
+                  },
+                  {
+                    fragmentId: secondFragmentId,
+                    structureId: STRUCTURE_ID,
+                    nodeId: '00000000-0000-4000-8000-000000000008',
+                    nodeKind: 'section' as const,
+                    codePointRange: {
+                      start: firstText.length + 2,
+                      end: normalizedText.length,
+                    },
+                    selectedTextSha256: createHash('sha256')
+                      .update(secondText)
+                      .digest('hex'),
+                  },
+                ],
+              },
+            ],
+          }),
+      },
+      informationEntryRepository: {
+        materializeEntries: () =>
+          Promise.resolve({outcome: 'existing' as const, createdCount: 0}),
+        materializeEntriesIfSnapshotEmpty: () =>
+          Promise.resolve({outcome: 'existing' as const, createdCount: 0}),
+        reviseEntry: () => Promise.resolve('not_found' as const),
+        loadCurrentEntries: () => Promise.resolve(currentEntries),
+      },
+      informationEntryRestructureRepository: {applyEntryRestructure},
+    });
+    const groups = [
+      {
+        titlePath: 'Merged Entry',
+        fragments: [
+          {
+            fragmentId: FRAGMENT_ID,
+            startCodePoint: 0,
+            endCodePoint: firstText.length,
+          },
+          {
+            fragmentId: secondFragmentId,
+            startCodePoint: 0,
+            endCodePoint: secondText.length,
+          },
+        ],
+      },
+    ];
+
+    const preview = await service.previewInformationEntryRestructure({
+      snapshotId: SNAPSHOT_ID,
+      includePrivate: false,
+      groups,
+    });
+    expect(preview).toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'preview',
+        currentEntryCount: 2,
+        resultingEntryCount: 1,
+        retiredEntryCount: 2,
+      },
+    });
+    const previewBody = preview.body as Readonly<{
+      status: string;
+      planSha256: string;
+    }>;
+    const applied = await service.applyInformationEntryRestructure({
+      snapshotId: SNAPSHOT_ID,
+      includePrivate: false,
+      groups,
+      planSha256: previewBody.planSha256,
+      acknowledgeAnnotationChanges: false,
+      acknowledgeRelationshipChanges: false,
+    });
+
+    expect(applied).toMatchObject({statusCode: 200, body: {status: 'applied'}});
+    expect(applyEntryRestructure).toHaveBeenCalledTimes(1);
+    expect(applyEntryRestructure.mock.calls[0]?.[0]).toMatchObject({
+      workspaceId: WORKSPACE_ID,
+      snapshotId: SNAPSHOT_ID,
+      includePrivate: false,
+      expectedEntries: [{revision: 1}, {revision: 1}],
+      successors: [{operation: 'insert'}],
+      retiredEntryIds: [
+        '00000000-0000-4000-8000-000000000011',
+        '00000000-0000-4000-8000-000000000013',
+      ],
+    });
+  });
+
   it('binds structural Entry filters, association traversal, and pagination to the public search cursor', async () => {
     const entryAId = '00000000-0000-4000-8000-000000000011';
     const entryBId = '00000000-0000-4000-8000-000000000013';
@@ -2858,6 +3014,45 @@ function createService(
     ...overrides,
   };
   return new M1cApiService(dependencies);
+}
+
+function currentRestructureEntry(
+  entryId: string,
+  revisionId: string,
+  documentOrder: number,
+  titlePath: string,
+  body: string,
+  fragmentId: string,
+): Readonly<CurrentInformationEntry> {
+  return Object.freeze({
+    workspaceId: WORKSPACE_ID,
+    entryId,
+    resourceId: RESOURCE_ID,
+    snapshotId: SNAPSHOT_ID,
+    revision: 1,
+    revisionId,
+    sourceKey: 'manual:synthetic-restructure',
+    capturedAt: '2040-01-02T03:04:05.000Z',
+    value: Object.freeze({
+      documentOrder,
+      titlePath,
+      body,
+      bodySha256: createHash('sha256').update(body).digest('hex'),
+      chunkMode: 'split' as const,
+      splitRuleVersion: 'struinfo.entry-split.manual-range.v1',
+      isPrivate: false,
+      typeKeyword: 'knowledge_explanation' as const,
+      contentKeywords: Object.freeze([]),
+      domains: Object.freeze([]),
+      fragmentIds: Object.freeze([fragmentId]),
+      fragmentRanges: Object.freeze([
+        Object.freeze({
+          startCodePoint: 0,
+          endCodePoint: Array.from(body).length,
+        }),
+      ]),
+    }),
+  });
 }
 
 class MemoryAutomationPreferences implements ReviewPreferencesStore {

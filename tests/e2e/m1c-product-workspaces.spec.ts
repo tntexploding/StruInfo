@@ -143,6 +143,7 @@ async function installCurrentProductApi(
   page: Page,
   options?: Readonly<{
     manualSplitRequests?: string[];
+    restructureRequests?: Readonly<{path: string; body: string}>[];
     importRequests?: string[];
     preferenceSuggestionGate?: Promise<void>;
     preferenceSuggestionScopes?: boolean[];
@@ -154,7 +155,28 @@ async function installCurrentProductApi(
 ) {
   const productRequests: string[] = [];
   const manualSplitEnabled = options?.manualSplitRequests !== undefined;
+  const restructureEnabled = options?.restructureRequests !== undefined;
+  const splitWorkspaceEnabled = manualSplitEnabled || restructureEnabled;
   const automationEnabled = options?.automationRunListRequests !== undefined;
+  let currentRestructureGroups: readonly Readonly<{
+    titlePath: string;
+    fragments: readonly Readonly<{
+      fragmentId: string;
+      startCodePoint: number;
+      endCodePoint: number;
+    }>[];
+  }>[] = [
+    {
+      titlePath: SYNTHETIC_ENTRY.value.titlePath,
+      fragments: [
+        {
+          fragmentId: FRAGMENT_ID,
+          startCodePoint: 0,
+          endCodePoint: 3,
+        },
+      ],
+    },
+  ];
   let associationPolicy = {
     revision: 0,
     version: 'struinfo.entry-association.local-index.v1',
@@ -238,19 +260,70 @@ async function installCurrentProductApi(
         contentType: 'application/json',
         json: {
           status: 'ok',
-          snapshots: manualSplitEnabled ? [SYNTHETIC_SNAPSHOT] : [],
+          snapshots: splitWorkspaceEnabled ? [SYNTHETIC_SNAPSHOT] : [],
         },
         status: 200,
       });
       return;
     }
     if (
-      manualSplitEnabled &&
+      splitWorkspaceEnabled &&
       path === `/api/v1/evidence/snapshots/${SNAPSHOT_ID}`
     ) {
       await route.fulfill({
         contentType: 'application/json',
         json: {status: 'ok', snapshot: SYNTHETIC_SNAPSHOT},
+        status: 200,
+      });
+      return;
+    }
+    if (
+      restructureEnabled &&
+      (path === '/api/v1/entries/restructure/preview' ||
+        path === '/api/v1/entries/restructure/apply') &&
+      request.method() === 'POST'
+    ) {
+      const body = request.postData() ?? '{}';
+      options.restructureRequests.push({path, body});
+      const payload = JSON.parse(body) as Readonly<{
+        groups?: typeof currentRestructureGroups;
+      }>;
+      const currentCount = currentRestructureGroups.length;
+      const requestedGroups = payload.groups ?? currentRestructureGroups;
+      const hasChanges =
+        payload.groups !== undefined &&
+        JSON.stringify(requestedGroups) !==
+          JSON.stringify(currentRestructureGroups);
+      if (path.endsWith('/apply')) currentRestructureGroups = requestedGroups;
+      const resultingCount = requestedGroups.length;
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {
+          status: path.endsWith('/apply') ? 'applied' : 'preview',
+          snapshotId: SNAPSHOT_ID,
+          planSha256: '9'.repeat(64),
+          currentGroups: currentRestructureGroups,
+          hasChanges,
+          currentEntryCount: currentCount,
+          resultingEntryCount: resultingCount,
+          insertedEntryCount: hasChanges ? resultingCount : 0,
+          revisedEntryCount: 0,
+          unchangedEntryCount: hasChanges ? 0 : resultingCount,
+          retiredEntryCount: hasChanges ? currentCount : 0,
+          annotationReviewCount: 0,
+          transferredRelationshipCount: 0,
+          collapsedRelationshipCount: 0,
+          conflictingRelationshipCount: 0,
+          successors: requestedGroups.map((group, index) => ({
+            entryId: `${(index + 1).toString().padStart(8, '0')}-0000-4000-8000-000000000099`,
+            operation: hasChanges ? 'insert' : 'unchanged',
+            titlePath: group.titlePath,
+            documentOrder: index,
+            predecessorEntryIds: [ENTRY_ID],
+            annotationStatus: 'preserved',
+          })),
+          ...(path.endsWith('/apply') ? {entries: []} : {}),
+        },
         status: 200,
       });
       return;
@@ -634,7 +707,16 @@ async function installCurrentProductApi(
       return;
     }
     if (path === '/api/v1/entry-documents') {
-      const documents = manualSplitEnabled ? [SYNTHETIC_DOCUMENT] : [];
+      const documents = splitWorkspaceEnabled
+        ? [
+            {
+              ...SYNTHETIC_DOCUMENT,
+              entryCount: restructureEnabled
+                ? currentRestructureGroups.length
+                : 0,
+            },
+          ]
+        : [];
       await route.fulfill({
         contentType: 'application/json',
         json: {status: 'ok', totalCount: documents.length, documents},
@@ -1076,4 +1158,81 @@ test('splits one immutable Fragment at an explicit caret and submits exact scala
       },
     ],
   });
+});
+
+test('previews and atomically applies a post-materialization scalar restructure', async ({
+  page,
+}) => {
+  const restructureRequests: Readonly<{path: string; body: string}>[] = [];
+  await installCurrentProductApi(page, {restructureRequests});
+  await page.setViewportSize({width: 390, height: 844});
+  await page.goto('/');
+
+  const navigation = page.getByRole('navigation', {name: '产品工作区'});
+  await navigation.getByRole('button', {name: '拆分', exact: true}).click();
+  await page
+    .getByRole('button', {name: /synthetic-split-source/u})
+    .first()
+    .click();
+
+  await expect(
+    page.getByRole('heading', {name: '已生成条目重组', exact: true}),
+  ).toBeVisible();
+  const sourceText = page.getByLabel('条目 1 来源段 1 正文');
+  await sourceText.evaluate((element) => {
+    if (!(element instanceof HTMLTextAreaElement))
+      throw new Error('Expected a textarea.');
+    element.focus();
+    element.setSelectionRange(3, 3);
+    element.dispatchEvent(new Event('select', {bubbles: true}));
+    element.dispatchEvent(
+      new KeyboardEvent('keyup', {bubbles: true, key: 'ArrowLeft'}),
+    );
+  });
+  await page
+    .getByRole('button', {name: '在光标处分开', exact: true})
+    .first()
+    .click();
+  await page.getByRole('button', {name: '预览重组影响', exact: true}).click();
+
+  await expect(
+    page.getByRole('heading', {name: '本次将发生什么', exact: true}),
+  ).toBeVisible();
+  await expect(page.getByText('1 → 2 条', {exact: true})).toBeVisible();
+  await page.getByRole('button', {name: '应用重组', exact: true}).click();
+  await expect(page.getByText('条目结构已更新', {exact: true})).toBeVisible();
+
+  const previewWrite = restructureRequests.find(
+    (request) =>
+      request.path.endsWith('/preview') &&
+      (JSON.parse(request.body) as {groups?: unknown}).groups !== undefined,
+  );
+  const applyWrite = restructureRequests.find((request) =>
+    request.path.endsWith('/apply'),
+  );
+  expect(previewWrite).toBeDefined();
+  expect(applyWrite).toBeDefined();
+  expect(JSON.parse(applyWrite?.body ?? '{}')).toMatchObject({
+    snapshotId: SNAPSHOT_ID,
+    includePrivate: false,
+    planSha256: '9'.repeat(64),
+    acknowledgeAnnotationChanges: false,
+    acknowledgeRelationshipChanges: false,
+    groups: [
+      {
+        fragments: [
+          {fragmentId: FRAGMENT_ID, startCodePoint: 0, endCodePoint: 2},
+        ],
+      },
+      {
+        fragments: [
+          {fragmentId: FRAGMENT_ID, startCodePoint: 2, endCodePoint: 3},
+        ],
+      },
+    ],
+  });
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - window.innerWidth,
+  );
+  expect(overflow).toBeLessThanOrEqual(1);
 });

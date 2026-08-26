@@ -3,6 +3,7 @@ export * from './information_entry_deterministic_tags.js';
 export * from './information_entry_contract.js';
 export * from './information_entry_identity.js';
 export * from './information_entry_repository.js';
+export * from './information_entry_restructuring.js';
 export * from './information_entry_search.js';
 export * from './information_document_tag.js';
 export * from './information_document_tag_contract.js';

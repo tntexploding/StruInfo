@@ -209,6 +209,8 @@ export async function startRoleRuntime(
             repositories.informationDocumentTags,
           informationEntryAssociationRepository:
             repositories.informationEntryAssociations,
+          informationEntryRestructureRepository:
+            repositories.informationEntryRestructures,
           processingRunRepository: repositories.processingRuns,
           entryAutomationExecutionRepository:
             repositories.entryAutomationExecutions,
