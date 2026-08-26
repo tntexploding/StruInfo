@@ -12,6 +12,13 @@ import type {
   EvidenceSnapshotSummary,
   EntryPreferenceProfile,
   EntryPreferenceRule,
+  EntryAutomationPolicy,
+  InformationEntryAutomationExecuteResponse,
+  InformationEntryAutomationExecutionListResponse,
+  InformationEntryAutomationExecutionResponse,
+  InformationEntryAutomationPolicyResponse,
+  InformationEntryAutomationPolicyWriteResponse,
+  InformationEntryAutomationTrialResponse,
   InformationEntryAssociationListResponse,
   InformationEntryAssociationOverrideResponse,
   InformationEntryAssociationPolicyWriteResponse,
@@ -110,6 +117,59 @@ export interface M1cApiClient {
     }>,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryPreferenceTrialResponse>>;
+  loadInformationEntryAutomationPolicy(
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryAutomationPolicyResponse>>;
+  saveInformationEntryAutomationPolicy(
+    body: Readonly<{
+      expectedRevision: number;
+      enabled: boolean;
+      paused: boolean;
+      profileRevision: number;
+      minimumMatchedRuleCount: number;
+      advanceThresholds: Readonly<EntryAutomationPolicy['advanceThresholds']>;
+      deferThresholds: Readonly<EntryAutomationPolicy['deferThresholds']>;
+      budgets: Readonly<EntryAutomationPolicy['budgets']>;
+      failureMode: 'pause';
+    }>,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryAutomationPolicyWriteResponse>>;
+  trialInformationEntryAutomationPolicy(
+    body: Readonly<{
+      includePrivate: boolean;
+      expectedPolicyRevision: number;
+      expectedProfileRevision: number;
+      policy: Readonly<EntryAutomationPolicy>;
+      expectedEntries?: readonly Readonly<{
+        entryId: string;
+        revision: number;
+      }>[];
+      manualTakeoverEntryIds?: readonly string[];
+    }>,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryAutomationTrialResponse>>;
+  executeInformationEntryAutomation(
+    body: Readonly<{
+      idempotencyKey: string;
+      includePrivate: boolean;
+      expectedPolicyRevision: number;
+      expectedProfileRevision: number;
+      expectedEntries: readonly Readonly<{
+        entryId: string;
+        revision: number;
+      }>[];
+      manualTakeoverEntryIds?: readonly string[];
+    }>,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryAutomationExecuteResponse>>;
+  listInformationEntryAutomationExecutions(
+    limit?: number,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryAutomationExecutionListResponse>>;
+  loadInformationEntryAutomationExecution(
+    runId: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryAutomationExecutionResponse>>;
   importMarkdown(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -304,6 +364,12 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     saveInformationEntryPreferenceProfile: reject,
     suggestInformationEntryPreferenceProfile: reject,
     trialInformationEntryPreferenceProfile: reject,
+    loadInformationEntryAutomationPolicy: reject,
+    saveInformationEntryAutomationPolicy: reject,
+    trialInformationEntryAutomationPolicy: reject,
+    executeInformationEntryAutomation: reject,
+    listInformationEntryAutomationExecutions: reject,
+    loadInformationEntryAutomationExecution: reject,
     importMarkdown: reject,
     importDocument: reject,
     materializeInformationEntries: reject,
@@ -415,6 +481,39 @@ export function createM1cApiClient(
       post<InformationEntryPreferenceTrialResponse>(
         'api/v1/entries/preferences/profile/trial',
         body,
+        options,
+      ),
+    loadInformationEntryAutomationPolicy: (options) =>
+      get<InformationEntryAutomationPolicyResponse>(
+        'api/v1/entries/automation/policy',
+        options,
+      ),
+    saveInformationEntryAutomationPolicy: (body, options) =>
+      put<InformationEntryAutomationPolicyWriteResponse>(
+        'api/v1/entries/automation/policy',
+        body,
+        options,
+      ),
+    trialInformationEntryAutomationPolicy: (body, options) =>
+      post<InformationEntryAutomationTrialResponse>(
+        'api/v1/entries/automation/trial',
+        body,
+        options,
+      ),
+    executeInformationEntryAutomation: (body, options) =>
+      post<InformationEntryAutomationExecuteResponse>(
+        'api/v1/entries/automation/runs',
+        body,
+        options,
+      ),
+    listInformationEntryAutomationExecutions: (limit = 10, options) =>
+      get<InformationEntryAutomationExecutionListResponse>(
+        `api/v1/entries/automation/runs?limit=${encodeURIComponent(limit.toString())}`,
+        options,
+      ),
+    loadInformationEntryAutomationExecution: (runId, options) =>
+      get<InformationEntryAutomationExecutionResponse>(
+        `api/v1/entries/automation/runs/${encodeURIComponent(runId)}`,
         options,
       ),
     importMarkdown: (body, options) =>

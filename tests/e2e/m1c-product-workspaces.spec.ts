@@ -105,6 +105,29 @@ const SYNTHETIC_EXPLORATION_ENTRY = {
   },
 };
 
+function syntheticAutomationExecution(runId: string) {
+  return {
+    runId,
+    status: 'succeeded' as const,
+    version: 2,
+    policyRevision: 1,
+    profileRevision: 0,
+    includePrivate: false,
+    claims: [
+      {
+        ordinal: 0,
+        entryId: ENTRY_ID,
+        entryRevision: 1,
+        route: 'manual_review' as const,
+        reason: 'threshold_not_met' as const,
+        status: 'completed' as const,
+        createdAt: '2026-08-26T00:00:00.000Z',
+        finishedAt: '2026-08-26T00:00:01.000Z',
+      },
+    ],
+  };
+}
+
 function controlledGate(): Readonly<{
   promise: Promise<void>;
   release: () => void;
@@ -125,10 +148,13 @@ async function installCurrentProductApi(
     preferenceSuggestionScopes?: boolean[];
     preferenceTrialGate?: Promise<void>;
     preferenceTrialScopes?: boolean[];
+    automationRunListGate?: Promise<void>;
+    automationRunListRequests?: string[];
   }>,
 ) {
   const productRequests: string[] = [];
   const manualSplitEnabled = options?.manualSplitRequests !== undefined;
+  const automationEnabled = options?.automationRunListRequests !== undefined;
   let associationPolicy = {
     revision: 0,
     version: 'struinfo.entry-association.local-index.v1',
@@ -154,6 +180,7 @@ async function installCurrentProductApi(
   };
   let preferenceSuggestionRequestCount = 0;
   let preferenceTrialRequestCount = 0;
+  let automationRunListRequestCount = 0;
 
   await page.route('**/*', async (route) => {
     const request = route.request();
@@ -184,7 +211,11 @@ async function installCurrentProductApi(
     if (path === '/api/v1/workspace') {
       await route.fulfill({
         contentType: 'application/json',
-        json: {status: 'ok', workspaceId: WORKSPACE_ID, capabilities: []},
+        json: {
+          status: 'ok',
+          workspaceId: WORKSPACE_ID,
+          capabilities: automationEnabled ? ['entry_automation'] : [],
+        },
         status: 200,
       });
       return;
@@ -363,6 +394,85 @@ async function installCurrentProductApi(
             },
           ],
         },
+        status: 200,
+      });
+      return;
+    }
+    if (
+      automationEnabled &&
+      path === '/api/v1/entries/automation/policy' &&
+      request.method() === 'GET'
+    ) {
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {
+          status: 'ok',
+          policy: {
+            revision: 1,
+            enabled: true,
+            paused: false,
+            profileRevision: 0,
+            minimumMatchedRuleCount: 1,
+            advanceThresholds: {
+              usefulness: 3,
+              interest: 3,
+              requiredDimensions: 'either',
+            },
+            deferThresholds: {
+              usefulness: -3,
+              interest: -3,
+              requiredDimensions: 'either',
+            },
+            budgets: {
+              maximumEntriesPerRun: 20,
+              maximumAdvanceCandidatesPerRun: 10,
+              maximumDeferCandidatesPerRun: 10,
+            },
+            failureMode: 'pause',
+          },
+          profile: {revision: 0, enabled: false, ruleCount: 0},
+        },
+        status: 200,
+      });
+      return;
+    }
+    if (
+      automationEnabled &&
+      path === '/api/v1/entries/automation/runs' &&
+      request.method() === 'GET'
+    ) {
+      const requestIndex = automationRunListRequestCount++;
+      options.automationRunListRequests.push(request.url());
+      if (requestIndex === 1 && options.automationRunListGate !== undefined) {
+        await options.automationRunListGate;
+      }
+      const runId =
+        requestIndex === 0
+          ? 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+          : requestIndex === 1
+            ? 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+            : 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {
+          status: 'ok',
+          executions: [syntheticAutomationExecution(runId)],
+        },
+        status: 200,
+      });
+      return;
+    }
+    if (
+      automationEnabled &&
+      path.startsWith('/api/v1/entries/automation/runs/') &&
+      request.method() === 'GET'
+    ) {
+      const runId = decodeURIComponent(
+        path.slice('/api/v1/entries/automation/runs/'.length),
+      );
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {status: 'ok', execution: syntheticAutomationExecution(runId)},
         status: 200,
       });
       return;
@@ -806,6 +916,77 @@ test('keeps the preference panel responsive and ignores superseded local results
     await page.setViewportSize(viewport);
     await expect(
       page.getByRole('heading', {name: '可解释偏好规则', exact: true}),
+    ).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+  }
+});
+
+test('keeps automation audit exact, responsive, and isolated from late run lists', async ({
+  page,
+}) => {
+  const runListGate = controlledGate();
+  const runListRequests: string[] = [];
+  await installCurrentProductApi(page, {
+    automationRunListGate: runListGate.promise,
+    automationRunListRequests: runListRequests,
+  });
+  await page.setViewportSize({width: 320, height: 720});
+  await page.goto('/');
+
+  const navigation = page.getByRole('navigation', {name: '产品工作区'});
+  await navigation.getByRole('button', {name: '标签', exact: true}).click();
+  const panel = page.locator('.entry-automation-policy');
+  await expect(
+    panel.getByRole('heading', {name: '可恢复自动分流', exact: true}),
+  ).toBeVisible();
+  await expect(panel.getByText('aaaaaaaa…aaaa', {exact: true})).toBeVisible();
+
+  await panel.getByRole('button', {name: '刷新记录', exact: true}).click();
+  await expect.poll(() => runListRequests.length).toBe(2);
+  await panel.getByRole('button', {name: '重新读取', exact: true}).click();
+  await expect.poll(() => runListRequests.length).toBe(3);
+  await expect(panel.getByText('cccccccc…cccc', {exact: true})).toBeVisible();
+
+  const lateResponse = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === '/api/v1/entries/automation/runs',
+  );
+  runListGate.release();
+  await lateResponse;
+  await expect(panel.getByText('bbbbbbbb…bbbb', {exact: true})).toHaveCount(0);
+  await expect(panel.getByText('cccccccc…cccc', {exact: true})).toBeVisible();
+
+  await panel
+    .getByRole('button', {name: /读取运行 cccccccc…cccc 的完整审计/u})
+    .click();
+  await expect(
+    panel.getByRole('heading', {name: '完整运行审计', exact: true}),
+  ).toBeVisible();
+  await expect(
+    panel.getByText(
+      '全部分流事实已经结算；本运行只记录去向，没有改写任何业务内容。',
+      {
+        exact: true,
+      },
+    ),
+  ).toBeVisible();
+  await expect(
+    panel.getByText('cccccccc-cccc-4ccc-8ccc-cccccccccccc', {exact: true}),
+  ).toBeVisible();
+
+  for (const viewport of [
+    {width: 320, height: 720},
+    {width: 390, height: 844},
+    {width: 768, height: 900},
+    {width: 1024, height: 900},
+    {width: 1440, height: 1000},
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(
+      panel.getByRole('heading', {name: '完整运行审计', exact: true}),
     ).toBeVisible();
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,

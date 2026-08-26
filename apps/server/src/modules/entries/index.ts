@@ -18,3 +18,5 @@ export * from './information_entry_exploration_contract.js';
 export * from './information_entry_exploration.js';
 export * from './information_entry_preference_profile_contract.js';
 export * from './information_entry_preference_profile.js';
+export * from './information_entry_automation_policy_contract.js';
+export * from './information_entry_automation_policy.js';

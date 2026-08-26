@@ -34,6 +34,7 @@ import {
   searchCurrentInformationEntries,
   scoreInformationEntrySearchText,
   suggestInformationEntryPreferenceRules,
+  trialInformationEntryAutomationPolicy,
   trialInformationEntryPreferenceProfile,
   type CurrentInformationEntry,
   type EntryDomainKeyword,
@@ -70,9 +71,13 @@ import {
   AiAssociationProposalServiceError,
   AiSplitProposalServiceError,
   AiTagProposalServiceError,
+  executeInformationEntryAutomation,
   type AiAssociationProposalServicePort,
   type AiSplitProposalServicePort,
   type AiTagProposalServicePort,
+  type EntryAutomationExecution,
+  type EntryAutomationExecutionRepositoryPort,
+  type ExecuteEntryAutomationResult,
   type ProcessingProposal,
   type ProcessingRun,
   type ProcessingRunRepositoryPort,
@@ -86,11 +91,13 @@ import type {BlobStore} from '../storage/blob_store.js';
 import {
   decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
+  decodeEntryAutomationPolicy,
   decodeEntryPreferenceProfile,
   decodeReviewExplorationPolicyPreferences,
   decodeReviewSourceSubscriptionPreferences,
   decodeReviewQuickTags,
   decodeReviewVocabularyPreferences,
+  DEFAULT_ENTRY_AUTOMATION_POLICY,
   DEFAULT_ENTRY_PREFERENCE_PROFILE,
   DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
@@ -100,6 +107,7 @@ import {
   updateReviewPreferences,
   type ReviewAssociationPolicyPreferences,
   type ReviewExplorationPolicyPreferences,
+  type EntryAutomationPolicy,
   type EntryPreferenceProfile,
   type ReviewPreferencesStore,
 } from '../storage/review_preferences_store.js';
@@ -121,6 +129,7 @@ export interface M1cApiServiceDependencies {
   readonly informationDocumentTagRepository: InformationDocumentTagRepositoryPort;
   readonly informationEntryAssociationRepository: InformationEntryAssociationRepositoryPort;
   readonly processingRunRepository: ProcessingRunRepositoryPort;
+  readonly entryAutomationExecutionRepository?: EntryAutomationExecutionRepositoryPort;
   readonly sourceSubscriptions?: SourceSubscriptionServicePort;
   readonly aiSplitProposals?: AiSplitProposalServicePort;
   readonly aiTagProposals?: AiTagProposalServicePort;
@@ -149,6 +158,16 @@ export interface M1cApiServicePort {
     body: unknown,
   ): Promise<M1cHttpResult>;
   trialInformationEntryPreferenceProfile(body: unknown): Promise<M1cHttpResult>;
+  loadInformationEntryAutomationPolicy(): Promise<M1cHttpResult>;
+  saveInformationEntryAutomationPolicy(body: unknown): Promise<M1cHttpResult>;
+  trialInformationEntryAutomationPolicy(body: unknown): Promise<M1cHttpResult>;
+  executeInformationEntryAutomation(body: unknown): Promise<M1cHttpResult>;
+  listInformationEntryAutomationExecutions(
+    limit?: unknown,
+  ): Promise<M1cHttpResult>;
+  loadInformationEntryAutomationExecution(
+    runId: string,
+  ): Promise<M1cHttpResult>;
   importMarkdown(body: unknown): Promise<M1cHttpResult>;
   importDocument(body: unknown): Promise<M1cHttpResult>;
   materializeInformationEntries(body: unknown): Promise<M1cHttpResult>;
@@ -478,6 +497,9 @@ export class M1cApiService implements M1cApiServicePort {
         'information_document_tags',
         'information_entry_knowledge_graph',
         'information_entry_association_policy',
+        ...(this.#dependencies.entryAutomationExecutionRepository === undefined
+          ? []
+          : ['entry_automation']),
         'information_entry_exploration',
         'private_documents',
         'processing_runs',
@@ -851,6 +873,361 @@ export class M1cApiService implements M1cApiServicePort {
       return httpResult(result.status === 'complete' ? 200 : 409, result);
     } catch {
       return entryPreferenceProfileFailure();
+    }
+  }
+
+  public async loadInformationEntryAutomationPolicy(): Promise<M1cHttpResult> {
+    try {
+      const preferences = await this.#dependencies.reviewPreferences.load(
+        this.#dependencies.workspaceId,
+      );
+      const profile =
+        preferences.entryPreferenceProfile ?? DEFAULT_ENTRY_PREFERENCE_PROFILE;
+      return httpResult(200, {
+        status: 'ok',
+        policy:
+          preferences.entryAutomationPolicy ?? DEFAULT_ENTRY_AUTOMATION_POLICY,
+        profile: Object.freeze({
+          revision: profile.revision,
+          enabled: profile.enabled,
+          ruleCount: profile.rules.length,
+        }),
+      });
+    } catch {
+      return entryAutomationFailure();
+    }
+  }
+
+  public async saveInformationEntryAutomationPolicy(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (
+      !isRecord(body) ||
+      typeof body.expectedRevision !== 'number' ||
+      !Number.isSafeInteger(body.expectedRevision) ||
+      body.expectedRevision < 0
+    ) {
+      return inputFailure('body.expectedRevision');
+    }
+    const draft = decodeEntryAutomationPolicy({
+      revision: body.expectedRevision,
+      enabled: body.enabled,
+      paused: body.paused,
+      profileRevision: body.profileRevision,
+      minimumMatchedRuleCount: body.minimumMatchedRuleCount,
+      advanceThresholds: body.advanceThresholds,
+      deferThresholds: body.deferThresholds,
+      budgets: body.budgets,
+      failureMode: body.failureMode,
+    });
+    if (draft === undefined) return inputFailure('body');
+
+    try {
+      const update = await updateReviewPreferences<
+        Readonly<{
+          outcome: 'applied' | 'stale' | 'stale_profile' | 'unchanged';
+          policy: Readonly<EntryAutomationPolicy>;
+          profile: Readonly<EntryPreferenceProfile>;
+        }>
+      >(
+        this.#dependencies.reviewPreferences,
+        this.#dependencies.workspaceId,
+        (preferences) => {
+          const current =
+            preferences.entryAutomationPolicy ??
+            DEFAULT_ENTRY_AUTOMATION_POLICY;
+          const profile =
+            preferences.entryPreferenceProfile ??
+            DEFAULT_ENTRY_PREFERENCE_PROFILE;
+          if (current.revision !== body.expectedRevision) {
+            return Object.freeze({
+              next: preferences,
+              result: Object.freeze({
+                outcome: 'stale' as const,
+                policy: current,
+                profile,
+              }),
+            });
+          }
+          if (draft.profileRevision !== profile.revision) {
+            return Object.freeze({
+              next: preferences,
+              result: Object.freeze({
+                outcome: 'stale_profile' as const,
+                policy: current,
+                profile,
+              }),
+            });
+          }
+          const unchanged = entryAutomationPoliciesHaveSameValue(
+            current,
+            draft,
+          );
+          if (unchanged) {
+            return Object.freeze({
+              next: preferences,
+              result: Object.freeze({
+                outcome: 'unchanged' as const,
+                policy: current,
+                profile,
+              }),
+            });
+          }
+          if (current.revision >= Number.MAX_SAFE_INTEGER) {
+            throw new Error('Entry automation policy revision exhausted.');
+          }
+          const nextPolicy = Object.freeze({
+            ...draft,
+            revision: current.revision + 1,
+          });
+          return Object.freeze({
+            next: patchReviewPreferences(preferences, {
+              entryAutomationPolicy: nextPolicy,
+            }),
+            result: Object.freeze({
+              outcome: 'applied' as const,
+              policy: nextPolicy,
+              profile,
+            }),
+          });
+        },
+      );
+      if (update.result.outcome === 'stale') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'stale_entry_automation_policy_revision',
+          }),
+        });
+      }
+      if (update.result.outcome === 'stale_profile') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'stale_entry_preference_profile_revision',
+          }),
+        });
+      }
+      return httpResult(200, {
+        status: update.result.outcome,
+        policy: update.result.policy,
+        profile: Object.freeze({
+          revision: update.result.profile.revision,
+          enabled: update.result.profile.enabled,
+          ruleCount: update.result.profile.rules.length,
+        }),
+      });
+    } catch {
+      return entryAutomationFailure();
+    }
+  }
+
+  public async trialInformationEntryAutomationPolicy(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (
+      !isRecord(body) ||
+      typeof body.includePrivate !== 'boolean' ||
+      typeof body.expectedPolicyRevision !== 'number' ||
+      !Number.isSafeInteger(body.expectedPolicyRevision) ||
+      body.expectedPolicyRevision < 0 ||
+      typeof body.expectedProfileRevision !== 'number' ||
+      !Number.isSafeInteger(body.expectedProfileRevision) ||
+      body.expectedProfileRevision < 0 ||
+      (body.expectedEntries !== undefined &&
+        !Array.isArray(body.expectedEntries)) ||
+      (body.manualTakeoverEntryIds !== undefined &&
+        !Array.isArray(body.manualTakeoverEntryIds))
+    ) {
+      return inputFailure('body');
+    }
+    try {
+      const [preferences, entries] = await Promise.all([
+        this.#dependencies.reviewPreferences.load(
+          this.#dependencies.workspaceId,
+        ),
+        this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          true,
+        ),
+      ]);
+      const currentPolicy =
+        preferences.entryAutomationPolicy ?? DEFAULT_ENTRY_AUTOMATION_POLICY;
+      const currentProfile =
+        preferences.entryPreferenceProfile ?? DEFAULT_ENTRY_PREFERENCE_PROFILE;
+      const result = trialInformationEntryAutomationPolicy(
+        entries,
+        currentPolicy.revision,
+        currentProfile.revision,
+        body.policy,
+        currentProfile,
+        {
+          includePrivate: body.includePrivate,
+          expectedPolicyRevision: body.expectedPolicyRevision,
+          expectedProfileRevision: body.expectedProfileRevision,
+          ...(body.expectedEntries === undefined
+            ? {}
+            : {
+                expectedEntries:
+                  body.expectedEntries as readonly Readonly<InformationEntryPreferenceTrialExpectedEntry>[],
+              }),
+          ...(body.manualTakeoverEntryIds === undefined
+            ? {}
+            : {
+                manualTakeoverEntryIds:
+                  body.manualTakeoverEntryIds as readonly string[],
+              }),
+        },
+      );
+      if (result.status === 'invalid_policy') {
+        return httpResult(422, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'invalid_entry_automation_policy',
+            path: 'body.policy',
+          }),
+        });
+      }
+      if (
+        result.status === 'invalid_profile' ||
+        result.status === 'invalid_request'
+      ) {
+        return inputFailure('body');
+      }
+      return httpResult(result.status === 'complete' ? 200 : 409, result);
+    } catch {
+      return entryAutomationFailure();
+    }
+  }
+
+  public async executeInformationEntryAutomation(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const repository = this.#dependencies.entryAutomationExecutionRepository;
+    if (repository === undefined) return entryAutomationUnavailable();
+    if (
+      !isRecord(body) ||
+      typeof body.idempotencyKey !== 'string' ||
+      typeof body.includePrivate !== 'boolean' ||
+      typeof body.expectedPolicyRevision !== 'number' ||
+      typeof body.expectedProfileRevision !== 'number' ||
+      (body.expectedEntries !== undefined &&
+        !Array.isArray(body.expectedEntries)) ||
+      (body.manualTakeoverEntryIds !== undefined &&
+        !Array.isArray(body.manualTakeoverEntryIds))
+    ) {
+      return inputFailure('body');
+    }
+    try {
+      const result = await executeInformationEntryAutomation(
+        {
+          repository,
+          entries: this.#dependencies.informationEntryRepository,
+          preferences: this.#dependencies.reviewPreferences,
+        },
+        {
+          workspaceId: this.#dependencies.workspaceId,
+          idempotencyKey: body.idempotencyKey,
+          includePrivate: body.includePrivate,
+          expectedPolicyRevision: body.expectedPolicyRevision,
+          expectedProfileRevision: body.expectedProfileRevision,
+          ...(body.expectedEntries === undefined
+            ? {}
+            : {
+                expectedEntries:
+                  body.expectedEntries as readonly Readonly<InformationEntryPreferenceTrialExpectedEntry>[],
+              }),
+          ...(body.manualTakeoverEntryIds === undefined
+            ? {}
+            : {
+                manualTakeoverEntryIds:
+                  body.manualTakeoverEntryIds as readonly string[],
+              }),
+        },
+      );
+      if (result.status === 'invalid_request') return inputFailure('body');
+      const execution =
+        'runId' in result
+          ? await repository.loadExecution(
+              this.#dependencies.workspaceId,
+              result.runId,
+            )
+          : undefined;
+      return httpResult(entryAutomationExecutionStatus(result), {
+        ...result,
+        ...(execution === undefined
+          ? {}
+          : {execution: entryAutomationExecutionResponse(execution)}),
+      });
+    } catch {
+      return entryAutomationFailure();
+    }
+  }
+
+  public async listInformationEntryAutomationExecutions(
+    limitInput: unknown = 10,
+  ): Promise<M1cHttpResult> {
+    const repository = this.#dependencies.entryAutomationExecutionRepository;
+    if (repository === undefined) return entryAutomationUnavailable();
+    const limit = decodeProcessingRunLimit(limitInput);
+    if (limit === undefined || limit > 20) return inputFailure('query.limit');
+    try {
+      const runs =
+        await this.#dependencies.processingRunRepository.listRecentRuns(
+          this.#dependencies.workspaceId,
+          100,
+        );
+      const runIds = runs
+        .filter(
+          (run) =>
+            run.origin === 'deterministic' &&
+            run.currentStage === 'tags' &&
+            run.currentStep?.startsWith('automation_') === true,
+        )
+        .slice(0, limit)
+        .map((run) => run.runId);
+      const loaded = await Promise.all(
+        runIds.map((runId) =>
+          repository.loadExecution(this.#dependencies.workspaceId, runId),
+        ),
+      );
+      const executions = loaded.filter(
+        (execution): execution is Readonly<EntryAutomationExecution> =>
+          execution !== undefined,
+      );
+      return httpResult(200, {
+        status: 'ok',
+        executions: Object.freeze(
+          executions.map(entryAutomationExecutionResponse),
+        ),
+      });
+    } catch {
+      return entryAutomationFailure();
+    }
+  }
+
+  public async loadInformationEntryAutomationExecution(
+    runId: string,
+  ): Promise<M1cHttpResult> {
+    const repository = this.#dependencies.entryAutomationExecutionRepository;
+    if (repository === undefined) return entryAutomationUnavailable();
+    if (!CANONICAL_UUID.test(runId)) return inputFailure('path.runId');
+    try {
+      const execution = await repository.loadExecution(
+        this.#dependencies.workspaceId,
+        runId,
+      );
+      return execution === undefined
+        ? httpResult(404, {
+            status: 'not_found',
+            issue: Object.freeze({code: 'entry_automation_run_not_found'}),
+          })
+        : httpResult(200, {
+            status: 'ok',
+            execution: entryAutomationExecutionResponse(execution),
+          });
+    } catch {
+      return entryAutomationFailure();
     }
   }
 
@@ -2292,6 +2669,20 @@ function entryPreferenceProfileFailure(): M1cHttpResult {
   });
 }
 
+function entryAutomationFailure(): M1cHttpResult {
+  return httpResult(503, {
+    status: 'failed',
+    issue: Object.freeze({code: 'entry_automation_failed'}),
+  });
+}
+
+function entryAutomationUnavailable(): M1cHttpResult {
+  return httpResult(503, {
+    status: 'failed',
+    issue: Object.freeze({code: 'entry_automation_unavailable'}),
+  });
+}
+
 function entryPreferenceProfilesHaveSameValue(
   current: Readonly<EntryPreferenceProfile>,
   draft: Readonly<EntryPreferenceProfile>,
@@ -2313,6 +2704,76 @@ function entryPreferenceProfilesHaveSameValue(
       rule.effect === candidate.effect &&
       rule.weight === candidate.weight
     );
+  });
+}
+
+function entryAutomationPoliciesHaveSameValue(
+  current: Readonly<EntryAutomationPolicy>,
+  draft: Readonly<EntryAutomationPolicy>,
+): boolean {
+  return (
+    current.enabled === draft.enabled &&
+    current.paused === draft.paused &&
+    current.profileRevision === draft.profileRevision &&
+    current.minimumMatchedRuleCount === draft.minimumMatchedRuleCount &&
+    current.advanceThresholds.usefulness ===
+      draft.advanceThresholds.usefulness &&
+    current.advanceThresholds.interest === draft.advanceThresholds.interest &&
+    current.advanceThresholds.requiredDimensions ===
+      draft.advanceThresholds.requiredDimensions &&
+    current.deferThresholds.usefulness === draft.deferThresholds.usefulness &&
+    current.deferThresholds.interest === draft.deferThresholds.interest &&
+    current.deferThresholds.requiredDimensions ===
+      draft.deferThresholds.requiredDimensions &&
+    current.budgets.maximumEntriesPerRun ===
+      draft.budgets.maximumEntriesPerRun &&
+    current.budgets.maximumAdvanceCandidatesPerRun ===
+      draft.budgets.maximumAdvanceCandidatesPerRun &&
+    current.budgets.maximumDeferCandidatesPerRun ===
+      draft.budgets.maximumDeferCandidatesPerRun
+  );
+}
+
+function entryAutomationExecutionStatus(
+  result: Readonly<ExecuteEntryAutomationResult>,
+): number {
+  if (result.status === 'succeeded') return 200;
+  if (result.status === 'failed') return 500;
+  return 409;
+}
+
+function entryAutomationExecutionResponse(
+  execution: Readonly<EntryAutomationExecution>,
+) {
+  return Object.freeze({
+    runId: execution.runId,
+    status: execution.status,
+    version: execution.version,
+    policyRevision: execution.policyRevision,
+    profileRevision: execution.profileRevision,
+    includePrivate: execution.includePrivate,
+    ...(execution.errorCode === undefined
+      ? {}
+      : {errorCode: execution.errorCode}),
+    claims: Object.freeze(
+      execution.claims.map((claim) =>
+        Object.freeze({
+          ordinal: claim.ordinal,
+          entryId: claim.entryId,
+          entryRevision: claim.entryRevision,
+          route: claim.route,
+          reason: claim.reason,
+          status: claim.status,
+          ...(claim.errorCode === undefined
+            ? {}
+            : {errorCode: claim.errorCode}),
+          createdAt: claim.createdAt,
+          ...(claim.finishedAt === undefined
+            ? {}
+            : {finishedAt: claim.finishedAt}),
+        }),
+      ),
+    ),
   });
 }
 

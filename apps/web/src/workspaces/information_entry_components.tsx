@@ -13,6 +13,12 @@ import type {
   InformationEntryPreferenceProfileWriteResponse,
   InformationEntryPreferenceSuggestionResponse,
   InformationEntryPreferenceTrialResponse,
+  InformationEntryAutomationExecuteResponse,
+  InformationEntryAutomationExecutionListResponse,
+  InformationEntryAutomationExecutionResponse,
+  InformationEntryAutomationPolicyResponse,
+  InformationEntryAutomationPolicyWriteResponse,
+  InformationEntryAutomationTrialResponse,
   InformationDocumentTagWriteResponse,
   InformationEntry,
   InformationEntryDocumentListResponse,
@@ -24,6 +30,7 @@ import type {
   ReviewPreferencesWrite,
   EntryPreferenceProfile,
   EntryPreferenceRule,
+  EntryAutomationPolicy,
 } from '../api/m1c_api_contract.js';
 import {DOMAIN_LABELS, TYPE_LABELS} from './information_entry_shared.js';
 
@@ -124,6 +131,56 @@ export interface InformationEntryServices {
       profile: Readonly<EntryPreferenceProfile>;
     }>,
   ) => Promise<M1cHttpResponse<InformationEntryPreferenceTrialResponse>>;
+  readonly onLoadEntryAutomationPolicy: () => Promise<
+    M1cHttpResponse<InformationEntryAutomationPolicyResponse>
+  >;
+  readonly onSaveEntryAutomationPolicy: (
+    body: Readonly<{
+      expectedRevision: number;
+      enabled: boolean;
+      paused: boolean;
+      profileRevision: number;
+      minimumMatchedRuleCount: number;
+      advanceThresholds: Readonly<EntryAutomationPolicy['advanceThresholds']>;
+      deferThresholds: Readonly<EntryAutomationPolicy['deferThresholds']>;
+      budgets: Readonly<EntryAutomationPolicy['budgets']>;
+      failureMode: 'pause';
+    }>,
+  ) => Promise<M1cHttpResponse<InformationEntryAutomationPolicyWriteResponse>>;
+  readonly onTrialEntryAutomationPolicy: (
+    body: Readonly<{
+      includePrivate: boolean;
+      expectedPolicyRevision: number;
+      expectedProfileRevision: number;
+      policy: Readonly<EntryAutomationPolicy>;
+      expectedEntries?: readonly Readonly<{
+        entryId: string;
+        revision: number;
+      }>[];
+      manualTakeoverEntryIds?: readonly string[];
+    }>,
+  ) => Promise<M1cHttpResponse<InformationEntryAutomationTrialResponse>>;
+  readonly onExecuteEntryAutomation: (
+    body: Readonly<{
+      idempotencyKey: string;
+      includePrivate: boolean;
+      expectedPolicyRevision: number;
+      expectedProfileRevision: number;
+      expectedEntries: readonly Readonly<{
+        entryId: string;
+        revision: number;
+      }>[];
+      manualTakeoverEntryIds?: readonly string[];
+    }>,
+  ) => Promise<M1cHttpResponse<InformationEntryAutomationExecuteResponse>>;
+  readonly onListEntryAutomationExecutions: (
+    limit?: number,
+  ) => Promise<
+    M1cHttpResponse<InformationEntryAutomationExecutionListResponse>
+  >;
+  readonly onLoadEntryAutomationExecution: (
+    runId: string,
+  ) => Promise<M1cHttpResponse<InformationEntryAutomationExecutionResponse>>;
   readonly onOpenEvidence: (
     snapshotId: string,
     fragmentId: string | undefined,

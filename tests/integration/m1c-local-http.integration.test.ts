@@ -281,6 +281,46 @@ function stubApi(
           items: [],
         }),
       ),
+    loadInformationEntryAutomationPolicy: () =>
+      Promise.resolve(
+        result(200, {
+          status: 'ok',
+          policy: {
+            revision: 0,
+            enabled: false,
+            paused: false,
+            profileRevision: 0,
+            minimumMatchedRuleCount: 1,
+            advanceThresholds: {
+              usefulness: 3,
+              interest: 3,
+              requiredDimensions: 1,
+            },
+            deferThresholds: {
+              usefulness: 3,
+              interest: 3,
+              requiredDimensions: 1,
+            },
+            budgets: {
+              maximumEntriesPerRun: 100,
+              maximumAdvanceCandidatesPerRun: 25,
+              maximumDeferCandidatesPerRun: 25,
+            },
+            failureMode: 'pause',
+          },
+          profile: {revision: 0, enabled: false, ruleCount: 0},
+        }),
+      ),
+    saveInformationEntryAutomationPolicy: () =>
+      Promise.resolve(result(200, {status: 'unchanged'})),
+    trialInformationEntryAutomationPolicy: () =>
+      Promise.resolve(result(200, {status: 'complete', items: []})),
+    executeInformationEntryAutomation: () =>
+      Promise.resolve(result(409, {status: 'not_ready', reason: 'disabled'})),
+    listInformationEntryAutomationExecutions: () =>
+      Promise.resolve(result(200, {status: 'ok', executions: []})),
+    loadInformationEntryAutomationExecution: () =>
+      Promise.resolve(result(404, {status: 'not_found'})),
     importMarkdown: () => Promise.resolve(result(201, {status: 'created'})),
     importDocument: () => Promise.resolve(result(201, {status: 'created'})),
     materializeInformationEntries: () =>

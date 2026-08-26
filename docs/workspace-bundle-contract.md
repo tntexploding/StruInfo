@@ -1,7 +1,7 @@
 # StruInfo 个人数据包（Workspace Bundle v1）合同
 
 - 状态：当前五分区个人数据导出/空工作区恢复已实现
-- 最近更新：2026-08-24
+- 最近更新：2026-08-26
 - 对应决策：[ADR 0002](adr/0002-postgresql-persistence-and-durable-work.md)、
   [ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、
   [ADR 0007](adr/0007-information-entry-first-document-processing.md)、
@@ -10,7 +10,8 @@
   [ADR 0013](adr/0013-openai-entry-tag-proposals.md)、
   [ADR 0014](adr/0014-openai-entry-association-proposals.md)、
   [ADR 0015](adr/0015-openai-entry-split-proposals.md)、
-  [ADR 0017](adr/0017-manual-within-fragment-entry-boundaries.md)
+  [ADR 0017](adr/0017-manual-within-fragment-entry-boundaries.md)、
+  [ADR 0027](adr/0027-recoverable-entry-automation-routing-execution.md)
 - 信封 Schema：[`workspace-bundle.v1.schema.json`](../packages/contracts/json-schema/workspace-bundle.v1.schema.json)
 
 ## 1. 目标
@@ -20,11 +21,11 @@ Workspace Bundle v1 现在是“当前已实现的全部工作区个人数据”
 - 36 张 Evidence、Curation 与正式 Knowledge 工作区表；
 - 8 张当前成品态 Entry / Document 标签及精确 Fragment 区间表；
 - 2 张 Entry 联系投影与当前控制表；
-- 10 张处理任务、提案信封及 AI 拆分/标签/联系提案表；
+- 12 张处理任务、提案信封、AI 拆分/标签/联系提案及自动路由执行表；
 - 所有被 Evidence 引用的原始/规范化 Blob 字节；
 - 当前工作区的快捷标签、自动标签筛选与标签别名偏好。
 
-共计 56 张数据库表。运行配置、数据库 URL、密码、API key、访问令牌、外部工作区路径和其他秘密不属于个人数据包，继续由外部配置/秘密机制提供。
+共计 58 张数据库表。运行配置、数据库 URL、密码、API key、访问令牌、外部工作区路径和其他秘密不属于个人数据包，继续由外部配置/秘密机制提供。
 
 真实包文件只能位于用户选择的外部数据根 `exports/`，不得进入 Git、源码目录、安装包、容器镜像或测试 fixture。tracked 测试只能使用合成且无个人价值的数据。
 
@@ -49,12 +50,12 @@ Workspace Bundle v1 现在是“当前已实现的全部工作区个人数据”
 | `struinfo.m1c-domain`      |       1 | `struinfo.m1c-domain.v1`      | Evidence、Curation、正式 Knowledge 与命令历史，36 表                             |
 | `struinfo.m1d-entry`       |       3 | `struinfo.m1d-entry.v3`       | 当前 Entry、Fragment 输入/可选精确区间、三维标签、lineage 与 Document 标签，8 表 |
 | `struinfo.m1d-association` |       3 | `struinfo.m1d-association.v3` | 可重建联系投影、当前人工控制与正式图谱关系元数据，2 表                           |
-| `struinfo.m1e-processing`  |       4 | `struinfo.m1e-processing.v4`  | 处理任务、提案信封、精确输入与 AI 拆分/标签/关系提案载荷，10 表                  |
+| `struinfo.m1e-processing`  |       5 | `struinfo.m1e-processing.v5`  | 处理任务、提案信封、AI 提案载荷与 typed 自动路由 header/claim，12 表             |
 | `struinfo.personal-data`   |       1 | `struinfo.personal-data.v1`   | 引用 Blob 的完整字节与当前审核/标签个人偏好                                      |
 
 每个 codec 都使用闭合 schema，显式列出允许的字段并拒绝未知表、未知列、重复身份、跨工作区引用和错误 scalar。通用信封不会把任意 JSON 直接当作领域事实。
 
-Entry v3、Association v3 和 Processing v4 反映迁移 `000011` 至 `000017` 之后的当前成品态。Entry v3 为人工首次物化增加可选半开 Unicode 标量区间；没有区间行的输入仍表示完整 Fragment。Association v3 在当前 override 上增加关系来源、名称和方向；Entry 的 `current_revision` / `current_revision_id` 只作为乐观并发版本令牌，不再指向一张普通编辑历史表。Processing v4 在 provider-neutral 任务/提案之上增加闭合的 AI 拆分、标签与所选公开 Entry 对关系提案载荷；它不保存 API key、提示全文、原始模型响应或任意 JSON。不可变 Snapshot、Fragment 以及正式 Knowledge 修订历史仍由 M1C domain 分区原样保留。
+Entry v3、Association v3 和 Processing v5 反映迁移 `000011` 至 `000018` 之后的当前成品态。Entry v3 为人工首次物化增加可选半开 Unicode 标量区间；没有区间行的输入仍表示完整 Fragment。Association v3 在当前 override 上增加关系来源、名称和方向；Entry 的 `current_revision` / `current_revision_id` 只作为乐观并发版本令牌，不再指向一张普通编辑历史表。Processing v5 在 provider-neutral 任务/提案与闭合 AI 拆分、标签、关系提案载荷之上，增加 exact-policy/Profile/Entry-bound 的自动路由运行与逐条 claim；它不保存 Entry 正文、API key、提示全文、原始模型响应或任意 JSON。不可变 Snapshot、Fragment 以及正式 Knowledge 修订历史仍由 M1C domain 分区原样保留。
 
 ## 4. 规范编码与隐私
 
@@ -74,7 +75,7 @@ Writer 输出确定性 UTF-8 JSON：
 
 一次导出按以下顺序执行：
 
-1. 在 PostgreSQL `REPEATABLE READ READ ONLY` 快照中读取当前 56 张工作区表；
+1. 在 PostgreSQL `REPEATABLE READ READ ONLY` 快照中读取当前 58 张工作区表；
 2. 规范化四个数据库分区并核对同一 `workspaceId`；
 3. 从 Evidence 行导出精确 Blob 引用清单，并从外部 Blob store 读取每个引用的字节；
 4. 从外部 `preferences/` 读取当前快捷标签、自动筛选和别名；
@@ -102,7 +103,7 @@ Reader 继续接受历史 Bundle：
 - 只含 `struinfo.m1c-domain.v1`：Entry 与联系状态按空处理；
 - 带 `struinfo.m1d-entry.v1`：只保留旧指针选中的当前 Entry/Document 标签值，转换为 v3，并补空的 Fragment 区间表；`struinfo.m1d-entry.v2` 原样保留七张当前态表并同样补空区间表；
 - 带 `struinfo.m1d-association.v1` 或 `.v2`：保留当前人工控制并转换为 v3；缺失的图谱关系元数据为 `null`；
-- 缺少 `struinfo.m1e-processing`：处理任务和提案状态按空处理；Processing v1 保留任务、提案信封和 Fragment 输入，v2 增加 AI 标签提案，v3 增加 selected-pair 联系提案；读取 v1/v2/v3 时缺失的后续表按空处理并转换为 v4；
+- 缺少 `struinfo.m1e-processing`：处理任务和提案状态按空处理；Processing v1 保留任务、提案信封和 Fragment 输入，v2 增加 AI 标签提案，v3 增加 selected-pair 联系提案，v4 增加 AI split 提案；读取 v1/v2/v3/v4 时缺失的后续表按空处理并转换为 v5；
 - 缺少 `struinfo.personal-data.v1`：仍要求外部 Blob store 已存在全部引用字节，且不覆盖当前个人偏好。
 
 新 writer 只生成五分区形式。未知或重复分区、Association 存在但 Entry 缺失、Blob manifest 与 personal-data 字节不一致时一律拒绝。

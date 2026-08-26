@@ -120,6 +120,71 @@ export class M1cApiController {
     );
   }
 
+  @Get('entries/automation/policy')
+  public async informationEntryAutomationPolicy(
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.loadInformationEntryAutomationPolicy(),
+    );
+  }
+
+  @Put('entries/automation/policy')
+  public async saveInformationEntryAutomationPolicy(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.saveInformationEntryAutomationPolicy(body),
+    );
+  }
+
+  @Post('entries/automation/trial')
+  public async trialInformationEntryAutomationPolicy(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.trialInformationEntryAutomationPolicy(body),
+    );
+  }
+
+  @Post('entries/automation/runs')
+  public async executeInformationEntryAutomation(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.executeInformationEntryAutomation(body),
+    );
+  }
+
+  @Get('entries/automation/runs')
+  public async informationEntryAutomationExecutions(
+    @Query('limit') limit: string | undefined,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.listInformationEntryAutomationExecutions(limit ?? 10),
+    );
+  }
+
+  @Get('entries/automation/runs/:runId')
+  public async informationEntryAutomationExecution(
+    @Param('runId') runId: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.loadInformationEntryAutomationExecution(runId),
+    );
+  }
+
   @Post('imports/markdown')
   public async importMarkdown(
     @Body() body: unknown,
