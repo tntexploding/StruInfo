@@ -483,6 +483,17 @@ personal-data package now covers 60 workspace tables. Manual-review/defer
 routes, AI proposal acceptance, graph assertions, score changes, hiding and
 deletion remain unauthorized.
 
+ADR 0033 completes M1H-2A/B with owner-controlled restructuring after Entry
+materialization. The Split page first previews one complete Fragment/scalar
+partition and freezes current Entry, override and Document-tag versions. Apply
+requires the same plan digest plus explicit annotation/relationship impact
+acknowledgements, then atomically switches the unique current structure, writes
+successor lineage, recomputes Document tags, transfers eligible manual/AI graph
+relations and rebuilds replaceable Association projections. Snapshot/Fragment
+evidence and retired Entry rows remain intact. Migration `000021` adds
+`is_current_structure`; Entry Bundle v4 carries it and upgrades v1-v3 rows as
+current. AutomationPolicy and AI proposals receive no restructuring authority.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

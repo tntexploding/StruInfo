@@ -3190,6 +3190,67 @@
   gap: var(--si-space-3);
 }
 
+.entry-restructure__preview-actions,
+.entry-restructure__impact > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--si-space-3);
+}
+
+.entry-restructure__preview-actions {
+  padding-block-start: var(--si-space-4);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  color: var(--si-color-text-muted);
+}
+
+.entry-restructure__impact {
+  display: grid;
+  gap: var(--si-space-4);
+  padding: var(--si-space-5);
+  border: var(--si-rule-thin) solid var(--si-color-border-strong);
+  background: var(--si-color-bg-shell);
+}
+
+.entry-restructure__impact h3 {
+  margin: 0;
+}
+
+.entry-restructure__metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--si-space-2);
+  margin: 0;
+}
+
+.entry-restructure__metrics > div {
+  display: grid;
+  gap: var(--si-space-1);
+  min-inline-size: 0;
+  padding: var(--si-space-3);
+  border-inline-start: 2px solid var(--si-color-border-strong);
+  background: var(--si-color-surface-1);
+}
+
+.entry-restructure__metrics dt {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-caption);
+}
+
+.entry-restructure__metrics dd {
+  margin: 0;
+  font-family: var(--si-font-display);
+  font-size: var(--si-text-heading-3);
+}
+
+.entry-restructure__warning {
+  margin: 0;
+  padding: var(--si-space-3) var(--si-space-4);
+  border-inline-start: 2px solid var(--si-color-danger);
+  color: var(--si-color-danger);
+}
+
 .entry-manual-split__full-text {
   border: var(--si-rule-thin) solid var(--si-color-border-default);
   background: var(--si-color-bg-shell);
@@ -3338,6 +3399,12 @@
   }
 }
 
+@media (max-width: 74.9375rem) {
+  .entry-restructure__metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 47.9375rem), (orientation: portrait) {
   .entry-manual-split {
     padding: var(--si-space-5);
@@ -3351,6 +3418,20 @@
   .entry-manual-split__piece-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .entry-restructure__preview-actions,
+  .entry-restructure__impact > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .entry-restructure__metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .entry-restructure__preview-actions .secondary-action {
+    inline-size: 100%;
   }
 
   .entry-manual-split__toolbar .secondary-action,

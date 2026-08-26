@@ -19,6 +19,7 @@ import {
   deriveInformationDocumentTagRevisionId,
   deriveInformationEntryAssociationOverrideRevisionId,
   deriveInformationEntryRevisionId,
+  deriveInformationEntryRestructureGroups,
   informationEntrySearchKey,
   listInformationEntryAssociations as selectInformationEntryAssociations,
   orderedInformationEntryAssociationPair,
@@ -30,6 +31,7 @@ import {
   prepareManualInformationDocumentTags,
   prepareManualEntryRevision,
   prepareManualSplitInformationEntries,
+  prepareInformationEntryRestructure,
   prepareSplitInformationEntries,
   searchCurrentInformationEntries,
   scoreInformationEntrySearchText,
@@ -56,6 +58,10 @@ import {
   type InformationEntrySearchRequest,
   type InformationEntryQuerySynthesisRequest,
   type InformationEntryQuerySynthesisServicePort,
+  type InformationEntryRestructurePreparation,
+  type InformationEntryRestructureRepositoryPort,
+  type CurrentInformationDocumentTags,
+  type MaterializedEvidenceSnapshot,
 } from '../modules/entries/index.js';
 import {
   importMarkdownEvidence,
@@ -134,6 +140,7 @@ export interface M1cApiServiceDependencies {
   readonly informationEntryRepository: InformationEntryEmptySnapshotRepositoryPort;
   readonly informationDocumentTagRepository: InformationDocumentTagRepositoryPort;
   readonly informationEntryAssociationRepository: InformationEntryAssociationRepositoryPort;
+  readonly informationEntryRestructureRepository?: InformationEntryRestructureRepositoryPort;
   readonly processingRunRepository: ProcessingRunRepositoryPort;
   readonly entryAutomationExecutionRepository?: EntryAutomationExecutionRepositoryPort;
   readonly entryAutomationWorkQueueRepository?: EntryAutomationWorkQueueRepositoryPort;
@@ -150,6 +157,25 @@ export interface M1cHttpResult {
   readonly statusCode: number;
   readonly body: unknown;
 }
+
+interface InformationEntryRestructureInput {
+  readonly snapshotId: string;
+  readonly includePrivate: boolean;
+  readonly groups?: readonly Readonly<ManualEntryFragmentGroupInput>[];
+  readonly planSha256?: string;
+  readonly acknowledgeAnnotationChanges: boolean;
+  readonly acknowledgeRelationshipChanges: boolean;
+}
+
+type LoadedInformationEntryRestructure =
+  | Readonly<{kind: 'response'; response: Readonly<M1cHttpResult>}>
+  | Readonly<{
+      kind: 'loaded';
+      materialized: Readonly<MaterializedEvidenceSnapshot>;
+      allEntries: readonly Readonly<CurrentInformationEntry>[];
+      currentDocumentTags?: Readonly<CurrentInformationDocumentTags>;
+      preparation: Readonly<InformationEntryRestructurePreparation>;
+    }>;
 
 export interface M1cApiServicePort {
   workspace(): M1cHttpResult;
@@ -193,6 +219,8 @@ export interface M1cApiServicePort {
   importDocument(body: unknown): Promise<M1cHttpResult>;
   materializeInformationEntries(body: unknown): Promise<M1cHttpResult>;
   materializeManualInformationEntries(body: unknown): Promise<M1cHttpResult>;
+  previewInformationEntryRestructure(body: unknown): Promise<M1cHttpResult>;
+  applyInformationEntryRestructure(body: unknown): Promise<M1cHttpResult>;
   reviseInformationEntry(
     entryId: string,
     body: unknown,
@@ -1604,6 +1632,248 @@ export class M1cApiService implements M1cApiServicePort {
       return repositoryFailure();
     }
   }
+
+  public async previewInformationEntryRestructure(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const input = decodeInformationEntryRestructureBody(body, false);
+    if (input === undefined) return inputFailure('body');
+    try {
+      const loaded = await this.#loadInformationEntryRestructure(input);
+      if (loaded.kind === 'response') return loaded.response;
+      return httpResult(
+        200,
+        informationEntryRestructurePreview(loaded.preparation),
+      );
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async applyInformationEntryRestructure(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const input = decodeInformationEntryRestructureBody(body, true);
+    if (input === undefined) return inputFailure('body');
+    const repository = this.#dependencies.informationEntryRestructureRepository;
+    if (repository === undefined) return repositoryFailure();
+    try {
+      const loaded = await this.#loadInformationEntryRestructure(input);
+      if (loaded.kind === 'response') return loaded.response;
+      const preparation = loaded.preparation;
+      if (input.planSha256 !== preparation.planSha256) {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'stale_entry_restructure_preview'}),
+        });
+      }
+      if (preparation.conflictingRelationshipCount > 0) {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'entry_restructure_relationship_conflict',
+          }),
+        });
+      }
+      if (
+        preparation.annotationReviewCount > 0 &&
+        !input.acknowledgeAnnotationChanges
+      ) {
+        return httpResult(422, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'entry_restructure_annotation_ack_required',
+          }),
+        });
+      }
+      if (
+        (preparation.transferredRelationshipCount > 0 ||
+          preparation.collapsedRelationshipCount > 0) &&
+        !input.acknowledgeRelationshipChanges
+      ) {
+        return httpResult(422, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'entry_restructure_relationship_ack_required',
+          }),
+        });
+      }
+      if (!preparation.hasChanges) {
+        return httpResult(200, {
+          ...informationEntryRestructurePreview(preparation),
+          status: 'unchanged',
+        });
+      }
+      const policy = await this.#loadInformationEntryAssociationPolicy();
+      const visibleCurrentEntries = input.includePrivate
+        ? loaded.allEntries
+        : loaded.allEntries.filter((entry) => !entry.value.isPrivate);
+      const resultingEntries = Object.freeze([
+        ...visibleCurrentEntries.filter(
+          (entry) => entry.snapshotId !== preparation.snapshotId,
+        ),
+        ...preparation.resultingEntries,
+      ]);
+      const projections = buildInformationEntryAssociationProjection(
+        resultingEntries,
+        policy,
+      );
+      const documentTags = prepareRestructuredDocumentTags(
+        loaded.materialized,
+        preparation.resultingEntries,
+        loaded.currentDocumentTags,
+      );
+      const outcome = await repository.applyEntryRestructure({
+        workspaceId: this.#dependencies.workspaceId,
+        snapshotId: preparation.snapshotId,
+        includePrivate: input.includePrivate,
+        expectedEntries: preparation.expectedEntries,
+        expectedOverrides: preparation.expectedOverrides,
+        successors: preparation.successors,
+        retiredEntryIds: preparation.retiredEntryIds,
+        lineage: preparation.lineage,
+        overrideTransfers: preparation.overrideTransfers,
+        projections,
+        ...(documentTags === undefined ? {} : {documentTags}),
+      });
+      if (outcome === 'stale') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'stale_entry_restructure_preview'}),
+        });
+      }
+      const refreshed =
+        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          input.includePrivate,
+        );
+      return httpResult(200, {
+        ...informationEntryRestructurePreview(preparation),
+        status: outcome,
+        entries: Object.freeze(
+          refreshed.filter(
+            (entry) => entry.snapshotId === preparation.snapshotId,
+          ),
+        ),
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  async #loadInformationEntryRestructure(
+    input: Readonly<InformationEntryRestructureInput>,
+  ): Promise<LoadedInformationEntryRestructure> {
+    const snapshot =
+      await this.#dependencies.evidenceReadRepository.loadSnapshot(
+        this.#dependencies.workspaceId,
+        input.snapshotId,
+      );
+    if (
+      snapshot === undefined ||
+      (snapshot.isPrivate === true && !input.includePrivate)
+    ) {
+      return Object.freeze({
+        kind: 'response' as const,
+        response: httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'snapshot_not_found'}),
+        }),
+      });
+    }
+    const materialized = await materializeEvidenceSnapshot(
+      snapshot,
+      this.#dependencies.blobStore,
+    );
+    const [allEntries, associationSnapshot, documentTags] = await Promise.all([
+      this.#dependencies.informationEntryRepository.loadCurrentEntries(
+        this.#dependencies.workspaceId,
+        true,
+      ),
+      this.#dependencies.informationEntryAssociationRepository.loadAssociationSnapshot(
+        this.#dependencies.workspaceId,
+        true,
+      ),
+      this.#dependencies.informationDocumentTagRepository.loadCurrentDocumentTags(
+        this.#dependencies.workspaceId,
+        true,
+      ),
+    ]);
+    const snapshotEntries = allEntries.filter(
+      (entry) => entry.snapshotId === input.snapshotId,
+    );
+    if (snapshotEntries.length === 0) {
+      return Object.freeze({
+        kind: 'response' as const,
+        response: httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'entry_structure_not_materialized'}),
+        }),
+      });
+    }
+    const snapshotEntryIds = new Set(
+      snapshotEntries.map((entry) => entry.entryId),
+    );
+    const entryById = new Map(
+      allEntries.map((entry) => [entry.entryId, entry]),
+    );
+    const touchesHiddenRelationship = associationSnapshot.overrides.some(
+      (override) =>
+        (snapshotEntryIds.has(override.entryLowId) ||
+          snapshotEntryIds.has(override.entryHighId)) &&
+        (entryById.get(override.entryLowId)?.value.isPrivate === true ||
+          entryById.get(override.entryHighId)?.value.isPrivate === true),
+    );
+    if (!input.includePrivate && touchesHiddenRelationship) {
+      return Object.freeze({
+        kind: 'response' as const,
+        response: httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'entry_restructure_private_relationship_scope_required',
+          }),
+        }),
+      });
+    }
+    const groups =
+      input.groups ??
+      deriveInformationEntryRestructureGroups(materialized, snapshotEntries);
+    if (groups === undefined) {
+      return Object.freeze({
+        kind: 'response' as const,
+        response: httpResult(422, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'entry_restructure_invalid'}),
+        }),
+      });
+    }
+    const preparation = prepareInformationEntryRestructure(
+      materialized,
+      snapshotEntries,
+      groups,
+      associationSnapshot.overrides,
+    );
+    if (preparation === undefined) {
+      return Object.freeze({
+        kind: 'response' as const,
+        response: httpResult(422, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'entry_restructure_invalid'}),
+        }),
+      });
+    }
+    const currentDocumentTags = documentTags.find(
+      (value) => value.snapshotId === input.snapshotId,
+    );
+    return Object.freeze({
+      kind: 'loaded' as const,
+      materialized,
+      allEntries,
+      preparation,
+      ...(currentDocumentTags === undefined ? {} : {currentDocumentTags}),
+    });
+  }
+
   public async reviseInformationEntry(
     entryId: string,
     body: unknown,
@@ -3172,6 +3442,130 @@ function decodeManualEntrySplitBody(body: unknown):
     snapshotId: body.snapshotId,
     includePrivate: body.includePrivate === true,
     groups: Object.freeze(groups),
+  });
+}
+
+function decodeInformationEntryRestructureBody(
+  body: unknown,
+  requirePlan: boolean,
+): Readonly<InformationEntryRestructureInput> | undefined {
+  if (
+    !isRecord(body) ||
+    typeof body.snapshotId !== 'string' ||
+    !CANONICAL_UUID.test(body.snapshotId) ||
+    typeof (body.includePrivate ?? false) !== 'boolean' ||
+    typeof (body.acknowledgeAnnotationChanges ?? false) !== 'boolean' ||
+    typeof (body.acknowledgeRelationshipChanges ?? false) !== 'boolean' ||
+    (body.planSha256 !== undefined &&
+      (typeof body.planSha256 !== 'string' ||
+        !/^[0-9a-f]{64}$/u.test(body.planSha256)))
+  ) {
+    return undefined;
+  }
+  const groups =
+    body.groups === undefined
+      ? undefined
+      : decodeManualEntrySplitBody({
+          snapshotId: body.snapshotId,
+          includePrivate: body.includePrivate,
+          groups: body.groups,
+        })?.groups;
+  if (
+    (body.groups !== undefined && groups === undefined) ||
+    (requirePlan &&
+      (groups === undefined || typeof body.planSha256 !== 'string'))
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    snapshotId: body.snapshotId,
+    includePrivate: body.includePrivate === true,
+    ...(groups === undefined ? {} : {groups}),
+    ...(body.planSha256 === undefined ? {} : {planSha256: body.planSha256}),
+    acknowledgeAnnotationChanges: body.acknowledgeAnnotationChanges === true,
+    acknowledgeRelationshipChanges:
+      body.acknowledgeRelationshipChanges === true,
+  });
+}
+
+function informationEntryRestructurePreview(
+  preparation: Readonly<InformationEntryRestructurePreparation>,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze({
+    status: 'preview',
+    snapshotId: preparation.snapshotId,
+    planSha256: preparation.planSha256,
+    currentGroups: preparation.currentGroups,
+    hasChanges: preparation.hasChanges,
+    currentEntryCount: preparation.expectedEntries.length,
+    resultingEntryCount: preparation.successors.length,
+    insertedEntryCount: preparation.successors.filter(
+      (successor) => successor.operation === 'insert',
+    ).length,
+    revisedEntryCount: preparation.successors.filter(
+      (successor) => successor.operation === 'revise',
+    ).length,
+    unchangedEntryCount: preparation.successors.filter(
+      (successor) => successor.operation === 'unchanged',
+    ).length,
+    retiredEntryCount: preparation.retiredEntryIds.length,
+    annotationReviewCount: preparation.annotationReviewCount,
+    transferredRelationshipCount: preparation.transferredRelationshipCount,
+    collapsedRelationshipCount: preparation.collapsedRelationshipCount,
+    conflictingRelationshipCount: preparation.conflictingRelationshipCount,
+    successors: Object.freeze(
+      preparation.successors.map((successor) =>
+        Object.freeze({
+          entryId: successor.row.entryId,
+          operation: successor.operation,
+          titlePath: successor.row.value.titlePath,
+          documentOrder: successor.row.value.documentOrder,
+          predecessorEntryIds: successor.predecessorEntryIds,
+          annotationStatus: successor.annotationStatus,
+        }),
+      ),
+    ),
+  });
+}
+
+function prepareRestructuredDocumentTags(
+  materialized: Readonly<MaterializedEvidenceSnapshot>,
+  entries: readonly Readonly<CurrentInformationEntry>[],
+  current: Readonly<CurrentInformationDocumentTags> | undefined,
+):
+  | Readonly<{
+      resourceId: string;
+      expectedRevision: number;
+      revisionId: string;
+      value: NonNullable<
+        ReturnType<typeof prepareAggregatedInformationDocumentTags>
+      >;
+    }>
+  | undefined {
+  if (current === undefined) return undefined;
+  const normalizedText = materialized.structures[0]?.normalizedText;
+  if (normalizedText === undefined) return undefined;
+  const input = Object.freeze({
+    normalizedText,
+    isPrivate: materialized.isPrivate === true,
+    entries,
+  });
+  const value =
+    current.value.revisionKind === 'manual'
+      ? prepareManualInformationDocumentTags(
+          input,
+          current.value.tags.map((tag) => tag.displayValue),
+        )
+      : prepareAggregatedInformationDocumentTags(input);
+  if (value === undefined) return undefined;
+  return Object.freeze({
+    resourceId: materialized.resourceId,
+    expectedRevision: current.revision,
+    revisionId: deriveInformationDocumentTagRevisionId(
+      materialized.snapshotId,
+      current.revision + 1,
+    ),
+    value,
   });
 }
 function decodeEntryRevisionBody(body: unknown):

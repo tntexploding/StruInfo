@@ -168,6 +168,7 @@ function snapshotWithEntry(
                 chunk_mode: 'split',
                 split_rule_version: 'synthetic-v1',
                 is_private: false,
+                is_current_structure: true,
                 type_keyword: null,
                 type_custom_name: null,
                 usefulness_score: null,

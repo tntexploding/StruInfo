@@ -28,6 +28,7 @@ export {
   READ_CURRENT_INFORMATION_ENTRY_INPUTS_SQL,
   READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_SQL,
 } from './postgres_information_entry_repository.js';
+export {PostgresInformationEntryRestructureRepository} from './postgres_information_entry_restructure_repository.js';
 export {
   PostgresInformationDocumentTagRepository,
   READ_CURRENT_INFORMATION_DOCUMENT_TAGS_SQL,

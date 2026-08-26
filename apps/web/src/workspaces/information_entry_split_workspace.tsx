@@ -18,12 +18,15 @@ import {
 } from './information_entry_document_navigation.js';
 import {useInformationEntryController} from './use_information_entry_controller.js';
 import {describeInformationEntryFailure} from './information_entry_shared.js';
+import {InformationEntryRestructure} from './information_entry_restructure.js';
 
 export interface InformationEntrySplitWorkspaceProps extends Pick<
   InformationEntryServices,
   | 'onListDocuments'
   | 'onMaterialize'
   | 'onMaterializeManual'
+  | 'onPreviewRestructure'
+  | 'onApplyRestructure'
   | 'onOpenEvidence'
   | 'onSearch'
 > {
@@ -51,6 +54,8 @@ export function InformationEntrySplitWorkspace({
   onLoadEvidenceSnapshot,
   onMaterialize,
   onMaterializeManual,
+  onPreviewRestructure,
+  onApplyRestructure,
   onOpenEvidence,
   onRejectAiSplitProposal,
   onSearch,
@@ -266,6 +271,19 @@ export function InformationEntrySplitWorkspace({
         alreadyMaterialized={(selectedDocument?.entryCount ?? 0) > 0}
         onLoadSnapshot={onLoadEvidenceSnapshot}
         onMaterialize={onMaterializeManual}
+        onCommitted={async () => {
+          await controller.executeSearch();
+          await controller.refreshDocuments();
+        }}
+      />
+      <InformationEntryRestructure
+        snapshotId={controller.snapshotId}
+        isPrivate={selectedDocument?.isPrivate === true}
+        includePrivate={controller.includePrivate}
+        alreadyMaterialized={(selectedDocument?.entryCount ?? 0) > 0}
+        onLoadSnapshot={onLoadEvidenceSnapshot}
+        onPreview={onPreviewRestructure}
+        onApply={onApplyRestructure}
         onCommitted={async () => {
           await controller.executeSearch();
           await controller.refreshDocuments();

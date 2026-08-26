@@ -335,6 +335,10 @@ function stubApi(
       Promise.resolve(result(201, {status: 'created'})),
     materializeManualInformationEntries: () =>
       Promise.resolve(result(201, {status: 'created'})),
+    previewInformationEntryRestructure: () =>
+      Promise.resolve(result(409, {status: 'rejected'})),
+    applyInformationEntryRestructure: () =>
+      Promise.resolve(result(409, {status: 'rejected'})),
     reviseInformationEntry: () =>
       Promise.resolve(result(200, {status: 'applied'})),
     searchInformationEntries: () =>

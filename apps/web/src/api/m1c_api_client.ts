@@ -34,6 +34,8 @@ import type {
   InformationEntryKnowledgeGraphResponse,
   InformationEntryMaterializeResponse,
   InformationEntryRevisionResponse,
+  InformationEntryRestructureApplyResponse,
+  InformationEntryRestructurePreviewResponse,
   InformationEntrySearchResponse,
   InformationEntryQuerySynthesisResponse,
   InformationEntryPreferenceProfileResponse,
@@ -217,6 +219,14 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryMaterializeResponse>>;
+  previewInformationEntryRestructure(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryRestructurePreviewResponse>>;
+  applyInformationEntryRestructure(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryRestructureApplyResponse>>;
   reviseInformationEntry(
     entryId: string,
     body: unknown,
@@ -408,6 +418,8 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     importDocument: reject,
     materializeInformationEntries: reject,
     materializeManualInformationEntries: reject,
+    previewInformationEntryRestructure: reject,
+    applyInformationEntryRestructure: reject,
     reviseInformationEntry: reject,
     searchInformationEntries: reject,
     exploreInformationEntries: reject,
@@ -590,6 +602,18 @@ export function createM1cApiClient(
     materializeManualInformationEntries: (body, options) =>
       post<InformationEntryMaterializeResponse>(
         'api/v1/entries/materialize/manual',
+        body,
+        options,
+      ),
+    previewInformationEntryRestructure: (body, options) =>
+      post<InformationEntryRestructurePreviewResponse>(
+        'api/v1/entries/restructure/preview',
+        body,
+        options,
+      ),
+    applyInformationEntryRestructure: (body, options) =>
+      post<InformationEntryRestructureApplyResponse>(
+        'api/v1/entries/restructure/apply',
         body,
         options,
       ),

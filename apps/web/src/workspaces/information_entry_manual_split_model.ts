@@ -1,6 +1,7 @@
 import type {
   EvidenceFragment,
   EvidenceSnapshot,
+  InformationEntryFragmentGroup,
 } from '../api/m1c_api_contract.js';
 
 export interface ManualSplitDraftPiece {
@@ -38,6 +39,52 @@ export function createManualSplitDraft(
       }),
     ),
   );
+}
+
+export function createManualSplitDraftFromGroups(
+  snapshot: Readonly<EvidenceSnapshot>,
+  groups: readonly Readonly<InformationEntryFragmentGroup>[],
+): readonly Readonly<ManualSplitDraftGroup>[] | undefined {
+  const fragments = new Map(
+    (snapshot.structures[0]?.fragments ?? []).map((fragment) => [
+      fragment.fragmentId,
+      fragment,
+    ]),
+  );
+  const draft: ManualSplitDraftGroup[] = [];
+  for (const group of groups) {
+    const pieces: ManualSplitDraftPiece[] = [];
+    for (const input of group.fragments) {
+      const fragment = fragments.get(input.fragmentId);
+      const length =
+        fragment === undefined ? -1 : Array.from(fragment.selectedText).length;
+      if (
+        fragment === undefined ||
+        !Number.isSafeInteger(input.startCodePoint) ||
+        !Number.isSafeInteger(input.endCodePoint) ||
+        input.startCodePoint < 0 ||
+        input.endCodePoint <= input.startCodePoint ||
+        input.endCodePoint > length
+      ) {
+        return undefined;
+      }
+      pieces.push(
+        Object.freeze({
+          fragment,
+          startCodePoint: input.startCodePoint,
+          endCodePoint: input.endCodePoint,
+        }),
+      );
+    }
+    if (pieces.length === 0) return undefined;
+    draft.push(
+      Object.freeze({
+        titlePath: group.titlePath,
+        pieces: Object.freeze(pieces),
+      }),
+    );
+  }
+  return draft.length === 0 ? undefined : Object.freeze(draft);
 }
 
 export function manualSplitPieceText(

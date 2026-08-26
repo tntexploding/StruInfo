@@ -315,6 +315,28 @@ export class M1cApiController {
       await this.#service.materializeManualInformationEntries(body),
     );
   }
+
+  @Post('entries/restructure/preview')
+  public async previewInformationEntryRestructure(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.previewInformationEntryRestructure(body),
+    );
+  }
+
+  @Post('entries/restructure/apply')
+  public async applyInformationEntryRestructure(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.applyInformationEntryRestructure(body),
+    );
+  }
   @Put('entries/:entryId')
   public async reviseInformationEntry(
     @Param('entryId') entryId: string,

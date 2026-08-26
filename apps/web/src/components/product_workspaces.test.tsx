@@ -11,6 +11,7 @@ import {MaterialsWorkspace} from '../workspaces/materials_workspace.js';
 import {InformationEntryPrivacyScope} from '../workspaces/information_entry_components.js';
 import {InformationEntryTextSearchOptions} from '../workspaces/information_entry_search_controls.js';
 import {InformationEntrySplitWorkspace} from '../workspaces/information_entry_split_workspace.js';
+import {InformationEntryRestructure} from '../workspaces/information_entry_restructure.js';
 import {InformationEntryReviewControls} from '../workspaces/information_entry_review_controls.js';
 import {InformationEntryPreferenceProfilePanel} from '../workspaces/information_entry_preference_profile_panel.js';
 import {AssociationPolicyPanel} from '../workspaces/association_policy_panel.js';
@@ -267,6 +268,18 @@ describe('M1D product workspaces', () => {
             },
           })
         }
+        onPreviewRestructure={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
+        onApplyRestructure={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
         onMaterialize={() =>
           Promise.resolve({
             statusCode: 201,
@@ -303,6 +316,40 @@ describe('M1D product workspaces', () => {
     expect(markup).not.toContain('类型关键词');
     expect(markup).not.toContain('领域关键词');
     expect(markup).not.toContain('高级筛选');
+  });
+
+  it('shows a preview-first restructuring workbench only for materialized documents', () => {
+    const markup = renderToStaticMarkup(
+      <InformationEntryRestructure
+        snapshotId={REVIEW_EVIDENCE.snapshotId}
+        isPrivate={false}
+        includePrivate={false}
+        alreadyMaterialized={true}
+        onLoadSnapshot={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {status: 'ok', snapshot: REVIEW_EVIDENCE},
+          })
+        }
+        onPreview={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
+        onApply={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
+        onCommitted={() => Promise.resolve()}
+      />,
+    );
+
+    expect(markup).toContain('已生成条目重组');
+    expect(markup).toContain('先编辑完整分组，再预览标签、沿袭与关系迁移');
+    expect(markup).toContain('原始证据不会改变');
   });
 
   it('integrates manual scores and deterministic tag preferences into Tags', () => {

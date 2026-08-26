@@ -3,6 +3,7 @@ import type {
   InformationEntryAssociationRepositoryPort,
   InformationEntryEmptySnapshotRepositoryPort,
   InformationEntryRepositoryPort,
+  InformationEntryRestructureRepositoryPort,
 } from '../../../modules/entries/index.js';
 import type {
   EvidenceReadRepositoryPort,
@@ -24,6 +25,7 @@ import {PostgresEvidenceRepository} from './postgres_evidence_repository.js';
 import {PostgresInformationDocumentTagRepository} from './postgres_information_document_tag_repository.js';
 import {PostgresInformationEntryAssociationRepository} from './postgres_information_entry_association_repository.js';
 import {PostgresInformationEntryRepository} from './postgres_information_entry_repository.js';
+import {PostgresInformationEntryRestructureRepository} from './postgres_information_entry_restructure_repository.js';
 import {PostgresAiAssociationProposalRepository} from './postgres_ai_association_proposal_repository.js';
 import {PostgresAiTagProposalRepository} from './postgres_ai_tag_proposal_repository.js';
 import {PostgresEntryAutomationExecutionRepository} from './postgres_entry_automation_execution_repository.js';
@@ -35,6 +37,7 @@ export interface PostgresRepositorySet {
   readonly evidenceRead: EvidenceReadRepositoryPort;
   readonly informationEntries: InformationEntryRepositoryPort &
     InformationEntryEmptySnapshotRepositoryPort;
+  readonly informationEntryRestructures: InformationEntryRestructureRepositoryPort;
   readonly informationDocumentTags: InformationDocumentTagRepositoryPort;
   readonly informationEntryAssociations: InformationEntryAssociationRepositoryPort;
   readonly processingRuns: ProcessingRunRepositoryPort &
@@ -55,6 +58,8 @@ export function createPostgresRepositories(
     evidence: new PostgresEvidenceRepository(pool),
     evidenceRead: new PostgresEvidenceReadRepository(pool),
     informationEntries: new PostgresInformationEntryRepository(pool),
+    informationEntryRestructures:
+      new PostgresInformationEntryRestructureRepository(pool),
     informationDocumentTags: new PostgresInformationDocumentTagRepository(pool),
     informationEntryAssociations:
       new PostgresInformationEntryAssociationRepository(pool),
