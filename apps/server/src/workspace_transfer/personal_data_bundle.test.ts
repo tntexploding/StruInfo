@@ -34,6 +34,12 @@ describe('personal data Bundle preference compatibility', () => {
       enabled: false,
       rules: [],
     });
+    expect(decoded.reviewPreferences.entryAutomationPolicy).toMatchObject({
+      revision: 0,
+      enabled: false,
+      paused: false,
+      profileRevision: 0,
+    });
   });
 
   it('round-trips a closed preference profile in the existing v1 section', () => {
@@ -63,6 +69,29 @@ describe('personal data Bundle preference compatibility', () => {
             },
           ],
         },
+        {
+          revision: 2,
+          enabled: true,
+          paused: false,
+          profileRevision: 1,
+          minimumMatchedRuleCount: 1,
+          advanceThresholds: {
+            usefulness: 4,
+            interest: 3,
+            requiredDimensions: 1,
+          },
+          deferThresholds: {
+            usefulness: 5,
+            interest: 4,
+            requiredDimensions: 2,
+          },
+          budgets: {
+            maximumEntriesPerRun: 20,
+            maximumAdvanceCandidatesPerRun: 5,
+            maximumDeferCandidatesPerRun: 4,
+          },
+          failureMode: 'pause',
+        },
       ),
     });
 
@@ -73,6 +102,9 @@ describe('personal data Bundle preference compatibility', () => {
 
     expect(decoded.reviewPreferences.entryPreferenceProfile).toEqual(
       section.reviewPreferences.entryPreferenceProfile,
+    );
+    expect(decoded.reviewPreferences.entryAutomationPolicy).toEqual(
+      section.reviewPreferences.entryAutomationPolicy,
     );
   });
 
@@ -97,6 +129,50 @@ describe('personal data Bundle preference compatibility', () => {
             enabled: true,
             rules: [],
             unknown: true,
+          },
+        },
+      }),
+    ).toThrow('The personal-data Bundle section is invalid.');
+  });
+
+  it('rejects malformed automation policy state instead of dropping it', () => {
+    expect(() =>
+      PERSONAL_DATA_BUNDLE_CODEC.decode({
+        schemaVersion: PERSONAL_DATA_BUNDLE_SCHEMA,
+        blobs: [],
+        reviewPreferences: {
+          format: 'struinfo.review-preferences',
+          version: 1,
+          workspaceId: WORKSPACE_ID,
+          quickTags: [],
+          automaticKeywords: {
+            enabled: true,
+            includeLinkDomains: false,
+            excludedKeywords: [],
+          },
+          vocabulary: {aliases: []},
+          entryAutomationPolicy: {
+            revision: 1,
+            enabled: true,
+            paused: false,
+            profileRevision: 1,
+            minimumMatchedRuleCount: 1,
+            advanceThresholds: {
+              usefulness: 3,
+              interest: 3,
+              requiredDimensions: 1,
+            },
+            deferThresholds: {
+              usefulness: 3,
+              interest: 3,
+              requiredDimensions: 1,
+            },
+            budgets: {
+              maximumEntriesPerRun: 10,
+              maximumAdvanceCandidatesPerRun: 3,
+              maximumDeferCandidatesPerRun: 3,
+            },
+            failureMode: 'continue',
           },
         },
       }),

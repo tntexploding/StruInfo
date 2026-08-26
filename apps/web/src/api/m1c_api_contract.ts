@@ -305,6 +305,192 @@ export type InformationEntryPreferenceTrialResponse =
       issue: Readonly<{code: string; path?: string}>;
     }>;
 
+export type EntryAutomationRoute =
+  'advance_candidate' | 'manual_review' | 'defer_candidate';
+export type EntryAutomationReason =
+  | 'advance_threshold_met'
+  | 'defer_threshold_met'
+  | 'threshold_not_met'
+  | 'insufficient_profile_evidence'
+  | 'mixed_signals'
+  | 'manual_takeover'
+  | 'run_budget_exhausted'
+  | 'advance_budget_exhausted'
+  | 'defer_budget_exhausted';
+
+export interface EntryAutomationThresholds {
+  readonly usefulness: number;
+  readonly interest: number;
+  readonly requiredDimensions: 1 | 2;
+}
+
+export interface EntryAutomationBudgets {
+  readonly maximumEntriesPerRun: number;
+  readonly maximumAdvanceCandidatesPerRun: number;
+  readonly maximumDeferCandidatesPerRun: number;
+}
+
+export interface EntryAutomationPolicy {
+  readonly revision: number;
+  readonly enabled: boolean;
+  readonly paused: boolean;
+  readonly profileRevision: number;
+  readonly minimumMatchedRuleCount: number;
+  readonly advanceThresholds: Readonly<EntryAutomationThresholds>;
+  readonly deferThresholds: Readonly<EntryAutomationThresholds>;
+  readonly budgets: Readonly<EntryAutomationBudgets>;
+  readonly failureMode: 'pause';
+}
+
+export interface EntryAutomationProfileSummary {
+  readonly revision: number;
+  readonly enabled: boolean;
+  readonly ruleCount: number;
+}
+
+export type InformationEntryAutomationPolicyResponse =
+  | Readonly<{
+      status: 'ok';
+      policy: Readonly<EntryAutomationPolicy>;
+      profile: Readonly<EntryAutomationProfileSummary>;
+    }>
+  | Readonly<{
+      status: 'failed';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
+export type InformationEntryAutomationPolicyWriteResponse =
+  | Readonly<{
+      status: 'applied' | 'unchanged';
+      policy: Readonly<EntryAutomationPolicy>;
+      profile: Readonly<EntryAutomationProfileSummary>;
+    }>
+  | Readonly<{
+      status: 'rejected' | 'failed';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
+export interface InformationEntryAutomationTrialItem extends InformationEntryPreferenceTrialItem {
+  readonly signals: Readonly<{
+    usefulness: 'advance' | 'defer' | 'neutral';
+    interest: 'advance' | 'defer' | 'neutral';
+  }>;
+  readonly route: EntryAutomationRoute;
+  readonly reason: EntryAutomationReason;
+}
+
+export type InformationEntryAutomationTrialResponse =
+  | Readonly<{
+      status: 'complete';
+      dryRunOnly: true;
+      activation:
+        | 'disabled'
+        | 'paused'
+        | 'profile_disabled'
+        | 'profile_revision_mismatch'
+        | 'ready';
+      includePrivate: boolean;
+      visibleEntryCount: number;
+      evaluatedEntryCount: number;
+      truncated: boolean;
+      policy: Readonly<EntryAutomationPolicy>;
+      profile: Readonly<EntryPreferenceProfile>;
+      counts: Readonly<Record<EntryAutomationRoute, number>>;
+      items: readonly Readonly<InformationEntryAutomationTrialItem>[];
+    }>
+  | Readonly<{
+      status: 'stale_policy' | 'stale_profile' | 'stale_entries';
+      entries?: readonly Readonly<{
+        entryId: string;
+        expectedRevision: number;
+        currentRevision?: number;
+      }>[];
+    }>
+  | Readonly<{
+      status: 'rejected' | 'failed';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
+export interface EntryAutomationExecutionClaimView {
+  readonly ordinal: number;
+  readonly entryId: string;
+  readonly entryRevision: number;
+  readonly route: EntryAutomationRoute;
+  readonly reason: EntryAutomationReason;
+  readonly status: 'claimed' | 'completed' | 'compensated';
+  readonly errorCode?: string;
+  readonly createdAt: string;
+  readonly finishedAt?: string;
+}
+
+export interface EntryAutomationExecutionView {
+  readonly runId: string;
+  readonly status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  readonly version: number;
+  readonly policyRevision: number;
+  readonly profileRevision: number;
+  readonly includePrivate: boolean;
+  readonly errorCode?: string;
+  readonly claims: readonly Readonly<EntryAutomationExecutionClaimView>[];
+}
+
+export type InformationEntryAutomationExecutionResponse =
+  | Readonly<{
+      status: 'ok';
+      execution: Readonly<EntryAutomationExecutionView>;
+    }>
+  | Readonly<{
+      status: 'not_found' | 'failed';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
+export type InformationEntryAutomationExecutionListResponse =
+  | Readonly<{
+      status: 'ok';
+      executions: readonly Readonly<EntryAutomationExecutionView>[];
+    }>
+  | Readonly<{
+      status: 'failed';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
+export type InformationEntryAutomationExecuteResponse =
+  | Readonly<{
+      status: 'succeeded';
+      runId: string;
+      replayed: boolean;
+      counts: Readonly<Record<EntryAutomationRoute, number>>;
+      execution?: Readonly<EntryAutomationExecutionView>;
+    }>
+  | Readonly<{
+      status: 'failed';
+      runId: string;
+      replayed: boolean;
+      errorCode:
+        'automation_revalidation_failed' | 'automation_execution_failed';
+      policyPause: 'applied' | 'superseded' | 'failed';
+      recoveryPending: boolean;
+      execution?: Readonly<EntryAutomationExecutionView>;
+    }>
+  | Readonly<{
+      status: 'not_ready';
+      reason:
+        | 'disabled'
+        | 'paused'
+        | 'profile_disabled'
+        | 'profile_revision_mismatch'
+        | 'stale_policy'
+        | 'stale_profile'
+        | 'stale_entries'
+        | 'invalid_state'
+        | 'no_entries';
+    }>
+  | Readonly<{status: 'conflict'; runId: string}>
+  | Readonly<{
+      status: 'rejected';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
 export interface ReviewPreferencesResponse {
   readonly status: 'ok';
   readonly workspaceId: string;

@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 
 import {
   createReviewPreferences,
+  decodeEntryAutomationPolicy,
   decodeEntryPreferenceProfile,
   decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
@@ -181,6 +182,10 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     value.entryPreferenceProfile === undefined
       ? undefined
       : decodeEntryPreferenceProfile(value.entryPreferenceProfile);
+  const entryAutomationPolicy =
+    value.entryAutomationPolicy === undefined
+      ? undefined
+      : decodeEntryAutomationPolicy(value.entryAutomationPolicy);
   if (
     value.format !== 'struinfo.review-preferences' ||
     value.version !== 1 ||
@@ -195,7 +200,9 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     (value.sourceSubscriptions !== undefined &&
       sourceSubscriptions === undefined) ||
     (value.entryPreferenceProfile !== undefined &&
-      entryPreferenceProfile === undefined)
+      entryPreferenceProfile === undefined) ||
+    (value.entryAutomationPolicy !== undefined &&
+      entryAutomationPolicy === undefined)
   ) {
     fail();
   }
@@ -208,6 +215,7 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     explorationPolicy,
     sourceSubscriptions,
     entryPreferenceProfile,
+    entryAutomationPolicy,
   );
 }
 

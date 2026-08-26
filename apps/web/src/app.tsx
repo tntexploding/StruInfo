@@ -259,6 +259,44 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const loadEntryAutomationPolicy = useCallback(
+    () => apiClient.loadInformationEntryAutomationPolicy(),
+    [apiClient],
+  );
+
+  const saveEntryAutomationPolicy = useCallback(
+    (
+      body: Parameters<M1cApiClient['saveInformationEntryAutomationPolicy']>[0],
+    ) => apiClient.saveInformationEntryAutomationPolicy(body),
+    [apiClient],
+  );
+
+  const trialEntryAutomationPolicy = useCallback(
+    (
+      body: Parameters<
+        M1cApiClient['trialInformationEntryAutomationPolicy']
+      >[0],
+    ) => apiClient.trialInformationEntryAutomationPolicy(body),
+    [apiClient],
+  );
+
+  const executeEntryAutomation = useCallback(
+    (body: Parameters<M1cApiClient['executeInformationEntryAutomation']>[0]) =>
+      apiClient.executeInformationEntryAutomation(body),
+    [apiClient],
+  );
+
+  const listEntryAutomationExecutions = useCallback(
+    (limit?: number) =>
+      apiClient.listInformationEntryAutomationExecutions(limit),
+    [apiClient],
+  );
+
+  const loadEntryAutomationExecution = useCallback(
+    (runId: string) => apiClient.loadInformationEntryAutomationExecution(runId),
+    [apiClient],
+  );
+
   useEffect(() => {
     const controller = new AbortController();
     globalThis.queueMicrotask(() => {
@@ -813,6 +851,10 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
             workspace.status === 'ready' &&
             workspace.value.capabilities.includes('ai_tags')
           }
+          automationEnabled={
+            workspace.status === 'ready' &&
+            workspace.value.capabilities.includes('entry_automation')
+          }
           reviewPreferences={reviewPreferences}
           reviewPreferencesOverride={reviewPreferencesOverride}
           onReviewPreferencesChange={setReviewPreferencesOverride}
@@ -820,9 +862,13 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onAggregateDocumentTags={aggregateInformationDocumentTags}
           onListAiTagProposals={listAiTagProposals}
           onListDocuments={listInformationEntryDocuments}
+          onListEntryAutomationExecutions={listEntryAutomationExecutions}
+          onLoadEntryAutomationExecution={loadEntryAutomationExecution}
+          onLoadEntryAutomationPolicy={loadEntryAutomationPolicy}
           onRejectAiTagProposal={rejectAiTagProposal}
           onRevise={reviseInformationEntry}
           onReviseDocumentTags={reviseInformationDocumentTags}
+          onSaveEntryAutomationPolicy={saveEntryAutomationPolicy}
           onSaveReviewPreferences={saveReviewPreferences}
           entryPreferenceProfile={entryPreferenceProfile}
           onReloadEntryPreferenceProfile={() => {
@@ -831,6 +877,8 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onSaveEntryPreferenceProfile={saveEntryPreferenceProfile}
           onSuggestEntryPreferenceProfile={suggestEntryPreferenceProfile}
           onTrialEntryPreferenceProfile={trialEntryPreferenceProfile}
+          onTrialEntryAutomationPolicy={trialEntryAutomationPolicy}
+          onExecuteEntryAutomation={executeEntryAutomation}
           onSearch={searchInformationEntries}
           onStartAiTagProposal={startAiTagProposal}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>

@@ -51,6 +51,7 @@ export {
   type PostgresRepositorySet,
 } from './postgres_repository_factory.js';
 export {PostgresProcessingRunRepository} from './postgres_processing_run_repository.js';
+export {PostgresEntryAutomationExecutionRepository} from './postgres_entry_automation_execution_repository.js';
 export {PostgresAiTagProposalRepository} from './postgres_ai_tag_proposal_repository.js';
 export {
   ACQUIRE_WORKSPACE_TRANSFER_LOCK_SQL,

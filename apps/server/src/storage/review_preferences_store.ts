@@ -8,6 +8,9 @@ export const MAX_SOURCE_SUBSCRIPTIONS = 32;
 export const MAX_ENTRY_PREFERENCE_RULES = 64;
 export const MAX_ENTRY_PREFERENCE_FEATURE_CODE_POINTS = 96;
 export const MAX_ENTRY_PREFERENCE_DISPLAY_CODE_POINTS = 80;
+export const MAX_ENTRY_AUTOMATION_SCORE_THRESHOLD =
+  MAX_ENTRY_PREFERENCE_RULES * 5;
+export const MAX_ENTRY_AUTOMATION_ENTRIES_PER_RUN = 100;
 
 export const ENTRY_PREFERENCE_DIMENSIONS = ['usefulness', 'interest'] as const;
 export const ENTRY_PREFERENCE_FEATURE_KINDS = [
@@ -16,6 +19,7 @@ export const ENTRY_PREFERENCE_FEATURE_KINDS = [
   'domain',
 ] as const;
 export const ENTRY_PREFERENCE_EFFECTS = ['prefer', 'deprioritize'] as const;
+export const ENTRY_AUTOMATION_FAILURE_MODES = ['pause'] as const;
 
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -49,6 +53,58 @@ export const DEFAULT_ENTRY_PREFERENCE_PROFILE: Readonly<EntryPreferenceProfile> 
     revision: 0,
     enabled: false,
     rules: Object.freeze([]),
+  });
+
+export type EntryAutomationFailureMode =
+  (typeof ENTRY_AUTOMATION_FAILURE_MODES)[number];
+
+export interface EntryAutomationThresholds {
+  readonly usefulness: number;
+  readonly interest: number;
+  readonly requiredDimensions: 1 | 2;
+}
+
+export interface EntryAutomationBudgets {
+  readonly maximumEntriesPerRun: number;
+  readonly maximumAdvanceCandidatesPerRun: number;
+  readonly maximumDeferCandidatesPerRun: number;
+}
+
+export interface EntryAutomationPolicy {
+  readonly revision: number;
+  readonly enabled: boolean;
+  readonly paused: boolean;
+  readonly profileRevision: number;
+  readonly minimumMatchedRuleCount: number;
+  readonly advanceThresholds: Readonly<EntryAutomationThresholds>;
+  readonly deferThresholds: Readonly<EntryAutomationThresholds>;
+  readonly budgets: Readonly<EntryAutomationBudgets>;
+  readonly failureMode: EntryAutomationFailureMode;
+}
+
+export const DEFAULT_ENTRY_AUTOMATION_POLICY: Readonly<EntryAutomationPolicy> =
+  Object.freeze({
+    revision: 0,
+    enabled: false,
+    paused: false,
+    profileRevision: 0,
+    minimumMatchedRuleCount: 1,
+    advanceThresholds: Object.freeze({
+      usefulness: 3,
+      interest: 3,
+      requiredDimensions: 1,
+    }),
+    deferThresholds: Object.freeze({
+      usefulness: 3,
+      interest: 3,
+      requiredDimensions: 1,
+    }),
+    budgets: Object.freeze({
+      maximumEntriesPerRun: 100,
+      maximumAdvanceCandidatesPerRun: 25,
+      maximumDeferCandidatesPerRun: 25,
+    }),
+    failureMode: 'pause',
   });
 
 export interface ReviewSourceSubscriptionCursor {
@@ -154,6 +210,7 @@ export interface ReviewPreferences {
   readonly explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>;
   readonly sourceSubscriptions?: Readonly<ReviewSourceSubscriptionPreferences>;
   readonly entryPreferenceProfile?: Readonly<EntryPreferenceProfile>;
+  readonly entryAutomationPolicy?: Readonly<EntryAutomationPolicy>;
 }
 
 export interface ReviewPreferencesStore {
@@ -167,6 +224,7 @@ export interface ReviewPreferencesStore {
     explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>,
     sourceSubscriptions?: Readonly<ReviewSourceSubscriptionPreferences>,
     entryPreferenceProfile?: Readonly<EntryPreferenceProfile>,
+    entryAutomationPolicy?: Readonly<EntryAutomationPolicy>,
   ): Promise<Readonly<ReviewPreferences>>;
   update?<T>(
     workspaceId: string,
@@ -196,6 +254,7 @@ export interface ReviewPreferencesPatch {
   readonly explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>;
   readonly sourceSubscriptions?: Readonly<ReviewSourceSubscriptionPreferences>;
   readonly entryPreferenceProfile?: Readonly<EntryPreferenceProfile>;
+  readonly entryAutomationPolicy?: Readonly<EntryAutomationPolicy>;
 }
 
 export function patchReviewPreferences(
@@ -223,6 +282,9 @@ export function patchReviewPreferences(
     patch.entryPreferenceProfile ??
       current.entryPreferenceProfile ??
       DEFAULT_ENTRY_PREFERENCE_PROFILE,
+    patch.entryAutomationPolicy ??
+      current.entryAutomationPolicy ??
+      DEFAULT_ENTRY_AUTOMATION_POLICY,
   );
 }
 
@@ -254,6 +316,7 @@ export async function updateReviewPreferences<T>(
           update.next.explorationPolicy,
           update.next.sourceSubscriptions,
           update.next.entryPreferenceProfile,
+          update.next.entryAutomationPolicy,
         );
   return Object.freeze({preferences, result: update.result});
 }
@@ -445,6 +508,63 @@ export function decodeEntryPreferenceProfile(
     rules: Object.freeze(rules),
   });
 }
+
+export function decodeEntryAutomationPolicy(
+  value: unknown,
+): Readonly<EntryAutomationPolicy> | undefined {
+  if (
+    !isClosedRecord(value, [
+      'advanceThresholds',
+      'budgets',
+      'deferThresholds',
+      'enabled',
+      'failureMode',
+      'minimumMatchedRuleCount',
+      'paused',
+      'profileRevision',
+      'revision',
+    ]) ||
+    !isNonNegativeSafeInteger(value.revision) ||
+    (value.enabled !== true && value.enabled !== false) ||
+    (value.paused !== true && value.paused !== false) ||
+    !isNonNegativeSafeInteger(value.profileRevision) ||
+    !isIntegerInRange(
+      value.minimumMatchedRuleCount,
+      1,
+      MAX_ENTRY_PREFERENCE_RULES,
+    ) ||
+    !ENTRY_AUTOMATION_FAILURE_MODES.includes(
+      value.failureMode as EntryAutomationFailureMode,
+    )
+  ) {
+    return undefined;
+  }
+  const advanceThresholds = decodeEntryAutomationThresholds(
+    value.advanceThresholds,
+  );
+  const deferThresholds = decodeEntryAutomationThresholds(
+    value.deferThresholds,
+  );
+  const budgets = decodeEntryAutomationBudgets(value.budgets);
+  if (
+    advanceThresholds === undefined ||
+    deferThresholds === undefined ||
+    budgets === undefined
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    revision: value.revision,
+    enabled: value.enabled,
+    paused: value.paused,
+    profileRevision: value.profileRevision,
+    minimumMatchedRuleCount: value.minimumMatchedRuleCount,
+    advanceThresholds,
+    deferThresholds,
+    budgets,
+    failureMode: value.failureMode as EntryAutomationFailureMode,
+  });
+}
 function decodeKeywordList(
   value: unknown,
   maximumItems: number,
@@ -486,6 +606,7 @@ export function createReviewPreferences(
   explorationPolicy: Readonly<ReviewExplorationPolicyPreferences> = DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences> = DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
   entryPreferenceProfile: Readonly<EntryPreferenceProfile> = DEFAULT_ENTRY_PREFERENCE_PROFILE,
+  entryAutomationPolicy: Readonly<EntryAutomationPolicy> = DEFAULT_ENTRY_AUTOMATION_POLICY,
 ): Readonly<ReviewPreferences> {
   return Object.freeze({
     format: REVIEW_PREFERENCES_FORMAT,
@@ -524,7 +645,99 @@ export function createReviewPreferences(
         entryPreferenceProfile.rules.map((rule) => Object.freeze({...rule})),
       ),
     }),
+    entryAutomationPolicy: Object.freeze({
+      revision: entryAutomationPolicy.revision,
+      enabled: entryAutomationPolicy.enabled,
+      paused: entryAutomationPolicy.paused,
+      profileRevision: entryAutomationPolicy.profileRevision,
+      minimumMatchedRuleCount: entryAutomationPolicy.minimumMatchedRuleCount,
+      advanceThresholds: Object.freeze({
+        ...entryAutomationPolicy.advanceThresholds,
+      }),
+      deferThresholds: Object.freeze({
+        ...entryAutomationPolicy.deferThresholds,
+      }),
+      budgets: Object.freeze({...entryAutomationPolicy.budgets}),
+      failureMode: entryAutomationPolicy.failureMode,
+    }),
   });
+}
+
+function decodeEntryAutomationThresholds(
+  value: unknown,
+): Readonly<EntryAutomationThresholds> | undefined {
+  if (
+    !isClosedRecord(value, ['interest', 'requiredDimensions', 'usefulness']) ||
+    !isIntegerInRange(
+      value.usefulness,
+      1,
+      MAX_ENTRY_AUTOMATION_SCORE_THRESHOLD,
+    ) ||
+    !isIntegerInRange(
+      value.interest,
+      1,
+      MAX_ENTRY_AUTOMATION_SCORE_THRESHOLD,
+    ) ||
+    (value.requiredDimensions !== 1 && value.requiredDimensions !== 2)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    usefulness: value.usefulness,
+    interest: value.interest,
+    requiredDimensions: value.requiredDimensions,
+  });
+}
+
+function decodeEntryAutomationBudgets(
+  value: unknown,
+): Readonly<EntryAutomationBudgets> | undefined {
+  if (
+    !isClosedRecord(value, [
+      'maximumAdvanceCandidatesPerRun',
+      'maximumDeferCandidatesPerRun',
+      'maximumEntriesPerRun',
+    ]) ||
+    !isIntegerInRange(
+      value.maximumEntriesPerRun,
+      1,
+      MAX_ENTRY_AUTOMATION_ENTRIES_PER_RUN,
+    ) ||
+    !isIntegerInRange(
+      value.maximumAdvanceCandidatesPerRun,
+      0,
+      value.maximumEntriesPerRun,
+    ) ||
+    !isIntegerInRange(
+      value.maximumDeferCandidatesPerRun,
+      0,
+      value.maximumEntriesPerRun,
+    )
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    maximumEntriesPerRun: value.maximumEntriesPerRun,
+    maximumAdvanceCandidatesPerRun: value.maximumAdvanceCandidatesPerRun,
+    maximumDeferCandidatesPerRun: value.maximumDeferCandidatesPerRun,
+  });
+}
+
+function isIntegerInRange(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= minimum &&
+    value <= maximum
+  );
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return isIntegerInRange(value, 0, Number.MAX_SAFE_INTEGER);
 }
 
 function decodeEntryPreferenceRule(

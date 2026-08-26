@@ -17,18 +17,34 @@ import type {
   InformationEntryQuerySynthesisServicePort,
   InformationEntrySearchCursor,
 } from '../modules/entries/index.js';
+import type {
+  EntryAutomationClaim,
+  EntryAutomationExecution,
+  EntryAutomationExecutionInitialize,
+  EntryAutomationExecutionRepositoryPort,
+  EntryAutomationExecutionSettle,
+  ProcessingRun,
+  ProcessingRunWriteOutcome,
+} from '../modules/processing/index.js';
 import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
 import {
+  createReviewPreferences,
+  DEFAULT_ENTRY_AUTOMATION_POLICY,
   DEFAULT_ENTRY_PREFERENCE_PROFILE,
   DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
   DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+  type EntryAutomationPolicy,
   type EntryPreferenceProfile,
+  type ReviewPreferences,
   type ReviewAssociationPolicyPreferences,
   type ReviewAutomaticKeywordPreferences,
   type ReviewExplorationPolicyPreferences,
+  type ReviewPreferencesStore,
+  type ReviewPreferencesUpdater,
+  type ReviewPreferencesUpdateResult,
   type ReviewSourceSubscriptionPreferences,
   type ReviewVocabularyPreferences,
 } from '../storage/review_preferences_store.js';
@@ -184,6 +200,7 @@ describe('M1cApiService', () => {
       DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
       DEFAULT_ENTRY_PREFERENCE_PROFILE,
+      DEFAULT_ENTRY_AUTOMATION_POLICY,
     );
   });
 
@@ -314,6 +331,7 @@ describe('M1cApiService', () => {
       DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
       {revision: 1, enabled: true, rules: [rule]},
+      DEFAULT_ENTRY_AUTOMATION_POLICY,
     );
     await expect(
       service.saveInformationEntryPreferenceProfile({
@@ -412,6 +430,170 @@ describe('M1cApiService', () => {
     expect(loadCurrentEntries).toHaveBeenNthCalledWith(3, WORKSPACE_ID, true);
   });
 
+  it('serves owner-controlled automation policy, trial, execution and audit through the public service', async () => {
+    const profile: Readonly<EntryPreferenceProfile> = Object.freeze({
+      revision: 1,
+      enabled: true,
+      rules: Object.freeze([
+        Object.freeze({
+          ruleId: '77777777-7777-4777-8777-777777777777',
+          dimension: 'usefulness' as const,
+          featureKind: 'content_keyword' as const,
+          featureIdentity: 'postgresql',
+          displayValue: 'PostgreSQL',
+          effect: 'prefer' as const,
+          weight: 5 as const,
+        }),
+      ]),
+    });
+    const preferences = new MemoryAutomationPreferences(
+      createReviewPreferences(
+        WORKSPACE_ID,
+        ['保留快捷标记'],
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        profile,
+      ),
+    );
+    const entries = Object.freeze([
+      syntheticPreferenceServiceEntry(81),
+      syntheticPreferenceServiceEntry(82),
+    ]);
+    const executions = new MemoryAutomationExecutionRepository();
+    const service = createService({
+      reviewPreferences: preferences,
+      entryAutomationExecutionRepository: executions,
+      informationEntryRepository: {
+        materializeEntries: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        materializeEntriesIfSnapshotEmpty: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        reviseEntry: () => Promise.resolve('not_found'),
+        loadCurrentEntries: () => Promise.resolve(entries),
+      },
+      processingRunRepository: {
+        listRecentRuns: () =>
+          Promise.resolve(
+            executions.current === undefined
+              ? []
+              : [automationProcessingRun(executions.current)],
+          ),
+        createRun: () => Promise.resolve('not_found'),
+        writeProgress: () => Promise.resolve('not_found'),
+        cancelRun: () => Promise.resolve('not_found'),
+        appendProposal: () => Promise.resolve('not_found'),
+      },
+    });
+
+    await expect(
+      service.loadInformationEntryAutomationPolicy(),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        policy: {revision: 0, enabled: false, paused: false},
+        profile: {revision: 1, enabled: true, ruleCount: 1},
+      },
+    });
+
+    const policyDraft = automationPolicyDraft(1);
+    const saved = await service.saveInformationEntryAutomationPolicy({
+      expectedRevision: 0,
+      ...policyDraft,
+    });
+    expect(saved).toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'applied',
+        policy: {revision: 1, enabled: true, profileRevision: 1},
+      },
+    });
+    const policy = preferences.value.entryAutomationPolicy;
+    expect(policy).toBeDefined();
+
+    await expect(
+      service.trialInformationEntryAutomationPolicy({
+        includePrivate: false,
+        expectedPolicyRevision: 1,
+        expectedProfileRevision: 1,
+        policy,
+        manualTakeoverEntryIds: [entries[0]?.entryId],
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'complete',
+        dryRunOnly: true,
+        activation: 'ready',
+        counts: {advance_candidate: 1, manual_review: 1, defer_candidate: 0},
+        items: [
+          {route: 'manual_review', reason: 'manual_takeover'},
+          {route: 'advance_candidate', reason: 'advance_threshold_met'},
+        ],
+      },
+    });
+
+    const executed = await service.executeInformationEntryAutomation({
+      idempotencyKey: 'm1g-4c-synthetic-run',
+      includePrivate: false,
+      expectedPolicyRevision: 1,
+      expectedProfileRevision: 1,
+      manualTakeoverEntryIds: [entries[0]?.entryId],
+    });
+    expect(executed).toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'succeeded',
+        replayed: false,
+        counts: {advance_candidate: 1, manual_review: 1, defer_candidate: 0},
+        execution: {
+          status: 'succeeded',
+          policyRevision: 1,
+          profileRevision: 1,
+          claims: [
+            {route: 'manual_review', status: 'completed'},
+            {route: 'advance_candidate', status: 'completed'},
+          ],
+        },
+      },
+    });
+    expect(executions.current?.runId).toBeDefined();
+
+    await expect(
+      service.listInformationEntryAutomationExecutions(10),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        executions: [{status: 'succeeded', claims: [{}, {}]}],
+      },
+    });
+    await expect(
+      service.loadInformationEntryAutomationExecution(
+        executions.current?.runId ?? '',
+      ),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'ok', execution: {status: 'succeeded'}},
+    });
+
+    await expect(
+      service.saveInformationEntryAutomationPolicy({
+        expectedRevision: 0,
+        ...policyDraft,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 409,
+      body: {
+        status: 'rejected',
+        issue: {code: 'stale_entry_automation_policy_revision'},
+      },
+    });
+  });
+
   it('versions association weights in external personal preferences and rejects stale writes', async () => {
     let policy: Readonly<ReviewAssociationPolicyPreferences> =
       DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES;
@@ -487,6 +669,7 @@ describe('M1cApiService', () => {
       DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
       DEFAULT_ENTRY_PREFERENCE_PROFILE,
+      DEFAULT_ENTRY_AUTOMATION_POLICY,
     );
     await expect(
       service.reviseInformationEntryAssociationPolicy({
@@ -604,6 +787,7 @@ describe('M1cApiService', () => {
       },
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
       entryPreferenceProfile,
+      DEFAULT_ENTRY_AUTOMATION_POLICY,
     );
 
     await expect(
@@ -663,6 +847,7 @@ describe('M1cApiService', () => {
       explorationPolicy,
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
       entryPreferenceProfile,
+      DEFAULT_ENTRY_AUTOMATION_POLICY,
     );
   });
 
@@ -2642,6 +2827,191 @@ function createService(
     ...overrides,
   };
   return new M1cApiService(dependencies);
+}
+
+class MemoryAutomationPreferences implements ReviewPreferencesStore {
+  public value: Readonly<ReviewPreferences>;
+
+  public constructor(value: Readonly<ReviewPreferences>) {
+    this.value = value;
+  }
+
+  public load(): Promise<Readonly<ReviewPreferences>> {
+    return Promise.resolve(this.value);
+  }
+
+  public save(): Promise<Readonly<ReviewPreferences>> {
+    return Promise.reject(new Error('Atomic update is required.'));
+  }
+
+  public update<T>(
+    _workspaceId: string,
+    updater: ReviewPreferencesUpdater<T>,
+  ): Promise<Readonly<ReviewPreferencesUpdateResult<T>>> {
+    const update = updater(this.value);
+    this.value = update.next;
+    return Promise.resolve(
+      Object.freeze({preferences: this.value, result: update.result}),
+    );
+  }
+}
+
+class MemoryAutomationExecutionRepository implements EntryAutomationExecutionRepositoryPort {
+  public current: Readonly<EntryAutomationExecution> | undefined;
+
+  public loadExecution(
+    _workspaceId: string,
+    runId: string,
+  ): Promise<Readonly<EntryAutomationExecution> | undefined> {
+    return Promise.resolve(
+      this.current?.runId === runId ? this.current : undefined,
+    );
+  }
+
+  public initializeExecution(
+    initialize: Readonly<EntryAutomationExecutionInitialize>,
+  ): Promise<ProcessingRunWriteOutcome> {
+    if (this.current !== undefined) {
+      return Promise.resolve(
+        this.current.requestSha256 === initialize.requestSha256 &&
+          this.current.planSha256 === initialize.planSha256
+          ? 'unchanged'
+          : 'conflict',
+      );
+    }
+    this.current = Object.freeze({
+      workspaceId: initialize.workspaceId,
+      runId: initialize.runId,
+      idempotencyKey: initialize.idempotencyKey,
+      requestSha256: initialize.requestSha256,
+      planSha256: initialize.planSha256,
+      policyRevision: initialize.policyRevision,
+      profileRevision: initialize.profileRevision,
+      includePrivate: initialize.includePrivate,
+      status: 'queued',
+      version: 1,
+      claims: Object.freeze(
+        initialize.claims.map((claim) => automationClaim(initialize, claim)),
+      ),
+    });
+    return Promise.resolve('applied');
+  }
+
+  public startExecution(
+    _workspaceId: string,
+    _runId: string,
+    expectedVersion: number,
+  ): Promise<ProcessingRunWriteOutcome> {
+    if (this.current === undefined) return Promise.resolve('not_found');
+    if (this.current.status !== 'queued') return Promise.resolve('terminal');
+    if (this.current.version !== expectedVersion)
+      return Promise.resolve('stale');
+    this.current = Object.freeze({
+      ...this.current,
+      status: 'running',
+      version: 2,
+    });
+    return Promise.resolve('applied');
+  }
+
+  public settleExecution(
+    settle: Readonly<EntryAutomationExecutionSettle>,
+  ): Promise<ProcessingRunWriteOutcome> {
+    if (this.current === undefined) return Promise.resolve('not_found');
+    if (this.current.version !== settle.expectedVersion) {
+      return Promise.resolve('stale');
+    }
+    const claimStatus =
+      settle.status === 'succeeded' ? 'completed' : 'compensated';
+    this.current = Object.freeze({
+      ...this.current,
+      status: settle.status,
+      version: this.current.version + 1,
+      ...(settle.errorCode === undefined ? {} : {errorCode: settle.errorCode}),
+      claims: Object.freeze(
+        this.current.claims.map((claim) =>
+          Object.freeze({
+            ...claim,
+            status: claimStatus,
+            ...(settle.errorCode === undefined
+              ? {}
+              : {errorCode: settle.errorCode}),
+            finishedAt: '2040-01-02T03:04:06.000Z',
+          }),
+        ),
+      ),
+    });
+    return Promise.resolve('applied');
+  }
+}
+
+function automationPolicyDraft(
+  profileRevision: number,
+): Omit<EntryAutomationPolicy, 'revision'> {
+  return Object.freeze({
+    enabled: true,
+    paused: false,
+    profileRevision,
+    minimumMatchedRuleCount: 1,
+    advanceThresholds: Object.freeze({
+      usefulness: 3,
+      interest: 3,
+      requiredDimensions: 1,
+    }),
+    deferThresholds: Object.freeze({
+      usefulness: 3,
+      interest: 3,
+      requiredDimensions: 1,
+    }),
+    budgets: Object.freeze({
+      maximumEntriesPerRun: 10,
+      maximumAdvanceCandidatesPerRun: 10,
+      maximumDeferCandidatesPerRun: 10,
+    }),
+    failureMode: 'pause',
+  });
+}
+
+function automationClaim(
+  initialize: Readonly<EntryAutomationExecutionInitialize>,
+  claim: Readonly<EntryAutomationExecutionInitialize['claims'][number]>,
+): Readonly<EntryAutomationClaim> {
+  return Object.freeze({
+    workspaceId: initialize.workspaceId,
+    runId: initialize.runId,
+    ...claim,
+    status: 'claimed',
+    createdAt: '2040-01-02T03:04:05.000Z',
+  });
+}
+
+function automationProcessingRun(
+  execution: Readonly<EntryAutomationExecution>,
+): Readonly<ProcessingRun> {
+  return Object.freeze({
+    workspaceId: execution.workspaceId,
+    runId: execution.runId,
+    idempotencyKey: execution.idempotencyKey,
+    origin: 'deterministic',
+    status: execution.status,
+    privacyScope: execution.includePrivate ? 'include_private' : 'public_only',
+    currentStage: 'tags',
+    currentStep:
+      execution.status === 'succeeded'
+        ? 'automation_complete'
+        : 'automation_routing',
+    completedUnits:
+      execution.status === 'succeeded' ? execution.claims.length : 0,
+    totalUnits: execution.claims.length,
+    attempt: 1,
+    version: execution.version,
+    createdAt: '2040-01-02T03:04:05.000Z',
+    updatedAt: '2040-01-02T03:04:06.000Z',
+    ...(execution.status === 'succeeded'
+      ? {finishedAt: '2040-01-02T03:04:06.000Z'}
+      : {}),
+    proposals: Object.freeze([]),
+  });
 }
 
 function syntheticExplorationEntry(

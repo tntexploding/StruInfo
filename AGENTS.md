@@ -414,6 +414,48 @@ implicit behavior, alter Query ranking, call a Provider, or grant automatic
 split/tag/link/ignore authority. Automatic routing remains a later
 `AutomationPolicy` decision.
 
+ADR 0026 starts M1G-4 with the separate authority record required by ADR 0025.
+M1G-4A stores a default-off, independently versioned Entry AutomationPolicy in
+the external preference file and personal-data package. Its pure local trial
+binds one exact Profile revision, applies explicit evidence, threshold and
+budget rules, and routes visible current Entries to advance candidate, manual
+review or defer candidate with stable reasons. Manual takeover wins, while
+defer never means ignore, delete or hide. M1G-4A exposes no HTTP/UI executor,
+creates no ProcessingRun and performs no downstream write. Recoverable
+execution and owner controls remain separate M1G-4B/M1G-4C boundaries.
+
+ADR 0027 completes M1G-4B with durable, idempotent execution of those routing
+facts. Forward migration `000018` adds one typed automation-run header and one
+typed per-Entry claim table. Each run freezes exact AutomationPolicy,
+PreferenceProfile and Entry revisions plus request/plan digests; authority and
+Entry state are revalidated before start and settlement. A failed run pauses
+only the still-matching external policy revision and compensates open claims;
+an unconfirmed recovery remains visibly pending. Processing Bundle v5 carries
+the two new tables and upgrades v1-v4 with empty execution state. Completing a
+claim records only advance/manual/defer routing—it MUST NOT mutate Entry
+content, tags, Associations, graph edges, queries or AI proposals. M1G-4C owns
+future HTTP/UI controls, and concrete downstream automatic actions still
+require a separately accepted product boundary.
+
+ADR 0028 completes M1G-4C with six narrow local API operations and one
+secondary Tags control panel. The owner can edit, enable/disable, pause/resume,
+trial, manually take over, explicitly start and inspect Entry routing runs. A
+dirty draft cannot start a run, and every start binds the saved ready policy to
+the exact Profile and Entry revisions shown by the trial. This adds no
+migration, dependency, Provider call or automatic downstream mutation.
+Completed advance/manual/defer claims remain routing audit facts only; they
+MUST NOT alter Entry content, keywords, Associations, graph edges, Query state
+or AI proposals.
+
+ADR 0029 completes M1G-4D by making the existing exact-run read a real
+owner-facing audit path and separating policy, save, trial, execution, recent
+list and exact-detail request generations. Recent runs are summaries only;
+unresolved or compensated claims remain explicit, stale responses cannot
+replace newer visible authority, and the responsive Tags panel introduces no
+new execution or content-write permission. M1G-4 is complete through A–D;
+concrete automatic business actions remain a later explicitly accepted
+boundary.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

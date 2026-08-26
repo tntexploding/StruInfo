@@ -45,6 +45,10 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0023](0023-deterministic-entry-exploration-policy.md) | Accepted | Default-off explainable Entry exploration over current visible direct Associations |
 | [0024](0024-versioned-git-source-subscriptions.md) | Accepted | Versioned exact GitHub Markdown subscriptions through external preferences and existing Evidence import |
 | [0025](0025-explainable-entry-preference-profile.md) | Accepted | Complete local explainable Entry preference rules, read-only trial evaluation and integration boundary before automation authority |
+| [0026](0026-entry-automation-policy-dry-run.md) | Accepted | Default-off external Entry automation policy and deterministic read-only routing trial without execution authority |
+| [0027](0027-recoverable-entry-automation-routing-execution.md) | Accepted | Durable idempotent Entry routing claims with exact revalidation, failure pause and compensation |
+| [0028](0028-owner-controlled-entry-automation-routing.md) | Accepted | Owner-controlled policy editing, trial, manual takeover, durable start and routing audit without downstream content mutation |
+| [0029](0029-entry-automation-control-integrity.md) | Accepted | Exact automation-run audit, independent request generations and responsive recovery visibility without new execution authority |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -87,3 +91,28 @@ M1G-3C exposes the narrow commands and secondary Tags panel. M1G-3D completes
 atomic sibling-preference updates, stale-response protection and the privacy,
 backward-package, responsive-browser and artifact checks. The accepted boundary
 does not grant automatic routing or Provider authority.
+ADR 0026 starts M1G-4 with the separate authority record deliberately required
+by ADR 0025. M1G-4A persists a default-off Entry AutomationPolicy externally and
+can explain deterministic advance, defer and manual-review candidates in a
+bounded dry-run. It does not execute a route or create automatic write
+authority.
+
+ADR 0027 completes M1G-4B by durably executing that routing decision as an
+idempotent ProcessingRun and exact per-Entry claims. Policy, Profile and Entry
+revisions are revalidated before completion; failure pauses only the still
+matching policy revision and compensates open claims. This records routing
+facts only and does not infer automatic tag, Association, graph or AI-proposal
+write authority.
+
+ADR 0028 completes M1G-4C through six narrow local API operations and a
+secondary Tags control panel. The owner can edit, enable, disable, pause,
+resume, trial, manually take over, start and inspect routing runs. A run binds
+only a saved ready policy and its exact Profile/Entry revisions; completed
+claims still do not mutate Entry content, tags, Associations, graph edges,
+queries or AI proposals.
+
+ADR 0029 completes M1G-4D by making the existing exact-run operation a real
+owner-facing audit path and separating policy, save, trial, execution, list and
+detail request generations. Late responses cannot replace newer visible
+authority, unresolved claims remain explicit, and the responsive Tags control
+surface adds no downstream content-write permission.

@@ -10,8 +10,11 @@ import {
 import type {WorkspaceBundleSectionCodec} from './workspace_bundle.js';
 
 export const M1E_PROCESSING_BUNDLE_SECTION_TYPE = 'struinfo.m1e-processing';
-export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 4;
-export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v4';
+export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 5;
+export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v5';
+export const M1E_PROCESSING_VERSION_FOUR_BUNDLE_SECTION_VERSION = 4;
+export const M1E_PROCESSING_VERSION_FOUR_BUNDLE_SCHEMA =
+  'struinfo.m1e-processing.v4';
 export const M1E_PROCESSING_VERSION_THREE_BUNDLE_SECTION_VERSION = 3;
 export const M1E_PROCESSING_VERSION_THREE_BUNDLE_SCHEMA =
   'struinfo.m1e-processing.v3';
@@ -141,7 +144,33 @@ export const M1E_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescript
       'fragment_ordinal',
       'fragment_id',
     ]),
+    table('processing_entry_automation_run', [
+      'workspace_id',
+      'run_id',
+      'request_sha256',
+      'plan_sha256',
+      'policy_revision',
+      'profile_revision',
+      'created_at',
+    ]),
+    table('processing_entry_automation_claim', [
+      'workspace_id',
+      'run_id',
+      'claim_ordinal',
+      'entry_id',
+      'entry_revision',
+      'entry_revision_id',
+      'route',
+      'reason',
+      'status',
+      'error_code',
+      'created_at',
+      'finished_at',
+    ]),
   ]);
+
+const VERSION_FOUR_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
+  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 10));
 
 const VERSION_THREE_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
   Object.freeze(M1E_PROCESSING_TABLES.slice(0, 7));
@@ -158,6 +187,16 @@ export const M1E_PROCESSING_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     version: M1E_PROCESSING_BUNDLE_SECTION_VERSION,
     encode: normalizeM1eProcessingSnapshot,
     decode: normalizeM1eProcessingSnapshot,
+  });
+
+export const M1E_PROCESSING_VERSION_FOUR_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: M1E_PROCESSING_VERSION_FOUR_BUNDLE_SECTION_VERSION,
+    encode: normalizeVersionFourSnapshot,
+    decode(payload: JsonValue): unknown {
+      return upgradePreviousSnapshot(normalizeVersionFourSnapshot(payload));
+    },
   });
 
 export const M1E_PROCESSING_VERSION_THREE_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
@@ -197,6 +236,20 @@ export function normalizeM1eProcessingSnapshot(
     M1E_PROCESSING_BUNDLE_SCHEMA,
     M1E_PROCESSING_TABLES,
   ) as M1eProcessingSnapshot;
+}
+
+function normalizeVersionFourSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1E_PROCESSING_VERSION_FOUR_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1E_PROCESSING_VERSION_FOUR_BUNDLE_SCHEMA,
+    VERSION_FOUR_PROCESSING_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1E_PROCESSING_VERSION_FOUR_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+  }>;
 }
 
 function normalizeVersionThreeSnapshot(value: unknown): Readonly<{

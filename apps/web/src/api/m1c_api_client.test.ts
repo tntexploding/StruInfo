@@ -146,6 +146,109 @@ describe('M1cApiClient', () => {
     ]);
   });
 
+  it('uses dedicated owner-control routes for Entry automation policy, trial, execution and audit', async () => {
+    const requests: Readonly<{url: string; method?: string; body?: string}>[] =
+      [];
+    const client = createM1cApiClient(
+      'http://127.0.0.1:3000/',
+      (input, init) => {
+        requests.push({
+          url: requestUrl(input),
+          ...(init?.method === undefined ? {} : {method: init.method}),
+          ...(typeof init?.body === 'string' ? {body: init.body} : {}),
+        });
+        return Promise.resolve(
+          new Response(JSON.stringify({status: 'ok'}), {
+            headers: {'content-type': 'application/json'},
+          }),
+        );
+      },
+    );
+    const policy = {
+      revision: 3,
+      enabled: true,
+      paused: false,
+      profileRevision: 2,
+      minimumMatchedRuleCount: 1,
+      advanceThresholds: {usefulness: 3, interest: 3, requiredDimensions: 1},
+      deferThresholds: {usefulness: 3, interest: 3, requiredDimensions: 1},
+      budgets: {
+        maximumEntriesPerRun: 25,
+        maximumAdvanceCandidatesPerRun: 10,
+        maximumDeferCandidatesPerRun: 10,
+      },
+      failureMode: 'pause' as const,
+    } as const;
+    const policyWrite = {
+      expectedRevision: policy.revision,
+      enabled: policy.enabled,
+      paused: policy.paused,
+      profileRevision: policy.profileRevision,
+      minimumMatchedRuleCount: policy.minimumMatchedRuleCount,
+      advanceThresholds: policy.advanceThresholds,
+      deferThresholds: policy.deferThresholds,
+      budgets: policy.budgets,
+      failureMode: policy.failureMode,
+    };
+    const trial = {
+      includePrivate: false,
+      expectedPolicyRevision: 3,
+      expectedProfileRevision: 2,
+      policy,
+      manualTakeoverEntryIds: ['11111111-1111-4111-8111-111111111111'],
+    } as const;
+    const execution = {
+      idempotencyKey: 'synthetic-m1g-4c-run',
+      includePrivate: false,
+      expectedPolicyRevision: 3,
+      expectedProfileRevision: 2,
+      expectedEntries: [
+        {
+          entryId: '11111111-1111-4111-8111-111111111111',
+          revision: 4,
+        },
+      ],
+      manualTakeoverEntryIds: trial.manualTakeoverEntryIds,
+    } as const;
+
+    await client.loadInformationEntryAutomationPolicy();
+    await client.saveInformationEntryAutomationPolicy(policyWrite);
+    await client.trialInformationEntryAutomationPolicy(trial);
+    await client.executeInformationEntryAutomation(execution);
+    await client.listInformationEntryAutomationExecutions(7);
+    await client.loadInformationEntryAutomationExecution('synthetic/run');
+
+    expect(requests).toEqual([
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/automation/policy',
+        method: 'GET',
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/automation/policy',
+        method: 'PUT',
+        body: JSON.stringify(policyWrite),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/automation/trial',
+        method: 'POST',
+        body: JSON.stringify(trial),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/automation/runs',
+        method: 'POST',
+        body: JSON.stringify(execution),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/automation/runs?limit=7',
+        method: 'GET',
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/automation/runs/synthetic%2Frun',
+        method: 'GET',
+      },
+    ]);
+  });
+
   it('encodes snapshot identity as one path segment', async () => {
     let requestedUrl = '';
     const client = createM1cApiClient('https://localhost:3000', (input) => {

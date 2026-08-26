@@ -57,6 +57,29 @@ describe('LocalReviewPreferencesStore', () => {
         enabled: false,
         rules: [],
       },
+      entryAutomationPolicy: {
+        revision: 0,
+        enabled: false,
+        paused: false,
+        profileRevision: 0,
+        minimumMatchedRuleCount: 1,
+        advanceThresholds: {
+          usefulness: 3,
+          interest: 3,
+          requiredDimensions: 1,
+        },
+        deferThresholds: {
+          usefulness: 3,
+          interest: 3,
+          requiredDimensions: 1,
+        },
+        budgets: {
+          maximumEntriesPerRun: 100,
+          maximumAdvanceCandidatesPerRun: 25,
+          maximumDeferCandidatesPerRun: 25,
+        },
+        failureMode: 'pause',
+      },
     });
   });
 
@@ -131,6 +154,29 @@ describe('LocalReviewPreferencesStore', () => {
           },
         ],
       },
+      {
+        revision: 3,
+        enabled: true,
+        paused: false,
+        profileRevision: 2,
+        minimumMatchedRuleCount: 2,
+        advanceThresholds: {
+          usefulness: 6,
+          interest: 4,
+          requiredDimensions: 2,
+        },
+        deferThresholds: {
+          usefulness: 5,
+          interest: 3,
+          requiredDimensions: 1,
+        },
+        budgets: {
+          maximumEntriesPerRun: 40,
+          maximumAdvanceCandidatesPerRun: 10,
+          maximumDeferCandidatesPerRun: 8,
+        },
+        failureMode: 'pause',
+      },
     );
 
     await expect(store.load(WORKSPACE_A)).resolves.toMatchObject({
@@ -193,6 +239,29 @@ describe('LocalReviewPreferencesStore', () => {
           },
         ],
       },
+      entryAutomationPolicy: {
+        revision: 3,
+        enabled: true,
+        paused: false,
+        profileRevision: 2,
+        minimumMatchedRuleCount: 2,
+        advanceThresholds: {
+          usefulness: 6,
+          interest: 4,
+          requiredDimensions: 2,
+        },
+        deferThresholds: {
+          usefulness: 5,
+          interest: 3,
+          requiredDimensions: 1,
+        },
+        budgets: {
+          maximumEntriesPerRun: 40,
+          maximumAdvanceCandidatesPerRun: 10,
+          maximumDeferCandidatesPerRun: 8,
+        },
+        failureMode: 'pause',
+      },
     });
     await expect(store.load(WORKSPACE_B)).resolves.toMatchObject({
       workspaceId: WORKSPACE_B,
@@ -209,6 +278,7 @@ describe('LocalReviewPreferencesStore', () => {
     expect(text).toContain('\n  "explorationPolicy": {\n');
     expect(text).toContain('\n  "sourceSubscriptions": {\n');
     expect(text).toContain('\n  "entryPreferenceProfile": {\n');
+    expect(text).toContain('\n  "entryAutomationPolicy": {\n');
     expect(text).toContain('\n    "revision": 3,\n');
   });
 
@@ -263,6 +333,11 @@ describe('LocalReviewPreferencesStore', () => {
         revision: 0,
         enabled: false,
         rules: [],
+      },
+      entryAutomationPolicy: {
+        revision: 0,
+        enabled: false,
+        paused: false,
       },
     });
   });
@@ -381,6 +456,47 @@ describe('LocalReviewPreferencesStore', () => {
               unknown: true,
             },
           ],
+        },
+      }),
+      'utf8',
+    );
+
+    await expect(store.load(WORKSPACE_A)).rejects.toMatchObject({
+      code: 'preferences_invalid',
+    });
+  });
+
+  it('rejects malformed external automation policy state', async () => {
+    const {root, store} = createStore();
+    writeFileSync(
+      join(root, WORKSPACE_A + '.review-preferences.json'),
+      JSON.stringify({
+        format: 'struinfo.review-preferences',
+        version: 1,
+        workspaceId: WORKSPACE_A,
+        quickTags: [],
+        entryAutomationPolicy: {
+          revision: 1,
+          enabled: true,
+          paused: false,
+          profileRevision: 1,
+          minimumMatchedRuleCount: 1,
+          advanceThresholds: {
+            usefulness: 3,
+            interest: 3,
+            requiredDimensions: 1,
+          },
+          deferThresholds: {
+            usefulness: 3,
+            interest: 3,
+            requiredDimensions: 1,
+          },
+          budgets: {
+            maximumEntriesPerRun: 10,
+            maximumAdvanceCandidatesPerRun: 11,
+            maximumDeferCandidatesPerRun: 5,
+          },
+          failureMode: 'pause',
         },
       }),
       'utf8',

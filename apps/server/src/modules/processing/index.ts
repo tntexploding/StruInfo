@@ -8,3 +8,5 @@ export * from './processing.js';
 export * from './processing_contract.js';
 export * from './processing_identity.js';
 export * from './processing_repository.js';
+export * from './entry_automation_execution_contract.js';
+export * from './entry_automation_execution_service.js';

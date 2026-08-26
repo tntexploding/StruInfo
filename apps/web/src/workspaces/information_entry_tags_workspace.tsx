@@ -13,6 +13,7 @@ import {
   type InformationEntryServices,
 } from './information_entry_components.js';
 import {InformationEntryAiTags} from './information_entry_ai_tags.js';
+import {InformationEntryAutomationPolicyPanel} from './information_entry_automation_policy_panel.js';
 import {InformationEntryPreferenceProfilePanel} from './information_entry_preference_profile_panel.js';
 import {InformationDocumentNavigator} from './information_entry_document_navigation.js';
 import {
@@ -25,20 +26,27 @@ export interface InformationEntryTagsWorkspaceProps extends Pick<
   InformationEntryServices,
   | 'onAcceptAiTagProposal'
   | 'onAggregateDocumentTags'
+  | 'onExecuteEntryAutomation'
   | 'onListAiTagProposals'
   | 'onListDocuments'
+  | 'onListEntryAutomationExecutions'
+  | 'onLoadEntryAutomationExecution'
+  | 'onLoadEntryAutomationPolicy'
   | 'onOpenEvidence'
   | 'onRejectAiTagProposal'
   | 'onRevise'
   | 'onReviseDocumentTags'
+  | 'onSaveEntryAutomationPolicy'
   | 'onSaveEntryPreferenceProfile'
   | 'onSaveReviewPreferences'
   | 'onSearch'
   | 'onSuggestEntryPreferenceProfile'
   | 'onStartAiTagProposal'
+  | 'onTrialEntryAutomationPolicy'
   | 'onTrialEntryPreferenceProfile'
 > {
   readonly aiEnabled: boolean;
+  readonly automationEnabled: boolean;
   readonly entryPreferenceProfile: Loadable<
     Readonly<InformationEntryPreferenceProfileResponse>
   >;
@@ -53,19 +61,26 @@ export interface InformationEntryTagsWorkspaceProps extends Pick<
 
 export function InformationEntryTagsWorkspace({
   aiEnabled,
+  automationEnabled,
   onAcceptAiTagProposal,
   onAggregateDocumentTags,
+  onExecuteEntryAutomation,
   onListAiTagProposals,
   onListDocuments,
+  onListEntryAutomationExecutions,
+  onLoadEntryAutomationExecution,
+  onLoadEntryAutomationPolicy,
   onOpenEvidence,
   onRejectAiTagProposal,
   onRevise,
   onReviseDocumentTags,
+  onSaveEntryAutomationPolicy,
   onSaveEntryPreferenceProfile,
   onSaveReviewPreferences,
   onSearch,
   onSuggestEntryPreferenceProfile,
   onStartAiTagProposal,
+  onTrialEntryAutomationPolicy,
   onTrialEntryPreferenceProfile,
   entryPreferenceProfile,
   onReloadEntryPreferenceProfile,
@@ -301,6 +316,16 @@ export function InformationEntryTagsWorkspace({
         onSave={onSaveEntryPreferenceProfile}
         onSuggest={onSuggestEntryPreferenceProfile}
         onTrial={onTrialEntryPreferenceProfile}
+      />
+
+      <InformationEntryAutomationPolicyPanel
+        enabled={automationEnabled}
+        onLoad={onLoadEntryAutomationPolicy}
+        onSave={onSaveEntryAutomationPolicy}
+        onTrial={onTrialEntryAutomationPolicy}
+        onExecute={onExecuteEntryAutomation}
+        onListRuns={onListEntryAutomationExecutions}
+        onLoadRun={onLoadEntryAutomationExecution}
       />
     </div>
   );

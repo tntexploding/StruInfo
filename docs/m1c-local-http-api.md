@@ -9,7 +9,7 @@
 
 ## 1. 接口边界
 
-本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、确定性/人工首次物化、Document 标签、Entry 联系、正式 Entry 图谱、确定性探索、精确 GitHub Markdown 信源订阅、Provider-neutral ProcessingRun、可选 OpenAI Snapshot 拆分/Entry 标签/selected-pair 联系提案与公开 Query 证据综合、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、任意 URL 抓取、通用 AI 执行、自动接受或公共扩展 API。
+本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、确定性/人工首次物化、Document 标签、Entry 联系、正式 Entry 图谱、确定性探索、精确 GitHub Markdown 信源订阅、Provider-neutral ProcessingRun、所有者控制的 Entry 路由执行、可选 OpenAI Snapshot 拆分/Entry 标签/selected-pair 联系提案与公开 Query 证据综合、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、任意 URL 抓取、通用 AI 执行、自动接受、具体自动内容改写或公共扩展 API。
 
 当前工作区由包体外运行配置中的 `STRUIINFO_WORKSPACE_ID` 选择。请求不能提交或切换 `workspaceId`；服务端把固定工作区注入所有领域操作。切换资料集需要停止当前进程、替换外部配置或数据根并重新启动。
 
@@ -41,6 +41,12 @@
 | `POST` | `/api/v1/entries/search/synthesize`                                                   | 显式综合当前公开确定性 Query 证据；答案只属于本次页面会话                             |
 | `POST` | `/api/v1/entries/exploration/candidates`                                              | 从选定 Entry 的当前可见直接联系生成独立页外探索候选                                   |
 | `PUT`  | `/api/v1/entries/exploration/policy`                                                  | 以期望修订保存外部探索开关、页额份额和三类候选开关                                    |
+| `GET`  | `/api/v1/entries/automation/policy`                                                   | 读取当前 AutomationPolicy 及其绑定 Profile 摘要                                       |
+| `PUT`  | `/api/v1/entries/automation/policy`                                                   | 以期望修订保存启停、暂停、阈值、维度要求和预算                                        |
+| `POST` | `/api/v1/entries/automation/trial`                                                    | 对草稿策略执行只读路由试算并应用显式人工接管                                          |
+| `POST` | `/api/v1/entries/automation/runs`                                                     | 用幂等键和精确修订账本显式启动一次持久路由执行                                        |
+| `GET`  | `/api/v1/entries/automation/runs?limit=`                                              | 列出最近 1–20 个 typed 自动路由运行及 claims                                          |
+| `GET`  | `/api/v1/entries/automation/runs/:runId`                                              | 读取一个精确自动路由运行及 claims                                                     |
 | `GET`  | `/api/v1/entries/:entryId/tag-proposals`                                              | 列出一个 Entry 的有界 tags 提案                                                       |
 | `POST` | `/api/v1/entries/:entryId/tag-proposals/start`                                        | 用户显式请求一个公开 Entry 的 OpenAI 标签提案                                         |
 | `POST` | `/api/v1/entries/:entryId/tag-proposals/:proposalId/accept`                           | 接受提案并通过现有 Entry revision 保存标签                                            |
@@ -109,6 +115,10 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 文档级标签通过 aggregate 接口确定性重算，或通过 tags 接口人工覆盖。快捷标签、排除词、域名策略、已确认别名、联系策略和探索策略由 preferences 边界写入外部偏好文件，不进入数据库迁移、Git 或应用包。旧客户端不传 `associationPolicy` 或 `explorationPolicy` 时分别保留现值。
 
+M1G-4C 的六个 `/entries/automation/*` 操作把外部 AutomationPolicy、M1G-4A 只读试算和 M1G-4B typed execution 接入同一 Tags 次级控制面。策略 PUT 必须提供 `expectedRevision` 并绑定当前 Profile revision；启用/禁用和暂停/恢复都是显式新修订。trial 接受草稿策略、当次隐私范围、可选 Entry 修订账本和人工接管 ID，只返回路由、原因和计数。run start 只接受已保存且 ready 的精确修订、幂等键和同一账本；列表/详情只返回运行、修订、route/reason/status 和时间，不返回正文、来源 Blob、请求摘要或幂等键。M1G-4D 明确规定列表只是摘要导航：Web 必须在用户选择后调用精确详情操作，独立显示未结算/补偿 claim，并用分离的请求代次阻止迟到列表或详情覆盖更新状态。
+
+这些路由完成的是所有者控制与路由审计，不是具体自动处理。completed claim 不会修改 Entry、评分、标签、联系、图谱、查询或 AI 提案，`defer_candidate` 也不隐藏或删除内容。私密 Entry 只有在当前 trial/run 显式 `includePrivate=true` 时参与，且整个过程保持本地、无 Provider。
+
 ### 3.4 联系
 
 `PUT /entries/associations/policy` 接受 `expectedRevision`、三项和为 100 的整数权重，以及 0–10000 的阈值。成功保存到外部个人偏好后，Web 会立即调用 rebuild；候选上限和逐对人工调整幅度仍是固定算法常量。rebuild 读取当前可见 Entry，按正文词项及内容/类型/领域维度生成可解释投影，不覆盖人工 override 或正式图谱关系。逐对 PUT 只接受当前 override 版本、`includePrivate` 和 `enhance`、`weaken`、`block`、`restore` 之一。自动 `similarity` 边不等于经过人工核验的事实性语义断言。
@@ -160,7 +170,7 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 ## 5. 个人数据包
 
-export 接口生成当前五分区 Bundle，包含 56 张当前工作区表、被引用的 Blob 字节和含版本化联系策略、探索策略的当前偏好文件。Entry v3 section 携带可选精确 Fragment 标量区间；Processing v4 section 携带三张任务表、三张 typed tag proposal 表、一张 typed association proposal 表和三张 typed split proposal 表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1/v2/v3 保持可读，缺失的新表和探索字段恢复为空/关闭状态。
+export 接口生成当前五分区 Bundle，包含 58 张当前工作区表、被引用的 Blob 字节和含版本化联系、探索、Entry 偏好与 AutomationPolicy 的当前偏好文件。Entry v3 section 携带可选精确 Fragment 标量区间；Processing v5 section 携带十张既有任务/提案表以及两张 typed 自动路由执行表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1/v2/v3/v4 保持可读，缺失的新表和偏好字段恢复为空/关闭状态。
 
 Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不进入 Git 或应用安装树。
 

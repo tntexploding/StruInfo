@@ -52,6 +52,7 @@ import {
   createEmptyM1eProcessingSnapshot,
   M1E_PROCESSING_BUNDLE_CODEC,
   M1E_PROCESSING_LEGACY_BUNDLE_CODEC,
+  M1E_PROCESSING_VERSION_FOUR_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_THREE_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_TWO_BUNDLE_CODEC,
   M1E_PROCESSING_BUNDLE_SECTION_TYPE,
@@ -159,6 +160,7 @@ const BUNDLE_CODECS = Object.freeze([
   M1E_PROCESSING_LEGACY_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_TWO_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_THREE_BUNDLE_CODEC,
+  M1E_PROCESSING_VERSION_FOUR_BUNDLE_CODEC,
   M1E_PROCESSING_BUNDLE_CODEC,
   PERSONAL_DATA_BUNDLE_CODEC,
 ]);
@@ -487,6 +489,7 @@ async function saveReviewPreferences(
     preferences.explorationPolicy,
     preferences.sourceSubscriptions,
     preferences.entryPreferenceProfile,
+    preferences.entryAutomationPolicy,
   );
 }
 async function restorePortableBlobs(

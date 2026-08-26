@@ -204,6 +204,8 @@ export async function startRoleRuntime(
           informationEntryAssociationRepository:
             repositories.informationEntryAssociations,
           processingRunRepository: repositories.processingRuns,
+          entryAutomationExecutionRepository:
+            repositories.entryAutomationExecutions,
           sourceSubscriptions,
           ...(aiSplitProposals === undefined ? {} : {aiSplitProposals}),
           ...(aiTagProposals === undefined ? {} : {aiTagProposals}),

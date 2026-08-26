@@ -4,6 +4,7 @@ import {join} from 'node:path';
 
 import {
   createReviewPreferences,
+  decodeEntryAutomationPolicy,
   decodeEntryPreferenceProfile,
   decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
@@ -12,6 +13,7 @@ import {
   decodeReviewQuickTags,
   decodeReviewVocabularyPreferences,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+  DEFAULT_ENTRY_AUTOMATION_POLICY,
   DEFAULT_ENTRY_PREFERENCE_PROFILE,
   DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
@@ -20,6 +22,7 @@ import {
   REVIEW_PREFERENCES_VERSION,
   ReviewPreferencesStoreError,
   type ReviewPreferences,
+  type EntryAutomationPolicy,
   type EntryPreferenceProfile,
   type ReviewAssociationPolicyPreferences,
   type ReviewAutomaticKeywordPreferences,
@@ -90,6 +93,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>,
     sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences> = DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
     entryPreferenceProfile: Readonly<EntryPreferenceProfile> = DEFAULT_ENTRY_PREFERENCE_PROFILE,
+    entryAutomationPolicy: Readonly<EntryAutomationPolicy> = DEFAULT_ENTRY_AUTOMATION_POLICY,
   ): Promise<Readonly<ReviewPreferences>> {
     validateWorkspaceId(workspaceId);
     return this.#serializeWrite(workspaceId, () =>
@@ -102,6 +106,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
         explorationPolicy,
         sourceSubscriptions,
         entryPreferenceProfile,
+        entryAutomationPolicy,
       ),
     );
   }
@@ -130,6 +135,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
                 DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
               update.next.entryPreferenceProfile ??
                 DEFAULT_ENTRY_PREFERENCE_PROFILE,
+              update.next.entryAutomationPolicy ??
+                DEFAULT_ENTRY_AUTOMATION_POLICY,
             );
       return Object.freeze({preferences, result: update.result});
     });
@@ -144,6 +151,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     explorationPolicy: Readonly<ReviewExplorationPolicyPreferences> | undefined,
     sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences>,
     entryPreferenceProfile: Readonly<EntryPreferenceProfile>,
+    entryAutomationPolicy: Readonly<EntryAutomationPolicy>,
   ): Promise<Readonly<ReviewPreferences>> {
     const decoded = decodeReviewQuickTags(quickTags);
     const decodedAutomaticKeywords =
@@ -162,6 +170,9 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     const decodedEntryPreferenceProfile = decodeEntryPreferenceProfile(
       entryPreferenceProfile,
     );
+    const decodedEntryAutomationPolicy = decodeEntryAutomationPolicy(
+      entryAutomationPolicy,
+    );
     if (
       decoded === undefined ||
       decodedAutomaticKeywords === undefined ||
@@ -171,7 +182,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       (explorationPolicy !== undefined &&
         decodedExplorationPolicy === undefined) ||
       decodedSourceSubscriptions === undefined ||
-      decodedEntryPreferenceProfile === undefined
+      decodedEntryPreferenceProfile === undefined ||
+      decodedEntryAutomationPolicy === undefined
     ) {
       throw invalid();
     }
@@ -184,6 +196,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       decodedExplorationPolicy,
       decodedSourceSubscriptions,
       decodedEntryPreferenceProfile,
+      decodedEntryAutomationPolicy,
     );
     const bytes = new TextEncoder().encode(
       `${JSON.stringify(preferences, undefined, 2)}\n`,
@@ -274,6 +287,10 @@ function decodePreferences(
     value.entryPreferenceProfile === undefined
       ? DEFAULT_ENTRY_PREFERENCE_PROFILE
       : decodeEntryPreferenceProfile(value.entryPreferenceProfile);
+  const entryAutomationPolicy =
+    value.entryAutomationPolicy === undefined
+      ? DEFAULT_ENTRY_AUTOMATION_POLICY
+      : decodeEntryAutomationPolicy(value.entryAutomationPolicy);
   if (
     value.associationPolicy !== undefined &&
     associationPolicy === undefined
@@ -283,7 +300,8 @@ function decodePreferences(
   if (
     explorationPolicy === undefined ||
     sourceSubscriptions === undefined ||
-    entryPreferenceProfile === undefined
+    entryPreferenceProfile === undefined ||
+    entryAutomationPolicy === undefined
   )
     throw invalid();
   return createReviewPreferences(
@@ -295,6 +313,7 @@ function decodePreferences(
     explorationPolicy,
     sourceSubscriptions,
     entryPreferenceProfile,
+    entryAutomationPolicy,
   );
 }
 
