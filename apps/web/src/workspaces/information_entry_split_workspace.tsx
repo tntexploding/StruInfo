@@ -3,6 +3,10 @@ import {type ComponentProps, useMemo, useState} from 'react';
 import {ActionNotice} from '../components/action_notice.js';
 import {InformationEntryAiSplit} from './information_entry_ai_split.js';
 import {
+  InformationDocumentWorkingCopy,
+  type InformationDocumentWorkingCopyProps,
+} from './information_document_working_copy.js';
+import {
   InformationEntryManualSplit,
   type InformationEntryManualSplitProps,
 } from './information_entry_manual_split.js';
@@ -32,6 +36,10 @@ export interface InformationEntrySplitWorkspaceProps extends Pick<
 > {
   readonly aiEnabled: boolean;
   readonly onLoadEvidenceSnapshot: InformationEntryManualSplitProps['onLoadSnapshot'];
+  readonly onLoadDocumentWorkingCopy: InformationDocumentWorkingCopyProps['onLoad'];
+  readonly onSaveDocumentWorkingCopy: InformationDocumentWorkingCopyProps['onSave'];
+  readonly onRestoreDocumentWorkingCopy: InformationDocumentWorkingCopyProps['onRestore'];
+  readonly onCommitDocumentWorkingCopy: InformationDocumentWorkingCopyProps['onCommit'];
   readonly onListAiSplitProposals: ComponentProps<
     typeof InformationEntryAiSplit
   >['onList'];
@@ -52,6 +60,10 @@ export function InformationEntrySplitWorkspace({
   onListAiSplitProposals,
   onListDocuments,
   onLoadEvidenceSnapshot,
+  onLoadDocumentWorkingCopy,
+  onSaveDocumentWorkingCopy,
+  onRestoreDocumentWorkingCopy,
+  onCommitDocumentWorkingCopy,
   onMaterialize,
   onMaterializeManual,
   onPreviewRestructure,
@@ -86,7 +98,8 @@ export function InformationEntrySplitWorkspace({
     () =>
       controller.documentView.status === 'ready'
         ? controller.documentView.response.documents.filter(
-            (document) => document.entryCount === 0,
+            (document) =>
+              document.entryCount === 0 && document.workingCopy === undefined,
           )
         : Object.freeze([]),
     [controller.documentView],
@@ -243,11 +256,14 @@ export function InformationEntrySplitWorkspace({
       <section className="workflow-capability-strip" aria-label="拆分能力">
         <div className="workflow-capability-strip__primary">
           <p className="section-index">SPLIT MODE</p>
-          <strong>人工分组优先，确定性规则随时可用</strong>
-          <span>在 Fragment 边界合并或拆开；原始 Snapshot 始终不变。</span>
+          <strong>先确认全文，再选择拆分方式</strong>
+          <span>
+            可保存一份当前修改并生成派生文档；原始 Snapshot 始终不变。
+          </span>
         </div>
         <div className="workflow-capability-strip__options">
           <span data-active="true">人工拆分 / 合并</span>
+          <span data-active="true">拆分前全文修改</span>
           <span data-active="true">结构规则</span>
           <span data-active="true">明确批量选择</span>
           <span data-active={aiEnabled}>OpenAI 提案 · 手动接受</span>
@@ -264,11 +280,35 @@ export function InformationEntrySplitWorkspace({
         onRetry={() => void controller.refreshDocuments()}
       />
 
-      <InformationEntryManualSplit
+      <InformationDocumentWorkingCopy
+        key={`${controller.snapshotId}:${controller.includePrivate ? 'private' : 'public'}:${(selectedDocument?.entryCount ?? 0) > 0 ? 'materialized' : 'editable'}`}
         snapshotId={controller.snapshotId}
         isPrivate={selectedDocument?.isPrivate === true}
         includePrivate={controller.includePrivate}
         alreadyMaterialized={(selectedDocument?.entryCount ?? 0) > 0}
+        onLoad={onLoadDocumentWorkingCopy}
+        onSave={onSaveDocumentWorkingCopy}
+        onRestore={onRestoreDocumentWorkingCopy}
+        onCommit={onCommitDocumentWorkingCopy}
+        onCommitted={async (derivedSnapshotId) => {
+          await controller.refreshDocuments();
+          controller.setSnapshotId(derivedSnapshotId);
+          setFeedback({
+            kind: 'success',
+            title: '已切换到派生文档',
+            detail: '现在可以选择人工、规则或 AI 提案进行拆分。',
+          });
+        }}
+      />
+
+      <InformationEntryManualSplit
+        snapshotId={controller.snapshotId}
+        isPrivate={selectedDocument?.isPrivate === true}
+        includePrivate={controller.includePrivate}
+        alreadyMaterialized={
+          (selectedDocument?.entryCount ?? 0) > 0 ||
+          selectedDocument?.workingCopy !== undefined
+        }
         onLoadSnapshot={onLoadEvidenceSnapshot}
         onMaterialize={onMaterializeManual}
         onCommitted={async () => {
@@ -336,7 +376,8 @@ export function InformationEntrySplitWorkspace({
               disabled={
                 materializing ||
                 controller.snapshotId === '' ||
-                (selectedDocument?.entryCount ?? 0) > 0
+                (selectedDocument?.entryCount ?? 0) > 0 ||
+                selectedDocument?.workingCopy !== undefined
               }
               onClick={() => void materialize(controller.snapshotId)}
             >
@@ -351,7 +392,10 @@ export function InformationEntrySplitWorkspace({
         enabled={aiEnabled}
         snapshotId={controller.snapshotId}
         isPrivate={selectedDocument?.isPrivate === true}
-        alreadyMaterialized={(selectedDocument?.entryCount ?? 0) > 0}
+        alreadyMaterialized={
+          (selectedDocument?.entryCount ?? 0) > 0 ||
+          selectedDocument?.workingCopy !== undefined
+        }
         onLoadSnapshot={onLoadEvidenceSnapshot}
         onList={onListAiSplitProposals}
         onStart={onStartAiSplitProposal}

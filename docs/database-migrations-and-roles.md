@@ -1,6 +1,6 @@
 # Database Migrations and Roles
 
-- Status: First-party runner and twelve forward migrations implemented; the M1C
+- Status: First-party runner and twenty-two forward migrations implemented; the M1C
   `000001`–`000006` PostgreSQL 18 functional smoke passed
 - Contract: `C-M0-S-r2`
 - Database direction: PostgreSQL 18 with separate migration and runtime
@@ -47,6 +47,16 @@ apps/server/migrations/000009_create_information_document_tags.sql
 apps/server/migrations/000010_create_information_entry_associations.sql
 apps/server/migrations/000011_collapse_information_entry_current_state.sql
 apps/server/migrations/000012_add_entry_knowledge_graph_edges.sql
+apps/server/migrations/000013_create_processing_runs_and_proposals.sql
+apps/server/migrations/000014_create_ai_tag_proposals.sql
+apps/server/migrations/000015_create_ai_association_proposals.sql
+apps/server/migrations/000016_create_ai_split_proposals.sql
+apps/server/migrations/000017_add_information_entry_fragment_ranges.sql
+apps/server/migrations/000018_create_entry_automation_execution.sql
+apps/server/migrations/000019_create_entry_automation_work_queue.sql
+apps/server/migrations/000020_create_entry_automation_actions.sql
+apps/server/migrations/000021_add_information_entry_structure_lifecycle.sql
+apps/server/migrations/000022_create_information_document_working_copies.sql
 ```
 
 The runner is first-party code over the already admitted `pg@8.22.0` driver.
@@ -196,6 +206,16 @@ projection remains detectable and rebuildable. The migration adds no seed,
 personal value, AI output, dependency, role, grant or database extension.
 
 `000012_add_entry_knowledge_graph_edges.sql` implements the minimal M1E-2 edge metadata without a new graph store. It adds nullable, closed-enum `graph_origin` and `graph_direction` plus a bounded `graph_label` to the current association override. All three fields are either absent together for legacy automatic similarity behavior or present together for a user-created/user-edited relation. The typed repository remains the only product writer; operator-managed least-privilege roles need the corresponding column INSERT/UPDATE rights but no DDL, generic SQL, new dependency, seed or source data.
+
+`000013` through `000016` add the closed ProcessingRun/proposal envelope and the typed tags, association and split proposal payloads accepted by ADR 0012 through ADR 0015. They store no Provider secret, prompt transcript, raw response or arbitrary JSON; ordinary writes remain behind the typed Processing repositories.
+
+`000017_add_information_entry_fragment_ranges.sql` stores optional one-to-one half-open Unicode scalar ranges for manual Entry inputs. Missing rows continue to mean the complete immutable Fragment.
+
+`000018` through `000020` add typed automation-run claims, the independent owner work queue and explicitly authorized deterministic action state. These are audit/control facts, not copied Entry bodies or generic workflow payloads.
+
+`000021_add_information_entry_structure_lifecycle.sql` adds the current-structure fact used by preview-first Entry restructuring. Retired Entry rows and lineage remain intact while ordinary reads select the unique current structure.
+
+`000022_create_information_document_working_copies.sql` adds one current pre-split working-copy row per source Snapshot. Editing rows contain one bounded UTF-8 draft; confirmation clears the draft and records the immutable derived Resource/Snapshot. The source Evidence foreign key remains authoritative, no original row is updated, and runtime access is limited to the typed SELECT/INSERT/UPDATE/DELETE operations used by this repository.
 
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.

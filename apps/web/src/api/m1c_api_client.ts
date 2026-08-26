@@ -43,6 +43,8 @@ import type {
   InformationEntryPreferenceSuggestionResponse,
   InformationEntryPreferenceTrialResponse,
   InformationDocumentTagWriteResponse,
+  InformationDocumentWorkingCopyCommitResponse,
+  InformationDocumentWorkingCopyResponse,
   M1cHttpResponse,
   DocumentImportResponse,
   MarkdownImportResponse,
@@ -89,6 +91,29 @@ export interface M1cApiClient {
       | Readonly<{status: 'rejected'; issue: Readonly<{code: string}>}>
     >
   >;
+  loadInformationDocumentWorkingCopy(
+    snapshotId: string,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationDocumentWorkingCopyResponse>>;
+  saveInformationDocumentWorkingCopy(
+    snapshotId: string,
+    body: Readonly<{
+      expectedRevision: number;
+      includePrivate: boolean;
+      text: string;
+    }>,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationDocumentWorkingCopyResponse>>;
+  restoreInformationDocumentWorkingCopy(
+    snapshotId: string,
+    body: Readonly<{expectedRevision: number; includePrivate: boolean}>,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationDocumentWorkingCopyResponse>>;
+  commitInformationDocumentWorkingCopy(
+    snapshotId: string,
+    body: Readonly<{expectedRevision: number; includePrivate: boolean}>,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationDocumentWorkingCopyCommitResponse>>;
   loadReviewPreferences(
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<ReviewPreferencesResponse>>;
@@ -399,6 +424,10 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     workspace: reject,
     listEvidence: reject,
     loadEvidenceSnapshot: reject,
+    loadInformationDocumentWorkingCopy: reject,
+    saveInformationDocumentWorkingCopy: reject,
+    restoreInformationDocumentWorkingCopy: reject,
+    commitInformationDocumentWorkingCopy: reject,
     loadReviewPreferences: reject,
     saveReviewPreferences: reject,
     loadInformationEntryPreferenceProfile: reject,
@@ -496,6 +525,29 @@ export function createM1cApiClient(
         | Readonly<{status: 'rejected'; issue: Readonly<{code: string}>}>
       >(
         `api/v1/evidence/snapshots/${encodeURIComponent(snapshotId)}${options?.includePrivate === true ? '?includePrivate=true' : ''}`,
+        options,
+      ),
+    loadInformationDocumentWorkingCopy: (snapshotId, options) =>
+      get<InformationDocumentWorkingCopyResponse>(
+        `api/v1/evidence/snapshots/${encodeURIComponent(snapshotId)}/working-copy${privateOnlyQuery(options?.includePrivate === true)}`,
+        options,
+      ),
+    saveInformationDocumentWorkingCopy: (snapshotId, body, options) =>
+      put<InformationDocumentWorkingCopyResponse>(
+        `api/v1/evidence/snapshots/${encodeURIComponent(snapshotId)}/working-copy`,
+        body,
+        options,
+      ),
+    restoreInformationDocumentWorkingCopy: (snapshotId, body, options) =>
+      post<InformationDocumentWorkingCopyResponse>(
+        `api/v1/evidence/snapshots/${encodeURIComponent(snapshotId)}/working-copy/restore`,
+        body,
+        options,
+      ),
+    commitInformationDocumentWorkingCopy: (snapshotId, body, options) =>
+      post<InformationDocumentWorkingCopyCommitResponse>(
+        `api/v1/evidence/snapshots/${encodeURIComponent(snapshotId)}/working-copy/commit`,
+        body,
         options,
       ),
     loadReviewPreferences: async (options) =>

@@ -58,6 +58,63 @@ export class M1cApiController {
     );
   }
 
+  @Get('evidence/snapshots/:snapshotId/working-copy')
+  public async informationDocumentWorkingCopy(
+    @Param('snapshotId') snapshotId: string,
+    @Query('includePrivate') includePrivate: string | undefined,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.loadInformationDocumentWorkingCopy(
+        snapshotId,
+        parseOptionalBooleanQuery(includePrivate),
+      ),
+    );
+  }
+
+  @Put('evidence/snapshots/:snapshotId/working-copy')
+  public async saveInformationDocumentWorkingCopy(
+    @Param('snapshotId') snapshotId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.saveInformationDocumentWorkingCopy(snapshotId, body),
+    );
+  }
+
+  @Post('evidence/snapshots/:snapshotId/working-copy/restore')
+  public async restoreInformationDocumentWorkingCopy(
+    @Param('snapshotId') snapshotId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.restoreInformationDocumentWorkingCopy(
+        snapshotId,
+        body,
+      ),
+    );
+  }
+
+  @Post('evidence/snapshots/:snapshotId/working-copy/commit')
+  public async commitInformationDocumentWorkingCopy(
+    @Param('snapshotId') snapshotId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.commitInformationDocumentWorkingCopy(
+        snapshotId,
+        body,
+      ),
+    );
+  }
+
   @Get('preferences/review')
   public async reviewPreferences(@Res() response: Response): Promise<void> {
     writeLocalApiResponse(

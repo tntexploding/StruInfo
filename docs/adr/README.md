@@ -138,3 +138,9 @@ ADR 0033 completes M1H-2A/B with a preview-first, owner-confirmed replacement
 of an already materialized Entry partition. Snapshot/Fragment evidence remains
 immutable; retired Entries remain lineage endpoints while current reads use one
 atomic successor structure with annotation and relationship impact controls.
+
+ADR 0034 completes M1H-3A/B with one current pre-split full-text working copy
+per source Snapshot and an explicit confirmation that creates a new immutable
+derived Snapshot through the existing Evidence/CommonMark path. It preserves
+the original Blob/Snapshot/Fragment evidence, inherits privacy, adds Entry
+Bundle v5 and does not create edit history or a second split implementation.

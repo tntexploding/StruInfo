@@ -5,6 +5,8 @@ import {
   createEmptyM1dEntrySnapshot,
   M1D_ENTRY_BUNDLE_SCHEMA,
   M1D_ENTRY_TABLES,
+  M1D_ENTRY_VERSION_FOUR_BUNDLE_CODEC,
+  M1D_ENTRY_VERSION_FOUR_BUNDLE_SCHEMA,
   M1D_ENTRY_VERSION_THREE_BUNDLE_CODEC,
   M1D_ENTRY_VERSION_THREE_BUNDLE_SCHEMA,
   M1D_ENTRY_VERSION_TWO_BUNDLE_CODEC,
@@ -18,25 +20,27 @@ const OTHER_WORKSPACE_ID = '22222222-2222-4222-8222-222222222222';
 const CREATED_AT = '2040-01-02T03:04:05.000Z';
 
 describe('M1D Entry Bundle section', () => {
-  it('normalizes all eight current Entry, range, and document-tag tables deterministically', () => {
+  it('normalizes all nine current Entry, range, document-tag, and working-copy tables deterministically', () => {
     const first = syntheticSnapshot(false);
     const reversed = syntheticSnapshot(true);
 
     expect(reversed).toEqual(first);
-    expect(first.tables).toHaveLength(8);
+    expect(first.tables).toHaveLength(9);
     expect(m1dEntryTableCounts(first)).toMatchObject({
       information_entry: 2,
       information_document_tag_set: 1,
       information_entry_fragment_range: 1,
+      information_document_working_copy: 1,
     });
     expect(() => {
       assertM1dEntryWorkspace(first, WORKSPACE_ID);
     }).not.toThrow();
   });
 
-  it('upgrades version three and version two sections into current structure rows', () => {
+  it('upgrades versions four, three, and two into current structure rows', () => {
     const current = syntheticSnapshot(false);
-    const versionThreeTables = current.tables.map((table) =>
+    const versionFourTables = current.tables.slice(0, -1);
+    const versionThreeTables = versionFourTables.map((table) =>
       table.name === 'information_entry'
         ? {
             ...table,
@@ -52,11 +56,18 @@ describe('M1D Entry Bundle section', () => {
       schemaVersion: M1D_ENTRY_VERSION_THREE_BUNDLE_SCHEMA,
       tables: versionThreeTables,
     };
+    const versionFour = {
+      schemaVersion: M1D_ENTRY_VERSION_FOUR_BUNDLE_SCHEMA,
+      tables: versionFourTables,
+    };
     const versionTwo = {
       schemaVersion: M1D_ENTRY_VERSION_TWO_BUNDLE_SCHEMA,
       tables: versionThreeTables.slice(0, -1),
     };
 
+    const upgradedFour = M1D_ENTRY_VERSION_FOUR_BUNDLE_CODEC.decode(
+      versionFour,
+    ) as ReturnType<typeof normalizeM1dEntrySnapshot>;
     const upgradedThree = M1D_ENTRY_VERSION_THREE_BUNDLE_CODEC.decode(
       versionThree,
     ) as ReturnType<typeof normalizeM1dEntrySnapshot>;
@@ -69,10 +80,15 @@ describe('M1D Entry Bundle section', () => {
         (row) => row.is_current_structure === true,
       ),
     ).toBe(true);
+    expect(upgradedFour.tables).toHaveLength(9);
+    expect(upgradedFour.tables.at(-1)).toEqual({
+      name: 'information_document_working_copy',
+      rows: [],
+    });
     expect(upgraded.schemaVersion).toBe(M1D_ENTRY_BUNDLE_SCHEMA);
-    expect(upgraded.tables).toHaveLength(8);
+    expect(upgraded.tables).toHaveLength(9);
     expect(upgraded.tables.at(-1)).toEqual({
-      name: 'information_entry_fragment_range',
+      name: 'information_document_working_copy',
       rows: [],
     });
   });
@@ -178,7 +194,24 @@ function syntheticSnapshot(reverseEntries: boolean) {
                     updated_at: CREATED_AT,
                   },
                 ]
-              : [],
+              : descriptor.name === 'information_document_working_copy'
+                ? [
+                    {
+                      workspace_id: WORKSPACE_ID,
+                      source_snapshot_id:
+                        '88888888-8888-4888-8888-888888888888',
+                      revision: 1,
+                      state: 'editing',
+                      draft_body: 'Edited synthetic document.',
+                      body_sha256: 'b'.repeat(64),
+                      derived_resource_id: null,
+                      derived_snapshot_id: null,
+                      created_at: CREATED_AT,
+                      updated_at: CREATED_AT,
+                      committed_at: null,
+                    },
+                  ]
+                : [],
     })),
   });
 }

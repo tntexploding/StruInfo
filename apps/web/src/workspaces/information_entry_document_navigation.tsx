@@ -19,7 +19,10 @@ export function InformationEntryBatchMaterializer({
 }) {
   const documents =
     state.status === 'ready'
-      ? state.response.documents.filter((document) => document.entryCount === 0)
+      ? state.response.documents.filter(
+          (document) =>
+            document.entryCount === 0 && document.workingCopy === undefined,
+        )
       : Object.freeze([]);
   const selected = new Set(selectedSnapshotIds);
 
@@ -188,6 +191,13 @@ export function InformationDocumentNavigator({
                 {document.entryCount.toString()} Entries ·{' '}
                 {(document.currentTags?.value.tags.length ?? 0).toString()} 标签
                 {document.isPrivate === true ? ' · 私密' : ''}
+                {document.workingCopy?.state === 'editing' ? ' · 全文草稿' : ''}
+                {document.workingCopy?.state === 'committed'
+                  ? ' · 已生成派生文档'
+                  : ''}
+                {document.derivedFromSnapshotId === undefined
+                  ? ''
+                  : ' · 派生版本'}
               </small>
             </button>
           ))}

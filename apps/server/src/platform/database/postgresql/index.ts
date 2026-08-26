@@ -30,6 +30,11 @@ export {
 } from './postgres_information_entry_repository.js';
 export {PostgresInformationEntryRestructureRepository} from './postgres_information_entry_restructure_repository.js';
 export {
+  LIST_INFORMATION_DOCUMENT_WORKING_COPIES_SQL,
+  PostgresInformationDocumentWorkingCopyRepository,
+  READ_INFORMATION_DOCUMENT_WORKING_COPY_SQL,
+} from './postgres_information_document_working_copy_repository.js';
+export {
   PostgresInformationDocumentTagRepository,
   READ_CURRENT_INFORMATION_DOCUMENT_TAGS_SQL,
   READ_CURRENT_INFORMATION_DOCUMENT_TAG_VALUES_SQL,

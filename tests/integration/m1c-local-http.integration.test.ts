@@ -240,6 +240,14 @@ function stubApi(
     listEvidence: () => Promise.resolve(result(200, {status: 'ok'})),
     loadEvidenceSnapshot: () =>
       Promise.resolve(result(404, {status: 'not_found'})),
+    loadInformationDocumentWorkingCopy: () =>
+      Promise.resolve(result(404, {status: 'not_found'})),
+    saveInformationDocumentWorkingCopy: () =>
+      Promise.resolve(result(200, {status: 'saved'})),
+    restoreInformationDocumentWorkingCopy: () =>
+      Promise.resolve(result(200, {status: 'restored'})),
+    commitInformationDocumentWorkingCopy: () =>
+      Promise.resolve(result(201, {status: 'created'})),
     loadReviewPreferences: () =>
       Promise.resolve(result(200, {status: 'ok', quickTags: []})),
     saveReviewPreferences: () =>

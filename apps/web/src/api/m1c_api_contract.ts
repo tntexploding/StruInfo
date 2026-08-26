@@ -827,7 +827,45 @@ export interface InformationEntryDocumentView extends EvidenceSnapshotSummary {
   readonly entryCount: number;
   readonly annotatedEntryCount: number;
   readonly currentTags?: Readonly<CurrentInformationDocumentTags>;
+  readonly workingCopy?: Readonly<{
+    readonly sourceSnapshotId: string;
+    readonly revision: number;
+    readonly state: 'editing' | 'committed';
+    readonly bodySha256: string;
+    readonly derivedResourceId?: string;
+    readonly derivedSnapshotId?: string;
+  }>;
+  readonly derivedFromSnapshotId?: string;
 }
+
+export interface InformationDocumentWorkingCopyView {
+  readonly sourceSnapshotId: string;
+  readonly revision: number;
+  readonly state: 'original' | 'editing' | 'committed';
+  readonly originalText: string;
+  readonly currentText: string;
+  readonly bodySha256?: string;
+  readonly changed: boolean;
+  readonly derivedResourceId?: string;
+  readonly derivedSnapshotId?: string;
+}
+
+export type InformationDocumentWorkingCopyResponse =
+  | Readonly<{
+      status: 'ok' | 'applied' | 'unchanged' | 'restored';
+      workingCopy: Readonly<InformationDocumentWorkingCopyView>;
+    }>
+  | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
+  | DomainFailure;
+
+export type InformationDocumentWorkingCopyCommitResponse =
+  | Readonly<{
+      status: 'committed' | 'existing';
+      sourceSnapshotId: string;
+      derivedResourceId: string;
+      derivedSnapshotId: string;
+    }>
+  | DomainFailure;
 
 export type InformationEntryDocumentListResponse =
   | Readonly<{

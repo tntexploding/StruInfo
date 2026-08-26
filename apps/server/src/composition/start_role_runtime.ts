@@ -205,6 +205,8 @@ export async function startRoleRuntime(
           evidenceRepository: repositories.evidence,
           evidenceReadRepository: repositories.evidenceRead,
           informationEntryRepository: repositories.informationEntries,
+          informationDocumentWorkingCopyRepository:
+            repositories.informationDocumentWorkingCopies,
           informationDocumentTagRepository:
             repositories.informationDocumentTags,
           informationEntryAssociationRepository:
