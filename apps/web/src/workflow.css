@@ -2502,6 +2502,13 @@
   accent-color: var(--si-color-signal);
 }
 
+.entry-automation-policy__action-note {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-sm);
+}
+
 .entry-automation-policy-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(8rem, 1fr));
@@ -2809,6 +2816,12 @@
 
 .entry-automation-work-queue__list h3 {
   margin-block: var(--si-space-1);
+}
+
+.entry-automation-work-queue__action-status {
+  color: var(--si-color-signal);
+  font-family: var(--si-font-mono);
+  font-size: var(--si-text-xs);
 }
 
 .entry-automation-work-queue__list p:last-child {

@@ -471,6 +471,18 @@ the successful cursor advances only after the whole chain succeeds. This local
 chain grants no AI, automatic tag/link/graph write, proposal acceptance or
 generic workflow authority. Older preferences decode the switch as false.
 
+ADR 0032 completes M1H-1A/B with two independent default-off
+`EntryAutomationPolicy.advanceActions` flags. Only a completed
+`advance_candidate` may append bounded local deterministic rule tags and then
+rebuild the replaceable Association projection. Exclusions and confirmed
+aliases apply; manual/AI/imported tags, pair overrides and Formal Knowledge
+graph relationships MUST survive. Migration `000020` stores typed recoverable
+action state and exact rule-origin compensation without copying Entry bodies;
+Processing Bundle v7 carries the fourteenth Processing table and the complete
+personal-data package now covers 60 workspace tables. Manual-review/defer
+routes, AI proposal acceptance, graph assertions, score changes, hiding and
+deletion remain unauthorized.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

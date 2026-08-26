@@ -78,6 +78,10 @@ describe('LocalReviewPreferencesStore', () => {
           maximumAdvanceCandidatesPerRun: 25,
           maximumDeferCandidatesPerRun: 25,
         },
+        advanceActions: {
+          deterministicTags: false,
+          rebuildAssociations: false,
+        },
         failureMode: 'pause',
       },
     });

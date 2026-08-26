@@ -181,6 +181,9 @@ export async function startRoleRuntime(
     evidenceRead: repositories.evidenceRead,
     entries: repositories.informationEntries,
     automationExecutions: repositories.entryAutomationExecutions,
+    automationWorkQueue: repositories.entryAutomationWorkQueue,
+    automationActions: repositories.entryAutomationActions,
+    associations: repositories.informationEntryAssociations,
   });
   if (config.role === 'scheduler' || config.role === 'all') {
     starters.push(() =>
@@ -211,6 +214,7 @@ export async function startRoleRuntime(
             repositories.entryAutomationExecutions,
           entryAutomationWorkQueueRepository:
             repositories.entryAutomationWorkQueue,
+          entryAutomationActionRepository: repositories.entryAutomationActions,
           sourceSubscriptions,
           ...(aiSplitProposals === undefined ? {} : {aiSplitProposals}),
           ...(aiTagProposals === undefined ? {} : {aiTagProposals}),

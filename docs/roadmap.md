@@ -1,6 +1,6 @@
 # StruInfo 分阶段计划
 
-- 状态：M1G-5A/5B 所有者工作队列与订阅后确定性分流已完成
+- 状态：M1H-1A/B 确定性标签动作与联系投影重建已完成
 - 最近更新：2026-08-26
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
@@ -27,7 +27,7 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 | InformationEntry             | 已实现 | 确定性/人工/AI 首次物化、当前成品态、三维标签、两项评分、文档标签、隐私和来源                                                          |
 | Entry 联系                   | 已实现 | 确定性投影、分项解释、外部版本化权重和逐对人工 override                                                                                |
 | Entry 查询                   | 已实现 | 标题/正文/标签的精确、包含和近似词法匹配，可见分数、组合筛选、绑定分页、查询页关联联想、双条比较及显式隐私范围内的独立完整文档结果     |
-| 完整个人数据包               | 已实现 | 59 表、引用 Blob 字节、偏好、Entry v3、Association v3 与 Processing v6                                                                 |
+| 完整个人数据包               | 已实现 | 60 表、引用 Blob 字节、偏好、Entry v3、Association v3 与 Processing v7                                                                 |
 | 旧 Curation/Knowledge 运行时 | 已退役 | 迁移和数据兼容保留，活动代码/HTTP/Web 已删除                                                                                           |
 | 正式知识页面                 | 已实现 | 最高匹配中心、有界图/列表、来源、用户关系编辑、隐私范围与 selected-pair AI 联系提案                                                    |
 | ProcessingRun / AI 提案      | 已实现 | 中性任务状态、取消；OpenAI split/tags/selected-pair association 的启动、列表、接受与拒绝                                               |
@@ -43,7 +43,7 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 
 M1E-3B、M1E-3C 和 M1E-3D 已依次完成单个公开 Entry 标签提案、用户明确选择的公开 Entry 对联系提案，以及用户明确选择的公开 Snapshot 拆分提案。三者都只创建 typed proposal，只有人工接受才调用现有 Entry/图谱命令；私密内容在网络前拒绝。
 
-M1E-4A/4B 已补齐无 Provider 的人工拆分：用户可在首次 Entry 物化前按既有 Fragment 边界或 Fragment 内 Unicode 标量边界合并、重新拆开并改标题，服务端从本地证据重建正文，三种物化方式共享唯一空 Snapshot 原子边界。M1E-5A/5B 又把一份本地 Markdown、纯文本、HTML 或带文字层 PDF 接入相同 Blob → Snapshot → Fragment → Split 主链；HTML/PDF 保留完整原始 Blob并产生本地文本投影，失败重试身份保持稳定。M1F-1 在现有查询上补齐标题/正文/标签的精确、包含和近似词法模式、可见分数与游标绑定；M1F-2 又把既有一至两跳 Association 过滤接入查询页，并提供同一查询范围内最多两条结果的事实比较；M1F-3 接通公开证据的会话内 AI 综合。M1G-1 进一步加入默认关闭、与搜索排序隔离的本地探索份额和三类可解释页外候选。M1G-2 则把一个精确公开 GitHub Markdown 文件接入外部版本化订阅、真实 ProcessingRun 和既有幂等 Evidence 导入。M1G-3/4A/4B 已建立外部偏好规则、独立默认关闭的自动化权力和可恢复的持久化路由执行；具体自动改写动作及所有者控制仍未开放。第二 Provider、自动接受、私密外发、Provider 检索、Embedding 和 RAG 继续后置。
+M1E-4A/4B 已补齐无 Provider 的人工拆分：用户可在首次 Entry 物化前按既有 Fragment 边界或 Fragment 内 Unicode 标量边界合并、重新拆开并改标题，服务端从本地证据重建正文，三种物化方式共享唯一空 Snapshot 原子边界。M1E-5A/5B 又把一份本地 Markdown、纯文本、HTML 或带文字层 PDF 接入相同 Blob → Snapshot → Fragment → Split 主链；HTML/PDF 保留完整原始 Blob并产生本地文本投影，失败重试身份保持稳定。M1F-1 在现有查询上补齐标题/正文/标签的精确、包含和近似词法模式、可见分数与游标绑定；M1F-2 又把既有一至两跳 Association 过滤接入查询页，并提供同一查询范围内最多两条结果的事实比较；M1F-3 接通公开证据的会话内 AI 综合。M1G-1 进一步加入默认关闭、与搜索排序隔离的本地探索份额和三类可解释页外候选。M1G-2 则把一个精确公开 GitHub Markdown 文件接入外部版本化订阅、真实 ProcessingRun 和既有幂等 Evidence 导入。M1G-3–5 已建立外部偏好规则、独立默认关闭的自动化权力、可恢复路由执行与所有者队列；M1H-1 进一步只为推进候选开放明确启用的本地确定性标签和联系投影重建。第二 Provider、自动接受、私密外发、Provider 检索、Embedding 和 RAG 继续后置。
 
 ## 已完成主线：M1D Entry 网络
 
@@ -261,7 +261,7 @@ M1G-4A 已由 [ADR 0026](adr/0026-entry-automation-policy-dry-run.md) 接受并�
 5. **权限边界（保持）**：claim 完成只表示路由事实已记录，不自动改写 Entry、标签、联系、图谱或 AI 提案。Processing Bundle 升至 v5/12 表，旧 v1–v4 补空执行表；完整个人数据包覆盖 58 表；
 6. **M1G-4C 所有者控制（已完成）**：[ADR 0028](adr/0028-owner-controlled-entry-automation-routing.md) 增加策略读取/保存、只读试算、显式启动、最近运行列表和精确运行读取，并在 Tags 次级面板提供启停、暂停/恢复、阈值/预算、隐私范围、逐条原因、人工接管和 claim 审计；脏草稿或非 ready 试算不能启动；
 7. **M1G-4D 控制完整性（已完成）**：[ADR 0029](adr/0029-entry-automation-control-integrity.md) 将最近运行限定为摘要导航，真正接入精确运行读取，显示未结算/补偿 claim，并以独立最新请求代次隔离策略、保存、试算、执行、列表和详情；合成浏览器验证覆盖迟到列表及 320–1440px 布局；
-8. **阶段边界（保持）**：M1G-4 已完成“策略 → 试算 → 可恢复路由事实 → 所有者控制 → 精确审计与异步隔离”。M1G-5A/5B 只按下节接受的队列和订阅串联扩展；其他自动业务动作仍不能从 claim 推导。
+8. **阶段边界（保持）**：M1G-4 已完成“策略 → 试算 → 可恢复路由事实 → 所有者控制 → 精确审计与异步隔离”。M1G-5A/5B 只按下节接受的队列和订阅串联扩展；M1H-1 又只按 ADR 0032 为推进候选开放两项显式、默认关闭的本地动作，其他业务动作仍不能从 claim 推导。
 
 ## 已完成：M1G-5A/5B 所有者工作队列与订阅后确定性分流
 
@@ -271,6 +271,17 @@ M1G-4A 已由 [ADR 0026](adr/0026-entry-automation-policy-dry-run.md) 接受并�
 4. **M1G-5B 订阅串联（已完成）**：[ADR 0031](adr/0031-subscription-deterministic-entry-routing-chain.md) 为每个订阅增加默认关闭的 `routeAfterImport`；变化内容复用既有 Evidence 导入、确定性空 Snapshot Entry 物化和可恢复分流，最终进入同一工作队列；
 5. **幂等与重试（已完成）**：资料身份不包含该开关，稳定自动化键绑定 subscription + source hash；只有导入、物化和分流全部成功后才推进成功游标，失败可安全重试；
 6. **权限边界（保持）**：该串联不调用 AI，不自动修改标签、联系或正式图谱，不接受提案，也不隐藏/删除 Entry。其他信源类型和具体自动内容动作仍需独立窄边界。
+
+## 已完成：M1H-1A/B 确定性标签与联系投影动作
+
+1. **显式权力（已完成）**：[ADR 0032](adr/0032-deterministic-entry-tag-and-association-actions.md) 为外部 AutomationPolicy 增加两个彼此独立、默认关闭的推进动作开关；只有 completed `advance_candidate` 获得动作，人工审核和延后仍只进入工作队列；
+2. **M1H-1A 确定性标签（已完成）**：服务端复用本地词法规则，遵守自动提取总开关、排除词和已确认别名，仅追加缺失的 rule-origin 内容标签，保留人工/AI/导入标签，不调用 Provider；
+3. **M1H-1B 联系重建（已完成）**：标签阶段后按当前外部联系权重和显式隐私范围重建可替换 Association 投影；逐对人工 override 与正式知识图谱关系不被覆盖；
+4. **恢复与补偿（已完成）**：迁移 `000020` 保存 pending/tags_applied/applied/undo_pending/undone/cancelled 动作状态、精确规则来源、Entry 结果修订和计数；失败可续跑，只有 Entry 仍匹配动作结果时才能删除本次规则标签并重建投影；
+5. **订阅串联（已完成）**：`routeAfterImport` 开启时仍使用保存策略；若动作也开启，订阅成功游标在导入、物化、分流和动作全部完成后才推进；
+6. **携带性与边界（已完成）**：Processing Bundle 升为 v7/14 表，旧 v1–v6 恢复空动作状态，完整个人数据包覆盖 60 表。该阶段不接受 AI 提案、不写图谱事实、不改评分、不隐藏/删除 Entry，也不赋予通用工作流权限。
+
+M1H-1 完成后，下一产品任务必须来自直接无数据使用或另一个明确接受的窄边界；不得把“推进候选”解释为任意自动操作授权。
 
 ## 历史基线：M1C 可运行核心闭环（运行时已退役）
 

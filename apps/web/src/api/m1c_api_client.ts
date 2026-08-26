@@ -14,6 +14,7 @@ import type {
   EntryPreferenceRule,
   EntryAutomationPolicy,
   EntryAutomationWorkItemState,
+  InformationEntryAutomationActionWriteResponse,
   InformationEntryAutomationExecuteResponse,
   InformationEntryAutomationExecutionListResponse,
   InformationEntryAutomationExecutionResponse,
@@ -133,6 +134,9 @@ export interface M1cApiClient {
       advanceThresholds: Readonly<EntryAutomationPolicy['advanceThresholds']>;
       deferThresholds: Readonly<EntryAutomationPolicy['deferThresholds']>;
       budgets: Readonly<EntryAutomationPolicy['budgets']>;
+      advanceActions?: Readonly<
+        NonNullable<EntryAutomationPolicy['advanceActions']>
+      >;
       failureMode: 'pause';
     }>,
     options?: M1cApiRequestOptions,
@@ -187,6 +191,16 @@ export interface M1cApiClient {
     }>,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryAutomationWorkItemWriteResponse>>;
+  executeInformationEntryAutomationWorkItemAction(
+    runId: string,
+    claimOrdinal: number,
+    body: Readonly<{
+      expectedVersion: number;
+      operation: 'apply' | 'undo';
+      includePrivate: boolean;
+    }>,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryAutomationActionWriteResponse>>;
   importMarkdown(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -389,6 +403,7 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     loadInformationEntryAutomationExecution: reject,
     listInformationEntryAutomationWorkQueue: reject,
     updateInformationEntryAutomationWorkItem: reject,
+    executeInformationEntryAutomationWorkItemAction: reject,
     importMarkdown: reject,
     importDocument: reject,
     materializeInformationEntries: reject,
@@ -548,6 +563,17 @@ export function createM1cApiClient(
     ) =>
       put<InformationEntryAutomationWorkItemWriteResponse>(
         `api/v1/entries/automation/work-queue/${encodeURIComponent(runId)}/${encodeURIComponent(claimOrdinal.toString())}`,
+        body,
+        options,
+      ),
+    executeInformationEntryAutomationWorkItemAction: (
+      runId,
+      claimOrdinal,
+      body,
+      options,
+    ) =>
+      post<InformationEntryAutomationActionWriteResponse>(
+        `api/v1/entries/automation/work-queue/${encodeURIComponent(runId)}/${encodeURIComponent(claimOrdinal.toString())}/action`,
         body,
         options,
       ),

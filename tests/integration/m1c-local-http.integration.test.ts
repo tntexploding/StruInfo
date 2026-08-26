@@ -327,6 +327,8 @@ function stubApi(
       ),
     updateInformationEntryAutomationWorkItem: () =>
       Promise.resolve(result(404, {status: 'not_found'})),
+    executeInformationEntryAutomationWorkItemAction: () =>
+      Promise.resolve(result(404, {status: 'not_found'})),
     importMarkdown: () => Promise.resolve(result(201, {status: 'created'})),
     importDocument: () => Promise.resolve(result(201, {status: 'created'})),
     materializeInformationEntries: () =>

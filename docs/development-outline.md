@@ -1,6 +1,6 @@
 # StruInfo 开发大纲
 
-- 状态：M1G-5A/5B 所有者工作队列与订阅后确定性分流已完成
+- 状态：M1H-1A/B 确定性标签动作与联系投影重建已完成
 - 最近更新：2026-08-26
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
@@ -322,7 +322,7 @@ Blob 边界只接受通过 intrinsic brand 检查的普通字节视图，并立�
 大型正文和媒体优先保留为 Blob 引用，不能通过反复嵌套 base64 形成不可读的 current-version 工件。
 writer contract 与边界测试必须证明每个成功输出都能由相同版本的公开 reader 往返读取；若确定性 encoder 与精确 preflight 已提供同等保证，运行时不要求为每次写入重复解析。
 
-切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload。当前五分区个人数据包包含 36 表 M1C 兼容分区、8 表 Entry v3、2 表 Association v3、13 表 Processing v6，以及引用 Blob 字节和偏好，共覆盖 59 张当前工作区表。Association v3 携带 M1E-2 关系来源、名称和方向；Processing v6 在闭合 AI 拆分、标签与关系提案载荷和 typed 自动路由 header/claim 之后增加独立所有者工作队列；旧版本继续可读并补为空状态。所有文件仍只落到外部 `exports/`。跨工作区克隆、非空合并和生产灾难恢复仍是独立后续能力。
+切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload。当前五分区个人数据包包含 36 表 M1C 兼容分区、8 表 Entry v3、2 表 Association v3、14 表 Processing v7，以及引用 Blob 字节和偏好，共覆盖 60 张当前工作区表。Association v3 携带 M1E-2 关系来源、名称和方向；Processing v7 在闭合 AI 拆分、标签与关系提案载荷、typed 自动路由 header/claim 和所有者工作队列之后增加 typed 确定性推进动作；旧版本继续可读并补为空状态。所有文件仍只落到外部 `exports/`。跨工作区克隆、非空合并和生产灾难恢复仍是独立后续能力。
 
 Linux 单机部署可先使用受备份保护的持久卷。
 需要多机或对象存储服务时，再增加 S3 兼容适配器；迁移不能改变 Resource、Snapshot 或 Citation ID。
@@ -651,7 +651,7 @@ import -> snapshot -> document nodes/fragments/media
 6. 联系页重建可解释投影，并逐对增强、削弱、屏蔽或恢复；
 7. 查询页按文本、标签、来源、时间、隐私和最多两跳联系稳定分页，并返回精确证据；
 8. 正式知识页搜索最高匹配 Entry，组合有界自动/用户关系图谱，支持图/列表、编辑、隐藏、恢复、创建和来源回看；
-9. 个人数据包导出/恢复 59 张当前表、引用 Blob 字节、当前偏好、Entry v3 精确区间、Association v3 图谱元数据和 Processing v6 状态。
+9. 个人数据包导出/恢复 60 张当前表、引用 Blob 字节、当前偏好、Entry v3 精确区间、Association v3 图谱元数据和 Processing v7 状态。
 10. 导入页管理外部版本化的精确 GitHub Markdown 单文件订阅；手动或默认关闭的间隔检查创建真实 ProcessingRun，变化时复用既有 Evidence 导入。
 11. M1G-3A 已实现闭合、默认关闭、带修订的外部 PreferenceProfile 状态及个人数据包兼容；M1G-3B 已实现从显式评分生成确定性候选和最多 100 个 Entry 的纯只读试运行；M1G-3C 已实现期望修订公共保存、候选/试运行操作和标签页次级规则面板；M1G-3D 已完成按 workspace 原子串行的偏好读改写、乐观修订检查、迟到响应防护、隐私/旧包/响应式浏览器及制品隔离回归。
 12. M1G-4A 已实现独立、默认关闭并可暂停的外部 AutomationPolicy，使用精确 Profile 修订、明确阈值和有界预算，将当前 Entry 稳定试分为推进候选、人工审核或延后候选；它始终只读，不授予任何下游写入权。

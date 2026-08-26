@@ -71,6 +71,8 @@ import {
   AiAssociationProposalServiceError,
   AiSplitProposalServiceError,
   AiTagProposalServiceError,
+  executeEntryAutomationRunActions,
+  executeEntryAutomationWorkItemAction,
   executeInformationEntryAutomation,
   listEntryAutomationWorkQueue,
   updateEntryAutomationWorkItem,
@@ -79,6 +81,7 @@ import {
   type AiTagProposalServicePort,
   type EntryAutomationExecution,
   type EntryAutomationExecutionRepositoryPort,
+  type EntryAutomationActionRepositoryPort,
   type EntryAutomationWorkQueueRepositoryPort,
   type ExecuteEntryAutomationResult,
   type ProcessingProposal,
@@ -134,6 +137,7 @@ export interface M1cApiServiceDependencies {
   readonly processingRunRepository: ProcessingRunRepositoryPort;
   readonly entryAutomationExecutionRepository?: EntryAutomationExecutionRepositoryPort;
   readonly entryAutomationWorkQueueRepository?: EntryAutomationWorkQueueRepositoryPort;
+  readonly entryAutomationActionRepository?: EntryAutomationActionRepositoryPort;
   readonly sourceSubscriptions?: SourceSubscriptionServicePort;
   readonly aiSplitProposals?: AiSplitProposalServicePort;
   readonly aiTagProposals?: AiTagProposalServicePort;
@@ -176,6 +180,11 @@ export interface M1cApiServicePort {
     includePrivate?: unknown,
   ): Promise<M1cHttpResult>;
   updateInformationEntryAutomationWorkItem(
+    runId: string,
+    claimOrdinal: string,
+    body: unknown,
+  ): Promise<M1cHttpResult>;
+  executeInformationEntryAutomationWorkItemAction(
     runId: string,
     claimOrdinal: string,
     body: unknown,
@@ -930,6 +939,7 @@ export class M1cApiService implements M1cApiServicePort {
       advanceThresholds: body.advanceThresholds,
       deferThresholds: body.deferThresholds,
       budgets: body.budgets,
+      advanceActions: body.advanceActions,
       failureMode: body.failureMode,
     });
     if (draft === undefined) return inputFailure('body');
@@ -1158,6 +1168,43 @@ export class M1cApiService implements M1cApiServicePort {
         },
       );
       if (result.status === 'invalid_request') return inputFailure('body');
+      let actions:
+        | Readonly<{
+            status: 'complete';
+            appliedCount: number;
+            unchangedCount: number;
+          }>
+        | undefined;
+      if (
+        result.status === 'succeeded' &&
+        this.#dependencies.entryAutomationActionRepository !== undefined
+      ) {
+        const workQueue = this.#dependencies.entryAutomationWorkQueueRepository;
+        if (workQueue === undefined) return entryAutomationUnavailable();
+        const actionResult = await executeEntryAutomationRunActions(
+          {
+            repository: this.#dependencies.entryAutomationActionRepository,
+            workQueue,
+            entries: this.#dependencies.informationEntryRepository,
+            associations:
+              this.#dependencies.informationEntryAssociationRepository,
+            preferences: this.#dependencies.reviewPreferences,
+          },
+          {
+            workspaceId: this.#dependencies.workspaceId,
+            runId: result.runId,
+            includePrivate: body.includePrivate,
+          },
+        );
+        if (actionResult.status !== 'complete') {
+          return httpResult(503, {
+            status: 'failed',
+            issue: Object.freeze({code: 'entry_automation_action_failed'}),
+            runId: result.runId,
+          });
+        }
+        actions = actionResult;
+      }
       const execution =
         'runId' in result
           ? await repository.loadExecution(
@@ -1167,6 +1214,7 @@ export class M1cApiService implements M1cApiServicePort {
           : undefined;
       return httpResult(entryAutomationExecutionStatus(result), {
         ...result,
+        ...(actions === undefined ? {} : {actions}),
         ...(execution === undefined
           ? {}
           : {execution: entryAutomationExecutionResponse(execution)}),
@@ -1314,6 +1362,72 @@ export class M1cApiService implements M1cApiServicePort {
           issue: Object.freeze({code: 'stale_entry_automation_work_item'}),
         });
       }
+      return httpResult(200, result);
+    } catch {
+      return entryAutomationFailure();
+    }
+  }
+
+  public async executeInformationEntryAutomationWorkItemAction(
+    runId: string,
+    claimOrdinalInput: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const repository = this.#dependencies.entryAutomationActionRepository;
+    const workQueue = this.#dependencies.entryAutomationWorkQueueRepository;
+    const claimOrdinal = decodeNonNegativeInteger(claimOrdinalInput);
+    if (repository === undefined || workQueue === undefined) {
+      return entryAutomationUnavailable();
+    }
+    if (
+      !CANONICAL_UUID.test(runId) ||
+      claimOrdinal === undefined ||
+      !isRecord(body) ||
+      typeof body.expectedVersion !== 'number' ||
+      typeof body.includePrivate !== 'boolean' ||
+      (body.operation !== 'apply' && body.operation !== 'undo')
+    ) {
+      return inputFailure('body');
+    }
+    try {
+      const result = await executeEntryAutomationWorkItemAction(
+        {
+          repository,
+          workQueue,
+          entries: this.#dependencies.informationEntryRepository,
+          associations:
+            this.#dependencies.informationEntryAssociationRepository,
+          preferences: this.#dependencies.reviewPreferences,
+        },
+        {
+          workspaceId: this.#dependencies.workspaceId,
+          runId,
+          claimOrdinal,
+          expectedVersion: body.expectedVersion,
+          includePrivate: body.includePrivate,
+          operation: body.operation,
+        },
+      );
+      if (result.status === 'invalid_request') return inputFailure('body');
+      if (result.status === 'not_found') {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'entry_automation_work_item_not_found'}),
+        });
+      }
+      if (result.status === 'not_enabled') {
+        return httpResult(409, {
+          status: 'not_enabled',
+          issue: Object.freeze({code: 'entry_automation_action_not_enabled'}),
+        });
+      }
+      if (result.status === 'stale') {
+        return httpResult(409, {
+          status: 'stale',
+          issue: Object.freeze({code: 'stale_entry_automation_action'}),
+        });
+      }
+      if (result.status === 'failed') return entryAutomationFailure();
       return httpResult(200, result);
     } catch {
       return entryAutomationFailure();
@@ -2800,6 +2914,12 @@ function entryAutomationPoliciesHaveSameValue(
   current: Readonly<EntryAutomationPolicy>,
   draft: Readonly<EntryAutomationPolicy>,
 ): boolean {
+  const currentActions =
+    current.advanceActions ??
+    Object.freeze({deterministicTags: false, rebuildAssociations: false});
+  const draftActions =
+    draft.advanceActions ??
+    Object.freeze({deterministicTags: false, rebuildAssociations: false});
   return (
     current.enabled === draft.enabled &&
     current.paused === draft.paused &&
@@ -2819,7 +2939,9 @@ function entryAutomationPoliciesHaveSameValue(
     current.budgets.maximumAdvanceCandidatesPerRun ===
       draft.budgets.maximumAdvanceCandidatesPerRun &&
     current.budgets.maximumDeferCandidatesPerRun ===
-      draft.budgets.maximumDeferCandidatesPerRun
+      draft.budgets.maximumDeferCandidatesPerRun &&
+    currentActions.deterministicTags === draftActions.deterministicTags &&
+    currentActions.rebuildAssociations === draftActions.rebuildAssociations
   );
 }
 

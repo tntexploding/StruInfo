@@ -10,6 +10,7 @@ import {
   DEFAULT_ENTRY_PREFERENCE_PROFILE,
   patchReviewPreferences,
   updateReviewPreferences,
+  type EntryAutomationPolicy,
   type ReviewPreferencesStore,
 } from '../../storage/review_preferences_store.js';
 import {deriveProcessingRunId} from './processing_identity.js';
@@ -68,6 +69,12 @@ export async function executeInformationEntryAutomation(
       policyRevision: request.expectedPolicyRevision,
       profileRevision: request.expectedProfileRevision,
       includePrivate: request.includePrivate,
+      advanceActions:
+        planned.policy.advanceActions ??
+        Object.freeze({
+          deterministicTags: false,
+          rebuildAssociations: false,
+        }),
       claims: planned.claims,
     });
     if (initialized === 'conflict') {
@@ -245,6 +252,7 @@ async function planExecution(
 ): Promise<
   Readonly<{
     result?: Readonly<ExecuteEntryAutomationResult>;
+    policy: Readonly<EntryAutomationPolicy>;
     claims: readonly Readonly<EntryAutomationClaimInput>[];
   }>
 > {
@@ -267,7 +275,11 @@ async function planExecution(
   );
   const notReady = trialResult(trial);
   if (notReady !== undefined) {
-    return Object.freeze({result: notReady, claims: Object.freeze([])});
+    return Object.freeze({
+      result: notReady,
+      policy,
+      claims: Object.freeze([]),
+    });
   }
   if (trial.status !== 'complete') {
     throw new Error('Entry automation trial did not produce a plan.');
@@ -287,7 +299,7 @@ async function planExecution(
       reason: item.reason,
     });
   });
-  return Object.freeze({claims: Object.freeze(claims)});
+  return Object.freeze({policy, claims: Object.freeze(claims)});
 }
 
 async function executionStillValid(

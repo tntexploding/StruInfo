@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {
   deriveUuidV5,
   prepareSplitInformationEntries,
+  type InformationEntryAssociationRepositoryPort,
   type InformationEntryEmptySnapshotRepositoryPort,
 } from '../entries/index.js';
 import {
@@ -13,8 +14,11 @@ import {
 } from '../evidence/index.js';
 import {
   deriveProcessingRunId,
+  executeEntryAutomationRunActions,
   executeInformationEntryAutomation,
+  type EntryAutomationActionRepositoryPort,
   type EntryAutomationExecutionRepositoryPort,
+  type EntryAutomationWorkQueueRepositoryPort,
   type ProcessingRunRepositoryPort,
 } from '../processing/index.js';
 import type {BlobStore} from '../../storage/blob_store.js';
@@ -88,6 +92,7 @@ export type SourceSubscriptionServiceErrorCode =
   | 'source_import_unavailable'
   | 'source_subscription_automation_not_ready'
   | 'source_subscription_automation_failed'
+  | 'source_subscription_actions_failed'
   | 'source_subscription_materialization_failed'
   | 'source_subscription_preferences_unavailable';
 
@@ -138,6 +143,9 @@ export interface SourceSubscriptionServiceDependencies {
   readonly evidenceRead?: EvidenceReadRepositoryPort;
   readonly entries?: InformationEntryEmptySnapshotRepositoryPort;
   readonly automationExecutions?: EntryAutomationExecutionRepositoryPort;
+  readonly automationWorkQueue?: EntryAutomationWorkQueueRepositoryPort;
+  readonly automationActions?: EntryAutomationActionRepositoryPort;
+  readonly associations?: InformationEntryAssociationRepositoryPort;
   readonly importEvidence?: typeof importMarkdownEvidence;
   readonly now?: () => string;
 }
@@ -544,6 +552,42 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
       throw new SourceSubscriptionServiceError(
         'source_subscription_automation_failed',
       );
+    }
+    const actionsEnabled =
+      policy.advanceActions?.deterministicTags === true ||
+      policy.advanceActions?.rebuildAssociations === true;
+    if (actionsEnabled) {
+      const automationWorkQueue = this.#dependencies.automationWorkQueue;
+      const automationActions = this.#dependencies.automationActions;
+      const associations = this.#dependencies.associations;
+      if (
+        automationWorkQueue === undefined ||
+        automationActions === undefined ||
+        associations === undefined
+      ) {
+        throw new SourceSubscriptionServiceError(
+          'source_subscription_automation_not_ready',
+        );
+      }
+      const actionResult = await executeEntryAutomationRunActions(
+        {
+          repository: automationActions,
+          workQueue: automationWorkQueue,
+          entries,
+          associations,
+          preferences: this.#dependencies.preferences,
+        },
+        {
+          workspaceId: this.#dependencies.workspaceId,
+          runId: result.runId,
+          includePrivate: subscription.isPrivate,
+        },
+      );
+      if (actionResult.status !== 'complete') {
+        throw new SourceSubscriptionServiceError(
+          'source_subscription_actions_failed',
+        );
+      }
     }
     return Object.freeze({
       automationRunId: result.runId,

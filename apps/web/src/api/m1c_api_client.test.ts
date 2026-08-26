@@ -177,6 +177,10 @@ describe('M1cApiClient', () => {
         maximumAdvanceCandidatesPerRun: 10,
         maximumDeferCandidatesPerRun: 10,
       },
+      advanceActions: {
+        deterministicTags: true,
+        rebuildAssociations: true,
+      },
       failureMode: 'pause' as const,
     } as const;
     const policyWrite = {
@@ -188,6 +192,7 @@ describe('M1cApiClient', () => {
       advanceThresholds: policy.advanceThresholds,
       deferThresholds: policy.deferThresholds,
       budgets: policy.budgets,
+      advanceActions: policy.advanceActions,
       failureMode: policy.failureMode,
     };
     const trial = {
@@ -223,6 +228,15 @@ describe('M1cApiClient', () => {
       state: 'completed',
       includePrivate: false,
     });
+    await client.executeInformationEntryAutomationWorkItemAction(
+      'synthetic/run',
+      3,
+      {
+        expectedVersion: 4,
+        operation: 'undo',
+        includePrivate: false,
+      },
+    );
 
     expect(requests).toEqual([
       {
@@ -262,6 +276,15 @@ describe('M1cApiClient', () => {
         body: JSON.stringify({
           expectedVersion: 2,
           state: 'completed',
+          includePrivate: false,
+        }),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/automation/work-queue/synthetic%2Frun/3/action',
+        method: 'POST',
+        body: JSON.stringify({
+          expectedVersion: 4,
+          operation: 'undo',
           includePrivate: false,
         }),
       },

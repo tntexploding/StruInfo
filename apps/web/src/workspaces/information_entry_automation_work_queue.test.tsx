@@ -22,7 +22,7 @@ describe('InformationEntryAutomationWorkQueue', () => {
 
     expect(markup).toContain('自动分流工作队列');
     expect(markup).toContain('当前服务未启用自动分流');
-    expect(markup).toContain('内容未自动修改');
+    expect(markup).toContain('自动动作可撤销');
     expect(markup).not.toContain('标记完成');
     expect(onList).not.toHaveBeenCalled();
     expect(onUpdate).not.toHaveBeenCalled();
