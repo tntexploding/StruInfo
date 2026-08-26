@@ -70,6 +70,13 @@ export interface EntryAutomationBudgets {
   readonly maximumDeferCandidatesPerRun: number;
 }
 
+export interface EntryAutomationAdvanceActions {
+  /** Apply deterministic content-keyword candidates to advance candidates. */
+  readonly deterministicTags: boolean;
+  /** Rebuild replaceable Association projections after the tag action. */
+  readonly rebuildAssociations: boolean;
+}
+
 export interface EntryAutomationPolicy {
   readonly revision: number;
   readonly enabled: boolean;
@@ -79,6 +86,7 @@ export interface EntryAutomationPolicy {
   readonly advanceThresholds: Readonly<EntryAutomationThresholds>;
   readonly deferThresholds: Readonly<EntryAutomationThresholds>;
   readonly budgets: Readonly<EntryAutomationBudgets>;
+  readonly advanceActions?: Readonly<EntryAutomationAdvanceActions>;
   readonly failureMode: EntryAutomationFailureMode;
 }
 
@@ -103,6 +111,10 @@ export const DEFAULT_ENTRY_AUTOMATION_POLICY: Readonly<EntryAutomationPolicy> =
       maximumEntriesPerRun: 100,
       maximumAdvanceCandidatesPerRun: 25,
       maximumDeferCandidatesPerRun: 25,
+    }),
+    advanceActions: Object.freeze({
+      deterministicTags: false,
+      rebuildAssociations: false,
     }),
     failureMode: 'pause',
   });
@@ -514,18 +526,20 @@ export function decodeEntryPreferenceProfile(
 export function decodeEntryAutomationPolicy(
   value: unknown,
 ): Readonly<EntryAutomationPolicy> | undefined {
+  const baseKeys = [
+    'advanceThresholds',
+    'budgets',
+    'deferThresholds',
+    'enabled',
+    'failureMode',
+    'minimumMatchedRuleCount',
+    'paused',
+    'profileRevision',
+    'revision',
+  ] as const;
   if (
-    !isClosedRecord(value, [
-      'advanceThresholds',
-      'budgets',
-      'deferThresholds',
-      'enabled',
-      'failureMode',
-      'minimumMatchedRuleCount',
-      'paused',
-      'profileRevision',
-      'revision',
-    ]) ||
+    (!isClosedRecord(value, baseKeys) &&
+      !isClosedRecord(value, [...baseKeys, 'advanceActions'])) ||
     !isNonNegativeSafeInteger(value.revision) ||
     (value.enabled !== true && value.enabled !== false) ||
     (value.paused !== true && value.paused !== false) ||
@@ -548,10 +562,15 @@ export function decodeEntryAutomationPolicy(
     value.deferThresholds,
   );
   const budgets = decodeEntryAutomationBudgets(value.budgets);
+  const advanceActions =
+    value.advanceActions === undefined
+      ? undefined
+      : decodeEntryAutomationAdvanceActions(value.advanceActions);
   if (
     advanceThresholds === undefined ||
     deferThresholds === undefined ||
-    budgets === undefined
+    budgets === undefined ||
+    (value.advanceActions !== undefined && advanceActions === undefined)
   ) {
     return undefined;
   }
@@ -564,6 +583,7 @@ export function decodeEntryAutomationPolicy(
     advanceThresholds,
     deferThresholds,
     budgets,
+    ...(advanceActions === undefined ? {} : {advanceActions}),
     failureMode: value.failureMode as EntryAutomationFailureMode,
   });
 }
@@ -610,6 +630,12 @@ export function createReviewPreferences(
   entryPreferenceProfile: Readonly<EntryPreferenceProfile> = DEFAULT_ENTRY_PREFERENCE_PROFILE,
   entryAutomationPolicy: Readonly<EntryAutomationPolicy> = DEFAULT_ENTRY_AUTOMATION_POLICY,
 ): Readonly<ReviewPreferences> {
+  const advanceActions =
+    entryAutomationPolicy.advanceActions ??
+    Object.freeze({
+      deterministicTags: false,
+      rebuildAssociations: false,
+    });
   return Object.freeze({
     format: REVIEW_PREFERENCES_FORMAT,
     version: REVIEW_PREFERENCES_VERSION,
@@ -660,8 +686,28 @@ export function createReviewPreferences(
         ...entryAutomationPolicy.deferThresholds,
       }),
       budgets: Object.freeze({...entryAutomationPolicy.budgets}),
+      advanceActions: Object.freeze({
+        deterministicTags: advanceActions.deterministicTags,
+        rebuildAssociations: advanceActions.rebuildAssociations,
+      }),
       failureMode: entryAutomationPolicy.failureMode,
     }),
+  });
+}
+
+function decodeEntryAutomationAdvanceActions(
+  value: unknown,
+): Readonly<EntryAutomationAdvanceActions> | undefined {
+  if (
+    !isClosedRecord(value, ['deterministicTags', 'rebuildAssociations']) ||
+    (value.deterministicTags !== true && value.deterministicTags !== false) ||
+    (value.rebuildAssociations !== true && value.rebuildAssociations !== false)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    deterministicTags: value.deterministicTags,
+    rebuildAssociations: value.rebuildAssociations,
   });
 }
 

@@ -943,6 +943,24 @@ test('keeps automation audit exact, responsive, and isolated from late run lists
     panel.getByRole('heading', {name: '可恢复自动分流', exact: true}),
   ).toBeVisible();
   await expect(panel.getByText('aaaaaaaa…aaaa', {exact: true})).toBeVisible();
+  await expect(
+    panel.getByRole('checkbox', {
+      name: '推进候选后生成确定性标签',
+      exact: true,
+    }),
+  ).not.toBeChecked();
+  await expect(
+    panel.getByRole('checkbox', {
+      name: '标签处理后重建相似联系',
+      exact: true,
+    }),
+  ).not.toBeChecked();
+  await expect(
+    panel.getByText(
+      '两项默认关闭，仅作用于“建议继续处理”。确定性标签遵守排除词与别名；联系重建不覆盖人工联系和知识图谱边。',
+      {exact: true},
+    ),
+  ).toBeVisible();
 
   await panel.getByRole('button', {name: '刷新记录', exact: true}).click();
   await expect.poll(() => runListRequests.length).toBe(2);

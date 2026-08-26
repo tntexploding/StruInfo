@@ -68,6 +68,9 @@ export interface InformationEntryAutomationPolicyPanelProps {
       advanceThresholds: Readonly<EntryAutomationPolicy['advanceThresholds']>;
       deferThresholds: Readonly<EntryAutomationPolicy['deferThresholds']>;
       budgets: Readonly<EntryAutomationPolicy['budgets']>;
+      advanceActions?: Readonly<
+        NonNullable<EntryAutomationPolicy['advanceActions']>
+      >;
       failureMode: 'pause';
     }>,
   ) => Promise<M1cHttpResponse<InformationEntryAutomationPolicyWriteResponse>>;
@@ -373,6 +376,7 @@ export function InformationEntryAutomationPolicyPanel({
         advanceThresholds: draft.advanceThresholds,
         deferThresholds: draft.deferThresholds,
         budgets: draft.budgets,
+        advanceActions: actionSettings(draft),
         failureMode: 'pause',
       });
       if (!mounted.current || !saveRequests.current.isCurrent(requestId)) {
@@ -763,6 +767,43 @@ function PolicyEditor({
           disabled={disabled}
           onChange={onIncludePrivateChange}
         />
+      </div>
+
+      <div
+        className="entry-automation-toggle-row"
+        aria-label="推进候选自动动作"
+      >
+        <ToggleField
+          label="推进候选后生成确定性标签"
+          checked={actionSettings(draft).deterministicTags}
+          disabled={disabled}
+          onChange={(value) => {
+            onChange({
+              ...draft,
+              advanceActions: {
+                ...actionSettings(draft),
+                deterministicTags: value,
+              },
+            });
+          }}
+        />
+        <ToggleField
+          label="标签处理后重建相似联系"
+          checked={actionSettings(draft).rebuildAssociations}
+          disabled={disabled}
+          onChange={(value) => {
+            onChange({
+              ...draft,
+              advanceActions: {
+                ...actionSettings(draft),
+                rebuildAssociations: value,
+              },
+            });
+          }}
+        />
+        <p className="entry-automation-policy__action-note">
+          两项默认关闭，仅作用于“建议继续处理”。确定性标签遵守排除词与别名；联系重建不覆盖人工联系和知识图谱边。
+        </p>
       </div>
 
       <div className="entry-automation-policy-grid">
@@ -1473,7 +1514,20 @@ function samePolicyValue(
     left.budgets.maximumAdvanceCandidatesPerRun ===
       right.budgets.maximumAdvanceCandidatesPerRun &&
     left.budgets.maximumDeferCandidatesPerRun ===
-      right.budgets.maximumDeferCandidatesPerRun
+      right.budgets.maximumDeferCandidatesPerRun &&
+    actionSettings(left).deterministicTags ===
+      actionSettings(right).deterministicTags &&
+    actionSettings(left).rebuildAssociations ===
+      actionSettings(right).rebuildAssociations
+  );
+}
+
+function actionSettings(
+  policy: Readonly<EntryAutomationPolicy>,
+): Readonly<{deterministicTags: boolean; rebuildAssociations: boolean}> {
+  return (
+    policy.advanceActions ??
+    Object.freeze({deterministicTags: false, rebuildAssociations: false})
   );
 }
 

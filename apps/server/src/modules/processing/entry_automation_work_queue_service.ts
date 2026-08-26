@@ -42,9 +42,7 @@ export async function listEntryAutomationWorkQueue(
     items.push(
       Object.freeze({
         ...workItem,
-        stale:
-          entry.revision !== workItem.entryRevision ||
-          entry.revisionId !== workItem.entryRevisionId,
+        stale: isWorkItemStale(workItem, entry.revision, entry.revisionId),
         entry,
       }),
     );
@@ -120,10 +118,28 @@ export async function updateEntryAutomationWorkItem(
     status: outcome,
     item: Object.freeze({
       ...current,
-      stale:
-        entry.revision !== current.entryRevision ||
-        entry.revisionId !== current.entryRevisionId,
+      stale: isWorkItemStale(current, entry.revision, entry.revisionId),
       entry,
     }),
   });
+}
+
+function isWorkItemStale(
+  item: Readonly<{
+    entryRevision: number;
+    entryRevisionId: string;
+    action?: Readonly<{
+      resultEntryRevision?: number;
+      resultEntryRevisionId?: string;
+    }>;
+  }>,
+  currentRevision: number,
+  currentRevisionId: string,
+): boolean {
+  return (
+    currentRevision !==
+      (item.action?.resultEntryRevision ?? item.entryRevision) ||
+    currentRevisionId !==
+      (item.action?.resultEntryRevisionId ?? item.entryRevisionId)
+  );
 }

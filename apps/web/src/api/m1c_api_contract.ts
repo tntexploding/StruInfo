@@ -342,6 +342,10 @@ export interface EntryAutomationPolicy {
   readonly advanceThresholds: Readonly<EntryAutomationThresholds>;
   readonly deferThresholds: Readonly<EntryAutomationThresholds>;
   readonly budgets: Readonly<EntryAutomationBudgets>;
+  readonly advanceActions?: Readonly<{
+    deterministicTags: boolean;
+    rebuildAssociations: boolean;
+  }>;
   readonly failureMode: 'pause';
 }
 
@@ -460,6 +464,26 @@ export type InformationEntryAutomationExecutionListResponse =
 export type EntryAutomationWorkItemState =
   'pending' | 'completed' | 'dismissed';
 
+export type EntryAutomationActionState =
+  | 'pending'
+  | 'tags_applied'
+  | 'applied'
+  | 'undo_pending'
+  | 'undone'
+  | 'cancelled';
+
+export interface EntryAutomationActionView {
+  readonly deterministicTagsEnabled: boolean;
+  readonly rebuildAssociationsEnabled: boolean;
+  readonly state: EntryAutomationActionState;
+  readonly originVersion: string;
+  readonly resultEntryRevision?: number;
+  readonly addedTagCount: number;
+  readonly associationProjectionCount?: number;
+  readonly version: number;
+  readonly completedAt?: string;
+}
+
 export interface EntryAutomationWorkQueueItemView {
   readonly workspaceId: string;
   readonly runId: string;
@@ -476,6 +500,7 @@ export interface EntryAutomationWorkQueueItemView {
   readonly resolvedAt?: string;
   readonly stale: boolean;
   readonly entry: Readonly<InformationEntry>;
+  readonly action?: Readonly<EntryAutomationActionView>;
 }
 
 export type InformationEntryAutomationWorkQueueResponse =
@@ -499,12 +524,27 @@ export type InformationEntryAutomationWorkItemWriteResponse =
       issue: Readonly<{code: string; path?: string}>;
     }>;
 
+export type InformationEntryAutomationActionWriteResponse =
+  | Readonly<{
+      status: 'applied' | 'unchanged';
+      item: Readonly<EntryAutomationWorkQueueItemView>;
+    }>
+  | Readonly<{
+      status: 'not_found' | 'not_enabled' | 'stale' | 'failed' | 'rejected';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
 export type InformationEntryAutomationExecuteResponse =
   | Readonly<{
       status: 'succeeded';
       runId: string;
       replayed: boolean;
       counts: Readonly<Record<EntryAutomationRoute, number>>;
+      actions?: Readonly<{
+        status: 'complete';
+        appliedCount: number;
+        unchangedCount: number;
+      }>;
       execution?: Readonly<EntryAutomationExecutionView>;
     }>
   | Readonly<{

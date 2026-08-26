@@ -319,6 +319,22 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const executeEntryAutomationWorkItemAction = useCallback(
+    (
+      runId: string,
+      claimOrdinal: number,
+      body: Parameters<
+        M1cApiClient['executeInformationEntryAutomationWorkItemAction']
+      >[2],
+    ) =>
+      apiClient.executeInformationEntryAutomationWorkItemAction(
+        runId,
+        claimOrdinal,
+        body,
+      ),
+    [apiClient],
+  );
+
   useEffect(() => {
     const controller = new AbortController();
     globalThis.queueMicrotask(() => {
@@ -889,6 +905,9 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onLoadEntryAutomationPolicy={loadEntryAutomationPolicy}
           onListEntryAutomationWorkQueue={listEntryAutomationWorkQueue}
           onUpdateEntryAutomationWorkItem={updateEntryAutomationWorkItem}
+          onExecuteEntryAutomationWorkItemAction={
+            executeEntryAutomationWorkItemAction
+          }
           onRejectAiTagProposal={rejectAiTagProposal}
           onRevise={reviseInformationEntry}
           onReviseDocumentTags={reviseInformationDocumentTags}

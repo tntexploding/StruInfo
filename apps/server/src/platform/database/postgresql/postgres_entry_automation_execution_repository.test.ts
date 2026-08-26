@@ -162,6 +162,51 @@ describe('PostgresEntryAutomationExecutionRepository', () => {
         ),
       ),
     ).toBe(true);
+    expect(
+      statements.some(
+        (sql) =>
+          sql.includes("state = 'cancelled'") &&
+          sql.includes('processing_entry_automation_action'),
+      ),
+    ).toBe(false);
+    expect(statements.at(-1)).toBe('COMMIT');
+  });
+
+  it('cancels only pending automatic actions when routing fails', async () => {
+    const statements: string[] = [];
+    const repository = new PostgresEntryAutomationExecutionRepository(
+      createPool((sql) => {
+        statements.push(sql);
+        if (sql === READ_WORKSPACE_SQL)
+          return rows({workspace_id: WORKSPACE_ID});
+        if (sql === ACQUIRE_WORKSPACE_WRITE_LOCK_SQL) return rows({});
+        if (sql.includes('FOR UPDATE')) {
+          return rows({status: 'running', current_version: 2});
+        }
+        if (sql === READ_ENTRY_AUTOMATION_CLAIMS_SQL) {
+          return rows(claimRow('claimed'));
+        }
+        if (sql.startsWith('UPDATE struinfo.')) return affected(1);
+        return rows();
+      }),
+    );
+
+    await expect(
+      repository.settleExecution({
+        workspaceId: WORKSPACE_ID,
+        runId: RUN_ID,
+        expectedVersion: 2,
+        status: 'failed',
+        errorCode: 'automation_execution_failed',
+      }),
+    ).resolves.toBe('applied');
+    expect(
+      statements.some(
+        (sql) =>
+          sql.includes("state = 'cancelled'") &&
+          sql.includes('processing_entry_automation_action'),
+      ),
+    ).toBe(true);
     expect(statements.at(-1)).toBe('COMMIT');
   });
 

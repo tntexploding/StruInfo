@@ -1,6 +1,6 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1G-5B 活动接口
+- 状态：M1H-1A/B 活动接口
 - 最近核对：2026-08-26
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
@@ -9,7 +9,7 @@
 
 ## 1. 接口边界
 
-本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、确定性/人工首次物化、Document 标签、Entry 联系、正式 Entry 图谱、确定性探索、精确 GitHub Markdown 信源订阅、Provider-neutral ProcessingRun、所有者控制的 Entry 路由执行、可选 OpenAI Snapshot 拆分/Entry 标签/selected-pair 联系提案与公开 Query 证据综合、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、任意 URL 抓取、通用 AI 执行、自动接受、具体自动内容改写或公共扩展 API。
+本地 HTTP 层只连接当前可运行的 Evidence、InformationEntry、确定性/人工首次物化、Document 标签、Entry 联系、正式 Entry 图谱、确定性探索、精确 GitHub Markdown 信源订阅、Provider-neutral ProcessingRun、所有者控制的 Entry 路由执行、默认关闭的确定性标签/联系投影动作、可选 OpenAI Snapshot 拆分/Entry 标签/selected-pair 联系提案与公开 Query 证据综合、个人偏好和个人数据包用例。它不提供账户、多用户授权、Webhook、WebSocket、任意 URL 抓取、通用 AI 执行、自动接受、任意工作流或公共扩展 API。
 
 当前工作区由包体外运行配置中的 `STRUIINFO_WORKSPACE_ID` 选择。请求不能提交或切换 `workspaceId`；服务端把固定工作区注入所有领域操作。切换资料集需要停止当前进程、替换外部配置或数据根并重新启动。
 
@@ -42,13 +42,14 @@
 | `POST` | `/api/v1/entries/exploration/candidates`                                              | 从选定 Entry 的当前可见直接联系生成独立页外探索候选                                   |
 | `PUT`  | `/api/v1/entries/exploration/policy`                                                  | 以期望修订保存外部探索开关、页额份额和三类候选开关                                    |
 | `GET`  | `/api/v1/entries/automation/policy`                                                   | 读取当前 AutomationPolicy 及其绑定 Profile 摘要                                       |
-| `PUT`  | `/api/v1/entries/automation/policy`                                                   | 以期望修订保存启停、暂停、阈值、维度要求和预算                                        |
+| `PUT`  | `/api/v1/entries/automation/policy`                                                   | 以期望修订保存启停、暂停、阈值、预算和两个默认关闭的推进动作                          |
 | `POST` | `/api/v1/entries/automation/trial`                                                    | 对草稿策略执行只读路由试算并应用显式人工接管                                          |
 | `POST` | `/api/v1/entries/automation/runs`                                                     | 用幂等键和精确修订账本显式启动一次持久路由执行                                        |
 | `GET`  | `/api/v1/entries/automation/runs?limit=`                                              | 列出最近 1–20 个 typed 自动路由运行及 claims                                          |
 | `GET`  | `/api/v1/entries/automation/runs/:runId`                                              | 读取一个精确自动路由运行及 claims                                                     |
 | `GET`  | `/api/v1/entries/automation/work-queue?includePrivate=`                               | 读取成功 claim 派生的隐私过滤所有者工作队列                                           |
 | `PUT`  | `/api/v1/entries/automation/work-queue/:runId/:claimOrdinal`                          | 以期望版本完成、跳过或重新打开一个工作项                                              |
+| `POST` | `/api/v1/entries/automation/work-queue/:runId/:claimOrdinal/action`                   | 以动作期望版本续跑或安全撤销获授权的确定性推进动作                                    |
 | `GET`  | `/api/v1/entries/:entryId/tag-proposals`                                              | 列出一个 Entry 的有界 tags 提案                                                       |
 | `POST` | `/api/v1/entries/:entryId/tag-proposals/start`                                        | 用户显式请求一个公开 Entry 的 OpenAI 标签提案                                         |
 | `POST` | `/api/v1/entries/:entryId/tag-proposals/:proposalId/accept`                           | 接受提案并通过现有 Entry revision 保存标签                                            |
@@ -88,7 +89,7 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 三个 `/source-subscriptions` 操作只管理精确公开 GitHub repository/ref 下的单个 Markdown 路径。GET 返回 revision、可编辑字段和服务端维护的 last-attempt/last-success/run/cursor；PUT 接受 `{expectedRevision, subscriptions}`，每个写入项必须完整给出稳定 UUID、标签、enabled、repositoryUri、repositoryRef、repositoryPath、profile、sourceAlias、isPrivate、默认关闭的 `routeAfterImport` 和 15–10080 分钟间隔，不能伪造运行字段。POST 只接受 `{requestKey}`；即使 enabled 为 false 也可手动运行。
 
-每次运行先建立 import 阶段 ProcessingRun，再读取 Git commit 与精确文件。字节变化时调用同一个 Markdown Evidence import；相同字节只推进 cursor，不重复生成 Snapshot。`routeAfterImport=false` 时在导入后结束；明确开启后，服务端继续复用确定性 section Entry 物化和现有可恢复自动路由，返回 automation run ID 与本 Snapshot 的 Entry 数。只有整个链成功才推进成功 cursor，失败保留旧 cursor 以便幂等重试。`source_subscriptions` capability 不允许任意 URL、仓库目录扫描、仓库代码执行、AI 调用、自动标签/联系/图谱修改或提案接受。
+每次运行先建立 import 阶段 ProcessingRun，再读取 Git commit 与精确文件。字节变化时调用同一个 Markdown Evidence import；相同字节只推进 cursor，不重复生成 Snapshot。`routeAfterImport=false` 时在导入后结束；明确开启后，服务端继续复用确定性 section Entry 物化和现有可恢复自动路由，返回 automation run ID 与本 Snapshot 的 Entry 数。若 AutomationPolicy 另外显式启用 M1H 推进动作，确定性标签和可替换联系投影也必须完成后才能推进成功 cursor；失败保留旧 cursor 以便幂等重试。`source_subscriptions` capability 本身不允许任意 URL、仓库目录扫描、仓库代码执行、AI 调用、图谱修改或提案接受。
 
 ### 3.2 拆分
 
@@ -119,9 +120,11 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 M1G-4C 的六个 `/entries/automation/*` 操作把外部 AutomationPolicy、M1G-4A 只读试算和 M1G-4B typed execution 接入同一 Tags 次级控制面。策略 PUT 必须提供 `expectedRevision` 并绑定当前 Profile revision；启用/禁用和暂停/恢复都是显式新修订。trial 接受草稿策略、当次隐私范围、可选 Entry 修订账本和人工接管 ID，只返回路由、原因和计数。run start 只接受已保存且 ready 的精确修订、幂等键和同一账本；列表/详情只返回运行、修订、route/reason/status 和时间，不返回正文、来源 Blob、请求摘要或幂等键。M1G-4D 明确规定列表只是摘要导航：Web 必须在用户选择后调用精确详情操作，独立显示未结算/补偿 claim，并用分离的请求代次阻止迟到列表或详情覆盖更新状态。
 
-这些路由完成的是所有者控制与路由审计，不是具体自动处理。completed claim 不会修改 Entry、评分、标签、联系、图谱、查询或 AI 提案，`defer_candidate` 也不隐藏或删除内容。私密 Entry 只有在当前 trial/run 显式 `includePrivate=true` 时参与，且整个过程保持本地、无 Provider。
+M1G-4 路由本身只记录控制与审计事实。M1H-1 仅在保存策略的 `advanceActions` 显式开启时，为 completed `advance_candidate` 创建并执行确定性标签和/或可替换联系投影；它不改评分、图谱、查询或 AI 提案。`manual_review` 与 `defer_candidate` 不获得动作，后者也不隐藏或删除内容。私密 Entry 只有在当前 trial/run 显式 `includePrivate=true` 时参与，且整个过程保持本地、无 Provider。
 
-M1G-5A 的两个 work-queue 操作在上述审计之外提供独立所有者状态。GET 最多返回 100 条当前可见 Entry 工作项，标明 claim 路由/原因、pending/completed/dismissed 和 Entry 是否已换修订；PUT 接受 `{expectedVersion, state, includePrivate}`。更新工作项不更新 Entry 或 claim。未显式包含隐私时，隐私工作项按不存在处理。
+M1G-5A 的两个 work-queue 操作在上述审计之外提供独立所有者状态。GET 最多返回 100 条当前可见 Entry 工作项，标明 claim 路由/原因、pending/completed/dismissed、Entry 是否已换修订，以及可选 M1H action 状态和计数；PUT 接受 `{expectedVersion, state, includePrivate}`。更新工作项不更新 Entry 或 claim。未显式包含隐私时，隐私工作项按不存在处理。
+
+M1H action POST 接受 `{expectedVersion, operation: "apply" | "undo", includePrivate}`。`apply` 从 pending 或 tags_applied 继续；`undo` 只在 Entry 仍处于该动作结果修订时删除本次 rule-origin 标签并重建投影。过期版本或人工后续编辑返回冲突，不覆盖人工状态。联系重建只替换计算投影，不覆盖逐对人工 override 或正式知识图谱关系。
 
 ### 3.4 联系
 
@@ -174,7 +177,7 @@ M1G-5A 的两个 work-queue 操作在上述审计之外提供独立所有者状�
 
 ## 5. 个人数据包
 
-export 接口生成当前五分区 Bundle，包含 59 张当前工作区表、被引用的 Blob 字节和含版本化联系、探索、Entry 偏好、AutomationPolicy 与信源串联开关的当前偏好文件。Entry v3 section 携带可选精确 Fragment 标量区间；Processing v6 section 携带十张既有任务/提案表、两张 typed 自动路由执行表和一张所有者工作队列表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1–v5 保持可读，缺失的新表和偏好字段恢复为空/关闭状态。
+export 接口生成当前五分区 Bundle，包含 60 张当前工作区表、被引用的 Blob 字节和含版本化联系、探索、Entry 偏好、AutomationPolicy 与信源串联开关的当前偏好文件。Entry v3 section 携带可选精确 Fragment 标量区间；Processing v7 section 携带十张既有任务/提案表、两张 typed 自动路由执行表、一张所有者工作队列表和一张确定性动作表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1–v6 保持可读，缺失的新表和偏好字段恢复为空/关闭状态。
 
 Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不进入 Git 或应用安装树。
 
@@ -197,5 +200,5 @@ Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不�
 - JSON 请求体上限为 2 MiB，Markdown 导入上限为 1 MiB；
 - Evidence 列表当前最多返回最近 200 个 Snapshot；
 - 接口仅面向回环单用户产品，没有公开认证或 CSRF 完整边界；
-- 没有 multipart/服务器路径上传、Office/OCR、多文件批量导入、目录监视、抓取、订阅、自动接受、语义/向量搜索或在线检索接口；OpenAI 目前只提供用户选中公开 Snapshot 的 split、公开 Entry 的 tags、用户选中公开 Entry 对的 association 提案，以及当前公开 Query 结果的会话内证据综合；
+- 没有 multipart/服务器路径上传、Office/OCR、多文件批量导入、目录监视、通用抓取/订阅、自动接受、语义/向量搜索或在线检索接口；OpenAI 目前只提供用户选中公开 Snapshot 的 split、公开 Entry 的 tags、用户选中公开 Entry 对的 association 提案，以及当前公开 Query 结果的会话内证据综合；
 - 当前正式知识只实现 Entry 中心关系图谱；不恢复 `/curation`、旧 `/knowledge` 写入/读取或旧 `/search` 路由，也不把历史 Knowledge 表当作当前产品入口。

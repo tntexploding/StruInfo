@@ -5,6 +5,7 @@ import type {
   EntryAutomationWorkQueueItemView,
   InformationEntry,
   InformationEntryAutomationWorkItemWriteResponse,
+  InformationEntryAutomationActionWriteResponse,
   InformationEntryAutomationWorkQueueResponse,
   M1cHttpResponse,
 } from '../api/m1c_api_contract.js';
@@ -35,11 +36,21 @@ export interface InformationEntryAutomationWorkQueueProps {
     M1cHttpResponse<InformationEntryAutomationWorkItemWriteResponse>
   >;
   readonly onOpenEntry: (entry: Readonly<InformationEntry>) => void;
+  readonly onExecuteAction?: (
+    runId: string,
+    claimOrdinal: number,
+    body: Readonly<{
+      expectedVersion: number;
+      operation: 'apply' | 'undo';
+      includePrivate: boolean;
+    }>,
+  ) => Promise<M1cHttpResponse<InformationEntryAutomationActionWriteResponse>>;
 }
 
 export function InformationEntryAutomationWorkQueue({
   enabled,
   onList,
+  onExecuteAction,
   onOpenEntry,
   onUpdate,
 }: InformationEntryAutomationWorkQueueProps) {
@@ -127,6 +138,49 @@ export function InformationEntryAutomationWorkQueue({
     }
   }
 
+  async function executeAction(
+    item: Readonly<EntryAutomationWorkQueueItemView>,
+    operation: 'apply' | 'undo',
+  ) {
+    const action = item.action;
+    if (
+      action === undefined ||
+      busyKey !== undefined ||
+      onExecuteAction === undefined
+    )
+      return;
+    const key = `${item.runId}:${String(item.claimOrdinal)}`;
+    setBusyKey(key);
+    try {
+      const response = await onExecuteAction(item.runId, item.claimOrdinal, {
+        expectedVersion: action.version,
+        operation,
+        includePrivate,
+      });
+      if (
+        response.body.status !== 'applied' &&
+        response.body.status !== 'unchanged'
+      ) {
+        setState({
+          status: 'error',
+          message:
+            response.body.status === 'stale'
+              ? 'Entry 或自动处理结果已变化；为保护人工修改，本次操作已停止。'
+              : '自动处理没有完成；当前 Entry 与人工联系保持不变。',
+        });
+        return;
+      }
+      await load();
+    } catch {
+      setState({
+        status: 'error',
+        message: '本地服务当前不可达；自动处理没有继续。',
+      });
+    } finally {
+      setBusyKey(undefined);
+    }
+  }
+
   return (
     <section
       className="entry-automation-work-queue"
@@ -138,7 +192,7 @@ export function InformationEntryAutomationWorkQueue({
           <h2 id="entry-automation-work-queue-title">自动分流工作队列</h2>
         </div>
         <span className="origin-label origin-label--deterministic">
-          事实已记录 · 内容未自动修改
+          路由可追溯 · 自动动作可撤销
         </span>
       </header>
 
@@ -222,8 +276,41 @@ export function InformationEntryAutomationWorkQueue({
                         {item.stale ? ' · Entry 已有新版本' : ''}
                         {item.entry.value.isPrivate ? ' · 隐私' : ''}
                       </p>
+                      {item.action === undefined ? null : (
+                        <p className="entry-automation-work-queue__action-status">
+                          自动处理：{actionStateLabel(item.action.state)}
+                          {item.action.deterministicTagsEnabled
+                            ? ` · 新增标签 ${item.action.addedTagCount.toString()}`
+                            : ''}
+                          {item.action.rebuildAssociationsEnabled &&
+                          item.action.associationProjectionCount !== undefined
+                            ? ` · 当前联系 ${item.action.associationProjectionCount.toString()}`
+                            : ''}
+                        </p>
+                      )}
                     </div>
                     <div className="entry-automation-work-queue__actions">
+                      {item.action?.state === 'pending' ||
+                      item.action?.state === 'tags_applied' ? (
+                        <button
+                          className="secondary-action"
+                          type="button"
+                          disabled={busyKey !== undefined || item.stale}
+                          onClick={() => void executeAction(item, 'apply')}
+                        >
+                          {busyKey === key ? '正在处理…' : '继续自动处理'}
+                        </button>
+                      ) : null}
+                      {item.action?.state === 'applied' ? (
+                        <button
+                          className="text-action"
+                          type="button"
+                          disabled={busyKey !== undefined || item.stale}
+                          onClick={() => void executeAction(item, 'undo')}
+                        >
+                          撤销本次自动处理
+                        </button>
+                      ) : null}
                       <button
                         className="secondary-action"
                         type="button"
@@ -301,4 +388,23 @@ function stateLabel(state: EntryAutomationWorkItemState): string {
   if (state === 'pending') return '待处理';
   if (state === 'completed') return '已完成';
   return '已跳过';
+}
+
+function actionStateLabel(
+  state: NonNullable<EntryAutomationWorkQueueItemView['action']>['state'],
+): string {
+  switch (state) {
+    case 'pending':
+      return '等待执行';
+    case 'tags_applied':
+      return '标签已写入，正在重建联系';
+    case 'applied':
+      return '已完成';
+    case 'undo_pending':
+      return '标签已撤销，正在重建联系';
+    case 'undone':
+      return '已撤销';
+    case 'cancelled':
+      return '已取消';
+  }
 }

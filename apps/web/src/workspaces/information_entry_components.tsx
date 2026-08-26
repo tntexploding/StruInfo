@@ -33,6 +33,7 @@ import type {
   EntryAutomationPolicy,
   EntryAutomationWorkItemState,
   InformationEntryAutomationWorkItemWriteResponse,
+  InformationEntryAutomationActionWriteResponse,
   InformationEntryAutomationWorkQueueResponse,
 } from '../api/m1c_api_contract.js';
 import {DOMAIN_LABELS, TYPE_LABELS} from './information_entry_shared.js';
@@ -147,6 +148,9 @@ export interface InformationEntryServices {
       advanceThresholds: Readonly<EntryAutomationPolicy['advanceThresholds']>;
       deferThresholds: Readonly<EntryAutomationPolicy['deferThresholds']>;
       budgets: Readonly<EntryAutomationPolicy['budgets']>;
+      advanceActions?: Readonly<
+        NonNullable<EntryAutomationPolicy['advanceActions']>
+      >;
       failureMode: 'pause';
     }>,
   ) => Promise<M1cHttpResponse<InformationEntryAutomationPolicyWriteResponse>>;
@@ -198,6 +202,15 @@ export interface InformationEntryServices {
   ) => Promise<
     M1cHttpResponse<InformationEntryAutomationWorkItemWriteResponse>
   >;
+  readonly onExecuteEntryAutomationWorkItemAction: (
+    runId: string,
+    claimOrdinal: number,
+    body: Readonly<{
+      expectedVersion: number;
+      operation: 'apply' | 'undo';
+      includePrivate: boolean;
+    }>,
+  ) => Promise<M1cHttpResponse<InformationEntryAutomationActionWriteResponse>>;
   readonly onOpenEvidence: (
     snapshotId: string,
     fragmentId: string | undefined,

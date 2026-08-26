@@ -12,3 +12,4 @@ export * from './entry_automation_execution_contract.js';
 export * from './entry_automation_execution_service.js';
 export * from './entry_automation_work_queue_contract.js';
 export * from './entry_automation_work_queue_service.js';
+export * from './entry_automation_action_service.js';

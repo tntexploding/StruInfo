@@ -215,6 +215,23 @@ export class M1cApiController {
     );
   }
 
+  @Post('entries/automation/work-queue/:runId/:claimOrdinal/action')
+  public async executeInformationEntryAutomationWorkItemAction(
+    @Param('runId') runId: string,
+    @Param('claimOrdinal') claimOrdinal: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.executeInformationEntryAutomationWorkItemAction(
+        runId,
+        claimOrdinal,
+        body,
+      ),
+    );
+  }
+
   @Post('imports/markdown')
   public async importMarkdown(
     @Body() body: unknown,

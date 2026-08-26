@@ -7,6 +7,7 @@ import type {
   ProcessingRunStatus,
   ProcessingRunWriteOutcome,
 } from './processing_contract.js';
+import type {EntryAutomationAdvanceActions} from '../../storage/review_preferences_store.js';
 
 export const ENTRY_AUTOMATION_CLAIM_STATUSES = [
   'claimed',
@@ -59,6 +60,7 @@ export interface EntryAutomationExecutionInitialize {
   readonly policyRevision: number;
   readonly profileRevision: number;
   readonly includePrivate: boolean;
+  readonly advanceActions?: Readonly<EntryAutomationAdvanceActions>;
   readonly claims: readonly Readonly<EntryAutomationClaimInput>[];
 }
 

@@ -35,6 +35,7 @@ export interface InformationEntryTagsWorkspaceProps extends Pick<
   | 'onLoadEntryAutomationPolicy'
   | 'onListEntryAutomationWorkQueue'
   | 'onUpdateEntryAutomationWorkItem'
+  | 'onExecuteEntryAutomationWorkItemAction'
   | 'onOpenEvidence'
   | 'onRejectAiTagProposal'
   | 'onRevise'
@@ -75,6 +76,7 @@ export function InformationEntryTagsWorkspace({
   onLoadEntryAutomationPolicy,
   onListEntryAutomationWorkQueue,
   onUpdateEntryAutomationWorkItem,
+  onExecuteEntryAutomationWorkItemAction,
   onOpenEvidence,
   onRejectAiTagProposal,
   onRevise,
@@ -319,6 +321,7 @@ export function InformationEntryTagsWorkspace({
         enabled={automationEnabled}
         onList={onListEntryAutomationWorkQueue}
         onUpdate={onUpdateEntryAutomationWorkItem}
+        onExecuteAction={onExecuteEntryAutomationWorkItemAction}
         onOpenEntry={(entry) => {
           controller.setSelectedEntryId(entry.entryId);
           controller.setSnapshotId(entry.snapshotId);
