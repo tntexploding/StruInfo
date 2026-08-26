@@ -13,12 +13,15 @@ import type {
   EntryPreferenceProfile,
   EntryPreferenceRule,
   EntryAutomationPolicy,
+  EntryAutomationWorkItemState,
   InformationEntryAutomationExecuteResponse,
   InformationEntryAutomationExecutionListResponse,
   InformationEntryAutomationExecutionResponse,
   InformationEntryAutomationPolicyResponse,
   InformationEntryAutomationPolicyWriteResponse,
   InformationEntryAutomationTrialResponse,
+  InformationEntryAutomationWorkItemWriteResponse,
+  InformationEntryAutomationWorkQueueResponse,
   InformationEntryAssociationListResponse,
   InformationEntryAssociationOverrideResponse,
   InformationEntryAssociationPolicyWriteResponse,
@@ -170,6 +173,20 @@ export interface M1cApiClient {
     runId: string,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryAutomationExecutionResponse>>;
+  listInformationEntryAutomationWorkQueue(
+    includePrivate: boolean,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryAutomationWorkQueueResponse>>;
+  updateInformationEntryAutomationWorkItem(
+    runId: string,
+    claimOrdinal: number,
+    body: Readonly<{
+      expectedVersion: number;
+      state: EntryAutomationWorkItemState;
+      includePrivate: boolean;
+    }>,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryAutomationWorkItemWriteResponse>>;
   importMarkdown(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -370,6 +387,8 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     executeInformationEntryAutomation: reject,
     listInformationEntryAutomationExecutions: reject,
     loadInformationEntryAutomationExecution: reject,
+    listInformationEntryAutomationWorkQueue: reject,
+    updateInformationEntryAutomationWorkItem: reject,
     importMarkdown: reject,
     importDocument: reject,
     materializeInformationEntries: reject,
@@ -514,6 +533,22 @@ export function createM1cApiClient(
     loadInformationEntryAutomationExecution: (runId, options) =>
       get<InformationEntryAutomationExecutionResponse>(
         `api/v1/entries/automation/runs/${encodeURIComponent(runId)}`,
+        options,
+      ),
+    listInformationEntryAutomationWorkQueue: (includePrivate, options) =>
+      get<InformationEntryAutomationWorkQueueResponse>(
+        `api/v1/entries/automation/work-queue?includePrivate=${includePrivate ? 'true' : 'false'}`,
+        options,
+      ),
+    updateInformationEntryAutomationWorkItem: (
+      runId,
+      claimOrdinal,
+      body,
+      options,
+    ) =>
+      put<InformationEntryAutomationWorkItemWriteResponse>(
+        `api/v1/entries/automation/work-queue/${encodeURIComponent(runId)}/${encodeURIComponent(claimOrdinal.toString())}`,
+        body,
         options,
       ),
     importMarkdown: (body, options) =>

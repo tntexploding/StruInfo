@@ -9,6 +9,7 @@ import {
   PostgresEntryAutomationExecutionRepository,
   READ_ENTRY_AUTOMATION_CLAIMS_SQL,
   READ_ENTRY_AUTOMATION_EXECUTION_SQL,
+  READ_ENTRY_AUTOMATION_WORK_ITEMS_SQL,
 } from './postgres_entry_automation_execution_repository.js';
 import {
   ACQUIRE_WORKSPACE_WRITE_LOCK_SQL,
@@ -129,6 +130,13 @@ describe('PostgresEntryAutomationExecutionRepository', () => {
           });
         }
         if (sql.startsWith('UPDATE struinfo.')) return affected(1);
+        if (
+          sql.startsWith(
+            'INSERT INTO struinfo.processing_entry_automation_work_item',
+          )
+        ) {
+          return affected(1);
+        }
         return rows();
       }),
     );
@@ -147,6 +155,46 @@ describe('PostgresEntryAutomationExecutionRepository', () => {
     expect(statements.some((sql) => sql.includes("status = 'succeeded'"))).toBe(
       true,
     );
+    expect(
+      statements.some((sql) =>
+        sql.startsWith(
+          'INSERT INTO struinfo.processing_entry_automation_work_item',
+        ),
+      ),
+    ).toBe(true);
+    expect(statements.at(-1)).toBe('COMMIT');
+  });
+
+  it('loads queue rows and updates only owner state under the workspace lock', async () => {
+    const statements: string[] = [];
+    const repository = new PostgresEntryAutomationExecutionRepository(
+      createPool((sql) => {
+        statements.push(sql);
+        if (sql === READ_ENTRY_AUTOMATION_WORK_ITEMS_SQL) {
+          return rows(workItemRow('pending', 1));
+        }
+        if (sql === READ_WORKSPACE_SQL)
+          return rows({workspace_id: WORKSPACE_ID});
+        if (sql === ACQUIRE_WORKSPACE_WRITE_LOCK_SQL) return rows({});
+        if (sql.includes('FOR UPDATE')) {
+          return rows({state: 'pending', current_version: 1});
+        }
+        if (sql.startsWith('UPDATE struinfo.')) return affected(1);
+        return rows();
+      }),
+    );
+
+    await expect(repository.listWorkItems(WORKSPACE_ID, 10)).resolves.toEqual([
+      expect.objectContaining({
+        entryId: ENTRY_ID,
+        state: 'pending',
+        version: 1,
+      }),
+    ]);
+    await expect(
+      repository.updateWorkItem(WORKSPACE_ID, RUN_ID, 0, 1, 'completed'),
+    ).resolves.toBe('applied');
+    expect(statements).toContain(ACQUIRE_WORKSPACE_WRITE_LOCK_SQL);
     expect(statements.at(-1)).toBe('COMMIT');
   });
 });
@@ -208,6 +256,24 @@ function claimRow(status: string): Row {
     error_code: null,
     created_at: '2040-01-02T03:04:05.000Z',
     finished_at: null,
+  };
+}
+
+function workItemRow(state: string, version: number): Row {
+  return {
+    workspace_id: WORKSPACE_ID,
+    run_id: RUN_ID,
+    claim_ordinal: 0,
+    entry_id: ENTRY_ID,
+    entry_revision: 1,
+    entry_revision_id: REVISION_ID,
+    route: 'advance_candidate',
+    reason: 'advance_threshold_met',
+    state,
+    current_version: version,
+    created_at: '2040-01-02T03:04:05.000Z',
+    updated_at: '2040-01-02T03:04:05.000Z',
+    resolved_at: null,
   };
 }
 

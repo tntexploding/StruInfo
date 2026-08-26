@@ -83,6 +83,7 @@ function subscription(): Readonly<ReviewSourceSubscription> {
     profile: 'commonmark-v1',
     sourceAlias: 'synthetic',
     isPrivate: false,
+    routeAfterImport: false,
     intervalMinutes: 1_440,
   });
 }

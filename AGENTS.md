@@ -456,6 +456,21 @@ new execution or content-write permission. M1G-4 is complete through A–D;
 concrete automatic business actions remain a later explicitly accepted
 boundary.
 
+ADR 0030 completes M1G-5A with a durable owner work queue derived only from
+successfully completed routing claims. Migration `000019` stores reversible
+pending/completed/dismissed owner state separately from immutable claim audit,
+and Processing Bundle v6 carries the thirteenth Processing table. Queue reads
+remain privacy-scoped and show when the routed Entry revision is stale. Queue
+actions MUST NOT mutate Entry content, tags, Associations, graph edges, Query
+state or AI proposals.
+
+ADR 0031 completes M1G-5B with one default-off `routeAfterImport` switch on an
+exact source subscription. A changed source may reuse the existing Evidence
+import, deterministic empty-Snapshot Entry materialization and M1G-4 execution;
+the successful cursor advances only after the whole chain succeeds. This local
+chain grants no AI, automatic tag/link/graph write, proposal acceptance or
+generic workflow authority. Older preferences decode the switch as false.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

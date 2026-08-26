@@ -123,6 +123,8 @@ export interface ReviewSourceSubscription {
   readonly profile: 'commonmark-v1' | 'ruanyf-weekly-v1';
   readonly sourceAlias: string;
   readonly isPrivate: boolean;
+  /** Default-off: route a changed import after deterministic materialization. */
+  readonly routeAfterImport: boolean;
   readonly intervalMinutes: number;
   readonly lastAttemptAt?: string;
   readonly lastSuccessAt?: string;
@@ -836,6 +838,9 @@ function decodeSourceSubscription(
       value.profile !== 'ruanyf-weekly-v1') ||
     typeof value.sourceAlias !== 'string' ||
     (value.isPrivate !== true && value.isPrivate !== false) ||
+    (value.routeAfterImport !== undefined &&
+      value.routeAfterImport !== true &&
+      value.routeAfterImport !== false) ||
     typeof value.intervalMinutes !== 'number' ||
     !Number.isSafeInteger(value.intervalMinutes) ||
     value.intervalMinutes < 15 ||
@@ -874,6 +879,7 @@ function decodeSourceSubscription(
     profile: value.profile,
     sourceAlias,
     isPrivate: value.isPrivate,
+    routeAfterImport: value.routeAfterImport === true,
     intervalMinutes: value.intervalMinutes,
     ...(typeof value.lastAttemptAt === 'string'
       ? {lastAttemptAt: value.lastAttemptAt}

@@ -104,6 +104,7 @@ export interface SourceSubscriptionWrite {
   readonly profile: 'commonmark-v1' | 'ruanyf-weekly-v1';
   readonly sourceAlias: string;
   readonly isPrivate: boolean;
+  readonly routeAfterImport: boolean;
   readonly intervalMinutes: number;
 }
 
@@ -143,6 +144,8 @@ export type SourceSubscriptionRunResponse =
       runId: string;
       subscriptionId: string;
       snapshotId?: string;
+      automationRunId?: string;
+      materializedEntryCount?: number;
     }>
   | Readonly<{
       status: 'not_found' | 'rejected' | 'failed';
@@ -451,6 +454,48 @@ export type InformationEntryAutomationExecutionListResponse =
     }>
   | Readonly<{
       status: 'failed';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
+export type EntryAutomationWorkItemState =
+  'pending' | 'completed' | 'dismissed';
+
+export interface EntryAutomationWorkQueueItemView {
+  readonly workspaceId: string;
+  readonly runId: string;
+  readonly claimOrdinal: number;
+  readonly entryId: string;
+  readonly entryRevision: number;
+  readonly entryRevisionId: string;
+  readonly route: EntryAutomationRoute;
+  readonly reason: EntryAutomationReason;
+  readonly state: EntryAutomationWorkItemState;
+  readonly version: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly resolvedAt?: string;
+  readonly stale: boolean;
+  readonly entry: Readonly<InformationEntry>;
+}
+
+export type InformationEntryAutomationWorkQueueResponse =
+  | Readonly<{
+      status: 'ok';
+      includePrivate: boolean;
+      items: readonly Readonly<EntryAutomationWorkQueueItemView>[];
+    }>
+  | Readonly<{
+      status: 'failed' | 'rejected';
+      issue: Readonly<{code: string; path?: string}>;
+    }>;
+
+export type InformationEntryAutomationWorkItemWriteResponse =
+  | Readonly<{
+      status: 'applied' | 'unchanged';
+      item: Readonly<EntryAutomationWorkQueueItemView>;
+    }>
+  | Readonly<{
+      status: 'not_found' | 'stale' | 'failed' | 'rejected';
       issue: Readonly<{code: string; path?: string}>;
     }>;
 

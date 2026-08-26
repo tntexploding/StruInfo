@@ -145,6 +145,7 @@ export function SourceSubscriptionPanel({
                 profile: 'commonmark-v1' as const,
                 sourceAlias: '',
                 isPrivate: false,
+                routeAfterImport: false,
                 intervalMinutes: 1_440,
               }),
             ]),
@@ -243,7 +244,9 @@ export function SourceSubscriptionPanel({
               : '相同检查已执行',
         detail:
           response.body.status === 'imported'
-            ? '新的不可变 Snapshot 已进入导入历史；后续拆分与标签步骤仍由你单独决定。'
+            ? response.body.automationRunId === undefined
+              ? '新的不可变 Snapshot 已进入导入历史；后续拆分与标签步骤仍由你单独决定。'
+              : `已确定性拆分 ${String(response.body.materializedEntryCount ?? 0)} 个 Entry，并生成可在“标签”页处理的分流工作项。`
             : '没有创建重复 Snapshot。',
       });
       await load();
@@ -449,6 +452,18 @@ export function SourceSubscriptionPanel({
                         />
                         导入为隐私文档
                       </label>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={subscription.routeAfterImport}
+                          onChange={(event) => {
+                            updateDraft(subscription.subscriptionId, {
+                              routeAfterImport: event.currentTarget.checked,
+                            });
+                          }}
+                        />
+                        变化后自动拆分并分流
+                      </label>
                       <span>
                         {saved?.lastSuccessAt === undefined
                           ? '尚未成功检查'
@@ -504,7 +519,7 @@ function PanelHeading() {
         <h2 id="source-subscription-title">信源订阅</h2>
       </div>
       <span className="origin-label origin-label--deterministic">
-        发现变化 · 不自动加工
+        变化导入 · 可选确定性分流
       </span>
     </header>
   );
@@ -523,6 +538,7 @@ function toWrite(
     profile: subscription.profile,
     sourceAlias: subscription.sourceAlias,
     isPrivate: subscription.isPrivate,
+    routeAfterImport: subscription.routeAfterImport,
     intervalMinutes: subscription.intervalMinutes,
   });
 }

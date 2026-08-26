@@ -1,10 +1,10 @@
 # StruInfo 知识核心架构
 
-- 状态：M1G-4D Entry 自动路由控制完整性已完成
+- 状态：M1G-5A/5B 所有者工作队列与订阅后确定性分流已完成
 - 最近更新：2026-08-26
 - 相关决策：[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、[ADR 0007](adr/0007-information-entry-first-document-processing.md)、[ADR 0008](adr/0008-current-entry-state-and-portable-personal-data.md)、[ADR 0009](adr/0009-retire-superseded-m1c-runtime.md)、[ADR 0010](adr/0010-entry-centered-formal-knowledge-graph.md)、[ADR 0011](adr/0011-association-derived-formal-graph-edges.md)、[ADR 0012](adr/0012-provider-neutral-processing-runs-and-proposals.md)、[ADR 0013](adr/0013-openai-entry-tag-proposals.md)、[ADR 0014](adr/0014-openai-entry-association-proposals.md)、[ADR 0015](adr/0015-openai-entry-split-proposals.md)、[ADR 0016](adr/0016-manual-entry-fragment-grouping.md)、[ADR 0017](adr/0017-manual-within-fragment-entry-boundaries.md)、[ADR 0018](adr/0018-local-text-file-import.md)、[ADR 0019](adr/0019-local-html-pdf-import.md)、[ADR 0020](adr/0020-explainable-lexical-entry-search.md)、[ADR 0021](adr/0021-query-association-and-result-comparison.md)、[ADR 0022](adr/0022-evidence-bounded-ai-query-synthesis.md)、[ADR 0023](adr/0023-deterministic-entry-exploration-policy.md)、[ADR 0024](adr/0024-versioned-git-source-subscriptions.md)、[ADR 0025](adr/0025-explainable-entry-preference-profile.md)、[ADR 0026](adr/0026-entry-automation-policy-dry-run.md)、[ADR 0027](adr/0027-recoverable-entry-automation-routing-execution.md)
 - 当前实现与未完成项：[当前项目状态与实现清单](current-project-state.md)
-- 当前自动路由控制决策：[ADR 0028](adr/0028-owner-controlled-entry-automation-routing.md)、[ADR 0029](adr/0029-entry-automation-control-integrity.md)
+- 当前自动路由与订阅串联决策：[ADR 0028](adr/0028-owner-controlled-entry-automation-routing.md)、[ADR 0029](adr/0029-entry-automation-control-integrity.md)、[ADR 0030](adr/0030-entry-automation-owner-work-queue.md)、[ADR 0031](adr/0031-subscription-deterministic-entry-routing-chain.md)
 
 ## 1. 核心结论
 
@@ -270,7 +270,7 @@ override，不复制为第二套相似度表；重建只更新底层分数与解
 | 标签     | 三维标签、五档有用/有趣、确定性候选、外部快捷标签/排除/别名；可选 OpenAI tags                                | 自动语义合并和无确认接受                   |
 | 联系     | 确定性相似边、分项解释、增强/削弱/屏蔽/恢复、用户图谱关系                                                    | 复杂事实关系类型                           |
 | 查询     | 标题/正文/标签的精确、包含和近似词法匹配；结构、来源、时间、隐私、一至两跳联系、游标、来源和可选公开证据综合 | 中文分词、语义/向量/RAG、在线混合查询      |
-| 传输     | 58 表、引用 Blob 字节、偏好、Entry v3、Association v3 与 Processing v5；空目标恢复                           | 跨工作区克隆、非空合并、灾难恢复           |
+| 传输     | 59 表、引用 Blob 字节、偏好、Entry v3、Association v3 与 Processing v6；空目标恢复                           | 跨工作区克隆、非空合并、灾难恢复           |
 | 正式知识 | 最高匹配 Entry 中心、有界图谱/列表、边来源、用户编辑、AI 联系提案和精确来源                                  | 树/集合/时间线与复杂本体                   |
 
 没有配置 AI Provider 时，系统显示“AI 未启用”，导入、确定性/人工拆分、标签、联系和查询仍可使用。当前完整配置 OpenAI 后分别发布 `ai_split`、`ai_tags`、`ai_associations` 与 `ai_query_synthesis`；每个 capability 只开启自己的窄界面。
@@ -387,8 +387,8 @@ Windows 本地运行和 Linux 部署都必须使用源码/安装目录之外的�
 6. **联系**：重建分项可解释的候选投影，并保存逐对人工控制；
 7. **查询**：组合文本、结构、来源、时间、隐私和一至两跳联系，稳定分页并返回精确证据；
 8. **探索**：在用户明确选择的当前结果之后，按外部策略从可见直接联系生成有界、可解释的页外候选；
-9. **传输**：五分区个人数据包携带 58 张当前工作区表、引用 Blob 字节、含联系/探索/Entry 偏好和 AutomationPolicy 及信源订阅/游标的偏好、Entry v3 精确区间、Association v3 图谱元数据和 Processing v5 状态；
-10. **处理任务**：Provider-neutral ProcessingRun/提案信封持久化，API 读取/取消；订阅检查写入真实 import 运行；可选 OpenAI split、tags 与 selected-pair association 启动、接受/拒绝；M1G-4B 以 typed claims 持久化自动路由并在失败时补偿，M1G-4C 提供显式所有者控制和审计；总览真实轨道；
+9. **传输**：五分区个人数据包携带 59 张当前工作区表、引用 Blob 字节、含联系/探索/Entry 偏好和 AutomationPolicy 及信源订阅/游标/串联开关的偏好、Entry v3 精确区间、Association v3 图谱元数据和 Processing v6 状态；
+10. **处理任务**：Provider-neutral ProcessingRun/提案信封持久化，API 读取/取消；订阅检查写入真实 import 运行；可选 OpenAI split、tags 与 selected-pair association 启动、接受/拒绝；M1G-4B 以 typed claims 持久化自动路由并在失败时补偿，M1G-4C/D 提供显式所有者控制和审计，M1G-5A 将成功 claim 投影为独立所有者工作队列；总览真实轨道；
 11. **产品壳**：总览、导入、拆分、标签、联系、查询、正式知识七个活动页面；
 12. **必要基础**：迁移、健康检查、日志、生命周期、非重叠订阅调度、共享队列基础、测试、构建与制品审计。
 
@@ -401,7 +401,7 @@ Windows 本地运行和 Linux 部署都必须使用源码/安装目录之外的�
 
 ### 11.3 下一实施顺序
 
-M1E-2 与直接使用增量已经完成。ADR 0012 的 M1E-3A 已接通中性任务边界；ADR 0013/0014/0015 的 M1E-3B/C/D 已选择同一 OpenAI Responses API，分别实现公开 Entry 标签、selected-pair 联系和公开 Snapshot 拆分提案，并把接受转换为既有 Entry revision、graph edge command 或 Entry materialization。ADR 0016 的 M1E-4A 补齐既有 Fragment 边界上的本地人工分组，ADR 0017 的 M1E-4B 进一步允许 Fragment 内 Unicode 标量边界，并让确定性、人工和 AI 接受共用唯一空 Snapshot 原子边界。ADR 0018/0019 的 M1E-5A/5B 把单份本地 Markdown、文本、HTML 和 PDF 接入同一 Evidence 与 Split 主线；ADR 0020 的 M1F-1 补齐精确、包含和近似本地词法查询，ADR 0021 的 M1F-2 让同一 Query 直接开启 Association 遍历并比较最多两条结果，ADR 0022 的 M1F-3 接通会话内公开证据综合，ADR 0023 的 M1G-1 接通独立本地探索策略，ADR 0024 的 M1G-2 接通精确公开 GitHub Markdown 单文件订阅。下一步等待所有者明确选择新的窄边界。偏好学习、基础缺口、新兴信号、观点多样性、第二 Provider、自动接受、私密外发、Provider 检索、RAG、向量、通用网页采集和自动下游处理都不得从已有窄能力推导。当前公开路径可复现的五步主线、图谱或隐私 `PRODUCT_BLOCKER` 仍优先。
+M1E-2 与直接使用增量已经完成。ADR 0012 的 M1E-3A 已接通中性任务边界；ADR 0013/0014/0015 的 M1E-3B/C/D 已选择同一 OpenAI Responses API，分别实现公开 Entry 标签、selected-pair 联系和公开 Snapshot 拆分提案，并把接受转换为既有 Entry revision、graph edge command 或 Entry materialization。ADR 0016 的 M1E-4A 补齐既有 Fragment 边界上的本地人工分组，ADR 0017 的 M1E-4B 进一步允许 Fragment 内 Unicode 标量边界，并让确定性、人工和 AI 接受共用唯一空 Snapshot 原子边界。ADR 0018/0019 的 M1E-5A/5B 把单份本地 Markdown、文本、HTML 和 PDF 接入同一 Evidence 与 Split 主线；ADR 0020 的 M1F-1 补齐精确、包含和近似本地词法查询，ADR 0021 的 M1F-2 让同一 Query 直接开启 Association 遍历并比较最多两条结果，ADR 0022 的 M1F-3 接通会话内公开证据综合，ADR 0023 的 M1G-1 接通独立本地探索策略，ADR 0024 的 M1G-2 接通精确公开 GitHub Markdown 单文件订阅，ADR 0025–0029 完成可解释偏好与可恢复路由控制，ADR 0030/0031 又完成所有者工作队列及默认关闭的订阅后确定性物化/分流。下一步等待所有者明确选择新的窄边界。基础缺口、新兴信号、观点多样性、第二 Provider、自动接受、私密外发、Provider 检索、RAG、向量、通用网页采集和任意自动内容修改都不得从已有窄能力推导。当前公开路径可复现的五步主线、图谱或隐私 `PRODUCT_BLOCKER` 仍优先。
 
 ## 12. 当前验收与未来验收
 
@@ -483,7 +483,7 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 - 人工输入以不可变 Fragment 正文的半开 Unicode 标量区间表示，完整覆盖全部 section Fragment；
 - 区间必须连续、无缺口、无重叠且保持来源顺序；服务端只接收标题、Fragment ID 和区间并重建正文；
 - 前向迁移 `000017` 的可选一对一子表保存精确范围；无范围行继续表示完整 Fragment；
-- Entry Bundle v3 携带第八张范围表，v1/v2 升级为空范围状态；该阶段把个人数据包扩至 56 表，当前又随 M1G-4B Processing v5 扩至 58 表；
+- Entry Bundle v3 携带第八张范围表，v1/v2 升级为空范围状态；该阶段把个人数据包扩至 56 表，M1G-4B Processing v5 扩至 58 表，M1G-5A Processing v6 再扩至 59 表；
 - Split 工作台只读显示每个来源片段，支持鼠标或键盘放置光标并显式执行“在光标处分开”；
 - 继续复用空 Snapshot 原子赢家和显式隐私范围，不改证据、不引入 Provider/依赖，也不迁移已有 Entry 结构。
 
@@ -583,6 +583,22 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 - 审计表位于键盘可聚焦的有界滚动容器，控制面在 320–1440px 下不造成整页水平溢出；
 - 本阶段复用 M1G-4C API，不增加迁移、依赖、Provider、Bundle 版本或下游自动业务权限。M1G-4A–D 至此完成。
 
-### 12.20 延期审核与环境门
+### 12.20 M1G-5A 所有者工作队列边界（已实现）
+
+- `processing_entry_automation_work_item` 一对一引用成功 claim，只保存独立的 pending/completed/dismissed 所有者状态、乐观版本和时间；claim 路由事实不变；
+- 成功 settlement 在同一事务创建工作项，迁移 `000019` 回填既有 succeeded/completed claims；失败和 compensated claim 不创建工作项；
+- 队列组合当前 Entry 后再应用隐私，Entry revision/revisionId 变化显示 stale，不静默隐藏；
+- Tags 次级面板只允许打开 Entry、完成、跳过或重开工作项，不写 Entry、标签、联系、图谱、Query 或 AI 提案；
+- Processing Bundle v6 携带第 13 张 Processing 表，旧 v1–v5 恢复为空队列，完整个人数据包覆盖 59 表。
+
+### 12.21 M1G-5B 订阅后确定性分流边界（已实现）
+
+- 外部单订阅 `routeAfterImport` 默认 false；只有所有者明确开启时，changed import 才继续调用既有确定性 section materializer 和 M1G-4 execution；
+- 来源内容身份排除串联开关，配置身份包含开关；启停可重新检查但不能复制 Evidence 身份；
+- Entry 集合严格限制为本次 Snapshot 的当前 Entries，自动化幂等键绑定 subscription ID 和 source SHA-256；
+- 成功游标只在导入、物化和分流全部成功后推进；失败保留旧游标并依靠现有 Evidence/Entry/run 幂等边界重试；
+- 整个串联本地执行，不调用 Provider，不自动写标签、联系或正式图谱，不接受 AI 提案。
+
+### 12.22 延期审核与环境门
 
 实际内容和所有者体验、真实 Provider 质量/费用、真实 PostgreSQL 正式 TM2、容器/Linux 等价性、公开网络部署、认证授权、生产资源限制、备份恢复演练和发布分发均在项目开发完成后统一开始，当前保持延期或未签发。它们必须如实报告状态，但不能在没有当前产品阻断证据时拖停 Entry 主线开发；活动工作区仍禁止恢复真实资料。单元、集成、构建和合成浏览器验证继续作为开发质量门运行。

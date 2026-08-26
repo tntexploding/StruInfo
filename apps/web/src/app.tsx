@@ -297,6 +297,28 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const listEntryAutomationWorkQueue = useCallback(
+    (includePrivate: boolean) =>
+      apiClient.listInformationEntryAutomationWorkQueue(includePrivate),
+    [apiClient],
+  );
+
+  const updateEntryAutomationWorkItem = useCallback(
+    (
+      runId: string,
+      claimOrdinal: number,
+      body: Parameters<
+        M1cApiClient['updateInformationEntryAutomationWorkItem']
+      >[2],
+    ) =>
+      apiClient.updateInformationEntryAutomationWorkItem(
+        runId,
+        claimOrdinal,
+        body,
+      ),
+    [apiClient],
+  );
+
   useEffect(() => {
     const controller = new AbortController();
     globalThis.queueMicrotask(() => {
@@ -865,6 +887,8 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onListEntryAutomationExecutions={listEntryAutomationExecutions}
           onLoadEntryAutomationExecution={loadEntryAutomationExecution}
           onLoadEntryAutomationPolicy={loadEntryAutomationPolicy}
+          onListEntryAutomationWorkQueue={listEntryAutomationWorkQueue}
+          onUpdateEntryAutomationWorkItem={updateEntryAutomationWorkItem}
           onRejectAiTagProposal={rejectAiTagProposal}
           onRevise={reviseInformationEntry}
           onReviseDocumentTags={reviseInformationDocumentTags}

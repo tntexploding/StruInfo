@@ -1,12 +1,20 @@
 import {createHash} from 'node:crypto';
 
-import {deriveUuidV5} from '../entries/index.js';
+import {
+  deriveUuidV5,
+  prepareSplitInformationEntries,
+  type InformationEntryEmptySnapshotRepositoryPort,
+} from '../entries/index.js';
 import {
   importMarkdownEvidence,
+  materializeEvidenceSnapshot,
+  type EvidenceReadRepositoryPort,
   type EvidenceRepositoryPort,
 } from '../evidence/index.js';
 import {
   deriveProcessingRunId,
+  executeInformationEntryAutomation,
+  type EntryAutomationExecutionRepositoryPort,
   type ProcessingRunRepositoryPort,
 } from '../processing/index.js';
 import type {BlobStore} from '../../storage/blob_store.js';
@@ -36,6 +44,7 @@ export interface SourceSubscriptionWrite {
   readonly profile: 'commonmark-v1' | 'ruanyf-weekly-v1';
   readonly sourceAlias: string;
   readonly isPrivate: boolean;
+  readonly routeAfterImport: boolean;
   readonly intervalMinutes: number;
 }
 
@@ -77,6 +86,9 @@ export type SourceSubscriptionServiceErrorCode =
   | 'source_subscription_run_invalid'
   | 'source_import_rejected'
   | 'source_import_unavailable'
+  | 'source_subscription_automation_not_ready'
+  | 'source_subscription_automation_failed'
+  | 'source_subscription_materialization_failed'
   | 'source_subscription_preferences_unavailable';
 
 export class SourceSubscriptionServiceError extends Error {
@@ -94,6 +106,8 @@ export interface SourceSubscriptionRunResult {
   readonly runId: string;
   readonly subscriptionId: string;
   readonly snapshotId?: string;
+  readonly automationRunId?: string;
+  readonly materializedEntryCount?: number;
 }
 
 export interface SourceSubscriptionServicePort {
@@ -121,6 +135,9 @@ export interface SourceSubscriptionServiceDependencies {
   readonly reader: GitSourceSubscriptionReaderPort;
   readonly blobStore: BlobStore;
   readonly evidence: EvidenceRepositoryPort;
+  readonly evidenceRead?: EvidenceReadRepositoryPort;
+  readonly entries?: InformationEntryEmptySnapshotRepositoryPort;
+  readonly automationExecutions?: EntryAutomationExecutionRepositoryPort;
   readonly importEvidence?: typeof importMarkdownEvidence;
   readonly now?: () => string;
 }
@@ -385,18 +402,32 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
             : 'source_import_rejected',
         );
       }
+      const routed = subscription.routeAfterImport
+        ? await this.#routeImportedSnapshot(
+            subscription,
+            imported.snapshotId,
+            sourceSha256,
+          )
+        : undefined;
       await this.#recordSubscriptionState(subscription, identity, {
         lastAttemptAt: attemptAt,
         lastSuccessAt: this.#now(),
         lastRunId: runId,
         cursor: Object.freeze({commitSha: read.commitSha, sourceSha256}),
       });
-      await this.#completeRun(runId, 3, '新版本已保存为来源 Snapshot');
+      await this.#completeRun(
+        runId,
+        3,
+        routed === undefined
+          ? '新版本已保存为来源 Snapshot'
+          : '新版本已保存、拆分并完成自动分流',
+      );
       return Object.freeze({
         outcome: 'imported',
         runId,
         subscriptionId: subscription.subscriptionId,
         snapshotId: imported.snapshotId,
+        ...(routed ?? {}),
       });
     } catch (error) {
       const code = sourceSubscriptionErrorCode(error);
@@ -418,6 +449,106 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
       }
       throw new SourceSubscriptionServiceError(code);
     }
+  }
+
+  async #routeImportedSnapshot(
+    subscription: Readonly<ReviewSourceSubscription>,
+    snapshotId: string,
+    sourceSha256: string,
+  ): Promise<
+    Readonly<{automationRunId: string; materializedEntryCount: number}>
+  > {
+    const evidenceRead = this.#dependencies.evidenceRead;
+    const entries = this.#dependencies.entries;
+    const automationExecutions = this.#dependencies.automationExecutions;
+    if (
+      evidenceRead === undefined ||
+      entries === undefined ||
+      automationExecutions === undefined
+    ) {
+      throw new SourceSubscriptionServiceError(
+        'source_subscription_automation_not_ready',
+      );
+    }
+    const preferences = await this.#loadPreferences();
+    const policy = preferences.entryAutomationPolicy;
+    const profile = preferences.entryPreferenceProfile;
+    if (
+      policy === undefined ||
+      profile === undefined ||
+      !policy.enabled ||
+      policy.paused ||
+      !profile.enabled ||
+      policy.profileRevision !== profile.revision
+    ) {
+      throw new SourceSubscriptionServiceError(
+        'source_subscription_automation_not_ready',
+      );
+    }
+    const snapshot = await evidenceRead.loadSnapshot(
+      this.#dependencies.workspaceId,
+      snapshotId,
+    );
+    if (
+      snapshot === undefined ||
+      (snapshot.isPrivate === true) !== subscription.isPrivate
+    ) {
+      throw new SourceSubscriptionServiceError(
+        'source_subscription_materialization_failed',
+      );
+    }
+    const materialized = await materializeEvidenceSnapshot(
+      snapshot,
+      this.#dependencies.blobStore,
+    );
+    const prepared = prepareSplitInformationEntries(materialized);
+    if (prepared.length === 0) {
+      throw new SourceSubscriptionServiceError(
+        'source_subscription_materialization_failed',
+      );
+    }
+    await entries.materializeEntriesIfSnapshotEmpty(prepared);
+    const current = (
+      await entries.loadCurrentEntries(this.#dependencies.workspaceId, true)
+    ).filter((entry) => entry.snapshotId === snapshotId);
+    if (current.length === 0) {
+      throw new SourceSubscriptionServiceError(
+        'source_subscription_materialization_failed',
+      );
+    }
+    const result = await executeInformationEntryAutomation(
+      {
+        repository: automationExecutions,
+        entries,
+        preferences: this.#dependencies.preferences,
+      },
+      {
+        workspaceId: this.#dependencies.workspaceId,
+        idempotencyKey: `source-route:${subscription.subscriptionId}:${sourceSha256}`,
+        includePrivate: subscription.isPrivate,
+        expectedPolicyRevision: policy.revision,
+        expectedProfileRevision: profile.revision,
+        expectedEntries: Object.freeze(
+          current.map((entry) =>
+            Object.freeze({entryId: entry.entryId, revision: entry.revision}),
+          ),
+        ),
+      },
+    );
+    if (result.status === 'not_ready') {
+      throw new SourceSubscriptionServiceError(
+        'source_subscription_automation_not_ready',
+      );
+    }
+    if (result.status !== 'succeeded') {
+      throw new SourceSubscriptionServiceError(
+        'source_subscription_automation_failed',
+      );
+    }
+    return Object.freeze({
+      automationRunId: result.runId,
+      materializedEntryCount: current.length,
+    });
   }
 
   async #completeRun(
@@ -539,7 +670,7 @@ function subscriptionImportInput(
   sourceSha256: string,
   capturedAt: string,
 ) {
-  const sourceIdentity = sourceConfigurationIdentity(subscription);
+  const sourceIdentity = sourceContentIdentity(subscription);
   const resourceId = deriveUuidV5(
     workspaceId,
     `struinfo:source-subscription-resource:v1:${subscription.subscriptionId}:${sourceIdentity}`,
@@ -597,6 +728,24 @@ function subscriptionImportInput(
 }
 
 function sourceConfigurationIdentity(
+  subscription: Readonly<ReviewSourceSubscription>,
+): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify([
+        subscription.repositoryUri,
+        subscription.repositoryRef,
+        subscription.repositoryPath,
+        subscription.profile,
+        subscription.sourceAlias,
+        subscription.isPrivate,
+        subscription.routeAfterImport,
+      ]),
+    )
+    .digest('hex');
+}
+
+function sourceContentIdentity(
   subscription: Readonly<ReviewSourceSubscription>,
 ): string {
   return createHash('sha256')

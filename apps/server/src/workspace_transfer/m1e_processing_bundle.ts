@@ -10,8 +10,11 @@ import {
 import type {WorkspaceBundleSectionCodec} from './workspace_bundle.js';
 
 export const M1E_PROCESSING_BUNDLE_SECTION_TYPE = 'struinfo.m1e-processing';
-export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 5;
-export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v5';
+export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 6;
+export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v6';
+export const M1E_PROCESSING_VERSION_FIVE_BUNDLE_SECTION_VERSION = 5;
+export const M1E_PROCESSING_VERSION_FIVE_BUNDLE_SCHEMA =
+  'struinfo.m1e-processing.v5';
 export const M1E_PROCESSING_VERSION_FOUR_BUNDLE_SECTION_VERSION = 4;
 export const M1E_PROCESSING_VERSION_FOUR_BUNDLE_SCHEMA =
   'struinfo.m1e-processing.v4';
@@ -167,7 +170,20 @@ export const M1E_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescript
       'created_at',
       'finished_at',
     ]),
+    table('processing_entry_automation_work_item', [
+      'workspace_id',
+      'run_id',
+      'claim_ordinal',
+      'state',
+      'current_version',
+      'created_at',
+      'updated_at',
+      'resolved_at',
+    ]),
   ]);
+
+const VERSION_FIVE_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
+  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 12));
 
 const VERSION_FOUR_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
   Object.freeze(M1E_PROCESSING_TABLES.slice(0, 10));
@@ -187,6 +203,16 @@ export const M1E_PROCESSING_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     version: M1E_PROCESSING_BUNDLE_SECTION_VERSION,
     encode: normalizeM1eProcessingSnapshot,
     decode: normalizeM1eProcessingSnapshot,
+  });
+
+export const M1E_PROCESSING_VERSION_FIVE_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: M1E_PROCESSING_VERSION_FIVE_BUNDLE_SECTION_VERSION,
+    encode: normalizeVersionFiveSnapshot,
+    decode(payload: JsonValue): unknown {
+      return upgradePreviousSnapshot(normalizeVersionFiveSnapshot(payload));
+    },
   });
 
 export const M1E_PROCESSING_VERSION_FOUR_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
@@ -236,6 +262,20 @@ export function normalizeM1eProcessingSnapshot(
     M1E_PROCESSING_BUNDLE_SCHEMA,
     M1E_PROCESSING_TABLES,
   ) as M1eProcessingSnapshot;
+}
+
+function normalizeVersionFiveSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1E_PROCESSING_VERSION_FIVE_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1E_PROCESSING_VERSION_FIVE_BUNDLE_SCHEMA,
+    VERSION_FIVE_PROCESSING_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1E_PROCESSING_VERSION_FIVE_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+  }>;
 }
 
 function normalizeVersionFourSnapshot(value: unknown): Readonly<{
