@@ -72,11 +72,14 @@ import {
   AiSplitProposalServiceError,
   AiTagProposalServiceError,
   executeInformationEntryAutomation,
+  listEntryAutomationWorkQueue,
+  updateEntryAutomationWorkItem,
   type AiAssociationProposalServicePort,
   type AiSplitProposalServicePort,
   type AiTagProposalServicePort,
   type EntryAutomationExecution,
   type EntryAutomationExecutionRepositoryPort,
+  type EntryAutomationWorkQueueRepositoryPort,
   type ExecuteEntryAutomationResult,
   type ProcessingProposal,
   type ProcessingRun,
@@ -130,6 +133,7 @@ export interface M1cApiServiceDependencies {
   readonly informationEntryAssociationRepository: InformationEntryAssociationRepositoryPort;
   readonly processingRunRepository: ProcessingRunRepositoryPort;
   readonly entryAutomationExecutionRepository?: EntryAutomationExecutionRepositoryPort;
+  readonly entryAutomationWorkQueueRepository?: EntryAutomationWorkQueueRepositoryPort;
   readonly sourceSubscriptions?: SourceSubscriptionServicePort;
   readonly aiSplitProposals?: AiSplitProposalServicePort;
   readonly aiTagProposals?: AiTagProposalServicePort;
@@ -167,6 +171,14 @@ export interface M1cApiServicePort {
   ): Promise<M1cHttpResult>;
   loadInformationEntryAutomationExecution(
     runId: string,
+  ): Promise<M1cHttpResult>;
+  listInformationEntryAutomationWorkQueue(
+    includePrivate?: unknown,
+  ): Promise<M1cHttpResult>;
+  updateInformationEntryAutomationWorkItem(
+    runId: string,
+    claimOrdinal: string,
+    body: unknown,
   ): Promise<M1cHttpResult>;
   importMarkdown(body: unknown): Promise<M1cHttpResult>;
   importDocument(body: unknown): Promise<M1cHttpResult>;
@@ -1226,6 +1238,83 @@ export class M1cApiService implements M1cApiServicePort {
             status: 'ok',
             execution: entryAutomationExecutionResponse(execution),
           });
+    } catch {
+      return entryAutomationFailure();
+    }
+  }
+
+  public async listInformationEntryAutomationWorkQueue(
+    includePrivateInput: unknown = false,
+  ): Promise<M1cHttpResult> {
+    const repository = this.#dependencies.entryAutomationWorkQueueRepository;
+    if (repository === undefined) return entryAutomationUnavailable();
+    if (typeof includePrivateInput !== 'boolean') {
+      return inputFailure('query.includePrivate');
+    }
+    try {
+      const result = await listEntryAutomationWorkQueue(
+        {
+          repository,
+          entries: this.#dependencies.informationEntryRepository,
+        },
+        this.#dependencies.workspaceId,
+        includePrivateInput,
+      );
+      return result.status === 'complete'
+        ? httpResult(200, {...result, status: 'ok'})
+        : inputFailure('query.includePrivate');
+    } catch {
+      return entryAutomationFailure();
+    }
+  }
+
+  public async updateInformationEntryAutomationWorkItem(
+    runId: string,
+    claimOrdinalInput: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const repository = this.#dependencies.entryAutomationWorkQueueRepository;
+    if (repository === undefined) return entryAutomationUnavailable();
+    const claimOrdinal = decodeNonNegativeInteger(claimOrdinalInput);
+    if (
+      !CANONICAL_UUID.test(runId) ||
+      claimOrdinal === undefined ||
+      !isRecord(body) ||
+      typeof body.expectedVersion !== 'number' ||
+      typeof body.state !== 'string' ||
+      typeof body.includePrivate !== 'boolean'
+    ) {
+      return inputFailure('body');
+    }
+    try {
+      const result = await updateEntryAutomationWorkItem(
+        {
+          repository,
+          entries: this.#dependencies.informationEntryRepository,
+        },
+        {
+          workspaceId: this.#dependencies.workspaceId,
+          runId,
+          claimOrdinal,
+          expectedVersion: body.expectedVersion,
+          state: body.state as 'pending' | 'completed' | 'dismissed',
+          includePrivate: body.includePrivate,
+        },
+      );
+      if (result.status === 'invalid_request') return inputFailure('body');
+      if (result.status === 'not_found') {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'entry_automation_work_item_not_found'}),
+        });
+      }
+      if (result.status === 'stale') {
+        return httpResult(409, {
+          status: 'stale',
+          issue: Object.freeze({code: 'stale_entry_automation_work_item'}),
+        });
+      }
+      return httpResult(200, result);
     } catch {
       return entryAutomationFailure();
     }
@@ -3773,6 +3862,18 @@ function decodeProcessingRunLimit(value: unknown): number | undefined {
     : undefined;
 }
 
+function decodeNonNegativeInteger(value: unknown): number | undefined {
+  const candidate =
+    typeof value === 'string' && /^(?:0|[1-9][0-9]*)$/u.test(value)
+      ? Number(value)
+      : value;
+  return typeof candidate === 'number' &&
+    Number.isSafeInteger(candidate) &&
+    candidate >= 0
+    ? candidate
+    : undefined;
+}
+
 function decodeSourceSubscriptionReplace(body: unknown):
   | Readonly<{
       expectedRevision: number;
@@ -3797,6 +3898,7 @@ function decodeSourceSubscriptionReplace(body: unknown):
     'repositoryPath',
     'repositoryRef',
     'repositoryUri',
+    'routeAfterImport',
     'sourceAlias',
     'subscriptionId',
   ];
@@ -3829,6 +3931,7 @@ function decodeSourceSubscriptionReplace(body: unknown):
           profile: subscription.profile,
           sourceAlias: subscription.sourceAlias,
           isPrivate: subscription.isPrivate,
+          routeAfterImport: subscription.routeAfterImport,
           intervalMinutes: subscription.intervalMinutes,
         }),
       ),

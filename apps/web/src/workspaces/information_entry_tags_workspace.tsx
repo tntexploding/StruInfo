@@ -14,6 +14,7 @@ import {
 } from './information_entry_components.js';
 import {InformationEntryAiTags} from './information_entry_ai_tags.js';
 import {InformationEntryAutomationPolicyPanel} from './information_entry_automation_policy_panel.js';
+import {InformationEntryAutomationWorkQueue} from './information_entry_automation_work_queue.js';
 import {InformationEntryPreferenceProfilePanel} from './information_entry_preference_profile_panel.js';
 import {InformationDocumentNavigator} from './information_entry_document_navigation.js';
 import {
@@ -32,6 +33,8 @@ export interface InformationEntryTagsWorkspaceProps extends Pick<
   | 'onListEntryAutomationExecutions'
   | 'onLoadEntryAutomationExecution'
   | 'onLoadEntryAutomationPolicy'
+  | 'onListEntryAutomationWorkQueue'
+  | 'onUpdateEntryAutomationWorkItem'
   | 'onOpenEvidence'
   | 'onRejectAiTagProposal'
   | 'onRevise'
@@ -70,6 +73,8 @@ export function InformationEntryTagsWorkspace({
   onListEntryAutomationExecutions,
   onLoadEntryAutomationExecution,
   onLoadEntryAutomationPolicy,
+  onListEntryAutomationWorkQueue,
+  onUpdateEntryAutomationWorkItem,
   onOpenEvidence,
   onRejectAiTagProposal,
   onRevise,
@@ -309,6 +314,19 @@ export function InformationEntryTagsWorkspace({
           </>
         )}
       </InformationEntryResults>
+
+      <InformationEntryAutomationWorkQueue
+        enabled={automationEnabled}
+        onList={onListEntryAutomationWorkQueue}
+        onUpdate={onUpdateEntryAutomationWorkItem}
+        onOpenEntry={(entry) => {
+          controller.setSelectedEntryId(entry.entryId);
+          controller.setSnapshotId(entry.snapshotId);
+          controller.setTextMode('exact');
+          controller.setTextFields(Object.freeze(['title']));
+          controller.setQuery(entry.value.titlePath);
+        }}
+      />
 
       <InformationEntryPreferenceProfilePanel
         state={entryPreferenceProfile}

@@ -49,6 +49,8 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0027](0027-recoverable-entry-automation-routing-execution.md) | Accepted | Durable idempotent Entry routing claims with exact revalidation, failure pause and compensation |
 | [0028](0028-owner-controlled-entry-automation-routing.md) | Accepted | Owner-controlled policy editing, trial, manual takeover, durable start and routing audit without downstream content mutation |
 | [0029](0029-entry-automation-control-integrity.md) | Accepted | Exact automation-run audit, independent request generations and responsive recovery visibility without new execution authority |
+| [0030](0030-entry-automation-owner-work-queue.md) | Accepted | Successful routing claims become a durable owner work queue without changing immutable execution facts or Entry content |
+| [0031](0031-subscription-deterministic-entry-routing-chain.md) | Accepted | Default-off changed-source chaining reuses Evidence import, deterministic Entry materialization and recoverable routing |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -116,3 +118,14 @@ owner-facing audit path and separating policy, save, trial, execution, list and
 detail request generations. Late responses cannot replace newer visible
 authority, unresolved claims remain explicit, and the responsive Tags control
 surface adds no downstream content-write permission.
+
+ADR 0030 completes M1G-5A by projecting every successfully completed routing
+claim into a separate durable owner work item. Pending/completed/dismissed state
+is optimistic and reversible, stale Entry revisions remain visible, and neither
+the work item nor its UI changes the immutable claim or Entry content.
+
+ADR 0031 completes M1G-5B by adding one default-off subscription switch that
+chains a changed exact GitHub Markdown source through the existing Evidence
+import, deterministic empty-Snapshot Entry materialization and M1G-4 execution.
+The successful cursor advances only after the whole chain succeeds; no AI or
+automatic content-edit authority is implied.

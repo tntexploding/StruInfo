@@ -31,6 +31,9 @@ import type {
   EntryPreferenceProfile,
   EntryPreferenceRule,
   EntryAutomationPolicy,
+  EntryAutomationWorkItemState,
+  InformationEntryAutomationWorkItemWriteResponse,
+  InformationEntryAutomationWorkQueueResponse,
 } from '../api/m1c_api_contract.js';
 import {DOMAIN_LABELS, TYPE_LABELS} from './information_entry_shared.js';
 
@@ -181,6 +184,20 @@ export interface InformationEntryServices {
   readonly onLoadEntryAutomationExecution: (
     runId: string,
   ) => Promise<M1cHttpResponse<InformationEntryAutomationExecutionResponse>>;
+  readonly onListEntryAutomationWorkQueue: (
+    includePrivate: boolean,
+  ) => Promise<M1cHttpResponse<InformationEntryAutomationWorkQueueResponse>>;
+  readonly onUpdateEntryAutomationWorkItem: (
+    runId: string,
+    claimOrdinal: number,
+    body: Readonly<{
+      expectedVersion: number;
+      state: EntryAutomationWorkItemState;
+      includePrivate: boolean;
+    }>,
+  ) => Promise<
+    M1cHttpResponse<InformationEntryAutomationWorkItemWriteResponse>
+  >;
   readonly onOpenEvidence: (
     snapshotId: string,
     fragmentId: string | undefined,

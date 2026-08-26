@@ -2746,6 +2746,76 @@
   color: var(--si-color-text-muted);
 }
 
+.entry-automation-work-queue {
+  display: grid;
+  gap: var(--si-space-4);
+  margin-block-start: var(--si-space-6);
+  padding: var(--si-space-5);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  border-inline-start: var(--si-space-1) solid var(--si-color-signal);
+  background: var(--si-color-bg-shell);
+}
+
+.entry-automation-work-queue__controls,
+.entry-automation-work-queue__privacy,
+.entry-automation-work-queue__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--si-space-3);
+}
+
+.entry-automation-work-queue__controls {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding-block: var(--si-space-3);
+  border-block: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.entry-automation-work-queue__controls > label:first-child {
+  display: grid;
+  gap: var(--si-space-1);
+}
+
+.entry-automation-work-queue__privacy {
+  color: var(--si-color-text-secondary);
+}
+
+.entry-automation-work-queue__privacy input {
+  accent-color: var(--si-color-signal);
+}
+
+.entry-automation-work-queue__list {
+  display: grid;
+  gap: var(--si-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.entry-automation-work-queue__list > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--si-space-4);
+  padding: var(--si-space-4);
+  border: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  background: var(--si-color-surface-1);
+}
+
+.entry-automation-work-queue__list h3,
+.entry-automation-work-queue__list p {
+  margin: 0;
+}
+
+.entry-automation-work-queue__list h3 {
+  margin-block: var(--si-space-1);
+}
+
+.entry-automation-work-queue__list p:last-child {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-sm);
+}
+
 .formal-knowledge-workspace {
   display: grid;
   gap: var(--si-space-6);
@@ -2771,6 +2841,12 @@
     flex-direction: column;
   }
 
+  .entry-automation-work-queue__controls,
+  .entry-automation-work-queue__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .entry-review-score-grid,
   .entry-deterministic-keywords,
   .entry-inline-draft,
@@ -2785,6 +2861,10 @@
   .entry-automation-policy__workbench,
   .entry-automation-run-audit__metadata,
   .entry-automation-run-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .entry-automation-work-queue__list > li {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -2805,6 +2885,12 @@
   .entry-preference-new-rule-grid .secondary-action,
   .entry-automation-policy .primary-action,
   .entry-automation-policy .secondary-action {
+    inline-size: 100%;
+  }
+
+  .entry-automation-work-queue .primary-action,
+  .entry-automation-work-queue .secondary-action,
+  .entry-automation-work-queue .text-action {
     inline-size: 100%;
   }
 

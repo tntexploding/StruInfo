@@ -1,7 +1,7 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1G-2 活动接口
-- 最近核对：2026-08-25
+- 状态：M1G-5B 活动接口
+- 最近核对：2026-08-26
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
 
@@ -28,7 +28,7 @@
 | `PUT`  | `/api/v1/preferences/review`                                                          | 整体保存当前偏好文件；未提交的版本化策略保持现值                                      |
 | `GET`  | `/api/v1/source-subscriptions`                                                        | 读取外部版本化 GitHub Markdown 单文件订阅、运行状态和成功游标                         |
 | `PUT`  | `/api/v1/source-subscriptions`                                                        | 以期望修订整体替换订阅配置；运行状态与游标由服务端维护                                |
-| `POST` | `/api/v1/source-subscriptions/:subscriptionId/run`                                    | 使用 `requestKey` 立即检查一个已保存订阅并在变化时复用 Evidence 导入                  |
+| `POST` | `/api/v1/source-subscriptions/:subscriptionId/run`                                    | 使用 `requestKey` 检查订阅；变化时导入，并可按默认关闭开关确定性物化/分流             |
 | `POST` | `/api/v1/imports/markdown`                                                            | 原子导入手动/Git Markdown 或本地 UTF-8 Markdown/文本文件、来源、Blob、结构和 Fragment |
 | `POST` | `/api/v1/entries/materialize`                                                         | 从一个用户选择的空 Snapshot 按 section 规则原子生成 Entry                             |
 | `POST` | `/api/v1/entries/materialize/manual`                                                  | 从标题和完整有序 Fragment 标量区间原子生成人工 Entry 结构                             |
@@ -47,6 +47,8 @@
 | `POST` | `/api/v1/entries/automation/runs`                                                     | 用幂等键和精确修订账本显式启动一次持久路由执行                                        |
 | `GET`  | `/api/v1/entries/automation/runs?limit=`                                              | 列出最近 1–20 个 typed 自动路由运行及 claims                                          |
 | `GET`  | `/api/v1/entries/automation/runs/:runId`                                              | 读取一个精确自动路由运行及 claims                                                     |
+| `GET`  | `/api/v1/entries/automation/work-queue?includePrivate=`                               | 读取成功 claim 派生的隐私过滤所有者工作队列                                           |
+| `PUT`  | `/api/v1/entries/automation/work-queue/:runId/:claimOrdinal`                          | 以期望版本完成、跳过或重新打开一个工作项                                              |
 | `GET`  | `/api/v1/entries/:entryId/tag-proposals`                                              | 列出一个 Entry 的有界 tags 提案                                                       |
 | `POST` | `/api/v1/entries/:entryId/tag-proposals/start`                                        | 用户显式请求一个公开 Entry 的 OpenAI 标签提案                                         |
 | `POST` | `/api/v1/entries/:entryId/tag-proposals/:proposalId/accept`                           | 接受提案并通过现有 Entry revision 保存标签                                            |
@@ -84,9 +86,9 @@ API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单�
 
 Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和正文前置文字映射到这些字段。本地文件默认使用基础文件名加 SHA-256 作为 portable source key，不提交目录路径；无前置文字时 Base64 解码后的字节保持原样。相同命令可重放；同键异内容返回冲突。
 
-三个 `/source-subscriptions` 操作只管理精确公开 GitHub repository/ref 下的单个 Markdown 路径。GET 返回 revision、可编辑字段和服务端维护的 last-attempt/last-success/run/cursor；PUT 接受 `{expectedRevision, subscriptions}`，每个写入项必须完整给出稳定 UUID、标签、enabled、repositoryUri、repositoryRef、repositoryPath、profile、sourceAlias、isPrivate 和 15–10080 分钟间隔，不能伪造运行字段。POST 只接受 `{requestKey}`；即使 enabled 为 false 也可手动运行。
+三个 `/source-subscriptions` 操作只管理精确公开 GitHub repository/ref 下的单个 Markdown 路径。GET 返回 revision、可编辑字段和服务端维护的 last-attempt/last-success/run/cursor；PUT 接受 `{expectedRevision, subscriptions}`，每个写入项必须完整给出稳定 UUID、标签、enabled、repositoryUri、repositoryRef、repositoryPath、profile、sourceAlias、isPrivate、默认关闭的 `routeAfterImport` 和 15–10080 分钟间隔，不能伪造运行字段。POST 只接受 `{requestKey}`；即使 enabled 为 false 也可手动运行。
 
-每次运行先建立 import 阶段 ProcessingRun，再读取 Git commit 与精确文件。字节变化时调用同一个 Markdown Evidence import；相同字节只推进 cursor，不重复生成 Snapshot。失败只返回稳定 source-subscription code，保留最后成功 cursor。`source_subscriptions` capability 表示这三个本地边界可用；它不允许任意 URL、仓库目录扫描、仓库代码执行、自动 Entry/标签/联系或 AI 接受。
+每次运行先建立 import 阶段 ProcessingRun，再读取 Git commit 与精确文件。字节变化时调用同一个 Markdown Evidence import；相同字节只推进 cursor，不重复生成 Snapshot。`routeAfterImport=false` 时在导入后结束；明确开启后，服务端继续复用确定性 section Entry 物化和现有可恢复自动路由，返回 automation run ID 与本 Snapshot 的 Entry 数。只有整个链成功才推进成功 cursor，失败保留旧 cursor 以便幂等重试。`source_subscriptions` capability 不允许任意 URL、仓库目录扫描、仓库代码执行、AI 调用、自动标签/联系/图谱修改或提案接受。
 
 ### 3.2 拆分
 
@@ -118,6 +120,8 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 M1G-4C 的六个 `/entries/automation/*` 操作把外部 AutomationPolicy、M1G-4A 只读试算和 M1G-4B typed execution 接入同一 Tags 次级控制面。策略 PUT 必须提供 `expectedRevision` 并绑定当前 Profile revision；启用/禁用和暂停/恢复都是显式新修订。trial 接受草稿策略、当次隐私范围、可选 Entry 修订账本和人工接管 ID，只返回路由、原因和计数。run start 只接受已保存且 ready 的精确修订、幂等键和同一账本；列表/详情只返回运行、修订、route/reason/status 和时间，不返回正文、来源 Blob、请求摘要或幂等键。M1G-4D 明确规定列表只是摘要导航：Web 必须在用户选择后调用精确详情操作，独立显示未结算/补偿 claim，并用分离的请求代次阻止迟到列表或详情覆盖更新状态。
 
 这些路由完成的是所有者控制与路由审计，不是具体自动处理。completed claim 不会修改 Entry、评分、标签、联系、图谱、查询或 AI 提案，`defer_candidate` 也不隐藏或删除内容。私密 Entry 只有在当前 trial/run 显式 `includePrivate=true` 时参与，且整个过程保持本地、无 Provider。
+
+M1G-5A 的两个 work-queue 操作在上述审计之外提供独立所有者状态。GET 最多返回 100 条当前可见 Entry 工作项，标明 claim 路由/原因、pending/completed/dismissed 和 Entry 是否已换修订；PUT 接受 `{expectedVersion, state, includePrivate}`。更新工作项不更新 Entry 或 claim。未显式包含隐私时，隐私工作项按不存在处理。
 
 ### 3.4 联系
 
@@ -170,7 +174,7 @@ M1G-4C 的六个 `/entries/automation/*` 操作把外部 AutomationPolicy、M1G-
 
 ## 5. 个人数据包
 
-export 接口生成当前五分区 Bundle，包含 58 张当前工作区表、被引用的 Blob 字节和含版本化联系、探索、Entry 偏好与 AutomationPolicy 的当前偏好文件。Entry v3 section 携带可选精确 Fragment 标量区间；Processing v5 section 携带十张既有任务/提案表以及两张 typed 自动路由执行表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1/v2/v3/v4 保持可读，缺失的新表和偏好字段恢复为空/关闭状态。
+export 接口生成当前五分区 Bundle，包含 59 张当前工作区表、被引用的 Blob 字节和含版本化联系、探索、Entry 偏好、AutomationPolicy 与信源串联开关的当前偏好文件。Entry v3 section 携带可选精确 Fragment 标量区间；Processing v6 section 携带十张既有任务/提案表、两张 typed 自动路由执行表和一张所有者工作队列表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1–v5 保持可读，缺失的新表和偏好字段恢复为空/关闭状态。
 
 Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不进入 Git 或应用安装树。
 

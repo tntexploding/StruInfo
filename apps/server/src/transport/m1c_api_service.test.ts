@@ -23,6 +23,9 @@ import type {
   EntryAutomationExecutionInitialize,
   EntryAutomationExecutionRepositoryPort,
   EntryAutomationExecutionSettle,
+  EntryAutomationWorkItem,
+  EntryAutomationWorkItemState,
+  EntryAutomationWorkQueueRepositoryPort,
   ProcessingRun,
   ProcessingRunWriteOutcome,
 } from '../modules/processing/index.js';
@@ -466,6 +469,7 @@ describe('M1cApiService', () => {
     const service = createService({
       reviewPreferences: preferences,
       entryAutomationExecutionRepository: executions,
+      entryAutomationWorkQueueRepository: executions,
       informationEntryRepository: {
         materializeEntries: () =>
           Promise.resolve({outcome: 'existing', createdCount: 0}),
@@ -578,6 +582,32 @@ describe('M1cApiService', () => {
     ).resolves.toMatchObject({
       statusCode: 200,
       body: {status: 'ok', execution: {status: 'succeeded'}},
+    });
+    await expect(
+      service.listInformationEntryAutomationWorkQueue(false),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        items: [
+          {state: 'pending', route: 'manual_review', stale: false},
+          {state: 'pending', route: 'advance_candidate', stale: false},
+        ],
+      },
+    });
+    await expect(
+      service.updateInformationEntryAutomationWorkItem(
+        executions.current?.runId ?? '',
+        '0',
+        {
+          expectedVersion: 1,
+          state: 'completed',
+          includePrivate: false,
+        },
+      ),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'applied', item: {state: 'completed', version: 2}},
     });
 
     await expect(
@@ -2518,6 +2548,7 @@ describe('M1E provider-neutral processing API', () => {
       profile: 'commonmark-v1' as const,
       sourceAlias: 'synthetic-source',
       isPrivate: false,
+      routeAfterImport: false,
       intervalMinutes: 1_440,
     });
     const replace = vi.fn(() =>
@@ -2856,8 +2887,13 @@ class MemoryAutomationPreferences implements ReviewPreferencesStore {
   }
 }
 
-class MemoryAutomationExecutionRepository implements EntryAutomationExecutionRepositoryPort {
+class MemoryAutomationExecutionRepository
+  implements
+    EntryAutomationExecutionRepositoryPort,
+    EntryAutomationWorkQueueRepositoryPort
+{
   public current: Readonly<EntryAutomationExecution> | undefined;
+  public workItems: EntryAutomationWorkItem[] = [];
 
   public loadExecution(
     _workspaceId: string,
@@ -2941,6 +2977,66 @@ class MemoryAutomationExecutionRepository implements EntryAutomationExecutionRep
         ),
       ),
     });
+    if (settle.status === 'succeeded') {
+      this.workItems = this.current.claims.map((claim) => ({
+        workspaceId: claim.workspaceId,
+        runId: claim.runId,
+        claimOrdinal: claim.ordinal,
+        entryId: claim.entryId,
+        entryRevision: claim.entryRevision,
+        entryRevisionId: claim.entryRevisionId,
+        route: claim.route,
+        reason: claim.reason,
+        state: 'pending',
+        version: 1,
+        createdAt: '2040-01-02T03:04:06.000Z',
+        updatedAt: '2040-01-02T03:04:06.000Z',
+      }));
+    }
+    return Promise.resolve('applied');
+  }
+
+  public listWorkItems(): Promise<
+    readonly Readonly<EntryAutomationWorkItem>[]
+  > {
+    return Promise.resolve(Object.freeze([...this.workItems]));
+  }
+
+  public loadWorkItem(
+    _workspaceId: string,
+    runId: string,
+    claimOrdinal: number,
+  ): Promise<Readonly<EntryAutomationWorkItem> | undefined> {
+    return Promise.resolve(
+      this.workItems.find(
+        (item) => item.runId === runId && item.claimOrdinal === claimOrdinal,
+      ),
+    );
+  }
+
+  public updateWorkItem(
+    _workspaceId: string,
+    runId: string,
+    claimOrdinal: number,
+    expectedVersion: number,
+    state: EntryAutomationWorkItemState,
+  ): Promise<ProcessingRunWriteOutcome> {
+    const index = this.workItems.findIndex(
+      (item) => item.runId === runId && item.claimOrdinal === claimOrdinal,
+    );
+    const current = this.workItems[index];
+    if (current === undefined) return Promise.resolve('not_found');
+    if (current.version !== expectedVersion) return Promise.resolve('stale');
+    if (current.state === state) return Promise.resolve('unchanged');
+    const withoutResolution = {...current};
+    delete withoutResolution.resolvedAt;
+    this.workItems[index] = {
+      ...withoutResolution,
+      state,
+      version: current.version + 1,
+      updatedAt: '2040-01-02T04:00:00.000Z',
+      ...(state === 'pending' ? {} : {resolvedAt: '2040-01-02T04:00:00.000Z'}),
+    };
     return Promise.resolve('applied');
   }
 }

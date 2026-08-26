@@ -126,6 +126,7 @@ describe('LocalReviewPreferencesStore', () => {
             profile: 'commonmark-v1',
             sourceAlias: 'synthetic-source',
             isPrivate: false,
+            routeAfterImport: false,
             intervalMinutes: 1_440,
           },
         ],
@@ -379,6 +380,7 @@ describe('LocalReviewPreferencesStore', () => {
               profile: 'commonmark-v1',
               sourceAlias: 'synthetic-source',
               isPrivate: false,
+              routeAfterImport: false,
               intervalMinutes: 1_440,
               cursor: {
                 commitSha: '1'.repeat(40),

@@ -178,6 +178,9 @@ export async function startRoleRuntime(
       new GithubGitSourceSubscriptionReader(),
     blobStore: storage.blobStore,
     evidence: repositories.evidence,
+    evidenceRead: repositories.evidenceRead,
+    entries: repositories.informationEntries,
+    automationExecutions: repositories.entryAutomationExecutions,
   });
   if (config.role === 'scheduler' || config.role === 'all') {
     starters.push(() =>
@@ -206,6 +209,8 @@ export async function startRoleRuntime(
           processingRunRepository: repositories.processingRuns,
           entryAutomationExecutionRepository:
             repositories.entryAutomationExecutions,
+          entryAutomationWorkQueueRepository:
+            repositories.entryAutomationWorkQueue,
           sourceSubscriptions,
           ...(aiSplitProposals === undefined ? {} : {aiSplitProposals}),
           ...(aiTagProposals === undefined ? {} : {aiTagProposals}),

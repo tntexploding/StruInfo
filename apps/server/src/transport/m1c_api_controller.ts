@@ -185,6 +185,36 @@ export class M1cApiController {
     );
   }
 
+  @Get('entries/automation/work-queue')
+  public async informationEntryAutomationWorkQueue(
+    @Query('includePrivate') includePrivate: string | undefined,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.listInformationEntryAutomationWorkQueue(
+        parseOptionalBooleanQuery(includePrivate),
+      ),
+    );
+  }
+
+  @Put('entries/automation/work-queue/:runId/:claimOrdinal')
+  public async updateInformationEntryAutomationWorkItem(
+    @Param('runId') runId: string,
+    @Param('claimOrdinal') claimOrdinal: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.updateInformationEntryAutomationWorkItem(
+        runId,
+        claimOrdinal,
+        body,
+      ),
+    );
+  }
+
   @Post('imports/markdown')
   public async importMarkdown(
     @Body() body: unknown,

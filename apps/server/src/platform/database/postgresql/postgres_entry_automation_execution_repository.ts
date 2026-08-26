@@ -1,5 +1,6 @@
 import {
   ENTRY_AUTOMATION_CLAIM_STATUSES,
+  ENTRY_AUTOMATION_WORK_ITEM_STATES,
   PROCESSING_RUN_STATUSES,
   type EntryAutomationClaim,
   type EntryAutomationClaimInput,
@@ -7,6 +8,9 @@ import {
   type EntryAutomationExecutionInitialize,
   type EntryAutomationExecutionRepositoryPort,
   type EntryAutomationExecutionSettle,
+  type EntryAutomationWorkItem,
+  type EntryAutomationWorkItemState,
+  type EntryAutomationWorkQueueRepositoryPort,
   type ProcessingRunWriteOutcome,
 } from '../../../modules/processing/index.js';
 import {
@@ -73,6 +77,38 @@ const READ_CURRENT_ENTRY_REVISIONS_SQL = sql(
   'ORDER BY entry_id',
 );
 
+export const READ_ENTRY_AUTOMATION_WORK_ITEMS_SQL = sql(
+  'SELECT work.workspace_id::text, work.run_id::text, work.claim_ordinal,',
+  '  claim.entry_id::text, claim.entry_revision,',
+  '  claim.entry_revision_id::text, claim.route, claim.reason,',
+  '  work.state, work.current_version, work.created_at, work.updated_at,',
+  '  work.resolved_at',
+  'FROM struinfo.processing_entry_automation_work_item AS work',
+  'JOIN struinfo.processing_entry_automation_claim AS claim',
+  '  ON claim.workspace_id = work.workspace_id',
+  '  AND claim.run_id = work.run_id',
+  '  AND claim.claim_ordinal = work.claim_ordinal',
+  'WHERE work.workspace_id = $1',
+  "ORDER BY CASE work.state WHEN 'pending' THEN 0 WHEN 'completed' THEN 1 ELSE 2 END,",
+  '  work.updated_at DESC, work.run_id, work.claim_ordinal',
+  'LIMIT $2',
+);
+
+const READ_ENTRY_AUTOMATION_WORK_ITEM_SQL = sql(
+  'SELECT work.workspace_id::text, work.run_id::text, work.claim_ordinal,',
+  '  claim.entry_id::text, claim.entry_revision,',
+  '  claim.entry_revision_id::text, claim.route, claim.reason,',
+  '  work.state, work.current_version, work.created_at, work.updated_at,',
+  '  work.resolved_at',
+  'FROM struinfo.processing_entry_automation_work_item AS work',
+  'JOIN struinfo.processing_entry_automation_claim AS claim',
+  '  ON claim.workspace_id = work.workspace_id',
+  '  AND claim.run_id = work.run_id',
+  '  AND claim.claim_ordinal = work.claim_ordinal',
+  'WHERE work.workspace_id = $1 AND work.run_id = $2',
+  '  AND work.claim_ordinal = $3',
+);
+
 const LOCK_AUTOMATION_RUN_SQL = sql(
   'SELECT status, current_version',
   'FROM struinfo.processing_run',
@@ -116,6 +152,30 @@ const COMPLETE_AUTOMATION_CLAIMS_SQL = sql(
   "WHERE workspace_id = $1 AND run_id = $2 AND status = 'claimed'",
 );
 
+const INSERT_AUTOMATION_WORK_ITEMS_SQL = sql(
+  'INSERT INTO struinfo.processing_entry_automation_work_item (',
+  '  workspace_id, run_id, claim_ordinal',
+  ') SELECT workspace_id, run_id, claim_ordinal',
+  'FROM struinfo.processing_entry_automation_claim',
+  "WHERE workspace_id = $1 AND run_id = $2 AND status = 'completed'",
+);
+
+const LOCK_AUTOMATION_WORK_ITEM_SQL = sql(
+  'SELECT state, current_version',
+  'FROM struinfo.processing_entry_automation_work_item',
+  'WHERE workspace_id = $1 AND run_id = $2 AND claim_ordinal = $3',
+  'FOR UPDATE',
+);
+
+const UPDATE_AUTOMATION_WORK_ITEM_SQL = sql(
+  'UPDATE struinfo.processing_entry_automation_work_item SET',
+  '  state = $5, current_version = current_version + 1,',
+  '  updated_at = CURRENT_TIMESTAMP,',
+  "  resolved_at = CASE WHEN $5 = 'pending' THEN NULL ELSE CURRENT_TIMESTAMP END",
+  'WHERE workspace_id = $1 AND run_id = $2 AND claim_ordinal = $3',
+  '  AND current_version = $4',
+);
+
 const COMPENSATE_AUTOMATION_CLAIMS_SQL = sql(
   'UPDATE struinfo.processing_entry_automation_claim SET',
   "  status = 'compensated', error_code = $3, finished_at = CURRENT_TIMESTAMP",
@@ -142,7 +202,11 @@ const FAIL_AUTOMATION_RUN_SQL = sql(
 
 type Row = Readonly<Record<string, unknown>>;
 
-export class PostgresEntryAutomationExecutionRepository implements EntryAutomationExecutionRepositoryPort {
+export class PostgresEntryAutomationExecutionRepository
+  implements
+    EntryAutomationExecutionRepositoryPort,
+    EntryAutomationWorkQueueRepositoryPort
+{
   readonly #pool: PostgresPoolBoundary;
 
   public constructor(pool: PostgresPoolBoundary) {
@@ -323,6 +387,16 @@ export class PostgresEntryAutomationExecutionRepository implements EntryAutomati
           ) {
             throw new PostgresAdapterError();
           }
+          if (
+            (
+              await client.query<Row>(INSERT_AUTOMATION_WORK_ITEMS_SQL, [
+                settle.workspaceId,
+                settle.runId,
+              ])
+            ).rowCount !== claims.length
+          ) {
+            throw new PostgresAdapterError();
+          }
           expectOneAffected(
             (
               await client.query<Row>(SUCCEED_AUTOMATION_RUN_SQL, [
@@ -359,6 +433,95 @@ export class PostgresEntryAutomationExecutionRepository implements EntryAutomati
             ).rowCount,
           );
         }
+        return 'applied';
+      },
+    );
+  }
+
+  public listWorkItems(
+    workspaceIdInput: string,
+    maximumInput: number,
+  ): Promise<readonly Readonly<EntryAutomationWorkItem>[]> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    const maximum = integer(maximumInput, 1);
+    if (maximum > 500) throw new PostgresAdapterError();
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const result = await client.query<Row>(
+          READ_ENTRY_AUTOMATION_WORK_ITEMS_SQL,
+          [workspaceId, maximum],
+        );
+        return Object.freeze(result.rows.map(mapWorkItem));
+      },
+    );
+  }
+
+  public loadWorkItem(
+    workspaceIdInput: string,
+    runIdInput: string,
+    claimOrdinalInput: number,
+  ): Promise<Readonly<EntryAutomationWorkItem> | undefined> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    const runId = canonicalUuid(runIdInput);
+    const claimOrdinal = integer(claimOrdinalInput, 0);
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const result = await client.query<Row>(
+          READ_ENTRY_AUTOMATION_WORK_ITEM_SQL,
+          [workspaceId, runId, claimOrdinal],
+        );
+        if (result.rows.length > 1) throw new PostgresAdapterError();
+        return result.rows[0] === undefined
+          ? undefined
+          : mapWorkItem(result.rows[0]);
+      },
+    );
+  }
+
+  public updateWorkItem(
+    workspaceIdInput: string,
+    runIdInput: string,
+    claimOrdinalInput: number,
+    expectedVersionInput: number,
+    stateInput: EntryAutomationWorkItemState,
+  ): Promise<ProcessingRunWriteOutcome> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    const runId = canonicalUuid(runIdInput);
+    const claimOrdinal = integer(claimOrdinalInput, 0);
+    const expectedVersion = integer(expectedVersionInput, 1);
+    const state = enumValue(stateInput, ENTRY_AUTOMATION_WORK_ITEM_STATES);
+    return runPostgresTransaction(
+      this.#pool,
+      'read_committed',
+      async (client) => {
+        await acquireWorkspaceWriteLock(client, workspaceId);
+        const locked = await client.query<Row>(LOCK_AUTOMATION_WORK_ITEM_SQL, [
+          workspaceId,
+          runId,
+          claimOrdinal,
+        ]);
+        if (locked.rows.length > 1) throw new PostgresAdapterError();
+        const row = locked.rows[0];
+        if (row === undefined) return 'not_found';
+        if (integer(row.current_version, 1) !== expectedVersion) return 'stale';
+        if (enumValue(row.state, ENTRY_AUTOMATION_WORK_ITEM_STATES) === state) {
+          return 'unchanged';
+        }
+        expectOneAffected(
+          (
+            await client.query<Row>(UPDATE_AUTOMATION_WORK_ITEM_SQL, [
+              workspaceId,
+              runId,
+              claimOrdinal,
+              expectedVersion,
+              state,
+            ])
+          ).rowCount,
+        );
         return 'applied';
       },
     );
@@ -445,6 +608,25 @@ function mapExecution(
     version: integer(row.current_version, 1),
     ...(errorCode === undefined ? {} : {errorCode}),
     claims,
+  });
+}
+
+function mapWorkItem(row: Row): Readonly<EntryAutomationWorkItem> {
+  const resolvedAt = optionalTimestamp(row.resolved_at);
+  return Object.freeze({
+    workspaceId: canonicalUuid(row.workspace_id),
+    runId: canonicalUuid(row.run_id),
+    claimOrdinal: integer(row.claim_ordinal, 0),
+    entryId: canonicalUuid(row.entry_id),
+    entryRevision: integer(row.entry_revision, 1),
+    entryRevisionId: canonicalUuid(row.entry_revision_id),
+    route: enumValue(row.route, INFORMATION_ENTRY_AUTOMATION_ROUTES),
+    reason: enumValue(row.reason, INFORMATION_ENTRY_AUTOMATION_REASONS),
+    state: enumValue(row.state, ENTRY_AUTOMATION_WORK_ITEM_STATES),
+    version: integer(row.current_version, 1),
+    createdAt: timestamp(row.created_at),
+    updatedAt: timestamp(row.updated_at),
+    ...(resolvedAt === undefined ? {} : {resolvedAt}),
   });
 }
 

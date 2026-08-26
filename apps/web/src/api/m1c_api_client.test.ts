@@ -217,6 +217,12 @@ describe('M1cApiClient', () => {
     await client.executeInformationEntryAutomation(execution);
     await client.listInformationEntryAutomationExecutions(7);
     await client.loadInformationEntryAutomationExecution('synthetic/run');
+    await client.listInformationEntryAutomationWorkQueue(false);
+    await client.updateInformationEntryAutomationWorkItem('synthetic/run', 3, {
+      expectedVersion: 2,
+      state: 'completed',
+      includePrivate: false,
+    });
 
     expect(requests).toEqual([
       {
@@ -245,6 +251,19 @@ describe('M1cApiClient', () => {
       {
         url: 'http://127.0.0.1:3000/api/v1/entries/automation/runs/synthetic%2Frun',
         method: 'GET',
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/automation/work-queue?includePrivate=false',
+        method: 'GET',
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/automation/work-queue/synthetic%2Frun/3',
+        method: 'PUT',
+        body: JSON.stringify({
+          expectedVersion: 2,
+          state: 'completed',
+          includePrivate: false,
+        }),
       },
     ]);
   });
@@ -394,6 +413,7 @@ describe('M1cApiClient', () => {
         profile: 'commonmark-v1',
         sourceAlias: 'synthetic-source',
         isPrivate: false,
+        routeAfterImport: false,
         intervalMinutes: 1_440,
       },
     ]);
@@ -586,6 +606,7 @@ describe('M1cApiClient', () => {
               profile: 'commonmark-v1',
               sourceAlias: 'synthetic-source',
               isPrivate: false,
+              routeAfterImport: false,
               intervalMinutes: 1_440,
             },
           ],

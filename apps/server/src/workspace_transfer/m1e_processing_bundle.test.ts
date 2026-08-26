@@ -9,6 +9,8 @@ import {
   M1E_PROCESSING_TABLES,
   M1E_PROCESSING_VERSION_FOUR_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_FOUR_BUNDLE_SCHEMA,
+  M1E_PROCESSING_VERSION_FIVE_BUNDLE_CODEC,
+  M1E_PROCESSING_VERSION_FIVE_BUNDLE_SCHEMA,
   M1E_PROCESSING_VERSION_THREE_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_THREE_BUNDLE_SCHEMA,
   M1E_PROCESSING_VERSION_TWO_BUNDLE_CODEC,
@@ -19,12 +21,24 @@ import {
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('M1E processing Bundle section', () => {
-  it('keeps the twelve typed processing tables in a closed canonical order', () => {
+  it('keeps the thirteen typed processing tables in a closed canonical order', () => {
     const empty = createEmptyM1eProcessingSnapshot();
     expect(empty.schemaVersion).toBe(M1E_PROCESSING_BUNDLE_SCHEMA);
     expect(empty.tables.map((table) => table.name)).toEqual(
       M1E_PROCESSING_TABLES.map((table) => table.name),
     );
+  });
+
+  it('upgrades the v5 automation execution section with an empty work queue', () => {
+    const upgraded = M1E_PROCESSING_VERSION_FIVE_BUNDLE_CODEC.decode({
+      schemaVersion: M1E_PROCESSING_VERSION_FIVE_BUNDLE_SCHEMA,
+      tables: M1E_PROCESSING_TABLES.slice(0, 12).map((descriptor) => ({
+        name: descriptor.name,
+        rows: [],
+      })),
+    });
+
+    expect(upgraded).toEqual(createEmptyM1eProcessingSnapshot());
   });
 
   it('upgrades the v4 split section with empty automation execution tables', () => {

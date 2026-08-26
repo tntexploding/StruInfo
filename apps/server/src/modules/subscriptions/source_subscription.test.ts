@@ -1,12 +1,29 @@
+import {createHash} from 'node:crypto';
 import {describe, expect, it, vi} from 'vitest';
 
-import type {ImportMarkdownEvidenceResult} from '../evidence/index.js';
 import type {
+  CurrentInformationEntry,
+  InformationEntryEmptySnapshotRepositoryPort,
+  InformationEntryMaterializeRow,
+} from '../entries/index.js';
+import type {
+  EvidenceSnapshotReadState,
+  ImportMarkdownEvidenceResult,
+} from '../evidence/index.js';
+import type {
+  EntryAutomationClaim,
+  EntryAutomationExecution,
+  EntryAutomationExecutionInitialize,
+  EntryAutomationExecutionRepositoryPort,
+  EntryAutomationExecutionSettle,
   ProcessingRun,
   ProcessingRunRepositoryPort,
+  ProcessingRunWriteOutcome,
 } from '../processing/index.js';
 import {
   createReviewPreferences,
+  type EntryAutomationPolicy,
+  type EntryPreferenceProfile,
   type ReviewPreferences,
   type ReviewPreferencesStore,
 } from '../../storage/review_preferences_store.js';
@@ -102,6 +119,7 @@ describe('SourceSubscriptionService', () => {
         profile: 'commonmark-v1',
         sourceAlias: 'synthetic-source',
         isPrivate: false,
+        routeAfterImport: false,
         intervalMinutes: 1_440,
       },
     ]);
@@ -200,6 +218,7 @@ describe('SourceSubscriptionService', () => {
         profile: 'commonmark-v1',
         sourceAlias: 'manual-only',
         isPrivate: false,
+        routeAfterImport: false,
         intervalMinutes: 15,
       },
       {
@@ -212,6 +231,7 @@ describe('SourceSubscriptionService', () => {
         profile: 'commonmark-v1',
         sourceAlias: 'scheduled-source',
         isPrivate: false,
+        routeAfterImport: false,
         intervalMinutes: 15,
       },
     ]);
@@ -226,13 +246,137 @@ describe('SourceSubscriptionService', () => {
       })),
     ).toEqual([{status: 'failed', errorCode: 'source_import_unavailable'}]);
   });
+
+  it('optionally materializes a changed source and routes only its current Entries', async () => {
+    const text = '# Synthetic section\n\nSynthetic body.\n';
+    const textBytes = new TextEncoder().encode(text);
+    const textSha256 = createHash('sha256').update(textBytes).digest('hex');
+    const snapshotId = '44444444-4444-4444-8444-444444444444';
+    const fragmentId = '66666666-6666-4666-8666-666666666666';
+    const snapshot: EvidenceSnapshotReadState = {
+      workspaceId: WORKSPACE_ID,
+      snapshotId,
+      resourceId: '33333333-3333-4333-8333-333333333333',
+      resourceKind: 'git_file',
+      sourceKey: 'synthetic-source',
+      capturedAt: '2026-08-25T08:00:00.000Z',
+      fragmentCount: 1,
+      rawSha256: textSha256,
+      canonicalContentSha256: textSha256,
+      canonicalizationVersion: 'utf8-lf-v1',
+      mediaType: 'text/markdown',
+      structures: [
+        {
+          structureId: '55555555-5555-4555-8555-555555555555',
+          parserName: 'synthetic',
+          parserVersion: '1',
+          textNormalizationVersion: 'utf8-lf-v1',
+          structureSha256: textSha256,
+          textBlob: {
+            algorithm: 'sha256',
+            digest: textSha256,
+            byteLength: textBytes.byteLength,
+          },
+          fragments: [
+            {
+              fragmentId,
+              structureId: '55555555-5555-4555-8555-555555555555',
+              nodeId: '77777777-7777-4777-8777-777777777777',
+              nodeKind: 'section',
+              codePointRange: {start: 0, end: Array.from(text).length},
+              selectedTextSha256: textSha256,
+            },
+          ],
+        },
+      ],
+    };
+    const preferences = memoryPreferences(automationPreferences());
+    const processing = memoryProcessingRuns();
+    const entries = new MemoryMaterializedEntries();
+    const automation = new MemoryAutomationExecution();
+    const imported = vi.fn((): Promise<ImportMarkdownEvidenceResult> =>
+      Promise.resolve({
+        status: 'created',
+        workspaceId: WORKSPACE_ID,
+        commandIdempotencyKey: 'synthetic',
+        resourceId: snapshot.resourceId,
+        snapshotId,
+        structureId: snapshot.structures[0]?.structureId ?? '',
+        fragmentIds: Object.freeze([fragmentId]),
+        mediaAssetIds: Object.freeze([]),
+      }),
+    );
+    const service = new SourceSubscriptionService({
+      workspaceId: WORKSPACE_ID,
+      preferences,
+      processing,
+      reader: {
+        read: () =>
+          Promise.resolve({
+            commitSha: COMMIT_SHA,
+            sourceUtf8: textBytes,
+            canonicalUri: `https://github.com/example/project/blob/${COMMIT_SHA}/docs/source.md`,
+          }),
+      },
+      blobStore: {
+        put: () => Promise.reject(new Error('unexpected Blob write')),
+        read: () => Promise.resolve(textBytes),
+      },
+      evidence: {
+        saveCapture: () =>
+          Promise.reject(new Error('unexpected Evidence write')),
+      },
+      evidenceRead: {
+        listSnapshots: () => Promise.resolve([snapshot]),
+        loadSnapshot: () => Promise.resolve(snapshot),
+      },
+      entries,
+      automationExecutions: automation,
+      importEvidence: imported,
+      now: () => '2026-08-25T08:00:00.000Z',
+    });
+    await service.replace(0, [
+      {
+        subscriptionId: SUBSCRIPTION_ID,
+        label: 'Synthetic routed source',
+        enabled: false,
+        repositoryUri: 'https://github.com/example/project',
+        repositoryRef: 'main',
+        repositoryPath: 'docs/source.md',
+        profile: 'commonmark-v1',
+        sourceAlias: 'synthetic-source',
+        isPrivate: false,
+        routeAfterImport: true,
+        intervalMinutes: 1_440,
+      },
+    ]);
+
+    const result = await service.runNow(SUBSCRIPTION_ID, 'routed-check');
+
+    expect(result).toMatchObject({
+      outcome: 'imported',
+      snapshotId,
+      automationRunId: automation.current?.runId,
+      materializedEntryCount: 1,
+    });
+    expect(entries.values).toHaveLength(1);
+    expect(automation.current).toMatchObject({
+      status: 'succeeded',
+      claims: [{status: 'completed', entryId: entries.values[0]?.entryId}],
+    });
+    expect((await service.list()).subscriptions[0]?.cursor).toMatchObject({
+      commitSha: COMMIT_SHA,
+    });
+  });
 });
 
-function memoryPreferences(): ReviewPreferencesStore {
-  let current: Readonly<ReviewPreferences> = createReviewPreferences(
+function memoryPreferences(
+  initial: Readonly<ReviewPreferences> = createReviewPreferences(
     WORKSPACE_ID,
     [],
-  );
+  ),
+): ReviewPreferencesStore {
+  let current = initial;
   return {
     load: () => Promise.resolve(current),
     save: (
@@ -244,6 +388,7 @@ function memoryPreferences(): ReviewPreferencesStore {
       explorationPolicy,
       sourceSubscriptions,
       entryPreferenceProfile,
+      entryAutomationPolicy,
     ) => {
       current = createReviewPreferences(
         workspaceId,
@@ -254,9 +399,178 @@ function memoryPreferences(): ReviewPreferencesStore {
         explorationPolicy,
         sourceSubscriptions,
         entryPreferenceProfile,
+        entryAutomationPolicy,
       );
       return Promise.resolve(current);
     },
+  };
+}
+
+class MemoryMaterializedEntries implements InformationEntryEmptySnapshotRepositoryPort {
+  public values: readonly Readonly<CurrentInformationEntry>[] = [];
+
+  public materializeEntries(
+    entries: readonly Readonly<InformationEntryMaterializeRow>[],
+  ) {
+    if (this.values.length > 0) {
+      return Promise.resolve({outcome: 'existing' as const, createdCount: 0});
+    }
+    return this.writeRows(entries);
+  }
+
+  public materializeEntriesIfSnapshotEmpty(
+    entries: readonly Readonly<InformationEntryMaterializeRow>[],
+  ) {
+    if (this.values.length > 0) {
+      return Promise.resolve({
+        outcome: 'snapshot_not_empty' as const,
+        createdCount: 0,
+      });
+    }
+    return this.writeRows(entries);
+  }
+
+  public reviseEntry(): Promise<'not_found'> {
+    return Promise.resolve('not_found');
+  }
+
+  public loadCurrentEntries(): Promise<
+    readonly Readonly<CurrentInformationEntry>[]
+  > {
+    return Promise.resolve(this.values);
+  }
+
+  private writeRows(rows: readonly Readonly<InformationEntryMaterializeRow>[]) {
+    this.values = Object.freeze(
+      rows.map((row) =>
+        Object.freeze({
+          workspaceId: row.workspaceId,
+          entryId: row.entryId,
+          resourceId: row.resourceId,
+          snapshotId: row.snapshotId,
+          revision: 1,
+          revisionId: row.revisionId,
+          sourceKey: 'synthetic-source',
+          capturedAt: '2026-08-25T08:00:00.000Z',
+          value: row.value,
+        }),
+      ),
+    );
+    return Promise.resolve({
+      outcome: 'created' as const,
+      createdCount: rows.length,
+    });
+  }
+}
+
+class MemoryAutomationExecution implements EntryAutomationExecutionRepositoryPort {
+  public current: Readonly<EntryAutomationExecution> | undefined;
+
+  public loadExecution(): Promise<
+    Readonly<EntryAutomationExecution> | undefined
+  > {
+    return Promise.resolve(this.current);
+  }
+
+  public initializeExecution(
+    initialize: Readonly<EntryAutomationExecutionInitialize>,
+  ): Promise<ProcessingRunWriteOutcome> {
+    this.current = Object.freeze({
+      ...initialize,
+      status: 'queued',
+      version: 1,
+      claims: Object.freeze(
+        initialize.claims.map((claim) => claimValue(initialize, claim)),
+      ),
+    });
+    return Promise.resolve('applied');
+  }
+
+  public startExecution(
+    _workspaceId: string,
+    _runId: string,
+    expectedVersion: number,
+  ): Promise<ProcessingRunWriteOutcome> {
+    if (this.current?.version !== expectedVersion)
+      return Promise.resolve('stale');
+    this.current = Object.freeze({
+      ...this.current,
+      status: 'running',
+      version: 2,
+    });
+    return Promise.resolve('applied');
+  }
+
+  public settleExecution(
+    settle: Readonly<EntryAutomationExecutionSettle>,
+  ): Promise<ProcessingRunWriteOutcome> {
+    if (this.current?.version !== settle.expectedVersion) {
+      return Promise.resolve('stale');
+    }
+    this.current = Object.freeze({
+      ...this.current,
+      status: settle.status,
+      version: this.current.version + 1,
+      claims: Object.freeze(
+        this.current.claims.map((claim) =>
+          Object.freeze({
+            ...claim,
+            status: settle.status === 'succeeded' ? 'completed' : 'compensated',
+            finishedAt: '2026-08-25T08:00:01.000Z',
+          }),
+        ),
+      ),
+    });
+    return Promise.resolve('applied');
+  }
+}
+
+function claimValue(
+  initialize: Readonly<EntryAutomationExecutionInitialize>,
+  claim: Readonly<EntryAutomationExecutionInitialize['claims'][number]>,
+): Readonly<EntryAutomationClaim> {
+  return Object.freeze({
+    workspaceId: initialize.workspaceId,
+    runId: initialize.runId,
+    ...claim,
+    status: 'claimed',
+    createdAt: '2026-08-25T08:00:00.000Z',
+  });
+}
+
+function automationPreferences(): Readonly<ReviewPreferences> {
+  return createReviewPreferences(
+    WORKSPACE_ID,
+    [],
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    automationProfile(),
+    automationPolicy(),
+  );
+}
+
+function automationProfile(): EntryPreferenceProfile {
+  return {revision: 1, enabled: true, rules: Object.freeze([])};
+}
+
+function automationPolicy(): EntryAutomationPolicy {
+  return {
+    revision: 1,
+    enabled: true,
+    paused: false,
+    profileRevision: 1,
+    minimumMatchedRuleCount: 1,
+    advanceThresholds: {usefulness: 3, interest: 3, requiredDimensions: 1},
+    deferThresholds: {usefulness: 3, interest: 3, requiredDimensions: 1},
+    budgets: {
+      maximumEntriesPerRun: 10,
+      maximumAdvanceCandidatesPerRun: 5,
+      maximumDeferCandidatesPerRun: 5,
+    },
+    failureMode: 'pause',
   };
 }
 

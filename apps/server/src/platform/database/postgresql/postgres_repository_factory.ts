@@ -13,6 +13,7 @@ import type {
   AiSplitProposalRepositoryPort,
   AiTagProposalRepositoryPort,
   EntryAutomationExecutionRepositoryPort,
+  EntryAutomationWorkQueueRepositoryPort,
   ProcessingRunRepositoryPort,
 } from '../../../modules/processing/index.js';
 import type {M1cDomainTransferRepositoryPort} from '../../../workspace_transfer/m1c_workspace_transfer.js';
@@ -40,12 +41,14 @@ export interface PostgresRepositorySet {
     AiSplitProposalRepositoryPort;
   readonly aiAssociationProposals: AiAssociationProposalRepositoryPort;
   readonly entryAutomationExecutions: EntryAutomationExecutionRepositoryPort;
+  readonly entryAutomationWorkQueue: EntryAutomationWorkQueueRepositoryPort;
   readonly workspaceTransfer: M1cDomainTransferRepositoryPort;
 }
 
 export function createPostgresRepositories(
   pool: PostgresPoolBoundary,
 ): Readonly<PostgresRepositorySet> {
+  const entryAutomation = new PostgresEntryAutomationExecutionRepository(pool);
   return Object.freeze({
     evidence: new PostgresEvidenceRepository(pool),
     evidenceRead: new PostgresEvidenceReadRepository(pool),
@@ -55,9 +58,8 @@ export function createPostgresRepositories(
       new PostgresInformationEntryAssociationRepository(pool),
     processingRuns: new PostgresAiTagProposalRepository(pool),
     aiAssociationProposals: new PostgresAiAssociationProposalRepository(pool),
-    entryAutomationExecutions: new PostgresEntryAutomationExecutionRepository(
-      pool,
-    ),
+    entryAutomationExecutions: entryAutomation,
+    entryAutomationWorkQueue: entryAutomation,
     workspaceTransfer: new PostgresM1cDomainTransferRepository(pool),
   });
 }
