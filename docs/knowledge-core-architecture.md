@@ -1,6 +1,6 @@
 # StruInfo 知识核心架构
 
-- 状态：M1K 可重建词项/向量索引、混合检索与公开证据 RAG 已完成
+- 状态：M1M 单机生产运行与维护边界已完成
 - 最近更新：2026-08-27
 - 相关决策：[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、[ADR 0007](adr/0007-information-entry-first-document-processing.md)、[ADR 0008](adr/0008-current-entry-state-and-portable-personal-data.md)、[ADR 0009](adr/0009-retire-superseded-m1c-runtime.md)、[ADR 0010](adr/0010-entry-centered-formal-knowledge-graph.md)、[ADR 0011](adr/0011-association-derived-formal-graph-edges.md)、[ADR 0012](adr/0012-provider-neutral-processing-runs-and-proposals.md)、[ADR 0013](adr/0013-openai-entry-tag-proposals.md)、[ADR 0014](adr/0014-openai-entry-association-proposals.md)、[ADR 0015](adr/0015-openai-entry-split-proposals.md)、[ADR 0016](adr/0016-manual-entry-fragment-grouping.md)、[ADR 0017](adr/0017-manual-within-fragment-entry-boundaries.md)、[ADR 0018](adr/0018-local-text-file-import.md)、[ADR 0019](adr/0019-local-html-pdf-import.md)、[ADR 0020](adr/0020-explainable-lexical-entry-search.md)、[ADR 0021](adr/0021-query-association-and-result-comparison.md)、[ADR 0022](adr/0022-evidence-bounded-ai-query-synthesis.md)、[ADR 0023](adr/0023-deterministic-entry-exploration-policy.md)、[ADR 0024](adr/0024-versioned-git-source-subscriptions.md)、[ADR 0025](adr/0025-explainable-entry-preference-profile.md)、[ADR 0026](adr/0026-entry-automation-policy-dry-run.md)、[ADR 0027](adr/0027-recoverable-entry-automation-routing-execution.md)
 - 当前实现与未完成项：[当前项目状态与实现清单](current-project-state.md)
@@ -8,6 +8,8 @@
 - 当前确定性推进、拆分编辑与显式批次导入决策：[ADR 0032](adr/0032-deterministic-entry-tag-and-association-actions.md)、[ADR 0033](adr/0033-post-materialization-entry-restructuring.md)、[ADR 0034](adr/0034-pre-split-derived-document-editing.md)、[ADR 0035](adr/0035-versioned-configurable-entry-split-rules.md)、[ADR 0036](adr/0036-explicit-local-multi-file-import-queue.md)
 - 当前外部信源决策：[ADR 0037](adr/0037-plugin-compatible-source-acquisition-foundation.md)、[ADR 0038](adr/0038-public-rss-atom-source-subscriptions.md)、[ADR 0039](adr/0039-declarative-json-api-source-subscriptions.md)、[ADR 0040](adr/0040-constrained-web-source-subscriptions.md)、[ADR 0041](adr/0041-installed-source-connector-product-wiring.md)
 - 当前正式知识维护决策：[ADR 0042](adr/0042-formal-knowledge-relation-semantics-and-source-review.md)
+- 当前检索与性能决策：[ADR 0043](adr/0043-rebuildable-entry-search-index-and-rag.md)、[ADR 0044](adr/0044-evidence-driven-local-performance.md)
+- 当前生产运行决策：[ADR 0045](adr/0045-operational-production-baseline.md)
 
 ## 1. 核心结论
 
@@ -404,7 +406,7 @@ Windows 本地运行和 Linux 部署都必须使用源码/安装目录之外的�
 
 ### 11.3 下一实施顺序
 
-M1E-2 与直接使用增量已经完成。ADR 0012 的 M1E-3A 已接通中性任务边界；ADR 0013/0014/0015 的 M1E-3B/C/D 已选择同一 OpenAI Responses API，分别实现公开 Entry 标签、selected-pair 联系和公开 Snapshot 拆分提案，并把接受转换为既有 Entry revision、graph edge command 或 Entry materialization。ADR 0016 的 M1E-4A 补齐既有 Fragment 边界上的本地人工分组，ADR 0017 的 M1E-4B 进一步允许 Fragment 内 Unicode 标量边界，并让确定性、人工和 AI 接受共用唯一空 Snapshot 原子边界。ADR 0018/0019 的 M1E-5A/5B 把单份本地 Markdown、文本、HTML 和 PDF 接入同一 Evidence 与 Split 主线；ADR 0020 的 M1F-1 补齐精确、包含和近似本地词法查询，ADR 0021 的 M1F-2 让同一 Query 直接开启 Association 遍历并比较最多两条结果，ADR 0022 的 M1F-3 接通会话内公开证据综合，ADR 0023 的 M1G-1 接通独立本地探索策略，ADR 0024 的 M1G-2 接通精确公开 GitHub Markdown 单文件订阅，ADR 0025–0029 完成可解释偏好与可恢复路由控制，ADR 0030/0031 又完成所有者工作队列及默认关闭的订阅后确定性物化/分流，ADR 0032–0036 补齐显式推进动作、物化后结构纠错、拆分前派生全文编辑、版本化本地拆分规则和显式多文件导入会话队列。ADR 0037–0041 的 M1I-1A/B 至 M1I-5 已完成连接器/远程文档底座、RSS/Atom、声明式 JSON API、受限同源网页和已安装连接器产品接线。ADR 0042 的 M1J 已在同一 Entry 图谱中补齐闭合关系语义、维护说明、来源核验状态、双端来源动作和 Association v4 兼容传输。ADR 0043 的 M1K 又完成可重建词项/向量索引、三种 Query、召回评估和公开证据 RAG。下一步按既定顺序处理 M1L 性能和 M1M 生产收口；未安装的连接器不得在 UI 中伪装为可用。
+M1E-2 与直接使用增量已经完成。ADR 0012 的 M1E-3A 已接通中性任务边界；ADR 0013/0014/0015 的 M1E-3B/C/D 已选择同一 OpenAI Responses API，分别实现公开 Entry 标签、selected-pair 联系和公开 Snapshot 拆分提案，并把接受转换为既有 Entry revision、graph edge command 或 Entry materialization。ADR 0016 的 M1E-4A 补齐既有 Fragment 边界上的本地人工分组，ADR 0017 的 M1E-4B 进一步允许 Fragment 内 Unicode 标量边界，并让确定性、人工和 AI 接受共用唯一空 Snapshot 原子边界。ADR 0018/0019 的 M1E-5A/5B 把单份本地 Markdown、文本、HTML 和 PDF 接入同一 Evidence 与 Split 主线；ADR 0020 的 M1F-1 补齐精确、包含和近似本地词法查询，ADR 0021 的 M1F-2 让同一 Query 直接开启 Association 遍历并比较最多两条结果，ADR 0022 的 M1F-3 接通会话内公开证据综合，ADR 0023 的 M1G-1 接通独立本地探索策略，ADR 0024 的 M1G-2 接通精确公开 GitHub Markdown 单文件订阅，ADR 0025–0029 完成可解释偏好与可恢复路由控制，ADR 0030/0031 又完成所有者工作队列及默认关闭的订阅后确定性物化/分流，ADR 0032–0036 补齐显式推进动作、物化后结构纠错、拆分前派生全文编辑、版本化本地拆分规则和显式多文件导入会话队列。ADR 0037–0041 的 M1I-1A/B 至 M1I-5 已完成连接器/远程文档底座、RSS/Atom、声明式 JSON API、受限同源网页和已安装连接器产品接线。ADR 0042 的 M1J 已在同一 Entry 图谱中补齐闭合关系语义、维护说明、来源核验状态、双端来源动作和 Association v4 兼容传输。ADR 0043 的 M1K 又完成可重建词项/向量索引、三种 Query、召回评估和公开证据 RAG。ADR 0044 的 M1L 已完成可重复合成性能基准、单次关联读取索引和搜索请求重复加载优化。ADR 0045 的 M1M 已完成单机容器、维护和恢复运行边界。下一步是所有者授权后的统一实际审核；未安装的连接器不得在 UI 中伪装为可用。
 
 ## 12. 当前验收与未来验收
 
@@ -673,6 +675,23 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 - 有界 expected-set 评估返回 Recall@K/MRR；既有综合复用所选检索模式的前八条公开本地证据，保留精确来源且不保存答案或授予写权限；
 - 没有独立向量数据库、搜索服务、`pgvector`、后台自动重建、私密向量、Provider 自主检索或真实资料。
 
-### 12.30 延期审核与环境门
+### 12.30 M1L 可重复性能评估与按证据优化（已实现）
 
-实际内容和所有者体验、真实 Provider 质量/费用、真实 PostgreSQL 正式 TM2、容器/Linux 等价性、公开网络部署、认证授权、生产资源限制、备份恢复演练和发布分发均在项目开发完成后统一开始，当前保持延期或未签发。它们必须如实报告状态，但不能在没有当前产品阻断证据时拖停 Entry 主线开发；活动工作区仍禁止恢复真实资料。单元、集成、构建和合成浏览器验证继续作为开发质量门运行。
+- 根级 `performance:m1l` 以稳定 workload hash 覆盖 Markdown/Evidence 导入、Entry 拆分、词项/Association 投影、词法/语义/混合/两跳查询、有界知识邻域和连接器批次；只输出 JSON，不持久化材料或报告；
+- 标准 fixture 为 800 个合成 Entry、8,040 条 Association projection 和 27,997 个 term posting；不读取活动数据库、外部数据根、Provider 或网络；
+- 一次 Association 查询建立一个只读邻接索引并由 BFS 复用，保持 current-revision、override、屏蔽、隐私、排序和路径语义；相同 workload hash 下两跳中位耗时从 184.565 ms 降到 4.196 ms；
+- lexical HTTP 搜索只加载一次 Entry/Association snapshot；semantic/hybrid 使用 retrieval service 已完成的加载，不再为了协议上为空的私密全文通道二次读取；
+- 时间只作同机候选比较证据，不是质量阈值或生产 SLO；没有迁移、依赖、持久缓存、SQL query pushdown、独立搜索服务、后台任务或真实数据。
+
+### 12.31 M1M 单机生产运行与维护（已实现）
+
+- 多阶段镜像只携带生产依赖、编译后 server/web、迁移和许可证/SBOM，以固定非 root 用户运行；
+- 普通 Compose 只持有 runtime secret，高权限 migration/pg-boss schema 准备位于独立 maintenance Compose；根文件系统只读，端口默认只发布到宿主回环；
+- 三类进程 secret 支持互斥直接值或严格单行 `*_FILE`，运行配置、secret、数据根和备份都保持在镜像/Git 之外；
+- runtime grant 不创建角色或密码，只授权当前可达 typed DML；升级顺序固定为备份、迁移、队列准备、grant、preflight、启动和 readiness；
+- `maintenance backup/restore` 复用完整个人数据包与既有同 workspace 空库原子恢复，文件落在外部 `backups/`；
+- M1M 不改变五步领域架构、数据库模型或 Provider。目标镜像、真实 PostgreSQL 18 操作演练、公网 TLS/认证、保留策略和发布许可证仍需统一上线审核。
+
+### 12.32 延期审核与环境门
+
+实际内容和所有者体验、真实 Provider 质量/费用、真实 PostgreSQL 正式 TM2、目标容器/Linux 等价性、公开网络部署、认证授权、真实资源限制、备份恢复演练和发布分发均在项目开发完成后统一开始，当前保持延期或未签发。它们必须如实报告状态，但不能在没有当前产品阻断证据时拖停 Entry 主线开发；活动工作区仍禁止恢复真实资料。单元、集成、构建和合成浏览器验证继续作为开发质量门运行。

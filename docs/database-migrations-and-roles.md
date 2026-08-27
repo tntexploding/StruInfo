@@ -1,15 +1,16 @@
 # Database Migrations and Roles
 
-- Status: First-party runner and twenty-two forward migrations implemented; the M1C
-  `000001`–`000006` PostgreSQL 18 functional smoke passed
+- Status: First-party runner and twenty-five forward migrations implemented;
+  M1M queue preparation and operator-managed runtime grant boundary available
 - Contract: `C-M0-S-r2`
 - Database direction: PostgreSQL 18 with separate migration and runtime
   credentials
 
 This document defines the operator and code boundary for forward migrations. It
 does not contain role-creation SQL or passwords. The first-party runner and first
-project-owned migrations are implemented. Formal runtime-grant and deployment
-certification remains pending the separately admitted infrastructure gate.
+project-owned migrations are implemented. The checked-in runtime-grant script is
+an executable operator baseline; formal target-environment and deployment
+certification remains pending the unified release review.
 
 ## Role boundary
 
@@ -57,6 +58,9 @@ apps/server/migrations/000019_create_entry_automation_work_queue.sql
 apps/server/migrations/000020_create_entry_automation_actions.sql
 apps/server/migrations/000021_add_information_entry_structure_lifecycle.sql
 apps/server/migrations/000022_create_information_document_working_copies.sql
+apps/server/migrations/000023_add_remote_document_resource_kind.sql
+apps/server/migrations/000024_add_information_entry_graph_semantics.sql
+apps/server/migrations/000025_create_information_entry_search_index.sql
 ```
 
 The runner is first-party code over the already admitted `pg@8.22.0` driver.
@@ -247,23 +251,32 @@ The application runtime does write the separate business command ledger in
 privileges required by the Evidence, Curation, and Knowledge repository ports;
 it still must not receive migration-ledger or DDL authority. The 2026-08-16
 functional smoke used an explicitly disposable synthetic role with DML grants.
-Production least-privilege grant automation remains a later operator deliverable
-and the broad smoke grant must not be copied as a production recipe.
+M1M now supplies `deploy/postgresql/apply-runtime-grants.sql` as the reviewed
+operator-managed baseline. It creates no role or password, revokes schema/database
+creation and metadata access, and grants the typed table/queue DML needed by the
+current runtime, including empty-workspace personal-data restore. Target PostgreSQL
+18 execution and any environment-specific tightening still require deployment
+review; the old broad smoke grant must not be copied as a production recipe.
 
 ## Operator sequence
 
-1. Back up the PostgreSQL truth and Blob set according to the current recovery
-   procedure before a risky schema change.
-2. Stop or drain application roles when the reviewed migration requires it.
-3. Supply the migration credential only to `pnpm db:migrate`.
-4. Inspect the non-secret version/checksum result and stop on any mismatch or
-   failure.
+1. Stop or drain application writes and run `pnpm maintenance -- backup` with
+   the runtime credential.
+2. Supply the migration credential only to `pnpm db:migrate` and inspect the
+   non-secret version/checksum result.
+3. With the same isolated migration credential, run `pnpm db:prepare-queue`.
+4. As the database owner, apply
+   `deploy/postgresql/apply-runtime-grants.sql`.
 5. Revoke the migration credential from the ordinary process environment.
-6. Start API, Scheduler, and Worker with the runtime credential.
-7. Confirm readiness only after the bounded runtime database check succeeds.
+6. Run `pnpm maintenance -- preflight` with only the runtime credential.
+7. Start API, Scheduler, and Worker with the runtime credential.
+8. Confirm readiness only after the bounded runtime database check succeeds.
 
 No automation may continue to application startup after a failed or uncertain
 migration result.
+
+Container equivalents and the clean-target restore procedure are documented in
+[Production Operations](production-operations.md).
 
 ## Rollback and recovery
 

@@ -3,6 +3,7 @@ import {
   type ProcessRole,
 } from '../config/runtime_config.js';
 import {loadRuntimeConfig} from '../config/external_runtime_config.js';
+import {materializeExternalSecretEnvironment} from '../config/external_secret_environment.js';
 import {
   collectEnvironmentSecrets,
   StandardOutputSink,
@@ -14,8 +15,10 @@ import {startRoleRuntime} from './start_role_runtime.js';
 export async function runProcess(role: ProcessRole): Promise<void> {
   const clock = new SystemClock();
   let config;
+  let environment: Readonly<Record<string, string | undefined>>;
   try {
-    config = loadRuntimeConfig(role, process.env);
+    environment = materializeExternalSecretEnvironment(process.env);
+    config = loadRuntimeConfig(role, environment);
   } catch (error) {
     writeBootstrapFailure(role, error, clock);
     process.exitCode = 1;
@@ -27,7 +30,7 @@ export async function runProcess(role: ProcessRole): Promise<void> {
     role,
     clock,
     sink: new StandardOutputSink(),
-    secrets: collectEnvironmentSecrets(process.env),
+    secrets: collectEnvironmentSecrets(environment),
   });
   try {
     await startRoleRuntime(config, logger);

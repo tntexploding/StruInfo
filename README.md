@@ -43,6 +43,7 @@ M1E-2 已把正式知识实现为 Entry 节点、自动相似联系与用户关�
 - [包体外运行配置与数据根](docs/runtime-configuration.md)
 - [个人数据包合同](docs/workspace-bundle-contract.md)
 - [候选应用制品边界](docs/application-artifact-boundary.md)
+- [生产运行与维护](docs/production-operations.md)
 - [文档条目处理准则](docs/document-entry-processing-guidelines.md)
 - [决策日志](docs/decision-log.md)与 [ADR](docs/adr/README.md)
 
@@ -66,6 +67,6 @@ corepack pnpm run verify
 
 ## 当前最重要的下一步
 
-继续在同一主项目和同一空工作区上开发。M1I 外部信源、M1J 正式知识深化和 M1K 分词/向量/RAG 均已完成；下一公开产品增量是 M1L 性能评估与优化，之后进入容器维护和生产边界收口。不恢复旧资料，也不为了演示填入新的真实资料。
+继续在同一主项目和同一空工作区上开发。M1I 外部信源、M1J 正式知识深化、M1K 分词/向量/RAG、M1L 性能优化和 M1M 单机生产运行边界均已完成。下一步不再预设新的横向功能，而是在所有者授权后统一进行真实材料、目标 PostgreSQL/Linux 宿主、备份恢复和发布审核；不为了演示提前恢复旧资料。
 
-项目开发完成后，再由所有者明确选择审核材料或恢复点。性能、容器/公网认证和发布门按路线图推进；真实内容审核继续后置，除非当前产品路径出现可复现阻断。
+项目开发完成后，再由所有者明确选择审核材料或恢复点。公网认证、目标镜像认证和发布许可证仍是部署/分发门；它们必须如实报告，但不能在没有当前可达阻断时重新拖慢产品主线。

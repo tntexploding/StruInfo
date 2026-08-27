@@ -1,8 +1,8 @@
 # StruInfo 候选应用制品边界
 
-- 状态：切片 0 已实现的非容器制品审计
-- 最近更新：2026-08-11
-- 对应决策：[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)
+- 状态：应用包审计与 M1M 容器源码边界已实现；目标镜像认证未签发
+- 最近更新：2026-08-27
+- 对应决策：[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、[ADR 0045](adr/0045-operational-production-baseline.md)
 
 ## 1. 目的与边界
 
@@ -18,8 +18,7 @@
 
 源码测试、`test_support`、运行配置、`.env`、秘密、工作区数据、Blob、上传、快照、导出、备份和任意未声明静态文件都不是候选包输入。
 
-这不是发布授权或可部署包声明。
-项目许可证仍未选择，生产依赖装配与容器镜像也未冻结；不得发布当前候选 tarball。
+这不是公开发布授权。项目许可证仍未选择；不得公开分发当前候选 tarball 或镜像。
 
 ## 2. 审计行为
 
@@ -42,15 +41,16 @@
 
 ## 3. 容器与后续发布
 
-仓库当前没有已准入的 Dockerfile 或生产镜像，因此本门不伪造镜像 digest 或镜像文件清单。
-`M0-S-CONTAINER-MAINT-001` 接受具体基础镜像、生产依赖装配和 Dockerfile 后，镜像审计必须：
+M1M 已加入多阶段 `Dockerfile`、普通/维护 Compose、production-only pnpm deploy、外部 secret 和数据挂载边界。`deployment:verify` 静态拒绝宽泛上下文复制、直接 secret、高权限凭据混入普通清单和缺失的容器硬化控制。开发验证还会执行 Compose 语法解析与 production deploy 探针。
+
+仓库仍不伪造尚未构建的目标镜像 digest 或镜像文件清单。进入真实目标宿主审核时必须：
 
 - 枚举最终镜像所有层与文件；
 - 证明候选应用文件来自本清单或另一份经审查的声明；
 - 证明运行配置、数据根和秘密只通过外部挂载或注入提供；
 - 记录镜像 digest、基础镜像许可证和完整运行时 notices。
 
-容器门未通过不否定当前非容器包边界，但任何文档都不能把本结果描述为生产镜像已经通过。
+目标镜像门未通过不否定已实现的容器源码和非容器包边界，但任何文档都不能把本结果描述为目标 Linux 镜像、漏洞扫描或公开分发已经通过。
 
 ## 4. 验证命令
 
@@ -64,4 +64,5 @@ corepack pnpm run verify
 
 ```powershell
 corepack pnpm run artifact:verify
+corepack pnpm run deployment:verify
 ```

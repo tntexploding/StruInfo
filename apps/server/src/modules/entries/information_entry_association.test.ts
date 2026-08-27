@@ -5,6 +5,7 @@ import {
   buildInformationEntryAssociationProjection,
   INFORMATION_ENTRY_ASSOCIATION_POLICY,
   listInformationEntryAssociations,
+  prepareInformationEntryAssociationReadIndex,
   prepareInformationEntryAssociationOverride,
 } from './information_entry_association.js';
 
@@ -92,6 +93,19 @@ describe('Information Entry associations', () => {
         isBlocked: false,
       },
     ]);
+
+    const readIndex = prepareInformationEntryAssociationReadIndex(entries, {
+      projections: [projection],
+      overrides: [override],
+    });
+    expect(readIndex.list(ENTRY_A)).toEqual(
+      listInformationEntryAssociations(ENTRY_A, entries, {
+        projections: [projection],
+        overrides: [override],
+      }),
+    );
+    expect(readIndex.list(ENTRY_B)[0]?.relatedEntry.entryId).toBe(ENTRY_A);
+    expect(readIndex.list(ENTRY_C)).toEqual([]);
 
     const blocked = {
       ...override,

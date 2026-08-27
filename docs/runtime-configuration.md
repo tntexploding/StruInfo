@@ -1,6 +1,6 @@
 # StruInfo 运行配置与数据根
 
-- 状态：外部工作区选择、受控重读及 M1K 可选 OpenAI 模型配置已实现
+- 状态：外部工作区选择、严格 secret 文件注入及 M1M 维护运行已实现
 - 最近更新：2026-08-27
 - 对应决策：[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)
 
@@ -9,7 +9,7 @@
 普通 `api`、`scheduler`、`worker` 和 `all` 进程启动前必须同时获得：
 
 1. 由进程环境提供的 `STRUIINFO_CONFIG_PATH`，指向包体外的 UTF-8 dotenv 配置文件；
-2. 由进程环境或秘密注入机制提供的 `DATABASE_URL`；
+2. 由进程环境提供的 `DATABASE_URL`，或互斥的 `DATABASE_URL_FILE`；
 3. 由外部配置文件提供、可被同名进程环境覆盖的 `STRUIINFO_DATA_ROOT`；
 4. 由外部配置文件提供、可被同名进程环境覆盖的 `STRUIINFO_WORKSPACE_ID`。
 
@@ -52,7 +52,7 @@ M1C 首版不要求后台文件监视或无中断热切换。允许采用明确�
 | `STRUIINFO_OPENAI_MODEL`           | 否   | 无          | Responses 模型；启用公开 AI 提案/综合    |
 | `STRUIINFO_OPENAI_EMBEDDING_MODEL` | 否   | 无          | Embedding 模型；启用公共语义/混合检索    |
 
-同名进程环境变量会覆盖文件中的非秘密运行参数，便于容器和托管环境注入。`STRUIINFO_CONFIG_PATH`、`DATABASE_URL`、迁移专用的 `STRUIINFO_MIGRATION_DATABASE_URL` 和 `OPENAI_API_KEY` 只能由进程环境/秘密机制提供，写入配置文件会被拒绝。`OPENAI_API_KEY` 必须与至少一个 OpenAI 模型同时存在；Responses 与 Embedding 模型可以分别配置，缺少 Embedding 模型时词法查询仍完整可用且不会宣告语义检索 capability。
+同名进程环境变量会覆盖文件中的非秘密运行参数，便于容器和托管环境注入。`STRUIINFO_CONFIG_PATH`、`DATABASE_URL`、迁移专用的 `STRUIINFO_MIGRATION_DATABASE_URL` 和 `OPENAI_API_KEY` 只能由进程环境/秘密机制提供，写入配置文件会被拒绝。M1M 为后三者增加互斥的 `DATABASE_URL_FILE`、`STRUIINFO_MIGRATION_DATABASE_URL_FILE` 和 `OPENAI_API_KEY_FILE`：文件路径必须绝对，目标为至多 16 KiB 的普通文件，内容为严格 UTF-8 的单行非空值；直接值与对应文件变量同时存在会失败。`OPENAI_API_KEY` 必须与至少一个 OpenAI 模型同时存在；Responses 与 Embedding 模型可以分别配置，缺少 Embedding 模型时词法查询仍完整可用且不会宣告语义检索 capability。
 
 配置文件上限为 64 KiB，必须是现存普通文件和有效 UTF-8。错误信息只报告字段或合同问题，不回显数据库地址、未知字段名、配置内容或个人路径。
 
@@ -71,19 +71,19 @@ M1C 首版不要求后台文件监视或无中断热切换。允许采用明确�
 
 普通运行角色在取得规范数据根后创建或验证五个固定区域。区域名由程序内部生成，调用方不能提供文件路径或目录片段；已有区域必须是位于数据根内的普通目录，文件、symlink 和 Windows junction 都会使启动或存储操作失败。
 
-| 相对目录       | 当前用途                                   | 当前实现状态                                 |
-| -------------- | ------------------------------------------ | -------------------------------------------- |
-| `blobs/`       | 不可变原始响应、大文本、图片和未来媒体字节 | 本地内容寻址适配器已实现                     |
-| `uploads/`     | 未来上传暂存；暂存内容不是已准入证据       | 只保留独立区域，尚无公开 reader/writer       |
-| `exports/`     | 版本化工作区领域 Bundle                    | M1C v1 规范文件落盘与同 ID 空库恢复已实现    |
-| `backups/`     | 未来数据库与 Blob 联合备份、清单和恢复工件 | 只保留独立区域，格式、保留和恢复合同尚未定义 |
-| `preferences/` | 工作区个人 UI 偏好                         | 审核快捷标记与自动标签筛选 v1 JSON 已实现    |
+| 相对目录       | 当前用途                                   | 当前实现状态                                |
+| -------------- | ------------------------------------------ | ------------------------------------------- |
+| `blobs/`       | 不可变原始响应、大文本、图片和未来媒体字节 | 本地内容寻址适配器已实现                    |
+| `uploads/`     | 未来上传暂存；暂存内容不是已准入证据       | 只保留独立区域，尚无公开 reader/writer      |
+| `exports/`     | 版本化工作区领域 Bundle                    | M1C v1 规范文件落盘与同 ID 空库恢复已实现   |
+| `backups/`     | 完整个人数据备份与空工作区恢复工件         | M1M 维护命令已实现；自动保留/异地复制未实现 |
+| `preferences/` | 工作区个人 UI 偏好                         | 审核快捷标记与自动标签筛选 v1 JSON 已实现   |
 
 本地 Blob 使用 `blobs/sha256/<前两位>/<次两位>/<完整摘要>` 布局。写入边界先把普通、非共享的 `Uint8Array` 精确可见范围复制到自有内存，再从该副本计算 SHA-256、字节长度和身份；默认单 Blob 上限为 64 MiB。调用方只能提交字节或经验证的 `{algorithm, digest, byteLength}` 身份，不能提交目标路径。
 
 发布采用同目录临时文件和原子硬链接；相同内容幂等去重，已有或读取中的字节必须重新通过长度与摘要校验，损坏会作为可见错误返回。当前端口只负责不可变字节，不授予工作区访问权，也不是 HTTP/WS 接口；逻辑 Blob 记录、工作区所有权、引用、保留和删除授权由后续数据库与应用层实现。
 
-当前 64 MiB 是适配器安全默认值，尚未成为外部运行配置项。上传和备份的文件格式及恢复流程仍是后续切片。工作区 Bundle 已具有 16 MiB 默认预算的 v1 规范 JSON reader/writer、`exports/` 文件落盘和同 ID 空库恢复用例；详见[工作区 Bundle 合同](workspace-bundle-contract.md)。
+当前 64 MiB 是适配器安全默认值，尚未成为外部运行配置项。工作区 Bundle 已具有 16 MiB 默认预算的 v1 规范 JSON reader/writer、`exports/` 文件落盘和同 ID 空库恢复用例；M1M 的 `maintenance backup/restore` 复用完整个人数据包，把 61 表、引用 Blob 和偏好写入 `backups/`，并只恢复到同 workspace 空数据库。自动保留、异地复制与非空合并仍未实现；详见[工作区 Bundle 合同](workspace-bundle-contract.md)和[生产运行与维护](production-operations.md)。
 
 审核快捷栏、自动标签筛选和轻量词表整理规则使用
 `preferences/<workspaceId>.review-preferences.json`。文件格式为
@@ -120,7 +120,7 @@ STRUIINFO_LOG_LEVEL=info
 
 ```powershell
 $env:STRUIINFO_CONFIG_PATH = 'C:\StruInfoExample\Config\runtime.env'
-$env:DATABASE_URL = 'postgresql://REPLACE_WITH_RUNTIME_CREDENTIALS@127.0.0.1/struinfo'
+$env:DATABASE_URL_FILE = 'C:\StruInfoExample\Secrets\runtime-database-url.txt'
 ```
 
 以上地址是占位符，不得把替换后的实际值保存回仓库文档或示例。
@@ -136,8 +136,8 @@ STRUIINFO_HOST=127.0.0.1
 STRUIINFO_LOG_LEVEL=info
 ```
 
-应用安装目录（例如 `/opt/struinfo`）、配置目录和数据目录必须分离。容器中的配置与数据必须分别挂载在镜像层之外；镜像构建和容器实测仍需通过既定制品准入门。
+应用安装目录（例如 `/opt/struinfo`）、配置目录和数据目录必须分离。M1M 的 `Dockerfile` 与两份 Compose 清单已经实现该挂载、非 root、只读根和 runtime/migrator secret 隔离；目标 Linux 镜像 digest、漏洞扫描和真实环境演练仍需通过上线审核。
 
 ## 8. 数据库迁移
 
-迁移保持独立权限边界。`corepack pnpm run db:migrate` 只读取 `STRUIINFO_MIGRATION_DATABASE_URL`，不会把普通运行时的 `DATABASE_URL` 当作回退，也不通过普通进程隐式执行 DDL。迁移进程当前不读个人数据根。
+迁移保持独立权限边界。`corepack pnpm run db:migrate` 只读取 `STRUIINFO_MIGRATION_DATABASE_URL` 或其互斥文件变量，不会把普通运行时的 `DATABASE_URL` 当作回退，也不通过普通进程隐式执行 DDL。迁移后以同一 migrator secret 运行 `corepack pnpm run db:prepare-queue`，再由数据库所有者应用 runtime grant；精确顺序见[生产运行与维护](production-operations.md)。这些高权限进程不读个人数据根。

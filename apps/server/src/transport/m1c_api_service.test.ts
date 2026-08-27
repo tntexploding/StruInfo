@@ -2165,6 +2165,70 @@ describe('M1cApiService', () => {
     expect(loadAssociationSnapshot).toHaveBeenCalledTimes(3);
   });
 
+  it('loads one Entry snapshot for lexical search and does not reload it after semantic retrieval', async () => {
+    const loadCurrentEntries = vi.fn(() => Promise.resolve([]));
+    const retrievalSearch = vi.fn(() =>
+      Promise.resolve(
+        Object.freeze({
+          querySha256: '0'.repeat(64),
+          retrievalMode: 'semantic' as const,
+          totalCount: 0,
+          items: Object.freeze([]),
+        }),
+      ),
+    );
+    const service = createService({
+      informationEntryRepository: {
+        materializeEntries: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        materializeEntriesIfSnapshotEmpty: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        reviseEntry: () => Promise.resolve('not_found'),
+        loadCurrentEntries,
+      },
+      informationEntryRetrieval: {
+        semanticSearchAvailable: true,
+        search: retrievalSearch,
+        status: () => Promise.reject(new Error('Unexpected status read.')),
+        rebuild: () => Promise.reject(new Error('Unexpected index rebuild.')),
+        evaluate: () =>
+          Promise.reject(new Error('Unexpected retrieval evaluation.')),
+      },
+    });
+
+    await expect(
+      service.searchInformationEntries({
+        text: 'synthetic',
+        retrievalMode: 'lexical',
+        includePrivate: false,
+        limit: 20,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'ok', privateDocuments: {totalCount: 0, items: []}},
+    });
+    expect(loadCurrentEntries).toHaveBeenCalledTimes(1);
+    expect(retrievalSearch).not.toHaveBeenCalled();
+
+    await expect(
+      service.searchInformationEntries({
+        text: 'synthetic',
+        retrievalMode: 'semantic',
+        includePrivate: false,
+        limit: 20,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        retrievalMode: 'semantic',
+        privateDocuments: {totalCount: 0, items: []},
+      },
+    });
+    expect(retrievalSearch).toHaveBeenCalledTimes(1);
+    expect(loadCurrentEntries).toHaveBeenCalledTimes(1);
+  });
+
   it('closes text mode and field scope at the HTTP boundary', async () => {
     const service = createService();
     for (const body of [
