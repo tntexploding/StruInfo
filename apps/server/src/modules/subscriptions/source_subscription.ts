@@ -30,27 +30,78 @@ import {
   type ReviewPreferences,
   type ReviewPreferencesUpdater,
   type ReviewPreferencesStore,
+  type ReviewGitSourceSubscriptionCursor,
+  type ReviewGitSourceSubscription,
+  type ReviewJsonApiSourceSubscription,
+  type ReviewJsonApiSourceSubscriptionCursor,
+  type ReviewRssSourceSubscription,
+  type ReviewRssSourceSubscriptionCursor,
   type ReviewSourceSubscription,
   type ReviewSourceSubscriptionPreferences,
 } from '../../storage/review_preferences_store.js';
+import {
+  importSourceConnectorDocuments,
+  SourceConnectorError,
+  type SourceConnectorRegistry,
+} from './source_connector.js';
 
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const REQUEST_KEY = /^[A-Za-z0-9._:-]{1,80}$/u;
+const RSS_ATOM_CONNECTOR_ID = 'builtin.rss-atom.v1';
+const JSON_API_CONNECTOR_ID = 'builtin.json-api.v1';
 
-export interface SourceSubscriptionWrite {
+interface SourceSubscriptionWriteBase {
   readonly subscriptionId: string;
   readonly label: string;
   readonly enabled: boolean;
-  readonly repositoryUri: string;
-  readonly repositoryRef: string;
-  readonly repositoryPath: string;
-  readonly profile: 'commonmark-v1' | 'ruanyf-weekly-v1';
   readonly sourceAlias: string;
   readonly isPrivate: boolean;
   readonly routeAfterImport: boolean;
   readonly intervalMinutes: number;
 }
+
+export interface GitSourceSubscriptionWrite extends SourceSubscriptionWriteBase {
+  readonly kind?: 'github_markdown';
+  readonly repositoryUri: string;
+  readonly repositoryRef: string;
+  readonly repositoryPath: string;
+  readonly profile: 'commonmark-v1' | 'ruanyf-weekly-v1';
+}
+
+export interface RssSourceSubscriptionWrite extends SourceSubscriptionWriteBase {
+  readonly kind: 'rss_atom';
+  readonly feedUrl: string;
+  readonly itemLimit: number;
+}
+
+export interface JsonApiSourceSubscriptionWrite extends SourceSubscriptionWriteBase {
+  readonly kind: 'json_api';
+  readonly endpointUrl: string;
+  readonly recordsPath: string;
+  readonly externalIdPath: string;
+  readonly titlePath: string;
+  readonly bodyPath: string;
+  readonly canonicalUriPath?: string;
+  readonly publishedAtPath?: string;
+  readonly versionPath?: string;
+  readonly recordLimit: number;
+  readonly pageCursor?: Readonly<{
+    queryParameter: string;
+    responsePath: string;
+  }>;
+  readonly incrementalCursor?: Readonly<{
+    queryParameter: string;
+    responsePath: string;
+  }>;
+  readonly authentication:
+    Readonly<{kind: 'none'}> | Readonly<{kind: 'bearer_env'; variable: string}>;
+}
+
+export type SourceSubscriptionWrite =
+  | GitSourceSubscriptionWrite
+  | RssSourceSubscriptionWrite
+  | JsonApiSourceSubscriptionWrite;
 
 export interface GitSourceSubscriptionRead {
   readonly commitSha: string;
@@ -60,7 +111,7 @@ export interface GitSourceSubscriptionRead {
 
 export interface GitSourceSubscriptionReaderPort {
   read(
-    subscription: Readonly<ReviewSourceSubscription>,
+    subscription: Readonly<ReviewGitSourceSubscription>,
   ): Promise<Readonly<GitSourceSubscriptionRead>>;
 }
 
@@ -111,7 +162,10 @@ export interface SourceSubscriptionRunResult {
   readonly runId: string;
   readonly subscriptionId: string;
   readonly snapshotId?: string;
+  readonly snapshotIds?: readonly string[];
+  readonly importedDocumentCount?: number;
   readonly automationRunId?: string;
+  readonly automationRunIds?: readonly string[];
   readonly materializedEntryCount?: number;
 }
 
@@ -138,6 +192,7 @@ export interface SourceSubscriptionServiceDependencies {
   readonly preferences: ReviewPreferencesStore;
   readonly processing: ProcessingRunRepositoryPort;
   readonly reader: GitSourceSubscriptionReaderPort;
+  readonly connectors?: SourceConnectorRegistry;
   readonly blobStore: BlobStore;
   readonly evidence: EvidenceRepositoryPort;
   readonly evidenceRead?: EvidenceReadRepositoryPort;
@@ -147,7 +202,18 @@ export interface SourceSubscriptionServiceDependencies {
   readonly automationActions?: EntryAutomationActionRepositoryPort;
   readonly associations?: InformationEntryAssociationRepositoryPort;
   readonly importEvidence?: typeof importMarkdownEvidence;
+  readonly importConnectorDocuments?: typeof importSourceConnectorDocuments;
   readonly now?: () => string;
+}
+
+interface SourceSubscriptionState {
+  readonly lastAttemptAt?: string;
+  readonly lastRunId?: string;
+  readonly lastSuccessAt?: string;
+  readonly cursor?:
+    | Readonly<ReviewGitSourceSubscriptionCursor>
+    | Readonly<ReviewRssSourceSubscriptionCursor>
+    | Readonly<ReviewJsonApiSourceSubscriptionCursor>;
 }
 
 export class SourceSubscriptionService implements SourceSubscriptionServicePort {
@@ -210,8 +276,7 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
           return previous !== undefined &&
             sourceConfigurationIdentity(previous) ===
               sourceConfigurationIdentity(subscription)
-            ? Object.freeze({
-                ...subscription,
+            ? copySourceSubscriptionWithState(subscription, {
                 ...(previous.lastAttemptAt === undefined
                   ? {}
                   : {lastAttemptAt: previous.lastAttemptAt}),
@@ -223,7 +288,7 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
                   : {lastRunId: previous.lastRunId}),
                 ...(previous.cursor === undefined
                   ? {}
-                  : {cursor: Object.freeze({...previous.cursor})}),
+                  : {cursor: previous.cursor}),
               })
             : subscription;
         }),
@@ -332,7 +397,7 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
       expectedVersion: 1,
       status: 'running',
       currentStage: 'import',
-      currentStep: '正在检查 Git 提交与文件内容',
+      currentStep: '正在检查外部信源内容',
       completedUnits: 0,
       totalUnits: 1,
     });
@@ -348,6 +413,17 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
         lastAttemptAt: attemptAt,
         lastRunId: runId,
       });
+      if (
+        subscription.kind === 'rss_atom' ||
+        subscription.kind === 'json_api'
+      ) {
+        return await this.#runConnectorSubscription(
+          subscription,
+          identity,
+          runId,
+          attemptAt,
+        );
+      }
       const read = await this.#dependencies.reader.read(subscription);
       const sourceSha256 = createHash('sha256')
         .update(read.sourceUtf8)
@@ -457,6 +533,143 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
       }
       throw new SourceSubscriptionServiceError(code);
     }
+  }
+
+  async #runConnectorSubscription(
+    subscription: Readonly<
+      ReviewRssSourceSubscription | ReviewJsonApiSourceSubscription
+    >,
+    configurationIdentity: string,
+    runId: string,
+    attemptAt: string,
+  ): Promise<Readonly<SourceSubscriptionRunResult>> {
+    const connectors = this.#dependencies.connectors;
+    if (connectors === undefined) {
+      throw new SourceSubscriptionServiceError('source_unavailable');
+    }
+    const connectorId =
+      subscription.kind === 'rss_atom'
+        ? RSS_ATOM_CONNECTOR_ID
+        : JSON_API_CONNECTOR_ID;
+    const sourceLabel =
+      subscription.kind === 'rss_atom' ? 'Feed 条目' : 'JSON API 记录';
+    const read = await connectors.read(connectorId, {
+      subscriptionId: subscription.subscriptionId,
+      configuration: connectorConfiguration(subscription),
+      ...(subscription.cursor === undefined
+        ? {}
+        : {previousCursor: subscription.cursor.connectorCursor}),
+    });
+    if (read.status === 'unchanged') {
+      await this.#recordSubscriptionState(subscription, configurationIdentity, {
+        lastAttemptAt: attemptAt,
+        lastSuccessAt: this.#now(),
+        lastRunId: runId,
+        cursor: Object.freeze({connectorCursor: read.cursor}),
+      });
+      await this.#completeRun(runId, 2, `${sourceLabel}没有新增或变化内容`);
+      return Object.freeze({
+        outcome: 'unchanged' as const,
+        runId,
+        subscriptionId: subscription.subscriptionId,
+      });
+    }
+    const writing = await this.#dependencies.processing.writeProgress({
+      workspaceId: this.#dependencies.workspaceId,
+      runId,
+      expectedVersion: 2,
+      status: 'running',
+      currentStage: 'import',
+      currentStep: `正在逐条写入 ${String(read.documents.length)} 个${sourceLabel}`,
+      completedUnits: 0,
+      totalUnits: read.documents.length,
+    });
+    if (writing !== 'applied') {
+      throw new SourceSubscriptionServiceError(
+        'source_subscription_run_invalid',
+      );
+    }
+    const imported = await (
+      this.#dependencies.importConnectorDocuments ??
+      importSourceConnectorDocuments
+    )(
+      {
+        blobStore: this.#dependencies.blobStore,
+        evidenceRepository: this.#dependencies.evidence,
+      },
+      {
+        workspaceId: this.#dependencies.workspaceId,
+        subscriptionId: subscription.subscriptionId,
+        connectorId,
+        sourceAlias: subscription.sourceAlias,
+        isPrivate: subscription.isPrivate,
+        capturedAt: attemptAt,
+        result: read,
+      },
+    );
+    if (imported.status !== 'complete') {
+      throw new SourceSubscriptionServiceError(
+        imported.code === 'persistence_failed'
+          ? 'source_import_unavailable'
+          : 'source_import_rejected',
+      );
+    }
+    const routed = [];
+    if (subscription.routeAfterImport) {
+      for (const document of imported.documents) {
+        routed.push(
+          await this.#routeImportedSnapshot(
+            subscription,
+            document.snapshotId,
+            createHash('sha256')
+              .update(
+                `${read.cursor}\u0000${document.externalId}\u0000${document.snapshotId}`,
+                'utf8',
+              )
+              .digest('hex'),
+          ),
+        );
+      }
+    }
+    await this.#recordSubscriptionState(subscription, configurationIdentity, {
+      lastAttemptAt: attemptAt,
+      lastSuccessAt: this.#now(),
+      lastRunId: runId,
+      cursor: Object.freeze({connectorCursor: read.cursor}),
+    });
+    await this.#completeRun(
+      runId,
+      3,
+      routed.length === 0
+        ? `已保存 ${String(imported.documents.length)} 个${sourceLabel}`
+        : `已保存并分流 ${String(imported.documents.length)} 个${sourceLabel}`,
+      imported.documents.length,
+      read.documents.length,
+    );
+    const snapshotIds = Object.freeze(
+      imported.documents.map((document) => document.snapshotId),
+    );
+    const automationRunIds = Object.freeze(
+      routed.map((result) => result.automationRunId),
+    );
+    return Object.freeze({
+      outcome: 'imported' as const,
+      runId,
+      subscriptionId: subscription.subscriptionId,
+      ...(snapshotIds[0] === undefined ? {} : {snapshotId: snapshotIds[0]}),
+      snapshotIds,
+      importedDocumentCount: imported.documents.length,
+      ...(automationRunIds.length === 0
+        ? {}
+        : {
+            automationRunId: automationRunIds[0],
+            automationRunIds,
+            materializedEntryCount: routed.reduce(
+              (total, result) => total + result.materializedEntryCount,
+              0,
+            ),
+          }),
+    });
   }
 
   async #routeImportedSnapshot(
@@ -599,6 +812,8 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
     runId: string,
     expectedVersion: number,
     currentStep: string,
+    completedUnits = 1,
+    totalUnits = 1,
   ): Promise<void> {
     const completed = await this.#dependencies.processing.writeProgress({
       workspaceId: this.#dependencies.workspaceId,
@@ -607,8 +822,8 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
       status: 'succeeded',
       currentStage: 'import',
       currentStep,
-      completedUnits: 1,
-      totalUnits: 1,
+      completedUnits,
+      totalUnits,
     });
     if (completed !== 'applied') {
       throw new SourceSubscriptionServiceError(
@@ -634,10 +849,7 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
   async #recordSubscriptionState(
     original: Readonly<ReviewSourceSubscription>,
     configurationIdentity: string,
-    state: Readonly<
-      Pick<ReviewSourceSubscription, 'lastAttemptAt' | 'lastRunId'> &
-        Partial<Pick<ReviewSourceSubscription, 'lastSuccessAt' | 'cursor'>>
-    >,
+    state: Readonly<SourceSubscriptionState>,
   ): Promise<void> {
     await this.#updatePreferences((preferences) => {
       const current =
@@ -656,7 +868,7 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
       const subscriptions = current.subscriptions.map(
         (subscription, ordinal) =>
           ordinal === index
-            ? Object.freeze({...subscription, ...state})
+            ? copySourceSubscriptionWithState(subscription, state)
             : subscription,
       );
       return Object.freeze({
@@ -709,7 +921,7 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
 
 function subscriptionImportInput(
   workspaceId: string,
-  subscription: Readonly<ReviewSourceSubscription>,
+  subscription: Readonly<ReviewGitSourceSubscription>,
   read: Readonly<GitSourceSubscriptionRead>,
   sourceSha256: string,
   capturedAt: string,
@@ -774,9 +986,48 @@ function subscriptionImportInput(
 function sourceConfigurationIdentity(
   subscription: Readonly<ReviewSourceSubscription>,
 ): string {
+  if (subscription.kind === 'rss_atom') {
+    return createHash('sha256')
+      .update(
+        JSON.stringify([
+          subscription.kind,
+          subscription.feedUrl,
+          subscription.itemLimit,
+          subscription.sourceAlias,
+          subscription.isPrivate,
+          subscription.routeAfterImport,
+        ]),
+      )
+      .digest('hex');
+  }
+  if (subscription.kind === 'json_api') {
+    return createHash('sha256')
+      .update(
+        JSON.stringify([
+          subscription.kind,
+          subscription.endpointUrl,
+          subscription.recordsPath,
+          subscription.externalIdPath,
+          subscription.titlePath,
+          subscription.bodyPath,
+          subscription.canonicalUriPath ?? null,
+          subscription.publishedAtPath ?? null,
+          subscription.versionPath ?? null,
+          subscription.recordLimit,
+          subscription.pageCursor ?? null,
+          subscription.incrementalCursor ?? null,
+          subscription.authentication,
+          subscription.sourceAlias,
+          subscription.isPrivate,
+          subscription.routeAfterImport,
+        ]),
+      )
+      .digest('hex');
+  }
   return createHash('sha256')
     .update(
       JSON.stringify([
+        subscription.kind,
         subscription.repositoryUri,
         subscription.repositoryRef,
         subscription.repositoryPath,
@@ -789,8 +1040,104 @@ function sourceConfigurationIdentity(
     .digest('hex');
 }
 
-function sourceContentIdentity(
+function copySourceSubscriptionWithState(
   subscription: Readonly<ReviewSourceSubscription>,
+  state: Readonly<SourceSubscriptionState>,
+): Readonly<ReviewSourceSubscription> {
+  const timestamps = {
+    ...(state.lastAttemptAt === undefined
+      ? {}
+      : {lastAttemptAt: state.lastAttemptAt}),
+    ...(state.lastSuccessAt === undefined
+      ? {}
+      : {lastSuccessAt: state.lastSuccessAt}),
+    ...(state.lastRunId === undefined ? {} : {lastRunId: state.lastRunId}),
+  };
+  if (subscription.kind === 'rss_atom' || subscription.kind === 'json_api') {
+    if (
+      state.cursor !== undefined &&
+      !Object.hasOwn(state.cursor, 'connectorCursor')
+    ) {
+      throw new SourceSubscriptionServiceError('source_subscription_changed');
+    }
+    return Object.freeze({
+      ...subscription,
+      ...timestamps,
+      ...(state.cursor === undefined
+        ? {}
+        : {
+            cursor: Object.freeze({
+              connectorCursor: (
+                state.cursor as
+                  | ReviewRssSourceSubscriptionCursor
+                  | ReviewJsonApiSourceSubscriptionCursor
+              ).connectorCursor,
+            }),
+          }),
+    });
+  }
+  if (state.cursor !== undefined && !Object.hasOwn(state.cursor, 'commitSha')) {
+    throw new SourceSubscriptionServiceError('source_subscription_changed');
+  }
+  return Object.freeze({
+    ...subscription,
+    ...timestamps,
+    ...(state.cursor === undefined
+      ? {}
+      : {
+          cursor: Object.freeze({
+            commitSha: (state.cursor as ReviewGitSourceSubscriptionCursor)
+              .commitSha,
+            sourceSha256: (state.cursor as ReviewGitSourceSubscriptionCursor)
+              .sourceSha256,
+          }),
+        }),
+  });
+}
+
+function connectorConfiguration(
+  subscription: Readonly<
+    ReviewRssSourceSubscription | ReviewJsonApiSourceSubscription
+  >,
+): Readonly<Record<string, unknown>> {
+  if (subscription.kind === 'rss_atom') {
+    return Object.freeze({
+      feedUrl: subscription.feedUrl,
+      itemLimit: subscription.itemLimit,
+    });
+  }
+  return Object.freeze({
+    endpointUrl: subscription.endpointUrl,
+    recordsPath: subscription.recordsPath,
+    externalIdPath: subscription.externalIdPath,
+    titlePath: subscription.titlePath,
+    bodyPath: subscription.bodyPath,
+    ...(subscription.canonicalUriPath === undefined
+      ? {}
+      : {canonicalUriPath: subscription.canonicalUriPath}),
+    ...(subscription.publishedAtPath === undefined
+      ? {}
+      : {publishedAtPath: subscription.publishedAtPath}),
+    ...(subscription.versionPath === undefined
+      ? {}
+      : {versionPath: subscription.versionPath}),
+    recordLimit: subscription.recordLimit,
+    ...(subscription.pageCursor === undefined
+      ? {}
+      : {pageCursor: Object.freeze({...subscription.pageCursor})}),
+    ...(subscription.incrementalCursor === undefined
+      ? {}
+      : {
+          incrementalCursor: Object.freeze({
+            ...subscription.incrementalCursor,
+          }),
+        }),
+    authentication: Object.freeze({...subscription.authentication}),
+  });
+}
+
+function sourceContentIdentity(
+  subscription: Readonly<ReviewGitSourceSubscription>,
 ): string {
   return createHash('sha256')
     .update(
@@ -847,6 +1194,11 @@ function sourceSubscriptionErrorCode(
   error: unknown,
 ): SourceSubscriptionServiceErrorCode {
   if (error instanceof SourceSubscriptionReaderError) return error.code;
+  if (error instanceof SourceConnectorError) {
+    if (error.code === 'connector_too_large') return 'source_too_large';
+    if (error.code === 'connector_result_invalid') return 'source_invalid';
+    return 'source_unavailable';
+  }
   if (error instanceof SourceSubscriptionServiceError) return error.code;
   return 'source_import_unavailable';
 }

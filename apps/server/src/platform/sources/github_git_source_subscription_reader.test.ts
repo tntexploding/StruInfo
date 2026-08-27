@@ -3,7 +3,7 @@ import {Buffer} from 'node:buffer';
 import {describe, expect, it, vi} from 'vitest';
 
 import {SourceSubscriptionReaderError} from '../../modules/subscriptions/index.js';
-import type {ReviewSourceSubscription} from '../../storage/review_preferences_store.js';
+import type {ReviewGitSourceSubscription} from '../../storage/review_preferences_store.js';
 import {GithubGitSourceSubscriptionReader} from './github_git_source_subscription_reader.js';
 
 const COMMIT_SHA = 'a'.repeat(40);
@@ -72,7 +72,7 @@ describe('GithubGitSourceSubscriptionReader', () => {
   });
 });
 
-function subscription(): Readonly<ReviewSourceSubscription> {
+function subscription(): Readonly<ReviewGitSourceSubscription> {
   return Object.freeze({
     subscriptionId: '22222222-2222-4222-8222-222222222222',
     label: 'Synthetic',

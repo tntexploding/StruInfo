@@ -27,6 +27,7 @@ import {
   type ReviewPreferences,
   type ReviewPreferencesStore,
 } from '../../storage/review_preferences_store.js';
+import {SourceConnectorRegistry} from './source_connector.js';
 import {SourceSubscriptionService} from './source_subscription.js';
 
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
@@ -124,7 +125,12 @@ describe('SourceSubscriptionService', () => {
       },
     ]);
     expect(replaced.outcome).toBe('applied');
-    expect(replaced.value.subscriptions[0]?.repositoryUri).toBe(
+    const savedSubscription = replaced.value.subscriptions[0];
+    expect(savedSubscription?.kind).toBe('github_markdown');
+    if (savedSubscription?.kind !== 'github_markdown') {
+      throw new Error('expected saved Git subscription');
+    }
+    expect(savedSubscription.repositoryUri).toBe(
       'https://github.com/example/project',
     );
 
@@ -366,6 +372,232 @@ describe('SourceSubscriptionService', () => {
     });
     expect((await service.list()).subscriptions[0]?.cursor).toMatchObject({
       commitSha: COMMIT_SHA,
+    });
+  });
+
+  it('imports an RSS connector batch before advancing its opaque cursor', async () => {
+    const preferences = memoryPreferences();
+    const processing = memoryProcessingRuns();
+    const connector = {
+      connectorId: 'builtin.rss-atom.v1',
+      read: vi.fn(() =>
+        Promise.resolve({
+          status: 'changed' as const,
+          cursor: 'synthetic-cursor-v1',
+          documents: Object.freeze([
+            Object.freeze({
+              externalId: 'synthetic-feed-item-1',
+              version: 'version-1',
+              canonicalUri: 'https://example.invalid/items/1',
+              mediaType: 'application/rss+xml',
+              profile: 'commonmark-v1' as const,
+              sourceUtf8: new TextEncoder().encode('# First\n'),
+            }),
+            Object.freeze({
+              externalId: 'synthetic-feed-item-2',
+              version: 'version-1',
+              canonicalUri: 'https://example.invalid/items/2',
+              mediaType: 'application/rss+xml',
+              profile: 'commonmark-v1' as const,
+              sourceUtf8: new TextEncoder().encode('# Second\n'),
+            }),
+          ]),
+        }),
+      ),
+    };
+    const importConnectorDocuments = vi.fn(() =>
+      Promise.resolve({
+        status: 'complete' as const,
+        documents: Object.freeze([
+          Object.freeze({
+            externalId: 'synthetic-feed-item-1',
+            resourceId: '33333333-3333-4333-8333-333333333333',
+            snapshotId: '44444444-4444-4444-8444-444444444444',
+            outcome: 'created' as const,
+          }),
+          Object.freeze({
+            externalId: 'synthetic-feed-item-2',
+            resourceId: '55555555-5555-4555-8555-555555555555',
+            snapshotId: '66666666-6666-4666-8666-666666666666',
+            outcome: 'created' as const,
+          }),
+        ]),
+      }),
+    );
+    const gitReader = {read: vi.fn()};
+    const service = new SourceSubscriptionService({
+      workspaceId: WORKSPACE_ID,
+      preferences,
+      processing,
+      reader: gitReader,
+      connectors: new SourceConnectorRegistry([connector]),
+      blobStore: {
+        put: () => Promise.reject(new Error('unexpected Blob write')),
+        read: () => Promise.reject(new Error('unexpected Blob read')),
+      },
+      evidence: {
+        saveCapture: () =>
+          Promise.reject(new Error('unexpected Evidence write')),
+      },
+      importConnectorDocuments,
+      now: () => '2026-08-25T08:00:00.000Z',
+    });
+    await service.replace(0, [
+      {
+        kind: 'rss_atom',
+        subscriptionId: SUBSCRIPTION_ID,
+        label: 'Synthetic Feed',
+        enabled: false,
+        feedUrl: 'https://example.invalid/feed.xml',
+        itemLimit: 20,
+        sourceAlias: 'synthetic-feed',
+        isPrivate: false,
+        routeAfterImport: false,
+        intervalMinutes: 60,
+      },
+    ]);
+
+    await expect(
+      service.runNow(SUBSCRIPTION_ID, 'rss-check'),
+    ).resolves.toMatchObject({
+      outcome: 'imported',
+      importedDocumentCount: 2,
+      snapshotId: '44444444-4444-4444-8444-444444444444',
+      snapshotIds: [
+        '44444444-4444-4444-8444-444444444444',
+        '66666666-6666-4666-8666-666666666666',
+      ],
+    });
+    expect(gitReader.read).not.toHaveBeenCalled();
+    expect(importConnectorDocuments).toHaveBeenCalledTimes(1);
+    expect((await service.list()).subscriptions[0]).toMatchObject({
+      kind: 'rss_atom',
+      cursor: {connectorCursor: 'synthetic-cursor-v1'},
+    });
+  });
+
+  it('passes declarative JSON mappings to the connector and commits its cursor last', async () => {
+    const preferences = memoryPreferences();
+    const connector = {
+      connectorId: 'builtin.json-api.v1',
+      read: vi.fn(() =>
+        Promise.resolve({
+          status: 'changed' as const,
+          cursor: 'synthetic-json-cursor-v1',
+          documents: Object.freeze([
+            Object.freeze({
+              externalId: 'record-1',
+              version: 'version-1',
+              canonicalUri: 'https://api.example.invalid/records/1',
+              mediaType: 'application/json',
+              profile: 'commonmark-v1' as const,
+              sourceUtf8: new TextEncoder().encode('# Record one\n'),
+            }),
+          ]),
+        }),
+      ),
+    };
+    const importConnectorDocuments = vi.fn(() =>
+      Promise.resolve({
+        status: 'complete' as const,
+        documents: Object.freeze([
+          Object.freeze({
+            externalId: 'record-1',
+            resourceId: '33333333-3333-4333-8333-333333333333',
+            snapshotId: '44444444-4444-4444-8444-444444444444',
+            outcome: 'created' as const,
+          }),
+        ]),
+      }),
+    );
+    const service = new SourceSubscriptionService({
+      workspaceId: WORKSPACE_ID,
+      preferences,
+      processing: memoryProcessingRuns(),
+      reader: {read: vi.fn()},
+      connectors: new SourceConnectorRegistry([connector]),
+      blobStore: {
+        put: () => Promise.reject(new Error('unexpected Blob write')),
+        read: () => Promise.reject(new Error('unexpected Blob read')),
+      },
+      evidence: {
+        saveCapture: () =>
+          Promise.reject(new Error('unexpected Evidence write')),
+      },
+      importConnectorDocuments,
+      now: () => '2026-08-27T08:00:00.000Z',
+    });
+    await service.replace(0, [
+      {
+        kind: 'json_api',
+        subscriptionId: SUBSCRIPTION_ID,
+        label: 'Synthetic JSON API',
+        enabled: false,
+        endpointUrl: 'https://api.example.invalid/records',
+        recordsPath: 'data.items',
+        externalIdPath: 'id',
+        titlePath: 'title',
+        bodyPath: 'content.body',
+        canonicalUriPath: 'url',
+        publishedAtPath: 'published_at',
+        versionPath: 'revision',
+        recordLimit: 16,
+        pageCursor: {
+          queryParameter: 'cursor',
+          responsePath: 'next_cursor',
+        },
+        incrementalCursor: {
+          queryParameter: 'since',
+          responsePath: 'checkpoint',
+        },
+        authentication: {
+          kind: 'bearer_env',
+          variable: 'STRUIINFO_SYNTHETIC_API_TOKEN',
+        },
+        sourceAlias: 'synthetic-json',
+        isPrivate: false,
+        routeAfterImport: false,
+        intervalMinutes: 60,
+      },
+    ]);
+
+    await expect(
+      service.runNow(SUBSCRIPTION_ID, 'json-check'),
+    ).resolves.toMatchObject({
+      outcome: 'imported',
+      importedDocumentCount: 1,
+      snapshotId: '44444444-4444-4444-8444-444444444444',
+    });
+    expect(connector.read).toHaveBeenCalledWith({
+      subscriptionId: SUBSCRIPTION_ID,
+      configuration: {
+        endpointUrl: 'https://api.example.invalid/records',
+        recordsPath: 'data.items',
+        externalIdPath: 'id',
+        titlePath: 'title',
+        bodyPath: 'content.body',
+        canonicalUriPath: 'url',
+        publishedAtPath: 'published_at',
+        versionPath: 'revision',
+        recordLimit: 16,
+        pageCursor: {
+          queryParameter: 'cursor',
+          responsePath: 'next_cursor',
+        },
+        incrementalCursor: {
+          queryParameter: 'since',
+          responsePath: 'checkpoint',
+        },
+        authentication: {
+          kind: 'bearer_env',
+          variable: 'STRUIINFO_SYNTHETIC_API_TOKEN',
+        },
+      },
+    });
+    expect(importConnectorDocuments).toHaveBeenCalledTimes(1);
+    expect((await service.list()).subscriptions[0]).toMatchObject({
+      kind: 'json_api',
+      cursor: {connectorCursor: 'synthetic-json-cursor-v1'},
     });
   });
 });

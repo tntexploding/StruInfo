@@ -1,8 +1,9 @@
 # Third-Party Notices
 
 - Foundation task: `M0-S-FOUNDATION-MAINT-001`
-- Dependency increments: `M1A-MD-DEP-MAINT-001`, `M1E-5B-DOCUMENT-IMPORT`
-- Tracked lock SHA-256: `10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A`
+- Dependency increments: `M1A-MD-DEP-MAINT-001`, `M1E-5B-DOCUMENT-IMPORT`, `M1I-2-RSS-ATOM`
+- Tracked lock SHA-256: `9AA55459A0A5EDD2D6AB7BEEB8CD81152297CB2276CB2026E4634F2306D7BD22`
+- M1I-2 pre-increment lock SHA-256: `10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A`
 - M1E-5B pre-increment lock SHA-256: `99F261C35311919380BF6AEF018E0B2A9D076DC7937A5EDE1E0D7F26F56192A0`
 - Foundation pre-M1A lock SHA-256: `A783E1C5B2DADD8B653D8E16446847530473D5569BB08830D7FC03D79400880B`
 - Scope: tracked Windows x64 and Linux x64/glibc npm closure plus the two
@@ -58,6 +59,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `@nestjs/common@11.1.28` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/nestjs__common@11.1.28/LICENSE` |
 | `@nestjs/core@11.1.28` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/nestjs__core@11.1.28/LICENSE` |
 | `@nestjs/platform-express@11.1.28` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/nestjs__platform-express@11.1.28/LICENSE` |
+| `@nodable/entities@3.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm-source/nodable__entities@3.0.0/canonical-MIT.txt` (DECLARED_SPDX_WITH_CANONICAL_TEXT) |
 | `@oxc-project/types@0.143.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/oxc-project__types@0.143.0/LICENSE` |
 | `@playwright/test@1.62.1` | development | `Apache-2.0` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/playwright__test@1.62.1/LICENSE`<br>`docs/dependencies/licenses/npm/playwright__test@1.62.1/NOTICE` |
 | `@rolldown/binding-linux-x64-gnu@1.2.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/rolldown@1.2.3/LICENSE` (EXACT_VERSION_MAIN_PACKAGE_LEGAL_TEXT) |
@@ -110,6 +112,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `acorn-jsx@5.3.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/acorn-jsx@5.3.2/LICENSE` |
 | `acorn@8.18.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/acorn@8.18.0/LICENSE` |
 | `ajv@6.15.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ajv@6.15.0/LICENSE` |
+| `anynum@1.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/anynum@1.0.1/LICENSE` |
 | `append-field@1.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/append-field@1.0.0/LICENSE` |
 | `assertion-error@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/assertion-error@2.0.1/LICENSE` |
 | `balanced-match@4.0.4` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/balanced-match@4.0.4/LICENSE.md` |
@@ -176,6 +179,8 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `fast-json-stable-stringify@2.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fast-json-stable-stringify@2.1.0/LICENSE` |
 | `fast-levenshtein@2.0.6` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fast-levenshtein@2.0.6/LICENSE.md` |
 | `fast-safe-stringify@2.1.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fast-safe-stringify@2.1.1/LICENSE` |
+| `fast-xml-builder@1.3.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fast-xml-builder@1.3.1/LICENSE` |
+| `fast-xml-parser@5.11.0` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fast-xml-parser@5.11.0/LICENSE` |
 | `fdir@6.5.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fdir@6.5.0/LICENSE` |
 | `file-entry-cache@8.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/file-entry-cache@8.0.0/LICENSE` |
 | `file-type@21.3.4` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/file-type@21.3.4/license` |
@@ -207,6 +212,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `is-extglob@2.1.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/is-extglob@2.1.1/LICENSE` |
 | `is-glob@4.0.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/is-glob@4.0.3/LICENSE` |
 | `is-promise@4.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/is-promise@4.0.0/LICENSE` |
+| `is-unsafe@2.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/is-unsafe@2.0.2/LICENSE` |
 | `isexe@2.0.0` | transitive | `ISC` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/isexe@2.0.0/LICENSE` |
 | `iterare@1.2.1` | transitive | `ISC` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/iterare@1.2.1/LICENSE.txt` |
 | `js-tokens@4.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/js-tokens@4.0.0/LICENSE` |
@@ -275,6 +281,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `parse5@8.0.1` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/parse5@8.0.1/LICENSE` |
 | `parseurl@1.3.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/parseurl@1.3.3/LICENSE` |
 | `path-exists@4.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/path-exists@4.0.0/license` |
+| `path-expression-matcher@1.6.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/path-expression-matcher@1.6.2/LICENSE` |
 | `path-key@3.1.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/path-key@3.1.1/license` |
 | `path-to-regexp@8.4.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/path-to-regexp@8.4.2/LICENSE` |
 | `pathe@2.0.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/pathe@2.0.3/LICENSE` |
@@ -334,6 +341,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `std-env@4.2.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/std-env@4.2.0/LICENCE` |
 | `streamsearch@1.1.0` | transitive | `(MIT)` | CONDITIONAL_REVIEW | `docs/dependencies/licenses/npm/streamsearch@1.1.0/mscdex-streamsearch-b9e9b39__LICENSE` |
 | `string_decoder@1.3.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/string_decoder@1.3.0/LICENSE` |
+| `strnum@2.4.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/strnum@2.4.2/LICENSE` |
 | `strtok3@10.3.5` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/strtok3@10.3.5/LICENSE.txt` |
 | `tagged-tag@1.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/tagged-tag@1.0.0/license` |
 | `tinybench@2.9.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/tinybench@2.9.0/LICENSE` |
@@ -367,6 +375,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `why-is-node-running@2.3.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/why-is-node-running@2.3.0/LICENSE` |
 | `word-wrap@1.2.5` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/word-wrap@1.2.5/LICENSE` |
 | `wrappy@1.0.2` | transitive | `ISC` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/wrappy@1.0.2/LICENSE` |
+| `xml-naming@0.3.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/xml-naming@0.3.0/LICENSE` |
 | `xtend@4.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/xtend@4.0.2/LICENSE` |
 | `yallist@3.1.1` | transitive | `ISC` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/yallist@3.1.1/LICENSE` |
 | `yocto-queue@0.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/yocto-queue@0.1.0/license` |

@@ -4,6 +4,7 @@ export const RESOURCE_KINDS = [
   'git_file',
   'manual_text',
   'uploaded_file',
+  'remote_document',
 ] as const;
 export type ResourceKind = (typeof RESOURCE_KINDS)[number];
 

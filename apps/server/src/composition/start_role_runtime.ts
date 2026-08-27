@@ -6,6 +6,7 @@ import {
   AiTagProposalService,
 } from '../modules/processing/index.js';
 import {
+  SourceConnectorRegistry,
   SourceSubscriptionService,
   type GitSourceSubscriptionReaderPort,
 } from '../modules/subscriptions/index.js';
@@ -15,7 +16,11 @@ import {
   OpenAiEntryTagProvider,
   OpenAiInformationEntryQuerySynthesisProvider,
 } from '../platform/ai/index.js';
-import {GithubGitSourceSubscriptionReader} from '../platform/sources/index.js';
+import {
+  GithubGitSourceSubscriptionReader,
+  JsonApiSourceConnector,
+  RssAtomSourceConnector,
+} from '../platform/sources/index.js';
 import {
   createRuntimeDatabase,
   type DatabasePoolFactory,
@@ -176,6 +181,10 @@ export async function startRoleRuntime(
     reader:
       dependencies.sourceSubscriptionReader ??
       new GithubGitSourceSubscriptionReader(),
+    connectors: new SourceConnectorRegistry([
+      new RssAtomSourceConnector(),
+      new JsonApiSourceConnector(),
+    ]),
     blobStore: storage.blobStore,
     evidence: repositories.evidence,
     evidenceRead: repositories.evidenceRead,

@@ -529,6 +529,27 @@ personal-data-package section. This adds no migration, dependency, API route,
 directory scan, automatic Entry materialization, tag/link action, Provider call
 or real data.
 
+ADR 0037 starts the owner-selected pre-launch external-source phase. M1I-1A/B
+adds a bounded connector result shared by built-in readers and optional trusted
+plugin adapters, plus the remote-document Evidence kind and deterministic
+multi-document import preparer. ADR 0038 completes M1I-2: external preferences,
+the existing subscription API/scheduler and Import page now admit public
+RSS/Atom Feeds through one built-in adapter with conditional requests, bounded
+item-version cursors, server-owned HTML-to-Markdown projection and per-item
+Evidence import. Feed item links remain references and are never crawled.
+ADR 0039 completes M1I-3: the same external preference, API, scheduler,
+ProcessingRun and Import surfaces now admit a bounded declarative JSON API
+adapter. It performs public HTTPS GET only, maps records through closed dot
+paths, separates same-run pagination from cross-run incremental cursors and
+stores only an environment-variable reference for optional Bearer credentials.
+GitHub Markdown, RSS/Atom and declarative JSON API are the current public remote
+subscriptions; constrained Web and installed-plugin product adapters remain
+later boundaries. Connector code retains no database, Entry, tag, Association,
+graph, AI or cursor-write port. The pre-launch order is now external sources, formal-knowledge
+deepening, tokenization/vector/RAG, measured performance work, then
+container/maintenance/production closure. Unrelated product expansion waits
+for post-development use with explicitly authorized real material.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

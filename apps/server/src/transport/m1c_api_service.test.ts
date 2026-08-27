@@ -2929,6 +2929,49 @@ describe('M1E provider-neutral processing API', () => {
       routeAfterImport: false,
       intervalMinutes: 1_440,
     });
+    const rssSubscription = Object.freeze({
+      kind: 'rss_atom' as const,
+      subscriptionId: '44444444-4444-4444-8444-444444444444',
+      label: 'Synthetic Feed',
+      enabled: true,
+      feedUrl: 'https://example.invalid/feed.xml',
+      itemLimit: 10,
+      sourceAlias: 'synthetic-feed',
+      isPrivate: false,
+      routeAfterImport: false,
+      intervalMinutes: 60,
+    });
+    const jsonSubscription = Object.freeze({
+      kind: 'json_api' as const,
+      subscriptionId: '55555555-5555-4555-8555-555555555555',
+      label: 'Synthetic JSON API',
+      enabled: false,
+      endpointUrl: 'https://api.example.invalid/records',
+      recordsPath: 'data.items',
+      externalIdPath: 'id',
+      titlePath: 'title',
+      bodyPath: 'content.body',
+      canonicalUriPath: 'url',
+      publishedAtPath: 'published_at',
+      versionPath: 'revision',
+      recordLimit: 24,
+      pageCursor: Object.freeze({
+        queryParameter: 'cursor',
+        responsePath: 'next_cursor',
+      }),
+      incrementalCursor: Object.freeze({
+        queryParameter: 'since',
+        responsePath: 'checkpoint',
+      }),
+      authentication: Object.freeze({
+        kind: 'bearer_env' as const,
+        variable: 'STRUIINFO_SYNTHETIC_API_TOKEN',
+      }),
+      sourceAlias: 'synthetic-json',
+      isPrivate: false,
+      routeAfterImport: false,
+      intervalMinutes: 60,
+    });
     const replace = vi.fn(() =>
       Promise.resolve({
         outcome: 'applied' as const,
@@ -2977,7 +3020,46 @@ describe('M1E provider-neutral processing API', () => {
       statusCode: 200,
       body: {status: 'applied', revision: 1},
     });
-    expect(replace).toHaveBeenCalledWith(1, [subscription]);
+    expect(replace).toHaveBeenCalledWith(1, [
+      {...subscription, kind: 'github_markdown'},
+    ]);
+    await expect(
+      service.replaceSourceSubscriptions({
+        expectedRevision: 1,
+        subscriptions: [rssSubscription],
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'applied'},
+    });
+    expect(replace).toHaveBeenLastCalledWith(1, [rssSubscription]);
+    await expect(
+      service.replaceSourceSubscriptions({
+        expectedRevision: 1,
+        subscriptions: [jsonSubscription],
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'applied'},
+    });
+    expect(replace).toHaveBeenLastCalledWith(1, [jsonSubscription]);
+    await expect(
+      service.replaceSourceSubscriptions({
+        expectedRevision: 1,
+        subscriptions: [
+          {
+            ...jsonSubscription,
+            authentication: {
+              kind: 'bearer_env',
+              variable: 'not-lowercase',
+            },
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 422,
+      body: {status: 'rejected'},
+    });
     await expect(
       service.runSourceSubscription(subscription.subscriptionId, {
         requestKey: 'synthetic-check',

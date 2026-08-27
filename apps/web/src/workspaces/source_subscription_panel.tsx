@@ -118,9 +118,44 @@ export function SourceSubscriptionPanel({
             drafts: Object.freeze(
               current.drafts.map((subscription) =>
                 subscription.subscriptionId === subscriptionId
-                  ? Object.freeze({...subscription, ...change})
+                  ? (Object.freeze({
+                      ...subscription,
+                      ...change,
+                    }) as Readonly<SourceSubscriptionWrite>)
                   : subscription,
               ),
+            ),
+          },
+    );
+    setFeedback(undefined);
+  }
+
+  function removeJsonApiCursorMapping(
+    subscriptionId: string,
+    field: 'pageCursor' | 'incrementalCursor',
+  ) {
+    setState((current) =>
+      current.status !== 'ready'
+        ? current
+        : {
+            ...current,
+            drafts: Object.freeze(
+              current.drafts.map((subscription) => {
+                if (
+                  subscription.subscriptionId !== subscriptionId ||
+                  subscription.kind !== 'json_api'
+                ) {
+                  return subscription;
+                }
+                if (field === 'pageCursor') {
+                  const remaining = {...subscription};
+                  delete remaining.pageCursor;
+                  return Object.freeze(remaining);
+                }
+                const remaining = {...subscription};
+                delete remaining.incrementalCursor;
+                return Object.freeze(remaining);
+              }),
             ),
           },
     );
@@ -136,6 +171,7 @@ export function SourceSubscriptionPanel({
             drafts: Object.freeze([
               ...current.drafts,
               Object.freeze({
+                kind: 'github_markdown' as const,
                 subscriptionId: createClientUuid(),
                 label: '',
                 enabled: false,
@@ -164,6 +200,64 @@ export function SourceSubscriptionPanel({
               current.drafts.filter(
                 (subscription) =>
                   subscription.subscriptionId !== subscriptionId,
+              ),
+            ),
+          },
+    );
+    setFeedback(undefined);
+  }
+
+  function changeSubscriptionKind(
+    subscription: Readonly<SourceSubscriptionWrite>,
+    kind: SourceSubscriptionWrite['kind'],
+  ) {
+    const common = {
+      subscriptionId: subscription.subscriptionId,
+      label: subscription.label,
+      enabled: subscription.enabled,
+      sourceAlias: subscription.sourceAlias,
+      isPrivate: subscription.isPrivate,
+      routeAfterImport: subscription.routeAfterImport,
+      intervalMinutes: subscription.intervalMinutes,
+    };
+    const next: Readonly<SourceSubscriptionWrite> =
+      kind === 'rss_atom'
+        ? Object.freeze({
+            ...common,
+            kind,
+            feedUrl: '',
+            itemLimit: 20,
+          })
+        : kind === 'json_api'
+          ? Object.freeze({
+              ...common,
+              kind,
+              endpointUrl: '',
+              recordsPath: 'items',
+              externalIdPath: 'id',
+              titlePath: 'title',
+              bodyPath: 'body',
+              recordLimit: 32,
+              authentication: Object.freeze({kind: 'none' as const}),
+            })
+          : Object.freeze({
+              ...common,
+              kind,
+              repositoryUri: '',
+              repositoryRef: 'main',
+              repositoryPath: '',
+              profile: 'commonmark-v1' as const,
+            });
+    setState((current) =>
+      current.status !== 'ready'
+        ? current
+        : {
+            ...current,
+            drafts: Object.freeze(
+              current.drafts.map((candidate) =>
+                candidate.subscriptionId === subscription.subscriptionId
+                  ? next
+                  : candidate,
               ),
             ),
           },
@@ -245,7 +339,9 @@ export function SourceSubscriptionPanel({
         detail:
           response.body.status === 'imported'
             ? response.body.automationRunId === undefined
-              ? '新的不可变 Snapshot 已进入导入历史；后续拆分与标签步骤仍由你单独决定。'
+              ? response.body.importedDocumentCount === undefined
+                ? '新的不可变 Snapshot 已进入导入历史；后续拆分与标签步骤仍由你单独决定。'
+                : `已逐条保存 ${String(response.body.importedDocumentCount)} 个外部记录；后续拆分与标签步骤仍由你单独决定。`
               : `已确定性拆分 ${String(response.body.materializedEntryCount ?? 0)} 个 Entry，并生成可在“标签”页处理的分流工作项。`
             : '没有创建重复 Snapshot。',
       });
@@ -254,7 +350,7 @@ export function SourceSubscriptionPanel({
       setFeedback({
         kind: 'error',
         title: '本次检查未完成',
-        detail: '本地接口或远端 Git 来源当前不可达；现有数据保持不变。',
+        detail: '本地接口或远端来源当前不可达；现有数据保持不变。',
       });
     } finally {
       setRunningId(undefined);
@@ -290,8 +386,8 @@ export function SourceSubscriptionPanel({
         <>
           <div className="source-subscription-toolbar">
             <p>
-              精确支持 GitHub 仓库中的单个 Markdown 文件。手动检查始终可用；
-              定期检查默认关闭。
+              支持精确 GitHub Markdown、公开 RSS/Atom 与声明式 JSON API。
+              手动检查始终可用；定期检查默认关闭。
             </p>
             <button
               className="secondary-action"
@@ -334,6 +430,25 @@ export function SourceSubscriptionPanel({
                     </header>
                     <div className="source-subscription-fields">
                       <label className="field">
+                        <span>来源类型</span>
+                        <select
+                          value={subscription.kind}
+                          onChange={(event) => {
+                            changeSubscriptionKind(
+                              subscription,
+                              event.currentTarget
+                                .value as SourceSubscriptionWrite['kind'],
+                            );
+                          }}
+                        >
+                          <option value="github_markdown">
+                            GitHub Markdown 文件
+                          </option>
+                          <option value="rss_atom">RSS / Atom Feed</option>
+                          <option value="json_api">JSON API</option>
+                        </select>
+                      </label>
+                      <label className="field">
                         <span>显示名称</span>
                         <input
                           value={subscription.label}
@@ -357,58 +472,386 @@ export function SourceSubscriptionPanel({
                           }}
                         />
                       </label>
-                      <label className="field field--wide">
-                        <span>GitHub 仓库</span>
-                        <input
-                          value={subscription.repositoryUri}
-                          placeholder="https://github.com/owner/repository"
-                          onChange={(event) => {
-                            updateDraft(subscription.subscriptionId, {
-                              repositoryUri: event.currentTarget.value,
-                            });
-                          }}
-                        />
-                      </label>
-                      <label className="field">
-                        <span>分支或引用</span>
-                        <input
-                          value={subscription.repositoryRef}
-                          maxLength={200}
-                          onChange={(event) => {
-                            updateDraft(subscription.subscriptionId, {
-                              repositoryRef: event.currentTarget.value,
-                            });
-                          }}
-                        />
-                      </label>
-                      <label className="field">
-                        <span>仓库内文件路径</span>
-                        <input
-                          value={subscription.repositoryPath}
-                          placeholder="docs/weekly.md"
-                          maxLength={500}
-                          onChange={(event) => {
-                            updateDraft(subscription.subscriptionId, {
-                              repositoryPath: event.currentTarget.value,
-                            });
-                          }}
-                        />
-                      </label>
-                      <label className="field">
-                        <span>解析规则</span>
-                        <select
-                          value={subscription.profile}
-                          onChange={(event) => {
-                            updateDraft(subscription.subscriptionId, {
-                              profile: event.currentTarget.value as
-                                'commonmark-v1' | 'ruanyf-weekly-v1',
-                            });
-                          }}
-                        >
-                          <option value="commonmark-v1">通用 Markdown</option>
-                          <option value="ruanyf-weekly-v1">周刊结构</option>
-                        </select>
-                      </label>
+                      {subscription.kind === 'github_markdown' ? (
+                        <>
+                          <label className="field field--wide">
+                            <span>GitHub 仓库</span>
+                            <input
+                              value={subscription.repositoryUri}
+                              placeholder="https://github.com/owner/repository"
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  repositoryUri: event.currentTarget.value,
+                                });
+                              }}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>分支或引用</span>
+                            <input
+                              value={subscription.repositoryRef}
+                              maxLength={200}
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  repositoryRef: event.currentTarget.value,
+                                });
+                              }}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>仓库内文件路径</span>
+                            <input
+                              value={subscription.repositoryPath}
+                              placeholder="docs/weekly.md"
+                              maxLength={500}
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  repositoryPath: event.currentTarget.value,
+                                });
+                              }}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>解析规则</span>
+                            <select
+                              value={subscription.profile}
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  profile: event.currentTarget.value as
+                                    'commonmark-v1' | 'ruanyf-weekly-v1',
+                                });
+                              }}
+                            >
+                              <option value="commonmark-v1">
+                                通用 Markdown
+                              </option>
+                              <option value="ruanyf-weekly-v1">周刊结构</option>
+                            </select>
+                          </label>
+                        </>
+                      ) : subscription.kind === 'rss_atom' ? (
+                        <>
+                          <label className="field field--wide">
+                            <span>公开 Feed 地址</span>
+                            <input
+                              type="url"
+                              value={subscription.feedUrl}
+                              placeholder="https://example.invalid/feed.xml"
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  feedUrl: event.currentTarget.value,
+                                });
+                              }}
+                            />
+                            <small>
+                              仅 HTTPS RSS/Atom；不会跟随重定向或抓取条目链接。
+                            </small>
+                          </label>
+                          <label className="field">
+                            <span>每次最多处理条目</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={20}
+                              step={1}
+                              value={subscription.itemLimit}
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  itemLimit: Number(event.currentTarget.value),
+                                });
+                              }}
+                            />
+                          </label>
+                        </>
+                      ) : (
+                        <>
+                          <label className="field field--wide">
+                            <span>JSON API 地址</span>
+                            <input
+                              type="url"
+                              value={subscription.endpointUrl}
+                              placeholder="https://api.example.invalid/entries"
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  endpointUrl: event.currentTarget.value,
+                                });
+                              }}
+                            />
+                            <small>
+                              仅发出公开 HTTPS GET；不会执行脚本或跟随重定向。
+                            </small>
+                          </label>
+                          <label className="field">
+                            <span>记录数组路径</span>
+                            <input
+                              value={subscription.recordsPath}
+                              placeholder="data.items（留空表示根数组）"
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  recordsPath: event.currentTarget.value,
+                                });
+                              }}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>每次记录上限</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={32}
+                              step={1}
+                              value={subscription.recordLimit}
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  recordLimit: Number(
+                                    event.currentTarget.value,
+                                  ),
+                                });
+                              }}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>记录 ID 路径</span>
+                            <input
+                              value={subscription.externalIdPath}
+                              placeholder="id"
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  externalIdPath: event.currentTarget.value,
+                                });
+                              }}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>标题路径</span>
+                            <input
+                              value={subscription.titlePath}
+                              placeholder="title"
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  titlePath: event.currentTarget.value,
+                                });
+                              }}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>正文路径</span>
+                            <input
+                              value={subscription.bodyPath}
+                              placeholder="content.body"
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  bodyPath: event.currentTarget.value,
+                                });
+                              }}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>原文地址路径（可选）</span>
+                            <input
+                              value={subscription.canonicalUriPath ?? ''}
+                              placeholder="url"
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  canonicalUriPath: event.currentTarget.value,
+                                });
+                              }}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>发布时间路径（可选）</span>
+                            <input
+                              value={subscription.publishedAtPath ?? ''}
+                              placeholder="published_at"
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  publishedAtPath: event.currentTarget.value,
+                                });
+                              }}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>远端版本路径（可选）</span>
+                            <input
+                              value={subscription.versionPath ?? ''}
+                              placeholder="updated_at"
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  versionPath: event.currentTarget.value,
+                                });
+                              }}
+                            />
+                          </label>
+                          <label className="field">
+                            <span>认证方式</span>
+                            <select
+                              value={subscription.authentication.kind}
+                              onChange={(event) => {
+                                updateDraft(subscription.subscriptionId, {
+                                  authentication:
+                                    event.currentTarget.value === 'bearer_env'
+                                      ? Object.freeze({
+                                          kind: 'bearer_env' as const,
+                                          variable: '',
+                                        })
+                                      : Object.freeze({kind: 'none' as const}),
+                                });
+                              }}
+                            >
+                              <option value="none">无认证</option>
+                              <option value="bearer_env">
+                                Bearer（环境变量）
+                              </option>
+                            </select>
+                          </label>
+                          {subscription.authentication.kind === 'bearer_env' ? (
+                            <label className="field">
+                              <span>令牌环境变量名</span>
+                              <input
+                                value={subscription.authentication.variable}
+                                placeholder="STRUIINFO_JSON_API_TOKEN"
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    authentication: Object.freeze({
+                                      kind: 'bearer_env' as const,
+                                      variable: event.currentTarget.value,
+                                    }),
+                                  });
+                                }}
+                              />
+                              <small>
+                                只保存变量名；令牌不会写入个人配置。
+                              </small>
+                            </label>
+                          ) : null}
+                          <label className="source-subscription-inline-option">
+                            <input
+                              type="checkbox"
+                              checked={subscription.pageCursor !== undefined}
+                              onChange={(event) => {
+                                if (event.currentTarget.checked) {
+                                  updateDraft(subscription.subscriptionId, {
+                                    pageCursor: Object.freeze({
+                                      queryParameter: 'cursor',
+                                      responsePath: 'next_cursor',
+                                    }),
+                                  });
+                                } else {
+                                  removeJsonApiCursorMapping(
+                                    subscription.subscriptionId,
+                                    'pageCursor',
+                                  );
+                                }
+                              }}
+                            />
+                            使用分页 cursor（最多 5 页）
+                          </label>
+                          {subscription.pageCursor === undefined ? null : (
+                            <>
+                              <label className="field">
+                                <span>分页请求参数</span>
+                                <input
+                                  value={subscription.pageCursor.queryParameter}
+                                  onChange={(event) => {
+                                    updateDraft(subscription.subscriptionId, {
+                                      pageCursor: Object.freeze({
+                                        queryParameter:
+                                          event.currentTarget.value,
+                                        responsePath:
+                                          subscription.pageCursor
+                                            ?.responsePath ?? '',
+                                      }),
+                                    });
+                                  }}
+                                />
+                              </label>
+                              <label className="field">
+                                <span>下一页 cursor 路径</span>
+                                <input
+                                  value={subscription.pageCursor.responsePath}
+                                  onChange={(event) => {
+                                    updateDraft(subscription.subscriptionId, {
+                                      pageCursor: Object.freeze({
+                                        queryParameter:
+                                          subscription.pageCursor
+                                            ?.queryParameter ?? '',
+                                        responsePath: event.currentTarget.value,
+                                      }),
+                                    });
+                                  }}
+                                />
+                              </label>
+                            </>
+                          )}
+                          <label className="source-subscription-inline-option">
+                            <input
+                              type="checkbox"
+                              checked={
+                                subscription.incrementalCursor !== undefined
+                              }
+                              onChange={(event) => {
+                                if (event.currentTarget.checked) {
+                                  updateDraft(subscription.subscriptionId, {
+                                    incrementalCursor: Object.freeze({
+                                      queryParameter: 'since',
+                                      responsePath: 'checkpoint',
+                                    }),
+                                  });
+                                } else {
+                                  removeJsonApiCursorMapping(
+                                    subscription.subscriptionId,
+                                    'incrementalCursor',
+                                  );
+                                }
+                              }}
+                            />
+                            使用增量 cursor
+                          </label>
+                          {subscription.incrementalCursor ===
+                          undefined ? null : (
+                            <>
+                              <label className="field">
+                                <span>增量请求参数</span>
+                                <input
+                                  value={
+                                    subscription.incrementalCursor
+                                      .queryParameter
+                                  }
+                                  onChange={(event) => {
+                                    updateDraft(subscription.subscriptionId, {
+                                      incrementalCursor: Object.freeze({
+                                        queryParameter:
+                                          event.currentTarget.value,
+                                        responsePath:
+                                          subscription.incrementalCursor
+                                            ?.responsePath ?? '',
+                                      }),
+                                    });
+                                  }}
+                                />
+                              </label>
+                              <label className="field">
+                                <span>增量 checkpoint 路径</span>
+                                <input
+                                  value={
+                                    subscription.incrementalCursor.responsePath
+                                  }
+                                  onChange={(event) => {
+                                    updateDraft(subscription.subscriptionId, {
+                                      incrementalCursor: Object.freeze({
+                                        queryParameter:
+                                          subscription.incrementalCursor
+                                            ?.queryParameter ?? '',
+                                        responsePath: event.currentTarget.value,
+                                      }),
+                                    });
+                                  }}
+                                />
+                              </label>
+                            </>
+                          )}
+                        </>
+                      )}
                       <label className="field">
                         <span>检查间隔（分钟）</span>
                         <input
@@ -528,19 +971,63 @@ function PanelHeading() {
 function toWrite(
   subscription: Readonly<SourceSubscriptionView>,
 ): Readonly<SourceSubscriptionWrite> {
-  return Object.freeze({
+  const common = {
     subscriptionId: subscription.subscriptionId,
     label: subscription.label,
     enabled: subscription.enabled,
-    repositoryUri: subscription.repositoryUri,
-    repositoryRef: subscription.repositoryRef,
-    repositoryPath: subscription.repositoryPath,
-    profile: subscription.profile,
     sourceAlias: subscription.sourceAlias,
     isPrivate: subscription.isPrivate,
     routeAfterImport: subscription.routeAfterImport,
     intervalMinutes: subscription.intervalMinutes,
-  });
+  };
+  return subscription.kind === 'rss_atom'
+    ? Object.freeze({
+        ...common,
+        kind: subscription.kind,
+        feedUrl: subscription.feedUrl,
+        itemLimit: subscription.itemLimit,
+      })
+    : subscription.kind === 'json_api'
+      ? Object.freeze({
+          ...common,
+          kind: subscription.kind,
+          endpointUrl: subscription.endpointUrl,
+          recordsPath: subscription.recordsPath,
+          externalIdPath: subscription.externalIdPath,
+          titlePath: subscription.titlePath,
+          bodyPath: subscription.bodyPath,
+          ...(subscription.canonicalUriPath === undefined
+            ? {}
+            : {canonicalUriPath: subscription.canonicalUriPath}),
+          ...(subscription.publishedAtPath === undefined
+            ? {}
+            : {publishedAtPath: subscription.publishedAtPath}),
+          ...(subscription.versionPath === undefined
+            ? {}
+            : {versionPath: subscription.versionPath}),
+          recordLimit: subscription.recordLimit,
+          ...(subscription.pageCursor === undefined
+            ? {}
+            : {
+                pageCursor: Object.freeze({...subscription.pageCursor}),
+              }),
+          ...(subscription.incrementalCursor === undefined
+            ? {}
+            : {
+                incrementalCursor: Object.freeze({
+                  ...subscription.incrementalCursor,
+                }),
+              }),
+          authentication: Object.freeze({...subscription.authentication}),
+        })
+      : Object.freeze({
+          ...common,
+          kind: subscription.kind,
+          repositoryUri: subscription.repositoryUri,
+          repositoryRef: subscription.repositoryRef,
+          repositoryPath: subscription.repositoryPath,
+          profile: subscription.profile,
+        });
 }
 
 function draftsAreComplete(
@@ -550,19 +1037,82 @@ function draftsAreComplete(
     (subscription) =>
       subscription.label.trim() !== '' &&
       subscription.sourceAlias.trim() !== '' &&
-      subscription.repositoryUri.trim() !== '' &&
-      subscription.repositoryRef.trim() !== '' &&
-      subscription.repositoryPath.trim() !== '' &&
+      subscriptionConfigurationIsComplete(subscription) &&
       Number.isSafeInteger(subscription.intervalMinutes) &&
       subscription.intervalMinutes >= 15 &&
       subscription.intervalMinutes <= 10_080,
   );
 }
 
+function subscriptionConfigurationIsComplete(
+  subscription: Readonly<SourceSubscriptionWrite>,
+): boolean {
+  if (subscription.kind === 'rss_atom') {
+    return (
+      subscription.feedUrl.trim() !== '' &&
+      Number.isSafeInteger(subscription.itemLimit) &&
+      subscription.itemLimit >= 1 &&
+      subscription.itemLimit <= 20
+    );
+  }
+  if (subscription.kind === 'github_markdown') {
+    return (
+      subscription.repositoryUri.trim() !== '' &&
+      subscription.repositoryRef.trim() !== '' &&
+      subscription.repositoryPath.trim() !== ''
+    );
+  }
+  return (
+    subscription.endpointUrl.trim() !== '' &&
+    pathIsValid(subscription.recordsPath, true) &&
+    pathIsValid(subscription.externalIdPath, false) &&
+    pathIsValid(subscription.titlePath, false) &&
+    pathIsValid(subscription.bodyPath, false) &&
+    optionalPathIsValid(subscription.canonicalUriPath) &&
+    optionalPathIsValid(subscription.publishedAtPath) &&
+    optionalPathIsValid(subscription.versionPath) &&
+    Number.isSafeInteger(subscription.recordLimit) &&
+    subscription.recordLimit >= 1 &&
+    subscription.recordLimit <= 32 &&
+    cursorMappingIsComplete(subscription.pageCursor) &&
+    cursorMappingIsComplete(subscription.incrementalCursor) &&
+    (subscription.pageCursor === undefined ||
+      subscription.incrementalCursor?.queryParameter !==
+        subscription.pageCursor.queryParameter) &&
+    (subscription.authentication.kind === 'none' ||
+      /^[A-Z_][A-Z0-9_]{0,99}$/u.test(subscription.authentication.variable))
+  );
+}
+
+function cursorMappingIsComplete(
+  value: Readonly<{queryParameter: string; responsePath: string}> | undefined,
+): boolean {
+  return (
+    value === undefined ||
+    (/^[A-Za-z_][A-Za-z0-9_.-]{0,79}$/u.test(value.queryParameter) &&
+      pathIsValid(value.responsePath, false))
+  );
+}
+
+function optionalPathIsValid(value: string | undefined): boolean {
+  return value === undefined || value === '' || pathIsValid(value, false);
+}
+
+function pathIsValid(value: string, allowEmpty: boolean): boolean {
+  return (
+    (allowEmpty && value === '') ||
+    /^(?:[A-Za-z_][A-Za-z0-9_-]{0,99})(?:\.(?:[A-Za-z_][A-Za-z0-9_-]{0,99})){0,7}$/u.test(
+      value,
+    )
+  );
+}
+
 function sourceRunIssue(code: string): string {
-  if (code === 'source_not_found') return '没有找到指定仓库、引用或文件。';
+  if (code === 'source_not_found') return '没有找到指定的远端来源。';
   if (code === 'source_too_large') return '来源文件超过当前 1 MiB 导入边界。';
-  if (code === 'source_invalid') return '来源不是有效的 UTF-8 Markdown 文件。';
+  if (code === 'source_invalid') {
+    return '来源地址、字段映射或返回内容不符合当前导入边界。';
+  }
   if (code === 'source_subscription_stale') {
     return '订阅配置已改变，请重新读取后再检查。';
   }
