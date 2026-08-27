@@ -84,6 +84,42 @@ describe('LocalReviewPreferencesStore', () => {
         },
         failureMode: 'pause',
       },
+      entrySplitRuleProfile: {
+        revision: 0,
+        mode: 'one_section',
+        minimumGroupCodePoints: 400,
+        maximumGroupCodePoints: 4000,
+        maximumFragmentsPerGroup: 8,
+      },
+    });
+  });
+
+  it('stores a versioned split rule in the external preference file', async () => {
+    const {store} = createStore();
+
+    await store.update(WORKSPACE_A, (current) =>
+      Object.freeze({
+        next: patchReviewPreferences(current, {
+          entrySplitRuleProfile: Object.freeze({
+            revision: 1,
+            mode: 'merge_short_adjacent',
+            minimumGroupCodePoints: 250,
+            maximumGroupCodePoints: 2500,
+            maximumFragmentsPerGroup: 6,
+          }),
+        }),
+        result: undefined,
+      }),
+    );
+
+    await expect(store.load(WORKSPACE_A)).resolves.toMatchObject({
+      entrySplitRuleProfile: {
+        revision: 1,
+        mode: 'merge_short_adjacent',
+        minimumGroupCodePoints: 250,
+        maximumGroupCodePoints: 2500,
+        maximumFragmentsPerGroup: 6,
+      },
     });
   });
 

@@ -40,6 +40,13 @@ describe('personal data Bundle preference compatibility', () => {
       paused: false,
       profileRevision: 0,
     });
+    expect(decoded.reviewPreferences.entrySplitRuleProfile).toEqual({
+      revision: 0,
+      mode: 'one_section',
+      minimumGroupCodePoints: 400,
+      maximumGroupCodePoints: 4000,
+      maximumFragmentsPerGroup: 8,
+    });
   });
 
   it('round-trips a closed preference profile in the existing v1 section', () => {
@@ -92,6 +99,13 @@ describe('personal data Bundle preference compatibility', () => {
           },
           failureMode: 'pause',
         },
+        {
+          revision: 3,
+          mode: 'merge_short_adjacent',
+          minimumGroupCodePoints: 250,
+          maximumGroupCodePoints: 2500,
+          maximumFragmentsPerGroup: 6,
+        },
       ),
     });
 
@@ -105,6 +119,9 @@ describe('personal data Bundle preference compatibility', () => {
     );
     expect(decoded.reviewPreferences.entryAutomationPolicy).toEqual(
       section.reviewPreferences.entryAutomationPolicy,
+    );
+    expect(decoded.reviewPreferences.entrySplitRuleProfile).toEqual(
+      section.reviewPreferences.entrySplitRuleProfile,
     );
   });
 

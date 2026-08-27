@@ -1,7 +1,7 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1H-3A/B 活动接口
-- 最近核对：2026-08-26
+- 状态：M1H-4A/B 活动接口
+- 最近核对：2026-08-27
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
 
@@ -36,6 +36,10 @@
 | `POST` | `/api/v1/imports/markdown`                                                            | 原子导入手动/Git Markdown 或本地 UTF-8 Markdown/文本文件、来源、Blob、结构和 Fragment |
 | `POST` | `/api/v1/entries/materialize`                                                         | 从一个用户选择的空 Snapshot 按 section 规则原子生成 Entry                             |
 | `POST` | `/api/v1/entries/materialize/manual`                                                  | 从标题和完整有序 Fragment 标量区间原子生成人工 Entry 结构                             |
+| `GET`  | `/api/v1/entries/split-rules/profile`                                                 | 读取外部工作区当前版本化本地拆分规则                                                  |
+| `PUT`  | `/api/v1/entries/split-rules/profile`                                                 | 以期望 revision 保存 section/相邻短段合并规则                                         |
+| `POST` | `/api/v1/entries/split-rules/trial`                                                   | 对一个精确 Snapshot 只读预览规则分组，不写 Entry                                      |
+| `POST` | `/api/v1/entries/split-rules/apply`                                                   | 以当前保存规则 revision 重新计算并原子物化空 Snapshot                                 |
 | `POST` | `/api/v1/entries/restructure/preview`                                                 | 对已物化 Snapshot 的完整新分组生成只读影响预览                                        |
 | `POST` | `/api/v1/entries/restructure/apply`                                                   | 以预览摘要和显式确认原子替换当前 Entry 结构                                           |
 | `GET`  | `/api/v1/evidence/snapshots/:snapshotId/split-proposals`                              | 列出一个 Snapshot 的有界拆分提案                                                      |

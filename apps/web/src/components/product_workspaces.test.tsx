@@ -251,6 +251,39 @@ describe('M1D product workspaces', () => {
             body: {status: 'rejected', issue: {code: 'unused'}},
           })
         }
+        onLoadSplitRuleProfile={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {
+              status: 'ok',
+              profile: {
+                revision: 0,
+                mode: 'one_section',
+                minimumGroupCodePoints: 400,
+                maximumGroupCodePoints: 4000,
+                maximumFragmentsPerGroup: 8,
+              },
+            },
+          })
+        }
+        onSaveSplitRuleProfile={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
+        onTrialSplitRule={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
+        onApplySplitRule={() =>
+          Promise.resolve({
+            statusCode: 409,
+            body: {status: 'rejected', issue: {code: 'unused'}},
+          })
+        }
         onListAiSplitProposals={() =>
           Promise.resolve({
             statusCode: 200,
@@ -346,6 +379,7 @@ describe('M1D product workspaces', () => {
     expect(markup).toContain('批量构建文档条目');
     expect(markup).toContain('构建所选文档');
     expect(markup).toContain('人工拆分工作台');
+    expect(markup).toContain('可替换的本地拆分规则');
     expect(markup).toContain('按结构生成条目');
     expect(markup).not.toContain('类型关键词');
     expect(markup).not.toContain('领域关键词');

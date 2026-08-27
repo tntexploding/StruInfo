@@ -252,6 +252,25 @@ function stubApi(
       Promise.resolve(result(200, {status: 'ok', quickTags: []})),
     saveReviewPreferences: () =>
       Promise.resolve(result(200, {status: 'ok', quickTags: []})),
+    loadInformationEntrySplitRuleProfile: () =>
+      Promise.resolve(
+        result(200, {
+          status: 'ok',
+          profile: {
+            revision: 0,
+            mode: 'one_section',
+            minimumGroupCodePoints: 400,
+            maximumGroupCodePoints: 4000,
+            maximumFragmentsPerGroup: 8,
+          },
+        }),
+      ),
+    saveInformationEntrySplitRuleProfile: () =>
+      Promise.resolve(result(200, {status: 'unchanged'})),
+    trialInformationEntrySplitRule: () =>
+      Promise.resolve(result(200, {status: 'previewed'})),
+    applyInformationEntrySplitRule: () =>
+      Promise.resolve(result(201, {status: 'created'})),
     loadInformationEntryPreferenceProfile: () =>
       Promise.resolve(
         result(200, {

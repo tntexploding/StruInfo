@@ -38,6 +38,10 @@ import type {
   DocumentImportResponse,
   EntryPreferenceProfile,
   EntryPreferenceRule,
+  EntrySplitRuleApplyResponse,
+  EntrySplitRuleProfileResponse,
+  EntrySplitRuleProfileWriteResponse,
+  EntrySplitRuleTrialResponse,
   ReviewPreferencesResponse,
   ReviewPreferencesWrite,
   SourceSubscriptionListResponse,
@@ -459,6 +463,28 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       body: unknown,
     ): Promise<M1cHttpResponse<InformationEntryMaterializeResponse>> =>
       apiClient.materializeManualInformationEntries(body),
+    [apiClient],
+  );
+  const loadInformationEntrySplitRuleProfile = useCallback(
+    (): Promise<M1cHttpResponse<EntrySplitRuleProfileResponse>> =>
+      apiClient.loadInformationEntrySplitRuleProfile(),
+    [apiClient],
+  );
+  const saveInformationEntrySplitRuleProfile = useCallback(
+    (
+      body: unknown,
+    ): Promise<M1cHttpResponse<EntrySplitRuleProfileWriteResponse>> =>
+      apiClient.saveInformationEntrySplitRuleProfile(body),
+    [apiClient],
+  );
+  const trialInformationEntrySplitRule = useCallback(
+    (body: unknown): Promise<M1cHttpResponse<EntrySplitRuleTrialResponse>> =>
+      apiClient.trialInformationEntrySplitRule(body),
+    [apiClient],
+  );
+  const applyInformationEntrySplitRule = useCallback(
+    (body: unknown): Promise<M1cHttpResponse<EntrySplitRuleApplyResponse>> =>
+      apiClient.applyInformationEntrySplitRule(body),
     [apiClient],
   );
   const previewInformationEntryRestructure = useCallback(
@@ -939,6 +965,10 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onCommitDocumentWorkingCopy={commitInformationDocumentWorkingCopy}
           onMaterialize={materializeInformationEntries}
           onMaterializeManual={materializeManualInformationEntries}
+          onLoadSplitRuleProfile={loadInformationEntrySplitRuleProfile}
+          onSaveSplitRuleProfile={saveInformationEntrySplitRuleProfile}
+          onTrialSplitRule={trialInformationEntrySplitRule}
+          onApplySplitRule={applyInformationEntrySplitRule}
           onPreviewRestructure={previewInformationEntryRestructure}
           onApplyRestructure={applyInformationEntryRestructure}
           onRejectAiSplitProposal={rejectAiSplitProposal}

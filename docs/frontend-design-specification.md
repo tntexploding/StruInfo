@@ -272,6 +272,17 @@ MUST:
 The manual workbench MUST NOT imply arbitrary character selection, source-text
 editing, reordering or replacement of already materialized Entries.
 
+ADR 0035 adds a secondary configurable local-rule panel to Split. It MUST keep
+the existing one-section behavior as the default, present short-adjacent merge
+as a plain-language alternative, separate unsaved draft/save/preview/apply
+states, and disable apply until the preview exactly matches the saved profile
+revision. Preview groups must expose title, Fragment count, scalar count and a
+bounded local excerpt. Private material remains locked until the current Split
+scope explicitly opts in. Below 1200 CSS pixels controls and preview recompose
+into one column with natural page scrolling. The panel MUST NOT present scripts,
+regular-expression programs, source reordering, Provider inference or silent
+background execution as supported rule types.
+
 Manual Curation, the old formal Knowledge writer/current-item reader and the old
 Knowledge search are not current product capabilities. Their pages, client
 contracts and server routes MUST NOT be restored as secondary or hidden tools.

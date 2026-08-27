@@ -35,6 +35,10 @@ import {
   prepareManualSplitInformationEntries,
   prepareInformationEntryRestructure,
   prepareSplitInformationEntries,
+  decodeEntrySplitRuleProfile,
+  decodeEntrySplitRuleSettings,
+  DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+  planInformationEntrySplitRule,
   searchCurrentInformationEntries,
   scoreInformationEntrySearchText,
   suggestInformationEntryPreferenceRules,
@@ -66,6 +70,7 @@ import {
   type InformationEntryRestructureRepositoryPort,
   type CurrentInformationDocumentTags,
   type MaterializedEvidenceSnapshot,
+  type EntrySplitRuleProfile,
 } from '../modules/entries/index.js';
 import {
   importMarkdownEvidence,
@@ -240,6 +245,10 @@ export interface M1cApiServicePort {
   importDocument(body: unknown): Promise<M1cHttpResult>;
   materializeInformationEntries(body: unknown): Promise<M1cHttpResult>;
   materializeManualInformationEntries(body: unknown): Promise<M1cHttpResult>;
+  loadInformationEntrySplitRuleProfile(): Promise<M1cHttpResult>;
+  saveInformationEntrySplitRuleProfile(body: unknown): Promise<M1cHttpResult>;
+  trialInformationEntrySplitRule(body: unknown): Promise<M1cHttpResult>;
+  applyInformationEntrySplitRule(body: unknown): Promise<M1cHttpResult>;
   previewInformationEntryRestructure(body: unknown): Promise<M1cHttpResult>;
   applyInformationEntryRestructure(body: unknown): Promise<M1cHttpResult>;
   reviseInformationEntry(
@@ -1866,6 +1875,244 @@ export class M1cApiService implements M1cApiServicePort {
       return httpResult(statusForImport(result.status), result);
     }
     return this.importMarkdown(body);
+  }
+
+  public async loadInformationEntrySplitRuleProfile(): Promise<M1cHttpResult> {
+    try {
+      const preferences = await this.#dependencies.reviewPreferences.load(
+        this.#dependencies.workspaceId,
+      );
+      return httpResult(200, {
+        status: 'ok',
+        profile:
+          preferences.entrySplitRuleProfile ?? DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+      });
+    } catch {
+      return entrySplitRuleFailure();
+    }
+  }
+
+  public async saveInformationEntrySplitRuleProfile(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (
+      !isRecord(body) ||
+      !Number.isSafeInteger(body.expectedRevision) ||
+      (body.expectedRevision as number) < 0
+    ) {
+      return inputFailure('body.expectedRevision');
+    }
+    const settings = decodeEntrySplitRuleSettings({
+      mode: body.mode,
+      minimumGroupCodePoints: body.minimumGroupCodePoints,
+      maximumGroupCodePoints: body.maximumGroupCodePoints,
+      maximumFragmentsPerGroup: body.maximumFragmentsPerGroup,
+    });
+    if (settings === undefined) return inputFailure('body');
+    try {
+      const update = await updateReviewPreferences<
+        Readonly<{
+          outcome: 'applied' | 'stale' | 'unchanged';
+          profile: Readonly<EntrySplitRuleProfile>;
+        }>
+      >(
+        this.#dependencies.reviewPreferences,
+        this.#dependencies.workspaceId,
+        (preferences) => {
+          const current =
+            preferences.entrySplitRuleProfile ??
+            DEFAULT_ENTRY_SPLIT_RULE_PROFILE;
+          if (current.revision !== body.expectedRevision) {
+            return Object.freeze({
+              next: preferences,
+              result: Object.freeze({
+                outcome: 'stale' as const,
+                profile: current,
+              }),
+            });
+          }
+          const unchanged =
+            current.mode === settings.mode &&
+            current.minimumGroupCodePoints ===
+              settings.minimumGroupCodePoints &&
+            current.maximumGroupCodePoints ===
+              settings.maximumGroupCodePoints &&
+            current.maximumFragmentsPerGroup ===
+              settings.maximumFragmentsPerGroup;
+          const next = unchanged
+            ? current
+            : Object.freeze({
+                revision: current.revision + 1,
+                ...settings,
+              });
+          return Object.freeze({
+            next: unchanged
+              ? preferences
+              : patchReviewPreferences(preferences, {
+                  entrySplitRuleProfile: next,
+                }),
+            result: Object.freeze({
+              outcome: unchanged
+                ? ('unchanged' as const)
+                : ('applied' as const),
+              profile: next,
+            }),
+          });
+        },
+      );
+      if (update.result.outcome === 'stale') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'stale_entry_split_rule_profile_revision',
+          }),
+        });
+      }
+      return httpResult(200, {
+        status: update.result.outcome,
+        profile: update.result.profile,
+      });
+    } catch {
+      return entrySplitRuleFailure();
+    }
+  }
+
+  public async trialInformationEntrySplitRule(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (
+      !isRecord(body) ||
+      typeof body.snapshotId !== 'string' ||
+      !CANONICAL_UUID.test(body.snapshotId) ||
+      typeof body.includePrivate !== 'boolean'
+    ) {
+      return inputFailure('body');
+    }
+    const profile = decodeEntrySplitRuleProfile(body.profile);
+    if (profile === undefined) return inputFailure('body.profile');
+    try {
+      const snapshot =
+        await this.#dependencies.evidenceReadRepository.loadSnapshot(
+          this.#dependencies.workspaceId,
+          body.snapshotId,
+        );
+      if (
+        snapshot === undefined ||
+        (snapshot.isPrivate === true && !body.includePrivate)
+      ) {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'snapshot_not_found'}),
+        });
+      }
+      const materialized = await materializeEvidenceSnapshot(
+        snapshot,
+        this.#dependencies.blobStore,
+      );
+      const plan = planInformationEntrySplitRule(materialized, profile);
+      if (plan === undefined) {
+        return httpResult(422, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'entry_split_rule_invalid'}),
+        });
+      }
+      return httpResult(200, {status: 'previewed', trial: plan.trial});
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async applyInformationEntrySplitRule(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (
+      !isRecord(body) ||
+      typeof body.snapshotId !== 'string' ||
+      !CANONICAL_UUID.test(body.snapshotId) ||
+      typeof body.includePrivate !== 'boolean' ||
+      !Number.isSafeInteger(body.expectedProfileRevision) ||
+      (body.expectedProfileRevision as number) < 0
+    ) {
+      return inputFailure('body');
+    }
+    try {
+      const workingCopy =
+        await this.#dependencies.informationDocumentWorkingCopyRepository.load(
+          this.#dependencies.workspaceId,
+          body.snapshotId,
+        );
+      if (workingCopy?.state === 'editing') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'document_working_copy_pending'}),
+        });
+      }
+      const preferences = await this.#dependencies.reviewPreferences.load(
+        this.#dependencies.workspaceId,
+      );
+      const profile =
+        preferences.entrySplitRuleProfile ?? DEFAULT_ENTRY_SPLIT_RULE_PROFILE;
+      if (profile.revision !== body.expectedProfileRevision) {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({
+            code: 'stale_entry_split_rule_profile_revision',
+          }),
+        });
+      }
+      const snapshot =
+        await this.#dependencies.evidenceReadRepository.loadSnapshot(
+          this.#dependencies.workspaceId,
+          body.snapshotId,
+        );
+      if (
+        snapshot === undefined ||
+        (snapshot.isPrivate === true && !body.includePrivate)
+      ) {
+        return httpResult(404, {
+          status: 'not_found',
+          issue: Object.freeze({code: 'snapshot_not_found'}),
+        });
+      }
+      const materialized = await materializeEvidenceSnapshot(
+        snapshot,
+        this.#dependencies.blobStore,
+      );
+      const plan = planInformationEntrySplitRule(materialized, profile);
+      if (plan === undefined || plan.rows.length === 0) {
+        return httpResult(422, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'entry_split_rule_invalid'}),
+        });
+      }
+      const persisted =
+        await this.#dependencies.informationEntryRepository.materializeEntriesIfSnapshotEmpty(
+          plan.rows,
+        );
+      if (persisted.outcome === 'snapshot_not_empty') {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: Object.freeze({code: 'split_structure_already_materialized'}),
+        });
+      }
+      const current =
+        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          body.includePrivate,
+        );
+      const entryIds = new Set(plan.rows.map((entry) => entry.entryId));
+      return httpResult(persisted.outcome === 'created' ? 201 : 200, {
+        status: persisted.outcome,
+        snapshotId: body.snapshotId,
+        profileRevision: profile.revision,
+        createdCount: persisted.createdCount,
+        entries: Object.freeze(
+          current.filter((entry) => entryIds.has(entry.entryId)),
+        ),
+      });
+    } catch {
+      return repositoryFailure();
+    }
   }
 
   public async materializeInformationEntries(
@@ -3540,6 +3787,13 @@ function entryPreferenceProfileFailure(): M1cHttpResult {
   return httpResult(503, {
     status: 'failed',
     issue: Object.freeze({code: 'entry_preference_profile_failed'}),
+  });
+}
+
+function entrySplitRuleFailure(): M1cHttpResult {
+  return httpResult(503, {
+    status: 'failed',
+    issue: Object.freeze({code: 'entry_split_rule_profile_failed'}),
   });
 }
 

@@ -961,6 +961,62 @@ export type InformationEntryMaterializeResponse =
   | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
   | DomainFailure;
 
+export type EntrySplitRuleMode = 'one_section' | 'merge_short_adjacent';
+
+export interface EntrySplitRuleProfile {
+  readonly revision: number;
+  readonly mode: EntrySplitRuleMode;
+  readonly minimumGroupCodePoints: number;
+  readonly maximumGroupCodePoints: number;
+  readonly maximumFragmentsPerGroup: number;
+}
+
+export interface EntrySplitRuleTrialGroup {
+  readonly ordinal: number;
+  readonly titlePath: string;
+  readonly fragmentIds: readonly string[];
+  readonly fragmentCount: number;
+  readonly codePointCount: number;
+  readonly exceedsMaximum: boolean;
+  readonly previewText: string;
+  readonly previewTruncated: boolean;
+}
+
+export interface EntrySplitRuleTrial {
+  readonly snapshotId: string;
+  readonly profile: Readonly<EntrySplitRuleProfile>;
+  readonly sourceFragmentCount: number;
+  readonly totalCodePointCount: number;
+  readonly groups: readonly Readonly<EntrySplitRuleTrialGroup>[];
+}
+
+export type EntrySplitRuleProfileResponse =
+  | Readonly<{status: 'ok'; profile: Readonly<EntrySplitRuleProfile>}>
+  | DomainFailure;
+
+export type EntrySplitRuleProfileWriteResponse =
+  | Readonly<{
+      status: 'applied' | 'unchanged';
+      profile: Readonly<EntrySplitRuleProfile>;
+    }>
+  | DomainFailure;
+
+export type EntrySplitRuleTrialResponse =
+  | Readonly<{status: 'previewed'; trial: Readonly<EntrySplitRuleTrial>}>
+  | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
+  | DomainFailure;
+
+export type EntrySplitRuleApplyResponse =
+  | Readonly<{
+      status: 'created' | 'existing';
+      snapshotId: string;
+      profileRevision: number;
+      createdCount: number;
+      entries: readonly Readonly<InformationEntry>[];
+    }>
+  | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
+  | DomainFailure;
+
 export type InformationEntryRevisionResponse =
   | Readonly<{
       status: 'applied' | 'unchanged';
