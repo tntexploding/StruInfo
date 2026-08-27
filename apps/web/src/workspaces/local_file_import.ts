@@ -1,4 +1,5 @@
 export const LOCAL_DOCUMENT_FILE_MAX_BYTES = 1_048_576;
+export const LOCAL_DOCUMENT_BATCH_MAX_FILES = 20;
 
 const LOCAL_FILE_NAME_MAX_CODE_POINTS = 255;
 const BASE64_ALPHABET =
@@ -7,6 +8,13 @@ const BASE64_ALPHABET =
 export type LocalDocumentFormat = 'markdown' | 'html' | 'pdf';
 export type LocalDocumentMediaType =
   'text/markdown' | 'text/plain' | 'text/html' | 'application/pdf';
+
+export type LocalDocumentFileIssueCode =
+  | 'file_name_invalid'
+  | 'file_type_unsupported'
+  | 'file_too_large'
+  | 'file_utf8_invalid'
+  | 'file_content_invalid';
 
 export interface PreparedLocalDocumentFile {
   readonly fileName: string;
@@ -21,12 +29,7 @@ export type PrepareLocalDocumentFileResult =
   | Readonly<{status: 'ready'; value: Readonly<PreparedLocalDocumentFile>}>
   | Readonly<{
       status: 'rejected';
-      code:
-        | 'file_name_invalid'
-        | 'file_type_unsupported'
-        | 'file_too_large'
-        | 'file_utf8_invalid'
-        | 'file_content_invalid';
+      code: LocalDocumentFileIssueCode;
     }>;
 
 export interface ComposedLocalDocumentSource {
@@ -38,6 +41,28 @@ export interface ComposedLocalDocumentSource {
   readonly sourcePreface?: string;
   readonly composed: boolean;
 }
+
+export interface LocalDocumentImportIdentity {
+  readonly commandIdempotencyKey: string;
+  readonly capturedAt: string;
+  readonly resourceId: string;
+  readonly snapshotId: string;
+}
+
+export interface LocalDocumentImportOptions {
+  readonly identity: Readonly<LocalDocumentImportIdentity>;
+  readonly file: Readonly<PreparedLocalDocumentFile>;
+  readonly isPrivate: boolean;
+  readonly publicationDate: string;
+  readonly profile: 'commonmark-v1' | 'ruanyf-weekly-v1';
+  readonly sourcePreface: string;
+  readonly sourceKey?: string;
+  readonly canonicalUri?: string;
+}
+
+export type ComposeLocalDocumentImportRequestResult =
+  | Readonly<{status: 'ready'; body: Readonly<Record<string, unknown>>}>
+  | Readonly<{status: 'rejected'; code: 'composed_too_large'}>;
 
 export function prepareLocalDocumentFile(
   fileName: string,
@@ -96,6 +121,88 @@ export async function composeLocalDocumentSource(
       : {sourcePreface: normalizedPrefix}),
     composed: composeIntoRaw,
   });
+}
+
+export async function composeLocalDocumentImportRequest(
+  options: Readonly<LocalDocumentImportOptions>,
+): Promise<ComposeLocalDocumentImportRequestResult> {
+  const composed = await composeLocalDocumentSource(
+    options.file,
+    options.sourcePreface,
+  );
+  if (composed === undefined) {
+    return Object.freeze({
+      status: 'rejected' as const,
+      code: 'composed_too_large' as const,
+    });
+  }
+  const canonicalUri = options.canonicalUri?.trim() ?? '';
+  const requestedSourceKey = options.sourceKey?.trim();
+  const sourceKey =
+    requestedSourceKey === undefined || requestedSourceKey === ''
+      ? composed.defaultSourceKey
+      : requestedSourceKey;
+  const profile =
+    options.file.documentFormat === 'markdown' &&
+    options.file.mediaType === 'text/markdown'
+      ? options.profile
+      : 'commonmark-v1';
+  return Object.freeze({
+    status: 'ready' as const,
+    body: Object.freeze({
+      commandIdempotencyKey: options.identity.commandIdempotencyKey,
+      resource: {
+        resourceId: options.identity.resourceId,
+        resourceKind: 'uploaded_file',
+        sourceKey,
+        ...(options.isPrivate ? {isPrivate: true} : {}),
+        ...(canonicalUri === '' ? {} : {canonicalUri}),
+      },
+      snapshot: {
+        snapshotId: options.identity.snapshotId,
+        resourceId: options.identity.resourceId,
+        capturedAt: options.identity.capturedAt,
+        mediaType: options.file.mediaType,
+        ...(options.publicationDate === ''
+          ? {}
+          : {
+              publication: {
+                instant: `${options.publicationDate}T00:00:00.000Z`,
+                sourceTimezone: 'UTC',
+                precision: 'day',
+                sourceText: options.publicationDate,
+                inferred: false,
+              },
+            }),
+      },
+      gitObservations: [],
+      documentFormat: composed.documentFormat,
+      profile,
+      sourceBase64: composed.sourceBase64,
+      ...(composed.sourcePreface === undefined
+        ? {}
+        : {sourcePreface: composed.sourcePreface}),
+      ...(canonicalUri === '' ? {} : {documentBaseUri: canonicalUri}),
+    }),
+  });
+}
+
+export function describeLocalDocumentFileIssue(
+  code: LocalDocumentFileIssueCode,
+): string {
+  if (code === 'file_name_invalid') return '文件名无效；请选择普通文件名。';
+  if (code === 'file_type_unsupported')
+    return '仅支持 .md、.markdown、.txt、.html、.htm 和 .pdf。';
+  if (code === 'file_too_large')
+    return `文件超过 ${formatLocalDocumentFileBytes(LOCAL_DOCUMENT_FILE_MAX_BYTES)} 上限。`;
+  if (code === 'file_utf8_invalid') return '文件不是有效的 UTF-8 文本。';
+  return '文件为空、PDF 标识无效，或文本含有不允许的 NUL 字符。';
+}
+
+export function formatLocalDocumentFileBytes(value: number): string {
+  return value < 1024
+    ? `${value.toString()} B`
+    : `${(value / 1024).toFixed(value < 1024 * 1024 ? 1 : 0)} KiB`;
 }
 
 function readyFile(

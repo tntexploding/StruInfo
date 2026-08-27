@@ -144,3 +144,13 @@ per source Snapshot and an explicit confirmation that creates a new immutable
 derived Snapshot through the existing Evidence/CommonMark path. It preserves
 the original Blob/Snapshot/Fragment evidence, inherits privacy, adds Entry
 Bundle v5 and does not create edit history or a second split implementation.
+
+ADR 0035 completes M1H-4A/B with an external versioned deterministic split-rule
+profile and a preview/apply surface that still uses immutable Fragment evidence
+and the existing empty-Snapshot materialization boundary.
+
+ADR 0036 completes M1H-5A/B with an explicit, session-only local multi-file
+queue. Every selected file keeps the existing validation, privacy, idempotent
+Evidence import and external Blob path; per-file results, stable retries and
+stop-after-current control add no batch write protocol or automatic downstream
+authority.

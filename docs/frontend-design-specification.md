@@ -252,6 +252,19 @@ Entry for tags, and one selected public Entry pair for association. Each surface
 must show Provider/model/prompt origin, privacy disclosure and explicit
 accept/reject without hiding its deterministic or manual path.
 
+ADR 0036 adds an explicit local multi-file mode to Import. It MUST keep the
+single-file path available, identify the batch as session-only, show per-file
+preparing/ready/running/success/failure/stopped state and an aggregate progress
+indicator, and provide visible retry and stop-after-current actions. A stopped
+in-flight request MUST NOT be rendered as cancelled. Narrow screens MUST stack
+file facts and actions without document-level horizontal overflow. The surface
+MUST say that it reads only explicitly selected files and does not scan
+directories or start Split, Tags, Associations, Automation or AI work. While a
+queue has items, source and single/batch mode switches MUST remain locked until
+the owner clears the queue; while it runs, shared privacy, date, parser and
+preface controls MUST remain locked. The client MUST NOT discard files merely
+because their name, size and modification time match.
+
 ADR 0016 adds a dedicated local manual grouping workbench to the Split page. It
 MUST:
 
