@@ -1,6 +1,6 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1J 活动接口
+- 状态：M1K 活动接口
 - 最近核对：2026-08-27
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
@@ -48,6 +48,9 @@
 | `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/reject`           | 拒绝提案且不创建 Entry                                                                |
 | `PUT`  | `/api/v1/entries/:entryId`                                                            | 以期望版本更新当前 Entry 成品态                                                       |
 | `POST` | `/api/v1/entries/search`                                                              | 查询 Entry，并在显式隐私范围下返回独立完整私密文档通道                                |
+| `GET`  | `/api/v1/entries/search/index`                                                        | 读取当前工作区可重建词项/向量索引状态                                                 |
+| `POST` | `/api/v1/entries/search/index/rebuild`                                                | 显式原子重建当前公共 Entry 的词项和可选向量投影                                       |
+| `POST` | `/api/v1/entries/search/index/evaluate`                                               | 用有界显式 expected-set 计算语义/混合 Recall@K 与 MRR                                 |
 | `POST` | `/api/v1/entries/search/synthesize`                                                   | 显式综合当前公开确定性 Query 证据；答案只属于本次页面会话                             |
 | `POST` | `/api/v1/entries/exploration/candidates`                                              | 从选定 Entry 的当前可见直接联系生成独立页外探索候选                                   |
 | `PUT`  | `/api/v1/entries/exploration/policy`                                                  | 以期望修订保存外部探索开关、页额份额和三类候选开关                                    |
@@ -158,12 +161,15 @@ M1H action POST 接受 `{expectedVersion, operation: "apply" | "undo", includePr
 - `includePrivate` 与 `onlyPrivate`；`onlyPrivate=true` 必须同时显式启用 `includePrivate`；
 - 指定 Entry 的一至两跳联系范围和最低分；
 - `limit` 1–100 与查询绑定排他游标 `after`。
+- `retrievalMode: lexical | semantic | hybrid`；省略时保持原词法语义。
 
-结果返回稳定 Entry 分页、匹配原因、0–10000 整数词法分、关联路径和精确 Fragment/Snapshot 证据。query digest v2 绑定规范化文字、模式和字段集合；cursor schema v2 另含词法分，旧临时 cursor 会被拒绝。响应还包含 `privateDocuments: { totalCount, items }`；默认及未勾选隐私时该通道为空，显式 `includePrivate=true` 后才按同一模式从外部 Blob 匹配完整规范正文、来源 key/URI 或私密 Entry 标签，并返回独立文档摘要与全文入口。当前实现是完整加载后的确定性词法查询，不是 SQL query pushdown、语义/向量检索或 RAG。
+结果返回稳定 Entry 分页、匹配原因、0–10000 整数词法/向量/最终检索分、关联路径和精确 Fragment/Snapshot 证据。词法模式保持原 query digest/cursor 兼容；语义和混合模式把检索模式及最终分绑定进同一 schema v2 cursor。响应还包含 `privateDocuments: { totalCount, items }`；默认及未勾选隐私时该通道为空，显式 `includePrivate=true` 后才按词法语义从外部 Blob 匹配完整规范正文、来源 key/URI 或私密 Entry 标签，并返回独立文档摘要与全文入口。私密范围不得使用语义/混合模式。
+
+`GET /entries/search/index` 返回 tokenizer/index 版本、公共 Entry 数、当前/嵌入/过期投影数、posting 数和当前模型 readiness。`POST /entries/search/index/rebuild` 在 workspace lock 下整体替换公共派生索引；没有 embedding 模型时仍生成词项投影。`POST /entries/search/index/evaluate` 只接受最多 20 个合成或所有者明确提供的小型 case、每项显式 query 和 expected Entry IDs、`k` 1–20，并返回 0–10000 的 Recall@K/MRR；它不保存输入或结果。
 
 `POST /entries/exploration/candidates` 接受一个当前可见 `anchorEntryId`、当前页排除 ID、当前页结果数和显式隐私范围。服务端先读取已保存的外部探索策略；关闭或 0% 时返回空结果，否则把页数乘以 0–50% 份额向上取整并限制最多 12 条。候选只来自锚点当前可见的直接 Association，按隐私先行排除当前页、blocked、过期和不可见端点，再按邻域扩展、跨领域连接、偶然发现三个启用桶稳定轮转。该结果不插入普通分页，不改变 query digest、排序、总数或游标，也不写搜索历史、行为画像、Entry、联系或图谱。
 
-`POST /entries/search/synthesize` 是 Query 的次级显式操作，只接收同一公开查询及页面请求身份。服务端重新运行确定性查询，最多打包前 8 条公开 Entry 的有界本地证据，私密范围在 Blob 和 Provider 前拒绝。返回答案、claim 证据句柄、模型/Prompt 版本和局限，但不保存答案，也不赋予模型检索或写权限。
+`POST /entries/search/synthesize` 是 Query 的次级显式操作，只接收同一公开查询及页面请求身份。服务端按请求的词法/语义/混合模式重新检索，最多打包前 8 条公开 Entry 的有界本地证据；私密范围在 Blob、Embedding 和综合 Provider 前拒绝。返回答案、claim 证据句柄、模型/Prompt 版本和局限，但不保存答案，也不赋予模型自主检索或写权限。
 
 ### 3.6 正式知识
 

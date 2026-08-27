@@ -45,6 +45,11 @@ export {
   READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL,
 } from './postgres_information_entry_association_repository.js';
 export {
+  PostgresInformationEntrySearchIndexRepository,
+  READ_INFORMATION_ENTRY_SEARCH_PROJECTIONS_SQL,
+  READ_INFORMATION_ENTRY_TERM_POSTINGS_SQL,
+} from './postgres_information_entry_search_index_repository.js';
+export {
   createNodePostgresPool,
   type PostgresClientBoundary,
   type PostgresPoolBoundary,

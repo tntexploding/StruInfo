@@ -1,5 +1,6 @@
 import type {
   EntryDomainKeyword,
+  EntryRetrievalMode,
   EntryTextSearchField,
   EntryTextSearchMode,
   EntryTypeKeyword,
@@ -14,6 +15,7 @@ export type InformationEntrySearchItem = Extract<
 
 export interface InformationEntryQueryScopeInput {
   readonly query: string;
+  readonly retrievalMode?: EntryRetrievalMode;
   readonly textMode: EntryTextSearchMode;
   readonly textFields: readonly EntryTextSearchField[];
   readonly snapshotId: string;
@@ -57,6 +59,7 @@ export function informationEntryQueryScopeKey(
           text,
           textMode: input.textMode,
           textFields: [...new Set(input.textFields)].sort(),
+          retrievalMode: input.retrievalMode ?? 'lexical',
         }),
     ...(input.snapshotId === '' ? {} : {snapshotId: input.snapshotId}),
     ...(input.typeKeyword === '' ? {} : {typeKeyword: input.typeKeyword}),

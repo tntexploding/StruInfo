@@ -1084,6 +1084,11 @@
   grid-column: 1;
   grid-row: 2;
 }
+
+.workflow-stage-workspace[data-workflow-page='query'] .entry-retrieval-options {
+  grid-column: 1;
+  grid-row: 3;
+}
 .workflow-stage-workspace[data-workflow-page='query'] .entry-source-filter {
   grid-column: 2;
   grid-row: 1;
@@ -1116,8 +1121,36 @@
 
 .workflow-stage-workspace[data-workflow-page='query'] .entry-command-actions {
   grid-column: 1;
-  grid-row: 3;
+  grid-row: 4;
   justify-content: flex-start;
+}
+
+.entry-search-index-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--si-space-5);
+  margin-block-start: var(--si-space-5);
+  padding: var(--si-space-5);
+  border: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  background: var(--si-color-bg-shell);
+}
+
+.entry-search-index-panel h3,
+.entry-search-index-panel p,
+.entry-search-index-panel small {
+  margin: 0;
+}
+
+.entry-search-index-panel > div {
+  display: grid;
+  gap: var(--si-space-2);
+  min-inline-size: 0;
+}
+
+.entry-search-index-panel small {
+  color: var(--si-color-text-muted);
+  line-height: 1.6;
 }
 
 .workflow-stage-workspace[data-workflow-page='query'] .entry-workbench {
@@ -1913,6 +1946,8 @@
   .workflow-stage-workspace[data-workflow-page='query'] .entry-type-filter,
   .workflow-stage-workspace[data-workflow-page='query'] .entry-domain-filter,
   .workflow-stage-workspace[data-workflow-page='query'] .entry-search-advanced,
+  .workflow-stage-workspace[data-workflow-page='query']
+    .entry-retrieval-options,
   .workflow-stage-workspace[data-workflow-page='query'] .entry-private-toggle,
   .workflow-stage-workspace[data-workflow-page='query'] .entry-command-actions {
     grid-column: 1;
@@ -1924,6 +1959,10 @@
   .workflow-stage-workspace[data-workflow-page='associations'] .entry-workbench,
   .workflow-stage-workspace[data-workflow-page='query'] .entry-workbench,
   .workflow-stage-workspace[data-workflow-page='tags'] .entry-editor-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .entry-search-index-panel {
     grid-template-columns: minmax(0, 1fr);
   }
 }

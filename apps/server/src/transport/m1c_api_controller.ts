@@ -460,6 +460,37 @@ export class M1cApiController {
     );
   }
 
+  @Get('entries/search/index')
+  public async informationEntrySearchIndexStatus(
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.informationEntrySearchIndexStatus(),
+    );
+  }
+
+  @Post('entries/search/index/rebuild')
+  public async rebuildInformationEntrySearchIndex(
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.rebuildInformationEntrySearchIndex(),
+    );
+  }
+
+  @Post('entries/search/index/evaluate')
+  public async evaluateInformationEntrySearch(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.evaluateInformationEntrySearch(body),
+    );
+  }
+
   @Post('entries/exploration/candidates')
   public async exploreInformationEntries(
     @Body() body: unknown,

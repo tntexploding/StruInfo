@@ -217,6 +217,28 @@ personal value, AI output, dependency, role, grant or database extension.
 
 `000022_create_information_document_working_copies.sql` adds one current pre-split working-copy row per source Snapshot. Editing rows contain one bounded UTF-8 draft; confirmation clears the draft and records the immutable derived Resource/Snapshot. The source Evidence foreign key remains authoritative, no original row is updated, and runtime access is limited to the typed SELECT/INSERT/UPDATE/DELETE operations used by this repository.
 
+`000023_add_remote_document_resource_kind.sql` extends only the closed Resource
+kind check with `remote_document`. It lets RSS/API/Web/connector capture reuse
+the existing Evidence and Blob boundary without adding remote bytes, secrets,
+subscription state, Provider payloads or generic crawler configuration to the
+database.
+
+`000024_add_information_entry_graph_semantics.sql` extends current graph
+overrides with the closed semantic kind, verification status and bounded owner
+note used by M1J. Existing graph overrides are deterministically upgraded;
+automatic similarity projections remain rebuildable calculations rather than
+verified factual assertions. Runtime access stays behind the typed graph
+override repository.
+
+`000025_create_information_entry_search_index.sql` adds two disposable derived
+tables for M1K: one current Entry-bound search projection with an optional
+standard `double precision[]` embedding, and one title/body/tag term-posting
+table. Both are fully rebuildable from current public Entries and are therefore
+excluded from personal-data packages. The migration adds no `pgvector` or other
+extension, source text, Provider secret, prompt, personal seed, role or grant;
+operators grant only the typed SELECT and scoped replacement operations used by
+the search-index repository.
+
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.
 
@@ -265,8 +287,8 @@ first-error stop, repeat no-op behavior, resource cleanup, safe output, and the
 ordinary runtime no-DDL/no-import boundary through injected filesystem,
 PostgreSQL, logger, and process boundaries.
 
-These synthetic tests are not real PostgreSQL coverage. Exact PostgreSQL 18 and
-pgvector execution, runtime grants, real advisory-lock concurrency, migration
+These synthetic tests are not real PostgreSQL coverage. Exact PostgreSQL 18,
+runtime grants, real advisory-lock concurrency, migration
 interruption, and Windows/Linux database parity remain pending
 `M0-S-CONTAINER-MAINT-001` or another separately admitted infrastructure fixture.
 
@@ -286,7 +308,6 @@ defines the narrower non-container TM2 candidate for externally provisioned
 PostgreSQL 18: its historical candidate covered migrations `000001` through
 `000004`, curation/knowledge
 transactions, complete current-knowledge reads, least-privilege runtime grants,
-and parity with the accepted pure boundaries. Its implementation remains
-blocked until independent Maintenance and Test contract review. Compose,
-container images, pgvector, Linux parity, and production resource claims remain
-outside that draft.
+and parity with the accepted pure boundaries. That historical harness no longer
+blocks current product development. Compose, container images, Linux parity and
+production resource claims remain outside that draft.

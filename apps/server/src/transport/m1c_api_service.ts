@@ -5,6 +5,7 @@ import {
   ENTRY_DOMAIN_KEYWORDS,
   ENTRY_TEXT_SEARCH_FIELDS,
   ENTRY_TEXT_SEARCH_MODES,
+  ENTRY_RETRIEVAL_MODES,
   ENTRY_TYPE_KEYWORDS,
   INFORMATION_ENTRY_ASSOCIATION_ACTIONS,
   INFORMATION_ENTRY_ASSOCIATION_POLICY,
@@ -14,6 +15,7 @@ import {
   INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES,
   INFORMATION_ENTRY_GRAPH_MAXIMUM_NEIGHBORS,
   InformationEntrySearchCursorError,
+  InformationEntryRetrievalServiceError,
   InformationEntryQuerySynthesisServiceError,
   buildInformationEntryKnowledgeGraph,
   buildInformationEntryAssociationProjection,
@@ -70,6 +72,8 @@ import {
   type InformationEntrySearchRequest,
   type InformationEntryQuerySynthesisRequest,
   type InformationEntryQuerySynthesisServicePort,
+  type InformationEntryRetrievalServicePort,
+  type InformationEntrySearchEvaluationCase,
   type InformationEntryRestructurePreparation,
   type InformationEntryRestructureRepositoryPort,
   type CurrentInformationDocumentTags,
@@ -154,6 +158,7 @@ export interface M1cApiServiceDependencies {
   readonly informationDocumentTagRepository: InformationDocumentTagRepositoryPort;
   readonly informationDocumentWorkingCopyRepository: InformationDocumentWorkingCopyRepositoryPort;
   readonly informationEntryAssociationRepository: InformationEntryAssociationRepositoryPort;
+  readonly informationEntryRetrieval?: InformationEntryRetrievalServicePort;
   readonly informationEntryRestructureRepository?: InformationEntryRestructureRepositoryPort;
   readonly processingRunRepository: ProcessingRunRepositoryPort;
   readonly entryAutomationExecutionRepository?: EntryAutomationExecutionRepositoryPort;
@@ -260,6 +265,9 @@ export interface M1cApiServicePort {
     body: unknown,
   ): Promise<M1cHttpResult>;
   searchInformationEntries(body: unknown): Promise<M1cHttpResult>;
+  informationEntrySearchIndexStatus(): Promise<M1cHttpResult>;
+  rebuildInformationEntrySearchIndex(): Promise<M1cHttpResult>;
+  evaluateInformationEntrySearch(body: unknown): Promise<M1cHttpResult>;
   exploreInformationEntries(body: unknown): Promise<M1cHttpResult>;
   synthesizeInformationEntryQuery(body: unknown): Promise<M1cHttpResult>;
   readInformationEntryKnowledgeGraph(body: unknown): Promise<M1cHttpResult>;
@@ -585,6 +593,9 @@ export class M1cApiService implements M1cApiServicePort {
           ? []
           : ['entry_automation']),
         'information_entry_exploration',
+        ...(this.#dependencies.informationEntryRetrieval === undefined
+          ? []
+          : ['information_entry_search_index']),
         'private_documents',
         'processing_runs',
         'review_preferences',
@@ -603,6 +614,10 @@ export class M1cApiService implements M1cApiServicePort {
         ...(this.#dependencies.aiQuerySynthesis === undefined
           ? []
           : ['ai_query_synthesis']),
+        ...(this.#dependencies.informationEntryRetrieval
+          ?.semanticSearchAvailable === true
+          ? ['semantic_entry_search']
+          : []),
       ]),
     });
   }
@@ -2559,6 +2574,32 @@ export class M1cApiService implements M1cApiServicePort {
     const request = decodeEntrySearchBody(body);
     if (request === undefined) return inputFailure('body');
     try {
+      if (this.#dependencies.informationEntryRetrieval !== undefined) {
+        const result =
+          await this.#dependencies.informationEntryRetrieval.search(request);
+        const entries =
+          await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+            this.#dependencies.workspaceId,
+            request.includePrivate,
+          );
+        const associationSnapshot =
+          request.association === undefined
+            ? {projections: [], overrides: []}
+            : await this.#dependencies.informationEntryAssociationRepository.loadAssociationSnapshot(
+                this.#dependencies.workspaceId,
+                request.includePrivate,
+              );
+        const privateDocuments = await this.#searchPrivateDocuments(
+          request,
+          entries,
+          associationSnapshot,
+        );
+        return httpResult(200, {
+          status: 'ok',
+          ...result,
+          privateDocuments,
+        });
+      }
       const [entries, associationSnapshot] = await Promise.all([
         this.#dependencies.informationEntryRepository.loadCurrentEntries(
           this.#dependencies.workspaceId,
@@ -2596,7 +2637,55 @@ export class M1cApiService implements M1cApiServicePort {
           }),
         });
       }
+      if (error instanceof InformationEntryRetrievalServiceError) {
+        return informationEntryRetrievalFailure(error);
+      }
       return repositoryFailure();
+    }
+  }
+
+  public async informationEntrySearchIndexStatus(): Promise<M1cHttpResult> {
+    const retrieval = this.#dependencies.informationEntryRetrieval;
+    if (retrieval === undefined) return httpResult(404, {status: 'not_found'});
+    try {
+      return httpResult(200, {status: 'ok', index: await retrieval.status()});
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async rebuildInformationEntrySearchIndex(): Promise<M1cHttpResult> {
+    const retrieval = this.#dependencies.informationEntryRetrieval;
+    if (retrieval === undefined) return httpResult(404, {status: 'not_found'});
+    try {
+      return httpResult(200, {status: 'ok', index: await retrieval.rebuild()});
+    } catch (error) {
+      return error instanceof InformationEntryRetrievalServiceError
+        ? informationEntryRetrievalFailure(error)
+        : repositoryFailure();
+    }
+  }
+
+  public async evaluateInformationEntrySearch(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const retrieval = this.#dependencies.informationEntryRetrieval;
+    if (retrieval === undefined) return httpResult(404, {status: 'not_found'});
+    const input = decodeInformationEntrySearchEvaluation(body);
+    if (input === undefined) return inputFailure('body');
+    try {
+      return httpResult(200, {
+        status: 'ok',
+        evaluation: await retrieval.evaluate(
+          input.retrievalMode,
+          input.k,
+          input.cases,
+        ),
+      });
+    } catch (error) {
+      return error instanceof InformationEntryRetrievalServiceError
+        ? informationEntryRetrievalFailure(error)
+        : repositoryFailure();
     }
   }
 
@@ -2652,6 +2741,9 @@ export class M1cApiService implements M1cApiServicePort {
       const result = await service.synthesize(input);
       return httpResult(200, {status: 'ok', ...result});
     } catch (error) {
+      if (error instanceof InformationEntryRetrievalServiceError) {
+        return informationEntryRetrievalFailure(error);
+      }
       return informationEntryQuerySynthesisFailure(error);
     }
   }
@@ -4325,6 +4417,7 @@ function decodeEntrySearchBody(
 ): Readonly<InformationEntrySearchRequest> | undefined {
   if (!isRecord(body)) return undefined;
   const textValue = optionalBoundedText(body.text, 300);
+  const retrievalMode = body.retrievalMode ?? 'lexical';
   const textMode = body.textMode ?? 'substring';
   const textFields = decodeEntrySearchTextFields(body.textFields);
   const contentKeyword = optionalBoundedText(body.contentKeyword, 80);
@@ -4344,6 +4437,12 @@ function decodeEntrySearchBody(
   const after = decodeEntrySearchCursor(body.after);
   if (
     textValue === null ||
+    typeof retrievalMode !== 'string' ||
+    !ENTRY_RETRIEVAL_MODES.includes(
+      retrievalMode as (typeof ENTRY_RETRIEVAL_MODES)[number],
+    ) ||
+    (retrievalMode !== 'lexical' &&
+      (textValue === undefined || textValue.trim() === '')) ||
     typeof textMode !== 'string' ||
     !ENTRY_TEXT_SEARCH_MODES.includes(textMode as EntryTextSearchMode) ||
     textFields === undefined ||
@@ -4395,6 +4494,7 @@ function decodeEntrySearchBody(
           textMode: textMode as EntryTextSearchMode,
           textFields,
         }),
+    retrievalMode: retrievalMode as (typeof ENTRY_RETRIEVAL_MODES)[number],
     ...(contentKeyword === undefined ? {} : {contentKeyword}),
     ...(sourceKey === undefined ? {} : {sourceKey}),
     ...(snapshotId === undefined ? {} : {snapshotId}),
@@ -4421,6 +4521,7 @@ function decodeEntrySearchBody(
 
 const INFORMATION_ENTRY_QUERY_SYNTHESIS_QUERY_KEYS = new Set([
   'text',
+  'retrievalMode',
   'textMode',
   'textFields',
   'contentKeyword',
@@ -4437,6 +4538,60 @@ const INFORMATION_ENTRY_QUERY_SYNTHESIS_QUERY_KEYS = new Set([
   'includePrivate',
   'onlyPrivate',
 ]);
+
+function decodeInformationEntrySearchEvaluation(body: unknown):
+  | Readonly<{
+      retrievalMode: 'semantic' | 'hybrid';
+      k: number;
+      cases: readonly Readonly<InformationEntrySearchEvaluationCase>[];
+    }>
+  | undefined {
+  if (
+    !isRecord(body) ||
+    (body.retrievalMode !== 'semantic' && body.retrievalMode !== 'hybrid') ||
+    typeof body.k !== 'number' ||
+    !Number.isSafeInteger(body.k) ||
+    body.k < 1 ||
+    body.k > 20 ||
+    !Array.isArray(body.cases) ||
+    body.cases.length < 1 ||
+    body.cases.length > 20
+  ) {
+    return undefined;
+  }
+  const cases = body.cases.flatMap((candidate) => {
+    if (!isRecord(candidate)) return [];
+    const query = optionalBoundedText(candidate.query, 300);
+    if (
+      typeof candidate.caseId !== 'string' ||
+      !/^[A-Za-z0-9._:-]{1,80}$/u.test(candidate.caseId) ||
+      query === undefined ||
+      query === null ||
+      query.trim() === '' ||
+      !Array.isArray(candidate.expectedEntryIds) ||
+      candidate.expectedEntryIds.length < 1 ||
+      candidate.expectedEntryIds.length > 20 ||
+      !isCanonicalUuidArray(candidate.expectedEntryIds) ||
+      new Set(candidate.expectedEntryIds).size !==
+        candidate.expectedEntryIds.length
+    ) {
+      return [];
+    }
+    return [
+      Object.freeze({
+        caseId: candidate.caseId,
+        query,
+        expectedEntryIds: Object.freeze([...candidate.expectedEntryIds]),
+      }),
+    ];
+  });
+  if (cases.length !== body.cases.length) return undefined;
+  return Object.freeze({
+    retrievalMode: body.retrievalMode,
+    k: body.k,
+    cases: Object.freeze(cases),
+  });
+}
 
 function decodeInformationEntryQuerySynthesisBody(
   body: unknown,
@@ -5650,6 +5805,33 @@ function repositoryFailure(): M1cHttpResult {
   });
 }
 
+function informationEntryRetrievalFailure(
+  error: InformationEntryRetrievalServiceError,
+): M1cHttpResult {
+  if (
+    error.code === 'semantic_search_private_scope_forbidden' ||
+    error.code === 'semantic_search_text_required'
+  ) {
+    return httpResult(422, {
+      status: 'rejected',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  if (
+    error.code === 'semantic_search_not_configured' ||
+    error.code === 'semantic_search_index_not_ready'
+  ) {
+    return httpResult(409, {
+      status: 'rejected',
+      issue: Object.freeze({code: error.code}),
+    });
+  }
+  return httpResult(502, {
+    status: 'failed',
+    issue: Object.freeze({code: error.code}),
+  });
+}
+
 function workspaceTransferFailure(error: unknown): M1cHttpResult {
   if (!(error instanceof M1cWorkspaceTransferError)) {
     return httpResult(503, {
@@ -5693,4 +5875,14 @@ function httpResult(statusCode: number, body: unknown): M1cHttpResult {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isCanonicalUuidArray(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (entryId: unknown) =>
+        typeof entryId === 'string' && CANONICAL_UUID.test(entryId),
+    )
+  );
 }

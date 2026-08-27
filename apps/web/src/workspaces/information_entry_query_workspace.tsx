@@ -17,9 +17,11 @@ import {
 } from './information_entry_components.js';
 import {DOMAIN_LABELS, TYPE_LABELS} from './information_entry_shared.js';
 import {
+  InformationEntryRetrievalOptions,
   InformationEntryAdvancedSearchFields,
   InformationEntryTextSearchOptions,
 } from './information_entry_search_controls.js';
+import {InformationEntrySearchIndexPanel} from './information_entry_search_index_panel.js';
 import {InformationEntryQueryComparison} from './information_entry_query_comparison.js';
 import {InformationEntryExploration} from './information_entry_exploration.js';
 import {InformationEntryQuerySynthesis} from './information_entry_query_synthesis.js';
@@ -42,6 +44,9 @@ export interface InformationEntryQueryWorkspaceProps extends Pick<
   'onExplore' | 'onOpenEvidence' | 'onReviseExplorationPolicy' | 'onSearch'
 > {
   readonly aiQuerySynthesisEnabled: boolean;
+  readonly semanticSearchEnabled?: boolean;
+  readonly onLoadSearchIndex?: InformationEntryServices['onLoadSearchIndex'];
+  readonly onRebuildSearchIndex?: InformationEntryServices['onRebuildSearchIndex'];
   readonly onSynthesize: InformationEntryQuerySynthesisAction;
   readonly reviewPreferences: Loadable<Readonly<ReviewPreferencesResponse>>;
   readonly snapshots: readonly Readonly<EvidenceSnapshotSummary>[];
@@ -49,17 +54,22 @@ export interface InformationEntryQueryWorkspaceProps extends Pick<
 
 export function InformationEntryQueryWorkspace({
   aiQuerySynthesisEnabled,
+  semanticSearchEnabled = false,
   onExplore,
+  onLoadSearchIndex,
   onOpenEvidence,
   onReviseExplorationPolicy,
   onSearch,
+  onRebuildSearchIndex,
   onSynthesize,
   reviewPreferences,
   snapshots,
 }: InformationEntryQueryWorkspaceProps) {
   const controller = useInformationEntryController({onSearch});
+  const [semanticIndexReady, setSemanticIndexReady] = useState(false);
   const comparisonScopeKey = informationEntryQueryScopeKey({
     query: controller.query,
+    retrievalMode: controller.retrievalMode,
     textMode: controller.textMode,
     textFields: controller.textFields,
     snapshotId: controller.snapshotId,
@@ -109,13 +119,13 @@ export function InformationEntryQueryWorkspace({
     >
       <header className="workflow-page-heading">
         <div>
-          <p className="section-index">05 / DETERMINISTIC QUERY</p>
+          <p className="section-index">05 / RETRIEVAL</p>
           <h1>查询</h1>
           <p>按正文、标签、来源、时间与有限邻域检索，并返回精确来源。</p>
         </div>
         <span className="origin-label origin-label--deterministic">
-          {aiQuerySynthesisEnabled
-            ? '本地词法搜索 · 可选 AI 证据综合'
+          {semanticSearchEnabled
+            ? '本地词法 · 可选语义召回'
             : '本地词法搜索 · 可离线使用'}
         </span>
       </header>
@@ -130,6 +140,7 @@ export function InformationEntryQueryWorkspace({
           <span data-active="true">标题 / 正文 / 标签</span>
           <span data-active="true">精确结构筛选</span>
           <span data-active="true">精确 / 包含 / 模糊</span>
+          <span data-active={semanticSearchEnabled}>语义 / 混合召回</span>
           <span data-active="true">关联联想 / 双条比较</span>
           <span data-active={aiQuerySynthesisEnabled}>可选 AI 证据综合</span>
         </div>
@@ -173,6 +184,14 @@ export function InformationEntryQueryWorkspace({
             fields={controller.textFields}
             onModeChange={controller.setTextMode}
             onFieldsChange={controller.setTextFields}
+          />
+          <InformationEntryRetrievalOptions
+            mode={controller.retrievalMode}
+            semanticAvailable={semanticSearchEnabled}
+            semanticReady={semanticIndexReady}
+            publicScope={!controller.includePrivate && !controller.onlyPrivate}
+            queryPresent={controller.query.trim() !== ''}
+            onChange={controller.setRetrievalMode}
           />
           <label className="field entry-source-filter">
             <span>来源文档</span>
@@ -254,6 +273,15 @@ export function InformationEntryQueryWorkspace({
             </button>
           </div>
         </form>
+        {onLoadSearchIndex === undefined ||
+        onRebuildSearchIndex === undefined ? null : (
+          <InformationEntrySearchIndexPanel
+            semanticEnabled={semanticSearchEnabled}
+            onLoad={onLoadSearchIndex}
+            onReadyChange={setSemanticIndexReady}
+            onRebuild={onRebuildSearchIndex}
+          />
+        )}
       </section>
 
       {controller.view.status === 'ready' && controller.includePrivate ? (
@@ -404,6 +432,7 @@ function InformationEntryQueryResults({
       <InformationEntryQuerySynthesis
         key={comparisonScopeKey}
         enabled={aiQuerySynthesisEnabled}
+        retrievalMode={controller.retrievalMode}
         includePrivate={controller.includePrivate}
         onlyPrivate={controller.onlyPrivate}
         resultCount={

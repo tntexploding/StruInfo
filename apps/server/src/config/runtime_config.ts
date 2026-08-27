@@ -18,6 +18,14 @@ export interface AiProposalProviderConfig {
   readonly timeoutMs: 60_000;
 }
 
+export interface EmbeddingProviderConfig {
+  readonly providerKey: 'openai-embeddings-v1';
+  readonly model: string;
+  readonly apiKey: string;
+  readonly maximumBatchSize: 32;
+  readonly timeoutMs: 60_000;
+}
+
 export interface RuntimeConfig {
   readonly role: ProcessRole;
   readonly database: Readonly<PostgresConnectionConfig>;
@@ -31,6 +39,7 @@ export interface RuntimeConfig {
   readonly shutdownTimeoutMs: number;
   readonly logLevel: LogLevel;
   readonly aiProposalProvider?: Readonly<AiProposalProviderConfig>;
+  readonly embeddingProvider?: Readonly<EmbeddingProviderConfig>;
 }
 
 export class ConfigurationError extends Error {
@@ -88,9 +97,18 @@ export function parseRuntimeConfig(
     MAX_SHUTDOWN_TIMEOUT_MS,
   );
   const logLevel = parseLogLevel(environment.STRUIINFO_LOG_LEVEL);
-  const aiProposalProvider = parseAiProposalProvider(
+  const openAiApiKey = parseOpenAiApiKey(
     environment.OPENAI_API_KEY,
     environment.STRUIINFO_OPENAI_MODEL,
+    environment.STRUIINFO_OPENAI_EMBEDDING_MODEL,
+  );
+  const aiProposalProvider = parseAiProposalProvider(
+    openAiApiKey,
+    environment.STRUIINFO_OPENAI_MODEL,
+  );
+  const embeddingProvider = parseEmbeddingProvider(
+    openAiApiKey,
+    environment.STRUIINFO_OPENAI_EMBEDDING_MODEL,
   );
 
   return Object.freeze({
@@ -106,6 +124,7 @@ export function parseRuntimeConfig(
     shutdownTimeoutMs,
     logLevel,
     ...(aiProposalProvider === undefined ? {} : {aiProposalProvider}),
+    ...(embeddingProvider === undefined ? {} : {embeddingProvider}),
   });
 }
 
@@ -113,15 +132,8 @@ function parseAiProposalProvider(
   apiKey: string | undefined,
   model: string | undefined,
 ): Readonly<AiProposalProviderConfig> | undefined {
-  if (apiKey === undefined && model === undefined) return undefined;
-  if (
-    apiKey === undefined ||
-    model === undefined ||
-    apiKey.length < 1 ||
-    apiKey.length > 4_096 ||
-    containsWhitespaceOrControl(apiKey) ||
-    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/u.test(model)
-  ) {
+  if (model === undefined) return undefined;
+  if (apiKey === undefined || !validModel(model)) {
     throw new ConfigurationError(
       'OPENAI_API_KEY and STRUIINFO_OPENAI_MODEL must both be supplied to enable AI proposals.',
     );
@@ -133,6 +145,55 @@ function parseAiProposalProvider(
     maxOutputTokens: 800 as const,
     timeoutMs: 60_000 as const,
   });
+}
+
+function parseEmbeddingProvider(
+  apiKey: string | undefined,
+  model: string | undefined,
+): Readonly<EmbeddingProviderConfig> | undefined {
+  if (model === undefined) return undefined;
+  if (apiKey === undefined || !validModel(model)) {
+    throw new ConfigurationError(
+      'OPENAI_API_KEY and STRUIINFO_OPENAI_EMBEDDING_MODEL must both be supplied to enable semantic search.',
+    );
+  }
+  return Object.freeze({
+    providerKey: 'openai-embeddings-v1' as const,
+    model,
+    apiKey,
+    maximumBatchSize: 32 as const,
+    timeoutMs: 60_000 as const,
+  });
+}
+
+function parseOpenAiApiKey(
+  apiKey: string | undefined,
+  responseModel: string | undefined,
+  embeddingModel: string | undefined,
+): string | undefined {
+  if (
+    apiKey === undefined &&
+    responseModel === undefined &&
+    embeddingModel === undefined
+  ) {
+    return undefined;
+  }
+  if (
+    apiKey === undefined ||
+    (responseModel === undefined && embeddingModel === undefined) ||
+    apiKey.length < 1 ||
+    apiKey.length > 4_096 ||
+    containsWhitespaceOrControl(apiKey)
+  ) {
+    throw new ConfigurationError(
+      'OPENAI_API_KEY and at least one configured OpenAI model must be supplied together.',
+    );
+  }
+  return apiKey;
+}
+
+function validModel(model: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$/u.test(model);
 }
 
 function containsWhitespaceOrControl(value: string): boolean {

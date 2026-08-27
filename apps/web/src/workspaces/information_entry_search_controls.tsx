@@ -1,10 +1,69 @@
 import type {
   EntryDomainKeyword,
+  EntryRetrievalMode,
   EntryTextSearchField,
   EntryTextSearchMode,
   EntryTypeKeyword,
   EvidenceSnapshotSummary,
 } from '../api/m1c_api_contract.js';
+
+export function InformationEntryRetrievalOptions({
+  mode,
+  publicScope,
+  queryPresent,
+  semanticAvailable,
+  semanticReady,
+  onChange,
+}: {
+  readonly mode: EntryRetrievalMode;
+  readonly publicScope: boolean;
+  readonly queryPresent: boolean;
+  readonly semanticAvailable: boolean;
+  readonly semanticReady: boolean;
+  readonly onChange: (mode: EntryRetrievalMode) => void;
+}) {
+  const semanticUsable =
+    semanticAvailable && semanticReady && publicScope && queryPresent;
+  return (
+    <fieldset className="entry-text-search-options entry-retrieval-options">
+      <legend>召回方式</legend>
+      <div className="entry-text-search-options__choices">
+        {(
+          [
+            ['lexical', '本地词法'],
+            ['semantic', '语义向量'],
+            ['hybrid', '混合召回'],
+          ] as const
+        ).map(([value, label]) => (
+          <label key={value}>
+            <input
+              type="radio"
+              name="entry-retrieval-mode"
+              value={value}
+              checked={mode === value}
+              disabled={value !== 'lexical' && !semanticUsable}
+              onChange={() => {
+                onChange(value);
+              }}
+            />
+            <span>{label}</span>
+          </label>
+        ))}
+      </div>
+      <p>
+        {!semanticAvailable
+          ? '未配置 Embedding 模型；确定性本地词法查询保持完整可用。'
+          : !semanticReady
+            ? 'Embedding 模型已配置，但当前向量索引尚未就绪；请先重建检索索引。'
+            : !publicScope
+              ? '隐私范围仅使用本地词法查询，内容不会发送给外部 Embedding Provider。'
+              : queryPresent
+                ? '语义与混合模式使用当前可重建向量索引；结果分数表示召回相似度，不代表事实正确性。'
+                : '输入搜索文字后可使用语义或混合召回。'}
+      </p>
+    </fieldset>
+  );
+}
 
 const TEXT_SEARCH_MODE_OPTIONS: readonly Readonly<{
   value: EntryTextSearchMode;

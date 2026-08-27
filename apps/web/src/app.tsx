@@ -516,6 +516,16 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const loadInformationEntrySearchIndex = useCallback(
+    () => apiClient.loadInformationEntrySearchIndex(),
+    [apiClient],
+  );
+
+  const rebuildInformationEntrySearchIndex = useCallback(
+    () => apiClient.rebuildInformationEntrySearchIndex(),
+    [apiClient],
+  );
+
   const exploreInformationEntries = useCallback(
     (
       body: unknown,
@@ -1063,11 +1073,17 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
             workspace.status === 'ready' &&
             workspace.value.capabilities.includes('ai_query_synthesis')
           }
+          semanticSearchEnabled={
+            workspace.status === 'ready' &&
+            workspace.value.capabilities.includes('semantic_entry_search')
+          }
           snapshots={snapshotValues}
           reviewPreferences={reviewPreferences}
           onExplore={exploreInformationEntries}
+          onLoadSearchIndex={loadInformationEntrySearchIndex}
           onReviseExplorationPolicy={reviseInformationEntryExplorationPolicy}
           onSearch={searchInformationEntries}
+          onRebuildSearchIndex={rebuildInformationEntrySearchIndex}
           onSynthesize={synthesizeInformationEntryQuery}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
             void openEvidence(snapshotId, undefined, fragmentId, includePrivate)

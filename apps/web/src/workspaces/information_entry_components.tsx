@@ -10,6 +10,7 @@ import type {
   InformationEntryAssociationRebuildResponse,
   InformationEntryExplorationPolicyWriteResponse,
   InformationEntryExplorationResponse,
+  InformationEntrySearchIndexResponse,
   InformationEntryPreferenceProfileWriteResponse,
   InformationEntryPreferenceSuggestionResponse,
   InformationEntryPreferenceTrialResponse,
@@ -76,6 +77,12 @@ export interface InformationEntryServices {
   readonly onSearch: (
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationEntrySearchResponse>>;
+  readonly onLoadSearchIndex: () => Promise<
+    M1cHttpResponse<InformationEntrySearchIndexResponse>
+  >;
+  readonly onRebuildSearchIndex: () => Promise<
+    M1cHttpResponse<InformationEntrySearchIndexResponse>
+  >;
   readonly onExplore: (
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationEntryExplorationResponse>>;
@@ -310,7 +317,15 @@ export function InformationEntryResults({
         </header>
         <ol>
           {state.response.items.map(
-            ({association, entry, filterReasons, matchReasons, textMatch}) => (
+            ({
+              association,
+              entry,
+              filterReasons,
+              matchReasons,
+              retrievalScore,
+              semanticMatch,
+              textMatch,
+            }) => (
               <li key={entry.entryId}>
                 <button
                   type="button"
@@ -342,6 +357,14 @@ export function InformationEntryResults({
                         )}
                       </em>
                     ) : null}
+                    {semanticMatch === undefined ? null : (
+                      <em>
+                        语义相似度 {scorePercentage(semanticMatch.score)}/100
+                        {retrievalScore === undefined
+                          ? null
+                          : ` · 综合排序分 ${scorePercentage(retrievalScore)}/100`}
+                      </em>
+                    )}
                     {filterReasons.length > 0 ? (
                       <em className="entry-result-list__filters">
                         筛选：{filterReasons.map(filterReasonLabel).join(' / ')}

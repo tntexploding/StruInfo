@@ -1,6 +1,7 @@
 import type {SyntheticEvent} from 'react';
 
 import type {
+  EntryRetrievalMode,
   InformationEntryQuerySynthesisEvidence,
   InformationEntryQuerySynthesisResponse,
 } from '../api/m1c_api_contract.js';
@@ -12,6 +13,7 @@ import {
 
 export interface InformationEntryQuerySynthesisProps {
   readonly enabled: boolean;
+  readonly retrievalMode?: EntryRetrievalMode;
   readonly includePrivate: boolean;
   readonly onlyPrivate: boolean;
   readonly resultCount: number;
@@ -22,6 +24,7 @@ export interface InformationEntryQuerySynthesisProps {
 
 export function InformationEntryQuerySynthesis({
   enabled,
+  retrievalMode,
   includePrivate,
   onlyPrivate,
   resultCount,
@@ -31,6 +34,7 @@ export function InformationEntryQuerySynthesis({
 }: InformationEntryQuerySynthesisProps) {
   const synthesis = useInformationEntryQuerySynthesis({onSynthesize});
   const privateScope = includePrivate || onlyPrivate;
+  const ragMode = retrievalMode !== undefined && retrievalMode !== 'lexical';
   const canSubmit =
     enabled &&
     !privateScope &&
@@ -53,15 +57,18 @@ export function InformationEntryQuerySynthesis({
         <div>
           <p className="section-index">AI SYNTHESIS / PUBLIC EVIDENCE</p>
           <h2 id="entry-query-synthesis-title">
-            AI 综合 · 仅基于当前公开查询结果
+            {ragMode
+              ? 'RAG 综合 · 语义召回与本地证据'
+              : 'AI 综合 · 仅基于当前公开查询结果'}
           </h2>
         </div>
         <span className="origin-label origin-label--ai">AI 生成 · 会话内</span>
       </header>
 
       <p className="entry-query-synthesis__disclosure" id="ai-disclosure">
-        只有点击“AI 综合当前结果”后，你输入的问题，以及当前公开查询最多 8 条
-        Entry 的标题、受限正文片段和标签才会发送给配置的 OpenAI
+        只有点击“{ragMode ? 'RAG 综合当前证据' : 'AI 综合当前结果'}
+        ”后，你输入的问题，以及当前公开查询最多 8 条 Entry
+        的标题、受限正文片段和标签才会发送给配置的 OpenAI
         模型。不会发送隐私文档、来源 URL、数据库身份或个人偏好，也不会保存回答。
       </p>
 
@@ -104,7 +111,9 @@ export function InformationEntryQuerySynthesis({
           >
             {synthesis.state.status === 'loading'
               ? '正在综合…'
-              : 'AI 综合当前结果'}
+              : ragMode
+                ? 'RAG 综合当前证据'
+                : 'AI 综合当前结果'}
           </button>
         </div>
       </form>

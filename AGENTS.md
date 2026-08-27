@@ -562,10 +562,21 @@ it is not an automated truth claim. Migration `000024`, restructuring and AI
 acceptance preserve this metadata, and Association Bundle v4 carries it while
 remaining backward-readable with v1-v3. M1J adds no Provider, dependency,
 second content model, knowledge tree, complex ontology or automatic fact check.
-The next pre-launch phase is M1K tokenization/vector/RAG, followed by
-measured performance work, then
-container/maintenance/production closure. Unrelated product expansion waits
-for post-development use with explicitly authorized real material.
+
+ADR 0043 completes M1K on the existing Entry Query path. Migration `000025`
+adds only a wholly rebuildable, current-revision-bound term/vector projection;
+the local Unicode tokenizer and lexical Query remain complete without a
+Provider. An optional environment-configured OpenAI Embeddings adapter enables
+public-only semantic and hybrid retrieval, explicit Recall@K/MRR evaluation,
+and reuse of the existing bounded query synthesis as evidence-grounded RAG.
+Private Entries MUST be rejected before projection, embedding, retrieval or
+synthesis Provider calls. Derived index tables are deliberately excluded from
+personal-data packages and must be rebuilt after restore or model changes.
+M1K adds no vector database, search service, background indexer, private RAG,
+Provider-owned retrieval or real fixture. The next pre-launch phase is M1L
+measured performance work, followed by M1M container/maintenance/production
+closure. Unrelated product expansion waits for post-development use with
+explicitly authorized real material.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable

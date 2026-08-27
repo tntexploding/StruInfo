@@ -112,6 +112,40 @@ describe('parseRuntimeConfig', () => {
     expect(Object.isFrozen(config.aiProposalProvider)).toBe(true);
   });
 
+  it('configures embeddings independently while sharing the environment-only secret', () => {
+    const embeddingOnly = parseRuntimeConfig('api', {
+      ...RUNTIME_ENVIRONMENT,
+      OPENAI_API_KEY: 'synthetic-openai-key',
+      STRUIINFO_OPENAI_EMBEDDING_MODEL: 'text-embedding-synthetic',
+    });
+    expect(embeddingOnly.aiProposalProvider).toBeUndefined();
+    expect(embeddingOnly.embeddingProvider).toEqual({
+      providerKey: 'openai-embeddings-v1',
+      model: 'text-embedding-synthetic',
+      apiKey: 'synthetic-openai-key',
+      maximumBatchSize: 32,
+      timeoutMs: 60_000,
+    });
+
+    const both = parseRuntimeConfig('api', {
+      ...RUNTIME_ENVIRONMENT,
+      OPENAI_API_KEY: 'synthetic-openai-key',
+      STRUIINFO_OPENAI_MODEL: 'gpt-5-mini',
+      STRUIINFO_OPENAI_EMBEDDING_MODEL: 'text-embedding-synthetic',
+    });
+    expect(both.aiProposalProvider).toBeDefined();
+    expect(both.embeddingProvider).toBeDefined();
+  });
+
+  it('rejects an embedding model without the environment-only API key', () => {
+    expect(() =>
+      parseRuntimeConfig('api', {
+        ...RUNTIME_ENVIRONMENT,
+        STRUIINFO_OPENAI_EMBEDDING_MODEL: 'text-embedding-synthetic',
+      }),
+    ).toThrow('OPENAI_API_KEY and at least one configured OpenAI model');
+  });
+
   it.each([
     {OPENAI_API_KEY: 'synthetic-openai-key'},
     {STRUIINFO_OPENAI_MODEL: 'gpt-5-mini'},
@@ -126,7 +160,7 @@ describe('parseRuntimeConfig', () => {
   ])('rejects partial or invalid OpenAI tag configuration', (provider) => {
     expect(() =>
       parseRuntimeConfig('api', {...RUNTIME_ENVIRONMENT, ...provider}),
-    ).toThrow('OPENAI_API_KEY and STRUIINFO_OPENAI_MODEL');
+    ).toThrow('OPENAI_API_KEY');
   });
 
   it('rejects a missing database URL', () => {

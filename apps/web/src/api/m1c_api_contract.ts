@@ -816,6 +816,7 @@ export type EntryTypeKeyword = (typeof ENTRY_TYPE_KEYWORDS)[number];
 export type EntryDomainKeyword = (typeof ENTRY_DOMAIN_KEYWORDS)[number];
 export type EntryTextSearchMode = 'exact' | 'substring' | 'fuzzy';
 export type EntryTextSearchField = 'title' | 'body' | 'tags';
+export type EntryRetrievalMode = 'lexical' | 'semantic' | 'hybrid';
 
 export interface InformationEntryContentKeyword {
   readonly displayValue: string;
@@ -1145,6 +1146,7 @@ export type InformationEntrySearchResponse =
   | Readonly<{
       status: 'ok';
       querySha256: string;
+      retrievalMode?: EntryRetrievalMode;
       totalCount: number;
       items: readonly Readonly<{
         entry: Readonly<InformationEntry>;
@@ -1153,6 +1155,13 @@ export type InformationEntrySearchResponse =
           mode: EntryTextSearchMode;
           score: number;
         }>;
+        semanticMatch?: Readonly<{
+          score: number;
+          provider: string;
+          model: string;
+          indexVersion: string;
+        }>;
+        retrievalScore?: number;
         filterReasons: readonly InformationEntryFilterReason[];
         association?: Readonly<InformationEntryAssociationMatch>;
       }>[];
@@ -1161,6 +1170,47 @@ export type InformationEntrySearchResponse =
         items: readonly Readonly<PrivateDocumentSearchItem>[];
       }>;
       nextCursor?: Readonly<InformationEntrySearchCursor>;
+    }>
+  | DomainFailure;
+
+export interface InformationEntrySearchIndexStatus {
+  readonly indexVersion: string;
+  readonly tokenizerVersion: string;
+  readonly publicEntryCount: number;
+  readonly currentProjectionCount: number;
+  readonly embeddedProjectionCount: number;
+  readonly staleProjectionCount: number;
+  readonly postingCount: number;
+  readonly semanticSearchAvailable: boolean;
+  readonly semanticSearchReady: boolean;
+  readonly embeddingProvider?: string;
+  readonly embeddingModel?: string;
+}
+
+export type InformationEntrySearchIndexResponse =
+  | Readonly<{
+      status: 'ok';
+      index: Readonly<InformationEntrySearchIndexStatus>;
+    }>
+  | DomainFailure;
+
+export type InformationEntrySearchEvaluationResponse =
+  | Readonly<{
+      status: 'ok';
+      evaluation: Readonly<{
+        retrievalMode: 'semantic' | 'hybrid';
+        k: number;
+        meanRecallAtK: number;
+        meanReciprocalRank: number;
+        cases: readonly Readonly<{
+          caseId: string;
+          expectedCount: number;
+          retrievedExpectedCount: number;
+          recallAtK: number;
+          reciprocalRank: number;
+          retrievedEntryIds: readonly string[];
+        }>[];
+      }>;
     }>
   | DomainFailure;
 
