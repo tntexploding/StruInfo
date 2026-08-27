@@ -19,6 +19,7 @@ const MAXIMUM_PACK_DESCRIPTION_BYTES = 16 * 1024 * 1024;
 const MAXIMUM_ARTIFACT_FILE_BYTES = 16 * 1024 * 1024;
 const MAXIMUM_ARTIFACT_TOTAL_BYTES = 128 * 1024 * 1024;
 const EXACT_ALLOWED_PATHS = new Set([
+  'LICENSE',
   'README.md',
   'THIRD_PARTY_NOTICES.md',
   'apps/server/package.json',
@@ -30,6 +31,7 @@ const EXACT_ALLOWED_PATHS = new Set([
   'docs/dependencies/sbom/npm-closure.spdx.json',
 ]);
 const REQUIRED_EXACT_PATHS = [
+  'LICENSE',
   'README.md',
   'THIRD_PARTY_NOTICES.md',
   'apps/server/dist/entrypoints/api.js',

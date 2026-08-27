@@ -1,6 +1,6 @@
 # StruInfo 当前项目状态与实现清单
 
-- 状态：M1M 单机生产运行与维护边界已完成；活动工作区保持无数据
+- 状态：M1M 已完成并通过本地私人 Docker/PostgreSQL 18 合成演练；活动工作区保持无数据，进入云端上线准备
 - 实现基线：M1I-1A/B 至 M1M 无数据开发候选
 - 最近核对：2026-08-27
 - 需求边界：[产品需求](product-requirements.md)
@@ -345,7 +345,14 @@ Feed adapter 只接受无凭据 HTTPS，连接前拒绝本地/私有地址，不
 
 [ADR 0045](adr/0045-operational-production-baseline.md) 增加多阶段非 root Dockerfile、普通 runtime 与高权限 maintenance 分离的 Compose、严格的 `*_FILE` secret 注入、独立 pg-boss schema 准备、runtime grant、维护 preflight/backup/restore 和完整[生产运行手册](production-operations.md)。普通应用清单不接触 migrator secret，容器复用现有 health、结构化日志与优雅关闭。
 
-备份复用完整个人数据包，把 61 张工作区表、引用 Blob 和偏好写入外部 `backups/`；恢复仍只允许同 workspace 空数据库。静态 verifier 已纳入根 `verify`，Compose 语法和 pnpm production deploy 独立验证。该结果没有迁移、依赖或真实数据，也不冒充目标 Linux 镜像、真实 PostgreSQL 18 权限/恢复演练、公网认证或公开分发许可。
+备份复用完整个人数据包，把 61 张工作区表、引用 Blob 和偏好写入外部 `backups/`；恢复仍只允许同 workspace 空数据库。静态 verifier 已纳入根 `verify`，Compose 语法和 pnpm production deploy 独立验证。2026-08-27 又在本地 Docker Desktop 与 disposable PostgreSQL 18.6 上，用纯合成数据完成全部 25 份迁移、首次 pg-boss schema 准备、runtime grant、preflight、回环 HTTP 健康、完整备份、同 workspace 空库恢复、数据/Blob 对照和重启；它不冒充目标云服务器镜像或网络验收。
+
+上线前代码复查关闭了三个可达启动缺口：根脚本现在可按 `api`、`scheduler`、`worker` 或
+`all` 从 server tsconfig 正确启动，也可从编译产物启动；部署静态门会阻止这些脚本再次缺失；
+PostgreSQL URL 从仅允许容器自身 localhost 修正为闭合的单 DNS/IP host，因此外置数据库和
+容器服务发现可用，同时继续拒绝多个 host、socket 与 query/fragment 覆盖。当前 `ssl=false`
+只用于同机或受信任私网，公网 TLS 仍属于目标部署审核。该演练还关闭了两个真实启动缺口：
+node-postgres 的多语句结果现在安全投影最终结果，使首次队列 schema 创建可完成；PDF.js 改为仅在显式 PDF 导入时按需加载，并使用只覆盖文字层提取的本地兼容边界，普通 API/worker/maintenance 启动不再依赖可选原生 Canvas。
 
 ### 7.30 已知产品缺口
 
@@ -360,11 +367,11 @@ Feed adapter 只接受无凭据 HTTPS，连接前拒绝本地/私有地址，不
 
 ### 7.31 发布与部署缺口
 
-- 当前产品是本机回环、单用户工作台，不是公共 API；
-- 公网认证、CSRF 完整边界、TLS、多用户授权和云部署未完成；
-- Docker/Compose 源码与运行权限脚本已实现，但目标 Linux 镜像 digest/漏洞扫描及真实 PostgreSQL 18 权限演练未签发；
+- 当前产品是私人单用户工作台，不是公共 API；本地和云端 Docker 默认只发布宿主回环地址，远程使用通过 SSH 隧道/VPN 等私网入口；
+- 公网访问只限显式订阅、受限网页抓取、连接器和 Provider 的受控出站；应用 HTTP 公网入站、多用户授权及公共服务不在当前部署边界；
+- Node 24 bookworm-slim 已固定不可变 digest；本地 Docker/PostgreSQL 18.6 的合成权限与恢复演练已通过，目标云端仍需重新构建、记录镜像 digest 并执行漏洞扫描；
 - 完整个人数据备份与同 workspace 空库恢复命令已实现；定期保留、异地灾难恢复、跨工作区克隆、非空目标合并和删除策略未完成；
-- 项目尚未选择分发许可证，不能发布为开源发行版。
+- 项目代码已选择 MIT License；发行包与镜像仍必须携带项目许可证、第三方声明和依赖许可证。
 
 以上未完成项只有在进入相应产品边界或出现当前可达 `PRODUCT_BLOCKER` 时才阻断；测试工具自证、
 未来环境强化和不可达边缘情况继续按开发总则记入延期强化，不拖住当前主线。
@@ -384,13 +391,14 @@ Feed adapter 只接受无凭据 HTTPS，连接前拒绝本地/私有地址，不
 - M1H-5 复用单文件导入协议，增加会话批次、逐文件状态、稳定失败重试、停止后续项及合成浏览器回归；没有迁移、数据库队列表或新依赖；
 - M1I-1A/B 至 M1I-5 新增连接器闭合结果、Registry、多文档幂等 Evidence 准备器、`remote_document` 迁移、Git 兼容、RSS/Atom、JSON API 与受限 Web adapter、条件请求/声明式映射、分页与增量游标、已安装 capability 发现、opaque 外部配置引用、批量订阅服务、外部偏好 union、API 与导入页合成回归；没有真实 Feed、API、网页、插件配置或网络测试资料；
 - M1J 新增迁移 `000024`、八类闭合关系语义、500 code-point 维护说明、来源核验状态、双端来源操作和 Association v4 向后升级；M1K 新增迁移 `000025`、可重建词项/向量投影、可选 OpenAI Embedding、三种 Query 和公开证据 RAG；M1L 新增可重复合成性能工具、单次关联读取索引与 HTTP 搜索去重；M1M 新增外部 secret 文件、维护/队列入口、容器与 grant 源码和 deployment verifier；没有第二套图谱/搜索服务、真实知识 fixture、私密外发、迁移或新依赖；
-- 完整 `corepack pnpm run verify` 退出码为 0：140 个单元测试文件、867 项单元测试、2 个集成测试文件、4 项集成测试全部通过，Web 构建转换 79 个模块，制品审计覆盖 1,028 个候选文件，部署静态门通过；
-- Docker Compose v2.31.0 使用纯合成路径成功解析普通及 maintenance 组合；pnpm 11 production deploy 探针成功。实际运行镜像构建因本机 Docker Desktop Linux daemon 未启动而为 `NOT_READY`，未生成镜像，也未启动数据库、容器或真实网络服务；
+- 完整 `corepack pnpm run verify` 退出码为 0：141 个单元测试文件、881 项单元测试、2 个集成测试文件、4 项集成测试全部通过，Web 构建转换 79 个模块，制品审计覆盖 1,029 个候选文件，部署静态门通过；
+- Docker Desktop Linux Engine 27.4.0 使用纯合成、一次性资源完成普通与 maintenance Compose 解析、镜像构建和运行；最终本地候选 `struinfo:release-candidate` 的镜像 ID 为 `sha256:124664dd52c46ae987500fc7b0a52a97301fc3ef421bd2984e84741df486f7da`，以 UID/GID 10001 运行并携带 MIT License、第三方声明和 SBOM；运行容器保持只读根、无 Linux capability、`no-new-privileges` 和回环端口；
+- disposable PostgreSQL 18.6 演练从空库完成 25 份迁移、首次队列 schema、runtime grant 和 preflight；一份合成 Markdown 经公开 API 形成 1 个 Resource、1 个 Snapshot、3 个 Fragment，备份生成 11,659-byte/13-row/1-Blob 个人数据包，空库恢复后数据库投影、85-byte Blob、精确读取和停止/重启健康结果一致；全部一次性资源在验证后清理，既有 `struinfo-owner-pg18` 未被修改；
 - M1G-4D 聚焦 Chrome 回归验证迟到旧列表不会覆盖新列表、精确运行详情真正经独立端点读取，并在 320、390、768、1024、1440 CSS 像素下没有整页水平溢出；
 - 当前合成 Playwright 回归 11/11 通过；M1H-1 两项推进动作在自动化策略面板中可见、默认关闭；M1H-2 在 390 CSS 像素下完成已物化结构的标量拆分、影响预览和原子应用；M1H-4 完成规则保存、预览与应用；M1H-5 完成两文件顺序导入、单项失败原身份重试及当前项完成后停止，并在 320、390、768、1024、1440 CSS 像素下无整页水平溢出；
 - M1G-5A 新增迁移 `000019` 与 Processing v6；M1G-5B 只扩展外部订阅字段和既有服务编排；M1H-1 新增迁移 `000020` 与 Processing v7；M1H-2 新增迁移 `000021` 与 Entry v4；M1H-3 新增迁移 `000022` 与 Entry v5。没有新依赖、Provider 调用或真实数据；活动工作区保持无数据，手工五步主线现在同时支持拆分前全文修订和物化后结构纠错。
 
-这些结果证明当前应用代码基线可构建、可测试且没有把测试/个人资源装入应用制品，并证明容器源码可被 Compose 解析；它们不替代尚未执行的所有者体验、目标镜像或生产部署认证。
+这些结果证明当前应用代码基线可构建、可测试、可在本地私人容器中迁移/运行/备份/恢复，且没有把测试或个人资源装入应用制品；它们不替代尚未执行的所有者体验、目标云主机镜像扫描、私网/防火墙、备份保留或生产监控验收。
 
 ## 9. 开发完成后的统一审核与下一开发触发条件
 

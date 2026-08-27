@@ -166,7 +166,9 @@ describe('parseRuntimeConfig', () => {
   it('rejects a missing database URL', () => {
     expect(() =>
       parseRuntimeConfig('api', {STRUIINFO_DATA_ROOT: DATA_ROOT}),
-    ).toThrow('DATABASE_URL must be a valid local PostgreSQL connection URL');
+    ).toThrow(
+      'DATABASE_URL must be a valid single-host PostgreSQL connection URL',
+    );
   });
 
   it('requires an absolute external data root', () => {
@@ -211,7 +213,7 @@ describe('parseRuntimeConfig', () => {
     );
 
     expect(error.message).toBe(
-      'DATABASE_URL must be a valid local PostgreSQL connection URL with explicit credentials.',
+      'DATABASE_URL must be a valid single-host PostgreSQL connection URL with explicit credentials.',
     );
     expect(error.message).not.toContain(injectedSecret);
   });

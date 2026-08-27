@@ -1,6 +1,6 @@
 # StruInfo 生产运行与维护
 
-- 状态：M1M 单机生产操作边界已实现；真实环境演练未签发
+- 状态：M1M 单机生产操作边界已实现；本地 Docker/PostgreSQL 18.6 合成演练已通过，目标云端待上线
 - 最近更新：2026-08-27
 - 决策：[ADR 0045](adr/0045-operational-production-baseline.md)
 
@@ -9,8 +9,12 @@
 本手册面向一个所有者、一个外部 PostgreSQL 18 数据库和一个持久外部数据根。它覆盖构建、
 迁移、队列 schema、runtime 权限、预检、启动、健康、备份、空库恢复和前向升级。
 
-它不宣称已经完成公网 TLS/认证、多用户隔离、云编排、自动保留策略、跨 workspace 克隆、
-非空合并或公开发行。仓库仍为 `UNLICENSED`，不得把下面的可运行边界解释为分发许可。
+它不宣称已经完成公共 HTTP 服务、多用户隔离、云编排、自动保留策略、跨 workspace 克隆或
+非空合并。项目代码采用 MIT License；第三方材料继续遵循各自许可证和声明。
+
+本地与云端部署都按私人服务处理：Compose 默认只发布宿主回环地址，远程访问应使用 SSH
+隧道、VPN 或同等级私网入口，不直接开放应用端口。GitHub、RSS/Atom、声明式 API、受限网页、
+受信任连接器和显式 OpenAI 能力是受控公网出站，不是公网入站；未配置的能力不得自行联网。
 
 ## 2. 外部状态
 
@@ -22,13 +26,18 @@
 - runtime 与 migrator 两个独立、只读、单行数据库 URL secret 文件；
 - 一个持久绝对数据根，容器内固定挂载为 `/var/lib/struinfo`。
 
+数据库 URL 必须使用一个明确的 DNS 名称或 IP 地址。容器中的 `localhost` / `127.0.0.1`
+只指向应用容器本身；外置 PostgreSQL 应使用容器可达的主机名、私网地址或编排服务名。
+当前驱动边界固定 `ssl=false`，因此仅适用于同机或受信任私网。跨不可信网络部署必须先在
+外层提供 TLS 隧道/代理，或另行接受 PostgreSQL TLS 配置边界。
+
 普通应用只能读取 runtime secret。迁移和队列准备只在显式组合
 `compose.maintenance.yaml` 时获得 migrator secret。OpenAI key 如需启用，可通过
 `OPENAI_API_KEY` 或 `OPENAI_API_KEY_FILE` 注入；两者不得同时提供。
 
 ## 3. 首次部署和升级顺序
 
-先构建镜像并解析配置：
+Dockerfile 已把 Node 24 bookworm-slim 固定到不可变多架构 digest。首次依赖安装可由受控构建主机访问包注册表并执行仓库供应链策略；随后的源码构建和生产依赖组装均关闭网络，只从同一构建阶段已经验证的共享冻结锁文件与本地 pnpm store 裁剪精确版本。离线 deploy 仅信任这份刚验证的锁文件，不解析新版本，并排除应用未使用的可选平台适配包；运行容器不需要访问包注册表。先构建镜像并解析配置：
 
 ```powershell
 docker compose -f compose.production.yaml build
@@ -44,6 +53,9 @@ STRUIINFO_DATA_ROOT
 STRUIINFO_RUNTIME_DATABASE_URL_SECRET_FILE
 STRUIINFO_MIGRATION_DATABASE_URL_SECRET_FILE
 ```
+
+目标 Linux 上应预先创建数据根，并保证容器用户 `10001:10001` 可以读写该目录；runtime
+配置和 secret 文件只需该用户可读。不要用仓库目录、镜像层或临时容器文件系统替代持久数据根。
 
 随后按固定顺序执行：
 
@@ -81,7 +93,10 @@ corepack pnpm run maintenance -- backup
 corepack pnpm run start:all
 ```
 
-启动脚本和本手册都不要求把 URL 或个人路径提交到 Git。
+`start:all` 直接从 TypeScript 源码启动，适合本地调试。执行 `corepack pnpm run build` 后，
+可用 `corepack pnpm run start:all:built` 从与容器相同的编译产物启动。需要拆分角色时使用
+`start:api`、`start:scheduler` 和 `start:worker`。前台进程按 `Ctrl+C` 触发优雅关闭。
+这些启动脚本和本手册都不要求把 URL 或个人路径提交到 Git。
 
 ## 5. 健康与日志
 
@@ -120,9 +135,15 @@ docker compose -f compose.production.yaml --profile maintenance run --rm restore
 ## 7. 上线前仍需完成
 
 - 在目标 Linux/容器宿主上构建镜像，记录不可变 digest、基础镜像材料和漏洞扫描；
-- 用真实但非个人的 disposable PostgreSQL 18 演练迁移、grant、backup、空库 restore 和重启；
-- 根据实际部署决定 TLS、认证、反向代理、备份保留、监控告警和资源预算；
-- 公开或分发前选择许可证并完成发布审查。
+- 复用本地已通过的 PostgreSQL 18.6 合成演练顺序，在云端 disposable 空库复核迁移、队列准备、grant、preflight、backup、空库 restore 和重启；
+- 保持应用端口只绑定回环或 VPN/SSH 私网入口，并在宿主增加防火墙；如未来直接提供公共 HTTP，再单独实现 TLS、认证和反向代理；
+- 确认订阅/抓取/Provider 仅按显式配置出站，并决定备份保留、监控告警和资源预算；
+- 按 MIT License 和第三方声明完成最终发行制品复核。
 
 这些事项必须如实记录，但除非出现当前可达的产品阻断，不应重新演变为无休止的测试框架
 强化循环。
+
+2026-08-27 的本地发布演练已完成上述数据库操作链：Docker Desktop 上的官方 PostgreSQL
+18.6 disposable 空库通过 25 份迁移、首次 pg-boss schema 准备、runtime grant、preflight、
+回环健康、合成写入、完整个人数据备份、同 workspace 空库恢复和停止/重启。该结果用于缩短
+云端操作，不表示云主机镜像、宿主防火墙、漏洞扫描、保留或告警已经完成。

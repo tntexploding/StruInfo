@@ -7,6 +7,7 @@ import {
 } from './verify_application_artifact.js';
 
 const REQUIRED_PATHS = [
+  'LICENSE',
   'README.md',
   'THIRD_PARTY_NOTICES.md',
   'apps/server/dist/entrypoints/api.js',

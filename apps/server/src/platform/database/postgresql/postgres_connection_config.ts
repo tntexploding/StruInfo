@@ -1,3 +1,5 @@
+import {isIP} from 'node:net';
+
 export const POSTGRES_STARTUP_OPTIONS =
   '-c role=none -c search_path=pg_catalog' as const;
 
@@ -9,14 +11,13 @@ export const POSTGRES_APPLICATION_NAMES = Object.freeze({
 export type PostgresConnectionPurpose = keyof typeof POSTGRES_APPLICATION_NAMES;
 
 const DEFAULT_POSTGRES_PORT = 5_432;
-const LOCAL_HOSTS = new Set(['127.0.0.1', '[::1]', 'localhost']);
 const POSTGRES_ROLE_IDENTITIES = Object.freeze({
   migrator: 'struinfo_tm2_migrator',
   runtime: 'struinfo_tm2_runtime',
 } as const satisfies Record<PostgresConnectionPurpose, string>);
 
 /**
- * The only connection shape supplied to node-postgres in the local parity
+ * The only connection shape supplied to node-postgres in the single-host
  * boundary. It deliberately cannot carry a connection string or password
  * callback.
  */
@@ -39,7 +40,7 @@ export class PostgresConnectionConfigError extends Error {
 }
 
 /**
- * Decodes one local PostgreSQL URL exactly once and discards the source URL.
+ * Decodes one single-host PostgreSQL URL exactly once and discards the source URL.
  * The returned record is frozen, null-prototype, and contains only the eight
  * admitted node-postgres connection properties.
  */
@@ -82,7 +83,7 @@ export function decodePostgresConnectionUrl(
 
   if (
     (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') ||
-    !LOCAL_HOSTS.has(parsed.hostname) ||
+    !isValidSingleHost(parsed.hostname) ||
     parsed.search !== '' ||
     parsed.hash !== '' ||
     parsed.username === '' ||
@@ -123,7 +124,7 @@ export function decodePostgresConnectionUrl(
 
   const config = Object.create(null) as PostgresConnectionConfig;
   Object.defineProperties(config, {
-    host: dataProperty(parsed.hostname === '[::1]' ? '::1' : parsed.hostname),
+    host: dataProperty(unbracketHost(parsed.hostname)),
     port: dataProperty(port),
     database: dataProperty(database),
     user: dataProperty(user),
@@ -133,6 +134,43 @@ export function decodePostgresConnectionUrl(
     options: dataProperty(POSTGRES_STARTUP_OPTIONS),
   });
   return Object.freeze(config);
+}
+
+function isValidSingleHost(hostname: string): boolean {
+  const unbracketed = unbracketHost(hostname);
+  const ipVersion = isIP(unbracketed);
+  if (ipVersion === 6) {
+    return unbracketed !== '::';
+  }
+  if (ipVersion === 4) {
+    return unbracketed !== '0.0.0.0';
+  }
+  if (
+    hostname.length === 0 ||
+    hostname.length > 253 ||
+    hostname.includes(':') ||
+    hostname.includes(',')
+  ) {
+    return false;
+  }
+  const dnsName = hostname.endsWith('.') ? hostname.slice(0, -1) : hostname;
+  if (dnsName.length === 0) {
+    return false;
+  }
+  return dnsName
+    .split('.')
+    .every(
+      (label) =>
+        label.length >= 1 &&
+        label.length <= 63 &&
+        /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(label),
+    );
+}
+
+function unbracketHost(hostname: string): string {
+  return hostname.startsWith('[') && hostname.endsWith(']')
+    ? hostname.slice(1, -1)
+    : hostname;
 }
 
 function serializedAuthority(input: string): string {

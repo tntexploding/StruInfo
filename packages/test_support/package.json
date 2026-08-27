@@ -2,7 +2,7 @@
   "name": "@struinfo/test-support",
   "version": "0.0.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "files": [
     "dist"

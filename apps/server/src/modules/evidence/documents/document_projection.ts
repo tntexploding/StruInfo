@@ -1,7 +1,7 @@
 import {TextDecoder} from 'node:util';
 
 import {parse, type DefaultTreeAdapterTypes} from 'parse5';
-import {getDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
+import type {getDocument as getPdfJsDocument} from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 import {MARKDOWN_BUDGETS} from '../markdown/markdown_contract.js';
 
@@ -82,6 +82,10 @@ interface PdfTextItem {
   readonly transform: readonly unknown[];
   readonly hasEOL: boolean;
 }
+
+type PdfJsGetDocument = typeof getPdfJsDocument;
+
+let pdfJsGetDocumentPromise: Promise<PdfJsGetDocument> | undefined;
 
 export async function projectStructuredDocument(
   format: StructuredDocumentFormat,
@@ -165,6 +169,12 @@ async function projectPdf(
   if (!startsWithPdfMagic(sourceBytes)) {
     return reject('pdf_invalid', 'sourceBase64');
   }
+  let getDocument: PdfJsGetDocument;
+  try {
+    getDocument = await loadPdfJsGetDocument();
+  } catch {
+    return reject('pdf_invalid', 'sourceBase64');
+  }
   const loadingTask = getDocument({
     data: Uint8Array.from(sourceBytes),
     stopAtErrors: true,
@@ -213,6 +223,39 @@ async function projectPdf(
   } finally {
     await loadingTask.destroy().catch(() => undefined);
   }
+}
+
+async function loadPdfJsGetDocument(): Promise<PdfJsGetDocument> {
+  installPdfTextExtractionDomMatrix();
+  pdfJsGetDocumentPromise ??= import('pdfjs-dist/legacy/build/pdf.mjs').then(
+    (module) => module.getDocument,
+  );
+  return pdfJsGetDocumentPromise;
+}
+
+function installPdfTextExtractionDomMatrix(): void {
+  if (typeof Reflect.get(globalThis, 'DOMMatrix') === 'function') return;
+  Object.defineProperty(globalThis, 'DOMMatrix', {
+    configurable: true,
+    enumerable: false,
+    value: PdfTextExtractionDomMatrix,
+    writable: true,
+  });
+}
+
+/**
+ * PDF.js constructs one identity DOMMatrix while loading its display bundle,
+ * even when StruInfo uses only getTextContent(). Rendering is not exposed here,
+ * so the six identity fields are the complete compatibility surface required by
+ * the admitted text-only path; unexpected rendering operations still fail closed.
+ */
+class PdfTextExtractionDomMatrix {
+  public a = 1;
+  public b = 0;
+  public c = 0;
+  public d = 1;
+  public e = 0;
+  public f = 0;
 }
 
 function renderHtmlBlocks(node: HtmlNode, blocks: string[]): void {

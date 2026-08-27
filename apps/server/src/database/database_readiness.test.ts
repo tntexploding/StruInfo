@@ -98,7 +98,7 @@ describe('RuntimeDatabase', () => {
         });
         createRuntimeDatabase(config, new ImmediateDeadline(), poolFactory);
       }).toThrow(
-        'DATABASE_URL must be a valid local PostgreSQL connection URL',
+        'DATABASE_URL must be a valid single-host PostgreSQL connection URL',
       );
       expect(poolFactory).not.toHaveBeenCalled();
     },

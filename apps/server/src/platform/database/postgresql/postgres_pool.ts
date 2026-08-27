@@ -72,7 +72,7 @@ class OwnedNodePostgresPool implements PostgresPoolBoundary {
     sql: string,
     parameters?: readonly unknown[],
   ): Promise<PostgresQueryResult<Row>> {
-    return projectQueryResult(
+    return projectNodePostgresQueryResult(
       parameters === undefined
         ? await this.#pool.query<QueryResultRow>(sql)
         : await this.#pool.query<QueryResultRow>(sql, [...parameters]),
@@ -111,7 +111,7 @@ class OwnedNodePostgresClient implements PostgresClientBoundary {
     sql: string,
     parameters?: readonly unknown[],
   ): Promise<PostgresQueryResult<Row>> {
-    return projectQueryResult(
+    return projectNodePostgresQueryResult(
       parameters === undefined
         ? await this.#client.query<QueryResultRow>(sql)
         : await this.#client.query<QueryResultRow>(sql, [...parameters]),
@@ -125,7 +125,7 @@ class OwnedNodePostgresClient implements PostgresClientBoundary {
     const result = await this.#database.execute<Row>(
       createDrizzleStatement(statement, parameters),
     );
-    return projectQueryResult(result);
+    return projectNodePostgresQueryResult(result);
   }
 
   public release(): void {
@@ -196,11 +196,26 @@ function loadDrizzleNodePostgresModule(): DrizzleNodePostgresModule {
   return candidate as DrizzleNodePostgresModule;
 }
 
-function projectQueryResult<Row extends Readonly<Record<string, unknown>>>(
-  result: QueryResult<QueryResultRow>,
+/** @internal Exported only for the node-postgres result-shape regression test. */
+export function projectNodePostgresQueryResult<
+  Row extends Readonly<Record<string, unknown>>,
+>(
+  result: QueryResult<QueryResultRow> | readonly QueryResult<QueryResultRow>[],
 ): PostgresQueryResult<Row> {
+  const terminalResult = isNodePostgresQueryResultArray(result)
+    ? result.at(-1)
+    : result;
+  if (terminalResult === undefined) {
+    throw new Error('PostgreSQL returned no query result.');
+  }
   return {
-    rows: result.rows as Row[],
-    rowCount: result.rowCount,
+    rows: terminalResult.rows as Row[],
+    rowCount: terminalResult.rowCount,
   };
+}
+
+function isNodePostgresQueryResultArray(
+  result: QueryResult<QueryResultRow> | readonly QueryResult<QueryResultRow>[],
+): result is readonly QueryResult<QueryResultRow>[] {
+  return Array.isArray(result);
 }

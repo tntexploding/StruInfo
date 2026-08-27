@@ -1,6 +1,6 @@
 # StruInfo 候选应用制品边界
 
-- 状态：应用包审计与 M1M 容器源码边界已实现；目标镜像认证未签发
+- 状态：应用包审计、M1M 容器源码和本地候选镜像演练已通过；目标云端镜像认证未签发
 - 最近更新：2026-08-27
 - 对应决策：[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、[ADR 0045](adr/0045-operational-production-baseline.md)
 
@@ -14,11 +14,12 @@
 - 编译后的服务端模块、迁移和服务端 package manifest；
 - Vite 生成的前端 HTML、JavaScript、CSS、项目原创 favicon 和前端 package manifest；
 - 版本化 OpenAPI、JSON Schema 和 contracts package manifest；
-- README、第三方声明、npm 依赖许可证材料和 npm SPDX SBOM。
+- README、项目 MIT License、第三方声明、npm 依赖许可证材料和 npm SPDX SBOM。
 
 源码测试、`test_support`、运行配置、`.env`、秘密、工作区数据、Blob、上传、快照、导出、备份和任意未声明静态文件都不是候选包输入。
 
-这不是公开发布授权。项目许可证仍未选择；不得公开分发当前候选 tarball 或镜像。
+项目代码已选择 MIT License。候选 tarball 或镜像仍必须携带项目许可证、第三方声明和依赖
+许可证，并通过本页的闭合制品检查；许可证选择不替代目标镜像和部署环境验收。
 
 ## 2. 审计行为
 
@@ -41,7 +42,7 @@
 
 ## 3. 容器与后续发布
 
-M1M 已加入多阶段 `Dockerfile`、普通/维护 Compose、production-only pnpm deploy、外部 secret 和数据挂载边界。`deployment:verify` 静态拒绝宽泛上下文复制、直接 secret、高权限凭据混入普通清单和缺失的容器硬化控制。开发验证还会执行 Compose 语法解析与 production deploy 探针。
+M1M 已加入多阶段 `Dockerfile`、普通/维护 Compose、production-only pnpm deploy、外部 secret 和数据挂载边界。`deployment:verify` 静态拒绝宽泛上下文复制、直接 secret、高权限凭据混入普通清单和缺失的容器硬化控制。开发验证还会执行 Compose 语法解析与 production deploy 探针。2026-08-27 已构建并运行本地候选镜像，核验非 root、只读根、外部挂载、MIT License、第三方声明、SBOM、健康和优雅关闭；该本地镜像 ID 不是云端发行 digest。
 
 仓库仍不伪造尚未构建的目标镜像 digest 或镜像文件清单。进入真实目标宿主审核时必须：
 

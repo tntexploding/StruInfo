@@ -21,6 +21,11 @@ M1I–M1L 已补齐外部信源、正式知识、可替换检索/RAG 和按证�
 `compose.maintenance.yaml` 单独持有 migrator 凭据，只运行前向迁移和 pg-boss schema 准备。
 普通应用清单不得请求高权限密钥。
 
+runtime 与 migrator URL 都保持闭合的单 host 语法，但 host 可为明确 DNS 名称、IPv4 或 IPv6，
+以支持外置 PostgreSQL 和容器服务发现；socket、多个 host、query/fragment 覆盖继续拒绝。
+当前 node-postgres 投影固定 `ssl=false`，只适用于同机或受信任私网。公网数据库 TLS 属于
+目标部署边界，不能由本机单用户基线暗示已经具备。
+
 容器默认只把 HTTP 端口发布到宿主回环地址，根文件系统只读，移除 Linux capabilities，启用
 `no-new-privileges`、资源上限、只读配置挂载和独立持久数据根。公网 TLS、认证和反向代理不是
 这个本机单用户基线的一部分。
@@ -52,19 +57,29 @@ M1I–M1L 已补齐外部信源、正式知识、可替换检索/RAG 和按证�
 日志并优雅关闭。M1M 增加静态 deployment verifier，并把它纳入 `verify`；Compose 语法和
 pnpm production deploy 也作为开发验证执行。
 
-当前仓库仍为 `UNLICENSED`，基础镜像未按不可变 digest 固定，也没有执行真实 Linux 镜像、
-漏洞扫描、真实 PostgreSQL 18 权限/恢复演练或公网安全审核。因此 M1M 表示生产操作代码边界
-已具备，不表示已经获得公开分发或云端上线许可。
+项目代码已由所有者选择 MIT License，运行镜像和候选包必须同时携带项目许可证与第三方
+许可证材料。Node 24 bookworm-slim 构建/运行阶段固定到不可变多架构 digest
+`sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df`。真实 Linux 镜像扫描和
+PostgreSQL 18 权限/恢复演练仍需执行。因此 M1M 表示生产操作代码边界已具备，不表示目标
+环境验收已经通过。
 
 ## 结果
 
 - 五步主线、数据库模型、Provider 与个人数据格式不变；没有迁移或新依赖；
 - 日常运行、维护运行和高权限 schema 操作有独立入口与凭据；
 - 备份/恢复成为可执行维护命令，而不是未使用目录；
-- 真实部署审核、许可证选择、镜像 digest/扫描、TLS/认证和生产灾难恢复演练留给统一上线
-  审核，不反向阻塞与其无关的产品逻辑开发。
+- 真实部署审核、镜像 digest/扫描、私人网络入口和生产灾难恢复演练留给统一上线审核，
+  不反向阻塞与其无关的产品逻辑开发。
 
 ## 操作手册
 
 精确命令、顺序、失败处理和回滚方式见
 [生产运行与维护](../production-operations.md)。
+
+## 后续实证（2026-08-27）
+
+在本 ADR 接受后，本地 Docker Desktop 与官方 PostgreSQL 18.6 disposable 环境使用纯合成数据
+完成全部 25 份迁移、首次 pg-boss schema 准备、runtime grant、preflight、回环 HTTP 健康、
+完整个人数据备份、同 workspace 空库恢复、Blob/数据库对照和停止/重启。演练暴露并修复了
+node-postgres 多语句结果投影与 PDF.js 启动期可选 Canvas 依赖两个可达缺陷。该后续实证不改变
+原决策，也不替代目标云服务器的镜像扫描、私网/防火墙、备份保留和监控验收。
