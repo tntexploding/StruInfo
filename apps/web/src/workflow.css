@@ -600,6 +600,167 @@
   overflow-wrap: anywhere;
   color: var(--si-color-text-primary);
 }
+
+.local-capture-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--si-space-3);
+  padding: 0;
+  border: 0;
+}
+
+.local-capture-mode legend {
+  inline-size: 100%;
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-xs);
+  font-weight: 700;
+}
+
+.local-capture-mode label {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--si-target-touch);
+  gap: var(--si-space-2);
+  padding-inline: var(--si-space-3);
+  border: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  background: var(--si-color-bg-shell);
+}
+
+.local-capture-mode input {
+  accent-color: var(--si-color-signal);
+}
+
+.local-file-batch {
+  display: grid;
+  gap: var(--si-space-4);
+  padding-block-start: var(--si-space-4);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.local-file-batch__heading,
+.local-file-batch__progress,
+.local-file-batch__actions,
+.local-file-batch__actions > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--si-space-4);
+}
+
+.local-file-batch__heading {
+  align-items: flex-start;
+}
+
+.local-file-batch__heading h4 {
+  margin-block: var(--si-space-1);
+  font-size: var(--si-text-lg);
+}
+
+.local-file-batch__heading p:last-child,
+.local-file-batch__empty,
+.local-file-batch__message,
+.local-file-batch__actions > p,
+.batch-identity-note p,
+.batch-import-boundary {
+  margin: 0;
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-sm);
+}
+
+.local-file-dropzone--batch {
+  min-block-size: 6rem;
+}
+
+.local-file-batch__progress {
+  padding: var(--si-space-3);
+  border-block: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.local-file-batch__progress > div {
+  display: grid;
+  gap: var(--si-space-1);
+}
+
+.local-file-batch__progress span {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-xs);
+}
+
+.local-file-batch__progress progress {
+  inline-size: min(18rem, 45%);
+  accent-color: var(--si-color-signal);
+}
+
+.local-file-batch__list {
+  display: grid;
+  gap: var(--si-space-2);
+  max-block-size: 24rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.local-file-batch__list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr) auto;
+  align-items: center;
+  gap: var(--si-space-3);
+  padding: var(--si-space-3);
+  border-inline-start: var(--si-space-1) solid var(--si-color-border-subtle);
+  background: var(--si-color-bg-shell);
+}
+
+.local-file-batch__list li[data-status='succeeded'] {
+  border-inline-start-color: var(--si-color-success);
+}
+
+.local-file-batch__list li[data-status='failed'],
+.local-file-batch__list li[data-status='invalid'] {
+  border-inline-start-color: var(--si-color-danger);
+}
+
+.local-file-batch__list li[data-status='importing'] {
+  border-inline-start-color: var(--si-color-signal);
+}
+
+.local-file-batch__item-main,
+.local-file-batch__item-meta {
+  display: grid;
+  min-inline-size: 0;
+  gap: var(--si-space-1);
+}
+
+.local-file-batch__item-main strong,
+.local-file-batch__item-meta span {
+  overflow-wrap: anywhere;
+}
+
+.local-file-batch__item-main span,
+.local-file-batch__item-meta {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-xs);
+}
+
+.local-file-batch__actions {
+  align-items: flex-end;
+  padding-block-start: var(--si-space-3);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-subtle);
+}
+
+.local-file-batch__actions > p {
+  max-inline-size: 62ch;
+}
+
+.batch-identity-note {
+  align-content: start;
+}
+
+.batch-import-boundary {
+  padding: var(--si-space-3);
+  border-inline-start: var(--si-space-1) solid var(--si-color-signal);
+  background: var(--si-color-bg-shell);
+}
 /* Shared stage architecture */
 
 .workflow-stage-workspace {
@@ -1851,13 +2012,36 @@
   }
 
   .local-file-import__heading,
-  .local-file-dropzone {
+  .local-file-dropzone,
+  .local-file-batch__heading,
+  .local-file-batch__progress,
+  .local-file-batch__actions {
     align-items: stretch;
     flex-direction: column;
   }
 
   .local-file-facts {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .local-file-batch__progress progress {
+    inline-size: 100%;
+  }
+
+  .local-file-batch__list li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .local-file-batch__list .text-action,
+  .local-file-batch__actions > div,
+  .local-file-batch__actions .primary-action,
+  .local-file-batch__actions .secondary-action {
+    inline-size: 100%;
+  }
+
+  .local-file-batch__actions > div {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .workflow-overview__ai,

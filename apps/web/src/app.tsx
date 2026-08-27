@@ -822,21 +822,30 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     );
   }
 
-  async function importDocument(body: unknown): Promise<ActionFeedback> {
+  async function importDocument(
+    body: unknown,
+    options: Readonly<{
+      openEvidence?: boolean;
+      refreshEvidence?: boolean;
+    }> = {},
+  ): Promise<ActionFeedback> {
     try {
       const response = await apiClient.importDocument(body);
-      const feedback = importFeedback(response.body);
+      const opensEvidence = options.openEvidence !== false;
+      const feedback = importFeedback(response.body, opensEvidence);
       if (
         response.body.status === 'created' ||
         response.body.status === 'existing'
       ) {
-        await refreshEvidence();
-        await openEvidence(
-          response.body.snapshotId,
-          undefined,
-          undefined,
-          response.body.isPrivate === true,
-        );
+        if (options.refreshEvidence !== false) await refreshEvidence();
+        if (opensEvidence) {
+          await openEvidence(
+            response.body.snapshotId,
+            undefined,
+            undefined,
+            response.body.isPrivate === true,
+          );
+        }
       }
       return feedback;
     } catch {
@@ -934,6 +943,13 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           snapshots={snapshots}
           selectedSnapshotId={selectedEvidence?.snapshotId}
           onImport={importDocument}
+          onImportBatchItem={(body) =>
+            importDocument(body, {
+              openEvidence: false,
+              refreshEvidence: false,
+            })
+          }
+          onImportBatchCompleted={refreshEvidence}
           onOpenEvidence={(snapshotId, target, includePrivate) =>
             void openEvidence(snapshotId, target, undefined, includePrivate)
           }
@@ -1116,19 +1132,22 @@ function RuntimeNotice({
   );
 }
 
-function importFeedback(body: DocumentImportResponse): ActionFeedback {
+function importFeedback(
+  body: DocumentImportResponse,
+  opensEvidence = true,
+): ActionFeedback {
   if (body.status === 'created') {
     return {
       kind: 'success',
       title: '材料已保存并拆解',
-      detail: `生成 ${body.fragmentIds.length.toString()} 个 Fragment；来源档案已打开。`,
+      detail: `生成 ${body.fragmentIds.length.toString()} 个 Fragment${opensEvidence ? '；来源档案已打开' : ''}。`,
     };
   }
   if (body.status === 'existing') {
     return {
       kind: 'success',
       title: '相同导入已存在',
-      detail: '幂等重放没有创建重复材料；来源档案已打开。',
+      detail: `幂等重放没有创建重复材料${opensEvidence ? '；来源档案已打开' : ''}。`,
     };
   }
   return {

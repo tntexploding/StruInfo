@@ -1,7 +1,9 @@
 import {describe, expect, it} from 'vitest';
 
 import {
+  LOCAL_DOCUMENT_BATCH_MAX_FILES,
   LOCAL_DOCUMENT_FILE_MAX_BYTES,
+  composeLocalDocumentImportRequest,
   composeLocalDocumentSource,
   prepareLocalDocumentFile,
 } from './local_file_import.js';
@@ -69,6 +71,58 @@ describe('local document file import', () => {
       composed: false,
     });
     expect(prepared.value.mediaType).toBe('text/html');
+  });
+
+  it('builds one uploaded-file request with stable identity and shared privacy metadata', async () => {
+    const prepared = prepareLocalDocumentFile(
+      'synthetic.html',
+      new TextEncoder().encode('<main>Synthetic</main>'),
+    );
+    expect(prepared.status).toBe('ready');
+    if (prepared.status !== 'ready') return;
+
+    const result = await composeLocalDocumentImportRequest({
+      identity: {
+        commandIdempotencyKey: 'import:synthetic-command',
+        capturedAt: '2026-08-27T00:00:00.000Z',
+        resourceId: '11111111-1111-4111-8111-111111111111',
+        snapshotId: '22222222-2222-4222-8222-222222222222',
+      },
+      file: prepared.value,
+      isPrivate: true,
+      publicationDate: '2026-08-26',
+      profile: 'ruanyf-weekly-v1',
+      sourcePreface: 'Synthetic context',
+    });
+
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.body).toMatchObject({
+      commandIdempotencyKey: 'import:synthetic-command',
+      resource: {
+        resourceId: '11111111-1111-4111-8111-111111111111',
+        resourceKind: 'uploaded_file',
+        isPrivate: true,
+      },
+      snapshot: {
+        snapshotId: '22222222-2222-4222-8222-222222222222',
+        capturedAt: '2026-08-27T00:00:00.000Z',
+        mediaType: 'text/html',
+        publication: {
+          instant: '2026-08-26T00:00:00.000Z',
+          sourceTimezone: 'UTC',
+          precision: 'day',
+          sourceText: '2026-08-26',
+          inferred: false,
+        },
+      },
+      documentFormat: 'html',
+      profile: 'commonmark-v1',
+      sourcePreface: 'Synthetic context',
+      gitObservations: [],
+    });
+    expect(result.body).not.toHaveProperty('documentBaseUri');
+    expect(LOCAL_DOCUMENT_BATCH_MAX_FILES).toBe(20);
   });
 
   it('accepts a PDF by binary signature without decoding it as UTF-8', async () => {

@@ -6,11 +6,14 @@ the cleaned InformationEntry-first flow. ADR 0011 governs the shipped M1E-2
 Entry-centred formal relation graph; ADR 0012 through ADR 0015 govern the
 provider-neutral task boundary and the shipped OpenAI split, tags and
 selected-pair association proposal slices. ADR 0016 through ADR 0019 complete
-manual split and local text/HTML/PDF import, while ADR 0020 and ADR 0021 complete
-the M1F-2 exact/substring/fuzzy query, Association traversal and two-result
-comparison baseline. A later AI increment must still select one narrow Provider
-boundary and one closed proposal payload rather than adding a generic model
-write path.
+manual split and local text/HTML/PDF import. ADR 0020 through ADR 0031 complete
+the query, exploration, source-subscription, external-preference, recoverable
+routing and owner-queue baseline. ADR 0032 through ADR 0036 add explicit local
+advance actions, post-materialization structure correction, pre-split derived
+source editing, versioned local split rules and an explicit local multi-file
+session queue. Any later AI or automation increment must still select one narrow
+authority boundary and one closed payload rather than adding a generic write
+path.
 An accepted ADR does not bypass a reachable product, dependency, or release
 obligation, but deferred hardening and test-tooling certification do not block
 unrelated product work.

@@ -1,11 +1,11 @@
 # StruInfo 知识核心架构
 
-- 状态：M1H-4A/B 版本化可配置 Entry 拆分规则已完成
+- 状态：M1H-5A/B 显式本地多文件导入队列已完成
 - 最近更新：2026-08-27
 - 相关决策：[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、[ADR 0007](adr/0007-information-entry-first-document-processing.md)、[ADR 0008](adr/0008-current-entry-state-and-portable-personal-data.md)、[ADR 0009](adr/0009-retire-superseded-m1c-runtime.md)、[ADR 0010](adr/0010-entry-centered-formal-knowledge-graph.md)、[ADR 0011](adr/0011-association-derived-formal-graph-edges.md)、[ADR 0012](adr/0012-provider-neutral-processing-runs-and-proposals.md)、[ADR 0013](adr/0013-openai-entry-tag-proposals.md)、[ADR 0014](adr/0014-openai-entry-association-proposals.md)、[ADR 0015](adr/0015-openai-entry-split-proposals.md)、[ADR 0016](adr/0016-manual-entry-fragment-grouping.md)、[ADR 0017](adr/0017-manual-within-fragment-entry-boundaries.md)、[ADR 0018](adr/0018-local-text-file-import.md)、[ADR 0019](adr/0019-local-html-pdf-import.md)、[ADR 0020](adr/0020-explainable-lexical-entry-search.md)、[ADR 0021](adr/0021-query-association-and-result-comparison.md)、[ADR 0022](adr/0022-evidence-bounded-ai-query-synthesis.md)、[ADR 0023](adr/0023-deterministic-entry-exploration-policy.md)、[ADR 0024](adr/0024-versioned-git-source-subscriptions.md)、[ADR 0025](adr/0025-explainable-entry-preference-profile.md)、[ADR 0026](adr/0026-entry-automation-policy-dry-run.md)、[ADR 0027](adr/0027-recoverable-entry-automation-routing-execution.md)
 - 当前实现与未完成项：[当前项目状态与实现清单](current-project-state.md)
 - 当前自动路由与订阅串联决策：[ADR 0028](adr/0028-owner-controlled-entry-automation-routing.md)、[ADR 0029](adr/0029-entry-automation-control-integrity.md)、[ADR 0030](adr/0030-entry-automation-owner-work-queue.md)、[ADR 0031](adr/0031-subscription-deterministic-entry-routing-chain.md)
-- 当前确定性推进与拆分编辑决策：[ADR 0032](adr/0032-deterministic-entry-tag-and-association-actions.md)、[ADR 0033](adr/0033-post-materialization-entry-restructuring.md)、[ADR 0034](adr/0034-pre-split-derived-document-editing.md)、[ADR 0035](adr/0035-versioned-configurable-entry-split-rules.md)
+- 当前确定性推进、拆分编辑与显式批次导入决策：[ADR 0032](adr/0032-deterministic-entry-tag-and-association-actions.md)、[ADR 0033](adr/0033-post-materialization-entry-restructuring.md)、[ADR 0034](adr/0034-pre-split-derived-document-editing.md)、[ADR 0035](adr/0035-versioned-configurable-entry-split-rules.md)、[ADR 0036](adr/0036-explicit-local-multi-file-import-queue.md)
 
 ## 1. 核心结论
 
@@ -264,15 +264,15 @@ override，不复制为第二套相似度表；重建只更新底层分数与解
 
 ## 7. 完全不依赖 AI 的操作模式
 
-| 能力     | 当前无 AI 行为                                                                                                                                | 尚未实现的增强                             |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| 摄取     | 手工 Markdown、固定 Git Markdown、单份本地 Markdown/文本/HTML/带文字层 PDF、完整证据与隐私标记                                                | Office/OCR、多文件、网页/RSS/API、定时采集 |
-| 拆分     | 拆分前唯一全文草稿与派生 Snapshot；CommonMark/周刊 profile；既有 Fragment/标量边界人工分组；物化后人工结构迁移；可选公开 Snapshot OpenAI 提案 | 来源重排、可替换规则、私密外发             |
-| 标签     | 三维标签、五档有用/有趣、确定性候选、外部快捷标签/排除/别名；可选 OpenAI tags                                                                 | 自动语义合并和无确认接受                   |
-| 联系     | 确定性相似边、分项解释、增强/削弱/屏蔽/恢复、用户图谱关系                                                                                     | 复杂事实关系类型                           |
-| 查询     | 标题/正文/标签的精确、包含和近似词法匹配；结构、来源、时间、隐私、一至两跳联系、游标、来源和可选公开证据综合                                  | 中文分词、语义/向量/RAG、在线混合查询      |
-| 传输     | 61 表、引用 Blob 字节、偏好、Entry v5、Association v3 与 Processing v7；空目标恢复                                                            | 跨工作区克隆、非空合并、灾难恢复           |
-| 正式知识 | 最高匹配 Entry 中心、有界图谱/列表、边来源、用户编辑、AI 联系提案和精确来源                                                                   | 树/集合/时间线与复杂本体                   |
+| 能力     | 当前无 AI 行为                                                                                                                                                                     | 尚未实现的增强                               |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| 摄取     | 手工 Markdown、固定 Git Markdown、单份或最多 20 份显式批次本地 Markdown/文本/HTML/带文字层 PDF、完整证据与隐私标记                                                                 | Office/OCR、目录扫描、网页/RSS/API、定时采集 |
+| 拆分     | 拆分前唯一全文草稿与派生 Snapshot；CommonMark/周刊 profile；版本化本地 section/相邻短段合并规则；既有 Fragment/标量边界人工分组；物化后人工结构迁移；可选公开 Snapshot OpenAI 提案 | 来源重排、任意脚本/自定义解析器、私密外发    |
+| 标签     | 三维标签、五档有用/有趣、确定性候选、外部快捷标签/排除/别名；可选 OpenAI tags                                                                                                      | 自动语义合并和无确认接受                     |
+| 联系     | 确定性相似边、分项解释、增强/削弱/屏蔽/恢复、用户图谱关系                                                                                                                          | 复杂事实关系类型                             |
+| 查询     | 标题/正文/标签的精确、包含和近似词法匹配；结构、来源、时间、隐私、一至两跳联系、游标、来源和可选公开证据综合                                                                       | 中文分词、语义/向量/RAG、在线混合查询        |
+| 传输     | 61 表、引用 Blob 字节、偏好、Entry v5、Association v3 与 Processing v7；空目标恢复                                                                                                 | 跨工作区克隆、非空合并、灾难恢复             |
+| 正式知识 | 最高匹配 Entry 中心、有界图谱/列表、边来源、用户编辑、AI 联系提案和精确来源                                                                                                        | 树/集合/时间线与复杂本体                     |
 
 没有配置 AI Provider 时，系统显示“AI 未启用”，导入、确定性/人工拆分、标签、联系和查询仍可使用。当前完整配置 OpenAI 后分别发布 `ai_split`、`ai_tags`、`ai_associations` 与 `ai_query_synthesis`；每个 capability 只开启自己的窄界面。
 `processing_runs` 只证明持久任务读取/取消和提案信封可用；每个 `ai_*` capability 只证明对应窄边界可用，不能被解释为自动维护、语义检索或泛化 AI 已经启用。
@@ -381,7 +381,7 @@ Windows 本地运行和 Linux 部署都必须使用源码/安装目录之外的�
 ### 11.1 当前活动实现
 
 1. **运行与隔离**：包体外配置固定工作区、PostgreSQL、Blob 根、偏好和导出目录；
-2. **导入**：手工 Markdown、固定 Git Markdown、单份本地 UTF-8 Markdown/文本文件，或精确公开 GitHub Markdown 订阅的变化内容，原子写入证据元数据、内容寻址 Blob 和结构；
+2. **导入**：手工 Markdown、固定 Git Markdown、单份或显式多文件批次的本地 Markdown/文本/HTML/PDF，或精确公开 GitHub Markdown 订阅的变化内容，逐份原子写入证据元数据、内容寻址 Blob 和结构；
 3. **拆分**：用户选择 Snapshot，可先保存一份当前全文草稿并显式确认成不可变派生 Snapshot，再以 CommonMark section、人工 Fragment/标量区间分组或已接受 AI 提案幂等物化 Entry；
 4. **标签**：保存 Entry 当前正文、三维标签、两项评分和外部个人词汇偏好；
 5. **文档标签**：按全文出现与 Entry 覆盖确定性聚合，或由用户保存当前标签；
@@ -402,7 +402,7 @@ Windows 本地运行和 Linux 部署都必须使用源码/安装目录之外的�
 
 ### 11.3 下一实施顺序
 
-M1E-2 与直接使用增量已经完成。ADR 0012 的 M1E-3A 已接通中性任务边界；ADR 0013/0014/0015 的 M1E-3B/C/D 已选择同一 OpenAI Responses API，分别实现公开 Entry 标签、selected-pair 联系和公开 Snapshot 拆分提案，并把接受转换为既有 Entry revision、graph edge command 或 Entry materialization。ADR 0016 的 M1E-4A 补齐既有 Fragment 边界上的本地人工分组，ADR 0017 的 M1E-4B 进一步允许 Fragment 内 Unicode 标量边界，并让确定性、人工和 AI 接受共用唯一空 Snapshot 原子边界。ADR 0018/0019 的 M1E-5A/5B 把单份本地 Markdown、文本、HTML 和 PDF 接入同一 Evidence 与 Split 主线；ADR 0020 的 M1F-1 补齐精确、包含和近似本地词法查询，ADR 0021 的 M1F-2 让同一 Query 直接开启 Association 遍历并比较最多两条结果，ADR 0022 的 M1F-3 接通会话内公开证据综合，ADR 0023 的 M1G-1 接通独立本地探索策略，ADR 0024 的 M1G-2 接通精确公开 GitHub Markdown 单文件订阅，ADR 0025–0029 完成可解释偏好与可恢复路由控制，ADR 0030/0031 又完成所有者工作队列及默认关闭的订阅后确定性物化/分流，ADR 0032–0035 补齐显式推进动作、物化后结构纠错、拆分前派生全文编辑和版本化本地拆分规则。下一步等待所有者明确选择新的窄边界。基础缺口、新兴信号、观点多样性、第二 Provider、自动接受、私密外发、Provider 检索、RAG、向量、通用网页采集和任意自动内容修改都不得从已有窄能力推导。当前公开路径可复现的五步主线、图谱或隐私 `PRODUCT_BLOCKER` 仍优先。
+M1E-2 与直接使用增量已经完成。ADR 0012 的 M1E-3A 已接通中性任务边界；ADR 0013/0014/0015 的 M1E-3B/C/D 已选择同一 OpenAI Responses API，分别实现公开 Entry 标签、selected-pair 联系和公开 Snapshot 拆分提案，并把接受转换为既有 Entry revision、graph edge command 或 Entry materialization。ADR 0016 的 M1E-4A 补齐既有 Fragment 边界上的本地人工分组，ADR 0017 的 M1E-4B 进一步允许 Fragment 内 Unicode 标量边界，并让确定性、人工和 AI 接受共用唯一空 Snapshot 原子边界。ADR 0018/0019 的 M1E-5A/5B 把单份本地 Markdown、文本、HTML 和 PDF 接入同一 Evidence 与 Split 主线；ADR 0020 的 M1F-1 补齐精确、包含和近似本地词法查询，ADR 0021 的 M1F-2 让同一 Query 直接开启 Association 遍历并比较最多两条结果，ADR 0022 的 M1F-3 接通会话内公开证据综合，ADR 0023 的 M1G-1 接通独立本地探索策略，ADR 0024 的 M1G-2 接通精确公开 GitHub Markdown 单文件订阅，ADR 0025–0029 完成可解释偏好与可恢复路由控制，ADR 0030/0031 又完成所有者工作队列及默认关闭的订阅后确定性物化/分流，ADR 0032–0036 补齐显式推进动作、物化后结构纠错、拆分前派生全文编辑、版本化本地拆分规则和显式多文件导入会话队列。下一步等待所有者明确选择新的窄边界。基础缺口、新兴信号、观点多样性、第二 Provider、自动接受、私密外发、Provider 检索、RAG、向量、通用网页采集、目录扫描、后台上传和任意自动内容修改都不得从已有窄能力推导。当前公开路径可复现的五步主线、图谱或隐私 `PRODUCT_BLOCKER` 仍优先。
 
 ## 12. 当前验收与未来验收
 
@@ -495,7 +495,7 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 - 无前置文字时原始字节保持不变；有前置文字时形成明确的组合 Snapshot，不能冒充原文件副本；
 - 基础文件名与 SHA-256 构成默认 portable source key，用户可用显式别名替换；
 - 导入继续复用现有外部 Blob、不可变 Snapshot/Fragment、隐私传播和幂等命令；成功后才进入现有 Split 队列；
-- 本切片不新增迁移、依赖、仓库内用户文件或第二套存储，也不声称支持 PDF/DOCX/OCR、多文件或自动采集。
+- 本切片不新增迁移、依赖、仓库内用户文件或第二套存储，也不声称支持 PDF/DOCX/OCR、多文件或自动采集；后续 M1E-5B 增加 HTML/PDF 文字层，M1H-5 增加显式最多 20 文件会话队列，DOCX/OCR 和自动采集仍未实现。
 
 ### 12.10 M1F-1 可解释本地词法查询边界
 
@@ -633,6 +633,14 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 - 只有保存后的同一 Profile revision 可以应用；服务端重新计算并调用既有空 Snapshot 原子物化，人工精细拆分和 AI 提案保持独立入口；
 - 新偏好字段沿用现有个人数据包，不增加数据库迁移、表、依赖、Provider 或任意脚本执行。
 
-### 12.26 延期审核与环境门
+### 12.26 M1H-5A/B 显式本地多文件导入边界（已实现）
+
+- 一次最多 20 份所有者明确选择或拖入的既有支持文件；逐份校验 1 MiB、UTF-8/PDF 标识和普通文件名，不读取目录或机器路径；
+- 每项有独立 command/Resource/Snapshot/capturedAt，继续调用原 `uploaded_file` Evidence/Blob/隐私边界；
+- 会话队列展示逐项状态和总进度；失败重试复用冻结请求，停止只阻止当前项之后的请求；
+- 成功后统一刷新文档列表；队列本身不持久化、不进入总览 ProcessingRun 或个人数据包；
+- 不增加迁移、路由、依赖、后台上传、自动拆分/标签/联系、AutomationPolicy 或 Provider 权限。
+
+### 12.27 延期审核与环境门
 
 实际内容和所有者体验、真实 Provider 质量/费用、真实 PostgreSQL 正式 TM2、容器/Linux 等价性、公开网络部署、认证授权、生产资源限制、备份恢复演练和发布分发均在项目开发完成后统一开始，当前保持延期或未签发。它们必须如实报告状态，但不能在没有当前产品阻断证据时拖停 Entry 主线开发；活动工作区仍禁止恢复真实资料。单元、集成、构建和合成浏览器验证继续作为开发质量门运行。

@@ -1,6 +1,6 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1H-4A/B 活动接口
+- 状态：M1H-5A/B 活动接口
 - 最近核对：2026-08-27
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
@@ -13,7 +13,7 @@
 
 当前工作区由包体外运行配置中的 `STRUIINFO_WORKSPACE_ID` 选择。请求不能提交或切换 `workspaceId`；服务端把固定工作区注入所有领域操作。切换资料集需要停止当前进程、替换外部配置或数据根并重新启动。
 
-手动/Git Markdown 以 `sourceText` JSON 字符串提交；浏览器选择的本地 UTF-8 Markdown/文本文件以 canonical `sourceBase64` 字符串提交。两者恰好出现一个。原始和规范化字节写入外部内容寻址 Blob 根，PostgreSQL 只保存身份、摘要、定位和结构关系。接口不接受服务器文件路径，也不会把正文写入 Git、安装目录或日志。
+手动/Git Markdown 以 `sourceText` JSON 字符串提交；浏览器选择的本地 Markdown/文本/HTML/PDF 文件以 canonical `sourceBase64` 字符串逐份提交。两者恰好出现一个。原始和规范化字节写入外部内容寻址 Blob 根，PostgreSQL 只保存身份、摘要、定位和结构关系。接口不接受服务器文件路径，也不会把正文写入 Git、安装目录或日志。
 
 所有产品路由位于 `/api/v1`，响应使用 `application/json`、`Cache-Control: no-store` 和 `X-Content-Type-Options: nosniff`。健康检查位于 `/health/live` 与 `/health/ready`。
 
@@ -95,7 +95,7 @@ API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单�
 - 带服务端固定工作区覆盖的 `resource`、`snapshot` 和 `gitObservations`；
 - 可选 `gitResource`、`profile` 与 `documentBaseUri`。
 
-Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和正文前置文字映射到这些字段。本地文件默认使用基础文件名加 SHA-256 作为 portable source key，不提交目录路径；无前置文字时 Base64 解码后的字节保持原样。相同命令可重放；同键异内容返回冲突。
+Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和正文前置文字映射到这些字段。本地文件默认使用基础文件名加 SHA-256 作为 portable source key，不提交目录路径；无前置文字时 Base64 解码后的字节保持原样。相同命令可重放；同键异内容返回冲突。M1H-5 批次队列仍按顺序逐份调用同一 `/imports/document`，没有批次请求体；失败项重试同一请求身份，成功后只统一刷新页面列表。
 
 三个 `/source-subscriptions` 操作只管理精确公开 GitHub repository/ref 下的单个 Markdown 路径。GET 返回 revision、可编辑字段和服务端维护的 last-attempt/last-success/run/cursor；PUT 接受 `{expectedRevision, subscriptions}`，每个写入项必须完整给出稳定 UUID、标签、enabled、repositoryUri、repositoryRef、repositoryPath、profile、sourceAlias、isPrivate、默认关闭的 `routeAfterImport` 和 15–10080 分钟间隔，不能伪造运行字段。POST 只接受 `{requestKey}`；即使 enabled 为 false 也可手动运行。
 
@@ -216,5 +216,5 @@ Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不�
 - JSON 请求体上限为 2 MiB，Markdown 导入上限为 1 MiB；
 - Evidence 列表当前最多返回最近 200 个 Snapshot；
 - 接口仅面向回环单用户产品，没有公开认证或 CSRF 完整边界；
-- 没有 multipart/服务器路径上传、Office/OCR、多文件批量导入、目录监视、通用抓取/订阅、自动接受、语义/向量搜索或在线检索接口；OpenAI 目前只提供用户选中公开 Snapshot 的 split、公开 Entry 的 tags、用户选中公开 Entry 对的 association 提案，以及当前公开 Query 结果的会话内证据综合；
+- 没有 multipart/服务器路径上传、专用批次写接口、Office/OCR、目录扫描/监视、通用抓取/订阅、自动接受、语义/向量搜索或在线检索接口；多文件能力只是 Web 会话内对既有逐文件接口的显式编排；OpenAI 目前只提供用户选中公开 Snapshot 的 split、公开 Entry 的 tags、用户选中公开 Entry 对的 association 提案，以及当前公开 Query 结果的会话内证据综合；
 - 当前正式知识只实现 Entry 中心关系图谱；不恢复 `/curation`、旧 `/knowledge` 写入/读取或旧 `/search` 路由，也不把历史 Knowledge 表当作当前产品入口。

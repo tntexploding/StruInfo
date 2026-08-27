@@ -20,14 +20,17 @@ import type {
   WorkspaceTransferFeedback,
 } from '../components/product_types.js';
 import {
-  LOCAL_DOCUMENT_FILE_MAX_BYTES,
-  composeLocalDocumentSource,
+  composeLocalDocumentImportRequest,
+  describeLocalDocumentFileIssue,
+  formatLocalDocumentFileBytes,
   prepareLocalDocumentFile,
+  type LocalDocumentImportIdentity,
   type PreparedLocalDocumentFile,
 } from './local_file_import.js';
+import {LocalFileBatchImport} from './local_file_batch_import.js';
 import {SourceSubscriptionPanel} from './source_subscription_panel.js';
 
-interface ImportIdentity {
+interface ImportIdentity extends LocalDocumentImportIdentity {
   readonly commandIdempotencyKey: string;
   readonly capturedAt: string;
   readonly observationId: string;
@@ -36,6 +39,7 @@ interface ImportIdentity {
 }
 
 type SourceMode = 'manual_text' | 'git_file' | 'uploaded_file';
+type LocalCaptureMode = 'single' | 'batch';
 
 type LocalFileState =
   | Readonly<{status: 'idle'}>
@@ -45,6 +49,8 @@ type LocalFileState =
 
 export interface MaterialsWorkspaceProps {
   readonly onImport: (body: unknown) => Promise<ActionFeedback>;
+  readonly onImportBatchItem?: (body: unknown) => Promise<ActionFeedback>;
+  readonly onImportBatchCompleted?: () => Promise<void> | void;
   readonly onOpenEvidence: (
     snapshotId: string,
     returnFocus?: HTMLElement,
@@ -71,6 +77,8 @@ export interface MaterialsWorkspaceProps {
 
 export function MaterialsWorkspace({
   onImport,
+  onImportBatchItem,
+  onImportBatchCompleted,
   onOpenEvidence,
   onRefresh,
   onExport,
@@ -88,6 +96,11 @@ export function MaterialsWorkspace({
   const [identity, setIdentity] =
     useState<ImportIdentity>(createImportIdentity);
   const [sourceMode, setSourceMode] = useState<SourceMode>('manual_text');
+  const [localCaptureMode, setLocalCaptureMode] =
+    useState<LocalCaptureMode>('single');
+  const [localBatchState, setLocalBatchState] = useState<
+    Readonly<{hasItems: boolean; busy: boolean}>
+  >({hasItems: false, busy: false});
   const [localFile, setLocalFile] = useState<LocalFileState>({status: 'idle'});
   const [isPrivate, setIsPrivate] = useState(false);
   const [showPrivateDocuments, setShowPrivateDocuments] = useState(false);
@@ -127,7 +140,7 @@ export function MaterialsWorkspace({
         setLocalFile({
           status: 'error',
           fileName: file.name,
-          message: describeLocalFileIssue(prepared.code),
+          message: describeLocalDocumentFileIssue(prepared.code),
         });
         return;
       }
@@ -158,6 +171,7 @@ export function MaterialsWorkspace({
   async function submitImport(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting) return;
+    if (sourceMode === 'uploaded_file' && localCaptureMode === 'batch') return;
     setSubmitting(true);
     setFeedback(undefined);
     try {
@@ -165,9 +179,8 @@ export function MaterialsWorkspace({
       const gitSource = sourceMode === 'git_file';
       const uploadedSource = sourceMode === 'uploaded_file';
       let resolvedSourceKey: string;
-      let mediaType = 'text/markdown';
-      let documentFormat: 'markdown' | 'html' | 'pdf' = 'markdown';
-      let projectedSourcePreface: string | undefined;
+      const mediaType = 'text/markdown';
+      const documentFormat = 'markdown';
       let sourcePayload: Readonly<
         {sourceText: string} | {sourceBase64: string}
       >;
@@ -180,11 +193,17 @@ export function MaterialsWorkspace({
           });
           return;
         }
-        const composed = await composeLocalDocumentSource(
-          localFile.value,
+        const request = await composeLocalDocumentImportRequest({
+          identity,
+          file: localFile.value,
+          isPrivate,
+          publicationDate,
+          profile,
           sourcePreface,
-        );
-        if (composed === undefined) {
+          sourceKey,
+          canonicalUri,
+        });
+        if (request.status === 'rejected') {
           setFeedback({
             kind: 'error',
             title: '组合后的文档超过上限',
@@ -192,11 +211,18 @@ export function MaterialsWorkspace({
           });
           return;
         }
-        resolvedSourceKey = sourceKey.trim() || composed.defaultSourceKey;
-        mediaType = localFile.value.mediaType;
-        sourcePayload = {sourceBase64: composed.sourceBase64};
-        documentFormat = composed.documentFormat;
-        projectedSourcePreface = composed.sourcePreface;
+        const nextFeedback = await onImport(request.body);
+        setFeedback(nextFeedback);
+        if (nextFeedback.kind === 'success') {
+          setIdentity(createImportIdentity());
+          setSourceKey('');
+          setCanonicalUri('');
+          setPublicationDate('');
+          setSourcePreface('');
+          setIsPrivate(false);
+          clearLocalFile();
+        }
+        return;
       } else {
         resolvedSourceKey =
           sourceKey.trim() || `import-${identity.snapshotId.slice(0, 8)}`;
@@ -261,9 +287,6 @@ export function MaterialsWorkspace({
         documentFormat,
         profile,
         ...sourcePayload,
-        ...(projectedSourcePreface === undefined
-          ? {}
-          : {sourcePreface: projectedSourcePreface}),
         ...(canonicalUri.trim() === ''
           ? {}
           : {documentBaseUri: canonicalUri.trim()}),
@@ -366,6 +389,7 @@ export function MaterialsWorkspace({
                 name="source-mode"
                 value="manual_text"
                 checked={sourceMode === 'manual_text'}
+                disabled={localBatchState.hasItems}
                 onChange={() => {
                   setSourceMode('manual_text');
                 }}
@@ -378,6 +402,7 @@ export function MaterialsWorkspace({
                 name="source-mode"
                 value="git_file"
                 checked={sourceMode === 'git_file'}
+                disabled={localBatchState.hasItems}
                 onChange={() => {
                   setSourceMode('git_file');
                 }}
@@ -390,6 +415,7 @@ export function MaterialsWorkspace({
                 name="source-mode"
                 value="uploaded_file"
                 checked={sourceMode === 'uploaded_file'}
+                disabled={localBatchState.hasItems}
                 onChange={() => {
                   setSourceMode('uploaded_file');
                 }}
@@ -409,7 +435,8 @@ export function MaterialsWorkspace({
                     .md / .markdown / .txt / .html / .htm / .pdf · 最大 1 MiB
                   </p>
                 </div>
-                {localFile.status === 'ready' ? (
+                {localCaptureMode === 'single' &&
+                localFile.status === 'ready' ? (
                   <button
                     className="text-action"
                     type="button"
@@ -419,76 +446,129 @@ export function MaterialsWorkspace({
                   </button>
                 ) : null}
               </div>
-              <input
-                ref={fileInput}
-                className="local-file-input"
-                id="local-document-file"
-                type="file"
-                accept=".md,.markdown,.txt,.html,.htm,.pdf,text/markdown,text/plain,text/html,application/pdf"
-                onChange={(event) => {
-                  void readLocalFile(
-                    event.currentTarget.files?.item(0) ?? undefined,
-                  );
-                }}
-              />
-              <div
-                className="local-file-dropzone"
-                onDragOver={(event) => {
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = 'copy';
-                }}
-                onDrop={(event: DragEvent<HTMLDivElement>) => {
-                  event.preventDefault();
-                  void readLocalFile(
-                    event.dataTransfer.files.item(0) ?? undefined,
-                  );
-                }}
-              >
-                <label
-                  className="secondary-action"
-                  htmlFor="local-document-file"
-                >
-                  选择文件
+              <fieldset className="local-capture-mode">
+                <legend>选择方式</legend>
+                <label>
+                  <input
+                    type="radio"
+                    name="local-capture-mode"
+                    value="single"
+                    checked={localCaptureMode === 'single'}
+                    disabled={localBatchState.hasItems}
+                    onChange={() => {
+                      setLocalCaptureMode('single');
+                    }}
+                  />
+                  单份文件
                 </label>
-                <span>或将一份文件拖到这里</span>
-              </div>
-              <div className="local-file-import__status" aria-live="polite">
-                {localFile.status === 'idle' ? (
-                  <p>浏览器只读取你明确选择的文件，不会读取目录路径。</p>
-                ) : null}
-                {localFile.status === 'loading' ? (
-                  <p role="status">正在读取 {localFile.fileName}…</p>
-                ) : null}
-                {localFile.status === 'error' ? (
-                  <p role="alert">
-                    <strong>{localFile.fileName}</strong> · {localFile.message}
-                  </p>
-                ) : null}
-                {localFile.status === 'ready' ? (
-                  <dl className="local-file-facts">
-                    <div>
-                      <dt>文件</dt>
-                      <dd>{localFile.value.fileName}</dd>
-                    </div>
-                    <div>
-                      <dt>类型</dt>
-                      <dd>{localFile.value.mediaType}</dd>
-                    </div>
-                    <div>
-                      <dt>大小</dt>
-                      <dd>
-                        {formatLocalFileBytes(localFile.value.byteLength)}
-                      </dd>
-                    </div>
-                  </dl>
-                ) : null}
-              </div>
+                <label>
+                  <input
+                    type="radio"
+                    name="local-capture-mode"
+                    value="batch"
+                    checked={localCaptureMode === 'batch'}
+                    disabled={localBatchState.hasItems}
+                    onChange={() => {
+                      clearLocalFile();
+                      setLocalCaptureMode('batch');
+                    }}
+                  />
+                  多份批次
+                </label>
+              </fieldset>
+              {localBatchState.hasItems ? (
+                <p className="local-file-batch__message" role="status">
+                  请先清空当前批次，再切换来源类型或选择方式。
+                </p>
+              ) : null}
+              {localCaptureMode === 'single' ? (
+                <>
+                  <input
+                    ref={fileInput}
+                    className="local-file-input"
+                    id="local-document-file"
+                    type="file"
+                    accept=".md,.markdown,.txt,.html,.htm,.pdf,text/markdown,text/plain,text/html,application/pdf"
+                    onChange={(event) => {
+                      void readLocalFile(
+                        event.currentTarget.files?.item(0) ?? undefined,
+                      );
+                    }}
+                  />
+                  <div
+                    className="local-file-dropzone"
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = 'copy';
+                    }}
+                    onDrop={(event: DragEvent<HTMLDivElement>) => {
+                      event.preventDefault();
+                      void readLocalFile(
+                        event.dataTransfer.files.item(0) ?? undefined,
+                      );
+                    }}
+                  >
+                    <label
+                      className="secondary-action"
+                      htmlFor="local-document-file"
+                    >
+                      选择文件
+                    </label>
+                    <span>或将一份文件拖到这里</span>
+                  </div>
+                  <div className="local-file-import__status" aria-live="polite">
+                    {localFile.status === 'idle' ? (
+                      <p>浏览器只读取你明确选择的文件，不会读取目录路径。</p>
+                    ) : null}
+                    {localFile.status === 'loading' ? (
+                      <p role="status">正在读取 {localFile.fileName}…</p>
+                    ) : null}
+                    {localFile.status === 'error' ? (
+                      <p role="alert">
+                        <strong>{localFile.fileName}</strong> ·{' '}
+                        {localFile.message}
+                      </p>
+                    ) : null}
+                    {localFile.status === 'ready' ? (
+                      <dl className="local-file-facts">
+                        <div>
+                          <dt>文件</dt>
+                          <dd>{localFile.value.fileName}</dd>
+                        </div>
+                        <div>
+                          <dt>类型</dt>
+                          <dd>{localFile.value.mediaType}</dd>
+                        </div>
+                        <div>
+                          <dt>大小</dt>
+                          <dd>
+                            {formatLocalDocumentFileBytes(
+                              localFile.value.byteLength,
+                            )}
+                          </dd>
+                        </div>
+                      </dl>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <LocalFileBatchImport
+                  isPrivate={isPrivate}
+                  publicationDate={publicationDate}
+                  profile={profile}
+                  sourcePreface={sourcePreface}
+                  onImport={onImportBatchItem ?? onImport}
+                  onCompleted={onImportBatchCompleted ?? onRefresh}
+                  onStateChange={setLocalBatchState}
+                />
+              )}
             </section>
           ) : null}
           <label className="privacy-choice field--full">
             <input
               type="checkbox"
               checked={isPrivate}
+              disabled={localBatchState.busy}
               onChange={(event) => {
                 setIsPrivate(event.currentTarget.checked);
               }}
@@ -500,21 +580,28 @@ export function MaterialsWorkspace({
               </small>
             </span>
           </label>
-          <label className="field field--wide">
-            <span>来源别名（可选）</span>
-            <input
-              maxLength={500}
-              value={sourceKey}
-              onChange={(event) => {
-                setSourceKey(event.currentTarget.value);
-              }}
-              placeholder={
-                sourceMode === 'uploaded_file'
-                  ? '留空时按文件名与 SHA-256 生成'
-                  : '留空时按本次导入身份自动生成'
-              }
-            />
-          </label>
+          {sourceMode !== 'uploaded_file' || localCaptureMode === 'single' ? (
+            <label className="field field--wide">
+              <span>来源别名（可选）</span>
+              <input
+                maxLength={500}
+                value={sourceKey}
+                onChange={(event) => {
+                  setSourceKey(event.currentTarget.value);
+                }}
+                placeholder={
+                  sourceMode === 'uploaded_file'
+                    ? '留空时按文件名与 SHA-256 生成'
+                    : '留空时按本次导入身份自动生成'
+                }
+              />
+            </label>
+          ) : (
+            <div className="field field--wide batch-identity-note">
+              <span>逐文件来源身份</span>
+              <p>每份文件按文件名与 SHA-256 独立生成，不共享来源别名。</p>
+            </div>
+          )}
           {sourceMode === 'git_file' ? (
             <fieldset className="git-source-fields field--full">
               <legend>Git 来源身份</legend>
@@ -568,26 +655,29 @@ export function MaterialsWorkspace({
               </label>
             </fieldset>
           ) : null}
-          <label className="field field--wide">
-            <span>规范来源链接（可选）</span>
-            <input
-              type="url"
-              value={canonicalUri}
-              onChange={(event) => {
-                setCanonicalUri(event.currentTarget.value);
-              }}
-              placeholder="https://…"
-            />
-          </label>
+          {sourceMode !== 'uploaded_file' || localCaptureMode === 'single' ? (
+            <label className="field field--wide">
+              <span>规范来源链接（可选）</span>
+              <input
+                type="url"
+                value={canonicalUri}
+                onChange={(event) => {
+                  setCanonicalUri(event.currentTarget.value);
+                }}
+                placeholder="https://…"
+              />
+            </label>
+          ) : null}
           <label className="field">
             <span>文档格式与解析规则</span>
             <select
               value={profile}
               disabled={
-                sourceMode === 'uploaded_file' &&
-                localFile.status === 'ready' &&
-                (localFile.value.mediaType === 'text/plain' ||
-                  localFile.value.documentFormat !== 'markdown')
+                localBatchState.busy ||
+                (sourceMode === 'uploaded_file' &&
+                  localFile.status === 'ready' &&
+                  (localFile.value.mediaType === 'text/plain' ||
+                    localFile.value.documentFormat !== 'markdown'))
               }
               onChange={(event) => {
                 setProfile(
@@ -605,6 +695,7 @@ export function MaterialsWorkspace({
             <input
               type="date"
               value={publicationDate}
+              disabled={localBatchState.busy}
               onChange={(event) => {
                 setPublicationDate(event.currentTarget.value);
               }}
@@ -615,6 +706,7 @@ export function MaterialsWorkspace({
             <textarea
               rows={3}
               value={sourcePreface}
+              disabled={localBatchState.busy}
               onChange={(event) => {
                 setSourcePreface(event.currentTarget.value);
               }}
@@ -627,64 +719,73 @@ export function MaterialsWorkspace({
               </small>
             ) : null}
           </label>
-          <label className="field field--full">
-            <span>
-              {sourceMode === 'uploaded_file'
-                ? localFile.status === 'ready' &&
-                  localFile.value.documentFormat === 'pdf'
-                  ? 'PDF 导入说明'
-                  : '文件正文预览'
-                : 'Markdown 正文'}
-            </span>
-            <textarea
-              required={sourceMode !== 'uploaded_file'}
-              readOnly={sourceMode === 'uploaded_file'}
-              rows={12}
-              value={
-                sourceMode === 'uploaded_file' && localFile.status === 'ready'
-                  ? localFile.value.sourceText
-                  : sourceMode === 'uploaded_file'
-                    ? ''
-                    : sourceText
-              }
-              onChange={(event) => {
-                if (sourceMode !== 'uploaded_file') {
-                  setSourceText(event.currentTarget.value);
-                }
-              }}
-              placeholder={
-                sourceMode === 'uploaded_file'
+          {sourceMode !== 'uploaded_file' || localCaptureMode === 'single' ? (
+            <label className="field field--full">
+              <span>
+                {sourceMode === 'uploaded_file'
                   ? localFile.status === 'ready' &&
                     localFile.value.documentFormat === 'pdf'
-                    ? 'PDF 文字层将在本地服务导入时按页提取；导入后请在“拆分”页检查和修改。扫描件暂不支持 OCR。'
-                    : '选择文件后在这里检查正文；编辑请使用前置文字或后续拆分流程。'
-                  : '粘贴或输入待保存的 Markdown；内容不会写入 Git 或前端包体。'
-              }
-            />
-          </label>
-          <div className="form-commit field--full">
-            <p>
-              导入会创建不可变 Snapshot、结构节点与精确
-              Fragment；相同命令键可安全重试。
+                    ? 'PDF 导入说明'
+                    : '文件正文预览'
+                  : 'Markdown 正文'}
+              </span>
+              <textarea
+                required={sourceMode !== 'uploaded_file'}
+                readOnly={sourceMode === 'uploaded_file'}
+                rows={12}
+                value={
+                  sourceMode === 'uploaded_file' && localFile.status === 'ready'
+                    ? localFile.value.sourceText
+                    : sourceMode === 'uploaded_file'
+                      ? ''
+                      : sourceText
+                }
+                onChange={(event) => {
+                  if (sourceMode !== 'uploaded_file') {
+                    setSourceText(event.currentTarget.value);
+                  }
+                }}
+                placeholder={
+                  sourceMode === 'uploaded_file'
+                    ? localFile.status === 'ready' &&
+                      localFile.value.documentFormat === 'pdf'
+                      ? 'PDF 文字层将在本地服务导入时按页提取；导入后请在“拆分”页检查和修改。扫描件暂不支持 OCR。'
+                      : '选择文件后在这里检查正文；编辑请使用前置文字或后续拆分流程。'
+                    : '粘贴或输入待保存的 Markdown；内容不会写入 Git 或前端包体。'
+                }
+              />
+            </label>
+          ) : null}
+          {sourceMode !== 'uploaded_file' || localCaptureMode === 'single' ? (
+            <div className="form-commit field--full">
+              <p>
+                导入会创建不可变 Snapshot、结构节点与精确
+                Fragment；相同命令键可安全重试。
+              </p>
+              <button
+                className="primary-action"
+                type="submit"
+                disabled={
+                  submitting ||
+                  (sourceMode === 'uploaded_file'
+                    ? localFile.status !== 'ready'
+                    : sourceText === '') ||
+                  (sourceMode === 'git_file' &&
+                    (repositoryUri.trim() === '' ||
+                      repositoryPath.trim() === '' ||
+                      repositoryRef.trim() === '' ||
+                      !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(commitDigest)))
+                }
+              >
+                {submitting ? '正在写入…' : '保存来源 Snapshot'}
+              </button>
+            </div>
+          ) : (
+            <p className="batch-import-boundary field--full">
+              批次按钮位于文件队列内。每个文件独立保存为一个不可变
+              Snapshot；批次不会自动拆分为 Entry、生成标签、建立联系或调用 AI。
             </p>
-            <button
-              className="primary-action"
-              type="submit"
-              disabled={
-                submitting ||
-                (sourceMode === 'uploaded_file'
-                  ? localFile.status !== 'ready'
-                  : sourceText === '') ||
-                (sourceMode === 'git_file' &&
-                  (repositoryUri.trim() === '' ||
-                    repositoryPath.trim() === '' ||
-                    repositoryRef.trim() === '' ||
-                    !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(commitDigest)))
-              }
-            >
-              {submitting ? '正在写入…' : '保存来源 Snapshot'}
-            </button>
-          </div>
+          )}
         </form>
         <ActionNotice feedback={feedback} />
       </section>
@@ -914,28 +1015,6 @@ function SnapshotList({
   );
 }
 
-function describeLocalFileIssue(
-  code:
-    | 'file_name_invalid'
-    | 'file_type_unsupported'
-    | 'file_too_large'
-    | 'file_utf8_invalid'
-    | 'file_content_invalid',
-): string {
-  if (code === 'file_name_invalid') return '文件名无效；请选择普通文件名。';
-  if (code === 'file_type_unsupported')
-    return '仅支持 .md、.markdown、.txt、.html、.htm 和 .pdf。';
-  if (code === 'file_too_large')
-    return `文件超过 ${formatLocalFileBytes(LOCAL_DOCUMENT_FILE_MAX_BYTES)} 上限。`;
-  if (code === 'file_utf8_invalid') return '文件不是有效的 UTF-8 文本。';
-  return '文件为空、PDF 标识无效，或文本含有不允许的 NUL 字符。';
-}
-
-function formatLocalFileBytes(value: number): string {
-  return value < 1024
-    ? `${value.toString()} B`
-    : `${(value / 1024).toFixed(value < 1024 * 1024 ? 1 : 0)} KiB`;
-}
 function createImportIdentity(): ImportIdentity {
   return Object.freeze({
     commandIdempotencyKey: createCommandKey('import'),

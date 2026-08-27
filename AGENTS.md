@@ -518,6 +518,17 @@ table, dependency or Provider. Do not infer arbitrary scripts, regex programs,
 custom parsers, source reordering, automatic background splitting or permission
 to replace already materialized Entry structures.
 
+ADR 0036 completes M1H-5A/B with one explicit local multi-file import queue.
+The owner may select or drop at most 20 supported files; every item independently
+reuses the accepted file validation, privacy propagation, stable idempotent
+identity, Evidence import and external Blob path. The Import page reports
+per-file state, retries failed items with their frozen request identity, and
+stops only before the next item rather than pretending to cancel an in-flight
+write. The queue is session-only and is not a ProcessingRun, database record or
+personal-data-package section. This adds no migration, dependency, API route,
+directory scan, automatic Entry materialization, tag/link action, Provider call
+or real data.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

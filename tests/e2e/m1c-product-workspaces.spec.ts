@@ -146,6 +146,8 @@ async function installCurrentProductApi(
     splitRuleRequests?: Readonly<{path: string; body: string}>[];
     restructureRequests?: Readonly<{path: string; body: string}>[];
     importRequests?: string[];
+    importOutcomes?: readonly ('created' | 'conflict')[];
+    importRequestGate?: Promise<void>;
     preferenceSuggestionGate?: Promise<void>;
     preferenceSuggestionScopes?: boolean[];
     preferenceTrialGate?: Promise<void>;
@@ -220,6 +222,7 @@ async function installCurrentProductApi(
   let preferenceSuggestionRequestCount = 0;
   let preferenceTrialRequestCount = 0;
   let automationRunListRequestCount = 0;
+  let importResponseIndex = 0;
 
   await page.route('**/*', async (route) => {
     const request = route.request();
@@ -264,7 +267,40 @@ async function installCurrentProductApi(
         path === '/api/v1/imports/document') &&
       request.method() === 'POST'
     ) {
-      options?.importRequests?.push(request.postData() ?? '');
+      const postData = request.postData() ?? '';
+      options?.importRequests?.push(postData);
+      if (
+        importResponseIndex === 0 &&
+        options?.importRequestGate !== undefined
+      ) {
+        await options.importRequestGate;
+      }
+      const importOutcome =
+        options?.importOutcomes?.[importResponseIndex] ?? 'conflict';
+      importResponseIndex += 1;
+      if (importOutcome === 'created') {
+        const body = JSON.parse(postData) as {
+          commandIdempotencyKey: string;
+          resource: {resourceId: string; isPrivate?: true};
+          snapshot: {snapshotId: string};
+        };
+        await route.fulfill({
+          contentType: 'application/json',
+          json: {
+            status: 'created',
+            workspaceId: WORKSPACE_ID,
+            commandIdempotencyKey: body.commandIdempotencyKey,
+            resourceId: body.resource.resourceId,
+            snapshotId: body.snapshot.snapshotId,
+            structureId: '88888888-8888-4888-8888-888888888888',
+            fragmentIds: ['99999999-9999-4999-8999-999999999999'],
+            mediaAssetIds: [],
+            ...(body.resource.isPrivate === true ? {isPrivate: true} : {}),
+          },
+          status: 201,
+        });
+        return;
+      }
       await route.fulfill({
         contentType: 'application/json',
         json: {status: 'conflict', code: 'synthetic_conflict'},
@@ -928,6 +964,131 @@ test('imports exact local UTF-8 bytes and preserves retry identity', async ({
   expect(first).not.toHaveProperty('sourceText');
   expect(JSON.stringify(first)).not.toContain('C:\\');
   expect(second).toEqual(first);
+});
+
+test('imports an explicit local file batch and retries only failed items with the same identity', async ({
+  page,
+}) => {
+  const importRequests: string[] = [];
+  await installCurrentProductApi(page, {
+    importRequests,
+    importOutcomes: ['created', 'conflict', 'created'],
+  });
+  await page.goto('/');
+
+  const navigation = page.getByRole('navigation', {name: '产品工作区'});
+  await navigation.getByRole('button', {name: '导入', exact: true}).click();
+  await page.getByRole('radio', {name: '本地文件', exact: true}).check();
+  await page.getByRole('radio', {name: '多份批次', exact: true}).check();
+  await page.locator('#local-document-batch-files').setInputFiles([
+    {
+      name: 'synthetic-a.md',
+      mimeType: 'text/markdown',
+      buffer: Buffer.from('# A\n\nSynthetic A', 'utf8'),
+    },
+    {
+      name: 'synthetic-a.md',
+      mimeType: 'text/markdown',
+      buffer: Buffer.from('# B\n\nSynthetic B', 'utf8'),
+    },
+  ]);
+
+  await expect(
+    page.getByRole('button', {name: '导入 2 份就绪文件', exact: true}),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole('radio', {name: '手动文本', exact: true}),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole('radio', {name: '单份文件', exact: true}),
+  ).toBeDisabled();
+  await page
+    .getByRole('button', {name: '导入 2 份就绪文件', exact: true})
+    .click();
+  await expect(page.getByText(/成功 1 · 失败 1 · 已停止 0/u)).toBeVisible();
+  await expect(
+    page.getByRole('button', {name: '重试失败与已停止项', exact: true}),
+  ).toBeVisible();
+
+  await page
+    .getByRole('button', {name: '重试失败与已停止项', exact: true})
+    .click();
+  await expect(page.getByText(/成功 2 · 失败 0 · 已停止 0/u)).toBeVisible();
+  expect(importRequests).toHaveLength(3);
+
+  const first = JSON.parse(importRequests[0] ?? 'null') as {
+    commandIdempotencyKey: string;
+    resource: {resourceId: string; sourceKey: string};
+    snapshot: {snapshotId: string};
+  };
+  const failed = JSON.parse(importRequests[1] ?? 'null') as {
+    resource: {sourceKey: string};
+  };
+  const retry = JSON.parse(importRequests[2] ?? 'null') as unknown;
+  expect(first.resource.sourceKey).toMatch(/^synthetic-a\.md#sha256:/u);
+  expect(failed.resource.sourceKey).toMatch(/^synthetic-a\.md#sha256:/u);
+  expect(failed.resource.sourceKey).not.toBe(first.resource.sourceKey);
+  expect(failed).toEqual(retry);
+  expect(JSON.stringify(importRequests)).not.toContain('C:\\');
+
+  for (const viewport of [
+    {width: 320, height: 720},
+    {width: 390, height: 844},
+    {width: 768, height: 900},
+    {width: 1024, height: 900},
+    {width: 1440, height: 1000},
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(
+      page.getByRole('heading', {name: '多文件导入队列', exact: true}),
+    ).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+  }
+});
+
+test('stops a local batch after the in-flight file without starting later files', async ({
+  page,
+}) => {
+  const importRequests: string[] = [];
+  const gate = controlledGate();
+  await installCurrentProductApi(page, {
+    importRequests,
+    importOutcomes: ['created', 'created'],
+    importRequestGate: gate.promise,
+  });
+  await page.goto('/');
+
+  const navigation = page.getByRole('navigation', {name: '产品工作区'});
+  await navigation.getByRole('button', {name: '导入', exact: true}).click();
+  await page.getByRole('radio', {name: '本地文件', exact: true}).check();
+  await page.getByRole('radio', {name: '多份批次', exact: true}).check();
+  await page.locator('#local-document-batch-files').setInputFiles([
+    {
+      name: 'synthetic-stop-a.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('Synthetic stop A', 'utf8'),
+    },
+    {
+      name: 'synthetic-stop-b.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('Synthetic stop B', 'utf8'),
+    },
+  ]);
+
+  await page
+    .getByRole('button', {name: '导入 2 份就绪文件', exact: true})
+    .click();
+  await expect(
+    page.getByRole('checkbox', {name: /作为隐私文档录入/u}),
+  ).toBeDisabled();
+  await page.getByRole('button', {name: '停止后续导入', exact: true}).click();
+  gate.release();
+
+  await expect(page.getByText(/成功 1 · 失败 0 · 已停止 1/u)).toBeVisible();
+  expect(importRequests).toHaveLength(1);
 });
 
 test('edits association weights and opens the complete private-document channel', async ({
