@@ -5121,10 +5121,11 @@ function decodeSourceSubscriptionReplace(body: unknown):
   ) {
     return undefined;
   }
-  const expectedKeys = [
+  const githubKeys = [
     'enabled',
     'intervalMinutes',
     'isPrivate',
+    'kind',
     'label',
     'profile',
     'repositoryPath',
@@ -5134,13 +5135,63 @@ function decodeSourceSubscriptionReplace(body: unknown):
     'sourceAlias',
     'subscriptionId',
   ];
+  const legacyGithubKeys = githubKeys.filter((key) => key !== 'kind');
+  const rssKeys = [
+    'enabled',
+    'feedUrl',
+    'intervalMinutes',
+    'isPrivate',
+    'itemLimit',
+    'kind',
+    'label',
+    'routeAfterImport',
+    'sourceAlias',
+    'subscriptionId',
+  ];
+  const jsonRequiredKeys = [
+    'authentication',
+    'bodyPath',
+    'enabled',
+    'endpointUrl',
+    'externalIdPath',
+    'intervalMinutes',
+    'isPrivate',
+    'kind',
+    'label',
+    'recordLimit',
+    'recordsPath',
+    'routeAfterImport',
+    'sourceAlias',
+    'subscriptionId',
+    'titlePath',
+  ];
+  const jsonAllowedKeys = [
+    ...jsonRequiredKeys,
+    'canonicalUriPath',
+    'incrementalCursor',
+    'pageCursor',
+    'publishedAtPath',
+    'versionPath',
+  ];
   if (
-    body.subscriptions.some(
-      (subscription) =>
-        !isRecord(subscription) ||
-        Object.keys(subscription).sort().join('\\u0000') !==
-          expectedKeys.join('\\u0000'),
-    )
+    body.subscriptions.some((subscription) => {
+      if (!isRecord(subscription)) return true;
+      const keys = Object.keys(subscription).sort().join('\\u0000');
+      if (subscription.kind === 'rss_atom') {
+        return keys !== rssKeys.join('\\u0000');
+      }
+      if (subscription.kind === 'json_api') {
+        const ownKeys = Object.keys(subscription);
+        return (
+          jsonRequiredKeys.some((key) => !Object.hasOwn(subscription, key)) ||
+          ownKeys.some((key) => !jsonAllowedKeys.includes(key))
+        );
+      }
+      return (
+        keys !== githubKeys.join('\\u0000') &&
+        keys !== legacyGithubKeys.join('\\u0000')
+      );
+    })
   ) {
     return undefined;
   }
@@ -5153,19 +5204,76 @@ function decodeSourceSubscriptionReplace(body: unknown):
     expectedRevision: body.expectedRevision as number,
     subscriptions: Object.freeze(
       decoded.subscriptions.map((subscription) =>
-        Object.freeze({
-          subscriptionId: subscription.subscriptionId,
-          label: subscription.label,
-          enabled: subscription.enabled,
-          repositoryUri: subscription.repositoryUri,
-          repositoryRef: subscription.repositoryRef,
-          repositoryPath: subscription.repositoryPath,
-          profile: subscription.profile,
-          sourceAlias: subscription.sourceAlias,
-          isPrivate: subscription.isPrivate,
-          routeAfterImport: subscription.routeAfterImport,
-          intervalMinutes: subscription.intervalMinutes,
-        }),
+        subscription.kind === 'rss_atom'
+          ? Object.freeze({
+              kind: subscription.kind,
+              subscriptionId: subscription.subscriptionId,
+              label: subscription.label,
+              enabled: subscription.enabled,
+              feedUrl: subscription.feedUrl,
+              itemLimit: subscription.itemLimit,
+              sourceAlias: subscription.sourceAlias,
+              isPrivate: subscription.isPrivate,
+              routeAfterImport: subscription.routeAfterImport,
+              intervalMinutes: subscription.intervalMinutes,
+            })
+          : subscription.kind === 'json_api'
+            ? Object.freeze({
+                kind: subscription.kind,
+                subscriptionId: subscription.subscriptionId,
+                label: subscription.label,
+                enabled: subscription.enabled,
+                endpointUrl: subscription.endpointUrl,
+                recordsPath: subscription.recordsPath,
+                externalIdPath: subscription.externalIdPath,
+                titlePath: subscription.titlePath,
+                bodyPath: subscription.bodyPath,
+                ...(subscription.canonicalUriPath === undefined
+                  ? {}
+                  : {canonicalUriPath: subscription.canonicalUriPath}),
+                ...(subscription.publishedAtPath === undefined
+                  ? {}
+                  : {publishedAtPath: subscription.publishedAtPath}),
+                ...(subscription.versionPath === undefined
+                  ? {}
+                  : {versionPath: subscription.versionPath}),
+                recordLimit: subscription.recordLimit,
+                ...(subscription.pageCursor === undefined
+                  ? {}
+                  : {
+                      pageCursor: Object.freeze({
+                        ...subscription.pageCursor,
+                      }),
+                    }),
+                ...(subscription.incrementalCursor === undefined
+                  ? {}
+                  : {
+                      incrementalCursor: Object.freeze({
+                        ...subscription.incrementalCursor,
+                      }),
+                    }),
+                authentication: Object.freeze({
+                  ...subscription.authentication,
+                }),
+                sourceAlias: subscription.sourceAlias,
+                isPrivate: subscription.isPrivate,
+                routeAfterImport: subscription.routeAfterImport,
+                intervalMinutes: subscription.intervalMinutes,
+              })
+            : Object.freeze({
+                kind: 'github_markdown' as const,
+                subscriptionId: subscription.subscriptionId,
+                label: subscription.label,
+                enabled: subscription.enabled,
+                repositoryUri: subscription.repositoryUri,
+                repositoryRef: subscription.repositoryRef,
+                repositoryPath: subscription.repositoryPath,
+                profile: subscription.profile,
+                sourceAlias: subscription.sourceAlias,
+                isPrivate: subscription.isPrivate,
+                routeAfterImport: subscription.routeAfterImport,
+                intervalMinutes: subscription.intervalMinutes,
+              }),
       ),
     ),
   });

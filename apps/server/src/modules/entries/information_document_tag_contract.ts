@@ -53,7 +53,8 @@ export interface InformationEntryDocumentView {
   readonly workspaceId: string;
   readonly resourceId: string;
   readonly snapshotId: string;
-  readonly resourceKind: 'git_file' | 'manual_text' | 'uploaded_file';
+  readonly resourceKind:
+    'git_file' | 'manual_text' | 'uploaded_file' | 'remote_document';
   readonly sourceKey: string;
   readonly canonicalUri?: string;
   readonly isPrivate?: true;

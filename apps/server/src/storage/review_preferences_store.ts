@@ -124,20 +124,32 @@ export const DEFAULT_ENTRY_AUTOMATION_POLICY: Readonly<EntryAutomationPolicy> =
     failureMode: 'pause',
   });
 
-export interface ReviewSourceSubscriptionCursor {
+export interface ReviewGitSourceSubscriptionCursor {
   readonly commitSha: string;
   readonly sourceSha256: string;
 }
 
-export interface ReviewSourceSubscription {
+export interface ReviewRssSourceSubscriptionCursor {
+  readonly connectorCursor: string;
+}
+
+export interface ReviewJsonApiSourceSubscriptionCursor {
+  readonly connectorCursor: string;
+}
+
+export interface ReviewJsonApiCursorMapping {
+  readonly queryParameter: string;
+  readonly responsePath: string;
+}
+
+export type ReviewJsonApiAuthentication =
+  Readonly<{kind: 'none'}> | Readonly<{kind: 'bearer_env'; variable: string}>;
+
+interface ReviewSourceSubscriptionBase {
   readonly subscriptionId: string;
   readonly label: string;
   /** Enables periodic checks. Explicit run-now remains available when false. */
   readonly enabled: boolean;
-  readonly repositoryUri: string;
-  readonly repositoryRef: string;
-  readonly repositoryPath: string;
-  readonly profile: 'commonmark-v1' | 'ruanyf-weekly-v1';
   readonly sourceAlias: string;
   readonly isPrivate: boolean;
   /** Default-off: route a changed import after deterministic materialization. */
@@ -146,8 +158,46 @@ export interface ReviewSourceSubscription {
   readonly lastAttemptAt?: string;
   readonly lastSuccessAt?: string;
   readonly lastRunId?: string;
-  readonly cursor?: Readonly<ReviewSourceSubscriptionCursor>;
 }
+
+export interface ReviewGitSourceSubscription extends ReviewSourceSubscriptionBase {
+  readonly kind?: 'github_markdown';
+  readonly repositoryUri: string;
+  readonly repositoryRef: string;
+  readonly repositoryPath: string;
+  readonly profile: 'commonmark-v1' | 'ruanyf-weekly-v1';
+  readonly cursor?: Readonly<ReviewGitSourceSubscriptionCursor>;
+}
+
+export interface ReviewRssSourceSubscription extends ReviewSourceSubscriptionBase {
+  readonly kind: 'rss_atom';
+  readonly feedUrl: string;
+  readonly itemLimit: number;
+  readonly cursor?: Readonly<ReviewRssSourceSubscriptionCursor>;
+}
+
+export interface ReviewJsonApiSourceSubscription extends ReviewSourceSubscriptionBase {
+  readonly kind: 'json_api';
+  readonly endpointUrl: string;
+  /** Empty means that the response root is the record array. */
+  readonly recordsPath: string;
+  readonly externalIdPath: string;
+  readonly titlePath: string;
+  readonly bodyPath: string;
+  readonly canonicalUriPath?: string;
+  readonly publishedAtPath?: string;
+  readonly versionPath?: string;
+  readonly recordLimit: number;
+  readonly pageCursor?: Readonly<ReviewJsonApiCursorMapping>;
+  readonly incrementalCursor?: Readonly<ReviewJsonApiCursorMapping>;
+  readonly authentication: Readonly<ReviewJsonApiAuthentication>;
+  readonly cursor?: Readonly<ReviewJsonApiSourceSubscriptionCursor>;
+}
+
+export type ReviewSourceSubscription =
+  | ReviewGitSourceSubscription
+  | ReviewRssSourceSubscription
+  | ReviewJsonApiSourceSubscription;
 
 export interface ReviewSourceSubscriptionPreferences {
   readonly revision: number;
@@ -669,14 +719,7 @@ export function createReviewPreferences(
     sourceSubscriptions: Object.freeze({
       revision: sourceSubscriptions.revision,
       subscriptions: Object.freeze(
-        sourceSubscriptions.subscriptions.map((subscription) =>
-          Object.freeze({
-            ...subscription,
-            ...(subscription.cursor === undefined
-              ? {}
-              : {cursor: Object.freeze({...subscription.cursor})}),
-          }),
-        ),
+        sourceSubscriptions.subscriptions.map(cloneSourceSubscription),
       ),
     }),
     entryPreferenceProfile: Object.freeze({
@@ -891,11 +934,6 @@ function decodeSourceSubscription(
     !CANONICAL_UUID.test(value.subscriptionId) ||
     typeof value.label !== 'string' ||
     (value.enabled !== true && value.enabled !== false) ||
-    typeof value.repositoryUri !== 'string' ||
-    typeof value.repositoryRef !== 'string' ||
-    typeof value.repositoryPath !== 'string' ||
-    (value.profile !== 'commonmark-v1' &&
-      value.profile !== 'ruanyf-weekly-v1') ||
     typeof value.sourceAlias !== 'string' ||
     (value.isPrivate !== true && value.isPrivate !== false) ||
     (value.routeAfterImport !== undefined &&
@@ -915,28 +953,13 @@ function decodeSourceSubscription(
   }
   const label = decodeBoundedText(value.label, 120);
   const sourceAlias = decodeBoundedText(value.sourceAlias, 500);
-  const repositoryUri = decodeGithubRepositoryUri(value.repositoryUri);
-  const repositoryRef = decodeRepositoryRef(value.repositoryRef);
-  const repositoryPath = decodeRepositoryPath(value.repositoryPath);
-  const cursor = decodeSourceSubscriptionCursor(value.cursor);
-  if (
-    label === undefined ||
-    sourceAlias === undefined ||
-    repositoryUri === undefined ||
-    repositoryRef === undefined ||
-    repositoryPath === undefined ||
-    (value.cursor !== undefined && cursor === undefined)
-  ) {
+  if (label === undefined || sourceAlias === undefined) {
     return undefined;
   }
-  return Object.freeze({
+  const common = Object.freeze({
     subscriptionId: value.subscriptionId,
     label,
     enabled: value.enabled,
-    repositoryUri,
-    repositoryRef,
-    repositoryPath,
-    profile: value.profile,
     sourceAlias,
     isPrivate: value.isPrivate,
     routeAfterImport: value.routeAfterImport === true,
@@ -950,13 +973,189 @@ function decodeSourceSubscription(
     ...(typeof value.lastRunId === 'string'
       ? {lastRunId: value.lastRunId}
       : {}),
+  });
+  const kind = value.kind ?? 'github_markdown';
+  if (kind === 'rss_atom') {
+    if (
+      typeof value.feedUrl !== 'string' ||
+      !Number.isSafeInteger(value.itemLimit) ||
+      (value.itemLimit as number) < 1 ||
+      (value.itemLimit as number) > 20
+    ) {
+      return undefined;
+    }
+    const feedUrl = decodePublicHttpsUri(value.feedUrl);
+    const cursor = decodeRssSourceSubscriptionCursor(value.cursor);
+    if (
+      feedUrl === undefined ||
+      (value.cursor !== undefined && cursor === undefined)
+    ) {
+      return undefined;
+    }
+    return Object.freeze({
+      ...common,
+      kind: 'rss_atom' as const,
+      feedUrl,
+      itemLimit: value.itemLimit as number,
+      ...(cursor === undefined ? {} : {cursor}),
+    });
+  }
+  if (kind === 'json_api') {
+    if (
+      typeof value.endpointUrl !== 'string' ||
+      typeof value.recordsPath !== 'string' ||
+      typeof value.externalIdPath !== 'string' ||
+      typeof value.titlePath !== 'string' ||
+      typeof value.bodyPath !== 'string' ||
+      !optionalJsonApiPath(value.canonicalUriPath) ||
+      !optionalJsonApiPath(value.publishedAtPath) ||
+      !optionalJsonApiPath(value.versionPath) ||
+      !Number.isSafeInteger(value.recordLimit) ||
+      (value.recordLimit as number) < 1 ||
+      (value.recordLimit as number) > 32
+    ) {
+      return undefined;
+    }
+    const endpointUrl = decodePublicHttpsUri(value.endpointUrl);
+    const recordsPath = decodeJsonApiPath(value.recordsPath, true);
+    const externalIdPath = decodeJsonApiPath(value.externalIdPath, false);
+    const titlePath = decodeJsonApiPath(value.titlePath, false);
+    const bodyPath = decodeJsonApiPath(value.bodyPath, false);
+    const canonicalUriPath = decodeOptionalJsonApiPath(value.canonicalUriPath);
+    const publishedAtPath = decodeOptionalJsonApiPath(value.publishedAtPath);
+    const versionPath = decodeOptionalJsonApiPath(value.versionPath);
+    const pageCursor = decodeJsonApiCursorMapping(value.pageCursor);
+    const incrementalCursor = decodeJsonApiCursorMapping(
+      value.incrementalCursor,
+    );
+    const authentication = decodeJsonApiAuthentication(value.authentication);
+    const cursor = decodeConnectorSourceSubscriptionCursor(value.cursor);
+    if (
+      endpointUrl === undefined ||
+      recordsPath === undefined ||
+      externalIdPath === undefined ||
+      titlePath === undefined ||
+      bodyPath === undefined ||
+      canonicalUriPath === null ||
+      publishedAtPath === null ||
+      versionPath === null ||
+      (value.pageCursor !== undefined && pageCursor === undefined) ||
+      (value.incrementalCursor !== undefined &&
+        incrementalCursor === undefined) ||
+      (pageCursor !== undefined &&
+        incrementalCursor?.queryParameter === pageCursor.queryParameter) ||
+      authentication === undefined ||
+      (value.cursor !== undefined && cursor === undefined)
+    ) {
+      return undefined;
+    }
+    return Object.freeze({
+      ...common,
+      kind: 'json_api' as const,
+      endpointUrl,
+      recordsPath,
+      externalIdPath,
+      titlePath,
+      bodyPath,
+      ...(canonicalUriPath === undefined ? {} : {canonicalUriPath}),
+      ...(publishedAtPath === undefined ? {} : {publishedAtPath}),
+      ...(versionPath === undefined ? {} : {versionPath}),
+      recordLimit: value.recordLimit as number,
+      ...(pageCursor === undefined ? {} : {pageCursor}),
+      ...(incrementalCursor === undefined ? {} : {incrementalCursor}),
+      authentication,
+      ...(cursor === undefined ? {} : {cursor}),
+    });
+  }
+  if (
+    kind !== 'github_markdown' ||
+    typeof value.repositoryUri !== 'string' ||
+    typeof value.repositoryRef !== 'string' ||
+    typeof value.repositoryPath !== 'string' ||
+    (value.profile !== 'commonmark-v1' && value.profile !== 'ruanyf-weekly-v1')
+  ) {
+    return undefined;
+  }
+  const repositoryUri = decodeGithubRepositoryUri(value.repositoryUri);
+  const repositoryRef = decodeRepositoryRef(value.repositoryRef);
+  const repositoryPath = decodeRepositoryPath(value.repositoryPath);
+  const cursor = decodeGitSourceSubscriptionCursor(value.cursor);
+  if (
+    repositoryUri === undefined ||
+    repositoryRef === undefined ||
+    repositoryPath === undefined ||
+    (value.cursor !== undefined && cursor === undefined)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    ...common,
+    kind: 'github_markdown' as const,
+    repositoryUri,
+    repositoryRef,
+    repositoryPath,
+    profile: value.profile,
     ...(cursor === undefined ? {} : {cursor}),
   });
 }
 
-function decodeSourceSubscriptionCursor(
+function cloneSourceSubscription(
+  subscription: Readonly<ReviewSourceSubscription>,
+): Readonly<ReviewSourceSubscription> {
+  if (subscription.kind === 'rss_atom') {
+    return Object.freeze({
+      ...subscription,
+      kind: subscription.kind,
+      ...(subscription.cursor === undefined
+        ? {}
+        : {
+            cursor: Object.freeze({
+              connectorCursor: subscription.cursor.connectorCursor,
+            }),
+          }),
+    });
+  }
+  if (subscription.kind === 'json_api') {
+    return Object.freeze({
+      ...subscription,
+      kind: subscription.kind,
+      ...(subscription.pageCursor === undefined
+        ? {}
+        : {pageCursor: Object.freeze({...subscription.pageCursor})}),
+      ...(subscription.incrementalCursor === undefined
+        ? {}
+        : {
+            incrementalCursor: Object.freeze({
+              ...subscription.incrementalCursor,
+            }),
+          }),
+      authentication: Object.freeze({...subscription.authentication}),
+      ...(subscription.cursor === undefined
+        ? {}
+        : {
+            cursor: Object.freeze({
+              connectorCursor: subscription.cursor.connectorCursor,
+            }),
+          }),
+    });
+  }
+  return Object.freeze({
+    ...subscription,
+    ...(subscription.kind === undefined ? {} : {kind: subscription.kind}),
+    ...(subscription.cursor === undefined
+      ? {}
+      : {
+          cursor: Object.freeze({
+            commitSha: subscription.cursor.commitSha,
+            sourceSha256: subscription.cursor.sourceSha256,
+          }),
+        }),
+  });
+}
+
+function decodeGitSourceSubscriptionCursor(
   value: unknown,
-): Readonly<ReviewSourceSubscriptionCursor> | undefined {
+): Readonly<ReviewGitSourceSubscriptionCursor> | undefined {
   if (value === undefined) return undefined;
   if (
     !isRecord(value) ||
@@ -971,6 +1170,115 @@ function decodeSourceSubscriptionCursor(
     commitSha: value.commitSha,
     sourceSha256: value.sourceSha256,
   });
+}
+
+function decodeRssSourceSubscriptionCursor(
+  value: unknown,
+): Readonly<ReviewRssSourceSubscriptionCursor> | undefined {
+  return decodeConnectorSourceSubscriptionCursor(value);
+}
+
+function decodeConnectorSourceSubscriptionCursor(
+  value: unknown,
+): Readonly<ReviewRssSourceSubscriptionCursor> | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !isRecord(value) ||
+    Object.keys(value).length !== 1 ||
+    typeof value.connectorCursor !== 'string' ||
+    value.connectorCursor.length === 0 ||
+    Array.from(value.connectorCursor).length > 2_048 ||
+    containsControlCodePoint(value.connectorCursor)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({connectorCursor: value.connectorCursor});
+}
+
+const JSON_API_PATH =
+  /^(?:[A-Za-z_][A-Za-z0-9_-]{0,99})(?:\.(?:[A-Za-z_][A-Za-z0-9_-]{0,99})){0,7}$/u;
+const JSON_API_QUERY_PARAMETER = /^[A-Za-z_][A-Za-z0-9_.-]{0,79}$/u;
+const ENVIRONMENT_VARIABLE = /^[A-Z_][A-Z0-9_]{0,99}$/u;
+
+function decodeJsonApiPath(
+  value: string,
+  allowEmpty: boolean,
+): string | undefined {
+  return (allowEmpty && value === '') || JSON_API_PATH.test(value)
+    ? value
+    : undefined;
+}
+
+function optionalJsonApiPath(value: unknown): boolean {
+  return value === undefined || typeof value === 'string';
+}
+
+function decodeOptionalJsonApiPath(value: unknown): string | undefined | null {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') return null;
+  if (value === '') return undefined;
+  return decodeJsonApiPath(value, false) ?? null;
+}
+
+function decodeJsonApiCursorMapping(
+  value: unknown,
+): Readonly<ReviewJsonApiCursorMapping> | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !isClosedRecord(value, ['queryParameter', 'responsePath']) ||
+    typeof value.queryParameter !== 'string' ||
+    !JSON_API_QUERY_PARAMETER.test(value.queryParameter) ||
+    typeof value.responsePath !== 'string'
+  ) {
+    return undefined;
+  }
+  const responsePath = decodeJsonApiPath(value.responsePath, false);
+  return responsePath === undefined
+    ? undefined
+    : Object.freeze({
+        queryParameter: value.queryParameter,
+        responsePath,
+      });
+}
+
+function decodeJsonApiAuthentication(
+  value: unknown,
+): Readonly<ReviewJsonApiAuthentication> | undefined {
+  if (!isRecord(value)) return undefined;
+  if (value.kind === 'none') {
+    return isClosedRecord(value, ['kind'])
+      ? Object.freeze({kind: 'none' as const})
+      : undefined;
+  }
+  return value.kind === 'bearer_env' &&
+    isClosedRecord(value, ['kind', 'variable']) &&
+    typeof value.variable === 'string' &&
+    ENVIRONMENT_VARIABLE.test(value.variable)
+    ? Object.freeze({kind: 'bearer_env' as const, variable: value.variable})
+    : undefined;
+}
+
+function decodePublicHttpsUri(value: string): string | undefined {
+  if (
+    value.trim() !== value ||
+    Array.from(value).length > 2_000 ||
+    containsControlCodePoint(value)
+  ) {
+    return undefined;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return undefined;
+  }
+  return parsed.protocol === 'https:' &&
+    parsed.username === '' &&
+    parsed.password === '' &&
+    parsed.hash === '' &&
+    parsed.hostname !== ''
+    ? parsed.toString()
+    : undefined;
 }
 
 function decodeGithubRepositoryUri(value: string): string | undefined {

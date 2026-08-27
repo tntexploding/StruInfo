@@ -5,8 +5,8 @@
   "admittedCandidateLockSha256": "2FAFED41EF12107322AA7498935EF4CBEF59ABC2FAB28F92A222B57F90696095",
   "trackedFoundationLockSha256": "A783E1C5B2DADD8B653D8E16446847530473D5569BB08830D7FC03D79400880B",
   "resolvedPackageAndSnapshotSectionsEqual": true,
-  "missingTarballLegalTextCount": 14,
-  "resolvedCount": 14,
+  "missingTarballLegalTextCount": 15,
+  "resolvedCount": 15,
   "unresolvedCount": 0,
   "records": [
     {
@@ -255,6 +255,22 @@
         }
       ],
       "selectedLegalFile": "docs/dependencies/licenses/npm-source/stackback@0.0.2/canonical-MIT.txt"
+    },
+    {
+      "packageKey": "@nodable/entities@3.0.0",
+      "lockIntegritySha512": "F0BF7115E4D82A19B8F717C8CA9A1ED96E705759BFDD9E7C913FBB911F40F0EC85C5C3DDB88E159B1694310C8A62B4635282CB497BFA10A2830F94EF8FD71457",
+      "declaredSpdx": "MIT",
+      "releaseRelation": "exact 3.0.0 tarball package.json declares MIT and identifies Amit Gupta; the published files omit a standalone legal file",
+      "resolution": "DECLARED_SPDX_WITH_CANONICAL_TEXT",
+      "legalFiles": [
+        {
+          "evidencePath": "docs/dependencies/licenses/npm-source/nodable__entities@3.0.0/canonical-MIT.txt",
+          "bytes": 1077,
+          "sha256": "C3B1B78BC8BD3EA13AA4BC9778442D16560270AFA235006D816E5E88CEF24DB4"
+        }
+      ],
+      "selectedLegalFile": "docs/dependencies/licenses/npm-source/nodable__entities@3.0.0/canonical-MIT.txt"
     }
-  ]
+  ],
+  "m1i2LockSha256": "9AA55459A0A5EDD2D6AB7BEEB8CD81152297CB2276CB2026E4634F2306D7BD22"
 }

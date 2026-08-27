@@ -180,16 +180,7 @@ describe('synthetic Markdown fixture provenance', () => {
 });
 
 describe('admitted Markdown parser provenance', () => {
-  it('pins server manifest, lock, notice, license and SBOM bytes', () => {
-    expect(sha256(readRepositoryBytes('apps/server/package.json'))).toBe(
-      ADMITTED_PARSER_ARTIFACT_ORACLE.serverPackageSha256,
-    );
-    expect(sha256(readRepositoryBytes('pnpm-lock.yaml'))).toBe(
-      ADMITTED_PARSER_ARTIFACT_ORACLE.lockfileSha256,
-    );
-    expect(sha256(readRepositoryBytes('THIRD_PARTY_NOTICES.md'))).toBe(
-      ADMITTED_PARSER_ARTIFACT_ORACLE.noticeSha256,
-    );
+  it('pins the parser-specific license bytes', () => {
     expect(
       sha256(
         readRepositoryBytes(
@@ -197,11 +188,6 @@ describe('admitted Markdown parser provenance', () => {
         ),
       ),
     ).toBe(ADMITTED_PARSER_ARTIFACT_ORACLE.licenseSha256);
-    expect(
-      sha256(
-        readRepositoryBytes('docs/dependencies/sbom/npm-closure.spdx.json'),
-      ),
-    ).toBe(ADMITTED_PARSER_ARTIFACT_ORACLE.sbomSha256);
   });
 
   it('records the exact runtime version, MIT notice and SBOM tarball identity', () => {
@@ -214,6 +200,11 @@ describe('admitted Markdown parser provenance', () => {
     }
     expect(serverPackage.dependencies['mdast-util-from-markdown']).toBe(
       ADMITTED_PARSER_ARTIFACT_ORACLE.version,
+    );
+
+    const lock = readRepositoryText('pnpm-lock.yaml');
+    expect(lock).toContain(
+      `  mdast-util-from-markdown@${ADMITTED_PARSER_ARTIFACT_ORACLE.version}:\n    resolution: {integrity: sha512-${ADMITTED_PARSER_ARTIFACT_ORACLE.lockIntegritySha512}}`,
     );
 
     const notice = readRepositoryText('THIRD_PARTY_NOTICES.md');

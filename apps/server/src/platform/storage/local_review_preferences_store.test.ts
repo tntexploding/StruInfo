@@ -123,6 +123,107 @@ describe('LocalReviewPreferencesStore', () => {
     });
   });
 
+  it('round-trips connector cursors while upgrading legacy Git subscriptions', async () => {
+    const {store} = createStore();
+
+    await store.update(WORKSPACE_A, (current) =>
+      Object.freeze({
+        next: patchReviewPreferences(current, {
+          sourceSubscriptions: Object.freeze({
+            revision: 1,
+            subscriptions: Object.freeze([
+              Object.freeze({
+                subscriptionId: '33333333-3333-4333-8333-333333333333',
+                label: 'Synthetic legacy Git',
+                enabled: false,
+                repositoryUri: 'https://github.com/example/project',
+                repositoryRef: 'main',
+                repositoryPath: 'docs/source.md',
+                profile: 'commonmark-v1' as const,
+                sourceAlias: 'synthetic-git',
+                isPrivate: false,
+                routeAfterImport: false,
+                intervalMinutes: 1_440,
+              }),
+              Object.freeze({
+                kind: 'rss_atom' as const,
+                subscriptionId: '44444444-4444-4444-8444-444444444444',
+                label: 'Synthetic Feed',
+                enabled: true,
+                feedUrl: 'https://example.invalid/feed.xml',
+                itemLimit: 12,
+                sourceAlias: 'synthetic-feed',
+                isPrivate: true,
+                routeAfterImport: false,
+                intervalMinutes: 60,
+                cursor: Object.freeze({connectorCursor: 'synthetic-cursor'}),
+              }),
+              Object.freeze({
+                kind: 'json_api' as const,
+                subscriptionId: '55555555-5555-4555-8555-555555555555',
+                label: 'Synthetic JSON API',
+                enabled: false,
+                endpointUrl: 'https://api.example.invalid/records',
+                recordsPath: 'data.items',
+                externalIdPath: 'id',
+                titlePath: 'title',
+                bodyPath: 'content.body',
+                canonicalUriPath: 'url',
+                recordLimit: 16,
+                pageCursor: Object.freeze({
+                  queryParameter: 'cursor',
+                  responsePath: 'next_cursor',
+                }),
+                authentication: Object.freeze({
+                  kind: 'bearer_env' as const,
+                  variable: 'STRUIINFO_SYNTHETIC_API_TOKEN',
+                }),
+                sourceAlias: 'synthetic-json',
+                isPrivate: false,
+                routeAfterImport: false,
+                intervalMinutes: 120,
+                cursor: Object.freeze({
+                  connectorCursor: 'synthetic-json-cursor',
+                }),
+              }),
+            ]),
+          }),
+        }),
+        result: undefined,
+      }),
+    );
+
+    await expect(store.load(WORKSPACE_A)).resolves.toMatchObject({
+      sourceSubscriptions: {
+        revision: 1,
+        subscriptions: [
+          {kind: 'github_markdown', sourceAlias: 'synthetic-git'},
+          {
+            kind: 'rss_atom',
+            feedUrl: 'https://example.invalid/feed.xml',
+            itemLimit: 12,
+            cursor: {connectorCursor: 'synthetic-cursor'},
+          },
+          {
+            kind: 'json_api',
+            endpointUrl: 'https://api.example.invalid/records',
+            recordsPath: 'data.items',
+            externalIdPath: 'id',
+            pageCursor: {
+              queryParameter: 'cursor',
+              responsePath: 'next_cursor',
+            },
+            authentication: {
+              kind: 'bearer_env',
+              variable: 'STRUIINFO_SYNTHETIC_API_TOKEN',
+            },
+            cursor: {connectorCursor: 'synthetic-json-cursor'},
+          },
+        ],
+      },
+    });
+  });
+
   it('saves human-readable tags outside the repository and isolates workspaces', async () => {
     const {root, store} = createStore();
 

@@ -472,6 +472,14 @@
   margin-block-start: var(--si-space-5);
 }
 
+.source-subscription-inline-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--si-space-2);
+  min-block-size: var(--si-target-touch);
+  padding-block-start: var(--si-space-5);
+}
+
 .source-subscription-options {
   flex-wrap: wrap;
   justify-content: flex-start;

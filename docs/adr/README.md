@@ -154,3 +154,25 @@ queue. Every selected file keeps the existing validation, privacy, idempotent
 Evidence import and external Blob path; per-file results, stable retries and
 stop-after-current control add no batch write protocol or automatic downstream
 authority.
+
+ADR 0037 starts the owner-selected pre-launch external-source phase. M1I-1A
+adds one bounded source-connector result and runtime registry shared by built-in
+readers and optional installed plugin adapters. M1I-1B adds the
+remote_document Evidence kind and a deterministic multi-document import
+preparer that retains exact remote bytes externally and advances no cursor
+itself. Git remains the only public remote subscription until the later
+RSS/Atom, declarative JSON API and constrained Web adapters are wired.
+
+ADR 0038 completes M1I-2 with one built-in public RSS/Atom adapter on that
+shared connector boundary. External preferences, the existing API/scheduler and
+Import UI now support conditional Feed checks, bounded item-version cursors,
+server-owned HTML-to-Markdown projection and per-item Evidence import. Item
+links remain source references and are never crawled; JSON API, constrained Web
+and installed-plugin product wiring remain later M1I increments.
+
+ADR 0039 completes M1I-3 with one built-in read-only declarative JSON API
+adapter. External preferences and the Import page store bounded property
+mappings plus optional page/incremental cursors; Bearer secrets remain in a
+named runtime environment variable. Complete bounded pages become individual
+remote-document Evidence records before the host advances the connector cursor.
+It is not a generic REST client, script runner or Web crawler.

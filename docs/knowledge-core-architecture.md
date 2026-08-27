@@ -28,7 +28,7 @@ M1E-2 正式图谱的节点。当前 Entry 采用一个成品态和并发版本�
 | 信息条目    | InformationEntry 当前成品态、三维标签、两项评分和 Fragment 输入                                                                          | 活动规范数据                                    |
 | 文档标签    | Snapshot 级当前标签及全文/Entry 覆盖证据                                                                                                 | 活动规范数据                                    |
 | Entry 联系  | 可重建相似度投影和当前人工 override                                                                                                      | 投影活动；人工控制是规范数据                    |
-| 用户偏好    | 快捷标签、提取开关、排除词、URL 规则、确认别名、版本化联系/探索/Entry 偏好规则、Entry 自动处理策略，以及 Git 信源订阅与成功游标          | 活动；包体外文件；AutomationPolicy 有所有者控制 |
+| 用户偏好    | 快捷标签、提取开关、排除词、URL 规则、确认别名、版本化联系/探索/Entry 偏好规则、Entry 自动处理策略，以及 Git/RSS 信源订阅与成功游标      | 活动；包体外文件；AutomationPolicy 有所有者控制 |
 | 正式知识    | Entry 节点、自动相似边、用户关系和精确来源；历史 Knowledge 表                                                                            | M1E-2 活动；旧表兼容保留                        |
 | 处理任务    | 当前 ProcessingRun、三类提案信封、typed split/tags/association payload，以及自动路由 run header/claims                                   | 活动；提案与可恢复路由均持久化                  |
 | 高级控制    | 自动路由策略/试算/人工接管/运行审计，以及 IntakeDecision、ConflictCase、集合、树、SavedView 和具体下游动作                               | 自动路由控制活动；其余历史兼容或未实现          |
@@ -264,15 +264,15 @@ override，不复制为第二套相似度表；重建只更新底层分数与解
 
 ## 7. 完全不依赖 AI 的操作模式
 
-| 能力     | 当前无 AI 行为                                                                                                                                                                     | 尚未实现的增强                               |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| 摄取     | 手工 Markdown、固定 Git Markdown、单份或最多 20 份显式批次本地 Markdown/文本/HTML/带文字层 PDF、完整证据与隐私标记                                                                 | Office/OCR、目录扫描、网页/RSS/API、定时采集 |
-| 拆分     | 拆分前唯一全文草稿与派生 Snapshot；CommonMark/周刊 profile；版本化本地 section/相邻短段合并规则；既有 Fragment/标量边界人工分组；物化后人工结构迁移；可选公开 Snapshot OpenAI 提案 | 来源重排、任意脚本/自定义解析器、私密外发    |
-| 标签     | 三维标签、五档有用/有趣、确定性候选、外部快捷标签/排除/别名；可选 OpenAI tags                                                                                                      | 自动语义合并和无确认接受                     |
-| 联系     | 确定性相似边、分项解释、增强/削弱/屏蔽/恢复、用户图谱关系                                                                                                                          | 复杂事实关系类型                             |
-| 查询     | 标题/正文/标签的精确、包含和近似词法匹配；结构、来源、时间、隐私、一至两跳联系、游标、来源和可选公开证据综合                                                                       | 中文分词、语义/向量/RAG、在线混合查询        |
-| 传输     | 61 表、引用 Blob 字节、偏好、Entry v5、Association v3 与 Processing v7；空目标恢复                                                                                                 | 跨工作区克隆、非空合并、灾难恢复             |
-| 正式知识 | 最高匹配 Entry 中心、有界图谱/列表、边来源、用户编辑、AI 联系提案和精确来源                                                                                                        | 树/集合/时间线与复杂本体                     |
+| 能力     | 当前无 AI 行为                                                                                                                                                                     | 尚未实现的增强                            |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| 摄取     | 手工 Markdown、固定 Git Markdown、单份或最多 20 份显式批次本地 Markdown/文本/HTML/带文字层 PDF、精确 Git Markdown、公开 RSS/Atom 与声明式 JSON API 定时检查、完整证据与隐私标记    | Office/OCR、目录扫描、网页/插件订阅       |
+| 拆分     | 拆分前唯一全文草稿与派生 Snapshot；CommonMark/周刊 profile；版本化本地 section/相邻短段合并规则；既有 Fragment/标量边界人工分组；物化后人工结构迁移；可选公开 Snapshot OpenAI 提案 | 来源重排、任意脚本/自定义解析器、私密外发 |
+| 标签     | 三维标签、五档有用/有趣、确定性候选、外部快捷标签/排除/别名；可选 OpenAI tags                                                                                                      | 自动语义合并和无确认接受                  |
+| 联系     | 确定性相似边、分项解释、增强/削弱/屏蔽/恢复、用户图谱关系                                                                                                                          | 复杂事实关系类型                          |
+| 查询     | 标题/正文/标签的精确、包含和近似词法匹配；结构、来源、时间、隐私、一至两跳联系、游标、来源和可选公开证据综合                                                                       | 中文分词、语义/向量/RAG、在线混合查询     |
+| 传输     | 61 表、引用 Blob 字节、偏好、Entry v5、Association v3 与 Processing v7；空目标恢复                                                                                                 | 跨工作区克隆、非空合并、灾难恢复          |
+| 正式知识 | 最高匹配 Entry 中心、有界图谱/列表、边来源、用户编辑、AI 联系提案和精确来源                                                                                                        | 树/集合/时间线与复杂本体                  |
 
 没有配置 AI Provider 时，系统显示“AI 未启用”，导入、确定性/人工拆分、标签、联系和查询仍可使用。当前完整配置 OpenAI 后分别发布 `ai_split`、`ai_tags`、`ai_associations` 与 `ai_query_synthesis`；每个 capability 只开启自己的窄界面。
 `processing_runs` 只证明持久任务读取/取消和提案信封可用；每个 `ai_*` capability 只证明对应窄边界可用，不能被解释为自动维护、语义检索或泛化 AI 已经启用。
@@ -381,7 +381,7 @@ Windows 本地运行和 Linux 部署都必须使用源码/安装目录之外的�
 ### 11.1 当前活动实现
 
 1. **运行与隔离**：包体外配置固定工作区、PostgreSQL、Blob 根、偏好和导出目录；
-2. **导入**：手工 Markdown、固定 Git Markdown、单份或显式多文件批次的本地 Markdown/文本/HTML/PDF，或精确公开 GitHub Markdown 订阅的变化内容，逐份原子写入证据元数据、内容寻址 Blob 和结构；
+2. **导入**：手工 Markdown、固定 Git Markdown、单份或显式多文件批次的本地 Markdown/文本/HTML/PDF，或精确公开 GitHub Markdown、RSS/Atom、声明式 JSON API 订阅的变化内容，逐份原子写入证据元数据、内容寻址 Blob 和结构；M1I-1 提供内建/插件共享的有界连接器结果与 remote_document 幂等入库底座，M1I-2/M1I-3 分别使用该底座逐条写入 Feed Entry 与 JSON 记录；
 3. **拆分**：用户选择 Snapshot，可先保存一份当前全文草稿并显式确认成不可变派生 Snapshot，再以 CommonMark section、人工 Fragment/标量区间分组或已接受 AI 提案幂等物化 Entry；
 4. **标签**：保存 Entry 当前正文、三维标签、两项评分和外部个人词汇偏好；
 5. **文档标签**：按全文出现与 Entry 覆盖确定性聚合，或由用户保存当前标签；
@@ -402,7 +402,7 @@ Windows 本地运行和 Linux 部署都必须使用源码/安装目录之外的�
 
 ### 11.3 下一实施顺序
 
-M1E-2 与直接使用增量已经完成。ADR 0012 的 M1E-3A 已接通中性任务边界；ADR 0013/0014/0015 的 M1E-3B/C/D 已选择同一 OpenAI Responses API，分别实现公开 Entry 标签、selected-pair 联系和公开 Snapshot 拆分提案，并把接受转换为既有 Entry revision、graph edge command 或 Entry materialization。ADR 0016 的 M1E-4A 补齐既有 Fragment 边界上的本地人工分组，ADR 0017 的 M1E-4B 进一步允许 Fragment 内 Unicode 标量边界，并让确定性、人工和 AI 接受共用唯一空 Snapshot 原子边界。ADR 0018/0019 的 M1E-5A/5B 把单份本地 Markdown、文本、HTML 和 PDF 接入同一 Evidence 与 Split 主线；ADR 0020 的 M1F-1 补齐精确、包含和近似本地词法查询，ADR 0021 的 M1F-2 让同一 Query 直接开启 Association 遍历并比较最多两条结果，ADR 0022 的 M1F-3 接通会话内公开证据综合，ADR 0023 的 M1G-1 接通独立本地探索策略，ADR 0024 的 M1G-2 接通精确公开 GitHub Markdown 单文件订阅，ADR 0025–0029 完成可解释偏好与可恢复路由控制，ADR 0030/0031 又完成所有者工作队列及默认关闭的订阅后确定性物化/分流，ADR 0032–0036 补齐显式推进动作、物化后结构纠错、拆分前派生全文编辑、版本化本地拆分规则和显式多文件导入会话队列。下一步等待所有者明确选择新的窄边界。基础缺口、新兴信号、观点多样性、第二 Provider、自动接受、私密外发、Provider 检索、RAG、向量、通用网页采集、目录扫描、后台上传和任意自动内容修改都不得从已有窄能力推导。当前公开路径可复现的五步主线、图谱或隐私 `PRODUCT_BLOCKER` 仍优先。
+M1E-2 与直接使用增量已经完成。ADR 0012 的 M1E-3A 已接通中性任务边界；ADR 0013/0014/0015 的 M1E-3B/C/D 已选择同一 OpenAI Responses API，分别实现公开 Entry 标签、selected-pair 联系和公开 Snapshot 拆分提案，并把接受转换为既有 Entry revision、graph edge command 或 Entry materialization。ADR 0016 的 M1E-4A 补齐既有 Fragment 边界上的本地人工分组，ADR 0017 的 M1E-4B 进一步允许 Fragment 内 Unicode 标量边界，并让确定性、人工和 AI 接受共用唯一空 Snapshot 原子边界。ADR 0018/0019 的 M1E-5A/5B 把单份本地 Markdown、文本、HTML 和 PDF 接入同一 Evidence 与 Split 主线；ADR 0020 的 M1F-1 补齐精确、包含和近似本地词法查询，ADR 0021 的 M1F-2 让同一 Query 直接开启 Association 遍历并比较最多两条结果，ADR 0022 的 M1F-3 接通会话内公开证据综合，ADR 0023 的 M1G-1 接通独立本地探索策略，ADR 0024 的 M1G-2 接通精确公开 GitHub Markdown 单文件订阅，ADR 0025–0029 完成可解释偏好与可恢复路由控制，ADR 0030/0031 又完成所有者工作队列及默认关闭的订阅后确定性物化/分流，ADR 0032–0036 补齐显式推进动作、物化后结构纠错、拆分前派生全文编辑、版本化本地拆分规则和显式多文件导入会话队列。ADR 0037 的 M1I-1A/B 已建立内建/插件共享连接器和远程文档入库底座，ADR 0038 的 M1I-2 已接通公开 RSS/Atom，ADR 0039 的 M1I-3 已接通声明式 JSON API。下一步按所有者明确顺序接 M1I-4 受限网页订阅与 M1I-5 插件产品接线，再进入正式知识深化、分词/向量/RAG、性能和生产收口；未接线的连接器不得在 UI 中显示为可用。
 
 ## 12. 当前验收与未来验收
 
@@ -641,6 +641,16 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 - 成功后统一刷新文档列表；队列本身不持久化、不进入总览 ProcessingRun 或个人数据包；
 - 不增加迁移、路由、依赖、后台上传、自动拆分/标签/联系、AutomationPolicy 或 Provider 权限。
 
-### 12.27 延期审核与环境门
+### 12.27 M1I-1A/B、M1I-2 与 M1I-3 外部信源边界（已实现）
+
+- `SourceConnectorPort` 和 Registry 为内建 reader 与受信任插件适配器提供相同的 unchanged/changed、有界文档和 opaque cursor 结果；连接器没有数据库或领域写端口；
+- `remote_document` 通用准备器从外部身份、原始字节和服务端 Markdown 投影派生幂等 Resource/Snapshot，精确原始字节继续进入外部内容寻址 Blob；
+- `builtin.rss-atom.v1` 只读取公开 HTTPS RSS/Atom，拒绝凭据、redirect、DTD 和本地/私有目标，限制 20 秒、1 MiB 和 20 条；不跟随 item link；
+- cursor 绑定 Feed 摘要、条目身份/版本 token、ETag 与 Last-Modified；整批入库及可选确定性物化/分流成功后才由订阅服务提交；
+- `builtin.json-api.v1` 只执行公开 HTTPS GET；以受限点分路径映射记录，独立处理同次分页和跨次增量 cursor，限制 20 秒、每页 1 MiB、最多 5 页/32 条，并在超限时整体失败；
+- JSON API 可选 Bearer 只保存环境变量名并在请求时读取秘密；不持久化 token，不执行脚本/JSONPath，也不抓取记录链接；
+- 外部偏好 union、API/scheduler/ProcessingRun 和 Import UI 显示 Git、RSS/Atom 与 JSON API 三种已实现类型；旧 Git 记录兼容，网页和安装插件接线仍未实现。
+
+### 12.28 延期审核与环境门
 
 实际内容和所有者体验、真实 Provider 质量/费用、真实 PostgreSQL 正式 TM2、容器/Linux 等价性、公开网络部署、认证授权、生产资源限制、备份恢复演练和发布分发均在项目开发完成后统一开始，当前保持延期或未签发。它们必须如实报告状态，但不能在没有当前产品阻断证据时拖停 Entry 主线开发；活动工作区仍禁止恢复真实资料。单元、集成、构建和合成浏览器验证继续作为开发质量门运行。

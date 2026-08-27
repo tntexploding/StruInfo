@@ -463,6 +463,7 @@ describe('M1cApiClient', () => {
     await client.listSourceSubscriptions();
     await client.replaceSourceSubscriptions(2, [
       {
+        kind: 'github_markdown',
         subscriptionId: '22222222-2222-4222-8222-222222222222',
         label: 'Synthetic',
         enabled: false,
@@ -715,6 +716,7 @@ describe('M1cApiClient', () => {
           expectedRevision: 2,
           subscriptions: [
             {
+              kind: 'github_markdown',
               subscriptionId: '22222222-2222-4222-8222-222222222222',
               label: 'Synthetic',
               enabled: false,

@@ -94,29 +94,67 @@ export type ProcessingRunCancelResponse =
       issue: Readonly<{code: string}>;
     }>;
 
-export interface SourceSubscriptionWrite {
+interface SourceSubscriptionWriteBase {
   readonly subscriptionId: string;
   readonly label: string;
   readonly enabled: boolean;
-  readonly repositoryUri: string;
-  readonly repositoryRef: string;
-  readonly repositoryPath: string;
-  readonly profile: 'commonmark-v1' | 'ruanyf-weekly-v1';
   readonly sourceAlias: string;
   readonly isPrivate: boolean;
   readonly routeAfterImport: boolean;
   readonly intervalMinutes: number;
 }
 
-export interface SourceSubscriptionView extends SourceSubscriptionWrite {
-  readonly lastAttemptAt?: string;
-  readonly lastSuccessAt?: string;
-  readonly lastRunId?: string;
-  readonly cursor?: Readonly<{
-    commitSha: string;
-    sourceSha256: string;
-  }>;
+export interface GitSourceSubscriptionWrite extends SourceSubscriptionWriteBase {
+  readonly kind: 'github_markdown';
+  readonly repositoryUri: string;
+  readonly repositoryRef: string;
+  readonly repositoryPath: string;
+  readonly profile: 'commonmark-v1' | 'ruanyf-weekly-v1';
 }
+
+export interface RssSourceSubscriptionWrite extends SourceSubscriptionWriteBase {
+  readonly kind: 'rss_atom';
+  readonly feedUrl: string;
+  readonly itemLimit: number;
+}
+
+export interface JsonApiSourceSubscriptionWrite extends SourceSubscriptionWriteBase {
+  readonly kind: 'json_api';
+  readonly endpointUrl: string;
+  readonly recordsPath: string;
+  readonly externalIdPath: string;
+  readonly titlePath: string;
+  readonly bodyPath: string;
+  readonly canonicalUriPath?: string;
+  readonly publishedAtPath?: string;
+  readonly versionPath?: string;
+  readonly recordLimit: number;
+  readonly pageCursor?: Readonly<{
+    queryParameter: string;
+    responsePath: string;
+  }>;
+  readonly incrementalCursor?: Readonly<{
+    queryParameter: string;
+    responsePath: string;
+  }>;
+  readonly authentication:
+    Readonly<{kind: 'none'}> | Readonly<{kind: 'bearer_env'; variable: string}>;
+}
+
+export type SourceSubscriptionWrite =
+  | GitSourceSubscriptionWrite
+  | RssSourceSubscriptionWrite
+  | JsonApiSourceSubscriptionWrite;
+
+export type SourceSubscriptionView = SourceSubscriptionWrite &
+  Readonly<{
+    readonly lastAttemptAt?: string;
+    readonly lastSuccessAt?: string;
+    readonly lastRunId?: string;
+    readonly cursor?:
+      | Readonly<{commitSha: string; sourceSha256: string}>
+      | Readonly<{connectorCursor: string}>;
+  }>;
 
 export type SourceSubscriptionListResponse =
   | Readonly<{
@@ -144,7 +182,10 @@ export type SourceSubscriptionRunResponse =
       runId: string;
       subscriptionId: string;
       snapshotId?: string;
+      snapshotIds?: readonly string[];
+      importedDocumentCount?: number;
       automationRunId?: string;
+      automationRunIds?: readonly string[];
       materializedEntryCount?: number;
     }>
   | Readonly<{
@@ -664,7 +705,8 @@ export interface EvidenceSnapshotSummary {
   readonly workspaceId: string;
   readonly snapshotId: string;
   readonly resourceId: string;
-  readonly resourceKind: 'git_file' | 'manual_text' | 'uploaded_file';
+  readonly resourceKind:
+    'git_file' | 'manual_text' | 'uploaded_file' | 'remote_document';
   readonly sourceKey: string;
   readonly canonicalUri?: string;
   readonly isPrivate?: true;

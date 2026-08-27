@@ -2,16 +2,17 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "StruInfo-M1E-5B-document-import-10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A",
-  "documentNamespace": "https://struinfo.invalid/spdx/m1e/document-import/10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A",
+  "name": "StruInfo-M1I-2-rss-atom-9AA55459A0A5EDD2D6AB7BEEB8CD81152297CB2276CB2026E4634F2306D7BD22",
+  "documentNamespace": "https://struinfo.invalid/spdx/m1i/rss-atom/9AA55459A0A5EDD2D6AB7BEEB8CD81152297CB2276CB2026E4634F2306D7BD22",
   "creationInfo": {
-    "created": "2026-08-24T00:00:00Z",
+    "created": "2026-08-27T00:00:00Z",
     "creators": [
       "Tool: StruInfo M0-S Maintenance audit-npm-closure.mjs",
       "Tool: M0-S-FOUNDATION-MAINT-001 exact-closure materialization",
       "Tool: StruInfo M1A-MD-DEP-MAINT-001 audit-mdast-closure.mjs",
       "Tool: StruInfo M1A-MD-DEP-MAINT-001 materialize-dependency-increment.mjs",
-      "Tool: StruInfo M1E-5B exact document-import dependency materialization"
+      "Tool: StruInfo M1E-5B exact document-import dependency materialization",
+      "Tool: StruInfo M1I-2 RSS/Atom exact dependency materialization"
     ],
     "licenseListVersion": "3.27"
   },
@@ -29,7 +30,7 @@
       "licenseDeclared": "NOASSERTION",
       "copyrightText": "NOASSERTION",
       "primaryPackagePurpose": "APPLICATION",
-      "comment": "Tracked dependency inventory through M1A-MD-DEP-MAINT-001. StruInfo distribution license remains unselected; browser and container artifacts are excluded."
+      "comment": "Tracked dependency inventory through M1I-2. StruInfo distribution license remains unselected; browser and container artifacts are excluded."
     },
     {
       "SPDXID": "SPDXRef-Package-2c8152c2f849b2d0",
@@ -11035,6 +11036,222 @@
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-169a06c5cb51bd34",
+      "name": "@nodable/entities",
+      "versionInfo": "3.0.0",
+      "downloadLocation": "https://registry.npmjs.org/@nodable/entities/-/entities-3.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "NOASSERTION",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "F0BF7115E4D82A19B8F717C8CA9A1ED96E705759BFDD9E7C913FBB911F40F0EC85C5C3DDB88E159B1694310C8A62B4635282CB497BFA10A2880F94EF8FD71457"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40nodable%2Fentities@3.0.0"
+        }
+      ],
+      "supplier": "Person: Amit Gupta",
+      "originator": "NOASSERTION",
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact lock integrity admitted by M1I-2; canonical SPDX MIT text retained because the exact tarball declares MIT but omits a legal file."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-2b5e47d1a6760af8",
+      "name": "anynum",
+      "versionInfo": "1.0.1",
+      "downloadLocation": "https://registry.npmjs.org/anynum/-/anynum-1.0.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) Amit Gupta",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "37AFFF14B113FED5D834CFC5E8005C6B5A07E9F581F8A953B7DD3D2DEDBC58C0C193CA1A4F8BD8D7B0C2AF083632F9AEA942ADDCD8B837974627F12806070EE8"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/anynum@1.0.1"
+        }
+      ],
+      "supplier": "Person: Amit Gupta",
+      "originator": "NOASSERTION",
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact lock integrity admitted by M1I-2; exact package legal text retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-398504df69b728f0",
+      "name": "fast-xml-builder",
+      "versionInfo": "1.3.1",
+      "downloadLocation": "https://registry.npmjs.org/fast-xml-builder/-/fast-xml-builder-1.3.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) Amit Gupta",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "A4833FD67DE7B455CA62B519C16ED008AD20016ED763EC338F560C215DED2C3BCF8FF57ECD31892B97B7FF85897F08F4A96C361253578938B175AFD1FB7612BA"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/fast-xml-builder@1.3.1"
+        }
+      ],
+      "supplier": "Person: Amit Gupta",
+      "originator": "NOASSERTION",
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact lock integrity admitted by M1I-2; exact package legal text retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-c364b9175ee3728b",
+      "name": "fast-xml-parser",
+      "versionInfo": "5.11.0",
+      "downloadLocation": "https://registry.npmjs.org/fast-xml-parser/-/fast-xml-parser-5.11.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) Amit Gupta",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "F481B132ABEA2CE9EA3FE1208B59EA0C72AFE64F1A67BAFD9F9E7C7A7C5CB9C9B254610134F014F8C3A0FFC8CF212EEB3BBB12AB88059B5FE71ED89AB9B32BBB"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/fast-xml-parser@5.11.0"
+        }
+      ],
+      "supplier": "Person: Amit Gupta",
+      "originator": "NOASSERTION",
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "Role=runtime; category=ROUTINE_REVIEW; exact lock integrity admitted by M1I-2; exact package legal text retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-2d2d5a7dff943340",
+      "name": "is-unsafe",
+      "versionInfo": "2.0.2",
+      "downloadLocation": "https://registry.npmjs.org/is-unsafe/-/is-unsafe-2.0.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) Amit Gupta",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "1E06C81CF047D0A1C709C8CB7C6B02BE1B4F4D5C636806655E3C1DCFBFC6402E344A349EE2C7D0B1AAFC279545A3C24E49B6AB92957438B1BDE5B6DA35DF5A01"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/is-unsafe@2.0.2"
+        }
+      ],
+      "supplier": "Person: Amit Gupta",
+      "originator": "NOASSERTION",
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact lock integrity admitted by M1I-2; exact package legal text retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-be3871a10cfeb99e",
+      "name": "path-expression-matcher",
+      "versionInfo": "1.6.2",
+      "downloadLocation": "https://registry.npmjs.org/path-expression-matcher/-/path-expression-matcher-1.6.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) Amit Gupta",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "7A74A56A26ADD3989AB27CE680DC518FCADE15D8F7A6E6364293603F568F21A55F4FA9E7F480AE3E816528793C10DDB61DCC1EC2C84EFA63760C66E40843ADA9"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/path-expression-matcher@1.6.2"
+        }
+      ],
+      "supplier": "Person: Amit Gupta",
+      "originator": "NOASSERTION",
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact lock integrity admitted by M1I-2; exact package legal text retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-6a66b39366647f25",
+      "name": "strnum",
+      "versionInfo": "2.4.2",
+      "downloadLocation": "https://registry.npmjs.org/strnum/-/strnum-2.4.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) Amit Gupta",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "AC31B7021E13574935856BCB4B3919B4C98B37DF9E4BE877927AB830FE80E36637621E6A18D9CE52CD63264A12AFC146E5DB0BDBC73B2A0908073484CA4AADBB"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/strnum@2.4.2"
+        }
+      ],
+      "supplier": "Person: Amit Gupta",
+      "originator": "NOASSERTION",
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact lock integrity admitted by M1I-2; exact package legal text retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-0447a2a1fcf2973c",
+      "name": "xml-naming",
+      "versionInfo": "0.3.0",
+      "downloadLocation": "https://registry.npmjs.org/xml-naming/-/xml-naming-0.3.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) Amit Gupta",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "8218A0D93044FC7D7568E56099A840DCC8629AF901AFA2486249C7FC385D935D275F075B22A049B1B7CCC69BC53C6F1B030EFB80DDBD6905AF2A9995A0F96F3D"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/xml-naming@0.3.0"
+        }
+      ],
+      "supplier": "Person: Amit Gupta",
+      "originator": "NOASSERTION",
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact lock integrity admitted by M1I-2; exact package legal text retained."
     }
   ],
   "relationships": [
@@ -11192,6 +11409,11 @@
       "spdxElementId": "SPDXRef-RootPackage",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-62d398829a7647cd"
+    },
+    {
+      "spdxElementId": "SPDXRef-RootPackage",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-c364b9175ee3728b"
     }
   ]
 }

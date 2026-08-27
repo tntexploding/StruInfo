@@ -5,7 +5,7 @@ import {
   type GitSourceSubscriptionRead,
   type GitSourceSubscriptionReaderPort,
 } from '../../modules/subscriptions/index.js';
-import type {ReviewSourceSubscription} from '../../storage/review_preferences_store.js';
+import type {ReviewGitSourceSubscription} from '../../storage/review_preferences_store.js';
 
 const SHA1 = /^[0-9a-f]{40}$/u;
 const MAX_SOURCE_BYTES = 1024 * 1024;
@@ -28,7 +28,7 @@ export class GithubGitSourceSubscriptionReader implements GitSourceSubscriptionR
   }
 
   public async read(
-    subscription: Readonly<ReviewSourceSubscription>,
+    subscription: Readonly<ReviewGitSourceSubscription>,
   ): Promise<Readonly<GitSourceSubscriptionRead>> {
     const repository = parseRepository(subscription.repositoryUri);
     const path = subscription.repositoryPath
