@@ -143,6 +143,7 @@ async function installCurrentProductApi(
   page: Page,
   options?: Readonly<{
     manualSplitRequests?: string[];
+    splitRuleRequests?: Readonly<{path: string; body: string}>[];
     restructureRequests?: Readonly<{path: string; body: string}>[];
     importRequests?: string[];
     preferenceSuggestionGate?: Promise<void>;
@@ -155,8 +156,10 @@ async function installCurrentProductApi(
 ) {
   const productRequests: string[] = [];
   const manualSplitEnabled = options?.manualSplitRequests !== undefined;
+  const splitRuleEnabled = options?.splitRuleRequests !== undefined;
   const restructureEnabled = options?.restructureRequests !== undefined;
-  const splitWorkspaceEnabled = manualSplitEnabled || restructureEnabled;
+  const splitWorkspaceEnabled =
+    manualSplitEnabled || splitRuleEnabled || restructureEnabled;
   const automationEnabled = options?.automationRunListRequests !== undefined;
   let currentRestructureGroups: readonly Readonly<{
     titlePath: string;
@@ -177,6 +180,20 @@ async function installCurrentProductApi(
       ],
     },
   ];
+  let splitRuleApplied = false;
+  let splitRuleProfile: {
+    revision: number;
+    mode: 'one_section' | 'merge_short_adjacent';
+    minimumGroupCodePoints: number;
+    maximumGroupCodePoints: number;
+    maximumFragmentsPerGroup: number;
+  } = {
+    revision: 0,
+    mode: 'one_section' as const,
+    minimumGroupCodePoints: 400,
+    maximumGroupCodePoints: 4_000,
+    maximumFragmentsPerGroup: 8,
+  };
   let associationPolicy = {
     revision: 0,
     version: 'struinfo.entry-association.local-index.v1',
@@ -274,6 +291,99 @@ async function installCurrentProductApi(
         contentType: 'application/json',
         json: {status: 'ok', snapshot: SYNTHETIC_SNAPSHOT},
         status: 200,
+      });
+      return;
+    }
+    if (
+      path === '/api/v1/entries/split-rules/profile' &&
+      request.method() === 'GET'
+    ) {
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {status: 'ok', profile: splitRuleProfile},
+        status: 200,
+      });
+      return;
+    }
+    if (
+      splitRuleEnabled &&
+      path === '/api/v1/entries/split-rules/profile' &&
+      request.method() === 'PUT'
+    ) {
+      const body = request.postData() ?? '{}';
+      options.splitRuleRequests.push({path, body});
+      const next = JSON.parse(body) as Readonly<{
+        mode: 'one_section' | 'merge_short_adjacent';
+        minimumGroupCodePoints: number;
+        maximumGroupCodePoints: number;
+        maximumFragmentsPerGroup: number;
+      }>;
+      splitRuleProfile = {
+        revision: splitRuleProfile.revision + 1,
+        mode: next.mode,
+        minimumGroupCodePoints: next.minimumGroupCodePoints,
+        maximumGroupCodePoints: next.maximumGroupCodePoints,
+        maximumFragmentsPerGroup: next.maximumFragmentsPerGroup,
+      };
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {status: 'applied', profile: splitRuleProfile},
+        status: 200,
+      });
+      return;
+    }
+    if (
+      splitRuleEnabled &&
+      path === '/api/v1/entries/split-rules/trial' &&
+      request.method() === 'POST'
+    ) {
+      const body = request.postData() ?? '{}';
+      options.splitRuleRequests.push({path, body});
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {
+          status: 'previewed',
+          trial: {
+            snapshotId: SNAPSHOT_ID,
+            profile: splitRuleProfile,
+            sourceFragmentCount: 1,
+            totalCodePointCount: 3,
+            groups: [
+              {
+                ordinal: 0,
+                titlePath: SYNTHETIC_FRAGMENT_TEXT,
+                fragmentIds: [FRAGMENT_ID],
+                fragmentCount: 1,
+                codePointCount: 3,
+                exceedsMaximum: false,
+                previewText: SYNTHETIC_FRAGMENT_TEXT,
+                previewTruncated: false,
+              },
+            ],
+          },
+        },
+        status: 200,
+      });
+      return;
+    }
+    if (
+      splitRuleEnabled &&
+      path === '/api/v1/entries/split-rules/apply' &&
+      request.method() === 'POST'
+    ) {
+      const body = request.postData() ?? '{}';
+      options.splitRuleRequests.push({path, body});
+      splitRuleApplied = true;
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {
+          status: 'created',
+          snapshotId: SNAPSHOT_ID,
+          profileRevision: splitRuleProfile.revision,
+          createdCount: 1,
+          entries: [SYNTHETIC_ENTRY],
+        },
+        status: 201,
       });
       return;
     }
@@ -713,7 +823,9 @@ async function installCurrentProductApi(
               ...SYNTHETIC_DOCUMENT,
               entryCount: restructureEnabled
                 ? currentRestructureGroups.length
-                : 0,
+                : splitRuleApplied
+                  ? 1
+                  : 0,
             },
           ]
         : [];
@@ -1158,6 +1270,74 @@ test('splits one immutable Fragment at an explicit caret and submits exact scala
       },
     ],
   });
+});
+
+test('saves, previews, and applies one versioned local split rule', async ({
+  page,
+}) => {
+  const splitRuleRequests: Readonly<{path: string; body: string}>[] = [];
+  await installCurrentProductApi(page, {splitRuleRequests});
+  await page.setViewportSize({width: 390, height: 844});
+  await page.goto('/');
+
+  const navigation = page.getByRole('navigation', {name: '产品工作区'});
+  await navigation.getByRole('button', {name: '拆分', exact: true}).click();
+  await page
+    .getByRole('button', {name: /synthetic-split-source/u})
+    .first()
+    .click();
+
+  const panel = page.locator('.split-rule-panel');
+  await expect(
+    panel.getByRole('heading', {name: '可替换的本地拆分规则', exact: true}),
+  ).toBeVisible();
+  await panel.getByRole('radio', {name: /合并相邻短段/u}).check();
+  await panel.getByLabel('期望最短字符数').fill('250');
+  await panel.getByLabel('允许最长字符数').fill('2500');
+  await panel.getByLabel('单组最多结构段').fill('6');
+  await panel.getByRole('button', {name: '保存规则', exact: true}).click();
+  await expect(panel.getByText('拆分规则已保存', {exact: true})).toBeVisible();
+
+  await panel.getByRole('button', {name: '预览当前文档', exact: true}).click();
+  await expect(panel.getByLabel('拆分规则预览结果')).toContainText(
+    SYNTHETIC_FRAGMENT_TEXT,
+  );
+  await panel
+    .getByRole('button', {name: '按已保存规则生成', exact: true})
+    .click();
+  await expect(panel.getByText('规则拆分已完成', {exact: true})).toBeVisible();
+
+  expect(splitRuleRequests.map((item) => item.path)).toEqual([
+    '/api/v1/entries/split-rules/profile',
+    '/api/v1/entries/split-rules/trial',
+    '/api/v1/entries/split-rules/apply',
+  ]);
+  expect(JSON.parse(splitRuleRequests[0]?.body ?? '{}')).toEqual({
+    expectedRevision: 0,
+    mode: 'merge_short_adjacent',
+    minimumGroupCodePoints: 250,
+    maximumGroupCodePoints: 2500,
+    maximumFragmentsPerGroup: 6,
+  });
+  expect(JSON.parse(splitRuleRequests[2]?.body ?? '{}')).toEqual({
+    snapshotId: SNAPSHOT_ID,
+    includePrivate: false,
+    expectedProfileRevision: 1,
+  });
+
+  for (const viewport of [
+    {width: 320, height: 720},
+    {width: 390, height: 844},
+    {width: 768, height: 900},
+    {width: 1024, height: 900},
+    {width: 1440, height: 1000},
+  ]) {
+    await page.setViewportSize(viewport);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1);
+  }
 });
 
 test('previews and atomically applies a post-materialization scalar restructure', async ({

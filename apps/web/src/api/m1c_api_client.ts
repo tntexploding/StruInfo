@@ -12,6 +12,10 @@ import type {
   EvidenceSnapshotSummary,
   EntryPreferenceProfile,
   EntryPreferenceRule,
+  EntrySplitRuleApplyResponse,
+  EntrySplitRuleProfileResponse,
+  EntrySplitRuleProfileWriteResponse,
+  EntrySplitRuleTrialResponse,
   EntryAutomationPolicy,
   EntryAutomationWorkItemState,
   InformationEntryAutomationActionWriteResponse,
@@ -244,6 +248,21 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryMaterializeResponse>>;
+  loadInformationEntrySplitRuleProfile(
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntrySplitRuleProfileResponse>>;
+  saveInformationEntrySplitRuleProfile(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntrySplitRuleProfileWriteResponse>>;
+  trialInformationEntrySplitRule(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntrySplitRuleTrialResponse>>;
+  applyInformationEntrySplitRule(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntrySplitRuleApplyResponse>>;
   previewInformationEntryRestructure(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -447,6 +466,10 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     importDocument: reject,
     materializeInformationEntries: reject,
     materializeManualInformationEntries: reject,
+    loadInformationEntrySplitRuleProfile: reject,
+    saveInformationEntrySplitRuleProfile: reject,
+    trialInformationEntrySplitRule: reject,
+    applyInformationEntrySplitRule: reject,
     previewInformationEntryRestructure: reject,
     applyInformationEntryRestructure: reject,
     reviseInformationEntry: reject,
@@ -654,6 +677,29 @@ export function createM1cApiClient(
     materializeManualInformationEntries: (body, options) =>
       post<InformationEntryMaterializeResponse>(
         'api/v1/entries/materialize/manual',
+        body,
+        options,
+      ),
+    loadInformationEntrySplitRuleProfile: (options) =>
+      get<EntrySplitRuleProfileResponse>(
+        'api/v1/entries/split-rules/profile',
+        options,
+      ),
+    saveInformationEntrySplitRuleProfile: (body, options) =>
+      put<EntrySplitRuleProfileWriteResponse>(
+        'api/v1/entries/split-rules/profile',
+        body,
+        options,
+      ),
+    trialInformationEntrySplitRule: (body, options) =>
+      post<EntrySplitRuleTrialResponse>(
+        'api/v1/entries/split-rules/trial',
+        body,
+        options,
+      ),
+    applyInformationEntrySplitRule: (body, options) =>
+      post<EntrySplitRuleApplyResponse>(
+        'api/v1/entries/split-rules/apply',
         body,
         options,
       ),

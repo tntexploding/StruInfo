@@ -373,6 +373,49 @@ export class M1cApiController {
     );
   }
 
+  @Get('entries/split-rules/profile')
+  public async loadInformationEntrySplitRuleProfile(
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.loadInformationEntrySplitRuleProfile(),
+    );
+  }
+
+  @Put('entries/split-rules/profile')
+  public async saveInformationEntrySplitRuleProfile(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.saveInformationEntrySplitRuleProfile(body),
+    );
+  }
+
+  @Post('entries/split-rules/trial')
+  public async trialInformationEntrySplitRule(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.trialInformationEntrySplitRule(body),
+    );
+  }
+
+  @Post('entries/split-rules/apply')
+  public async applyInformationEntrySplitRule(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.applyInformationEntrySplitRule(body),
+    );
+  }
+
   @Post('entries/restructure/preview')
   public async previewInformationEntryRestructure(
     @Body() body: unknown,

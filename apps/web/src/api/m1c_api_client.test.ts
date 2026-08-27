@@ -346,6 +346,30 @@ describe('M1cApiClient', () => {
         },
       ],
     });
+    await client.loadInformationEntrySplitRuleProfile();
+    await client.saveInformationEntrySplitRuleProfile({
+      expectedRevision: 0,
+      mode: 'merge_short_adjacent',
+      minimumGroupCodePoints: 250,
+      maximumGroupCodePoints: 2500,
+      maximumFragmentsPerGroup: 6,
+    });
+    await client.trialInformationEntrySplitRule({
+      snapshotId: 'synthetic-snapshot',
+      includePrivate: false,
+      profile: {
+        revision: 1,
+        mode: 'merge_short_adjacent',
+        minimumGroupCodePoints: 250,
+        maximumGroupCodePoints: 2500,
+        maximumFragmentsPerGroup: 6,
+      },
+    });
+    await client.applyInformationEntrySplitRule({
+      snapshotId: 'synthetic-snapshot',
+      includePrivate: false,
+      expectedProfileRevision: 1,
+    });
     await client.previewInformationEntryRestructure({
       snapshotId: 'synthetic-snapshot',
       includePrivate: false,
@@ -478,6 +502,45 @@ describe('M1cApiClient', () => {
               fragmentIds: ['synthetic-fragment'],
             },
           ],
+        }),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/split-rules/profile',
+        method: 'GET',
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/split-rules/profile',
+        method: 'PUT',
+        body: JSON.stringify({
+          expectedRevision: 0,
+          mode: 'merge_short_adjacent',
+          minimumGroupCodePoints: 250,
+          maximumGroupCodePoints: 2500,
+          maximumFragmentsPerGroup: 6,
+        }),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/split-rules/trial',
+        method: 'POST',
+        body: JSON.stringify({
+          snapshotId: 'synthetic-snapshot',
+          includePrivate: false,
+          profile: {
+            revision: 1,
+            mode: 'merge_short_adjacent',
+            minimumGroupCodePoints: 250,
+            maximumGroupCodePoints: 2500,
+            maximumFragmentsPerGroup: 6,
+          },
+        }),
+      },
+      {
+        url: 'http://127.0.0.1:3000/api/v1/entries/split-rules/apply',
+        method: 'POST',
+        body: JSON.stringify({
+          snapshotId: 'synthetic-snapshot',
+          includePrivate: false,
+          expectedProfileRevision: 1,
         }),
       },
       {

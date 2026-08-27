@@ -19,6 +19,7 @@ import type {
   InformationEntryRestructureWrite,
   InformationEntrySearchCursor,
 } from '../modules/entries/index.js';
+import {DEFAULT_ENTRY_SPLIT_RULE_PROFILE} from '../modules/entries/index.js';
 import type {
   EntryAutomationClaim,
   EntryAutomationExecution,
@@ -206,6 +207,7 @@ describe('M1cApiService', () => {
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
       DEFAULT_ENTRY_PREFERENCE_PROFILE,
       DEFAULT_ENTRY_AUTOMATION_POLICY,
+      DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
     );
   });
 
@@ -337,6 +339,7 @@ describe('M1cApiService', () => {
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
       {revision: 1, enabled: true, rules: [rule]},
       DEFAULT_ENTRY_AUTOMATION_POLICY,
+      DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
     );
     await expect(
       service.saveInformationEntryPreferenceProfile({
@@ -702,6 +705,7 @@ describe('M1cApiService', () => {
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
       DEFAULT_ENTRY_PREFERENCE_PROFILE,
       DEFAULT_ENTRY_AUTOMATION_POLICY,
+      DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
     );
     await expect(
       service.reviseInformationEntryAssociationPolicy({
@@ -820,6 +824,7 @@ describe('M1cApiService', () => {
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
       entryPreferenceProfile,
       DEFAULT_ENTRY_AUTOMATION_POLICY,
+      DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
     );
 
     await expect(
@@ -880,7 +885,58 @@ describe('M1cApiService', () => {
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
       entryPreferenceProfile,
       DEFAULT_ENTRY_AUTOMATION_POLICY,
+      DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
     );
+  });
+
+  it('loads and saves one versioned external Entry split rule profile', async () => {
+    const preferences = new MemoryAutomationPreferences(
+      createReviewPreferences(WORKSPACE_ID, []),
+    );
+    const service = createService({reviewPreferences: preferences});
+
+    await expect(
+      service.loadInformationEntrySplitRuleProfile(),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'ok', profile: DEFAULT_ENTRY_SPLIT_RULE_PROFILE},
+    });
+    await expect(
+      service.saveInformationEntrySplitRuleProfile({
+        expectedRevision: 0,
+        mode: 'merge_short_adjacent',
+        minimumGroupCodePoints: 250,
+        maximumGroupCodePoints: 2500,
+        maximumFragmentsPerGroup: 6,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'applied',
+        profile: {
+          revision: 1,
+          mode: 'merge_short_adjacent',
+          minimumGroupCodePoints: 250,
+          maximumGroupCodePoints: 2500,
+          maximumFragmentsPerGroup: 6,
+        },
+      },
+    });
+    await expect(
+      service.saveInformationEntrySplitRuleProfile({
+        expectedRevision: 0,
+        mode: 'one_section',
+        minimumGroupCodePoints: 400,
+        maximumGroupCodePoints: 4000,
+        maximumFragmentsPerGroup: 8,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 409,
+      body: {
+        status: 'rejected',
+        issue: {code: 'stale_entry_split_rule_profile_revision'},
+      },
+    });
   });
 
   it('serves explainable exploration candidates through the public application boundary', async () => {

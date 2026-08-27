@@ -23,6 +23,10 @@ import {
 import {useInformationEntryController} from './use_information_entry_controller.js';
 import {describeInformationEntryFailure} from './information_entry_shared.js';
 import {InformationEntryRestructure} from './information_entry_restructure.js';
+import {
+  InformationEntrySplitRule,
+  type InformationEntrySplitRuleProps,
+} from './information_entry_split_rule.js';
 
 export interface InformationEntrySplitWorkspaceProps extends Pick<
   InformationEntryServices,
@@ -40,6 +44,10 @@ export interface InformationEntrySplitWorkspaceProps extends Pick<
   readonly onSaveDocumentWorkingCopy: InformationDocumentWorkingCopyProps['onSave'];
   readonly onRestoreDocumentWorkingCopy: InformationDocumentWorkingCopyProps['onRestore'];
   readonly onCommitDocumentWorkingCopy: InformationDocumentWorkingCopyProps['onCommit'];
+  readonly onLoadSplitRuleProfile: InformationEntrySplitRuleProps['onLoad'];
+  readonly onSaveSplitRuleProfile: InformationEntrySplitRuleProps['onSave'];
+  readonly onTrialSplitRule: InformationEntrySplitRuleProps['onTrial'];
+  readonly onApplySplitRule: InformationEntrySplitRuleProps['onApply'];
   readonly onListAiSplitProposals: ComponentProps<
     typeof InformationEntryAiSplit
   >['onList'];
@@ -64,6 +72,10 @@ export function InformationEntrySplitWorkspace({
   onSaveDocumentWorkingCopy,
   onRestoreDocumentWorkingCopy,
   onCommitDocumentWorkingCopy,
+  onLoadSplitRuleProfile,
+  onSaveSplitRuleProfile,
+  onTrialSplitRule,
+  onApplySplitRule,
   onMaterialize,
   onMaterializeManual,
   onPreviewRestructure,
@@ -264,7 +276,7 @@ export function InformationEntrySplitWorkspace({
         <div className="workflow-capability-strip__options">
           <span data-active="true">人工拆分 / 合并</span>
           <span data-active="true">拆分前全文修改</span>
-          <span data-active="true">结构规则</span>
+          <span data-active="true">可配置结构规则</span>
           <span data-active="true">明确批量选择</span>
           <span data-active={aiEnabled}>OpenAI 提案 · 手动接受</span>
         </div>
@@ -298,6 +310,24 @@ export function InformationEntrySplitWorkspace({
             title: '已切换到派生文档',
             detail: '现在可以选择人工、规则或 AI 提案进行拆分。',
           });
+        }}
+      />
+
+      <InformationEntrySplitRule
+        snapshotId={controller.snapshotId}
+        isPrivate={selectedDocument?.isPrivate === true}
+        includePrivate={controller.includePrivate}
+        alreadyMaterialized={
+          (selectedDocument?.entryCount ?? 0) > 0 ||
+          selectedDocument?.workingCopy !== undefined
+        }
+        onLoad={onLoadSplitRuleProfile}
+        onSave={onSaveSplitRuleProfile}
+        onTrial={onTrialSplitRule}
+        onApply={onApplySplitRule}
+        onCommitted={async () => {
+          await controller.executeSearch();
+          await controller.refreshDocuments();
         }}
       />
 

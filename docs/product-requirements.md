@@ -1,7 +1,7 @@
 # StruInfo 产品需求
 
-- 状态：M1H-3A/B 拆分前全文工作副本与派生 Snapshot 已完成
-- 最近更新：2026-08-26
+- 状态：M1H-4A/B 版本化可配置 Entry 拆分规则已完成
+- 最近更新：2026-08-27
 - 目的：定义“来源可追溯、AI 可增强且无 AI 仍完整可用的个人知识摄取与维护系统”的产品边界和首个验证切片
 - 历史基线：[产品需求 v0.1](archive/product-requirements-v0.1.md)
 - 文档条目处理细则：[文档条目处理准则](document-entry-processing-guidelines.md)
@@ -194,7 +194,7 @@ OpenAI Fragment 分组提案，并在逐组核对精确本地正文后人工应�
 
 人工分组必须按来源顺序完整覆盖全部 section Fragment；客户端不提交 Entry 正文，服务端从
 不可变证据重建。确定性、人工和 AI 接受共用同一空 Snapshot 原子边界，已经物化的结构不会被
-覆盖。拆分前全文修改由 M1H-3A/B 以“唯一当前草稿 → 显式确认 → 新的不可变派生 Snapshot”实现；来源重排和替换自定义规则仍未实现。已有 Entry 的人工结构重组由 M1H-2A/B 提供。
+覆盖。拆分前全文修改由 M1H-3A/B 以“唯一当前草稿 → 显式确认 → 新的不可变派生 Snapshot”实现；M1H-4A/B 提供版本化本地 section/相邻短段合并规则及显式预览/应用。来源重排和任意脚本/自定义解析器仍未实现。已有 Entry 的人工结构重组由 M1H-2A/B 提供。
 
 普通 Entry 更新只保留一个当前成品态和并发版本，不重复保存每次中间输入；原始 Snapshot、
 Fragment 与 Blob 仍不可变。
@@ -253,7 +253,7 @@ AI 可以参与：
 - 含 61 张工作区表、引用 Blob 字节和偏好的个人数据包导出/空工作区恢复；
 - 最高匹配 Entry 中心、有界图谱/列表、边来源、用户关系编辑和三种隐私范围。
 
-尚未实现的是来源重排、自定义规则、集合/树/时间线、复杂事实关系类型、语义或向量检索、
+尚未实现的是来源重排、任意脚本或自定义解析器规则、集合/树/时间线、复杂事实关系类型、语义或向量检索、
 在线查询和自动维护。系统不得因为这些未来能力缺席而把当前工作区显示为故障。
 
 ### 5.5 入库自动化与权限等级
@@ -789,6 +789,10 @@ Processing Bundle v6 携带第 13 张 Processing 表，旧 v1–v5 补空工作�
 
 ADR 0031 为每个精确 Git 信源订阅增加默认关闭的 `routeAfterImport`。开关关闭时，订阅继续只检查并导入变化 Snapshot；所有者明确开启后，变化内容依次复用现有 Evidence 导入、确定性 section Entry 物化、M1G-4 可恢复路由和 M1G-5A 所有者队列。它不得调用 AI、自动编辑标签/联系/图谱或接受提案。
 
+来源内容身份不含该开关，配置身份包含该开关；因此启用可以重新检查当前内容，但只能复用而不能分叉既有 Resource/Snapshot。分流只处理该 Snapshot 的当前 Entry，并用 subscription ID + source SHA-256 派生稳定幂等键。成功游标只能在导入、物化和路由全部成功后推进；失败保留旧游标，以便下一次检查安全重试。
+
+旧偏好和个人数据包将该字段解码为 false。私密订阅的本地串联必须由该订阅自身的显式开关授权，且仍不得向 Provider 发送私密正文。
+
 ### 7.1.24 M1H-1A/B 确定性推进动作（已实现）
 
 ADR 0032 为 AutomationPolicy 增加 `advanceActions.deterministicTags` 与 `advanceActions.rebuildAssociations` 两个默认关闭开关。它们只授权 completed `advance_candidate`；`manual_review` 和 `defer_candidate` 仍只形成可见工作项，不能据此修改内容、隐藏或删除 Entry。
@@ -809,9 +813,11 @@ ADR 0034 允许所有者在尚未生成 Entry 的来源 Snapshot 上维护一份
 
 M1H-3B 只确认已经保存且版本匹配的草稿。服务端复用 Evidence/CommonMark 导入，以确定性身份生成新的不可变 `manual_text` Resource/Snapshot，继承来源的 privacy、publication 和 capture 元数据，然后把工作副本标记为 committed 并清除可变正文。页面切换到派生 Snapshot，后续确定性、人工范围、人工分组和 AI 提案仍使用现有拆分边界。迁移 `000022` 新增一张表，Entry Bundle v5 携带它并把 v1–v4 升级为空工作副本；完整个人数据包覆盖 61 张表。
 
-来源内容身份不含该开关，配置身份包含该开关；因此启用可以重新检查当前内容，但只能复用而不能分叉既有 Resource/Snapshot。分流只处理该 Snapshot 的当前 Entry，并用 subscription ID + source SHA-256 派生稳定幂等键。成功游标只能在导入、物化和路由全部成功后推进；失败保留旧游标，以便下一次检查安全重试。
+### 7.1.27 M1H-4A/B 版本化可配置 Entry 拆分规则（已实现）
 
-旧偏好和个人数据包将该字段解码为 false。私密订阅的本地串联必须由该订阅自身的显式开关授权，且仍不得向 Provider 发送私密正文。
+ADR 0035 在外部个人偏好中增加独立版本的 `EntrySplitRuleProfile`。默认 `one_section` 与原确定性路径一致；`merge_short_adjacent` 只按来源顺序和显式最短/最长字符、最多 Fragment 参数合并相邻短 section。纯规则计划返回有界本地预览，不写 Entry；单个过长 Fragment 只标记，不被规则静默切断。
+
+拆分页可显式保存规则、预览当前空 Snapshot 并应用同一保存 revision。应用时服务端重新从不可变 Fragment 生成标题/正文并复用空 Snapshot 原子物化，未保存草稿、过期 revision、已有 Entry、全文工作副本或未授权私密范围均不能覆盖现状。规则随既有偏好进入完整个人数据包，旧偏好/旧包补默认值；没有迁移、依赖、Provider、任意脚本、来源重排或后台自动拆分。
 
 ### 7.2 MVP-1：偏好学习与每周自适应摄取
 

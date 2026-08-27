@@ -498,6 +498,7 @@ async function saveReviewPreferences(
     preferences.sourceSubscriptions,
     preferences.entryPreferenceProfile,
     preferences.entryAutomationPolicy,
+    preferences.entrySplitRuleProfile,
   );
 }
 async function restorePortableBlobs(

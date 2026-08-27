@@ -14,6 +14,10 @@ import {
   type ReviewPreferences,
 } from '../storage/review_preferences_store.js';
 import {
+  decodeEntrySplitRuleProfile,
+  type EntrySplitRuleProfile,
+} from '../modules/entries/information_entry_split_rule.js';
+import {
   BLOB_DIGEST_ALGORITHM,
   type BlobIdentity,
 } from '../storage/blob_store.js';
@@ -186,6 +190,10 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     value.entryAutomationPolicy === undefined
       ? undefined
       : decodeEntryAutomationPolicy(value.entryAutomationPolicy);
+  const entrySplitRuleProfile: Readonly<EntrySplitRuleProfile> | undefined =
+    value.entrySplitRuleProfile === undefined
+      ? undefined
+      : decodeEntrySplitRuleProfile(value.entrySplitRuleProfile);
   if (
     value.format !== 'struinfo.review-preferences' ||
     value.version !== 1 ||
@@ -202,7 +210,9 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     (value.entryPreferenceProfile !== undefined &&
       entryPreferenceProfile === undefined) ||
     (value.entryAutomationPolicy !== undefined &&
-      entryAutomationPolicy === undefined)
+      entryAutomationPolicy === undefined) ||
+    (value.entrySplitRuleProfile !== undefined &&
+      entrySplitRuleProfile === undefined)
   ) {
     fail();
   }
@@ -216,6 +226,7 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     sourceSubscriptions,
     entryPreferenceProfile,
     entryAutomationPolicy,
+    entrySplitRuleProfile,
   );
 }
 

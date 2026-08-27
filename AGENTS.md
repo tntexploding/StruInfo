@@ -505,6 +505,19 @@ Migration `000022` adds the ninth Entry table; Entry Bundle v5 carries it and
 upgrades v1-v4 with empty working-copy state. The personal-data package now
 covers 61 workspace tables, while the active workspace remains data-free.
 
+ADR 0035 completes M1H-4A/B with one external, independently versioned
+`EntrySplitRuleProfile` and its Split-page controls. The default profile keeps
+one section per Entry; the only additional rule deterministically merges
+adjacent short section Fragments under explicit scalar and Fragment-count
+limits. Draft rules may be previewed, but only the exact saved revision can be
+applied through the existing empty-Snapshot atomic materialization boundary.
+The service always rebuilds title/body from immutable local Fragment evidence,
+and private Snapshots still require a current-action opt-in. This preference is
+already transported by the complete personal-data package and adds no migration,
+table, dependency or Provider. Do not infer arbitrary scripts, regex programs,
+custom parsers, source reordering, automatic background splitting or permission
+to replace already materialized Entry structures.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

@@ -24,6 +24,8 @@ export const MANUAL_ENTRY_SPLIT_RULE_VERSION =
   'struinfo.entry-split.manual-range.v1';
 export const MANUAL_ENTRY_RESTRUCTURE_RULE_VERSION =
   'struinfo.entry-restructure.manual-range.v1';
+export const CONFIGURABLE_ENTRY_SPLIT_RULE_VERSION =
+  'struinfo.entry-split.configurable-group.v1';
 export const ENTRY_MANUAL_ORIGIN_VERSION = 'manual-entry-editor.v1';
 export const MAXIMUM_ENTRY_BODY_CODE_POINTS = 200_000;
 export const MAXIMUM_CONTENT_KEYWORDS = 32;
@@ -103,7 +105,7 @@ export function prepareSplitInformationEntries(
         revisionId,
         value: Object.freeze({
           documentOrder,
-          titlePath: deriveTitlePath(body),
+          titlePath: deriveInformationEntryTitlePath(body),
           body,
           bodySha256: informationEntryBodySha256(body),
           chunkMode: 'split' as const,
@@ -127,6 +129,22 @@ export function prepareAiSplitInformationEntries(
     identityVersion: 'ai-group-v1',
     includeTitleInIdentity: false,
     isPrivate: false,
+  });
+}
+
+export function prepareConfigurableSplitInformationEntries(
+  snapshot: Readonly<MaterializedEvidenceSnapshot>,
+  groups: readonly Readonly<EntryFragmentGroupInput>[],
+  profileRevision: number,
+): readonly Readonly<InformationEntryMaterializeRow>[] | undefined {
+  if (!Number.isSafeInteger(profileRevision) || profileRevision < 0) {
+    return undefined;
+  }
+  return prepareGroupedInformationEntries(snapshot, groups, {
+    splitRuleVersion: `${CONFIGURABLE_ENTRY_SPLIT_RULE_VERSION}:r${profileRevision.toString()}`,
+    identityVersion: 'configurable-group-v1',
+    includeTitleInIdentity: false,
+    isPrivate: snapshot.isPrivate === true,
   });
 }
 
@@ -601,7 +619,7 @@ function normalizeSplitTitle(value: string): string | undefined {
   return normalized;
 }
 
-function deriveTitlePath(body: string): string {
+export function deriveInformationEntryTitlePath(body: string): string {
   const line = body
     .split(/\r?\n/u)
     .map((candidate) => candidate.trim())

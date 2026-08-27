@@ -3,6 +3,12 @@ import {lstat, readFile, rename, unlink, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 
 import {
+  decodeEntrySplitRuleProfile,
+  DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+  type EntrySplitRuleProfile,
+} from '../../modules/entries/information_entry_split_rule.js';
+
+import {
   createReviewPreferences,
   decodeEntryAutomationPolicy,
   decodeEntryPreferenceProfile,
@@ -94,6 +100,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences> = DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
     entryPreferenceProfile: Readonly<EntryPreferenceProfile> = DEFAULT_ENTRY_PREFERENCE_PROFILE,
     entryAutomationPolicy: Readonly<EntryAutomationPolicy> = DEFAULT_ENTRY_AUTOMATION_POLICY,
+    entrySplitRuleProfile: Readonly<EntrySplitRuleProfile> = DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
   ): Promise<Readonly<ReviewPreferences>> {
     validateWorkspaceId(workspaceId);
     return this.#serializeWrite(workspaceId, () =>
@@ -107,6 +114,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
         sourceSubscriptions,
         entryPreferenceProfile,
         entryAutomationPolicy,
+        entrySplitRuleProfile,
       ),
     );
   }
@@ -137,6 +145,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
                 DEFAULT_ENTRY_PREFERENCE_PROFILE,
               update.next.entryAutomationPolicy ??
                 DEFAULT_ENTRY_AUTOMATION_POLICY,
+              update.next.entrySplitRuleProfile ??
+                DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
             );
       return Object.freeze({preferences, result: update.result});
     });
@@ -152,6 +162,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences>,
     entryPreferenceProfile: Readonly<EntryPreferenceProfile>,
     entryAutomationPolicy: Readonly<EntryAutomationPolicy>,
+    entrySplitRuleProfile: Readonly<EntrySplitRuleProfile>,
   ): Promise<Readonly<ReviewPreferences>> {
     const decoded = decodeReviewQuickTags(quickTags);
     const decodedAutomaticKeywords =
@@ -173,6 +184,9 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     const decodedEntryAutomationPolicy = decodeEntryAutomationPolicy(
       entryAutomationPolicy,
     );
+    const decodedEntrySplitRuleProfile = decodeEntrySplitRuleProfile(
+      entrySplitRuleProfile,
+    );
     if (
       decoded === undefined ||
       decodedAutomaticKeywords === undefined ||
@@ -183,7 +197,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
         decodedExplorationPolicy === undefined) ||
       decodedSourceSubscriptions === undefined ||
       decodedEntryPreferenceProfile === undefined ||
-      decodedEntryAutomationPolicy === undefined
+      decodedEntryAutomationPolicy === undefined ||
+      decodedEntrySplitRuleProfile === undefined
     ) {
       throw invalid();
     }
@@ -197,6 +212,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       decodedSourceSubscriptions,
       decodedEntryPreferenceProfile,
       decodedEntryAutomationPolicy,
+      decodedEntrySplitRuleProfile,
     );
     const bytes = new TextEncoder().encode(
       `${JSON.stringify(preferences, undefined, 2)}\n`,
@@ -291,6 +307,10 @@ function decodePreferences(
     value.entryAutomationPolicy === undefined
       ? DEFAULT_ENTRY_AUTOMATION_POLICY
       : decodeEntryAutomationPolicy(value.entryAutomationPolicy);
+  const entrySplitRuleProfile =
+    value.entrySplitRuleProfile === undefined
+      ? DEFAULT_ENTRY_SPLIT_RULE_PROFILE
+      : decodeEntrySplitRuleProfile(value.entrySplitRuleProfile);
   if (
     value.associationPolicy !== undefined &&
     associationPolicy === undefined
@@ -301,7 +321,8 @@ function decodePreferences(
     explorationPolicy === undefined ||
     sourceSubscriptions === undefined ||
     entryPreferenceProfile === undefined ||
-    entryAutomationPolicy === undefined
+    entryAutomationPolicy === undefined ||
+    entrySplitRuleProfile === undefined
   )
     throw invalid();
   return createReviewPreferences(
@@ -314,6 +335,7 @@ function decodePreferences(
     sourceSubscriptions,
     entryPreferenceProfile,
     entryAutomationPolicy,
+    entrySplitRuleProfile,
   );
 }
 

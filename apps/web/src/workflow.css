@@ -3297,6 +3297,136 @@
   gap: var(--si-space-3);
 }
 
+.split-rule-panel {
+  border-block-start: 2px solid var(--si-color-signal);
+}
+
+.split-rule-layout {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.8fr) minmax(24rem, 1.2fr);
+  gap: var(--si-space-6);
+  margin-block-start: var(--si-space-5);
+}
+
+.split-rule-controls,
+.split-rule-preview {
+  min-inline-size: 0;
+  padding: var(--si-space-5);
+  border: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  background: var(--si-color-surface-1);
+}
+
+.split-rule-controls fieldset {
+  display: grid;
+  gap: var(--si-space-3);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.split-rule-controls legend,
+.split-rule-preview h3 {
+  margin-block-end: var(--si-space-3);
+  color: var(--si-color-text-primary);
+  font-size: var(--si-text-body);
+  font-weight: 700;
+}
+
+.split-rule-choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: var(--si-space-3);
+  min-block-size: 3.25rem;
+  padding: var(--si-space-3);
+  border: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  cursor: pointer;
+}
+
+.split-rule-choice:has(input:checked) {
+  border-color: var(--si-color-signal);
+  background: color-mix(in srgb, var(--si-color-signal) 8%, transparent);
+}
+
+.split-rule-choice input {
+  margin-block-start: 0.25rem;
+}
+
+.split-rule-choice span {
+  display: grid;
+  gap: var(--si-space-1);
+}
+
+.split-rule-choice small,
+.split-rule-preview li span,
+.split-rule-preview li small {
+  color: var(--si-color-text-muted);
+}
+
+.split-rule-number-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--si-space-3);
+  margin-block-start: var(--si-space-5);
+}
+
+.split-rule-number-grid label {
+  display: grid;
+  gap: var(--si-space-2);
+  color: var(--si-color-text-secondary);
+  font-size: var(--si-text-xs);
+}
+
+.split-rule-number-grid input {
+  min-block-size: 2.75rem;
+  inline-size: 100%;
+  padding-inline: var(--si-space-3);
+  border: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  background: var(--si-color-bg-shell);
+  color: var(--si-color-text-primary);
+}
+
+.split-rule-actions {
+  flex-wrap: wrap;
+  margin-block-start: var(--si-space-5);
+}
+
+.split-rule-preview ol {
+  display: grid;
+  gap: var(--si-space-3);
+  max-block-size: 36rem;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.split-rule-preview li {
+  display: grid;
+  gap: var(--si-space-2);
+  padding: var(--si-space-4);
+  border-inline-start: 2px solid var(--si-color-border-default);
+  background: var(--si-color-bg-shell);
+}
+
+.split-rule-preview li > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--si-space-3);
+}
+
+.split-rule-preview li p {
+  margin: 0;
+  color: var(--si-color-text-secondary);
+  white-space: pre-wrap;
+}
+
+.field-error {
+  color: var(--si-color-danger);
+  font-size: var(--si-text-xs);
+}
+
 .entry-restructure__preview-actions,
 .entry-restructure__impact > header {
   display: flex;
@@ -3494,6 +3624,15 @@
 }
 
 @media (max-width: 74.9375rem) {
+  .split-rule-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .split-rule-preview ol {
+    max-block-size: none;
+    overflow: visible;
+  }
+
   .workflow-stage-workspace[data-workflow-page='split'] > .entry-manual-split,
   .workflow-stage-workspace[data-workflow-page='split']
     > .information-document-working-copy,
@@ -3515,6 +3654,20 @@
 }
 
 @media (max-width: 47.9375rem), (orientation: portrait) {
+  .split-rule-number-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .split-rule-actions,
+  .split-rule-preview li > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .split-rule-actions button {
+    inline-size: 100%;
+  }
+
   .entry-manual-split {
     padding: var(--si-space-5);
   }
