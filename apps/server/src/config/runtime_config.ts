@@ -238,7 +238,7 @@ function parseDatabaseConfig(
       throw error;
     }
     throw new ConfigurationError(
-      'DATABASE_URL must be a valid local PostgreSQL connection URL with explicit credentials.',
+      'DATABASE_URL must be a valid single-host PostgreSQL connection URL with explicit credentials.',
     );
   }
 }

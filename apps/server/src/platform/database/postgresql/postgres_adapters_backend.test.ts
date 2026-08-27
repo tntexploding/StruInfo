@@ -138,7 +138,10 @@ describe('closed PostgreSQL connection projection', () => {
     `postgresql://${RUNTIME_ROLE}@localhost/struinfo`,
     `postgresql://${RUNTIME_ROLE}:@localhost/struinfo`,
     `postgresql://${RUNTIME_ROLE}:%00@localhost/struinfo`,
-    `postgresql://${RUNTIME_ROLE}:synthetic@example.invalid/struinfo`,
+    `postgresql://${RUNTIME_ROLE}:synthetic@localhost,example.invalid/struinfo`,
+    `postgresql://${RUNTIME_ROLE}:synthetic@bad_host/struinfo`,
+    `postgresql://${RUNTIME_ROLE}:synthetic@0.0.0.0/struinfo`,
+    `postgresql://${RUNTIME_ROLE}:synthetic@[::]/struinfo`,
     `postgresql://${RUNTIME_ROLE}:synthetic@localhost/a/b`,
     `postgresql://${RUNTIME_ROLE}:synthetic@localhost/struinfo?ssl=true`,
     `postgresql://${RUNTIME_ROLE}:%ZZ@localhost/struinfo`,
@@ -148,6 +151,24 @@ describe('closed PostgreSQL connection projection', () => {
       PostgresConnectionConfigError,
     );
   });
+
+  it.each([
+    ['postgres', 'postgres'],
+    ['host.docker.internal', 'host.docker.internal'],
+    ['10.20.30.40', '10.20.30.40'],
+    ['db.internal', 'db.internal'],
+    ['[2001:db8::10]', '2001:db8::10'],
+  ] as const)(
+    'accepts the explicit single PostgreSQL host %s',
+    (serializedHost, expectedHost) => {
+      const config = decodePostgresConnectionUrl(
+        `postgresql://${RUNTIME_ROLE}:synthetic@${serializedHost}/struinfo`,
+        'runtime',
+      );
+
+      expect(config.host).toBe(expectedHost);
+    },
+  );
 
   it.each([
     ['runtime', RUNTIME_ROLE, 'struinfo-tm2-runtime'],

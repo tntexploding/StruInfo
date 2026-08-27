@@ -17,8 +17,8 @@ obligations.
   approval status.
 
 Presence in the SPDX list does not by itself mean a license is OSI approved or
-compatible with this project. The project distribution license is still
-undecided, so every dependency remains subject to review.
+compatible with this project. StruInfo uses the MIT License, and every dependency
+remains subject to review against the exact way it is distributed or operated.
 
 ## Dependency Admission Checklist
 
@@ -59,9 +59,9 @@ These categories prioritize review; they are not compatibility judgments.
 | Unknown or isolated | Do not merge or distribute | Missing license, conflicting declarations, unavailable terms, unknown source |
 
 GPL and AGPL can be OSI-approved open-source licenses. Their placement in the
-restricted category is a conservative project policy while distribution and
-SaaS plans remain undecided. Apache-2.0 still requires checking for applicable
-upstream `NOTICE` material.
+restricted category is a conservative project policy for the current MIT-licensed
+distribution and private-service boundary. Apache-2.0 still requires checking
+for applicable upstream `NOTICE` material.
 
 ## Copied or Adapted Code
 
@@ -88,8 +88,12 @@ output when its license or original source cannot be established.
   technology stack and build system are selected.
 - Treat server, browser, CLI, container, model, and sample-data artifacts as
   separate dependency sets.
-- Do not publish a release until the project owner selects the StruInfo license
-  and all included materials have been reviewed against it.
+- Do not publish a release until all included materials have been reviewed against
+  the selected StruInfo MIT License and their own obligations.
+
+The owner selected the MIT License for StruInfo on 2026-08-27. The canonical
+project text is the repository-root `LICENSE`; this selection does not replace
+the per-dependency review and notices required above.
 
 User-fetched web content is not a software dependency merely because the system
 processes it. Any snapshot, sample, image, dataset, or model bundled with a

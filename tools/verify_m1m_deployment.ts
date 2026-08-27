@@ -10,20 +10,42 @@ export class M1mDeploymentError extends Error {
 }
 
 export interface M1mDeploymentSources {
+  readonly rootPackage: string;
+  readonly projectLicense: string;
+  readonly dockerignore: string;
   readonly dockerfile: string;
   readonly compose: string;
   readonly maintenanceCompose: string;
   readonly runtimeExample: string;
   readonly runtimeGrants: string;
+  readonly productionOperations: string;
 }
 
 export function validateM1mDeploymentSources(
   sources: Readonly<M1mDeploymentSources>,
 ): void {
+  validateRootStartScripts(sources.rootPackage);
+  requireAll(sources.projectLicense, [
+    'MIT License',
+    'Permission is hereby granted, free of charge',
+    'THE SOFTWARE IS PROVIDED "AS IS"',
+  ]);
+  requireAll(sources.dockerignore, [
+    '.git',
+    '.agents',
+    'node_modules',
+    '**/node_modules',
+    'backups',
+    'exports',
+    'workspace-data',
+  ]);
+
   requireAll(sources.dockerfile, [
-    'FROM node:24-bookworm-slim AS build',
-    'FROM node:24-bookworm-slim AS runtime',
-    'pnpm --filter @struinfo/server deploy --prod --legacy /runtime-server',
+    'FROM node:24-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS build',
+    'FROM node:24-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS runtime',
+    'RUN --network=none pnpm run build',
+    'RUN --network=none pnpm --offline --config.trust-lockfile=true --config.inject-workspace-packages=true --filter @struinfo/server deploy --prod --no-optional /runtime-server',
+    'COPY --from=build --chown=10001:10001 /workspace/LICENSE /opt/struinfo/LICENSE',
     'USER 10001:10001',
     'CMD ["node", "dist/entrypoints/all.js"]',
   ]);
@@ -104,6 +126,11 @@ export function validateM1mDeploymentSources(
     /\bGRANT\s+CREATE\b/iu,
   ]);
 
+  requireAll(sources.productionOperations, [
+    'corepack pnpm run start:all',
+    'corepack pnpm run start:all:built',
+  ]);
+
   const joined = Object.values(sources).join('\n');
   rejectAny(joined, [
     /-----BEGIN [^-\r\n]*PRIVATE KEY-----/u,
@@ -116,12 +143,63 @@ export function verifyM1mDeployment(repositoryRoot: string): void {
   const read = (relativePath: string) =>
     readFileSync(join(repositoryRoot, ...relativePath.split('/')), 'utf8');
   validateM1mDeploymentSources({
+    rootPackage: read('package.json'),
+    projectLicense: read('LICENSE'),
+    dockerignore: read('.dockerignore'),
     dockerfile: read('Dockerfile'),
     compose: read('compose.production.yaml'),
     maintenanceCompose: read('compose.maintenance.yaml'),
     runtimeExample: read('deploy/runtime.container.env.example'),
     runtimeGrants: read('deploy/postgresql/apply-runtime-grants.sql'),
+    productionOperations: read('docs/production-operations.md'),
   });
+}
+
+const REQUIRED_START_SCRIPTS = Object.freeze({
+  'start:api':
+    'tsx --tsconfig apps/server/tsconfig.json apps/server/src/entrypoints/api.ts',
+  'start:scheduler':
+    'tsx --tsconfig apps/server/tsconfig.json apps/server/src/entrypoints/scheduler.ts',
+  'start:worker':
+    'tsx --tsconfig apps/server/tsconfig.json apps/server/src/entrypoints/worker.ts',
+  'start:all':
+    'tsx --tsconfig apps/server/tsconfig.json apps/server/src/entrypoints/all.ts',
+  'start:all:built': 'node apps/server/dist/entrypoints/all.js',
+} as const);
+
+function validateRootStartScripts(source: string): void {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(source);
+  } catch {
+    throw new M1mDeploymentError('The root package manifest is invalid JSON.');
+  }
+  if (!isRecord(decoded) || !isRecord(decoded.scripts)) {
+    throw new M1mDeploymentError(
+      'The root package manifest is missing its scripts record.',
+    );
+  }
+  if (
+    decoded.license !== 'MIT' ||
+    !Array.isArray(decoded.files) ||
+    !decoded.files.includes('LICENSE')
+  ) {
+    throw new M1mDeploymentError(
+      'The root package manifest must publish the selected MIT license.',
+    );
+  }
+  const scripts = decoded.scripts;
+  for (const [name, command] of Object.entries(REQUIRED_START_SCRIPTS)) {
+    if (scripts[name] !== command) {
+      throw new M1mDeploymentError(
+        `The root package manifest is missing the required ${name} command.`,
+      );
+    }
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function requireAll(source: string, required: readonly string[]): void {

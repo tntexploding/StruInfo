@@ -105,8 +105,10 @@ PDF.js declares `@napi-rs/canvas` as optional. StruInfo uses only its data-only
 text extraction path, so `pnpm-workspace.yaml` explicitly lists that package in
 `ignoredOptionalDependencies`. No Canvas package, platform native binding,
 install lifecycle or Wasm/image-rendering capability enters the selected lock
-closure. This exclusion is functional: M1E-5B does not perform OCR or visual
-PDF reconstruction.
+closure. The PDF.js module is loaded only for an explicit PDF import; a narrow
+identity `DOMMatrix` compatibility value permits module initialization without
+claiming or exposing rendering. This exclusion is functional: M1E-5B does not
+perform OCR or visual PDF reconstruction.
 
 ### RSS/Atom parser dependency increment
 

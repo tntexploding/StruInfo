@@ -54,6 +54,11 @@ M1C 首版不要求后台文件监视或无中断热切换。允许采用明确�
 
 同名进程环境变量会覆盖文件中的非秘密运行参数，便于容器和托管环境注入。`STRUIINFO_CONFIG_PATH`、`DATABASE_URL`、迁移专用的 `STRUIINFO_MIGRATION_DATABASE_URL` 和 `OPENAI_API_KEY` 只能由进程环境/秘密机制提供，写入配置文件会被拒绝。M1M 为后三者增加互斥的 `DATABASE_URL_FILE`、`STRUIINFO_MIGRATION_DATABASE_URL_FILE` 和 `OPENAI_API_KEY_FILE`：文件路径必须绝对，目标为至多 16 KiB 的普通文件，内容为严格 UTF-8 的单行非空值；直接值与对应文件变量同时存在会失败。`OPENAI_API_KEY` 必须与至少一个 OpenAI 模型同时存在；Responses 与 Embedding 模型可以分别配置，缺少 Embedding 模型时词法查询仍完整可用且不会宣告语义检索 capability。
 
+数据库 URL 只接受一个明确的 DNS 名称、IPv4 或 IPv6 地址，不接受 Unix socket、多个 host、
+query/fragment 覆盖或含糊的 authority。这样既支持本机 `localhost`，也支持容器可达的服务名、
+`host.docker.internal` 或私网地址。当前 node-postgres 投影固定 `ssl=false`，因此仅用于同机或
+受信任私网；跨不可信网络时必须在部署层提供 TLS，不能把明文数据库连接当作公网边界。
+
 配置文件上限为 64 KiB，必须是现存普通文件和有效 UTF-8。错误信息只报告字段或合同问题，不回显数据库地址、未知字段名、配置内容或个人路径。
 
 ## 4. 路径规则
@@ -137,6 +142,8 @@ STRUIINFO_LOG_LEVEL=info
 ```
 
 应用安装目录（例如 `/opt/struinfo`）、配置目录和数据目录必须分离。M1M 的 `Dockerfile` 与两份 Compose 清单已经实现该挂载、非 root、只读根和 runtime/migrator secret 隔离；目标 Linux 镜像 digest、漏洞扫描和真实环境演练仍需通过上线审核。
+容器中的 `localhost` 指向容器本身。外置 PostgreSQL 的 URL 必须使用容器可达的单一地址；
+数据根应由宿主预先创建并允许容器用户 `10001:10001` 读写，配置与 secret 文件则保持只读。
 
 ## 8. 数据库迁移
 

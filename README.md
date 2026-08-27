@@ -57,7 +57,25 @@ M1E-2 已把正式知识实现为 Entry 节点、自动相似联系与用户关�
 - [贡献与审查流程](CONTRIBUTING.md)
 - [第三方声明](THIRD_PARTY_NOTICES.md)
 
+StruInfo 采用 [MIT License](LICENSE)。第三方依赖仍分别遵循
+[第三方声明](THIRD_PARTY_NOTICES.md)及随制品保留的原始许可证。
+
 仓库和应用包只保存协议、迁移、代码与合成示例。实际资料、知识、偏好、词表、提示覆盖、快照、媒体、导出、备份和运行配置全部位于包体外；切换工作区不需要修改代码或把“记忆文件”加入 Git。
+
+## 本机快速启动
+
+准备一个仓库外的数据目录、runtime 配置文件和只含单行 PostgreSQL URL 的 secret 文件，
+然后在 PowerShell 中设置：
+
+```powershell
+$env:STRUIINFO_CONFIG_PATH = 'C:\StruInfoExample\Config\runtime.env'
+$env:DATABASE_URL_FILE = 'C:\StruInfoExample\Secrets\runtime-database-url.txt'
+corepack pnpm run start:all
+```
+
+默认 Web/API 地址为 `http://127.0.0.1:3000`，按 `Ctrl+C` 停止。完整运行配置、迁移和权限
+顺序见[生产运行与维护](docs/production-operations.md)。构建后也可用
+`corepack pnpm run start:all:built` 启动编译产物。
 
 完整本地质量门使用：
 
@@ -67,6 +85,6 @@ corepack pnpm run verify
 
 ## 当前最重要的下一步
 
-继续在同一主项目和同一空工作区上开发。M1I 外部信源、M1J 正式知识深化、M1K 分词/向量/RAG、M1L 性能优化和 M1M 单机生产运行边界均已完成。下一步不再预设新的横向功能，而是在所有者授权后统一进行真实材料、目标 PostgreSQL/Linux 宿主、备份恢复和发布审核；不为了演示提前恢复旧资料。
+继续在同一主项目和同一空工作区上准备私人云端部署。M1I 外部信源、M1J 正式知识深化、M1K 分词/向量/RAG、M1L 性能优化和 M1M 单机生产运行边界均已完成；本地 Docker/PostgreSQL 18 的合成迁移、权限、健康、备份、空库恢复和重启演练也已通过。下一步不再预设新的横向功能，而是在目标云服务器复建并扫描镜像、配置私网入口/宿主防火墙、外部秘密与持久数据根、备份保留和监控；不为了演示提前恢复旧资料。
 
-项目开发完成后，再由所有者明确选择审核材料或恢复点。公网认证、目标镜像认证和发布许可证仍是部署/分发门；它们必须如实报告，但不能在没有当前可达阻断时重新拖慢产品主线。
+项目开发完成后，再由所有者明确选择审核材料或恢复点。应用端口保持回环或 VPN/SSH 私网访问；订阅、网页抓取、连接器和显式 Provider 是受控公网出站。MIT License 已确定，目标云端镜像认证和最终制品复核仍是部署/分发门；它们必须如实报告，但不能在没有当前可达阻断时重新拖慢产品主线。

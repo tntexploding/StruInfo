@@ -50,16 +50,63 @@ describe('M1M deployment source policy', () => {
       });
     }).toThrow(M1mDeploymentError);
   });
+
+  it('rejects a missing executable start boundary', () => {
+    const sources = readSources();
+    const rootPackage = JSON.parse(sources.rootPackage) as {
+      scripts: Record<string, string>;
+    };
+    delete rootPackage.scripts['start:all'];
+
+    expect(() => {
+      validateM1mDeploymentSources({
+        ...sources,
+        rootPackage: JSON.stringify(rootPackage),
+      });
+    }).toThrow(M1mDeploymentError);
+  });
+
+  it('rejects a missing project MIT license boundary', () => {
+    const sources = readSources();
+    const rootPackage = JSON.parse(sources.rootPackage) as {
+      license: string;
+    };
+    rootPackage.license = 'UNLICENSED';
+
+    expect(() => {
+      validateM1mDeploymentSources({
+        ...sources,
+        rootPackage: JSON.stringify(rootPackage),
+      });
+    }).toThrow(M1mDeploymentError);
+    expect(() => {
+      validateM1mDeploymentSources({...sources, projectLicense: 'MIT'});
+    }).toThrow(M1mDeploymentError);
+  });
+
+  it('rejects a Docker context that admits nested dependency junctions', () => {
+    const sources = readSources();
+    expect(() => {
+      validateM1mDeploymentSources({
+        ...sources,
+        dockerignore: sources.dockerignore.replace('**/node_modules', ''),
+      });
+    }).toThrow(M1mDeploymentError);
+  });
 });
 
 function readSources(): M1mDeploymentSources {
   const read = (path: string) =>
     readFileSync(join(process.cwd(), path), 'utf8');
   return {
+    rootPackage: read('package.json'),
+    projectLicense: read('LICENSE'),
+    dockerignore: read('.dockerignore'),
     dockerfile: read('Dockerfile'),
     compose: read('compose.production.yaml'),
     maintenanceCompose: read('compose.maintenance.yaml'),
     runtimeExample: read('deploy/runtime.container.env.example'),
     runtimeGrants: read('deploy/postgresql/apply-runtime-grants.sql'),
+    productionOperations: read('docs/production-operations.md'),
   };
 }

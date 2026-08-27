@@ -2,7 +2,7 @@
   "name": "@struinfo/web",
   "version": "0.0.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=24.18.0",

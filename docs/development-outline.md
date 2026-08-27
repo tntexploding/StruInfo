@@ -686,7 +686,7 @@ M0-S 工程地基已于 2026-08-10 完成：工具链、目录、最小运行角
 | P1 平台与恢复 | Windows/Linux 上的 Node、PostgreSQL、同事务后台工作、迁移/运行角色、恢复和备份路径足以支持架构选择 | 仅为离线、非分布式探针；网络隔离、seccomp、完整类型声明、在线备份、加密和 RPO/RTO 仍待正式验证 |
 | P2 中文与图片证据 | 中文、混排、Emoji、code-point 文本定位和 synthetic P6 区域定位可行；来源绑定与版本分类方向成立 | writer/reader 预算必须闭合；只接受普通稠密容器和 owned bytes；真实媒体 decoder 另行评审；探针源码不可复用 |
 | P3 协议与幂等 | HTTP 最终状态恢复、WS 投影和耐久副作用方向可行 | 使用标准 schema、工作区全链路 scoping、原子幂等、fenced transition/outcome 与一致 WS cutoff/replay；不执行额外的认证式探针循环 |
-| 依赖与许可证 | 已审查的非分布式探针图足以支持架构选择 | 生产 package/lockfile、生命周期 allowlist、完整依赖闭包、notices、SPDX SBOM、镜像 digest、浏览器/FFmpeg 和项目发布许可证仍是 M0-S/发布门 |
+| 依赖与许可证 | 已审查的非分布式探针图足以支持架构选择 | 生产 package/lockfile、生命周期 allowlist、完整依赖闭包、notices、SPDX SBOM、镜像 digest 和浏览器/FFmpeg 仍是 M0-S/发布门；项目许可证已于 2026-08-27 选择 MIT |
 
 M0-P 的测试数量和候选实现不构成生产质量证明。
 正式测试直接针对 M0-S 之后的真实模块与契约，覆盖本大纲列出的不变量。

@@ -114,6 +114,9 @@ Track the actual npm and action SPDX inventories, exact legal material, source
 reconciliation, and third-party notice in the repository. The project remains
 `UNLICENSED`; this is an inventory decision, not a release authorization.
 
+This paragraph records the original M0-S state. The owner selected MIT on
+2026-08-27; the repository-root `LICENSE` is now authoritative.
+
 Defer these independent gates:
 
 - `M0-S-BROWSER-MAINT-001` before Chromium, FFmpeg, winldd, Linux browser-system
