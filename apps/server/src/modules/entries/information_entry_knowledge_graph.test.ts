@@ -35,6 +35,9 @@ describe('Information Entry knowledge graph', () => {
           label: 'similarity',
           direction: 'symmetric',
           origin: 'automatically_calculated',
+          semanticKind: 'similarity',
+          verificationStatus: 'calculated',
+          note: '',
           isBlocked: false,
           overrideRevision: 0,
         },
@@ -51,6 +54,11 @@ describe('Information Entry knowledge graph', () => {
       '  同一工具链  ',
       'low_to_high',
       'association',
+      {
+        semanticKind: 'supports',
+        verificationStatus: 'source_checked',
+        note: '  已核对来源  ',
+      },
     );
     if (relation === undefined) throw new Error('Expected relation.');
     const edited = prepareInformationEntryGraphEdit(undefined, true, relation);
@@ -71,6 +79,7 @@ describe('Information Entry knowledge graph', () => {
     });
 
     expect(relation.label).toBe('同一工具链');
+    expect(relation.note).toBe('已核对来源');
     expect(graph).toMatchObject({
       nodes: [{entryId: ENTRY_A}, {entryId: ENTRY_B}],
       edges: [],
@@ -79,6 +88,8 @@ describe('Information Entry knowledge graph', () => {
           label: '同一工具链',
           direction: 'low_to_high',
           origin: 'user_edited',
+          semanticKind: 'supports',
+          verificationStatus: 'source_checked',
           isBlocked: true,
           overrideRevision: 2,
         },

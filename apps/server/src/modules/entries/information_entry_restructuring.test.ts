@@ -94,6 +94,9 @@ describe('InformationEntry restructuring', () => {
         origin: 'user' as const,
         label: 'related',
         direction: 'symmetric' as const,
+        semanticKind: 'related' as const,
+        verificationStatus: 'source_checked' as const,
+        note: '两端来源已核对',
       }),
     });
     const preparation = prepareInformationEntryRestructure(
@@ -209,6 +212,9 @@ describe('InformationEntry restructuring', () => {
               origin: 'user' as const,
               label: 'depends on',
               direction: 'low_to_high' as const,
+              semanticKind: 'supports' as const,
+              verificationStatus: 'needs_review' as const,
+              note: '方向需要再次核对',
             }),
           }),
         }),

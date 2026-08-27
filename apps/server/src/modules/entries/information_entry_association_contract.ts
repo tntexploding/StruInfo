@@ -26,6 +26,23 @@ export const INFORMATION_ENTRY_GRAPH_DIRECTIONS = [
   'high_to_low',
 ] as const;
 
+export const INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS = [
+  'similarity',
+  'related',
+  'supports',
+  'contradicts',
+  'part_of',
+  'causes',
+  'example_of',
+  'custom',
+] as const;
+
+export const INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES = [
+  'unreviewed',
+  'source_checked',
+  'needs_review',
+] as const;
+
 export type InformationEntryAssociationAction =
   (typeof INFORMATION_ENTRY_ASSOCIATION_ACTIONS)[number];
 export type InformationEntryAssociationBasis =
@@ -34,11 +51,20 @@ export type InformationEntryGraphOrigin =
   (typeof INFORMATION_ENTRY_GRAPH_ORIGINS)[number];
 export type InformationEntryGraphDirection =
   (typeof INFORMATION_ENTRY_GRAPH_DIRECTIONS)[number];
+export type InformationEntryGraphSemanticKind =
+  (typeof INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS)[number];
+export type InformationEntryGraphVerificationStatus =
+  (typeof INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES)[number];
+export type InformationEntryGraphEdgeVerificationStatus =
+  InformationEntryGraphVerificationStatus | 'calculated';
 
 export interface InformationEntryGraphRelationValue {
   readonly origin: InformationEntryGraphOrigin;
   readonly label: string;
   readonly direction: InformationEntryGraphDirection;
+  readonly semanticKind: InformationEntryGraphSemanticKind;
+  readonly verificationStatus: InformationEntryGraphVerificationStatus;
+  readonly note: string;
 }
 
 export interface InformationEntryAssociationPolicy {
@@ -117,6 +143,9 @@ export interface InformationEntryGraphEdge {
   readonly label: string;
   readonly direction: InformationEntryGraphDirection;
   readonly origin: InformationEntryGraphEdgeOrigin;
+  readonly semanticKind: InformationEntryGraphSemanticKind;
+  readonly verificationStatus: InformationEntryGraphEdgeVerificationStatus;
+  readonly note: string;
   readonly effectiveScore: number;
   readonly isBlocked: boolean;
   readonly overrideRevision: number;

@@ -65,6 +65,11 @@ interface ParsedFeedItem {
  */
 export class RssAtomSourceConnector implements SourceConnectorPort {
   public readonly connectorId = RSS_ATOM_SOURCE_CONNECTOR_ID;
+  public readonly descriptor = Object.freeze({
+    displayName: 'RSS / Atom',
+    origin: 'builtin' as const,
+    configurationMode: 'internal' as const,
+  });
   readonly #fetch: typeof fetch;
   readonly #resolveAddresses: (hostname: string) => Promise<readonly string[]>;
 

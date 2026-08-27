@@ -3,6 +3,8 @@ import {
   INFORMATION_ENTRY_ASSOCIATION_BASES,
   INFORMATION_ENTRY_GRAPH_DIRECTIONS,
   INFORMATION_ENTRY_GRAPH_ORIGINS,
+  INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS,
+  INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES,
   type CurrentInformationEntryAssociationOverride,
   type InformationEntryAssociationOverrideOutcome,
   type InformationEntryAssociationOverrideValue,
@@ -59,7 +61,9 @@ export const READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL = sql(
   '  override.entry_high_id::text, override.current_revision,',
   '  override.current_revision_id::text, override.action,',
   '  override.manual_adjustment, override.is_blocked,',
-  '  override.graph_origin, override.graph_label, override.graph_direction',
+  '  override.graph_origin, override.graph_label, override.graph_direction,',
+  '  override.graph_semantic_kind, override.graph_verification_status,',
+  '  override.graph_note',
   'FROM struinfo.information_entry_association_override AS override',
   'JOIN struinfo.information_entry AS low_entry',
   '  ON low_entry.workspace_id = override.workspace_id',
@@ -107,7 +111,8 @@ const READ_ASSOCIATION_ENDPOINTS_SQL = sql(
 
 const LOCK_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
   'SELECT current_revision, current_revision_id::text, action,',
-  '  manual_adjustment, is_blocked, graph_origin, graph_label, graph_direction',
+  '  manual_adjustment, is_blocked, graph_origin, graph_label, graph_direction,',
+  '  graph_semantic_kind, graph_verification_status, graph_note',
   'FROM struinfo.information_entry_association_override',
   'WHERE workspace_id = $1 AND entry_low_id = $2 AND entry_high_id = $3',
   'FOR UPDATE',
@@ -117,17 +122,20 @@ const INSERT_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
   'INSERT INTO struinfo.information_entry_association_override (',
   '  workspace_id, entry_low_id, entry_high_id, current_revision,',
   '  current_revision_id, action, manual_adjustment, is_blocked,',
-  '  graph_origin, graph_label, graph_direction',
-  ') VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $10)',
+  '  graph_origin, graph_label, graph_direction, graph_semantic_kind,',
+  '  graph_verification_status, graph_note',
+  ') VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
 );
 
 const UPDATE_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
   'UPDATE struinfo.information_entry_association_override SET',
   '  current_revision = $4, current_revision_id = $5, action = $6,',
   '  manual_adjustment = $7, is_blocked = $8, graph_origin = $9,',
-  '  graph_label = $10, graph_direction = $11, updated_at = CURRENT_TIMESTAMP',
+  '  graph_label = $10, graph_direction = $11, graph_semantic_kind = $12,',
+  '  graph_verification_status = $13, graph_note = $14,',
+  '  updated_at = CURRENT_TIMESTAMP',
   'WHERE workspace_id = $1 AND entry_low_id = $2 AND entry_high_id = $3',
-  '  AND current_revision = $12',
+  '  AND current_revision = $15',
 );
 
 type Row = Readonly<Record<string, unknown>>;
@@ -249,6 +257,9 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
               write.value.graph?.origin ?? null,
               write.value.graph?.label ?? null,
               write.value.graph?.direction ?? null,
+              write.value.graph?.semanticKind ?? null,
+              write.value.graph?.verificationStatus ?? null,
+              write.value.graph?.note ?? null,
             ],
           );
           expectOneAffected(inserted.rowCount);
@@ -275,6 +286,9 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
             write.value.graph?.origin ?? null,
             write.value.graph?.label ?? null,
             write.value.graph?.direction ?? null,
+            write.value.graph?.semanticKind ?? null,
+            write.value.graph?.verificationStatus ?? null,
+            write.value.graph?.note ?? null,
             currentRevision,
           ],
         );
@@ -362,7 +376,14 @@ function mapOverrideValue(
 function mapGraphRelationValue(
   row: Row,
 ): Readonly<InformationEntryGraphRelationValue> | undefined {
-  const fields = [row.graph_origin, row.graph_label, row.graph_direction];
+  const fields = [
+    row.graph_origin,
+    row.graph_label,
+    row.graph_direction,
+    row.graph_semantic_kind,
+    row.graph_verification_status,
+    row.graph_note,
+  ];
   if (fields.every((value) => value === null || value === undefined)) {
     return undefined;
   }
@@ -370,7 +391,14 @@ function mapGraphRelationValue(
     throw new PostgresAdapterError();
   }
   const label = nonEmptyText(row.graph_label);
-  if (Array.from(label).length > 80 || containsControlCodePoint(label)) {
+  const note = text(row.graph_note);
+  if (
+    Array.from(label).length > 80 ||
+    containsControlCodePoint(label) ||
+    note !== note.replace(/\r\n?/gu, '\n').trim().normalize('NFC') ||
+    Array.from(note).length > 500 ||
+    containsForbiddenNoteControlCodePoint(note)
+  ) {
     throw new PostgresAdapterError();
   }
   return Object.freeze({
@@ -380,6 +408,15 @@ function mapGraphRelationValue(
       row.graph_direction,
       INFORMATION_ENTRY_GRAPH_DIRECTIONS,
     ),
+    semanticKind: enumValue(
+      row.graph_semantic_kind,
+      INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS,
+    ),
+    verificationStatus: enumValue(
+      row.graph_verification_status,
+      INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES,
+    ),
+    note,
   });
 }
 
@@ -391,11 +428,20 @@ function assertOverrideValue(
   if (value.graph !== undefined) {
     enumValue(value.graph.origin, INFORMATION_ENTRY_GRAPH_ORIGINS);
     enumValue(value.graph.direction, INFORMATION_ENTRY_GRAPH_DIRECTIONS);
+    enumValue(value.graph.semanticKind, INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS);
+    enumValue(
+      value.graph.verificationStatus,
+      INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES,
+    );
     if (
       value.graph.label !== value.graph.label.trim().normalize('NFC') ||
       value.graph.label.length === 0 ||
       Array.from(value.graph.label).length > 80 ||
-      containsControlCodePoint(value.graph.label)
+      containsControlCodePoint(value.graph.label) ||
+      value.graph.note !==
+        value.graph.note.replace(/\r\n?/gu, '\n').trim().normalize('NFC') ||
+      Array.from(value.graph.note).length > 500 ||
+      containsForbiddenNoteControlCodePoint(value.graph.note)
     ) {
       throw new PostgresAdapterError();
     }
@@ -433,5 +479,16 @@ function containsControlCodePoint(value: string): boolean {
   return Array.from(value).some((character) => {
     const codePoint = character.codePointAt(0);
     return codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f);
+  });
+}
+
+function containsForbiddenNoteControlCodePoint(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0);
+    return (
+      codePoint !== undefined &&
+      ((codePoint <= 0x1f && codePoint !== 0x09 && codePoint !== 0x0a) ||
+        codePoint === 0x7f)
+    );
   });
 }

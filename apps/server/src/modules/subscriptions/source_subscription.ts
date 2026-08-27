@@ -34,14 +34,19 @@ import {
   type ReviewGitSourceSubscription,
   type ReviewJsonApiSourceSubscription,
   type ReviewJsonApiSourceSubscriptionCursor,
+  type ReviewPluginSourceSubscription,
+  type ReviewPluginSourceSubscriptionCursor,
   type ReviewRssSourceSubscription,
   type ReviewRssSourceSubscriptionCursor,
   type ReviewSourceSubscription,
   type ReviewSourceSubscriptionPreferences,
+  type ReviewWebSourceSubscription,
+  type ReviewWebSourceSubscriptionCursor,
 } from '../../storage/review_preferences_store.js';
 import {
   importSourceConnectorDocuments,
   SourceConnectorError,
+  type SourceConnectorCapability,
   type SourceConnectorRegistry,
 } from './source_connector.js';
 
@@ -50,6 +55,7 @@ const CANONICAL_UUID =
 const REQUEST_KEY = /^[A-Za-z0-9._:-]{1,80}$/u;
 const RSS_ATOM_CONNECTOR_ID = 'builtin.rss-atom.v1';
 const JSON_API_CONNECTOR_ID = 'builtin.json-api.v1';
+const WEB_CONNECTOR_ID = 'builtin.web.v1';
 
 interface SourceSubscriptionWriteBase {
   readonly subscriptionId: string;
@@ -98,10 +104,24 @@ export interface JsonApiSourceSubscriptionWrite extends SourceSubscriptionWriteB
     Readonly<{kind: 'none'}> | Readonly<{kind: 'bearer_env'; variable: string}>;
 }
 
+export interface WebSourceSubscriptionWrite extends SourceSubscriptionWriteBase {
+  readonly kind: 'web';
+  readonly pageUrl: string;
+  readonly additionalPaths: readonly string[];
+}
+
+export interface PluginSourceSubscriptionWrite extends SourceSubscriptionWriteBase {
+  readonly kind: 'plugin';
+  readonly connectorId: string;
+  readonly configurationRef: string;
+}
+
 export type SourceSubscriptionWrite =
   | GitSourceSubscriptionWrite
   | RssSourceSubscriptionWrite
-  | JsonApiSourceSubscriptionWrite;
+  | JsonApiSourceSubscriptionWrite
+  | WebSourceSubscriptionWrite
+  | PluginSourceSubscriptionWrite;
 
 export interface GitSourceSubscriptionRead {
   readonly commitSha: string;
@@ -171,6 +191,7 @@ export interface SourceSubscriptionRunResult {
 
 export interface SourceSubscriptionServicePort {
   list(): Promise<Readonly<ReviewSourceSubscriptionPreferences>>;
+  connectorCapabilities?(): readonly Readonly<SourceConnectorCapability>[];
   replace(
     expectedRevision: number,
     subscriptions: readonly Readonly<SourceSubscriptionWrite>[],
@@ -213,7 +234,9 @@ interface SourceSubscriptionState {
   readonly cursor?:
     | Readonly<ReviewGitSourceSubscriptionCursor>
     | Readonly<ReviewRssSourceSubscriptionCursor>
-    | Readonly<ReviewJsonApiSourceSubscriptionCursor>;
+    | Readonly<ReviewJsonApiSourceSubscriptionCursor>
+    | Readonly<ReviewWebSourceSubscriptionCursor>
+    | Readonly<ReviewPluginSourceSubscriptionCursor>;
 }
 
 export class SourceSubscriptionService implements SourceSubscriptionServicePort {
@@ -231,6 +254,10 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
       preferences.sourceSubscriptions ??
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES
     );
+  }
+
+  public connectorCapabilities(): readonly Readonly<SourceConnectorCapability>[] {
+    return this.#dependencies.connectors?.capabilities() ?? Object.freeze([]);
   }
 
   public async replace(
@@ -415,7 +442,9 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
       });
       if (
         subscription.kind === 'rss_atom' ||
-        subscription.kind === 'json_api'
+        subscription.kind === 'json_api' ||
+        subscription.kind === 'web' ||
+        subscription.kind === 'plugin'
       ) {
         return await this.#runConnectorSubscription(
           subscription,
@@ -537,7 +566,10 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
 
   async #runConnectorSubscription(
     subscription: Readonly<
-      ReviewRssSourceSubscription | ReviewJsonApiSourceSubscription
+      | ReviewRssSourceSubscription
+      | ReviewJsonApiSourceSubscription
+      | ReviewWebSourceSubscription
+      | ReviewPluginSourceSubscription
     >,
     configurationIdentity: string,
     runId: string,
@@ -547,12 +579,21 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
     if (connectors === undefined) {
       throw new SourceSubscriptionServiceError('source_unavailable');
     }
-    const connectorId =
-      subscription.kind === 'rss_atom'
-        ? RSS_ATOM_CONNECTOR_ID
-        : JSON_API_CONNECTOR_ID;
-    const sourceLabel =
-      subscription.kind === 'rss_atom' ? 'Feed 条目' : 'JSON API 记录';
+    const connectorId = connectorIdFor(subscription);
+    const sourceLabel = connectorSourceLabel(subscription);
+    if (
+      subscription.kind === 'plugin' &&
+      !connectors
+        .capabilities()
+        .some(
+          (capability) =>
+            capability.connectorId === connectorId &&
+            capability.origin === 'plugin' &&
+            capability.configurationMode === 'external_reference',
+        )
+    ) {
+      throw new SourceSubscriptionServiceError('source_unavailable');
+    }
     const read = await connectors.read(connectorId, {
       subscriptionId: subscription.subscriptionId,
       configuration: connectorConfiguration(subscription),
@@ -1024,6 +1065,34 @@ function sourceConfigurationIdentity(
       )
       .digest('hex');
   }
+  if (subscription.kind === 'web') {
+    return createHash('sha256')
+      .update(
+        JSON.stringify([
+          subscription.kind,
+          subscription.pageUrl,
+          subscription.additionalPaths,
+          subscription.sourceAlias,
+          subscription.isPrivate,
+          subscription.routeAfterImport,
+        ]),
+      )
+      .digest('hex');
+  }
+  if (subscription.kind === 'plugin') {
+    return createHash('sha256')
+      .update(
+        JSON.stringify([
+          subscription.kind,
+          subscription.connectorId,
+          subscription.configurationRef,
+          subscription.sourceAlias,
+          subscription.isPrivate,
+          subscription.routeAfterImport,
+        ]),
+      )
+      .digest('hex');
+  }
   return createHash('sha256')
     .update(
       JSON.stringify([
@@ -1053,7 +1122,12 @@ function copySourceSubscriptionWithState(
       : {lastSuccessAt: state.lastSuccessAt}),
     ...(state.lastRunId === undefined ? {} : {lastRunId: state.lastRunId}),
   };
-  if (subscription.kind === 'rss_atom' || subscription.kind === 'json_api') {
+  if (
+    subscription.kind === 'rss_atom' ||
+    subscription.kind === 'json_api' ||
+    subscription.kind === 'web' ||
+    subscription.kind === 'plugin'
+  ) {
     if (
       state.cursor !== undefined &&
       !Object.hasOwn(state.cursor, 'connectorCursor')
@@ -1071,6 +1145,8 @@ function copySourceSubscriptionWithState(
                 state.cursor as
                   | ReviewRssSourceSubscriptionCursor
                   | ReviewJsonApiSourceSubscriptionCursor
+                  | ReviewWebSourceSubscriptionCursor
+                  | ReviewPluginSourceSubscriptionCursor
               ).connectorCursor,
             }),
           }),
@@ -1097,7 +1173,10 @@ function copySourceSubscriptionWithState(
 
 function connectorConfiguration(
   subscription: Readonly<
-    ReviewRssSourceSubscription | ReviewJsonApiSourceSubscription
+    | ReviewRssSourceSubscription
+    | ReviewJsonApiSourceSubscription
+    | ReviewWebSourceSubscription
+    | ReviewPluginSourceSubscription
   >,
 ): Readonly<Record<string, unknown>> {
   if (subscription.kind === 'rss_atom') {
@@ -1105,6 +1184,15 @@ function connectorConfiguration(
       feedUrl: subscription.feedUrl,
       itemLimit: subscription.itemLimit,
     });
+  }
+  if (subscription.kind === 'web') {
+    return Object.freeze({
+      pageUrl: subscription.pageUrl,
+      additionalPaths: Object.freeze([...subscription.additionalPaths]),
+    });
+  }
+  if (subscription.kind === 'plugin') {
+    return Object.freeze({configurationRef: subscription.configurationRef});
   }
   return Object.freeze({
     endpointUrl: subscription.endpointUrl,
@@ -1134,6 +1222,34 @@ function connectorConfiguration(
         }),
     authentication: Object.freeze({...subscription.authentication}),
   });
+}
+
+function connectorIdFor(
+  subscription: Readonly<
+    | ReviewRssSourceSubscription
+    | ReviewJsonApiSourceSubscription
+    | ReviewWebSourceSubscription
+    | ReviewPluginSourceSubscription
+  >,
+): string {
+  if (subscription.kind === 'rss_atom') return RSS_ATOM_CONNECTOR_ID;
+  if (subscription.kind === 'json_api') return JSON_API_CONNECTOR_ID;
+  if (subscription.kind === 'web') return WEB_CONNECTOR_ID;
+  return subscription.connectorId;
+}
+
+function connectorSourceLabel(
+  subscription: Readonly<
+    | ReviewRssSourceSubscription
+    | ReviewJsonApiSourceSubscription
+    | ReviewWebSourceSubscription
+    | ReviewPluginSourceSubscription
+  >,
+): string {
+  if (subscription.kind === 'rss_atom') return 'Feed 条目';
+  if (subscription.kind === 'json_api') return 'JSON API 记录';
+  if (subscription.kind === 'web') return '网页';
+  return '插件来源文档';
 }
 
 function sourceContentIdentity(

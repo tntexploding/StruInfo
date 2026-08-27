@@ -2,6 +2,8 @@ import {
   INFORMATION_ENTRY_ASSOCIATION_ACTIONS,
   INFORMATION_ENTRY_GRAPH_DIRECTIONS,
   INFORMATION_ENTRY_GRAPH_ORIGINS,
+  INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS,
+  INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES,
   INFORMATION_DOCUMENT_TAG_ORIGINS,
   INFORMATION_DOCUMENT_TAG_REVISION_KINDS,
   type InformationEntryRestructureRepositoryPort,
@@ -47,7 +49,8 @@ const LOCK_SNAPSHOT_STRUCTURE_SQL = sql(
 const LOCK_WORKSPACE_OVERRIDES_SQL = sql(
   'SELECT entry_low_id::text, entry_high_id::text, current_revision,',
   '  current_revision_id::text, action, manual_adjustment, is_blocked,',
-  '  graph_origin, graph_label, graph_direction',
+  '  graph_origin, graph_label, graph_direction, graph_semantic_kind,',
+  '  graph_verification_status, graph_note',
   'FROM struinfo.information_entry_association_override',
   'WHERE workspace_id = $1',
   'ORDER BY entry_low_id, entry_high_id',
@@ -85,8 +88,9 @@ const INSERT_OVERRIDE_SQL = sql(
   'INSERT INTO struinfo.information_entry_association_override (',
   '  workspace_id, entry_low_id, entry_high_id, current_revision,',
   '  current_revision_id, action, manual_adjustment, is_blocked,',
-  '  graph_origin, graph_label, graph_direction',
-  ') VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $10)',
+  '  graph_origin, graph_label, graph_direction, graph_semantic_kind,',
+  '  graph_verification_status, graph_note',
+  ') VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
 );
 
 const DELETE_WORKSPACE_PROJECTIONS_SQL = sql(
@@ -262,6 +266,9 @@ export class PostgresInformationEntryRestructureRepository implements Informatio
             transfer.value.graph?.origin ?? null,
             transfer.value.graph?.label ?? null,
             transfer.value.graph?.direction ?? null,
+            transfer.value.graph?.semanticKind ?? null,
+            transfer.value.graph?.verificationStatus ?? null,
+            transfer.value.graph?.note ?? null,
           ]);
           expectOneAffected(inserted.rowCount);
         }
@@ -427,6 +434,21 @@ function sameOverride(
       : enumValue(row.graph_direction, INFORMATION_ENTRY_GRAPH_DIRECTIONS);
   const graphLabel =
     row.graph_label === null ? undefined : text(row.graph_label);
+  const graphSemanticKind =
+    row.graph_semantic_kind === null
+      ? undefined
+      : enumValue(
+          row.graph_semantic_kind,
+          INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS,
+        );
+  const graphVerificationStatus =
+    row.graph_verification_status === null
+      ? undefined
+      : enumValue(
+          row.graph_verification_status,
+          INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES,
+        );
+  const graphNote = row.graph_note === null ? undefined : text(row.graph_note);
   return (
     enumValue(row.action, INFORMATION_ENTRY_ASSOCIATION_ACTIONS) ===
       expected.action &&
@@ -434,6 +456,9 @@ function sameOverride(
     row.is_blocked === expected.isBlocked &&
     graphOrigin === expected.graph?.origin &&
     graphDirection === expected.graph?.direction &&
-    graphLabel === expected.graph?.label
+    graphLabel === expected.graph?.label &&
+    graphSemanticKind === expected.graph?.semanticKind &&
+    graphVerificationStatus === expected.graph?.verificationStatus &&
+    graphNote === expected.graph?.note
   );
 }

@@ -141,10 +141,31 @@ export interface JsonApiSourceSubscriptionWrite extends SourceSubscriptionWriteB
     Readonly<{kind: 'none'}> | Readonly<{kind: 'bearer_env'; variable: string}>;
 }
 
+export interface WebSourceSubscriptionWrite extends SourceSubscriptionWriteBase {
+  readonly kind: 'web';
+  readonly pageUrl: string;
+  readonly additionalPaths: readonly string[];
+}
+
+export interface PluginSourceSubscriptionWrite extends SourceSubscriptionWriteBase {
+  readonly kind: 'plugin';
+  readonly connectorId: string;
+  readonly configurationRef: string;
+}
+
+export interface SourceConnectorCapabilityView {
+  readonly connectorId: string;
+  readonly displayName: string;
+  readonly origin: 'builtin' | 'plugin';
+  readonly configurationMode: 'internal' | 'external_reference';
+}
+
 export type SourceSubscriptionWrite =
   | GitSourceSubscriptionWrite
   | RssSourceSubscriptionWrite
-  | JsonApiSourceSubscriptionWrite;
+  | JsonApiSourceSubscriptionWrite
+  | WebSourceSubscriptionWrite
+  | PluginSourceSubscriptionWrite;
 
 export type SourceSubscriptionView = SourceSubscriptionWrite &
   Readonly<{
@@ -160,6 +181,7 @@ export type SourceSubscriptionListResponse =
   | Readonly<{
       status: 'ok';
       revision: number;
+      connectors: readonly Readonly<SourceConnectorCapabilityView>[];
       subscriptions: readonly Readonly<SourceSubscriptionView>[];
     }>
   | Readonly<{status: 'failed'; issue: Readonly<{code: string}>}>;
@@ -1265,6 +1287,9 @@ export interface CurrentInformationEntryAssociationOverride {
       origin: 'association' | 'user' | 'ai';
       label: string;
       direction: InformationEntryGraphDirection;
+      semanticKind: InformationEntryGraphSemanticKind;
+      verificationStatus: InformationEntryGraphVerificationStatus;
+      note: string;
     }>;
   }>;
 }
@@ -1280,6 +1305,22 @@ export interface InformationEntryAssociationView {
 export type InformationEntryGraphDirection =
   'symmetric' | 'low_to_high' | 'high_to_low';
 
+export type InformationEntryGraphSemanticKind =
+  | 'similarity'
+  | 'related'
+  | 'supports'
+  | 'contradicts'
+  | 'part_of'
+  | 'causes'
+  | 'example_of'
+  | 'custom';
+
+export type InformationEntryGraphVerificationStatus =
+  'unreviewed' | 'source_checked' | 'needs_review';
+
+export type InformationEntryGraphEdgeVerificationStatus =
+  InformationEntryGraphVerificationStatus | 'calculated';
+
 export type InformationEntryGraphEdgeOrigin =
   'automatically_calculated' | 'user_edited' | 'user_created' | 'ai_assisted';
 
@@ -1289,6 +1330,9 @@ export interface InformationEntryGraphEdge {
   readonly label: string;
   readonly direction: InformationEntryGraphDirection;
   readonly origin: InformationEntryGraphEdgeOrigin;
+  readonly semanticKind: InformationEntryGraphSemanticKind;
+  readonly verificationStatus: InformationEntryGraphEdgeVerificationStatus;
+  readonly note: string;
   readonly effectiveScore: number;
   readonly isBlocked: boolean;
   readonly overrideRevision: number;

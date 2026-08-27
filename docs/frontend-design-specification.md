@@ -299,7 +299,7 @@ background execution as supported rule types.
 Manual Curation, the old formal Knowledge writer/current-item reader and the old
 Knowledge search are not current product capabilities. Their pages, client
 contracts and server routes MUST NOT be restored as secondary or hidden tools.
-The `正式知识` page implements the graph, edge-origin and retrieval semantics accepted in ADR 0010/0011. It uses the existing Association override with only three added current metadata columns; it does not add a parallel graph store.
+The `正式知识` page implements the graph, edge-origin and retrieval semantics accepted in ADR 0010/0011 and the relation-maintenance boundary in ADR 0042. It uses the existing Association override with six graph metadata columns: origin, label, direction, semantic kind, source-review status and note. It does not add a parallel graph store. Automatic similarity MUST be labelled calculated rather than source-checked; the edge inspector MUST expose both endpoint evidence actions before the user records a source-review state.
 
 Privacy is explicit and local to the action being taken:
 

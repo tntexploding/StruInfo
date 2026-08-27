@@ -33,6 +33,9 @@ describe('Postgres Information Entry knowledge graph persistence', () => {
             graph_origin: 'association',
             graph_label: '扩展自',
             graph_direction: 'low_to_high',
+            graph_semantic_kind: 'supports',
+            graph_verification_status: 'source_checked',
+            graph_note: '已核对两端来源',
           })
         : rows(),
     );
@@ -51,6 +54,9 @@ describe('Postgres Information Entry knowledge graph persistence', () => {
               origin: 'association',
               label: '扩展自',
               direction: 'low_to_high',
+              semanticKind: 'supports',
+              verificationStatus: 'source_checked',
+              note: '已核对两端来源',
             },
           },
         },
@@ -100,6 +106,9 @@ describe('Postgres Information Entry knowledge graph persistence', () => {
             origin: 'user',
             label: '补充说明',
             direction: 'symmetric',
+            semanticKind: 'related',
+            verificationStatus: 'unreviewed',
+            note: '待核对',
           },
         },
       }),
@@ -121,6 +130,9 @@ describe('Postgres Information Entry knowledge graph persistence', () => {
       'user',
       '补充说明',
       'symmetric',
+      'related',
+      'unreviewed',
+      '待核对',
     ]);
   });
 });

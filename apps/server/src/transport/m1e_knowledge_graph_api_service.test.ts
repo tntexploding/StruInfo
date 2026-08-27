@@ -91,6 +91,8 @@ describe('M1E Knowledge graph local API', () => {
               entryHighId: ENTRY_B,
               label: 'similarity',
               origin: 'automatically_calculated',
+              semanticKind: 'similarity',
+              verificationStatus: 'calculated',
               overrideRevision: 0,
             },
           ],
@@ -105,6 +107,9 @@ describe('M1E Knowledge graph local API', () => {
         operation: 'edit',
         label: '扩展自',
         direction: 'low_to_high',
+        semanticKind: 'supports',
+        verificationStatus: 'source_checked',
+        note: '已核对两端原始来源',
       }),
     ).resolves.toMatchObject({
       statusCode: 200,
@@ -117,6 +122,9 @@ describe('M1E Knowledge graph local API', () => {
           origin: 'association',
           label: '扩展自',
           direction: 'low_to_high',
+          semanticKind: 'supports',
+          verificationStatus: 'source_checked',
+          note: '已核对两端原始来源',
         },
       },
     });
@@ -133,6 +141,9 @@ describe('M1E Knowledge graph local API', () => {
             {
               label: '扩展自',
               origin: 'user_edited',
+              semanticKind: 'supports',
+              verificationStatus: 'source_checked',
+              note: '已核对两端原始来源',
               overrideRevision: 1,
             },
           ],

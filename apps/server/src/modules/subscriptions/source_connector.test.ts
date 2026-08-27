@@ -17,6 +17,11 @@ describe('SourceConnectorRegistry', () => {
     const registry = new SourceConnectorRegistry([
       {
         connectorId: 'plugin.example.rss.v1',
+        descriptor: Object.freeze({
+          displayName: 'Synthetic RSS',
+          origin: 'plugin' as const,
+          configurationMode: 'external_reference' as const,
+        }),
         read: vi.fn(() =>
           Promise.resolve({
             status: 'changed',
@@ -50,6 +55,14 @@ describe('SourceConnectorRegistry', () => {
       configuration: Object.freeze({feed: 'synthetic'}),
     });
     expect(registry.connectorIds()).toEqual(['plugin.example.rss.v1']);
+    expect(registry.capabilities()).toEqual([
+      {
+        connectorId: 'plugin.example.rss.v1',
+        displayName: 'Synthetic RSS',
+        origin: 'plugin',
+        configurationMode: 'external_reference',
+      },
+    ]);
     expect(result).toMatchObject({
       status: 'changed',
       cursor: 'feed-version-2',
@@ -77,6 +90,42 @@ describe('SourceConnectorRegistry', () => {
     ).toThrow(
       expect.objectContaining<Partial<SourceConnectorError>>({
         code: 'connector_duplicate',
+      }),
+    );
+    expect(
+      () =>
+        new SourceConnectorRegistry([
+          {
+            connectorId: 'plugin.bad.v1',
+            descriptor: {
+              displayName: 'Bad adapter',
+              origin: 'plugin',
+              configurationMode: 'internal',
+            },
+            read: () => Promise.resolve({}),
+          },
+        ]),
+    ).toThrow(
+      expect.objectContaining<Partial<SourceConnectorError>>({
+        code: 'connector_result_invalid',
+      }),
+    );
+    expect(
+      () =>
+        new SourceConnectorRegistry([
+          {
+            connectorId: 'builtin.forged-plugin.v1',
+            descriptor: {
+              displayName: 'Wrong namespace',
+              origin: 'plugin',
+              configurationMode: 'external_reference',
+            },
+            read: () => Promise.resolve({}),
+          },
+        ]),
+    ).toThrow(
+      expect.objectContaining<Partial<SourceConnectorError>>({
+        code: 'connector_result_invalid',
       }),
     );
 

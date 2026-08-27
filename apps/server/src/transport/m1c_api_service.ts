@@ -10,6 +10,8 @@ import {
   INFORMATION_ENTRY_ASSOCIATION_POLICY,
   INFORMATION_ENTRY_EXPLORATION_POLICY_VERSION,
   INFORMATION_ENTRY_GRAPH_DIRECTIONS,
+  INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS,
+  INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES,
   INFORMATION_ENTRY_GRAPH_MAXIMUM_NEIGHBORS,
   InformationEntrySearchCursorError,
   InformationEntryQuerySynthesisServiceError,
@@ -58,6 +60,8 @@ import {
   type InformationEntryAssociationRepositoryPort,
   type InformationEntryAssociationRepositorySnapshot,
   type InformationEntryGraphDirection,
+  type InformationEntryGraphSemanticKind,
+  type InformationEntryGraphVerificationStatus,
   type InformationEntryPreferenceTrialExpectedEntry,
   type InformationDocumentTagRepositoryPort,
   type InformationDocumentWorkingCopyRepositoryPort,
@@ -2779,6 +2783,11 @@ export class M1cApiService implements M1cApiServicePort {
           input.label,
           input.direction,
           origin,
+          {
+            semanticKind: input.semanticKind,
+            verificationStatus: input.verificationStatus,
+            note: input.note,
+          },
         );
         if (graph === undefined) return inputFailure('body.label');
         value = prepareInformationEntryGraphEdit(
@@ -3409,7 +3418,11 @@ export class M1cApiService implements M1cApiServicePort {
     if (service === undefined) return sourceSubscriptionUnavailable();
     try {
       const value = await service.list();
-      return httpResult(200, {status: 'ok', ...value});
+      return httpResult(200, {
+        status: 'ok',
+        ...value,
+        connectors: service.connectorCapabilities?.() ?? Object.freeze([]),
+      });
     } catch (error) {
       return sourceSubscriptionFailure(error);
     }
@@ -4666,6 +4679,9 @@ function decodeInformationEntryKnowledgeGraphEdgeWrite(body: unknown):
           operation: 'edit';
           label: string;
           direction: InformationEntryGraphDirection;
+          semanticKind: InformationEntryGraphSemanticKind;
+          verificationStatus: InformationEntryGraphVerificationStatus;
+          note: string;
         }
       | {
           expectedRevision: number;
@@ -4686,12 +4702,24 @@ function decodeInformationEntryKnowledgeGraphEdgeWrite(body: unknown):
     return undefined;
   }
   if (body.operation === 'edit') {
+    const semanticKind = body.semanticKind ?? 'related';
+    const verificationStatus = body.verificationStatus ?? 'unreviewed';
+    const note = body.note ?? '';
     if (
       typeof body.label !== 'string' ||
       typeof body.direction !== 'string' ||
       !INFORMATION_ENTRY_GRAPH_DIRECTIONS.includes(
         body.direction as InformationEntryGraphDirection,
-      )
+      ) ||
+      typeof semanticKind !== 'string' ||
+      !INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS.includes(
+        semanticKind as InformationEntryGraphSemanticKind,
+      ) ||
+      typeof verificationStatus !== 'string' ||
+      !INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES.includes(
+        verificationStatus as InformationEntryGraphVerificationStatus,
+      ) ||
+      typeof note !== 'string'
     ) {
       return undefined;
     }
@@ -4701,12 +4729,19 @@ function decodeInformationEntryKnowledgeGraphEdgeWrite(body: unknown):
       operation: 'edit' as const,
       label: body.label,
       direction: body.direction as InformationEntryGraphDirection,
+      semanticKind: semanticKind as InformationEntryGraphSemanticKind,
+      verificationStatus:
+        verificationStatus as InformationEntryGraphVerificationStatus,
+      note,
     });
   }
   if (
     (body.operation !== 'block' && body.operation !== 'restore') ||
     body.label !== undefined ||
-    body.direction !== undefined
+    body.direction !== undefined ||
+    body.semanticKind !== undefined ||
+    body.verificationStatus !== undefined ||
+    body.note !== undefined
   ) {
     return undefined;
   }
@@ -5173,6 +5208,30 @@ function decodeSourceSubscriptionReplace(body: unknown):
     'publishedAtPath',
     'versionPath',
   ];
+  const webKeys = [
+    'additionalPaths',
+    'enabled',
+    'intervalMinutes',
+    'isPrivate',
+    'kind',
+    'label',
+    'pageUrl',
+    'routeAfterImport',
+    'sourceAlias',
+    'subscriptionId',
+  ];
+  const pluginKeys = [
+    'configurationRef',
+    'connectorId',
+    'enabled',
+    'intervalMinutes',
+    'isPrivate',
+    'kind',
+    'label',
+    'routeAfterImport',
+    'sourceAlias',
+    'subscriptionId',
+  ];
   if (
     body.subscriptions.some((subscription) => {
       if (!isRecord(subscription)) return true;
@@ -5186,6 +5245,12 @@ function decodeSourceSubscriptionReplace(body: unknown):
           jsonRequiredKeys.some((key) => !Object.hasOwn(subscription, key)) ||
           ownKeys.some((key) => !jsonAllowedKeys.includes(key))
         );
+      }
+      if (subscription.kind === 'web') {
+        return keys !== webKeys.join('\\u0000');
+      }
+      if (subscription.kind === 'plugin') {
+        return keys !== pluginKeys.join('\\u0000');
       }
       return (
         keys !== githubKeys.join('\\u0000') &&
@@ -5260,20 +5325,48 @@ function decodeSourceSubscriptionReplace(body: unknown):
                 routeAfterImport: subscription.routeAfterImport,
                 intervalMinutes: subscription.intervalMinutes,
               })
-            : Object.freeze({
-                kind: 'github_markdown' as const,
-                subscriptionId: subscription.subscriptionId,
-                label: subscription.label,
-                enabled: subscription.enabled,
-                repositoryUri: subscription.repositoryUri,
-                repositoryRef: subscription.repositoryRef,
-                repositoryPath: subscription.repositoryPath,
-                profile: subscription.profile,
-                sourceAlias: subscription.sourceAlias,
-                isPrivate: subscription.isPrivate,
-                routeAfterImport: subscription.routeAfterImport,
-                intervalMinutes: subscription.intervalMinutes,
-              }),
+            : subscription.kind === 'web'
+              ? Object.freeze({
+                  kind: subscription.kind,
+                  subscriptionId: subscription.subscriptionId,
+                  label: subscription.label,
+                  enabled: subscription.enabled,
+                  pageUrl: subscription.pageUrl,
+                  additionalPaths: Object.freeze([
+                    ...subscription.additionalPaths,
+                  ]),
+                  sourceAlias: subscription.sourceAlias,
+                  isPrivate: subscription.isPrivate,
+                  routeAfterImport: subscription.routeAfterImport,
+                  intervalMinutes: subscription.intervalMinutes,
+                })
+              : subscription.kind === 'plugin'
+                ? Object.freeze({
+                    kind: subscription.kind,
+                    subscriptionId: subscription.subscriptionId,
+                    label: subscription.label,
+                    enabled: subscription.enabled,
+                    connectorId: subscription.connectorId,
+                    configurationRef: subscription.configurationRef,
+                    sourceAlias: subscription.sourceAlias,
+                    isPrivate: subscription.isPrivate,
+                    routeAfterImport: subscription.routeAfterImport,
+                    intervalMinutes: subscription.intervalMinutes,
+                  })
+                : Object.freeze({
+                    kind: 'github_markdown' as const,
+                    subscriptionId: subscription.subscriptionId,
+                    label: subscription.label,
+                    enabled: subscription.enabled,
+                    repositoryUri: subscription.repositoryUri,
+                    repositoryRef: subscription.repositoryRef,
+                    repositoryPath: subscription.repositoryPath,
+                    profile: subscription.profile,
+                    sourceAlias: subscription.sourceAlias,
+                    isPrivate: subscription.isPrivate,
+                    routeAfterImport: subscription.routeAfterImport,
+                    intervalMinutes: subscription.intervalMinutes,
+                  }),
       ),
     ),
   });

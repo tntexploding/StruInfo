@@ -72,6 +72,11 @@ export interface JsonApiSourceConnectorDependencies {
  */
 export class JsonApiSourceConnector implements SourceConnectorPort {
   public readonly connectorId = JSON_API_SOURCE_CONNECTOR_ID;
+  public readonly descriptor = Object.freeze({
+    displayName: 'JSON API',
+    origin: 'builtin' as const,
+    configurationMode: 'internal' as const,
+  });
   readonly #fetch: typeof fetch;
   readonly #resolveAddresses: (hostname: string) => Promise<readonly string[]>;
   readonly #readEnvironment: (variable: string) => string | undefined;

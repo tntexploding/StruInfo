@@ -2,6 +2,7 @@ import {useCallback, useEffect, useMemo, useState} from 'react';
 
 import type {
   M1cHttpResponse,
+  SourceConnectorCapabilityView,
   SourceSubscriptionListResponse,
   SourceSubscriptionReplaceResponse,
   SourceSubscriptionRunResponse,
@@ -14,6 +15,11 @@ import {
   createCommandKey,
 } from '../components/client_identity.js';
 import type {ActionFeedback} from '../components/product_types.js';
+import {
+  PluginSourceSubscriptionFields,
+  SourceConnectorCapabilityList,
+  WebSourceSubscriptionFields,
+} from './source_subscription_connector_fields.js';
 
 type SubscriptionPanelState =
   | Readonly<{status: 'loading'}>
@@ -21,6 +27,7 @@ type SubscriptionPanelState =
   | Readonly<{
       status: 'ready';
       revision: number;
+      connectors: readonly Readonly<SourceConnectorCapabilityView>[];
       saved: readonly Readonly<SourceSubscriptionView>[];
       drafts: readonly Readonly<SourceSubscriptionWrite>[];
     }>;
@@ -68,6 +75,7 @@ export function SourceSubscriptionPanel({
       setState({
         status: 'ready',
         revision: response.body.revision,
+        connectors: response.body.connectors,
         saved: response.body.subscriptions,
         drafts: Object.freeze(response.body.subscriptions.map(toWrite)),
       });
@@ -211,6 +219,11 @@ export function SourceSubscriptionPanel({
     subscription: Readonly<SourceSubscriptionWrite>,
     kind: SourceSubscriptionWrite['kind'],
   ) {
+    const firstPluginId =
+      state.status === 'ready'
+        ? state.connectors.find((connector) => connector.origin === 'plugin')
+            ?.connectorId
+        : undefined;
     const common = {
       subscriptionId: subscription.subscriptionId,
       label: subscription.label,
@@ -240,14 +253,28 @@ export function SourceSubscriptionPanel({
               recordLimit: 32,
               authentication: Object.freeze({kind: 'none' as const}),
             })
-          : Object.freeze({
-              ...common,
-              kind,
-              repositoryUri: '',
-              repositoryRef: 'main',
-              repositoryPath: '',
-              profile: 'commonmark-v1' as const,
-            });
+          : kind === 'web'
+            ? Object.freeze({
+                ...common,
+                kind,
+                pageUrl: '',
+                additionalPaths: Object.freeze([]),
+              })
+            : kind === 'plugin'
+              ? Object.freeze({
+                  ...common,
+                  kind,
+                  connectorId: firstPluginId ?? '',
+                  configurationRef: '',
+                })
+              : Object.freeze({
+                  ...common,
+                  kind,
+                  repositoryUri: '',
+                  repositoryRef: 'main',
+                  repositoryPath: '',
+                  profile: 'commonmark-v1' as const,
+                });
     setState((current) =>
       current.status !== 'ready'
         ? current
@@ -291,6 +318,7 @@ export function SourceSubscriptionPanel({
       setState({
         status: 'ready',
         revision: response.body.revision,
+        connectors: state.connectors,
         saved: response.body.subscriptions,
         drafts: Object.freeze(response.body.subscriptions.map(toWrite)),
       });
@@ -386,8 +414,8 @@ export function SourceSubscriptionPanel({
         <>
           <div className="source-subscription-toolbar">
             <p>
-              支持精确 GitHub Markdown、公开 RSS/Atom 与声明式 JSON API。
-              手动检查始终可用；定期检查默认关闭。
+              支持精确 GitHub Markdown、公开 RSS/Atom、声明式 JSON API、
+              受限网页与运行环境已安装的连接器。手动检查始终可用；定期检查默认关闭。
             </p>
             <button
               className="secondary-action"
@@ -398,6 +426,7 @@ export function SourceSubscriptionPanel({
               新增订阅
             </button>
           </div>
+          <SourceConnectorCapabilityList connectors={state.connectors} />
           {state.drafts.length === 0 ? (
             <p className="empty-copy">
               尚无订阅。新增后先保存，再执行一次手动检查。
@@ -446,6 +475,13 @@ export function SourceSubscriptionPanel({
                           </option>
                           <option value="rss_atom">RSS / Atom Feed</option>
                           <option value="json_api">JSON API</option>
+                          <option value="web">受限网页</option>
+                          {subscription.kind === 'plugin' ||
+                          state.connectors.some(
+                            (connector) => connector.origin === 'plugin',
+                          ) ? (
+                            <option value="plugin">已安装插件</option>
+                          ) : null}
                         </select>
                       </label>
                       <label className="field">
@@ -563,7 +599,7 @@ export function SourceSubscriptionPanel({
                             />
                           </label>
                         </>
-                      ) : (
+                      ) : subscription.kind === 'json_api' ? (
                         <>
                           <label className="field field--wide">
                             <span>JSON API 地址</span>
@@ -851,6 +887,21 @@ export function SourceSubscriptionPanel({
                             </>
                           )}
                         </>
+                      ) : subscription.kind === 'web' ? (
+                        <WebSourceSubscriptionFields
+                          subscription={subscription}
+                          onChange={(change) => {
+                            updateDraft(subscription.subscriptionId, change);
+                          }}
+                        />
+                      ) : (
+                        <PluginSourceSubscriptionFields
+                          subscription={subscription}
+                          connectors={state.connectors}
+                          onChange={(change) => {
+                            updateDraft(subscription.subscriptionId, change);
+                          }}
+                        />
                       )}
                       <label className="field">
                         <span>检查间隔（分钟）</span>
@@ -1020,14 +1071,28 @@ function toWrite(
               }),
           authentication: Object.freeze({...subscription.authentication}),
         })
-      : Object.freeze({
-          ...common,
-          kind: subscription.kind,
-          repositoryUri: subscription.repositoryUri,
-          repositoryRef: subscription.repositoryRef,
-          repositoryPath: subscription.repositoryPath,
-          profile: subscription.profile,
-        });
+      : subscription.kind === 'web'
+        ? Object.freeze({
+            ...common,
+            kind: subscription.kind,
+            pageUrl: subscription.pageUrl,
+            additionalPaths: Object.freeze([...subscription.additionalPaths]),
+          })
+        : subscription.kind === 'plugin'
+          ? Object.freeze({
+              ...common,
+              kind: subscription.kind,
+              connectorId: subscription.connectorId,
+              configurationRef: subscription.configurationRef,
+            })
+          : Object.freeze({
+              ...common,
+              kind: subscription.kind,
+              repositoryUri: subscription.repositoryUri,
+              repositoryRef: subscription.repositoryRef,
+              repositoryPath: subscription.repositoryPath,
+              profile: subscription.profile,
+            });
 }
 
 function draftsAreComplete(
@@ -1060,6 +1125,28 @@ function subscriptionConfigurationIsComplete(
       subscription.repositoryUri.trim() !== '' &&
       subscription.repositoryRef.trim() !== '' &&
       subscription.repositoryPath.trim() !== ''
+    );
+  }
+  if (subscription.kind === 'web') {
+    return (
+      subscription.pageUrl.trim() !== '' &&
+      subscription.additionalPaths.length <= 7 &&
+      subscription.additionalPaths.every(
+        (path) =>
+          path.startsWith('/') &&
+          !path.startsWith('//') &&
+          !path.includes('\\') &&
+          !path.includes('#') &&
+          Array.from(path).length <= 500,
+      ) &&
+      new Set(subscription.additionalPaths).size ===
+        subscription.additionalPaths.length
+    );
+  }
+  if (subscription.kind === 'plugin') {
+    return (
+      /^plugin(?:[._-][a-z0-9]+){1,7}$/u.test(subscription.connectorId) &&
+      /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u.test(subscription.configurationRef)
     );
   }
   return (

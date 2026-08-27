@@ -1,6 +1,6 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1H-5A/B 活动接口
+- 状态：M1J 活动接口
 - 最近核对：2026-08-27
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
@@ -30,7 +30,7 @@
 | `POST` | `/api/v1/evidence/snapshots/:snapshotId/working-copy/commit`                          | 确认草稿并通过既有 Evidence 边界生成不可变派生 Snapshot                               |
 | `GET`  | `/api/v1/preferences/review`                                                          | 读取外部工作区的快捷标签、自动关键词开关/过滤、别名、联系和探索策略                   |
 | `PUT`  | `/api/v1/preferences/review`                                                          | 整体保存当前偏好文件；未提交的版本化策略保持现值                                      |
-| `GET`  | `/api/v1/source-subscriptions`                                                        | 读取外部版本化 GitHub Markdown 单文件订阅、运行状态和成功游标                         |
+| `GET`  | `/api/v1/source-subscriptions`                                                        | 读取外部版本化信源订阅、运行状态、成功游标和实际安装连接器 capability                 |
 | `PUT`  | `/api/v1/source-subscriptions`                                                        | 以期望修订整体替换订阅配置；运行状态与游标由服务端维护                                |
 | `POST` | `/api/v1/source-subscriptions/:subscriptionId/run`                                    | 使用 `requestKey` 检查订阅；变化时导入，并可按默认关闭开关确定性物化/分流             |
 | `POST` | `/api/v1/imports/markdown`                                                            | 原子导入手动/Git Markdown 或本地 UTF-8 Markdown/文本文件、来源、Blob、结构和 Fragment |
@@ -82,7 +82,7 @@
 | `POST` | `/api/v1/workspace-bundles/export`                                                    | 将当前工作区个人数据写入外部 `exports/`                                               |
 | `POST` | `/api/v1/workspace-bundles/restore`                                                   | 从安全文件名恢复同 ID 的空工作区                                                      |
 
-API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单页应用。`scheduler`/`all` 角色还运行顺序且非重叠的到期订阅检查；worker 只提供健康路由。该能力只代表精确 GitHub Markdown 单文件订阅，不表示通用自动采集。ProcessingRun 读取/取消是独立任务状态边界；OpenAI split、tags、selected-pair association 与 Query synthesis 只在 API/`all` 且配置完整时装配。确定性探索始终是本地无 Provider 读路径。
+API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单页应用。`scheduler`/`all` 角色还运行顺序且非重叠的到期订阅检查；worker 只提供健康路由。订阅能力只代表精确 GitHub Markdown、公开 RSS/Atom、声明式 JSON API、受限同源网页和实际安装的受信任连接器，不表示通用自动采集或开放爬虫。ProcessingRun 读取/取消是独立任务状态边界；OpenAI split、tags、selected-pair association 与 Query synthesis 只在 API/`all` 且配置完整时装配。确定性探索始终是本地无 Provider 读路径。
 
 ## 3. 五步主线如何调用接口
 
@@ -97,9 +97,9 @@ API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单�
 
 Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和正文前置文字映射到这些字段。本地文件默认使用基础文件名加 SHA-256 作为 portable source key，不提交目录路径；无前置文字时 Base64 解码后的字节保持原样。相同命令可重放；同键异内容返回冲突。M1H-5 批次队列仍按顺序逐份调用同一 `/imports/document`，没有批次请求体；失败项重试同一请求身份，成功后只统一刷新页面列表。
 
-三个 `/source-subscriptions` 操作只管理精确公开 GitHub repository/ref 下的单个 Markdown 路径。GET 返回 revision、可编辑字段和服务端维护的 last-attempt/last-success/run/cursor；PUT 接受 `{expectedRevision, subscriptions}`，每个写入项必须完整给出稳定 UUID、标签、enabled、repositoryUri、repositoryRef、repositoryPath、profile、sourceAlias、isPrivate、默认关闭的 `routeAfterImport` 和 15–10080 分钟间隔，不能伪造运行字段。POST 只接受 `{requestKey}`；即使 enabled 为 false 也可手动运行。
+三个 `/source-subscriptions` 操作管理闭合的 `github_markdown`、`rss_atom`、`json_api`、`web` 和 `plugin` union。GET 返回 revision、可编辑字段、服务端维护的 last-attempt/last-success/run/cursor，以及当前实际安装连接器 capability；PUT 接受 `{expectedRevision, subscriptions}`，每项必须完整给出稳定 UUID、标签、enabled、类型配置、profile、sourceAlias、isPrivate、默认关闭的 `routeAfterImport` 和 15–10080 分钟间隔，不能伪造运行字段。Web 配置只含一个公开 HTTPS `pageUrl` 和最多七个 root-relative 同源路径；plugin 配置只含 `plugin.*` connector ID 与 opaque `configurationRef`。POST 只接受 `{requestKey}`；即使 enabled 为 false 也可手动运行。
 
-每次运行先建立 import 阶段 ProcessingRun，再读取 Git commit 与精确文件。字节变化时调用同一个 Markdown Evidence import；相同字节只推进 cursor，不重复生成 Snapshot。`routeAfterImport=false` 时在导入后结束；明确开启后，服务端继续复用确定性 section Entry 物化和现有可恢复自动路由，返回 automation run ID 与本 Snapshot 的 Entry 数。若 AutomationPolicy 另外显式启用 M1H 推进动作，确定性标签和可替换联系投影也必须完成后才能推进成功 cursor；失败保留旧 cursor 以便幂等重试。`source_subscriptions` capability 本身不允许任意 URL、仓库目录扫描、仓库代码执行、AI 调用、图谱修改或提案接受。
+每次运行先建立 import 阶段 ProcessingRun，再由所选 reader 返回 unchanged 或有界 changed documents。变化文档调用同一个 Evidence import；相同内容只推进 connector cursor，不重复生成 Snapshot。`routeAfterImport=false` 时在导入后结束；明确开启后，服务端继续复用确定性 section Entry 物化和现有可恢复自动路由，返回 automation run ID 与各 Snapshot 的 Entry 数。若 AutomationPolicy 另外显式启用 M1H 推进动作，确定性标签和可替换联系投影也必须完成后才能推进成功 cursor；失败保留旧 cursor以便幂等重试。`source_subscriptions` capability 本身不允许开放 URL 抓取、链接发现、仓库目录扫描、代码执行、AI 调用、图谱修改或提案接受；插件也没有数据库或游标写端口。
 
 ### 3.2 拆分
 
@@ -169,7 +169,7 @@ M1H action POST 接受 `{expectedVersion, operation: "apply" | "undo", includePr
 
 `POST /knowledge-graph/view` 接受可选 `query` 或 `centerEntryId`、隐私范围、1–12 个候选和 1–24 个可见邻居。未指定中心时，服务端复用确定性 Entry 匹配，把最高结果作为中心，同时返回可改选候选。隐私过滤先于中心选择、遍历、计数和返回。
 
-`PUT /knowledge-graph/edges/:entryId/:relatedEntryId` 使用 `expectedRevision` 和当前态 CAS，支持 `edit`、`block`、`restore`。`edit` 可保存 1–80 字符关系名以及双向、低 ID 指向高 ID 或高 ID 指向低 ID；无自动投影的 Entry 对会形成用户创建关系。自动边、用户编辑边、用户创建边和 AI 辅助边分别标明来源。自动 `similarity` 表示确定性导航相似度，不是经核验的事实断言。
+`PUT /knowledge-graph/edges/:entryId/:relatedEntryId` 使用 `expectedRevision` 和当前态 CAS，支持 `edit`、`block`、`restore`。`edit` 保存 1–80 字符关系名、方向、`semanticKind`、`verificationStatus` 和最多 500 code point 的 `note`。语义闭合为 `similarity / related / supports / contradicts / part_of / causes / example_of / custom`；持久核验状态闭合为 `unreviewed / source_checked / needs_review`。无自动投影的 Entry 对会形成用户创建关系。读取结果中的纯自动边为 `similarity / calculated`；它表示确定性导航相似度，不是经核验的事实断言。知识页可分别打开两端精确来源，`source_checked` 也只表示用户已回看来源，不证明客观事实为真。
 
 四个 `/knowledge-graph/edges/:entryId/:relatedEntryId/proposals` 路由只处理用户已经选中的 Entry 对。start 接受 `{requestKey}`；服务端先固定两端 current revision 和 pair override revision，任一端隐私时在 fetch 前拒绝。Provider 只接收该对标题、正文和三维标签，返回有界关系名、方向和说明。reject 不改图谱；accept 使用提案冻结的版本调用同一 graph edge command/CAS，成功边来源为 `ai_assisted`，后续人工编辑仍转为用户编辑来源。
 

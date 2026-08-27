@@ -433,6 +433,50 @@
   margin-block: var(--si-space-6) var(--si-space-5);
 }
 
+.source-connector-capabilities {
+  display: grid;
+  gap: var(--si-space-3);
+  margin-block-end: var(--si-space-5);
+  padding: var(--si-space-4);
+  border: var(--si-rule-thin) solid var(--si-color-border-subtle);
+  background: var(--si-color-bg-shell);
+}
+
+.source-connector-capabilities > div,
+.source-connector-capabilities li {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--si-space-3);
+}
+
+.source-connector-capabilities > div span,
+.source-connector-capabilities p,
+.source-connector-capabilities small,
+.source-connector-capabilities code,
+.source-connector-warning {
+  color: var(--si-color-text-muted);
+  font-size: var(--si-text-sm);
+}
+
+.source-connector-capabilities ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--si-space-2) var(--si-space-5);
+  list-style: none;
+}
+
+.source-connector-capabilities code {
+  overflow-wrap: anywhere;
+}
+
+.source-connector-warning {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--si-space-3);
+  border-inline-start: var(--si-space-1) solid var(--si-color-warning);
+}
+
 .source-subscription-toolbar p,
 .source-subscription-commit p,
 .source-subscription-options > span,

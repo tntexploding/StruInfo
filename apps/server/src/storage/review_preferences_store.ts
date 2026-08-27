@@ -137,6 +137,14 @@ export interface ReviewJsonApiSourceSubscriptionCursor {
   readonly connectorCursor: string;
 }
 
+export interface ReviewWebSourceSubscriptionCursor {
+  readonly connectorCursor: string;
+}
+
+export interface ReviewPluginSourceSubscriptionCursor {
+  readonly connectorCursor: string;
+}
+
 export interface ReviewJsonApiCursorMapping {
   readonly queryParameter: string;
   readonly responsePath: string;
@@ -194,10 +202,28 @@ export interface ReviewJsonApiSourceSubscription extends ReviewSourceSubscriptio
   readonly cursor?: Readonly<ReviewJsonApiSourceSubscriptionCursor>;
 }
 
+export interface ReviewWebSourceSubscription extends ReviewSourceSubscriptionBase {
+  readonly kind: 'web';
+  readonly pageUrl: string;
+  readonly additionalPaths: readonly string[];
+  readonly cursor?: Readonly<ReviewWebSourceSubscriptionCursor>;
+}
+
+export interface ReviewPluginSourceSubscription extends ReviewSourceSubscriptionBase {
+  readonly kind: 'plugin';
+  /** Installed runtime adapter. No executable payload is stored here. */
+  readonly connectorId: string;
+  /** Opaque reference resolved by the already-installed adapter. */
+  readonly configurationRef: string;
+  readonly cursor?: Readonly<ReviewPluginSourceSubscriptionCursor>;
+}
+
 export type ReviewSourceSubscription =
   | ReviewGitSourceSubscription
   | ReviewRssSourceSubscription
-  | ReviewJsonApiSourceSubscription;
+  | ReviewJsonApiSourceSubscription
+  | ReviewWebSourceSubscription
+  | ReviewPluginSourceSubscription;
 
 export interface ReviewSourceSubscriptionPreferences {
   readonly revision: number;
@@ -1067,6 +1093,47 @@ function decodeSourceSubscription(
       ...(cursor === undefined ? {} : {cursor}),
     });
   }
+  if (kind === 'web') {
+    const pageUrl =
+      typeof value.pageUrl === 'string'
+        ? decodePublicHttpsUri(value.pageUrl)
+        : undefined;
+    const additionalPaths = decodeWebAdditionalPaths(value.additionalPaths);
+    const cursor = decodeConnectorSourceSubscriptionCursor(value.cursor);
+    if (
+      pageUrl === undefined ||
+      additionalPaths === undefined ||
+      (value.cursor !== undefined && cursor === undefined)
+    ) {
+      return undefined;
+    }
+    return Object.freeze({
+      ...common,
+      kind: 'web' as const,
+      pageUrl,
+      additionalPaths,
+      ...(cursor === undefined ? {} : {cursor}),
+    });
+  }
+  if (kind === 'plugin') {
+    const cursor = decodeConnectorSourceSubscriptionCursor(value.cursor);
+    if (
+      typeof value.connectorId !== 'string' ||
+      !PLUGIN_CONNECTOR_ID.test(value.connectorId) ||
+      typeof value.configurationRef !== 'string' ||
+      !PLUGIN_CONFIGURATION_REFERENCE.test(value.configurationRef) ||
+      (value.cursor !== undefined && cursor === undefined)
+    ) {
+      return undefined;
+    }
+    return Object.freeze({
+      ...common,
+      kind: 'plugin' as const,
+      connectorId: value.connectorId,
+      configurationRef: value.configurationRef,
+      ...(cursor === undefined ? {} : {cursor}),
+    });
+  }
   if (
     kind !== 'github_markdown' ||
     typeof value.repositoryUri !== 'string' ||
@@ -1139,6 +1206,31 @@ function cloneSourceSubscription(
           }),
     });
   }
+  if (subscription.kind === 'web') {
+    return Object.freeze({
+      ...subscription,
+      additionalPaths: Object.freeze([...subscription.additionalPaths]),
+      ...(subscription.cursor === undefined
+        ? {}
+        : {
+            cursor: Object.freeze({
+              connectorCursor: subscription.cursor.connectorCursor,
+            }),
+          }),
+    });
+  }
+  if (subscription.kind === 'plugin') {
+    return Object.freeze({
+      ...subscription,
+      ...(subscription.cursor === undefined
+        ? {}
+        : {
+            cursor: Object.freeze({
+              connectorCursor: subscription.cursor.connectorCursor,
+            }),
+          }),
+    });
+  }
   return Object.freeze({
     ...subscription,
     ...(subscription.kind === undefined ? {} : {kind: subscription.kind}),
@@ -1199,6 +1291,33 @@ const JSON_API_PATH =
   /^(?:[A-Za-z_][A-Za-z0-9_-]{0,99})(?:\.(?:[A-Za-z_][A-Za-z0-9_-]{0,99})){0,7}$/u;
 const JSON_API_QUERY_PARAMETER = /^[A-Za-z_][A-Za-z0-9_.-]{0,79}$/u;
 const ENVIRONMENT_VARIABLE = /^[A-Z_][A-Z0-9_]{0,99}$/u;
+const PLUGIN_CONNECTOR_ID = /^plugin(?:[._-][a-z0-9]+){1,7}$/u;
+const PLUGIN_CONFIGURATION_REFERENCE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u;
+
+function decodeWebAdditionalPaths(
+  value: unknown,
+): readonly string[] | undefined {
+  if (!Array.isArray(value) || value.length > 7) return undefined;
+  const decoded: string[] = [];
+  const seen = new Set<string>();
+  for (const path of value) {
+    if (
+      typeof path !== 'string' ||
+      !path.startsWith('/') ||
+      path.startsWith('//') ||
+      path.includes('\\') ||
+      path.includes('#') ||
+      Array.from(path).length > 500 ||
+      containsControlCodePoint(path) ||
+      seen.has(path)
+    ) {
+      return undefined;
+    }
+    seen.add(path);
+    decoded.push(path);
+  }
+  return Object.freeze(decoded);
+}
 
 function decodeJsonApiPath(
   value: string,

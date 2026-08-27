@@ -27,7 +27,11 @@ import {
   type ReviewPreferences,
   type ReviewPreferencesStore,
 } from '../../storage/review_preferences_store.js';
-import {SourceConnectorRegistry} from './source_connector.js';
+import {
+  SourceConnectorRegistry,
+  type SourceConnectorImportDependencies,
+  type SourceConnectorImportInput,
+} from './source_connector.js';
 import {SourceSubscriptionService} from './source_subscription.js';
 
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
@@ -599,6 +603,158 @@ describe('SourceSubscriptionService', () => {
       kind: 'json_api',
       cursor: {connectorCursor: 'synthetic-json-cursor-v1'},
     });
+  });
+
+  it('runs constrained Web and installed plugin adapters through one host-owned import path', async () => {
+    const preferences = memoryPreferences();
+    const webRead = vi.fn(() =>
+      Promise.resolve({
+        status: 'changed' as const,
+        cursor: 'synthetic-web-cursor-v1',
+        documents: [
+          {
+            externalId: 'page:a',
+            version: 'version-1',
+            canonicalUri: 'https://example.invalid/articles',
+            mediaType: 'text/html',
+            profile: 'commonmark-v1' as const,
+            sourceUtf8: new TextEncoder().encode('# Synthetic page\n'),
+          },
+        ],
+      }),
+    );
+    const pluginRead = vi.fn(() =>
+      Promise.resolve({
+        status: 'changed' as const,
+        cursor: 'synthetic-plugin-cursor-v1',
+        documents: [
+          {
+            externalId: 'plugin-record-1',
+            version: 'version-1',
+            canonicalUri: 'https://example.invalid/plugin/1',
+            mediaType: 'text/markdown',
+            profile: 'commonmark-v1' as const,
+            sourceUtf8: new TextEncoder().encode('# Plugin record\n'),
+          },
+        ],
+      }),
+    );
+    const importConnectorDocuments = vi.fn(
+      (
+        _dependencies: Readonly<SourceConnectorImportDependencies>,
+        input: Readonly<SourceConnectorImportInput>,
+      ) =>
+        Promise.resolve({
+          status: 'complete' as const,
+          documents: Object.freeze(
+            input.result.documents.map((document, index) =>
+              Object.freeze({
+                externalId: document.externalId,
+                resourceId: `33333333-3333-4333-8333-${String(index + 1).padStart(12, '0')}`,
+                snapshotId:
+                  input.connectorId === 'builtin.web.v1'
+                    ? '44444444-4444-4444-8444-444444444444'
+                    : '55555555-5555-4555-8555-555555555555',
+                outcome: 'created' as const,
+              }),
+            ),
+          ),
+        }),
+    );
+    const service = new SourceSubscriptionService({
+      workspaceId: WORKSPACE_ID,
+      preferences,
+      processing: memoryProcessingRuns(),
+      reader: {read: vi.fn()},
+      connectors: new SourceConnectorRegistry([
+        {
+          connectorId: 'builtin.web.v1',
+          descriptor: {
+            displayName: '受限网页',
+            origin: 'builtin',
+            configurationMode: 'internal',
+          },
+          read: webRead,
+        },
+        {
+          connectorId: 'plugin.synthetic.v1',
+          descriptor: {
+            displayName: 'Synthetic plugin',
+            origin: 'plugin',
+            configurationMode: 'external_reference',
+          },
+          read: pluginRead,
+        },
+      ]),
+      blobStore: {
+        put: () => Promise.reject(new Error('unexpected Blob write')),
+        read: () => Promise.reject(new Error('unexpected Blob read')),
+      },
+      evidence: {
+        saveCapture: () =>
+          Promise.reject(new Error('unexpected Evidence write')),
+      },
+      importConnectorDocuments,
+      now: () => '2026-08-27T08:00:00.000Z',
+    });
+    await service.replace(0, [
+      {
+        kind: 'web',
+        subscriptionId: SUBSCRIPTION_ID,
+        label: 'Synthetic Web',
+        enabled: false,
+        pageUrl: 'https://example.invalid/articles',
+        additionalPaths: ['/about'],
+        sourceAlias: 'synthetic-web',
+        isPrivate: false,
+        routeAfterImport: false,
+        intervalMinutes: 60,
+      },
+      {
+        kind: 'plugin',
+        subscriptionId: '66666666-6666-4666-8666-666666666666',
+        label: 'Synthetic plugin',
+        enabled: false,
+        connectorId: 'plugin.synthetic.v1',
+        configurationRef: 'profile.default',
+        sourceAlias: 'synthetic-plugin',
+        isPrivate: true,
+        routeAfterImport: false,
+        intervalMinutes: 120,
+      },
+    ]);
+
+    expect(service.connectorCapabilities()).toEqual([
+      expect.objectContaining({connectorId: 'builtin.web.v1'}),
+      expect.objectContaining({
+        connectorId: 'plugin.synthetic.v1',
+        origin: 'plugin',
+      }),
+    ]);
+    await service.runNow(SUBSCRIPTION_ID, 'web-check');
+    await service.runNow(
+      '66666666-6666-4666-8666-666666666666',
+      'plugin-check',
+    );
+    expect(webRead).toHaveBeenCalledWith({
+      subscriptionId: SUBSCRIPTION_ID,
+      configuration: {
+        pageUrl: 'https://example.invalid/articles',
+        additionalPaths: ['/about'],
+      },
+    });
+    expect(pluginRead).toHaveBeenCalledWith({
+      subscriptionId: '66666666-6666-4666-8666-666666666666',
+      configuration: {configurationRef: 'profile.default'},
+    });
+    expect(importConnectorDocuments).toHaveBeenCalledTimes(2);
+    expect((await service.list()).subscriptions).toMatchObject([
+      {kind: 'web', cursor: {connectorCursor: 'synthetic-web-cursor-v1'}},
+      {
+        kind: 'plugin',
+        cursor: {connectorCursor: 'synthetic-plugin-cursor-v1'},
+      },
+    ]);
   });
 });
 
