@@ -5,6 +5,7 @@ import type {
   InformationEntryEmptySnapshotRepositoryPort,
   InformationEntryRepositoryPort,
   InformationEntryRestructureRepositoryPort,
+  InformationEntrySearchIndexRepositoryPort,
 } from '../../../modules/entries/index.js';
 import type {
   EvidenceReadRepositoryPort,
@@ -27,6 +28,7 @@ import {PostgresInformationDocumentTagRepository} from './postgres_information_d
 import {PostgresInformationDocumentWorkingCopyRepository} from './postgres_information_document_working_copy_repository.js';
 import {PostgresInformationEntryAssociationRepository} from './postgres_information_entry_association_repository.js';
 import {PostgresInformationEntryRepository} from './postgres_information_entry_repository.js';
+import {PostgresInformationEntrySearchIndexRepository} from './postgres_information_entry_search_index_repository.js';
 import {PostgresInformationEntryRestructureRepository} from './postgres_information_entry_restructure_repository.js';
 import {PostgresAiAssociationProposalRepository} from './postgres_ai_association_proposal_repository.js';
 import {PostgresAiTagProposalRepository} from './postgres_ai_tag_proposal_repository.js';
@@ -43,6 +45,7 @@ export interface PostgresRepositorySet {
   readonly informationEntryRestructures: InformationEntryRestructureRepositoryPort;
   readonly informationDocumentTags: InformationDocumentTagRepositoryPort;
   readonly informationEntryAssociations: InformationEntryAssociationRepositoryPort;
+  readonly informationEntrySearchIndex: InformationEntrySearchIndexRepositoryPort;
   readonly processingRuns: ProcessingRunRepositoryPort &
     AiTagProposalRepositoryPort &
     AiSplitProposalRepositoryPort;
@@ -68,6 +71,8 @@ export function createPostgresRepositories(
     informationDocumentTags: new PostgresInformationDocumentTagRepository(pool),
     informationEntryAssociations:
       new PostgresInformationEntryAssociationRepository(pool),
+    informationEntrySearchIndex:
+      new PostgresInformationEntrySearchIndexRepository(pool),
     processingRuns: new PostgresAiTagProposalRepository(pool),
     aiAssociationProposals: new PostgresAiAssociationProposalRepository(pool),
     entryAutomationExecutions: entryAutomation,

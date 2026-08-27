@@ -32,6 +32,8 @@ import type {
   InformationEntryAssociationPolicyWriteResponse,
   InformationEntryExplorationPolicyWriteResponse,
   InformationEntryExplorationResponse,
+  InformationEntrySearchIndexResponse,
+  InformationEntrySearchEvaluationResponse,
   InformationEntryAssociationRebuildResponse,
   InformationEntryDocumentListResponse,
   InformationEntryKnowledgeGraphEdgeWriteResponse,
@@ -280,6 +282,16 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntrySearchResponse>>;
+  loadInformationEntrySearchIndex(
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntrySearchIndexResponse>>;
+  rebuildInformationEntrySearchIndex(
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntrySearchIndexResponse>>;
+  evaluateInformationEntrySearch(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntrySearchEvaluationResponse>>;
   exploreInformationEntries(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -474,6 +486,9 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     applyInformationEntryRestructure: reject,
     reviseInformationEntry: reject,
     searchInformationEntries: reject,
+    loadInformationEntrySearchIndex: reject,
+    rebuildInformationEntrySearchIndex: reject,
+    evaluateInformationEntrySearch: reject,
     exploreInformationEntries: reject,
     synthesizeInformationEntryQuery: reject,
     readInformationEntryKnowledgeGraph: reject,
@@ -724,6 +739,23 @@ export function createM1cApiClient(
     searchInformationEntries: (body, options) =>
       post<InformationEntrySearchResponse>(
         'api/v1/entries/search',
+        body,
+        options,
+      ),
+    loadInformationEntrySearchIndex: (options) =>
+      get<InformationEntrySearchIndexResponse>(
+        'api/v1/entries/search/index',
+        options,
+      ),
+    rebuildInformationEntrySearchIndex: (options) =>
+      post<InformationEntrySearchIndexResponse>(
+        'api/v1/entries/search/index/rebuild',
+        {},
+        options,
+      ),
+    evaluateInformationEntrySearch: (body, options) =>
+      post<InformationEntrySearchEvaluationResponse>(
+        'api/v1/entries/search/index/evaluate',
         body,
         options,
       ),

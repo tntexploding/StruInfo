@@ -2,6 +2,7 @@ import {searchCurrentInformationEntries} from './information_entry_search.js';
 import type {InformationEntryAssociationRepositoryPort} from './information_entry_association_repository.js';
 import type {CurrentInformationEntry} from './information_entry_contract.js';
 import type {InformationEntryRepositoryPort} from './information_entry_repository.js';
+import type {InformationEntryRetrievalServicePort} from './information_entry_search_index_contract.js';
 import {
   AiQuerySynthesisProviderError,
   INFORMATION_ENTRY_QUERY_SYNTHESIS_EVIDENCE_STATUSES,
@@ -23,6 +24,7 @@ export interface InformationEntryQuerySynthesisServiceDependencies {
   readonly entries: InformationEntryRepositoryPort;
   readonly associations: InformationEntryAssociationRepositoryPort;
   readonly provider: InformationEntryQuerySynthesisProviderPort;
+  readonly retrieval?: InformationEntryRetrievalServicePort;
 }
 
 export class InformationEntryQuerySynthesisService implements InformationEntryQuerySynthesisServicePort {
@@ -54,30 +56,31 @@ export class InformationEntryQuerySynthesisService implements InformationEntryQu
     } = request.query;
     void ignoredAfter;
     void ignoredLimit;
-    const entries = await this.#dependencies.entries.loadCurrentEntries(
-      this.#dependencies.workspaceId,
-      false,
-    );
-    const associationSnapshot =
-      semanticQuery.association === undefined
-        ? Object.freeze({
-            projections: Object.freeze([]),
-            overrides: Object.freeze([]),
-          })
-        : await this.#dependencies.associations.loadAssociationSnapshot(
-            this.#dependencies.workspaceId,
-            false,
-          );
-    const search = searchCurrentInformationEntries(
-      entries,
-      Object.freeze({
-        ...semanticQuery,
-        includePrivate: false,
-        onlyPrivate: false,
-        limit: INFORMATION_ENTRY_QUERY_SYNTHESIS_MAXIMUM_EVIDENCE,
-      }),
-      associationSnapshot,
-    );
+    const boundedQuery = Object.freeze({
+      ...semanticQuery,
+      includePrivate: false,
+      onlyPrivate: false,
+      limit: INFORMATION_ENTRY_QUERY_SYNTHESIS_MAXIMUM_EVIDENCE,
+    });
+    const search =
+      this.#dependencies.retrieval === undefined
+        ? searchCurrentInformationEntries(
+            await this.#dependencies.entries.loadCurrentEntries(
+              this.#dependencies.workspaceId,
+              false,
+            ),
+            boundedQuery,
+            semanticQuery.association === undefined
+              ? Object.freeze({
+                  projections: Object.freeze([]),
+                  overrides: Object.freeze([]),
+                })
+              : await this.#dependencies.associations.loadAssociationSnapshot(
+                  this.#dependencies.workspaceId,
+                  false,
+                ),
+          )
+        : await this.#dependencies.retrieval.search(boundedQuery);
     if (search.items.length === 0) {
       throw new InformationEntryQuerySynthesisServiceError(
         'ai_query_no_evidence',

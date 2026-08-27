@@ -370,6 +370,12 @@ function stubApi(
       Promise.resolve(result(200, {status: 'applied'})),
     searchInformationEntries: () =>
       Promise.resolve(result(200, {status: 'ok', entries: []})),
+    informationEntrySearchIndexStatus: () =>
+      Promise.resolve(result(200, {status: 'ok', index: {}})),
+    rebuildInformationEntrySearchIndex: () =>
+      Promise.resolve(result(200, {status: 'ok', index: {}})),
+    evaluateInformationEntrySearch: () =>
+      Promise.resolve(result(200, {status: 'ok', evaluation: {}})),
     exploreInformationEntries: () =>
       Promise.resolve(result(200, {status: 'ok', items: []})),
     synthesizeInformationEntryQuery: () =>

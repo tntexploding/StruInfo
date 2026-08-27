@@ -40,6 +40,15 @@ export function searchCurrentInformationEntries(
   associationSnapshot: Readonly<InformationEntryAssociationRepositorySnapshot> = Object.freeze(
     {projections: Object.freeze([]), overrides: Object.freeze([])},
   ),
+  semanticMatches: ReadonlyMap<
+    string,
+    Readonly<{
+      score: number;
+      provider: string;
+      model: string;
+      indexVersion: string;
+    }>
+  > = new Map(),
 ): Readonly<InformationEntrySearchResult> {
   const querySha256 = informationEntryQuerySha256(request);
   if (
@@ -63,6 +72,7 @@ export function searchCurrentInformationEntries(
           request.association,
         );
   const query = informationEntrySearchKey(request.text ?? '');
+  const retrievalMode = request.retrievalMode ?? 'lexical';
   const textMode = request.textMode ?? 'substring';
   const textFields = canonicalTextSearchFields(request.textFields);
   const matches = visibleEntries.flatMap((entry) => {
@@ -77,7 +87,22 @@ export function searchCurrentInformationEntries(
       textMode,
       textFields,
     );
-    if (query !== '' && textMatch === undefined) return [];
+    const semanticMatch = semanticMatches.get(entry.entryId);
+    if (
+      query !== '' &&
+      ((retrievalMode === 'lexical' && textMatch === undefined) ||
+        (retrievalMode === 'semantic' && semanticMatch === undefined) ||
+        (retrievalMode === 'hybrid' &&
+          textMatch === undefined &&
+          semanticMatch === undefined))
+    ) {
+      return [];
+    }
+    const retrievalScore = effectiveRetrievalScore(
+      retrievalMode,
+      textMatch?.score,
+      semanticMatch?.score,
+    );
     return [
       Object.freeze({
         entry,
@@ -90,6 +115,10 @@ export function searchCurrentInformationEntries(
                 score: textMatch.score,
               }),
             }),
+        ...(semanticMatch === undefined ? {} : {semanticMatch}),
+        ...(query === '' || retrievalMode === 'lexical'
+          ? {}
+          : {retrievalScore}),
         filterReasons: Object.freeze(filterReasons),
         ...(association === undefined ? {} : {association}),
       }),
@@ -105,6 +134,7 @@ export function searchCurrentInformationEntries(
   const last = page.at(-1);
   return Object.freeze({
     querySha256,
+    ...(retrievalMode === 'lexical' ? {} : {retrievalMode}),
     totalCount: matches.length,
     items: Object.freeze(page),
     ...(last === undefined || afterMatches.length <= request.limit
@@ -118,6 +148,10 @@ export function informationEntryQuerySha256(
 ): string {
   const projection = {
     schemaVersion: 'struinfo.information-entry-search.v2',
+    ...(request.retrievalMode === undefined ||
+    request.retrievalMode === 'lexical'
+      ? {}
+      : {retrievalMode: request.retrievalMode}),
     text: Object.freeze({
       value: informationEntrySearchKey(request.text ?? ''),
       mode: request.textMode ?? 'substring',
@@ -541,8 +575,8 @@ function compareSearchItems(
   const leftDepth = left.association?.depth ?? 0;
   const rightDepth = right.association?.depth ?? 0;
   if (leftDepth !== rightDepth) return leftDepth - rightDepth;
-  const leftTextScore = left.textMatch?.score ?? 0;
-  const rightTextScore = right.textMatch?.score ?? 0;
+  const leftTextScore = left.retrievalScore ?? left.textMatch?.score ?? 0;
+  const rightTextScore = right.retrievalScore ?? right.textMatch?.score ?? 0;
   if (leftTextScore !== rightTextScore) return rightTextScore - leftTextScore;
   if (left.matchReasons.length !== right.matchReasons.length) {
     return right.matchReasons.length - left.matchReasons.length;
@@ -566,7 +600,7 @@ function compareSearchItemToCursor(
 ): number {
   const depth = item.association?.depth ?? 0;
   if (depth !== cursor.associationDepth) return depth - cursor.associationDepth;
-  const textScore = item.textMatch?.score ?? 0;
+  const textScore = item.retrievalScore ?? item.textMatch?.score ?? 0;
   if (textScore !== cursor.textScore) return cursor.textScore - textScore;
   if (item.matchReasons.length !== cursor.matchReasonCount) {
     return cursor.matchReasonCount - item.matchReasons.length;
@@ -589,11 +623,23 @@ function searchCursorFor(
     schemaVersion: 2 as const,
     querySha256,
     associationDepth: item.association?.depth ?? 0,
-    textScore: item.textMatch?.score ?? 0,
+    textScore: item.retrievalScore ?? item.textMatch?.score ?? 0,
     matchReasonCount: item.matchReasons.length,
     associationScore: item.association?.effectiveScore ?? 0,
     capturedAt: item.entry.capturedAt,
     documentOrder: item.entry.value.documentOrder,
     entryId: item.entry.entryId,
   });
+}
+
+function effectiveRetrievalScore(
+  mode: 'lexical' | 'semantic' | 'hybrid',
+  lexicalScore: number | undefined,
+  semanticScore: number | undefined,
+): number {
+  if (mode === 'lexical') return lexicalScore ?? 0;
+  if (mode === 'semantic') return semanticScore ?? 0;
+  if (lexicalScore === undefined) return semanticScore ?? 0;
+  if (semanticScore === undefined) return lexicalScore;
+  return Math.round(lexicalScore * 0.45 + semanticScore * 0.55);
 }

@@ -30,6 +30,7 @@ export const ENTRY_CHUNK_MODES = ['split', 'whole'] as const;
 export const ENTRY_ANNOTATION_ORIGINS = ['manual', 'rule', 'ai'] as const;
 export const ENTRY_TEXT_SEARCH_MODES = ['exact', 'substring', 'fuzzy'] as const;
 export const ENTRY_TEXT_SEARCH_FIELDS = ['title', 'body', 'tags'] as const;
+export const ENTRY_RETRIEVAL_MODES = ['lexical', 'semantic', 'hybrid'] as const;
 
 export type EntryTypeKeyword = (typeof ENTRY_TYPE_KEYWORDS)[number];
 export type EntryDomainKeyword = (typeof ENTRY_DOMAIN_KEYWORDS)[number];
@@ -37,6 +38,7 @@ export type EntryChunkMode = (typeof ENTRY_CHUNK_MODES)[number];
 export type EntryAnnotationOrigin = (typeof ENTRY_ANNOTATION_ORIGINS)[number];
 export type EntryTextSearchMode = (typeof ENTRY_TEXT_SEARCH_MODES)[number];
 export type EntryTextSearchField = (typeof ENTRY_TEXT_SEARCH_FIELDS)[number];
+export type EntryRetrievalMode = (typeof ENTRY_RETRIEVAL_MODES)[number];
 export type EntryAssessmentScore = 1 | 2 | 3 | 4 | 5;
 
 export interface EntryContentKeyword {
@@ -125,6 +127,7 @@ export interface InformationEntryRevisionWrite {
 
 export interface InformationEntrySearchRequest {
   readonly text?: string;
+  readonly retrievalMode?: EntryRetrievalMode;
   readonly textMode?: EntryTextSearchMode;
   readonly textFields?: readonly EntryTextSearchField[];
   readonly contentKeyword?: string;
@@ -200,12 +203,20 @@ export interface InformationEntrySearchItem {
     mode: EntryTextSearchMode;
     score: number;
   }>;
+  readonly semanticMatch?: Readonly<{
+    score: number;
+    provider: string;
+    model: string;
+    indexVersion: string;
+  }>;
+  readonly retrievalScore?: number;
   readonly filterReasons: readonly InformationEntryFilterReason[];
   readonly association?: Readonly<InformationEntryAssociationMatch>;
 }
 
 export interface InformationEntrySearchResult {
   readonly querySha256: string;
+  readonly retrievalMode?: EntryRetrievalMode;
   readonly totalCount: number;
   readonly items: readonly Readonly<InformationEntrySearchItem>[];
   readonly nextCursor?: Readonly<InformationEntrySearchCursor>;

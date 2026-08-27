@@ -1,7 +1,7 @@
 # StruInfo Frontend Design Specification
 
 - Status: Project frontend baseline
-- Version: 1.8
+- Version: 1.9
 - Effective date: 2026-08-25
 - Scope: StruInfo web application design, implementation, and review
 
@@ -389,9 +389,11 @@ Each workspace has one dominant task and a visibly subordinate context area:
 
 A requested capability that is not backed by the current public product boundary
 MUST be labelled unavailable or pending rather than simulated. The M1F-3 panel
-MUST remain visibly unavailable unless `ai_query_synthesis` is returned; this
-always applies to automatic proposal acceptance, semantic/vector matching and
-RAG. Query's implemented exact, contains and approximate controls
+MUST remain visibly unavailable unless `ai_query_synthesis` is returned;
+semantic and hybrid controls MUST remain unavailable unless
+`semantic_entry_search` is returned. This always applies to automatic proposal
+acceptance, private vector matching and external retrieval. Query's exact,
+contains and approximate controls
 MUST be described as local lexical matching; approximate results show a bounded
 lexical score and MUST NOT be styled as probability, confidence or semantic
 equivalence. A real imported or deterministic ProcessingRun may still be shown and
@@ -450,6 +452,24 @@ column with natural page scrolling. The primary search, privacy state, AI
 disclosure, status announcement, retry and evidence actions remain keyboard
 reachable. Loading uses an in-place status/skeleton and MUST NOT replace or hide
 the deterministic result set.
+
+ADR 0043 adds the M1K Query retrieval controls without replacing that hierarchy.
+The mode selector presents `词法 / 语义 / 混合` as one labelled radio group next
+to, but distinct from, exact/contains/approximate lexical matching. Empty query
+or either private scope forces lexical mode. Semantic and hybrid modes show
+vector similarity and final retrieval score as separate facts; neither is a
+truth, confidence or source-quality score.
+
+A secondary index panel reports the real public Entry, current projection,
+embedded projection, stale projection and term counts, tokenizer/model identity,
+and ready/not-ready state. Rebuild is an explicit button with progress, success
+and retry feedback. It MUST NOT fabricate background indexing. If no embedding
+model is configured, local term rebuilding and lexical Query remain available
+while semantic controls explain why they are unavailable. RAG synthesis labels
+semantic/hybrid use as local evidence retrieval followed by AI synthesis; it
+does not present a chat, autonomous Web search or private-content permission.
+At narrow widths the mode group and index facts wrap or stack in normal reading
+order and do not hide the search input or results.
 
 ADR 0023 adds one separate local exploration panel after the ordinary Query
 results. It MUST remain visually and behaviorally independent from search

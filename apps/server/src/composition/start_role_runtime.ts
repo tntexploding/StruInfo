@@ -1,5 +1,8 @@
 import type {RuntimeConfig} from '../config/runtime_config.js';
-import {InformationEntryQuerySynthesisService} from '../modules/entries/index.js';
+import {
+  InformationEntryQuerySynthesisService,
+  InformationEntryRetrievalService,
+} from '../modules/entries/index.js';
 import {
   AiAssociationProposalService,
   AiSplitProposalService,
@@ -16,6 +19,7 @@ import {
   OpenAiEntrySplitProvider,
   OpenAiEntryTagProvider,
   OpenAiInformationEntryQuerySynthesisProvider,
+  OpenAiInformationEntryEmbeddingProvider,
 } from '../platform/ai/index.js';
 import {
   GithubGitSourceSubscriptionReader,
@@ -167,6 +171,19 @@ export async function startRoleRuntime(
             config.aiProposalProvider,
           ),
         });
+  const informationEntryRetrieval = new InformationEntryRetrievalService({
+    workspaceId: config.workspaceId,
+    entries: repositories.informationEntries,
+    associations: repositories.informationEntryAssociations,
+    index: repositories.informationEntrySearchIndex,
+    ...(config.embeddingProvider === undefined
+      ? {}
+      : {
+          embeddingProvider: new OpenAiInformationEntryEmbeddingProvider(
+            config.embeddingProvider,
+          ),
+        }),
+  });
   const aiQuerySynthesis =
     config.aiProposalProvider === undefined
       ? undefined
@@ -174,6 +191,7 @@ export async function startRoleRuntime(
           workspaceId: config.workspaceId,
           entries: repositories.informationEntries,
           associations: repositories.informationEntryAssociations,
+          retrieval: informationEntryRetrieval,
           provider: new OpenAiInformationEntryQuerySynthesisProvider(
             config.aiProposalProvider,
           ),
@@ -226,6 +244,7 @@ export async function startRoleRuntime(
             repositories.informationDocumentTags,
           informationEntryAssociationRepository:
             repositories.informationEntryAssociations,
+          informationEntryRetrieval,
           informationEntryRestructureRepository:
             repositories.informationEntryRestructures,
           processingRunRepository: repositories.processingRuns,

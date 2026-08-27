@@ -205,3 +205,10 @@ relation semantics, a bounded maintenance note and an explicit source-review
 status to the current Association override, exposes both endpoint sources in the
 relation inspector and upgrades Association personal-data packages to v4. It
 does not restore the retired Knowledge runtime or claim automatic fact checking.
+
+ADR 0043 completes M1K with a rebuildable, revision-bound Entry term/vector
+index in PostgreSQL, optional OpenAI embeddings, lexical/semantic/hybrid Query
+modes, explicit Recall@K/MRR evaluation and evidence-bounded RAG through the
+existing query-synthesis action. Lexical Query remains complete without a
+Provider, private content never enters the external embedding/RAG path and the
+derived index is deliberately excluded from personal-data packages.

@@ -2,6 +2,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import type {
   EntryDomainKeyword,
+  EntryRetrievalMode,
   EntryTypeKeyword,
   EntryTextSearchField,
   EntryTextSearchMode,
@@ -44,6 +45,8 @@ export function useInformationEntryController({
   onSearch,
 }: InformationEntryControllerOptions) {
   const [query, setQuery] = useState('');
+  const [retrievalMode, setRetrievalMode] =
+    useState<EntryRetrievalMode>('lexical');
   const [textMode, setTextMode] = useState<EntryTextSearchMode>('substring');
   const [textFields, setTextFields] = useState<readonly EntryTextSearchField[]>(
     Object.freeze(['title', 'body', 'tags']),
@@ -70,6 +73,10 @@ export function useInformationEntryController({
   >(Object.freeze([undefined]));
   const searchRequests = useRef(createLatestRequestTracker());
   const documentRequests = useRef(createLatestRequestTracker());
+  const effectiveRetrievalMode: EntryRetrievalMode =
+    query.trim() === '' || includePrivate || onlyPrivate
+      ? 'lexical'
+      : retrievalMode;
 
   const searchRequest = useMemo(
     () =>
@@ -80,6 +87,7 @@ export function useInformationEntryController({
               text: query.trim(),
               textMode,
               textFields,
+              retrievalMode: effectiveRetrievalMode,
             }),
         ...(advancedFilters.contentKeyword.trim() === ''
           ? {}
@@ -130,6 +138,7 @@ export function useInformationEntryController({
     [
       advancedFilters,
       domainKeyword,
+      effectiveRetrievalMode,
       includePrivate,
       onlyPrivate,
       query,
@@ -283,6 +292,7 @@ export function useInformationEntryController({
     setQuery('');
     setTextMode('substring');
     setTextFields(Object.freeze(['title', 'body', 'tags']));
+    setRetrievalMode('lexical');
     setSnapshotId('');
     setTypeKeyword('');
     setDomainKeyword('');
@@ -294,6 +304,12 @@ export function useInformationEntryController({
   function setPrivacyScope(scope: 'public' | 'all' | 'private') {
     setIncludePrivate(scope !== 'public');
     setOnlyPrivate(scope === 'private');
+    if (scope !== 'public') setRetrievalMode('lexical');
+  }
+
+  function changeQuery(value: string) {
+    setQuery(value);
+    if (value.trim() === '') setRetrievalMode('lexical');
   }
 
   return {
@@ -306,6 +322,7 @@ export function useInformationEntryController({
     onlyPrivate,
     pageIndex,
     query,
+    retrievalMode: effectiveRetrievalMode,
     refreshDocuments,
     selectedDocument,
     selectedEntry,
@@ -317,7 +334,8 @@ export function useInformationEntryController({
     setIncludePrivate,
     setOnlyPrivate,
     setPrivacyScope,
-    setQuery,
+    setQuery: changeQuery,
+    setRetrievalMode,
     setSelectedEntryId,
     setSnapshotId,
     setTextFields,

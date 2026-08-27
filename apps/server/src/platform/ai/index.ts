@@ -11,3 +11,4 @@ export {
 } from './openai_entry_association_provider.js';
 export * from './openai_entry_split_provider.js';
 export * from './openai_information_entry_query_synthesis_provider.js';
+export * from './openai_information_entry_embedding_provider.js';
