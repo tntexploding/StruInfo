@@ -7,6 +7,8 @@ import type {
   InformationEntry,
   InformationEntryGraphDirection,
   InformationEntryGraphEdge,
+  InformationEntryGraphSemanticKind,
+  InformationEntryGraphVerificationStatus,
   InformationEntryKnowledgeGraphEdgeWriteResponse,
   InformationEntryKnowledgeGraphResponse,
   M1cHttpResponse,
@@ -31,6 +33,28 @@ type PrivacyScope = 'public' | 'include_private' | 'only_private';
 type ViewMode = 'graph' | 'list';
 type NewRelationDirection =
   'symmetric' | 'center_to_related' | 'related_to_center';
+
+interface GraphRelationDraft {
+  readonly label: string;
+  readonly direction: InformationEntryGraphDirection;
+  readonly semanticKind: InformationEntryGraphSemanticKind;
+  readonly verificationStatus: InformationEntryGraphVerificationStatus;
+  readonly note: string;
+}
+
+const SEMANTIC_KIND_OPTIONS: readonly Readonly<{
+  value: InformationEntryGraphSemanticKind;
+  label: string;
+}>[] = Object.freeze([
+  {value: 'similarity', label: '相似'},
+  {value: 'related', label: '相关'},
+  {value: 'supports', label: '支持 / 补强'},
+  {value: 'contradicts', label: '冲突 / 反驳'},
+  {value: 'part_of', label: '组成 / 隶属'},
+  {value: 'causes', label: '因果'},
+  {value: 'example_of', label: '例子'},
+  {value: 'custom', label: '自定义'},
+]);
 
 export interface FormalKnowledgeGraphWorkspaceProps {
   readonly aiAssociationEnabled: boolean;
@@ -95,6 +119,9 @@ export function FormalKnowledgeGraphWorkspace({
   >([]);
   const [targetEntryId, setTargetEntryId] = useState('');
   const [newLabel, setNewLabel] = useState('相关');
+  const [newSemanticKind, setNewSemanticKind] =
+    useState<InformationEntryGraphSemanticKind>('related');
+  const [newNote, setNewNote] = useState('');
   const [newDirection, setNewDirection] =
     useState<NewRelationDirection>('symmetric');
   const graphRequests = useRef(createLatestRequestTracker());
@@ -183,8 +210,7 @@ export function FormalKnowledgeGraphWorkspace({
   async function writeEdge(
     edge: Readonly<InformationEntryGraphEdge>,
     operation: 'edit' | 'block' | 'restore',
-    label = edge.label,
-    direction = edge.direction,
+    draft?: Readonly<GraphRelationDraft>,
   ) {
     if (graph === null || writing) return;
     const relatedEntryId = otherEndpoint(edge, graph.center.entryId);
@@ -198,7 +224,19 @@ export function FormalKnowledgeGraphWorkspace({
           expectedRevision: edge.overrideRevision,
           includePrivate,
           operation,
-          ...(operation === 'edit' ? {label, direction} : {}),
+          ...(operation === 'edit'
+            ? {
+                label: draft?.label ?? edge.label,
+                direction: draft?.direction ?? edge.direction,
+                semanticKind: draft?.semanticKind ?? edge.semanticKind,
+                verificationStatus:
+                  draft?.verificationStatus ??
+                  (edge.verificationStatus === 'calculated'
+                    ? 'unreviewed'
+                    : edge.verificationStatus),
+                note: draft?.note ?? edge.note,
+              }
+            : {}),
         },
       );
       if (
@@ -293,6 +331,9 @@ export function FormalKnowledgeGraphWorkspace({
           targetEntryId,
           newDirection,
         ),
+        semanticKind: newSemanticKind,
+        verificationStatus: 'unreviewed',
+        note: newNote,
       });
       if (
         response.body.status !== 'applied' &&
@@ -308,6 +349,7 @@ export function FormalKnowledgeGraphWorkspace({
       setTargetEntryId('');
       setTargetCandidates([]);
       setTargetQuery('');
+      setNewNote('');
       await readGraph(graph.center.entryId, {preserveFeedback: true});
       setFeedback({
         kind: 'success',
@@ -467,7 +509,7 @@ export function FormalKnowledgeGraphWorkspace({
                   </p>
                 ) : (
                   <EdgeInspector
-                    key={edgeKey(selectedEdge)}
+                    key={`${edgeKey(selectedEdge)}:${selectedEdge.overrideRevision.toString()}`}
                     aiAssociationEnabled={aiAssociationEnabled}
                     centerEntry={graph.center}
                     edge={selectedEdge}
@@ -479,6 +521,7 @@ export function FormalKnowledgeGraphWorkspace({
                       onAcceptAiAssociationProposal
                     }
                     onListAiAssociationProposals={onListAiAssociationProposals}
+                    onOpenEvidence={onOpenEvidence}
                     onProposalAccepted={() =>
                       readGraph(graph.center.entryId, {
                         preserveFeedback: true,
@@ -494,6 +537,8 @@ export function FormalKnowledgeGraphWorkspace({
                 <CreateRelationPanel
                   direction={newDirection}
                   label={newLabel}
+                  note={newNote}
+                  semanticKind={newSemanticKind}
                   targetCandidates={targetCandidates}
                   targetEntryId={targetEntryId}
                   targetQuery={targetQuery}
@@ -501,11 +546,13 @@ export function FormalKnowledgeGraphWorkspace({
                   onCreate={() => void createRelation()}
                   onDirectionChange={setNewDirection}
                   onLabelChange={setNewLabel}
+                  onNoteChange={setNewNote}
                   onSearch={(event) => {
                     void searchTargets(event);
                   }}
                   onTargetChange={setTargetEntryId}
                   onTargetQueryChange={setTargetQuery}
+                  onSemanticKindChange={setNewSemanticKind}
                 />
                 {hiddenEdges.length > 0 ? (
                   <HiddenRelations
@@ -776,6 +823,7 @@ function EdgeInspector({
   edge,
   onAcceptAiAssociationProposal,
   onListAiAssociationProposals,
+  onOpenEvidence,
   onProposalAccepted,
   onRejectAiAssociationProposal,
   onStartAiAssociationProposal,
@@ -788,20 +836,28 @@ function EdgeInspector({
   readonly edge: Readonly<InformationEntryGraphEdge>;
   readonly onAcceptAiAssociationProposal: FormalKnowledgeGraphWorkspaceProps['onAcceptAiAssociationProposal'];
   readonly onListAiAssociationProposals: FormalKnowledgeGraphWorkspaceProps['onListAiAssociationProposals'];
+  readonly onOpenEvidence: FormalKnowledgeGraphWorkspaceProps['onOpenEvidence'];
   readonly onProposalAccepted: () => Promise<void>;
   readonly onRejectAiAssociationProposal: FormalKnowledgeGraphWorkspaceProps['onRejectAiAssociationProposal'];
   readonly onStartAiAssociationProposal: FormalKnowledgeGraphWorkspaceProps['onStartAiAssociationProposal'];
   readonly onWrite: (
     edge: Readonly<InformationEntryGraphEdge>,
     operation: 'edit' | 'block' | 'restore',
-    label?: string,
-    direction?: InformationEntryGraphDirection,
+    draft?: Readonly<GraphRelationDraft>,
   ) => Promise<void>;
   readonly relatedEntry: Readonly<InformationEntry> | undefined;
   readonly writing: boolean;
 }) {
   const [label, setLabel] = useState(edge.label);
   const [direction, setDirection] = useState(edge.direction);
+  const [semanticKind, setSemanticKind] = useState(edge.semanticKind);
+  const [verificationStatus, setVerificationStatus] =
+    useState<InformationEntryGraphVerificationStatus>(
+      edge.verificationStatus === 'calculated'
+        ? 'unreviewed'
+        : edge.verificationStatus,
+    );
+  const [note, setNote] = useState(edge.note);
   return (
     <section className="knowledge-edge-inspector">
       <p className="section-index">SELECTED RELATION</p>
@@ -813,6 +869,12 @@ function EdgeInspector({
         {relatedEntry === undefined ? '相关 Entry' : entryTitle(relatedEntry)} ·{' '}
         {directionLabel(edge, centerEntry.entryId)}
       </p>
+      <div className="knowledge-relation-status" aria-label="关系状态">
+        <span>{semanticKindLabel(edge.semanticKind)}</span>
+        <span data-verification={edge.verificationStatus}>
+          {verificationLabel(edge.verificationStatus)}
+        </span>
+      </div>
       {edge.projection === undefined ? null : (
         <dl className="knowledge-edge-metrics">
           <div>
@@ -834,6 +896,39 @@ function EdgeInspector({
         </dl>
       )}
       {relatedEntry === undefined ? null : (
+        <div className="knowledge-source-check">
+          <p>核验关系时可分别打开两端 Entry 的精确来源。</p>
+          <div className="knowledge-inspector-actions">
+            <button
+              className="secondary-action"
+              type="button"
+              onClick={() => {
+                onOpenEvidence(
+                  centerEntry.snapshotId,
+                  centerEntry.value.fragmentIds[0],
+                  centerEntry.value.isPrivate,
+                );
+              }}
+            >
+              查看中心来源
+            </button>
+            <button
+              className="secondary-action"
+              type="button"
+              onClick={() => {
+                onOpenEvidence(
+                  relatedEntry.snapshotId,
+                  relatedEntry.value.fragmentIds[0],
+                  relatedEntry.value.isPrivate,
+                );
+              }}
+            >
+              查看相关项来源
+            </button>
+          </div>
+        </div>
+      )}
+      {relatedEntry === undefined ? null : (
         <InformationEntryAiAssociations
           enabled={aiAssociationEnabled}
           entry={centerEntry}
@@ -845,6 +940,23 @@ function EdgeInspector({
           onStartAiAssociationProposal={onStartAiAssociationProposal}
         />
       )}
+      <label className="field">
+        <span>关系语义</span>
+        <select
+          value={semanticKind}
+          onChange={(event) => {
+            setSemanticKind(
+              event.currentTarget.value as InformationEntryGraphSemanticKind,
+            );
+          }}
+        >
+          {SEMANTIC_KIND_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
       <label className="field">
         <span>关系名称</span>
         <input
@@ -872,12 +984,48 @@ function EdgeInspector({
           ))}
         </select>
       </label>
+      <label className="field">
+        <span>来源核验</span>
+        <select
+          value={verificationStatus}
+          onChange={(event) => {
+            setVerificationStatus(
+              event.currentTarget
+                .value as InformationEntryGraphVerificationStatus,
+            );
+          }}
+        >
+          <option value="unreviewed">尚未核对来源</option>
+          <option value="source_checked">已核对两端来源</option>
+          <option value="needs_review">需要再次复核</option>
+        </select>
+      </label>
+      <label className="field">
+        <span>关系说明（可选）</span>
+        <textarea
+          value={note}
+          maxLength={500}
+          rows={4}
+          placeholder="记录这条关系为何成立，或仍需核对的问题"
+          onChange={(event) => {
+            setNote(event.currentTarget.value);
+          }}
+        />
+      </label>
       <div className="knowledge-inspector-actions">
         <button
           className="primary-action"
           type="button"
           disabled={writing || label.trim() === ''}
-          onClick={() => void onWrite(edge, 'edit', label, direction)}
+          onClick={() =>
+            void onWrite(edge, 'edit', {
+              label,
+              direction,
+              semanticKind,
+              verificationStatus,
+              note,
+            })
+          }
         >
           保存关系
         </button>
@@ -897,12 +1045,16 @@ function EdgeInspector({
 function CreateRelationPanel({
   direction,
   label,
+  note,
   onCreate,
   onDirectionChange,
   onLabelChange,
+  onNoteChange,
   onSearch,
   onTargetChange,
   onTargetQueryChange,
+  onSemanticKindChange,
+  semanticKind,
   targetCandidates,
   targetEntryId,
   targetQuery,
@@ -910,12 +1062,18 @@ function CreateRelationPanel({
 }: {
   readonly direction: NewRelationDirection;
   readonly label: string;
+  readonly note: string;
   readonly onCreate: () => void;
   readonly onDirectionChange: (value: NewRelationDirection) => void;
   readonly onLabelChange: (value: string) => void;
+  readonly onNoteChange: (value: string) => void;
   readonly onSearch: (event: React.SyntheticEvent<HTMLFormElement>) => void;
   readonly onTargetChange: (value: string) => void;
   readonly onTargetQueryChange: (value: string) => void;
+  readonly onSemanticKindChange: (
+    value: InformationEntryGraphSemanticKind,
+  ) => void;
+  readonly semanticKind: InformationEntryGraphSemanticKind;
   readonly targetCandidates: readonly Readonly<InformationEntry>[];
   readonly targetEntryId: string;
   readonly targetQuery: string;
@@ -960,12 +1118,41 @@ function CreateRelationPanel({
       ) : null}
 
       <label className="field">
+        <span>关系语义</span>
+        <select
+          value={semanticKind}
+          onChange={(event) => {
+            onSemanticKindChange(
+              event.currentTarget.value as InformationEntryGraphSemanticKind,
+            );
+          }}
+        >
+          {SEMANTIC_KIND_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="field">
         <span>关系名称</span>
         <input
           value={label}
           maxLength={80}
           onChange={(event) => {
             onLabelChange(event.currentTarget.value);
+          }}
+        />
+      </label>
+      <label className="field">
+        <span>关系说明（可选）</span>
+        <textarea
+          value={note}
+          maxLength={500}
+          rows={3}
+          onChange={(event) => {
+            onNoteChange(event.currentTarget.value);
           }}
         />
       </label>
@@ -1093,6 +1280,22 @@ function originLabel(origin: InformationEntryGraphEdge['origin']): string {
   if (origin === 'user_edited') return '用户编辑';
   if (origin === 'ai_assisted') return 'AI 辅助';
   return '自动计算';
+}
+
+function semanticKindLabel(kind: InformationEntryGraphSemanticKind): string {
+  return (
+    SEMANTIC_KIND_OPTIONS.find((option) => option.value === kind)?.label ??
+    '自定义'
+  );
+}
+
+function verificationLabel(
+  status: InformationEntryGraphEdge['verificationStatus'],
+): string {
+  if (status === 'calculated') return '计算所得';
+  if (status === 'source_checked') return '已核对来源';
+  if (status === 'needs_review') return '需要复核';
+  return '尚未核对';
 }
 
 function otherEndpoint(

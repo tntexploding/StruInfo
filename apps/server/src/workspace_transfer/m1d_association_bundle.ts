@@ -10,8 +10,11 @@ import {
 import type {WorkspaceBundleSectionCodec} from './workspace_bundle.js';
 
 export const M1D_ASSOCIATION_BUNDLE_SECTION_TYPE = 'struinfo.m1d-association';
-export const M1D_ASSOCIATION_BUNDLE_SECTION_VERSION = 3;
-export const M1D_ASSOCIATION_BUNDLE_SCHEMA = 'struinfo.m1d-association.v3';
+export const M1D_ASSOCIATION_BUNDLE_SECTION_VERSION = 4;
+export const M1D_ASSOCIATION_BUNDLE_SCHEMA = 'struinfo.m1d-association.v4';
+export const M1D_ASSOCIATION_VERSION_THREE_BUNDLE_SECTION_VERSION = 3;
+export const M1D_ASSOCIATION_VERSION_THREE_BUNDLE_SCHEMA =
+  'struinfo.m1d-association.v3';
 export const M1D_ASSOCIATION_VERSION_TWO_BUNDLE_SECTION_VERSION = 2;
 export const M1D_ASSOCIATION_VERSION_TWO_BUNDLE_SCHEMA =
   'struinfo.m1d-association.v2';
@@ -60,6 +63,29 @@ export const M1D_ASSOCIATION_TABLES: readonly Readonly<M1dAssociationTableDescri
       'candidate_rank',
       'generated_at',
     ]),
+    table('information_entry_association_override', [
+      'workspace_id',
+      'entry_low_id',
+      'entry_high_id',
+      'current_revision',
+      'current_revision_id',
+      'action',
+      'manual_adjustment',
+      'is_blocked',
+      'graph_origin',
+      'graph_label',
+      'graph_direction',
+      'graph_semantic_kind',
+      'graph_verification_status',
+      'graph_note',
+      'created_at',
+      'updated_at',
+    ]),
+  ]);
+
+const VERSION_THREE_ASSOCIATION_TABLES: readonly Readonly<M1dAssociationTableDescriptor>[] =
+  Object.freeze([
+    requiredDescriptor(M1D_ASSOCIATION_TABLES, 0),
     table('information_entry_association_override', [
       'workspace_id',
       'entry_low_id',
@@ -137,6 +163,18 @@ export const M1D_ASSOCIATION_VERSION_TWO_BUNDLE_CODEC: WorkspaceBundleSectionCod
     },
   });
 
+export const M1D_ASSOCIATION_VERSION_THREE_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
+    version: M1D_ASSOCIATION_VERSION_THREE_BUNDLE_SECTION_VERSION,
+    encode: normalizeVersionThreeSnapshot,
+    decode(payload: JsonValue): unknown {
+      return upgradeVersionThreeSnapshot(
+        normalizeVersionThreeSnapshot(payload),
+      );
+    },
+  });
+
 export const M1D_ASSOCIATION_LEGACY_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
   Object.freeze({
     type: M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
@@ -203,6 +241,46 @@ function normalizeVersionTwoSnapshot(value: unknown): Readonly<{
   }>;
 }
 
+function normalizeVersionThreeSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1D_ASSOCIATION_VERSION_THREE_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1dAssociationTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1D_ASSOCIATION_VERSION_THREE_BUNDLE_SCHEMA,
+    VERSION_THREE_ASSOCIATION_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1D_ASSOCIATION_VERSION_THREE_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1dAssociationTableSnapshot>[];
+  }>;
+}
+
+function upgradeVersionThreeSnapshot(
+  legacy: ReturnType<typeof normalizeVersionThreeSnapshot>,
+): M1dAssociationSnapshot {
+  return normalizeM1dAssociationSnapshot({
+    schemaVersion: M1D_ASSOCIATION_BUNDLE_SCHEMA,
+    tables: legacy.tables.map((tableSnapshot) => ({
+      name: tableSnapshot.name,
+      rows:
+        tableSnapshot.name === 'information_entry_association_override'
+          ? tableSnapshot.rows.map((row) => ({
+              ...row,
+              graph_semantic_kind:
+                row.graph_origin === null
+                  ? null
+                  : row.graph_label === 'similarity'
+                    ? 'similarity'
+                    : 'custom',
+              graph_verification_status:
+                row.graph_origin === null ? null : 'unreviewed',
+              graph_note: row.graph_origin === null ? null : '',
+            }))
+          : tableSnapshot.rows,
+    })),
+  });
+}
+
 function upgradeVersionTwoSnapshot(
   legacy: ReturnType<typeof normalizeVersionTwoSnapshot>,
 ): M1dAssociationSnapshot {
@@ -217,6 +295,9 @@ function upgradeVersionTwoSnapshot(
               graph_origin: null,
               graph_label: null,
               graph_direction: null,
+              graph_semantic_kind: null,
+              graph_verification_status: null,
+              graph_note: null,
             }))
           : tableSnapshot.rows,
     })),
@@ -282,6 +363,9 @@ function upgradeLegacySnapshot(
       graph_origin: null,
       graph_label: null,
       graph_direction: null,
+      graph_semantic_kind: null,
+      graph_verification_status: null,
+      graph_note: null,
       created_at: requiredPrimitive(override, 'created_at'),
       updated_at: requiredPrimitive(revision, 'created_at'),
     });

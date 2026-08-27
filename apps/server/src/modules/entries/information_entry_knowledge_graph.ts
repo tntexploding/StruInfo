@@ -1,36 +1,61 @@
 import type {CurrentInformationEntry} from './information_entry_contract.js';
 import {
   INFORMATION_ENTRY_GRAPH_DIRECTIONS,
+  INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS,
+  INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES,
   type InformationEntryAssociationOverrideValue,
   type InformationEntryAssociationRepositorySnapshot,
   type InformationEntryGraphDirection,
   type InformationEntryGraphEdge,
   type InformationEntryGraphOrigin,
   type InformationEntryGraphRelationValue,
+  type InformationEntryGraphSemanticKind,
+  type InformationEntryGraphVerificationStatus,
   type InformationEntryKnowledgeGraph,
 } from './information_entry_association_contract.js';
 import {listInformationEntryAssociations} from './information_entry_association.js';
 
 export const INFORMATION_ENTRY_GRAPH_DEFAULT_LABEL = 'similarity';
 export const INFORMATION_ENTRY_GRAPH_MAXIMUM_LABEL_CODE_POINTS = 80;
+export const INFORMATION_ENTRY_GRAPH_MAXIMUM_NOTE_CODE_POINTS = 500;
 export const INFORMATION_ENTRY_GRAPH_MAXIMUM_NEIGHBORS = 24;
 
 export function prepareInformationEntryGraphRelation(
   labelInput: string,
   direction: InformationEntryGraphDirection,
   origin: InformationEntryGraphOrigin,
+  metadata: Readonly<{
+    semanticKind?: InformationEntryGraphSemanticKind;
+    verificationStatus?: InformationEntryGraphVerificationStatus;
+    note?: string;
+  }> = {},
 ): Readonly<InformationEntryGraphRelationValue> | undefined {
   const label = labelInput.trim().normalize('NFC');
+  const semanticKind = metadata.semanticKind ?? 'related';
+  const verificationStatus = metadata.verificationStatus ?? 'unreviewed';
+  const note = normalizeGraphNote(metadata.note ?? '');
   if (
     label.length === 0 ||
     Array.from(label).length >
       INFORMATION_ENTRY_GRAPH_MAXIMUM_LABEL_CODE_POINTS ||
     containsControlCodePoint(label) ||
-    !INFORMATION_ENTRY_GRAPH_DIRECTIONS.includes(direction)
+    !INFORMATION_ENTRY_GRAPH_DIRECTIONS.includes(direction) ||
+    !INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS.includes(semanticKind) ||
+    !INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES.includes(
+      verificationStatus,
+    ) ||
+    note === undefined
   ) {
     return undefined;
   }
-  return Object.freeze({origin, label, direction});
+  return Object.freeze({
+    origin,
+    label,
+    direction,
+    semanticKind,
+    verificationStatus,
+    note,
+  });
 }
 
 export function prepareInformationEntryGraphEdit(
@@ -164,11 +189,33 @@ function toGraphEdge(
           : graph === undefined
             ? 'automatically_calculated'
             : 'user_edited',
+    semanticKind: graph?.semanticKind ?? 'similarity',
+    verificationStatus: graph?.verificationStatus ?? 'calculated',
+    note: graph?.note ?? '',
     effectiveScore: view.effectiveScore,
     isBlocked: view.isBlocked,
     overrideRevision: override?.revision ?? 0,
     ...(projection === undefined ? {} : {projection}),
   });
+}
+
+function normalizeGraphNote(value: string): string | undefined {
+  const note = value.replace(/\r\n?/gu, '\n').trim().normalize('NFC');
+  if (
+    Array.from(note).length >
+      INFORMATION_ENTRY_GRAPH_MAXIMUM_NOTE_CODE_POINTS ||
+    Array.from(note).some((character) => {
+      const codePoint = character.codePointAt(0);
+      return (
+        codePoint !== undefined &&
+        ((codePoint <= 0x1f && codePoint !== 0x09 && codePoint !== 0x0a) ||
+          codePoint === 0x7f)
+      );
+    })
+  ) {
+    return undefined;
+  }
+  return note;
 }
 
 function containsControlCodePoint(value: string): boolean {

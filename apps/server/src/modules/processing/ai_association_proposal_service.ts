@@ -334,6 +334,11 @@ export class AiAssociationProposalService implements AiAssociationProposalServic
       payload.relationLabel,
       payload.direction,
       'ai',
+      {
+        semanticKind: 'related',
+        verificationStatus: 'unreviewed',
+        note: proposal.summary,
+      },
     );
     if (graph === undefined) {
       throw new AiAssociationProposalServiceError('ai_proposal_invalid');

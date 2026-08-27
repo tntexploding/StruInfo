@@ -88,6 +88,9 @@ describe('AiAssociationProposalService', () => {
           origin: 'ai',
           label: '补充说明',
           direction: 'low_to_high',
+          semanticKind: 'related',
+          verificationStatus: 'unreviewed',
+          note: 'A 补充 B 的实现背景。',
         },
       },
     });

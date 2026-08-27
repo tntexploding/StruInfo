@@ -1,7 +1,7 @@
 # StruInfo 开发大纲
 
-- 状态：M1H-3A/B 拆分前全文工作副本与派生 Snapshot 已完成
-- 最近更新：2026-08-26
+- 状态：M1J 正式知识关系语义、维护说明与来源核验已完成
+- 最近更新：2026-08-27
 - 对应需求：[产品需求](product-requirements.md)
 - 对应计划：[分阶段计划](roadmap.md)
 - 当前实现：[当前项目状态与实现清单](current-project-state.md)
@@ -33,7 +33,8 @@
   [ADR 0026](adr/0026-entry-automation-policy-dry-run.md)、
   [ADR 0027](adr/0027-recoverable-entry-automation-routing-execution.md)、
   [ADR 0028](adr/0028-owner-controlled-entry-automation-routing.md)、
-  [ADR 0029](adr/0029-entry-automation-control-integrity.md)
+  [ADR 0029](adr/0029-entry-automation-control-integrity.md)、
+  [ADR 0042](adr/0042-formal-knowledge-relation-semantics-and-source-review.md)
 
 ## 1. 结论
 
@@ -63,7 +64,7 @@ M0-S 已精确锁定工具和依赖版本，并建立最小脚手架、首方迁
 [ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md) 已接受版本化正式知识核心和无 AI 确定性检索；[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md) 已接受个人数据隔离要求；[ADR 0007](adr/0007-information-entry-first-document-processing.md) 把普通文档主线重定向为 Entry-first。ADR 0008 随后把普通 Entry、文档标签和人工联系收敛为当前成品态与可携带个人数据，ADR 0009 删除了没有活动调用方的旧 Curation/Knowledge 应用运行时。ADR 0010 将新的所有者正式知识页定义为有界中心图谱；ADR 0011 进一步允许确定性相似联系
 直接成为可编辑图谱边，并让用户编辑或 block 优先于后续重建。
 
-当前产品已经提供导入、确定性/人工拆分、标签、联系、查询、正式 Entry 图谱、精确来源、隐私范围与完整个人数据包。M1E-2 复用 Association 投影与 override，实现最高匹配中心、有界图/列表、用户关系命令和 Association Bundle v3；M1E-3A–D 增加任务状态及可选的拆分、标签和 selected-pair 联系提案；M1E-4A/4B 让用户在首次 Entry 物化前直接合并既有 Fragment、在既有边界或 Fragment 内 Unicode 标量边界拆开并编辑标题；M1E-5A 让一份本地 UTF-8 Markdown/文本文件直接进入既有 Evidence 与 Split 主线。活动工作区目前按所有者要求保持零业务数据，旧资料只存在于项目目录外的恢复归档。
+当前产品已经提供导入、确定性/人工拆分、标签、联系、查询、正式 Entry 图谱、精确来源、隐私范围与完整个人数据包。M1E-2 复用 Association 投影与 override，实现最高匹配中心、有界图/列表和用户关系命令；M1J 在同一边界上增加八类关系语义、维护说明、来源核验、双端来源动作和 Association Bundle v4。M1E-3A–D 增加任务状态及可选的拆分、标签和 selected-pair 联系提案；M1E-4A/4B 让用户在首次 Entry 物化前直接合并既有 Fragment、在既有边界或 Fragment 内 Unicode 标量边界拆开并编辑标题；M1E-5A/5B 让本地 UTF-8 Markdown/文本/HTML/PDF 进入既有 Evidence 与 Split 主线。活动工作区目前按所有者要求保持零业务数据，旧资料只存在于项目目录外的恢复归档。
 
 ## 2. 为什么选择这个形态
 
@@ -322,7 +323,7 @@ Blob 边界只接受通过 intrinsic brand 检查的普通字节视图，并立�
 大型正文和媒体优先保留为 Blob 引用，不能通过反复嵌套 base64 形成不可读的 current-version 工件。
 writer contract 与边界测试必须证明每个成功输出都能由相同版本的公开 reader 往返读取；若确定性 encoder 与精确 preflight 已提供同等保证，运行时不要求为每次写入重复解析。
 
-切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload。当前五分区个人数据包包含 36 表 M1C 兼容分区、9 表 Entry v5、2 表 Association v3、14 表 Processing v7，以及引用 Blob 字节和偏好，共覆盖 61 张当前工作区表。Entry v4 在既有精确 Fragment 范围上增加唯一当前结构事实并向后读取 v1–v3；Entry v5 增加拆分前唯一全文工作副本并向后读取 v1–v4；Association v3 携带关系来源、名称和方向；Processing v7 增加 typed 确定性推进动作。所有文件仍只落到外部 `exports/`。跨工作区克隆、非空合并和生产灾难恢复仍是独立后续能力。
+切片 0 已实现[工作区 Bundle v1 信封](workspace-bundle-contract.md)：模块通过注册的 `type + version` codec 提供闭合 payload。当前五分区个人数据包包含 36 表 M1C 兼容分区、9 表 Entry v5、2 表 Association v4、14 表 Processing v7，以及引用 Blob 字节和偏好，共覆盖 61 张当前工作区表。Entry v4 在既有精确 Fragment 范围上增加唯一当前结构事实并向后读取 v1–v3；Entry v5 增加拆分前唯一全文工作副本并向后读取 v1–v4；Association v4 在 v3 的关系来源、名称和方向上增加闭合语义、维护说明和来源核验状态，并向后读取 v1–v3；Processing v7 增加 typed 确定性推进动作。所有文件仍只落到外部 `exports/`。跨工作区克隆、非空合并和生产灾难恢复仍是独立后续能力。
 
 Linux 单机部署可先使用受备份保护的持久卷。
 需要多机或对象存储服务时，再增加 S3 兼容适配器；迁移不能改变 Resource、Snapshot 或 Citation ID。
@@ -650,8 +651,8 @@ import -> snapshot -> document nodes/fragments/media
 5. Document 标签从当前 Entry 聚合或由用户覆盖；
 6. 联系页重建可解释投影，并逐对增强、削弱、屏蔽或恢复；
 7. 查询页按文本、标签、来源、时间、隐私和最多两跳联系稳定分页，并返回精确证据；
-8. 正式知识页搜索最高匹配 Entry，组合有界自动/用户关系图谱，支持图/列表、编辑、隐藏、恢复、创建和来源回看；
-9. 个人数据包导出/恢复 61 张当前表、引用 Blob 字节、当前偏好、Entry v5 当前结构/精确区间/全文工作副本、Association v3 图谱元数据和 Processing v7 状态。
+8. 正式知识页搜索最高匹配 Entry，组合有界自动/用户/AI 关系图谱，支持图/列表、八类语义、名称、方向、说明、来源核验、双端来源、编辑、隐藏、恢复和创建；
+9. 个人数据包导出/恢复 61 张当前表、引用 Blob 字节、当前偏好、Entry v5 当前结构/精确区间/全文工作副本、Association v4 图谱元数据和 Processing v7 状态。
 10. 导入页管理外部版本化的精确 GitHub Markdown 单文件订阅；手动或默认关闭的间隔检查创建真实 ProcessingRun，变化时复用既有 Evidence 导入。
 11. M1G-3A 已实现闭合、默认关闭、带修订的外部 PreferenceProfile 状态及个人数据包兼容；M1G-3B 已实现从显式评分生成确定性候选和最多 100 个 Entry 的纯只读试运行；M1G-3C 已实现期望修订公共保存、候选/试运行操作和标签页次级规则面板；M1G-3D 已完成按 workspace 原子串行的偏好读改写、乐观修订检查、迟到响应防护、隐私/旧包/响应式浏览器及制品隔离回归。
 12. M1G-4A 已实现独立、默认关闭并可暂停的外部 AutomationPolicy，使用精确 Profile 修订、明确阈值和有界预算，将当前 Entry 稳定试分为推进候选、人工审核或延后候选；它始终只读，不授予任何下游写入权。

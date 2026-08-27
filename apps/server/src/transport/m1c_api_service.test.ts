@@ -2972,6 +2972,30 @@ describe('M1E provider-neutral processing API', () => {
       routeAfterImport: false,
       intervalMinutes: 60,
     });
+    const webSubscription = Object.freeze({
+      kind: 'web' as const,
+      subscriptionId: '66666666-6666-4666-8666-666666666666',
+      label: 'Synthetic Web',
+      enabled: false,
+      pageUrl: 'https://example.invalid/articles',
+      additionalPaths: Object.freeze(['/about']),
+      sourceAlias: 'synthetic-web',
+      isPrivate: false,
+      routeAfterImport: false,
+      intervalMinutes: 60,
+    });
+    const pluginSubscription = Object.freeze({
+      kind: 'plugin' as const,
+      subscriptionId: '77777777-7777-4777-8777-777777777777',
+      label: 'Synthetic plugin',
+      enabled: false,
+      connectorId: 'plugin.synthetic.v1',
+      configurationRef: 'profile.default',
+      sourceAlias: 'synthetic-plugin',
+      isPrivate: true,
+      routeAfterImport: false,
+      intervalMinutes: 120,
+    });
     const replace = vi.fn(() =>
       Promise.resolve({
         outcome: 'applied' as const,
@@ -2997,6 +3021,15 @@ describe('M1E provider-neutral processing API', () => {
               subscriptions: Object.freeze([subscription]),
             }),
           ),
+        connectorCapabilities: () =>
+          Object.freeze([
+            Object.freeze({
+              connectorId: 'plugin.synthetic.v1',
+              displayName: 'Synthetic plugin',
+              origin: 'plugin' as const,
+              configurationMode: 'external_reference' as const,
+            }),
+          ]),
         replace,
         runNow,
         runDue: () => Promise.resolve([]),
@@ -3009,7 +3042,11 @@ describe('M1E provider-neutral processing API', () => {
     expect(workspaceBody.capabilities).toContain('source_subscriptions');
     await expect(service.listSourceSubscriptions()).resolves.toMatchObject({
       statusCode: 200,
-      body: {status: 'ok', revision: 1},
+      body: {
+        status: 'ok',
+        revision: 1,
+        connectors: [{connectorId: 'plugin.synthetic.v1', origin: 'plugin'}],
+      },
     });
     await expect(
       service.replaceSourceSubscriptions({
@@ -3043,6 +3080,20 @@ describe('M1E provider-neutral processing API', () => {
       body: {status: 'applied'},
     });
     expect(replace).toHaveBeenLastCalledWith(1, [jsonSubscription]);
+    await expect(
+      service.replaceSourceSubscriptions({
+        expectedRevision: 1,
+        subscriptions: [webSubscription],
+      }),
+    ).resolves.toMatchObject({statusCode: 200, body: {status: 'applied'}});
+    expect(replace).toHaveBeenLastCalledWith(1, [webSubscription]);
+    await expect(
+      service.replaceSourceSubscriptions({
+        expectedRevision: 1,
+        subscriptions: [pluginSubscription],
+      }),
+    ).resolves.toMatchObject({statusCode: 200, body: {status: 'applied'}});
+    expect(replace).toHaveBeenLastCalledWith(1, [pluginSubscription]);
     await expect(
       service.replaceSourceSubscriptions({
         expectedRevision: 1,

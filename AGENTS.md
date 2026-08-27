@@ -542,11 +542,28 @@ ProcessingRun and Import surfaces now admit a bounded declarative JSON API
 adapter. It performs public HTTPS GET only, maps records through closed dot
 paths, separates same-run pagination from cross-run incremental cursors and
 stores only an environment-variable reference for optional Bearer credentials.
-GitHub Markdown, RSS/Atom and declarative JSON API are the current public remote
-subscriptions; constrained Web and installed-plugin product adapters remain
-later boundaries. Connector code retains no database, Entry, tag, Association,
-graph, AI or cursor-write port. The pre-launch order is now external sources, formal-knowledge
-deepening, tokenization/vector/RAG, measured performance work, then
+ADR 0040 completes M1I-4 with at most eight owner-declared same-origin public
+Web pages. The server extracts article/main/body content without scripts, link
+discovery, redirects or browser session state; exact HTML remains an external
+Blob and the Markdown projection reuses the Evidence path. ADR 0041 completes
+M1I-5: only trusted adapters explicitly injected into the runtime expose a
+closed capability in the API and Import UI. Plugin preferences retain only a
+stable `plugin.*` connector ID and an opaque external configuration reference;
+missing plugins remain visible but unavailable. Connector code retains no
+database, Entry, tag, Association, graph, AI or cursor-write port.
+
+ADR 0042 completes M1J without restoring the retired M1C Knowledge runtime.
+The current Entry-centred graph now stores a closed relation semantic kind,
+bounded maintenance note and source-review status on user/AI overrides, while
+calculated projection edges remain explicitly `similarity / calculated`.
+The Formal Knowledge relationship inspector opens exact evidence for both
+endpoints. `source_checked` records only that the owner reviewed those sources;
+it is not an automated truth claim. Migration `000024`, restructuring and AI
+acceptance preserve this metadata, and Association Bundle v4 carries it while
+remaining backward-readable with v1-v3. M1J adds no Provider, dependency,
+second content model, knowledge tree, complex ontology or automatic fact check.
+The next pre-launch phase is M1K tokenization/vector/RAG, followed by
+measured performance work, then
 container/maintenance/production closure. Unrelated product expansion waits
 for post-development use with explicitly authorized real material.
 

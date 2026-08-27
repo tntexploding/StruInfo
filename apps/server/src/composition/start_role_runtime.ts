@@ -9,6 +9,7 @@ import {
   SourceConnectorRegistry,
   SourceSubscriptionService,
   type GitSourceSubscriptionReaderPort,
+  type SourceConnectorPort,
 } from '../modules/subscriptions/index.js';
 import {
   OpenAiEntryAssociationProvider,
@@ -20,6 +21,7 @@ import {
   GithubGitSourceSubscriptionReader,
   JsonApiSourceConnector,
   RssAtomSourceConnector,
+  WebSourceConnector,
 } from '../platform/sources/index.js';
 import {
   createRuntimeDatabase,
@@ -89,6 +91,8 @@ export interface RoleRuntimeDependencies {
   readonly exitDecision?: ExitDecision;
   readonly storageServicesFactory?: StorageServicesFactory;
   readonly sourceSubscriptionReader?: GitSourceSubscriptionReaderPort;
+  /** Trusted adapters supplied by the installed host; never loaded from prefs. */
+  readonly sourceConnectors?: readonly SourceConnectorPort[];
   readonly sourceSubscriptionSchedulerStarter?: (
     dependencies: Readonly<SourceSubscriptionSchedulerDependencies>,
   ) => Promise<RuntimeResource>;
@@ -184,6 +188,8 @@ export async function startRoleRuntime(
     connectors: new SourceConnectorRegistry([
       new RssAtomSourceConnector(),
       new JsonApiSourceConnector(),
+      new WebSourceConnector(),
+      ...(dependencies.sourceConnectors ?? []),
     ]),
     blobStore: storage.blobStore,
     evidence: repositories.evidence,

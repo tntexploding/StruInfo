@@ -47,6 +47,20 @@ export interface SourceConnectorReadRequest {
   readonly previousCursor?: string;
 }
 
+export type SourceConnectorOrigin = 'builtin' | 'plugin';
+export type SourceConnectorConfigurationMode =
+  'internal' | 'external_reference';
+
+export interface SourceConnectorDescriptor {
+  readonly displayName: string;
+  readonly origin: SourceConnectorOrigin;
+  readonly configurationMode: SourceConnectorConfigurationMode;
+}
+
+export interface SourceConnectorCapability extends SourceConnectorDescriptor {
+  readonly connectorId: string;
+}
+
 export interface SourceConnectorDocument {
   readonly externalId: string;
   readonly version: string;
@@ -70,6 +84,11 @@ export type SourceConnectorReadResult =
 
 export interface SourceConnectorPort {
   readonly connectorId: string;
+  /**
+   * Optional owner-facing metadata. Undescribed injected test adapters remain
+   * callable, but only described adapters appear in capability discovery.
+   */
+  readonly descriptor?: Readonly<SourceConnectorDescriptor>;
   read(request: Readonly<SourceConnectorReadRequest>): Promise<unknown>;
 }
 
@@ -79,9 +98,11 @@ export interface SourceConnectorPort {
  */
 export class SourceConnectorRegistry {
   readonly #connectors: ReadonlyMap<string, SourceConnectorPort>;
+  readonly #capabilities: readonly Readonly<SourceConnectorCapability>[];
 
   public constructor(connectors: readonly SourceConnectorPort[]) {
     const byId = new Map<string, SourceConnectorPort>();
+    const capabilities: SourceConnectorCapability[] = [];
     for (const connector of connectors) {
       if (!validConnectorId(connector.connectorId)) {
         throw new SourceConnectorError('connector_result_invalid');
@@ -90,12 +111,36 @@ export class SourceConnectorRegistry {
         throw new SourceConnectorError('connector_duplicate');
       }
       byId.set(connector.connectorId, connector);
+      if (connector.descriptor !== undefined) {
+        const descriptor = decodeConnectorDescriptor(connector.descriptor);
+        if (
+          descriptor === undefined ||
+          (descriptor.origin === 'plugin' &&
+            !PLUGIN_CONNECTOR_ID.test(connector.connectorId)) ||
+          (descriptor.origin === 'builtin' &&
+            !BUILTIN_CONNECTOR_ID.test(connector.connectorId))
+        ) {
+          throw new SourceConnectorError('connector_result_invalid');
+        }
+        capabilities.push(
+          Object.freeze({connectorId: connector.connectorId, ...descriptor}),
+        );
+      }
     }
     this.#connectors = byId;
+    this.#capabilities = Object.freeze(
+      capabilities.sort((left, right) =>
+        left.connectorId.localeCompare(right.connectorId),
+      ),
+    );
   }
 
   public connectorIds(): readonly string[] {
     return Object.freeze([...this.#connectors.keys()].sort());
+  }
+
+  public capabilities(): readonly Readonly<SourceConnectorCapability>[] {
+    return this.#capabilities;
   }
 
   public async read(
@@ -122,6 +167,29 @@ export class SourceConnectorRegistry {
     }
     return decodeConnectorResult(result);
   }
+}
+
+function decodeConnectorDescriptor(
+  value: unknown,
+): Readonly<SourceConnectorDescriptor> | undefined {
+  if (
+    !isRecord(value) ||
+    !exactKeys(value, ['configurationMode', 'displayName', 'origin']) ||
+    !boundedText(value.displayName, 80) ||
+    (value.origin !== 'builtin' && value.origin !== 'plugin') ||
+    (value.configurationMode !== 'internal' &&
+      value.configurationMode !== 'external_reference') ||
+    (value.origin === 'builtin' && value.configurationMode !== 'internal') ||
+    (value.origin === 'plugin' &&
+      value.configurationMode !== 'external_reference')
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    displayName: value.displayName,
+    origin: value.origin,
+    configurationMode: value.configurationMode,
+  });
 }
 
 export interface SourceConnectorImportDependencies {
@@ -414,6 +482,9 @@ function decodePublication(
 function validConnectorId(value: unknown): value is string {
   return typeof value === 'string' && CONNECTOR_ID.test(value);
 }
+
+const BUILTIN_CONNECTOR_ID = /^builtin(?:[._-][a-z0-9]+){1,7}$/u;
+const PLUGIN_CONNECTOR_ID = /^plugin(?:[._-][a-z0-9]+){1,7}$/u;
 
 function boundedText(value: unknown, maximum: number): value is string {
   return (

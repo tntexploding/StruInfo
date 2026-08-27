@@ -53,13 +53,13 @@ Workspace Bundle v1 现在是“当前已实现的全部工作区个人数据”
 | -------------------------- | ------: | ----------------------------- | ---------------------------------------------------------------------------------------- |
 | `struinfo.m1c-domain`      |       1 | `struinfo.m1c-domain.v1`      | Evidence、Curation、正式 Knowledge 与命令历史，36 表                                     |
 | `struinfo.m1d-entry`       |       4 | `struinfo.m1d-entry.v4`       | Entry 当前结构事实、Fragment 输入/可选精确区间、三维标签、lineage 与 Document 标签，8 表 |
-| `struinfo.m1d-association` |       3 | `struinfo.m1d-association.v3` | 可重建联系投影、当前人工控制与正式图谱关系元数据，2 表                                   |
+| `struinfo.m1d-association` |       4 | `struinfo.m1d-association.v4` | 可重建联系投影、当前人工控制与正式图谱关系语义/说明/核验元数据，2 表                     |
 | `struinfo.m1e-processing`  |       7 | `struinfo.m1e-processing.v7`  | 处理任务、提案载荷、typed 自动路由、所有者队列与确定性动作，14 表                        |
 | `struinfo.personal-data`   |       1 | `struinfo.personal-data.v1`   | 引用 Blob 的完整字节与当前审核/标签个人偏好                                              |
 
 每个 codec 都使用闭合 schema，显式列出允许的字段并拒绝未知表、未知列、重复身份、跨工作区引用和错误 scalar。通用信封不会把任意 JSON 直接当作领域事实。
 
-Entry v5、Association v3 和 Processing v7 反映迁移 `000011` 至 `000022` 之后的当前成品态。Entry v3 为人工物化增加可选半开 Unicode 标量区间；没有区间行的输入仍表示完整 Fragment。Entry v4 在相同八张表内为每个 Entry 增加 `is_current_structure`：重组退出当前结构的旧行及 lineage 仍可完整导出，普通产品读取只使用当前行。Entry v5 增加第九张 `information_document_working_copy` 表，携带拆分前唯一当前草稿或已确认派生 Snapshot 的关系；v1–v4 恢复时该表为空。Association v3 在当前 override 上增加关系来源、名称和方向；Entry 的 `current_revision` / `current_revision_id` 只作为乐观并发版本令牌，不再指向一张普通编辑历史表。Processing v7 在 provider-neutral 任务/提案、闭合 AI 拆分/标签/关系提案载荷、exact-policy/Profile/Entry-bound 自动路由运行/claim 和所有者工作队列之上，增加 typed 确定性动作状态；它只保存权力、规则来源、状态、修订与计数，不保存 Entry 正文、API key、提示全文、原始模型响应或任意 JSON。不可变 Snapshot、Fragment 以及正式 Knowledge 修订历史仍由 M1C domain 分区原样保留。
+Entry v5、Association v4 和 Processing v7 反映当前成品态。Entry v3 为人工物化增加可选半开 Unicode 标量区间；没有区间行的输入仍表示完整 Fragment。Entry v4 在相同八张表内为每个 Entry 增加 `is_current_structure`；Entry v5 增加第九张 `information_document_working_copy` 表。Association v3 在当前 override 上增加关系来源、名称和方向；Association v4 再增加闭合语义、500 code-point 内维护说明和未核验/已核对来源/需复核状态，并以保守默认值读取 v1–v3。Entry 的 `current_revision` / `current_revision_id` 只作为乐观并发版本令牌，不再指向一张普通编辑历史表。Processing v7 保存 typed 任务、提案、路由和确定性动作状态，不保存 Entry 正文、API key、提示全文、原始模型响应或任意 JSON。不可变 Snapshot、Fragment 以及正式 Knowledge 修订历史仍由 M1C domain 分区原样保留。
 
 ## 4. 规范编码与隐私
 

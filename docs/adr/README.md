@@ -51,6 +51,17 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0029](0029-entry-automation-control-integrity.md) | Accepted | Exact automation-run audit, independent request generations and responsive recovery visibility without new execution authority |
 | [0030](0030-entry-automation-owner-work-queue.md) | Accepted | Successful routing claims become a durable owner work queue without changing immutable execution facts or Entry content |
 | [0031](0031-subscription-deterministic-entry-routing-chain.md) | Accepted | Default-off changed-source chaining reuses Evidence import, deterministic Entry materialization and recoverable routing |
+| [0032](0032-deterministic-entry-tag-and-association-actions.md) | Accepted | Recoverable deterministic tag and Association actions for advance candidates only |
+| [0033](0033-post-materialization-entry-restructuring.md) | Accepted | Owner-controlled post-materialization Entry restructuring with impact preview and lineage |
+| [0034](0034-pre-split-derived-document-editing.md) | Accepted | One current pre-split working copy confirmed as a new immutable derived Snapshot |
+| [0035](0035-versioned-configurable-entry-split-rules.md) | Accepted | External versioned deterministic Entry split rules with preview and explicit apply |
+| [0036](0036-explicit-local-multi-file-import-queue.md) | Accepted | Explicit session-only local multi-file import queue over the existing Evidence boundary |
+| [0037](0037-plugin-compatible-source-acquisition-foundation.md) | Accepted | Shared bounded source-connector result and remote-document Evidence import foundation |
+| [0038](0038-public-rss-atom-source-subscriptions.md) | Accepted | Public RSS/Atom subscriptions through external preferences and host-owned import |
+| [0039](0039-declarative-json-api-source-subscriptions.md) | Accepted | Bounded declarative JSON API subscriptions without a script or generic REST surface |
+| [0040](0040-constrained-web-source-subscriptions.md) | Accepted | Explicit same-origin Web page subscriptions with server-owned extraction and no discovery |
+| [0041](0041-installed-source-connector-product-wiring.md) | Accepted | Visible installed connector capabilities and portable external configuration references |
+| [0042](0042-formal-knowledge-relation-semantics-and-source-review.md) | Accepted | Closed Formal Knowledge relation semantics, maintenance notes and explicit source-review status |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -176,3 +187,21 @@ mappings plus optional page/incremental cursors; Bearer secrets remain in a
 named runtime environment variable. Complete bounded pages become individual
 remote-document Evidence records before the host advances the connector cursor.
 It is not a generic REST client, script runner or Web crawler.
+
+ADR 0040 completes M1I-4 with one built-in constrained Web adapter. The owner
+lists one public HTTPS page and at most seven same-origin paths; the server
+extracts article/main/body content, retains exact raw bytes externally and
+uses conditional per-page cursors. It never discovers links, follows redirects,
+uses a login session or becomes an open crawler.
+
+ADR 0041 completes M1I-5 by exposing only the connector capabilities actually
+injected by the trusted runtime composition. Plugin subscriptions persist a
+stable adapter ID and an opaque external configuration reference, never code,
+secrets or configuration payloads. Installed adapters still return only bounded
+documents and receive no domain write port.
+
+ADR 0042 completes M1J on the existing Entry-centred graph. It adds closed
+relation semantics, a bounded maintenance note and an explicit source-review
+status to the current Association override, exposes both endpoint sources in the
+relation inspector and upgrades Association personal-data packages to v4. It
+does not restore the retired Knowledge runtime or claim automatic fact checking.
