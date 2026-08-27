@@ -1,7 +1,7 @@
 # StruInfo 当前项目状态与实现清单
 
-- 状态：M1K 可重建词项/向量索引、语义/混合检索与带证据 RAG 已完成；活动工作区保持无数据
-- 实现基线：M1I-1A/B 至 M1K 无数据开发候选
+- 状态：M1M 单机生产运行与维护边界已完成；活动工作区保持无数据
+- 实现基线：M1I-1A/B 至 M1M 无数据开发候选
 - 最近核对：2026-08-27
 - 需求边界：[产品需求](product-requirements.md)
 - 交付顺序：[分阶段计划](roadmap.md)
@@ -25,7 +25,7 @@
 
 本文是“当前代码到底能做什么”的实现真值表。产品需求描述长期目标，路线图描述交付顺序，
 ADR 记录已经接受的决策；当历史文档中的旧 M1C 示例与当前代码冲突时，以 ADR 0008、
-ADR 0009、ADR 0010、ADR 0011、ADR 0012、ADR 0013、ADR 0014、ADR 0015、ADR 0016、ADR 0017、ADR 0018、ADR 0019、ADR 0020、ADR 0021、ADR 0022、ADR 0023、ADR 0024、ADR 0025、ADR 0026、ADR 0027、ADR 0028、ADR 0029、ADR 0030、ADR 0031、ADR 0032、ADR 0033、ADR 0034、ADR 0035、ADR 0036、ADR 0037、ADR 0038、ADR 0039、ADR 0040、ADR 0041、ADR 0042、ADR 0043 和本文列出的活动入口为准。
+ADR 0009、ADR 0010、ADR 0011、ADR 0012、ADR 0013、ADR 0014、ADR 0015、ADR 0016、ADR 0017、ADR 0018、ADR 0019、ADR 0020、ADR 0021、ADR 0022、ADR 0023、ADR 0024、ADR 0025、ADR 0026、ADR 0027、ADR 0028、ADR 0029、ADR 0030、ADR 0031、ADR 0032、ADR 0033、ADR 0034、ADR 0035、ADR 0036、ADR 0037、ADR 0038、ADR 0039、ADR 0040、ADR 0041、ADR 0042、ADR 0043、ADR 0044、ADR 0045 和本文列出的活动入口为准。
 
 状态只使用三种含义：
 
@@ -121,14 +121,15 @@ M1I-1A/B 已增加内建读取器和受信任插件适配器共享的 SourceConn
 
 - 外部运行配置、数据根路径隔离和 PostgreSQL 连接；
 - 二十五份前向迁移及独立迁移进程；
-- 本地内容寻址 Blob、偏好文件和导出文件存储；
+- 本地内容寻址 Blob、偏好、导出与备份文件存储；
 - 健康检查、结构化日志、生命周期与优雅关闭；
 - API、scheduler、worker 和 `all` 运行角色、非重叠订阅轮询及共享队列基础；
-- React/Vite Web 外壳、同源本地 API 客户端、单元/集成/E2E 与制品审计。
+- React/Vite Web 外壳、同源本地 API 客户端、单元/集成/E2E 与制品审计；
+- 非 root 容器、runtime/migrator secret 隔离、迁移/队列准备、runtime grant、维护预检与完整个人数据备份/空库恢复命令。
 
 队列和多运行角色目前是基础设施能力；精确 GitHub Markdown、公开 RSS/Atom、声明式 JSON API、受限网页和实际安装 connector 已接通，但不能由此推导开放爬虫或通用自动采集。ProcessingRun 是独立的持久任务状态边界；订阅检查使用 import 阶段，公开 split、tags 与 selected-pair association 提案都可以显式启动、接受或拒绝。
 
-M1I-1A/B 至 M1I-5 已完成外部信源底座、三类内建远端 reader 和已安装连接器产品接线。M1J 又在现有 Entry 图谱上完成关系语义、维护说明、来源核验和 Association v4 传输；M1K 已完成可重建词项/向量索引、三种 Query、召回评估与公开证据 RAG。下一公开产品增量是 M1L 性能评估与按证据优化。
+M1I-1A/B 至 M1I-5 已完成外部信源底座、三类内建远端 reader 和已安装连接器产品接线。M1J 又在现有 Entry 图谱上完成关系语义、维护说明、来源核验和 Association v4 传输；M1K 已完成可重建词项/向量索引、三种 Query、召回评估与公开证据 RAG；M1L 已完成无数据性能基准、关联读取索引和搜索请求重复读取优化；M1M 已完成单机生产运行代码边界。下一步是所有者授权后的统一实际审核，不再预设横向产品增量。
 
 ## 6. 兼容保留而非活动产品能力
 
@@ -334,7 +335,19 @@ Feed adapter 只接受无凭据 HTTPS，连接前拒绝本地/私有地址，不
 
 [ADR 0041](adr/0041-installed-source-connector-product-wiring.md) 把真实已安装连接器的声明能力公开到 API 和导入页。主程序只保存稳定 `plugin.*` connector ID 与 opaque 外部配置引用；连接器代码和秘密配置不进入偏好或个人数据包。未安装的历史配置仍可见但不可运行，运行时适配器仍只能返回有界文档，持久化、隐私、游标与后续分流由主程序拥有。
 
-### 7.28 已知产品缺口
+### 7.28 已完成：M1L 性能评估与按证据优化
+
+[ADR 0044](adr/0044-evidence-driven-local-performance.md) 提供仓库自有的 `corepack pnpm run performance:m1l`。标准工作负载只用合成 Markdown、Entry、向量与 `example.invalid` 连接器结果，固定覆盖导入、拆分、词项/联系投影、词法/语义/混合/两跳查询、正式知识邻域和订阅批次，并输出运行时、workload hash 与中位数/P95 等闭合 JSON；它不写数据库、Blob、偏好或仓库报告。
+
+同机标准基线确认两跳 Association 查询会为每个访问节点重建全部映射。现在一次请求只构建一个只读邻接索引；800 个 Entry、8,040 条投影的相同 workload hash 下，中位耗时由 184.565 ms 降到 4.196 ms。HTTP lexical 查询也只读取一次 Entry/Association snapshot，semantic/hybrid 不再由 API 重复加载检索服务已经读取的数据。所有优化保持公开结果、隐私、排序、过期投影、override 和 cursor 语义，不引入迁移、依赖、持久缓存或新服务。
+
+### 7.29 已完成：M1M 单机生产运行与维护边界
+
+[ADR 0045](adr/0045-operational-production-baseline.md) 增加多阶段非 root Dockerfile、普通 runtime 与高权限 maintenance 分离的 Compose、严格的 `*_FILE` secret 注入、独立 pg-boss schema 准备、runtime grant、维护 preflight/backup/restore 和完整[生产运行手册](production-operations.md)。普通应用清单不接触 migrator secret，容器复用现有 health、结构化日志与优雅关闭。
+
+备份复用完整个人数据包，把 61 张工作区表、引用 Blob 和偏好写入外部 `backups/`；恢复仍只允许同 workspace 空数据库。静态 verifier 已纳入根 `verify`，Compose 语法和 pnpm production deploy 独立验证。该结果没有迁移、依赖或真实数据，也不冒充目标 Linux 镜像、真实 PostgreSQL 18 权限/恢复演练、公网认证或公开分发许可。
+
+### 7.30 已知产品缺口
 
 - 拆分页尚不能重排来源、执行任意脚本/自定义解析器规则，或自动/批量重组多个已物化文档；
 - 导入已支持手动 Markdown、固定 Git Markdown，以及单份或显式多文件批次的 Markdown、纯文本、HTML 或带文字层 PDF；尚无 Office、OCR、复杂版面/图片还原、持久后台上传、目录扫描或目录监视；
@@ -343,14 +356,14 @@ Feed adapter 只接受无凭据 HTTPS，连接前拒绝本地/私有地址，不
 - 精确 GitHub Markdown、公开 RSS/Atom、声明式 JSON API、受限同源网页和已安装受信任连接器的手动/间隔检查、变化检测和可选确定性拆分/分流已实现；尚无开放式爬虫、目录订阅、交互式认证信源、日历时区调度、任意工作流编排或自动内容修改；
 - 知识树、集合、时间线、冲突维护、报告/推送和复杂事实关系类型尚未实现；当前图谱只提供有界 Entry 邻域；
 - 历史 Curation/Knowledge 表尚未通过数据退役迁移移除；在确认不再需要兼容前继续保留；
-- 当前完整加载式 Entry 查询尚未做 SQL query pushdown；无数据审核期间没有优化依据。
+- 当前完整加载式 Entry 查询尚未做 SQL query pushdown；M1L 合成工作负载只证明关联遍历的重复构图值得优化，没有证据支持提前引入另一套查询或缓存基础设施。
 
-### 7.29 发布与部署缺口
+### 7.31 发布与部署缺口
 
 - 当前产品是本机回环、单用户工作台，不是公共 API；
 - 公网认证、CSRF 完整边界、TLS、多用户授权和云部署未完成；
-- Docker/Linux/生产等价 PostgreSQL 与运行权限认证未签发；
-- 生产备份/灾难恢复、跨工作区克隆、非空目标合并和删除/保留策略未完成；
+- Docker/Compose 源码与运行权限脚本已实现，但目标 Linux 镜像 digest/漏洞扫描及真实 PostgreSQL 18 权限演练未签发；
+- 完整个人数据备份与同 workspace 空库恢复命令已实现；定期保留、异地灾难恢复、跨工作区克隆、非空目标合并和删除策略未完成；
 - 项目尚未选择分发许可证，不能发布为开源发行版。
 
 以上未完成项只有在进入相应产品边界或出现当前可达 `PRODUCT_BLOCKER` 时才阻断；测试工具自证、
@@ -358,7 +371,7 @@ Feed adapter 只接受无凭据 HTTPS，连接前拒绝本地/私有地址，不
 
 ## 8. 当前验证快照
 
-M1G-5A/5B、M1H-1A/B、M1H-2A/B、M1H-3A/B、M1H-4A/B 与 M1H-5A/B 在冻结的 M1G-4D 基线上完成以下验证：
+当前 M1M 无数据开发候选完成以下验证：
 
 - AutomationPolicy decoder、纯分流核心、外部偏好文件、typed execution service/PostgreSQL adapter、迁移和完整个人数据包边界均有合成测试；
 - 回归覆盖默认关闭、策略/Profile/Entry 过期、独立正负阈值、预算、人工接管、显式隐私范围、请求重放/冲突、运行中重校验、claim 完成/补偿、策略暂停失败后的待恢复重试、旧包升级及兄弟偏好字段保留；
@@ -370,13 +383,14 @@ M1G-5A/5B、M1H-1A/B、M1H-2A/B、M1H-3A/B、M1H-4A/B 与 M1H-5A/B 在冻结的 
 - M1H-4 新增闭合规则 decoder、确定性分组计划、外部偏好原子写入、个人数据包、四个本地 API、拆分页操作与浏览器纵向回归；
 - M1H-5 复用单文件导入协议，增加会话批次、逐文件状态、稳定失败重试、停止后续项及合成浏览器回归；没有迁移、数据库队列表或新依赖；
 - M1I-1A/B 至 M1I-5 新增连接器闭合结果、Registry、多文档幂等 Evidence 准备器、`remote_document` 迁移、Git 兼容、RSS/Atom、JSON API 与受限 Web adapter、条件请求/声明式映射、分页与增量游标、已安装 capability 发现、opaque 外部配置引用、批量订阅服务、外部偏好 union、API 与导入页合成回归；没有真实 Feed、API、网页、插件配置或网络测试资料；
-- M1J 新增迁移 `000024`、八类闭合关系语义、500 code-point 维护说明、来源核验状态、双端来源操作和 Association v4 向后升级；M1K 新增迁移 `000025`、可重建词项/向量投影、可选 OpenAI Embedding、三种 Query 和公开证据 RAG；没有第二套图谱/搜索服务、真实知识 fixture、私密外发或旧 Knowledge runtime；
-- 完整 `corepack pnpm run verify` 退出码为 0：128 个单元测试文件、828 项单元测试、2 个集成测试文件、4 项集成测试全部通过，Web 构建转换 78 个模块，制品审计覆盖 982 个候选文件；
+- M1J 新增迁移 `000024`、八类闭合关系语义、500 code-point 维护说明、来源核验状态、双端来源操作和 Association v4 向后升级；M1K 新增迁移 `000025`、可重建词项/向量投影、可选 OpenAI Embedding、三种 Query 和公开证据 RAG；M1L 新增可重复合成性能工具、单次关联读取索引与 HTTP 搜索去重；M1M 新增外部 secret 文件、维护/队列入口、容器与 grant 源码和 deployment verifier；没有第二套图谱/搜索服务、真实知识 fixture、私密外发、迁移或新依赖；
+- 完整 `corepack pnpm run verify` 退出码为 0：140 个单元测试文件、867 项单元测试、2 个集成测试文件、4 项集成测试全部通过，Web 构建转换 79 个模块，制品审计覆盖 1,028 个候选文件，部署静态门通过；
+- Docker Compose v2.31.0 使用纯合成路径成功解析普通及 maintenance 组合；pnpm 11 production deploy 探针成功。实际运行镜像构建因本机 Docker Desktop Linux daemon 未启动而为 `NOT_READY`，未生成镜像，也未启动数据库、容器或真实网络服务；
 - M1G-4D 聚焦 Chrome 回归验证迟到旧列表不会覆盖新列表、精确运行详情真正经独立端点读取，并在 320、390、768、1024、1440 CSS 像素下没有整页水平溢出；
 - 当前合成 Playwright 回归 11/11 通过；M1H-1 两项推进动作在自动化策略面板中可见、默认关闭；M1H-2 在 390 CSS 像素下完成已物化结构的标量拆分、影响预览和原子应用；M1H-4 完成规则保存、预览与应用；M1H-5 完成两文件顺序导入、单项失败原身份重试及当前项完成后停止，并在 320、390、768、1024、1440 CSS 像素下无整页水平溢出；
 - M1G-5A 新增迁移 `000019` 与 Processing v6；M1G-5B 只扩展外部订阅字段和既有服务编排；M1H-1 新增迁移 `000020` 与 Processing v7；M1H-2 新增迁移 `000021` 与 Entry v4；M1H-3 新增迁移 `000022` 与 Entry v5。没有新依赖、Provider 调用或真实数据；活动工作区保持无数据，手工五步主线现在同时支持拆分前全文修订和物化后结构纠错。
 
-这些结果证明当前代码基线可构建、可测试且没有把测试/个人资源装入应用制品；它们不替代尚未执行的所有者体验或生产部署认证。
+这些结果证明当前应用代码基线可构建、可测试且没有把测试/个人资源装入应用制品，并证明容器源码可被 Compose 解析；它们不替代尚未执行的所有者体验、目标镜像或生产部署认证。
 
 ## 9. 开发完成后的统一审核与下一开发触发条件
 
@@ -384,4 +398,4 @@ M1G-5A/5B、M1H-1A/B、M1H-2A/B、M1H-3A/B、M1H-4A/B 与 M1H-5A/B 在冻结的 
 
 活动数据库和外部数据根继续保持空状态。不得为了展示或验收恢复旧周报、个人条目、偏好或任何其他真实资料；开发验证只使用合成、无个人含义、执行后清理的 fixture。恢复归档或引入新材料必须再次取得所有者明确授权。
 
-M1E-4A/4B 已补齐直接人工拆分，M1E-5A/5B 已接通本地 Markdown、纯文本、HTML 和 PDF；M1F 已完成词法查询、关联比较和公开证据综合；M1G/M1H 已完成可解释偏好、可恢复路由、所有者队列、确定性推进动作、结构纠错、全文派生、拆分规则和多文件队列；M1I 已完成连接器/远程文档入库底座、RSS/Atom、声明式 JSON API、受限同源网页与已安装连接器接线；M1J 已完成正式知识关系语义；M1K 已完成词项/向量/RAG。其他自动业务动作仍未授权。下一开发任务是 M1L 性能；开发完成前不恢复真实资料来制造审核任务。
+M1E-4A/4B 已补齐直接人工拆分，M1E-5A/5B 已接通本地 Markdown、纯文本、HTML 和 PDF；M1F 已完成词法查询、关联比较和公开证据综合；M1G/M1H 已完成可解释偏好、可恢复路由、所有者队列、确定性推进动作、结构纠错、全文派生、拆分规则和多文件队列；M1I 已完成连接器/远程文档入库底座、RSS/Atom、声明式 JSON API、受限同源网页与已安装连接器接线；M1J 已完成正式知识关系语义；M1K 已完成词项/向量/RAG；M1L 已完成性能基准与按证据优化；M1M 已完成单机生产运行和维护代码边界。其他自动业务动作仍未授权。下一步是所有者明确授权的统一实际审核或审核中出现的窄产品修复；在此之前不恢复真实资料来制造任务。

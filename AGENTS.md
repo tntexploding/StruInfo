@@ -573,10 +573,21 @@ Private Entries MUST be rejected before projection, embedding, retrieval or
 synthesis Provider calls. Derived index tables are deliberately excluded from
 personal-data packages and must be rebuilt after restore or model changes.
 M1K adds no vector database, search service, background indexer, private RAG,
-Provider-owned retrieval or real fixture. The next pre-launch phase is M1L
-measured performance work, followed by M1M container/maintenance/production
-closure. Unrelated product expansion waits for post-development use with
-explicitly authorized real material.
+Provider-owned retrieval or real fixture.
+
+ADR 0044 completes M1L with a repository-owned, data-free performance workload
+and only two measured optimizations: one per-request Association read index and
+removal of duplicate HTTP search loads. Timings are comparison evidence, not an
+SLO or test threshold.
+
+ADR 0045 completes M1M with a non-root multi-stage image, split runtime and
+maintenance Compose manifests, strict external secret-file injection, explicit
+migration/queue/grant/preflight order, and complete personal-data backup plus
+same-workspace empty-database restore. Target Linux image, real PostgreSQL 18
+operations, public-network and distribution certification remain deferred.
+There is no inferred M1N: further work comes from owner-authorized unified use
+and deployment review or a reachable product defect. Do not restore real
+material merely to demonstrate the deployment boundary.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable

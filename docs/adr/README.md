@@ -62,6 +62,9 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0040](0040-constrained-web-source-subscriptions.md) | Accepted | Explicit same-origin Web page subscriptions with server-owned extraction and no discovery |
 | [0041](0041-installed-source-connector-product-wiring.md) | Accepted | Visible installed connector capabilities and portable external configuration references |
 | [0042](0042-formal-knowledge-relation-semantics-and-source-review.md) | Accepted | Closed Formal Knowledge relation semantics, maintenance notes and explicit source-review status |
+| [0043](0043-rebuildable-entry-search-index-and-rag.md) | Accepted | Rebuildable Entry term/vector index, optional semantic recall and evidence-bounded RAG |
+| [0044](0044-evidence-driven-local-performance.md) | Accepted | Repeatable data-free performance workload and evidence-driven local optimizations |
+| [0045](0045-operational-production-baseline.md) | Accepted | Maintainable single-host production runtime, secrets, backup/restore and upgrade boundary |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -212,3 +215,16 @@ modes, explicit Recall@K/MRR evaluation and evidence-bounded RAG through the
 existing query-synthesis action. Lexical Query remains complete without a
 Provider, private content never enters the external embedding/RAG path and the
 derived index is deliberately excluded from personal-data packages.
+
+ADR 0044 completes M1L with a repository-owned synthetic performance workload
+covering import, split, index, query, graph and connector paths. It removes the
+measured repeated Association-map construction and duplicate HTTP search loads,
+while treating timings as same-machine comparison evidence rather than a test
+threshold or production SLO. It adds no migration, dependency, cache service or
+real data.
+
+ADR 0045 completes M1M with a non-root multi-stage image, privilege-separated
+runtime and maintenance manifests, external secret files, explicit migration,
+queue preparation and grant order, and executable personal-data backup/empty-
+workspace restore operations. Target-image, real PostgreSQL 18, public-network
+and distribution certification remain explicit release-time gates.

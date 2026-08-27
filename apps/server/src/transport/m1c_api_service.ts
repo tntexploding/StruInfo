@@ -2574,30 +2574,20 @@ export class M1cApiService implements M1cApiServicePort {
     const request = decodeEntrySearchBody(body);
     if (request === undefined) return inputFailure('body');
     try {
-      if (this.#dependencies.informationEntryRetrieval !== undefined) {
+      const retrievalMode = request.retrievalMode ?? 'lexical';
+      if (
+        this.#dependencies.informationEntryRetrieval !== undefined &&
+        retrievalMode !== 'lexical'
+      ) {
         const result =
           await this.#dependencies.informationEntryRetrieval.search(request);
-        const entries =
-          await this.#dependencies.informationEntryRepository.loadCurrentEntries(
-            this.#dependencies.workspaceId,
-            request.includePrivate,
-          );
-        const associationSnapshot =
-          request.association === undefined
-            ? {projections: [], overrides: []}
-            : await this.#dependencies.informationEntryAssociationRepository.loadAssociationSnapshot(
-                this.#dependencies.workspaceId,
-                request.includePrivate,
-              );
-        const privateDocuments = await this.#searchPrivateDocuments(
-          request,
-          entries,
-          associationSnapshot,
-        );
         return httpResult(200, {
           status: 'ok',
           ...result,
-          privateDocuments,
+          privateDocuments: Object.freeze({
+            totalCount: 0,
+            items: Object.freeze([]),
+          }),
         });
       }
       const [entries, associationSnapshot] = await Promise.all([

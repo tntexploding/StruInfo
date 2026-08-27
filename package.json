@@ -33,8 +33,12 @@
     "test:e2e": "playwright test --config playwright.config.ts",
     "build": "tsc --build tsconfig.build.json --clean && tsc --build tsconfig.build.json --pretty false && corepack pnpm --filter @struinfo/web run build",
     "artifact:verify": "tsx tools/verify_application_artifact.ts",
-    "verify": "corepack pnpm run format:check && corepack pnpm run lint && corepack pnpm run typecheck && corepack pnpm run test && corepack pnpm run test:integration && corepack pnpm run build && corepack pnpm run artifact:verify",
-    "db:migrate": "corepack pnpm --filter @struinfo/server run db:migrate"
+    "deployment:verify": "tsx tools/verify_m1m_deployment.ts",
+    "performance:m1l": "tsx tools/run_m1l_performance.ts",
+    "verify": "corepack pnpm run format:check && corepack pnpm run lint && corepack pnpm run typecheck && corepack pnpm run test && corepack pnpm run test:integration && corepack pnpm run build && corepack pnpm run artifact:verify && corepack pnpm run deployment:verify",
+    "db:migrate": "corepack pnpm --filter @struinfo/server run db:migrate",
+    "db:prepare-queue": "tsx apps/server/src/entrypoints/prepare_queue.ts",
+    "maintenance": "tsx apps/server/src/entrypoints/maintenance.ts"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

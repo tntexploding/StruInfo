@@ -14,7 +14,7 @@ import type {
   InformationEntrySearchResult,
 } from './information_entry_contract.js';
 import type {InformationEntryAssociationRepositorySnapshot} from './information_entry_association_contract.js';
-import {listInformationEntryAssociations} from './information_entry_association.js';
+import {prepareInformationEntryAssociationReadIndex} from './information_entry_association.js';
 import {informationEntrySearchKey} from './information_entry.js';
 
 export class InformationEntrySearchCursorError extends Error {
@@ -499,6 +499,10 @@ function buildAssociationMatches(
     return new Map();
   }
   const visited = new Map<string, AssociationVisit>();
+  const associationIndex = prepareInformationEntryAssociationReadIndex(
+    entries,
+    snapshot,
+  );
   const queue: string[] = [request.entryId];
   visited.set(request.entryId, {
     depth: 0,
@@ -509,15 +513,13 @@ function buildAssociationMatches(
     const current = visited.get(currentId);
     if (current === undefined || current.depth >= request.maximumDepth)
       continue;
-    const associations = listInformationEntryAssociations(
-      currentId,
-      entries,
-      snapshot,
-    ).filter(
-      (association) =>
-        !association.isBlocked &&
-        association.effectiveScore >= request.minimumScore,
-    );
+    const associations = associationIndex
+      .list(currentId)
+      .filter(
+        (association) =>
+          !association.isBlocked &&
+          association.effectiveScore >= request.minimumScore,
+      );
     for (const association of associations) {
       const relatedId = association.relatedEntry.entryId;
       const depth = current.depth + 1;

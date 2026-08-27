@@ -9,7 +9,9 @@
     "pnpm": "11.20.0"
   },
   "scripts": {
-    "db:migrate": "tsx src/entrypoints/migrate.ts"
+    "db:migrate": "tsx src/entrypoints/migrate.ts",
+    "db:prepare-queue": "tsx src/entrypoints/prepare_queue.ts",
+    "maintenance": "tsx src/entrypoints/maintenance.ts"
   },
   "dependencies": {
     "@nestjs/common": "11.1.28",

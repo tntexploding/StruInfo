@@ -58,6 +58,26 @@ interface ScoredCandidate {
   readonly candidateBasis: readonly InformationEntryAssociationBasis[];
 }
 
+export interface InformationEntryAssociationReadIndex {
+  list(entryId: string): readonly Readonly<InformationEntryAssociationView>[];
+}
+
+interface InformationEntryAssociationReadSource {
+  readonly entriesById: ReadonlyMap<string, Readonly<CurrentInformationEntry>>;
+  readonly projections: ReadonlyMap<
+    string,
+    Readonly<InformationEntryAssociationProjection>
+  >;
+  readonly overrides: ReadonlyMap<
+    string,
+    Readonly<InformationEntryAssociationRepositorySnapshot['overrides'][number]>
+  >;
+  readonly pairKeys: readonly string[];
+}
+
+const EMPTY_ASSOCIATION_VIEWS: readonly Readonly<InformationEntryAssociationView>[] =
+  Object.freeze([]);
+
 export function buildInformationEntryAssociationProjection(
   entries: readonly Readonly<CurrentInformationEntry>[],
   policy: Readonly<InformationEntryAssociationPolicy> = INFORMATION_ENTRY_ASSOCIATION_POLICY,
@@ -182,8 +202,49 @@ export function listInformationEntryAssociations(
   entries: readonly Readonly<CurrentInformationEntry>[],
   snapshot: Readonly<InformationEntryAssociationRepositorySnapshot>,
 ): readonly Readonly<InformationEntryAssociationView>[] {
+  const source = prepareAssociationReadSource(entries, snapshot);
+  return buildAssociationViews(entryId, source, source.pairKeys);
+}
+
+export function prepareInformationEntryAssociationReadIndex(
+  entries: readonly Readonly<CurrentInformationEntry>[],
+  snapshot: Readonly<InformationEntryAssociationRepositorySnapshot>,
+): Readonly<InformationEntryAssociationReadIndex> {
+  const source = prepareAssociationReadSource(entries, snapshot);
+  const pairKeysByEntryId = new Map<string, string[]>();
+  for (const pairKey of source.pairKeys) {
+    const projection = source.projections.get(pairKey);
+    const override = source.overrides.get(pairKey);
+    const lowId = projection?.entryLowId ?? override?.entryLowId;
+    const highId = projection?.entryHighId ?? override?.entryHighId;
+    if (lowId === undefined || highId === undefined) continue;
+    pushAssociationPairKey(pairKeysByEntryId, lowId, pairKey);
+    pushAssociationPairKey(pairKeysByEntryId, highId, pairKey);
+  }
+  const cache = new Map<
+    string,
+    readonly Readonly<InformationEntryAssociationView>[]
+  >();
+  return Object.freeze({
+    list(entryId: string) {
+      const existing = cache.get(entryId);
+      if (existing !== undefined) return existing;
+      const views = buildAssociationViews(
+        entryId,
+        source,
+        pairKeysByEntryId.get(entryId) ?? [],
+      );
+      cache.set(entryId, views);
+      return views;
+    },
+  });
+}
+
+function prepareAssociationReadSource(
+  entries: readonly Readonly<CurrentInformationEntry>[],
+  snapshot: Readonly<InformationEntryAssociationRepositorySnapshot>,
+): Readonly<InformationEntryAssociationReadSource> {
   const entriesById = new Map(entries.map((entry) => [entry.entryId, entry]));
-  if (!entriesById.has(entryId)) return Object.freeze([]);
   const projections = new Map(
     snapshot.projections
       .filter((projection) => projectionMatchesCurrent(projection, entriesById))
@@ -198,11 +259,26 @@ export function listInformationEntryAssociations(
       override,
     ]),
   );
-  const pairKeys = new Set([...projections.keys(), ...overrides.keys()]);
+  return Object.freeze({
+    entriesById,
+    projections,
+    overrides,
+    pairKeys: Object.freeze([
+      ...new Set([...projections.keys(), ...overrides.keys()]),
+    ]),
+  });
+}
+
+function buildAssociationViews(
+  entryId: string,
+  source: Readonly<InformationEntryAssociationReadSource>,
+  pairKeys: readonly string[],
+): readonly Readonly<InformationEntryAssociationView>[] {
+  if (!source.entriesById.has(entryId)) return EMPTY_ASSOCIATION_VIEWS;
   const views: InformationEntryAssociationView[] = [];
   for (const pairKey of pairKeys) {
-    const projection = projections.get(pairKey);
-    const override = overrides.get(pairKey);
+    const projection = source.projections.get(pairKey);
+    const override = source.overrides.get(pairKey);
     const lowId = projection?.entryLowId ?? override?.entryLowId;
     const highId = projection?.entryHighId ?? override?.entryHighId;
     if (lowId === undefined || highId === undefined) continue;
@@ -214,7 +290,9 @@ export function listInformationEntryAssociations(
     ) {
       continue;
     }
-    const relatedEntry = entriesById.get(entryId === lowId ? highId : lowId);
+    const relatedEntry = source.entriesById.get(
+      entryId === lowId ? highId : lowId,
+    );
     if (relatedEntry === undefined) continue;
     const isBlocked = override?.value.isBlocked === true;
     const effectiveScore = isBlocked
@@ -233,16 +311,7 @@ export function listInformationEntryAssociations(
       }),
     );
   }
-  views.sort((left, right) =>
-    left.isBlocked !== right.isBlocked
-      ? left.isBlocked
-        ? 1
-        : -1
-      : left.effectiveScore !== right.effectiveScore
-        ? right.effectiveScore - left.effectiveScore
-        : left.relatedEntry.entryId.localeCompare(right.relatedEntry.entryId),
-  );
-  return Object.freeze(views);
+  return Object.freeze(views.sort(compareAssociationViews));
 }
 
 export function orderedInformationEntryAssociationPair(
@@ -459,6 +528,29 @@ function projectionMatchesCurrent(
 
 function associationPairKey(entryLowId: string, entryHighId: string): string {
   return `${entryLowId}:${entryHighId}`;
+}
+
+function pushAssociationPairKey(
+  pairKeysByEntryId: Map<string, string[]>,
+  entryId: string,
+  pairKey: string,
+): void {
+  const pairKeys = pairKeysByEntryId.get(entryId) ?? [];
+  pairKeys.push(pairKey);
+  pairKeysByEntryId.set(entryId, pairKeys);
+}
+
+function compareAssociationViews(
+  left: Readonly<InformationEntryAssociationView>,
+  right: Readonly<InformationEntryAssociationView>,
+): number {
+  return left.isBlocked !== right.isBlocked
+    ? left.isBlocked
+      ? 1
+      : -1
+    : left.effectiveScore !== right.effectiveScore
+      ? right.effectiveScore - left.effectiveScore
+      : left.relatedEntry.entryId.localeCompare(right.relatedEntry.entryId);
 }
 
 function clampScore(value: number): number {
