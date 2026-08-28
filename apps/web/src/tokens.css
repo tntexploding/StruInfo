@@ -1,0 +1,93 @@
+:root {
+  color-scheme: dark;
+
+  --si-color-bg-canvas: #121515;
+  --si-color-bg-shell: #0d1011;
+  --si-color-surface-1: #1f2326;
+  --si-color-surface-2: #252b2e;
+  --si-color-surface-raised: #30373b;
+  --si-color-surface-ai: #1c234b;
+
+  --si-color-text-primary: #f3f7f8;
+  --si-color-text-secondary: #a8b0b5;
+  --si-color-text-muted: #879298;
+  --si-color-text-disabled: #6f7a80;
+
+  --si-color-border-subtle: #2b3134;
+  --si-color-border-default: #394146;
+  --si-color-signal: #26cdcb;
+  --si-color-signal-ink: #071314;
+  --si-color-warning: #d9a441;
+  --si-color-danger: #d9534f;
+  --si-color-danger-text: #ff7c77;
+  --si-color-topic: #7c6fe8;
+  --si-color-topic-text: #a99eff;
+  --si-color-info: #4d86ff;
+  --si-color-info-text: #8db0ff;
+  --si-color-success-text: #6ee5a5;
+
+  --si-font-ui:
+    'Noto Sans SC', 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC',
+    system-ui, sans-serif;
+  --si-font-display:
+    'Bahnschrift SemiCondensed', 'Arial Narrow', var(--si-font-ui);
+  --si-font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+
+  --si-text-xs: 0.75rem;
+  --si-text-sm: 0.8125rem;
+  --si-text-body: 0.875rem;
+  --si-text-control: 1rem;
+  --si-text-subheading: 1.25rem;
+  --si-text-section: clamp(1.5rem, 3vw, 2.5rem);
+  --si-text-title: clamp(2rem, 5vw, 3.5rem);
+
+  --si-space-0: 0;
+  --si-space-1: 0.125rem;
+  --si-space-2: 0.25rem;
+  --si-space-3: 0.5rem;
+  --si-space-4: 0.75rem;
+  --si-space-5: 1rem;
+  --si-space-6: 1.25rem;
+  --si-space-7: 1.5rem;
+  --si-space-8: 2rem;
+  --si-space-9: 2.5rem;
+  --si-space-10: 3rem;
+  --si-space-11: 4rem;
+
+  --si-rule-thin: 1px;
+  --si-focus-width: 2px;
+  --si-focus-offset: 0.25rem;
+  --si-radius-compact: 0.25rem;
+  --si-radius-control: 0.375rem;
+  --si-radius-surface: 0.5rem;
+  --si-target-pointer: 2.5rem;
+  --si-target-touch: 2.75rem;
+  --si-command-height: 4rem;
+  --si-navigation-width: 14.5rem;
+  --si-navigation-compact: 4.5rem;
+  --si-evidence-width: clamp(22.5rem, 30vw, 30rem);
+
+  --si-motion-direct: 240ms;
+  --si-motion-reveal: 650ms;
+  --si-motion-attention: 1800ms;
+  --si-motion-ease: cubic-bezier(0.22, 0.8, 0.2, 1);
+}
+
+[data-ui-family='struinfo-industrial'] {
+  --si-family-ink: var(--si-color-bg-shell);
+  --si-family-paper: var(--si-color-text-primary);
+  --si-family-signal: var(--si-color-signal);
+  --si-family-radius: var(--si-radius-compact);
+}
+
+[data-ui-depth='complex'] {
+  --si-grid-opacity: 0.055;
+  --si-stage-reveal-distance: var(--si-space-5);
+  --si-instrument-opacity: 1;
+}
+
+[data-ui-depth='moderate'] {
+  --si-grid-opacity: 0.04;
+  --si-stage-reveal-distance: var(--si-space-4);
+  --si-instrument-opacity: 0.78;
+}

@@ -1,0 +1,152 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "info": {
+    "title": "StruInfo Operational Health API",
+    "version": "1.0.0",
+    "description": "Unversioned deployment probes. These routes are not product commands or queries under /api/v1."
+  },
+  "tags": [{"name": "Operational health"}],
+  "paths": {
+    "/health/live": {
+      "get": {
+        "operationId": "getOperationalLiveness",
+        "summary": "Report process liveness",
+        "tags": ["Operational health"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The process can serve requests.",
+            "headers": {
+              "Cache-Control": {"$ref": "#/components/headers/NoStore"}
+            },
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/LiveResponse"},
+                "example": {
+                  "schema_version": "1",
+                  "service": "struinfo",
+                  "role": "api",
+                  "status": "ok"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "getOperationalReadiness",
+        "summary": "Report role readiness",
+        "tags": ["Operational health"],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Initialization and the bounded database check succeeded.",
+            "headers": {
+              "Cache-Control": {"$ref": "#/components/headers/NoStore"}
+            },
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/ReadyResponse"},
+                "example": {
+                  "schema_version": "1",
+                  "service": "struinfo",
+                  "role": "api",
+                  "status": "ready",
+                  "checks": {"database": "ready"}
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Initialization is incomplete, a required check failed, or shutdown has started.",
+            "headers": {
+              "Cache-Control": {"$ref": "#/components/headers/NoStore"}
+            },
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/NotReadyResponse"},
+                "example": {
+                  "schema_version": "1",
+                  "service": "struinfo",
+                  "role": "api",
+                  "status": "not_ready",
+                  "checks": {"database": "not_ready"}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "headers": {
+      "NoStore": {
+        "description": "Required cache prohibition for every health response.",
+        "schema": {"type": "string", "const": "no-store"}
+      }
+    },
+    "schemas": {
+      "Role": {
+        "type": "string",
+        "enum": ["api", "scheduler", "worker", "all"]
+      },
+      "LiveResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_version", "service", "role", "status"],
+        "properties": {
+          "schema_version": {"type": "string", "const": "1"},
+          "service": {"type": "string", "const": "struinfo"},
+          "role": {"$ref": "#/components/schemas/Role"},
+          "status": {"type": "string", "const": "ok"}
+        }
+      },
+      "DatabaseReadyChecks": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["database"],
+        "properties": {
+          "database": {"type": "string", "const": "ready"}
+        }
+      },
+      "DatabaseNotReadyChecks": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["database"],
+        "properties": {
+          "database": {"type": "string", "const": "not_ready"}
+        }
+      },
+      "ReadyResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_version", "service", "role", "status", "checks"],
+        "properties": {
+          "schema_version": {"type": "string", "const": "1"},
+          "service": {"type": "string", "const": "struinfo"},
+          "role": {"$ref": "#/components/schemas/Role"},
+          "status": {"type": "string", "const": "ready"},
+          "checks": {"$ref": "#/components/schemas/DatabaseReadyChecks"}
+        }
+      },
+      "NotReadyResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["schema_version", "service", "role", "status", "checks"],
+        "properties": {
+          "schema_version": {"type": "string", "const": "1"},
+          "service": {"type": "string", "const": "struinfo"},
+          "role": {"$ref": "#/components/schemas/Role"},
+          "status": {"type": "string", "const": "not_ready"},
+          "checks": {
+            "$ref": "#/components/schemas/DatabaseNotReadyChecks"
+          }
+        }
+      }
+    }
+  }
+}

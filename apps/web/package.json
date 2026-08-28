@@ -1,0 +1,26 @@
+{
+  "name": "@struinfo/web",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24.18.0",
+    "pnpm": "11.20.0"
+  },
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "6.0.5",
+    "tsx": "4.23.11",
+    "vite": "8.2.1"
+  }
+}

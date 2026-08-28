@@ -1,0 +1,276 @@
+{
+  "schemaVersion": "1",
+  "generatedBy": "M0-S-TOOLCHAIN-MAINT-001/scripts/reconcile-source-licenses.mjs",
+  "materializedBy": "M0-S-FOUNDATION-MAINT-001",
+  "admittedCandidateLockSha256": "2FAFED41EF12107322AA7498935EF4CBEF59ABC2FAB28F92A222B57F90696095",
+  "trackedFoundationLockSha256": "A783E1C5B2DADD8B653D8E16446847530473D5569BB08830D7FC03D79400880B",
+  "resolvedPackageAndSnapshotSectionsEqual": true,
+  "missingTarballLegalTextCount": 15,
+  "resolvedCount": 15,
+  "unresolvedCount": 0,
+  "records": [
+    {
+      "packageKey": "@esbuild/linux-x64@0.28.1",
+      "tarballSha256": "9ED00AB5330C94386F3273EDA99A1FB0E8F37CFD6CB5270E4AD2FE3527DA3546",
+      "declaredSpdx": "MIT",
+      "releaseRelation": "platform package shares exact version, repository, and license with esbuild@0.28.1",
+      "resolution": "EXACT_VERSION_MAIN_PACKAGE_LEGAL_TEXT",
+      "legalFiles": [
+        {
+          "evidencePath": "docs/dependencies/licenses/npm/esbuild@0.28.1/LICENSE.md",
+          "bytes": 1069,
+          "sha256": "B40EC5BAEC7BB34FA5B1C09521FA3CD52D5FAD7ADAFED74932A2010D3612A681"
+        }
+      ],
+      "selectedLegalFile": "docs/dependencies/licenses/npm/esbuild@0.28.1/LICENSE.md"
+    },
+    {
+      "packageKey": "@esbuild/win32-x64@0.28.1",
+      "tarballSha256": "5C5D62DA7572B57DDC1FA3CAEDC36C1218B5D8D02CE9C7EE70E3339FCE4453C4",
+      "declaredSpdx": "MIT",
+      "releaseRelation": "platform package shares exact version, repository, and license with esbuild@0.28.1",
+      "resolution": "EXACT_VERSION_MAIN_PACKAGE_LEGAL_TEXT",
+      "legalFiles": [
+        {
+          "evidencePath": "docs/dependencies/licenses/npm/esbuild@0.28.1/LICENSE.md",
+          "bytes": 1069,
+          "sha256": "B40EC5BAEC7BB34FA5B1C09521FA3CD52D5FAD7ADAFED74932A2010D3612A681"
+        }
+      ],
+      "selectedLegalFile": "docs/dependencies/licenses/npm/esbuild@0.28.1/LICENSE.md"
+    },
+    {
+      "packageKey": "@humanfs/types@0.15.0",
+      "tarballSha256": "3C2942DA7BA321F6BA27255A5FACEEE76EAE502403129D8AA50D2DC8400A94D5",
+      "declaredSpdx": "Apache-2.0",
+      "releaseRelation": "exact release declares Apache-2.0; canonical Apache-2.0 text retained from same-repository @humanfs/core@0.19.2",
+      "resolution": "DECLARED_SPDX_WITH_CANONICAL_TEXT",
+      "legalFiles": [
+        {
+          "evidencePath": "docs/dependencies/licenses/npm/humanfs__core@0.19.2/LICENSE",
+          "bytes": 11357,
+          "sha256": "C71D239DF91726FC519C6EB72D318EC65820627232B2F796219E87DCF35D0AB4"
+        }
+      ],
+      "selectedLegalFile": "docs/dependencies/licenses/npm/humanfs__core@0.19.2/LICENSE"
+    },
+    {
+      "packageKey": "@rolldown/binding-linux-x64-gnu@1.2.3",
+      "tarballSha256": "EA535C99F739CABD74677456CC61F4FE650F183676248A6AA77A191E1EF8B395",
+      "declaredSpdx": "MIT",
+      "releaseRelation": "platform package shares exact version, repository, and license with rolldown@1.2.3",
+      "resolution": "EXACT_VERSION_MAIN_PACKAGE_LEGAL_TEXT",
+      "legalFiles": [
+        {
+          "evidencePath": "docs/dependencies/licenses/npm/rolldown@1.2.3/LICENSE",
+          "bytes": 1302,
+          "sha256": "23ECFFF35A5A2E80D92142F75228912C3B1ABC4B5A8337A821FF4397E2F9F734"
+        }
+      ],
+      "selectedLegalFile": "docs/dependencies/licenses/npm/rolldown@1.2.3/LICENSE"
+    },
+    {
+      "packageKey": "@rolldown/binding-win32-x64-msvc@1.2.3",
+      "tarballSha256": "CFD769C3025085B1F9FF9F50FD3766CADEE13D806F83F25829F710AB3EB2EFDD",
+      "declaredSpdx": "MIT",
+      "releaseRelation": "platform package shares exact version, repository, and license with rolldown@1.2.3",
+      "resolution": "EXACT_VERSION_MAIN_PACKAGE_LEGAL_TEXT",
+      "legalFiles": [
+        {
+          "evidencePath": "docs/dependencies/licenses/npm/rolldown@1.2.3/LICENSE",
+          "bytes": 1302,
+          "sha256": "23ECFFF35A5A2E80D92142F75228912C3B1ABC4B5A8337A821FF4397E2F9F734"
+        }
+      ],
+      "selectedLegalFile": "docs/dependencies/licenses/npm/rolldown@1.2.3/LICENSE"
+    },
+    {
+      "packageKey": "@tokenizer/token@0.3.0",
+      "commit": "e068a455370090f44c757946b8571bb3fb1f117e",
+      "releaseRelation": "npm gitHead",
+      "evidencePath": ".agents/spikes/m0/license-r3/evidence/source-license-reconciliation.json",
+      "resolution": "INHERITED_EXACT_RELEASE_README_MIT_TEXT",
+      "tarballSha256": "911758CECA239C8E5372700EEDFBBD514F16D3C117B5AF0A648F6E720487C209",
+      "declaredSpdx": "MIT",
+      "inheritedEvidenceSha256": "BD8A341675823CE819079158E3A9BABDC860F8DCA0C1E34DFA837EFD51B3BB38"
+    },
+    {
+      "packageKey": "drizzle-orm@0.45.2",
+      "commit": "273c78071d4841b497f5144734b38294df7ec64b",
+      "releaseRelation": "npm SLSA provenance resolvedDependencies.gitCommit",
+      "evidencePath": ".agents/spikes/m0/license-r2/source-licenses/drizzle-orm@0.45.2/LICENSE",
+      "resolution": "INHERITED_EXACT_PROVENANCE_SOURCE_LICENSE",
+      "tarballSha256": "60B32ED3F08691D6AB42861DF1D50C61F55D73E265E2FAFE4ACFB2A042116F99",
+      "declaredSpdx": "Apache-2.0",
+      "inheritedEvidenceSha256": "C71D239DF91726FC519C6EB72D318EC65820627232B2F796219E87DCF35D0AB4"
+    },
+    {
+      "packageKey": "esrecurse@4.3.0",
+      "tarballSha256": "3ECF9370D7296B47B570C88A11F70B35BB965AF8D536536B259EB55F9B793B61",
+      "declaredSpdx": "BSD-2-Clause",
+      "repository": "https://github.com/estools/esrecurse",
+      "commit": "8ceb63797813d9ac69572a671b95cf58ffdf35b6",
+      "releaseRelation": "npm packument gitHead",
+      "resolution": "SOURCE_LEGAL_TEXT_RETAINED",
+      "legalFiles": [
+        {
+          "sourcePath": "README.md",
+          "immutableUrl": "https://api.github.com/repos/estools/esrecurse/contents/README.md?ref=8ceb63797813d9ac69572a671b95cf58ffdf35b6",
+          "evidencePath": "docs/dependencies/licenses/npm-source/esrecurse@4.3.0/README.md",
+          "bytes": 5102,
+          "sha256": "A7007C78C9D9DA690EF6CDB0E7A3427D05832EDB00ABD1F5A9882700D73BE4AD",
+          "containsFullPermissiveGrant": true
+        }
+      ],
+      "selectedLegalFile": "docs/dependencies/licenses/npm-source/esrecurse@4.3.0/README.md"
+    },
+    {
+      "packageKey": "imurmurhash@0.1.4",
+      "tarballSha256": "AC23A031966A7371D192E35C7852AB31C772B7D4E468DDD886AD3C014372CB60",
+      "declaredSpdx": "MIT",
+      "repository": "https://github.com/jensyt/imurmurhash-js",
+      "commit": "9f40361c7e2835a9b7b8eaa1cbab2a9f94ee22a2",
+      "releaseRelation": "exact v0.1.4 source tag; npm packument has no gitHead",
+      "resolution": "SOURCE_LEGAL_TEXT_RETAINED",
+      "legalFiles": [
+        {
+          "sourcePath": "LICENSE",
+          "immutableUrl": "https://api.github.com/repos/jensyt/imurmurhash-js/contents/LICENSE?ref=9f40361c7e2835a9b7b8eaa1cbab2a9f94ee22a2",
+          "evidencePath": "docs/dependencies/licenses/npm-source/imurmurhash@0.1.4/LICENSE",
+          "bytes": 1090,
+          "sha256": "FA0943DDCAA857D901A9EB92254D89876297ECDFBC884D294A927DF08EBCBBE8",
+          "containsFullPermissiveGrant": true
+        },
+        {
+          "sourcePath": "README.md",
+          "immutableUrl": "https://api.github.com/repos/jensyt/imurmurhash-js/contents/README.md?ref=9f40361c7e2835a9b7b8eaa1cbab2a9f94ee22a2",
+          "evidencePath": "docs/dependencies/licenses/npm-source/imurmurhash@0.1.4/README.md",
+          "bytes": 4763,
+          "sha256": "4491517F7DEB68D0B2A3BB590E785E276A60F12448447A9650D0BD50161A101C",
+          "containsFullPermissiveGrant": true
+        }
+      ],
+      "selectedLegalFile": "docs/dependencies/licenses/npm-source/imurmurhash@0.1.4/LICENSE"
+    },
+    {
+      "packageKey": "keyv@4.5.4",
+      "tarballSha256": "EB26F1C561E57AF4A4365E6B54F5F3E745E3963747A93845AF1F000A747B6098",
+      "declaredSpdx": "MIT",
+      "repository": "https://github.com/jaredwray/keyv",
+      "commit": "78b247b5b7a8c9b12154fbfae4295d6fb29158cf",
+      "releaseRelation": "source tag 2023-10-07 equals npm publish date; npm packument has no gitHead",
+      "resolution": "SOURCE_LEGAL_TEXT_RETAINED",
+      "legalFiles": [
+        {
+          "sourcePath": "LICENSE",
+          "immutableUrl": "https://api.github.com/repos/jaredwray/keyv/contents/LICENSE?ref=78b247b5b7a8c9b12154fbfae4295d6fb29158cf",
+          "evidencePath": "docs/dependencies/licenses/npm-source/keyv@4.5.4/LICENSE",
+          "bytes": 1108,
+          "sha256": "1F7DCA26D2D328C3DBB9B6FE3B15EC3CDA08FFE2288E47B73D617454B256F959",
+          "containsFullPermissiveGrant": true
+        },
+        {
+          "sourcePath": "README.md",
+          "immutableUrl": "https://api.github.com/repos/jaredwray/keyv/contents/README.md?ref=78b247b5b7a8c9b12154fbfae4295d6fb29158cf",
+          "evidencePath": "docs/dependencies/licenses/npm-source/keyv@4.5.4/README.md",
+          "bytes": 7237,
+          "sha256": "6DC30C3F5F2E7146FF94BD7F1D5404DF888443CEB22EB185CAA7A87F1105258F",
+          "containsFullPermissiveGrant": false
+        }
+      ],
+      "selectedLegalFile": "docs/dependencies/licenses/npm-source/keyv@4.5.4/LICENSE"
+    },
+    {
+      "packageKey": "natural-compare@1.4.0",
+      "tarballSha256": "5E5569ECD12064F73632A8C18A45B1D1DE4A27B699A671864801F1C35EE779EE",
+      "declaredSpdx": "MIT",
+      "repository": "https://github.com/litejs/natural-compare-lite",
+      "commit": "eec83eee67cfac84d6db30cdd65363f155673770",
+      "releaseRelation": "npm packument gitHead",
+      "resolution": "SOURCE_LEGAL_TEXT_RETAINED",
+      "legalFiles": [
+        {
+          "sourcePath": "README.md",
+          "immutableUrl": "https://api.github.com/repos/litejs/natural-compare-lite/contents/README.md?ref=eec83eee67cfac84d6db30cdd65363f155673770",
+          "evidencePath": "docs/dependencies/licenses/npm-source/natural-compare@1.4.0/README.md",
+          "bytes": 3326,
+          "sha256": "9A97891A8E69DA238853B1A512AE6EA8797072E9AAD5BB25449B798DEAAB986E",
+          "containsFullPermissiveGrant": false
+        },
+        {
+          "sourcePath": "SPDX:MIT",
+          "immutableUrl": "https://spdx.org/licenses/MIT.txt",
+          "evidencePath": "docs/dependencies/licenses/npm-source/natural-compare@1.4.0/canonical-MIT.txt",
+          "bytes": 1077,
+          "sha256": "C3B1B78BC8BD3EA13AA4BC9778442D16560270AFA235006D816E5E88CEF24DB4",
+          "containsFullPermissiveGrant": true
+        }
+      ],
+      "selectedLegalFile": "docs/dependencies/licenses/npm-source/natural-compare@1.4.0/canonical-MIT.txt"
+    },
+    {
+      "packageKey": "pg-types@2.2.0",
+      "commit": "d9d9dfb87eb50914043cbc178c301b7dd3b0c50d",
+      "releaseRelation": "npm gitHead",
+      "evidencePath": ".agents/spikes/m0/license-r3/evidence/source-license-reconciliation.json",
+      "resolution": "INHERITED_EXACT_RELEASE_README_MIT_TEXT",
+      "tarballSha256": "C4804FD058140C32F8FDA78883AD45DEE3EAA4FD9E9127B6EB659FEFE51981BD",
+      "declaredSpdx": "MIT",
+      "inheritedEvidenceSha256": "BD8A341675823CE819079158E3A9BABDC860F8DCA0C1E34DFA837EFD51B3BB38"
+    },
+    {
+      "packageKey": "pgpass@1.0.5",
+      "commit": "4230ed5e417ba6044ea7eb80b7c33db9ec301398",
+      "releaseRelation": "npm gitHead",
+      "evidencePath": ".agents/spikes/m0/license-r3/evidence/source-license-reconciliation.json",
+      "resolution": "INHERITED_EXACT_RELEASE_README_MIT_TEXT",
+      "tarballSha256": "FF794C956186430AFD600B5BC4500F3F0FAF34B62BE6FF98494F4C7F4A6D8597",
+      "declaredSpdx": "MIT",
+      "inheritedEvidenceSha256": "BD8A341675823CE819079158E3A9BABDC860F8DCA0C1E34DFA837EFD51B3BB38"
+    },
+    {
+      "packageKey": "stackback@0.0.2",
+      "tarballSha256": "3E663C82D1CCF9748ED446B648EC21A7DD6C5895ECF4A95310A60A320CA55858",
+      "declaredSpdx": "MIT",
+      "repository": "https://github.com/shtylman/node-stackback",
+      "commit": "a3ebcabaf09f9df7d7cfa913cb18fa869bd2a58d",
+      "releaseRelation": "exact v0.0.2 source tag; npm packument has no gitHead",
+      "resolution": "SOURCE_LEGAL_TEXT_RETAINED",
+      "legalFiles": [
+        {
+          "sourcePath": "README.md",
+          "immutableUrl": "https://api.github.com/repos/shtylman/node-stackback/contents/README.md?ref=a3ebcabaf09f9df7d7cfa913cb18fa869bd2a58d",
+          "evidencePath": "docs/dependencies/licenses/npm-source/stackback@0.0.2/README.md",
+          "bytes": 1900,
+          "sha256": "0AC49857291755487F92130E4E2EEC3E88B8012A7E42A6549763929BA4E6A4E5",
+          "containsFullPermissiveGrant": false
+        },
+        {
+          "sourcePath": "SPDX:MIT",
+          "immutableUrl": "https://spdx.org/licenses/MIT.txt",
+          "evidencePath": "docs/dependencies/licenses/npm-source/stackback@0.0.2/canonical-MIT.txt",
+          "bytes": 1077,
+          "sha256": "C3B1B78BC8BD3EA13AA4BC9778442D16560270AFA235006D816E5E88CEF24DB4",
+          "containsFullPermissiveGrant": true
+        }
+      ],
+      "selectedLegalFile": "docs/dependencies/licenses/npm-source/stackback@0.0.2/canonical-MIT.txt"
+    },
+    {
+      "packageKey": "@nodable/entities@3.0.0",
+      "lockIntegritySha512": "F0BF7115E4D82A19B8F717C8CA9A1ED96E705759BFDD9E7C913FBB911F40F0EC85C5C3DDB88E159B1694310C8A62B4635282CB497BFA10A2830F94EF8FD71457",
+      "declaredSpdx": "MIT",
+      "releaseRelation": "exact 3.0.0 tarball package.json declares MIT and identifies Amit Gupta; the published files omit a standalone legal file",
+      "resolution": "DECLARED_SPDX_WITH_CANONICAL_TEXT",
+      "legalFiles": [
+        {
+          "evidencePath": "docs/dependencies/licenses/npm-source/nodable__entities@3.0.0/canonical-MIT.txt",
+          "bytes": 1077,
+          "sha256": "C3B1B78BC8BD3EA13AA4BC9778442D16560270AFA235006D816E5E88CEF24DB4"
+        }
+      ],
+      "selectedLegalFile": "docs/dependencies/licenses/npm-source/nodable__entities@3.0.0/canonical-MIT.txt"
+    }
+  ],
+  "m1i2LockSha256": "9AA55459A0A5EDD2D6AB7BEEB8CD81152297CB2276CB2026E4634F2306D7BD22"
+}

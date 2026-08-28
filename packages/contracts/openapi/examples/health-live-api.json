@@ -1,0 +1,6 @@
+{
+  "schema_version": "1",
+  "service": "struinfo",
+  "role": "api",
+  "status": "ok"
+}

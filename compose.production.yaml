@@ -1,0 +1,112 @@
+name: struinfo
+
+x-struinfo-common: &struinfo-common
+  image: ${STRUIINFO_IMAGE:-struinfo:0.1.0}
+  build:
+    context: .
+    dockerfile: Dockerfile
+  init: true
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 256
+  mem_limit: 1g
+  cpus: 2.0
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=64m
+
+services:
+  app:
+    <<: *struinfo-common
+    restart: unless-stopped
+    stop_grace_period: 30s
+    environment:
+      STRUIINFO_CONFIG_PATH: /run/struinfo/runtime.env
+      DATABASE_URL_FILE: /run/secrets/runtime_database_url
+    volumes:
+      - type: bind
+        source: ${STRUIINFO_RUNTIME_CONFIG_FILE:?set STRUIINFO_RUNTIME_CONFIG_FILE}
+        target: /run/struinfo/runtime.env
+        read_only: true
+      - type: bind
+        source: ${STRUIINFO_DATA_ROOT:?set STRUIINFO_DATA_ROOT}
+        target: /var/lib/struinfo
+    secrets:
+      - runtime_database_url
+    ports:
+      - 127.0.0.1:${STRUIINFO_HTTP_PORT:-3000}:3000
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+  preflight:
+    <<: *struinfo-common
+    profiles: [maintenance]
+    command: [node, dist/entrypoints/maintenance.js, preflight]
+    environment:
+      STRUIINFO_CONFIG_PATH: /run/struinfo/runtime.env
+      DATABASE_URL_FILE: /run/secrets/runtime_database_url
+    volumes:
+      - type: bind
+        source: ${STRUIINFO_RUNTIME_CONFIG_FILE:?set STRUIINFO_RUNTIME_CONFIG_FILE}
+        target: /run/struinfo/runtime.env
+        read_only: true
+      - type: bind
+        source: ${STRUIINFO_DATA_ROOT:?set STRUIINFO_DATA_ROOT}
+        target: /var/lib/struinfo
+    secrets:
+      - runtime_database_url
+
+  backup:
+    <<: *struinfo-common
+    profiles: [maintenance]
+    command: [node, dist/entrypoints/maintenance.js, backup]
+    environment:
+      STRUIINFO_CONFIG_PATH: /run/struinfo/runtime.env
+      DATABASE_URL_FILE: /run/secrets/runtime_database_url
+    volumes:
+      - type: bind
+        source: ${STRUIINFO_RUNTIME_CONFIG_FILE:?set STRUIINFO_RUNTIME_CONFIG_FILE}
+        target: /run/struinfo/runtime.env
+        read_only: true
+      - type: bind
+        source: ${STRUIINFO_DATA_ROOT:?set STRUIINFO_DATA_ROOT}
+        target: /var/lib/struinfo
+    secrets:
+      - runtime_database_url
+
+  restore:
+    <<: *struinfo-common
+    profiles: [maintenance]
+    command:
+      - node
+      - dist/entrypoints/maintenance.js
+      - restore
+      - --file
+      - ${STRUIINFO_RESTORE_FILE:-unset.personal-data.json}
+    environment:
+      STRUIINFO_CONFIG_PATH: /run/struinfo/runtime.env
+      DATABASE_URL_FILE: /run/secrets/runtime_database_url
+    volumes:
+      - type: bind
+        source: ${STRUIINFO_RUNTIME_CONFIG_FILE:?set STRUIINFO_RUNTIME_CONFIG_FILE}
+        target: /run/struinfo/runtime.env
+        read_only: true
+      - type: bind
+        source: ${STRUIINFO_DATA_ROOT:?set STRUIINFO_DATA_ROOT}
+        target: /var/lib/struinfo
+    secrets:
+      - runtime_database_url
+
+secrets:
+  runtime_database_url:
+    file: ${STRUIINFO_RUNTIME_DATABASE_URL_SECRET_FILE:?set STRUIINFO_RUNTIME_DATABASE_URL_SECRET_FILE}
