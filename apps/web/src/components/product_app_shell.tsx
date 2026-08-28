@@ -25,7 +25,7 @@ const NAVIGATION: readonly Readonly<{
   {
     section: 'knowledge',
     index: '06',
-    label: '正式知识',
+    label: '知识',
     microLabel: 'KNOWLEDGE',
   },
 ];
@@ -68,7 +68,6 @@ export function ProductAppShell({
             <span className="primary-rail__mark" aria-hidden="true">
               SI
             </span>
-            <span className="primary-rail__edition">M1D / FLOW</span>
           </div>
           <nav className="primary-navigation" aria-label="产品工作区">
             <ol className="workflow-navigation__list">
@@ -112,7 +111,7 @@ export function ProductAppShell({
           <div className="product-lockup">
             <p className="product-lockup__name">StruInfo</p>
             <p className="product-lockup__descriptor">
-              文档处理台 · 导入 → 拆分 → 标签 → 联系 → 查询 · 正式知识
+              文档处理台 · 导入 → 拆分 → 标签 → 联系 → 查询 → 知识
             </p>
           </div>
           <dl className="command-status" aria-label="当前运行状态">

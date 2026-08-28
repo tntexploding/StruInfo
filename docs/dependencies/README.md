@@ -3,7 +3,7 @@
 - Status: tracked foundation inventory plus the M1A Markdown, M1E-5B document-import and M1I-2 RSS/Atom dependency increments
 - Contracts: `C-M0-S-r2`, `C-SLICE-A-MARKDOWN-r2`
 - Review date: 2026-08-24
-- Distribution status: not authorized
+- Distribution status: `v0.1.0` source and private-runtime image authorized
 
 This directory makes the admitted dependency decision durable. Package manifests
 and the single lockfile remain the install source of truth. The SPDX documents,
@@ -146,10 +146,11 @@ SHA-512 integrity selected by the lockfile for all eight packages.
 - The selected Windows x64 and Linux x64/glibc union is 363 packages: the
   admitted 320-package foundation union plus 32 Markdown packages and 3
   universal document-import packages plus 8 RSS/Atom XML packages.
-- A network-backed 2026-08-24
-  `pnpm audit --audit-level low --json` result reported zero at every severity
-  over all 402 lock packages. This is a point-in-time registry result, not a
-  perpetual vulnerability guarantee.
+- A network-backed 2026-08-28 `pnpm audit --prod --audit-level low` result
+  reported no known production-package vulnerabilities. The `v0.1.0` runtime
+  image also removes the unused global npm/Corepack/Yarn toolchain; Trivy 0.66.0
+  then reported 0 HIGH and 0 CRITICAL findings for the final local image.
+  These are point-in-time results, not a perpetual vulnerability guarantee.
 
 `pnpm-workspace.yaml` owns the pnpm 11 policy. Peer installation is disabled;
 peer checks, exact saves, store integrity, lock revalidation, minimum release
@@ -170,7 +171,7 @@ at resolution/install time.
 | Tracked artifact                              | SHA-256                                                            |
 | --------------------------------------------- | ------------------------------------------------------------------ |
 | `THIRD_PARTY_NOTICES.md`                      | `EA5367975DAB23FBD5907DF041776E068CDFBEB7E8B077923622A9ACD2684242` |
-| `sbom/npm-closure.spdx.json`                  | `F7341372F8FE3AB0176C88C06DB5807A643B90707E13F8883A7BEA35945EBE04` |
+| `sbom/npm-closure.spdx.json`                  | `AAF46524099C08A9574C236EA51D5F1238B46D8BCA0AC0209C11495ADA60FE25` |
 | `sbom/github-actions-runtime.spdx.json`       | `A5CD5A5DBD820926AB6F77766756ECCB61BBC9B172096D3927392AF5064B3B59` |
 | `evidence/source-license-reconciliation.json` | `2613B9B3894A1A1B5AAE3A7857BB96E46720ADAC7ED6C81736482E4197ABE0CF` |
 | `evidence/lzma-sdk-7zdec-review.json`         | `9A9A573E009DA1E035A51164524B7B0E213C29708362F2647F254946E63C42A7` |
@@ -200,11 +201,13 @@ Chromium, FFmpeg, winldd, and Linux browser-system packages are absent and remai
 owned by `M0-S-BROWSER-MAINT-001`. No browser may be downloaded or made a
 mandatory gate before that review passes.
 
-Node and PostgreSQL/pgvector container layers are absent. Compose, Dockerfile,
-and database-container CI remain owned by `M0-S-CONTAINER-MAINT-001` after exact
-per-platform SBOM, license, and vulnerability closure.
+The runtime image is built from the immutable Node 24 Bookworm Slim digest in
+`Dockerfile`; the final stage removes the unused npm/Corepack/Yarn toolchain and ships
+only production server dependencies, built Web assets, the project MIT license,
+third-party notices and the npm SBOM/license tree. PostgreSQL remains an
+operator-owned external service and is not part of the application image.
 
-No public or distributable StruInfo release is authorized until the project
-owner selects the project license and the release-specific server, browser,
-container, sample-data, and other included artifact sets are reconciled against
-it.
+The owner authorized the `v0.1.0` public source release and private single-user
+runtime image on 2026-08-28. The release contains no sample or owner data. A
+later artifact with additional server, browser, container, model, font or sample
+materials requires its own reconciliation before distribution.

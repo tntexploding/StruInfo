@@ -1,0 +1,23 @@
+# Copy this file to the cloud host's Caddy configuration. Keep the application
+# itself bound to 127.0.0.1; Caddy is the only public listener.
+{
+  email {$STRUIINFO_ACME_EMAIL}
+}
+
+{$STRUIINFO_DOMAIN} {
+  encode zstd gzip
+
+  basic_auth {
+    {$STRUIINFO_AUTH_USER} {$STRUIINFO_AUTH_PASSWORD_HASH}
+  }
+
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "DENY"
+    Referrer-Policy "no-referrer"
+    -Server
+  }
+
+  reverse_proxy 127.0.0.1:{$STRUIINFO_HTTP_PORT}
+}

@@ -17,6 +17,7 @@ import {ActionNotice} from '../components/action_notice.js';
 import type {ActionFeedback} from '../components/product_types.js';
 import {describeInformationEntryFailure} from './information_entry_shared.js';
 import {InformationEntryAiAssociations} from './information_entry_ai_associations.js';
+import {formatBasisPointPercentage} from './information_entry_score.js';
 import {createLatestRequestTracker} from './latest_request.js';
 
 type ReadyGraphResponse = Extract<
@@ -372,7 +373,7 @@ export function FormalKnowledgeGraphWorkspace({
       <header className="workflow-page-heading">
         <div>
           <p className="section-index">06 / FORMAL KNOWLEDGE GRAPH</p>
-          <h1>正式知识</h1>
+          <h1>知识</h1>
           <p>
             搜索一个 Entry 作为中心，查看自动相似联系与用户关系组成的有限邻域。
             自动边是导航线索，不代表已经人工确认的事实。
@@ -381,10 +382,17 @@ export function FormalKnowledgeGraphWorkspace({
         <span className="origin-label">Entry 正式关系图谱</span>
       </header>
 
-      <section className="knowledge-command-panel" aria-label="选择图谱中心">
+      <aside className="workflow-mode-summary" aria-label="知识页操作指南">
+        <strong>查看知识</strong>
+        <span>1. 从右侧选择中心条目</span>
+        <span>2. 在中间查看关系图谱</span>
+        <span>3. 在底部检查并编辑关系</span>
+      </aside>
+
+      <section className="knowledge-command-panel" aria-label="选择知识中心">
         <form className="knowledge-search-form" onSubmit={submitSearch}>
           <label className="field field--wide">
-            <span>选择图谱中心</span>
+            <span>搜索中心条目</span>
             <input
               type="search"
               value={queryDraft}
@@ -408,7 +416,7 @@ export function FormalKnowledgeGraphWorkspace({
             </select>
           </label>
           <button className="primary-action" type="submit">
-            打开最高匹配图谱
+            设为知识中心
           </button>
         </form>
         <div className="knowledge-view-switch" aria-label="知识展示方式">
@@ -677,7 +685,7 @@ function GraphView({
                   }}
                 >
                   <small>
-                    {Math.round(edge.effectiveScore * 100).toString()}% 联系
+                    {formatBasisPointPercentage(edge.effectiveScore)} 联系
                   </small>
                   <strong>{entryTitle(related)}</strong>
                   <span>{entrySummary(related)}</span>
@@ -740,7 +748,7 @@ function RelationListView({
                 >
                   <strong>{entryTitle(related)}</strong>
                   <small>
-                    {Math.round(edge.effectiveScore * 100).toString()}% 联系
+                    {formatBasisPointPercentage(edge.effectiveScore)} 联系
                   </small>
                 </button>
               </li>
@@ -1319,5 +1327,5 @@ function entrySummary(entry: Readonly<InformationEntry>): string {
 }
 
 function score(value: number): string {
-  return `${Math.round(value * 100).toString()}%`;
+  return formatBasisPointPercentage(value);
 }

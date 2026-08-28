@@ -96,6 +96,7 @@ export function InformationEntryTagsWorkspace({
   onReviewPreferencesChange,
 }: InformationEntryTagsWorkspaceProps) {
   const controller = useInformationEntryController({
+    autoSearchDelayMs: 300,
     loadDocuments: true,
     onListDocuments,
     onSearch,
@@ -163,191 +164,235 @@ export function InformationEntryTagsWorkspace({
         </span>
       </header>
 
-      <section className="workflow-capability-strip" aria-label="标签能力">
-        <div className="workflow-capability-strip__primary">
-          <p className="section-index">REVIEW MODE</p>
-          <strong>完整人工审核体系</strong>
-          <span>
-            有用与有趣评分、自动确定性候选、别名归并和个人快捷标记在同一处完成。
-          </span>
-        </div>
-        <div className="workflow-capability-strip__options">
-          <span data-active="true">Entry 标签</span>
-          <span data-active="true">全文标签</span>
-          <span data-active="true">个人词汇规则</span>
-        </div>
-      </section>
+      <aside className="workflow-mode-summary" aria-label="标签页操作指南">
+        <strong>标注条目</strong>
+        <span>1. 先选择文档，再选择条目</span>
+        <span>2. 检查关键词并完成评分</span>
+        <span>3. 需要时调整偏好与自动分流</span>
+      </aside>
 
-      <InformationDocumentNavigator
-        state={controller.documentView}
-        selectedSnapshotId={controller.snapshotId}
-        onSelect={(snapshotId) => {
-          setFeedback(undefined);
-          controller.setSnapshotId(snapshotId);
-        }}
-        onRetry={() => void controller.refreshDocuments()}
-      />
+      <div className="tags-studio-grid">
+        <aside className="tags-studio-grid__documents">
+          <InformationDocumentNavigator
+            state={controller.documentView}
+            selectedSnapshotId={controller.snapshotId}
+            onSelect={(snapshotId) => {
+              setFeedback(undefined);
+              controller.setSnapshotId(snapshotId);
+            }}
+            onRetry={() => void controller.refreshDocuments()}
+          />
+        </aside>
 
-      <section
-        className="entry-command-panel"
-        aria-labelledby="tag-filter-title"
-      >
-        <header className="console-heading">
-          <div>
-            <p className="section-index">REVIEW / SELECT</p>
-            <h2 id="tag-filter-title">选择要审核的条目</h2>
-          </div>
-          <span className="record-count">
-            {controller.view.status === 'ready'
-              ? `${controller.view.response.totalCount.toString()} 条`
-              : '读取中'}
-          </span>
-        </header>
-        <form
-          className="entry-search-form"
-          role="search"
-          onSubmit={submitSearch}
-        >
-          <label className="field entry-search-query">
-            <span>正文或关键词</span>
-            <input
-              type="search"
-              value={controller.query}
-              onChange={(event) => {
-                controller.setQuery(event.currentTarget.value);
-              }}
-              placeholder="留空按文档顺序审核"
-            />
-          </label>
-          <label className="privacy-query-toggle entry-private-toggle">
-            <input
-              type="checkbox"
-              checked={controller.includePrivate}
-              onChange={(event) => {
-                controller.setIncludePrivate(event.currentTarget.checked);
-                controller.setOnlyPrivate(false);
-              }}
-            />
-            查看隐私文档
-          </label>
-          <div className="entry-command-actions">
-            <button className="primary-action entry-query-action" type="submit">
-              刷新审核队列
-            </button>
-          </div>
-        </form>
-        <ActionNotice feedback={feedback} />
-      </section>
+        <main className="tags-studio-grid__review">
+          <section
+            className="entry-command-panel tags-review-selector"
+            aria-labelledby="tag-filter-title"
+          >
+            <header className="console-heading">
+              <div>
+                <p className="section-index">REVIEW / SELECT</p>
+                <h2 id="tag-filter-title">选择要审核的条目</h2>
+              </div>
+              <span className="record-count" role="status" aria-live="polite">
+                {controller.searchDirty
+                  ? '条件已更改'
+                  : controller.view.status === 'ready'
+                    ? `${controller.view.response.totalCount.toString()} 条`
+                    : controller.view.status === 'loading'
+                      ? '正在筛选…'
+                      : '筛选失败'}
+              </span>
+            </header>
+            <form
+              className="entry-search-form"
+              role="search"
+              onSubmit={submitSearch}
+            >
+              <label className="field entry-search-query">
+                <span>正文或关键词</span>
+                <input
+                  type="search"
+                  value={controller.query}
+                  onChange={(event) => {
+                    controller.setQuery(event.currentTarget.value);
+                  }}
+                  placeholder="留空按文档顺序审核"
+                />
+              </label>
+              <label className="privacy-query-toggle entry-private-toggle">
+                <input
+                  type="checkbox"
+                  checked={controller.includePrivate}
+                  onChange={(event) => {
+                    controller.setIncludePrivate(event.currentTarget.checked);
+                    controller.setOnlyPrivate(false);
+                  }}
+                />
+                查看隐私文档
+              </label>
+              <div className="entry-command-actions">
+                <button
+                  className="primary-action entry-query-action"
+                  type="submit"
+                >
+                  刷新审核队列
+                </button>
+              </div>
+            </form>
+            <ActionNotice feedback={feedback} />
+          </section>
 
-      {controller.selectedDocument === undefined ? null : (
-        <InformationDocumentPanel
-          key={`${controller.selectedDocument.snapshotId}:${controller.selectedDocument.currentTags?.revision.toString() ?? '0'}`}
-          document={controller.selectedDocument}
-          includePrivate={controller.includePrivate}
-          onOpenDocument={() => {
-            onOpenEvidence(
-              controller.selectedDocument?.snapshotId ?? '',
-              undefined,
-              controller.selectedDocument?.isPrivate === true,
-            );
-          }}
-          onAggregate={onAggregateDocumentTags}
-          onRevise={onReviseDocumentTags}
-          onChanged={async (nextFeedback) => {
-            setFeedback(nextFeedback);
-            await controller.refreshDocuments();
-          }}
-        />
-      )}
-
-      <InformationEntryResults
-        ariaLabel="待审核信息条目"
-        emptyDescription="当前筛选范围没有可审核条目；可切换来源文档或隐私范围。"
-        state={controller.view}
-        selectedEntryId={controller.selectedEntryId}
-        pageIndex={controller.pageIndex}
-        onSelectEntry={controller.setSelectedEntryId}
-        onRetry={() => void controller.executeSearch()}
-        onPreviousPage={() => {
-          controller.showPreviousPage();
-        }}
-        onNextPage={() => {
-          controller.showNextPage();
-        }}
-      >
-        {controller.selectedEntry === undefined ? undefined : (
-          <>
-            <InformationEntryAiTags
-              key={`ai:${controller.selectedEntry.entryId}:${controller.selectedEntry.revision.toString()}`}
-              enabled={aiEnabled}
-              entry={controller.selectedEntry}
-              onListAiTagProposals={onListAiTagProposals}
-              onStartAiTagProposal={onStartAiTagProposal}
-              onAcceptAiTagProposal={onAcceptAiTagProposal}
-              onRejectAiTagProposal={onRejectAiTagProposal}
-              onAccepted={async () => {
-                await controller.executeSearch();
-                await controller.refreshDocuments();
-              }}
-            />
-            <InformationEntryEditor
-              key={`${controller.selectedEntry.entryId}:${controller.selectedEntry.revision.toString()}`}
-              entry={controller.selectedEntry}
+          {controller.selectedDocument === undefined ? null : (
+            <InformationDocumentPanel
+              key={`${controller.selectedDocument.snapshotId}:${controller.selectedDocument.currentTags?.revision.toString() ?? '0'}`}
+              document={controller.selectedDocument}
               includePrivate={controller.includePrivate}
-              onOpenEvidence={onOpenEvidence}
-              onLocateDocument={() => {
-                controller.setSnapshotId(
-                  controller.selectedEntry?.snapshotId ?? '',
+              onOpenDocument={() => {
+                onOpenEvidence(
+                  controller.selectedDocument?.snapshotId ?? '',
+                  undefined,
+                  controller.selectedDocument?.isPrivate === true,
                 );
               }}
-              onPrevious={canGoPrevious ? showPreviousEntry : undefined}
-              onNext={canGoNext ? showNextEntry : undefined}
-              onRevise={onRevise}
-              onSavePreferences={onSaveReviewPreferences}
-              reviewPreferences={reviewPreferences}
-              onPreferencesChange={onReviewPreferencesChange}
-              overridePreferences={reviewPreferencesOverride}
-              onSaved={async (nextFeedback) => {
+              onAggregate={onAggregateDocumentTags}
+              onRevise={onReviseDocumentTags}
+              onChanged={async (nextFeedback) => {
                 setFeedback(nextFeedback);
-                await controller.executeSearch();
                 await controller.refreshDocuments();
               }}
             />
-          </>
-        )}
-      </InformationEntryResults>
+          )}
 
-      <InformationEntryAutomationWorkQueue
-        enabled={automationEnabled}
-        onList={onListEntryAutomationWorkQueue}
-        onUpdate={onUpdateEntryAutomationWorkItem}
-        onExecuteAction={onExecuteEntryAutomationWorkItemAction}
-        onOpenEntry={(entry) => {
-          controller.setSelectedEntryId(entry.entryId);
-          controller.setSnapshotId(entry.snapshotId);
-          controller.setTextMode('exact');
-          controller.setTextFields(Object.freeze(['title']));
-          controller.setQuery(entry.value.titlePath);
-        }}
-      />
+          <InformationEntryResults
+            ariaLabel="待审核信息条目"
+            emptyDescription="当前筛选范围没有可审核条目；可切换来源文档或隐私范围。"
+            state={controller.view}
+            selectedEntryId={controller.selectedEntryId}
+            pageIndex={controller.pageIndex}
+            onSelectEntry={controller.setSelectedEntryId}
+            onRetry={() => void controller.executeSearch()}
+            onPreviousPage={() => {
+              controller.showPreviousPage();
+            }}
+            onNextPage={() => {
+              controller.showNextPage();
+            }}
+          >
+            {controller.selectedEntry === undefined ? undefined : (
+              <>
+                <InformationEntryAiTags
+                  key={`ai:${controller.selectedEntry.entryId}:${controller.selectedEntry.revision.toString()}`}
+                  enabled={aiEnabled}
+                  entry={controller.selectedEntry}
+                  onListAiTagProposals={onListAiTagProposals}
+                  onStartAiTagProposal={onStartAiTagProposal}
+                  onAcceptAiTagProposal={onAcceptAiTagProposal}
+                  onRejectAiTagProposal={onRejectAiTagProposal}
+                  onAccepted={async () => {
+                    await controller.executeSearch();
+                    await controller.refreshDocuments();
+                  }}
+                />
+                <InformationEntryEditor
+                  key={`${controller.selectedEntry.entryId}:${controller.selectedEntry.revision.toString()}`}
+                  entry={controller.selectedEntry}
+                  includePrivate={controller.includePrivate}
+                  onOpenEvidence={onOpenEvidence}
+                  onLocateDocument={() => {
+                    controller.setSnapshotId(
+                      controller.selectedEntry?.snapshotId ?? '',
+                    );
+                  }}
+                  onPrevious={canGoPrevious ? showPreviousEntry : undefined}
+                  onNext={canGoNext ? showNextEntry : undefined}
+                  onRevise={onRevise}
+                  onSavePreferences={onSaveReviewPreferences}
+                  reviewPreferences={reviewPreferences}
+                  onPreferencesChange={onReviewPreferencesChange}
+                  overridePreferences={reviewPreferencesOverride}
+                  onSaved={async (nextFeedback) => {
+                    setFeedback(nextFeedback);
+                    await controller.executeSearch();
+                    await controller.refreshDocuments();
+                  }}
+                />
+              </>
+            )}
+          </InformationEntryResults>
+        </main>
 
-      <InformationEntryPreferenceProfilePanel
-        state={entryPreferenceProfile}
-        onReload={onReloadEntryPreferenceProfile}
-        onSave={onSaveEntryPreferenceProfile}
-        onSuggest={onSuggestEntryPreferenceProfile}
-        onTrial={onTrialEntryPreferenceProfile}
-      />
-
-      <InformationEntryAutomationPolicyPanel
-        enabled={automationEnabled}
-        onLoad={onLoadEntryAutomationPolicy}
-        onSave={onSaveEntryAutomationPolicy}
-        onTrial={onTrialEntryAutomationPolicy}
-        onExecute={onExecuteEntryAutomation}
-        onListRuns={onListEntryAutomationExecutions}
-        onLoadRun={onLoadEntryAutomationExecution}
-      />
+        <aside className="tags-studio-grid__rules" aria-label="偏好与自动分流">
+          <details className="workflow-tool-drawer">
+            <summary>
+              <span>偏好规则</span>
+              <span className="workflow-tool-drawer__hint" aria-hidden="true">
+                <span className="workflow-tool-drawer__hint-closed">
+                  点击展开
+                </span>
+                <span className="workflow-tool-drawer__hint-open">
+                  点击收起
+                </span>
+              </span>
+            </summary>
+            <InformationEntryPreferenceProfilePanel
+              state={entryPreferenceProfile}
+              onReload={onReloadEntryPreferenceProfile}
+              onSave={onSaveEntryPreferenceProfile}
+              onSuggest={onSuggestEntryPreferenceProfile}
+              onTrial={onTrialEntryPreferenceProfile}
+            />
+          </details>
+          <details className="workflow-tool-drawer">
+            <summary>
+              <span>自动分流</span>
+              <span className="workflow-tool-drawer__hint" aria-hidden="true">
+                <span className="workflow-tool-drawer__hint-closed">
+                  点击展开
+                </span>
+                <span className="workflow-tool-drawer__hint-open">
+                  点击收起
+                </span>
+              </span>
+            </summary>
+            <InformationEntryAutomationPolicyPanel
+              enabled={automationEnabled}
+              onLoad={onLoadEntryAutomationPolicy}
+              onSave={onSaveEntryAutomationPolicy}
+              onTrial={onTrialEntryAutomationPolicy}
+              onExecute={onExecuteEntryAutomation}
+              onListRuns={onListEntryAutomationExecutions}
+              onLoadRun={onLoadEntryAutomationExecution}
+            />
+          </details>
+          <details className="workflow-tool-drawer">
+            <summary>
+              <span>待处理队列</span>
+              <span className="workflow-tool-drawer__hint" aria-hidden="true">
+                <span className="workflow-tool-drawer__hint-closed">
+                  点击展开
+                </span>
+                <span className="workflow-tool-drawer__hint-open">
+                  点击收起
+                </span>
+              </span>
+            </summary>
+            <InformationEntryAutomationWorkQueue
+              enabled={automationEnabled}
+              onList={onListEntryAutomationWorkQueue}
+              onUpdate={onUpdateEntryAutomationWorkItem}
+              onExecuteAction={onExecuteEntryAutomationWorkItemAction}
+              onOpenEntry={(entry) => {
+                controller.setSelectedEntryId(entry.entryId);
+                controller.setSnapshotId(entry.snapshotId);
+                controller.setTextMode('exact');
+                controller.setTextFields(Object.freeze(['title']));
+                controller.setQuery(entry.value.titlePath);
+              }}
+            />
+          </details>
+        </aside>
+      </div>
     </div>
   );
 }

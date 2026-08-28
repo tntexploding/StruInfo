@@ -182,9 +182,8 @@ export function WorkflowOverview({
                 把一份文档变成可以查找、修改和追溯的信息
               </h2>
               <p>
-                Snapshot 保留证据，Entry
-                承担日常拆分、标签与联系；正式知识页将用 Entry
-                组成由相似联系与用户关系共同维护的可编辑图谱。
+                Snapshot 保留证据，Entry 承担日常拆分、标签与联系；知识页将用
+                Entry 组成由相似联系与用户关系共同维护的可编辑图谱。
               </p>
             </div>
           </section>

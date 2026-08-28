@@ -18,14 +18,12 @@ An accepted ADR does not bypass a reachable product, dependency, or release
 obligation, but deferred hardening and test-tooling certification do not block
 unrelated product work.
 
-The active workspace is frozen as a data-free development baseline. Actual
-owner-content review and broader formal review begin only after product
-development is complete. Until the owner explicitly authorizes material use,
-contributors must not import, restore, fetch or add real documents, entries,
-preferences or derived knowledge. Use synthetic value-free fixtures only, and
-continue in the same main project and workspace rather than creating a
-replacement workspace. Ordinary tests and reachable product-blocker fixes remain
-part of development; deferred review is not permission to skip them.
+The repository and distributable image remain data-free even when an owner uses
+real material in an external deployment. Contributors must not add real
+documents, entries, preferences, Blob bytes, database exports, backups or
+derived knowledge to Git, tests or release artifacts. Use synthetic value-free
+fixtures only. Ordinary tests and reachable product-blocker fixes remain part
+of development; deferred hardening is not permission to skip them.
 
 ## Sources of Truth
 
@@ -74,7 +72,7 @@ the body.
 
 ## Project License Status
 
-The project has not selected a distribution license and therefore does not yet
-contain a `LICENSE` file. Do not publish a release or describe the repository as
-open source until the owner records that decision and adds the required license
-materials.
+StruInfo is distributed under the repository-root MIT `LICENSE`. Every release
+must also retain `THIRD_PARTY_NOTICES.md`, the admitted dependency license tree
+and the release SBOM. Personal data, credentials and external configuration are
+never release materials.

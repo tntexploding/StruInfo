@@ -69,7 +69,7 @@ export function ManualSplitGroupEditor({
             }
             return (
               <div
-                key={`${piece.fragment.fragmentId}:${piece.startCodePoint.toString()}:${piece.endCodePoint.toString()}`}
+                key={`${piece.fragment.fragmentId}:${piece.startCodePoint.toString()}`}
               >
                 {pieceIndex === 0 ? null : (
                   <button

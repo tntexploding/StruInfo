@@ -34,12 +34,14 @@ export const EMPTY_ENTRY_ADVANCED_SEARCH_FILTERS: Readonly<EntryAdvancedSearchFi
 type PageSelection = 'preserve' | 'first' | 'last';
 
 export interface InformationEntryControllerOptions {
+  readonly autoSearchDelayMs?: number;
   readonly loadDocuments?: boolean;
   readonly onListDocuments?: InformationEntryServices['onListDocuments'];
   readonly onSearch: InformationEntryServices['onSearch'];
 }
 
 export function useInformationEntryController({
+  autoSearchDelayMs = 0,
   loadDocuments = false,
   onListDocuments,
   onSearch,
@@ -73,6 +75,9 @@ export function useInformationEntryController({
   >(Object.freeze([undefined]));
   const searchRequests = useRef(createLatestRequestTracker());
   const documentRequests = useRef(createLatestRequestTracker());
+  const scheduledSearchTimer = useRef<
+    ReturnType<typeof globalThis.setTimeout> | undefined
+  >(undefined);
   const effectiveRetrievalMode: EntryRetrievalMode =
     query.trim() === '' || includePrivate || onlyPrivate
       ? 'lexical'
@@ -148,6 +153,13 @@ export function useInformationEntryController({
       typeKeyword,
     ],
   );
+  const [lastRequestedSearch, setLastRequestedSearch] = useState(searchRequest);
+
+  const clearScheduledSearch = useCallback(() => {
+    if (scheduledSearchTimer.current === undefined) return;
+    globalThis.clearTimeout(scheduledSearchTimer.current);
+    scheduledSearchTimer.current = undefined;
+  }, []);
 
   useEffect(
     () => () => {
@@ -186,6 +198,8 @@ export function useInformationEntryController({
       after?: Readonly<InformationEntrySearchCursor>,
       selection: PageSelection = 'preserve',
     ) => {
+      clearScheduledSearch();
+      setLastRequestedSearch(searchRequest);
       const requestId = searchRequests.current.begin();
       setView({status: 'loading'});
       try {
@@ -212,23 +226,33 @@ export function useInformationEntryController({
         });
       }
     },
-    [onSearch, searchRequest],
+    [clearScheduledSearch, onSearch, searchRequest],
   );
 
   useEffect(() => {
     const tracker = searchRequests.current;
     let cancelled = false;
-    globalThis.queueMicrotask(() => {
+    const startSearch = () => {
+      scheduledSearchTimer.current = undefined;
       if (cancelled) return;
       setPageIndex(0);
       setPageCursors(Object.freeze([undefined]));
       void executeSearch();
-    });
+    };
+    if (autoSearchDelayMs > 0) {
+      scheduledSearchTimer.current = globalThis.setTimeout(
+        startSearch,
+        autoSearchDelayMs,
+      );
+    } else {
+      globalThis.queueMicrotask(startSearch);
+    }
     return () => {
       cancelled = true;
+      clearScheduledSearch();
       tracker.invalidate();
     };
-  }, [executeSearch]);
+  }, [autoSearchDelayMs, clearScheduledSearch, executeSearch]);
 
   useEffect(() => {
     if (!loadDocuments) return;
@@ -329,6 +353,7 @@ export function useInformationEntryController({
     selectedEntryId,
     selectedEntryIndex,
     searchRequest,
+    searchDirty: lastRequestedSearch !== searchRequest,
     setAdvancedFilters,
     setDomainKeyword,
     setIncludePrivate,

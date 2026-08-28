@@ -1,6 +1,7 @@
 import {NestFactory} from '@nestjs/core';
 import type {INestApplication} from '@nestjs/common';
 import type {NestExpressApplication} from '@nestjs/platform-express';
+import type {NextFunction, Request, Response} from 'express';
 import {fileURLToPath} from 'node:url';
 
 import type {RuntimeResource} from '../lifecycle/runtime_resource.js';
@@ -10,6 +11,17 @@ import type {M1cApiServicePort} from './m1c_api_service.js';
 import {RuntimeHttpModule} from './runtime_http_module.js';
 
 export const M1C_JSON_BODY_LIMIT = '2mb';
+export const RUNTIME_HTTP_SECURITY_HEADERS = Object.freeze({
+  'Content-Security-Policy':
+    "default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'",
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+  'Permissions-Policy':
+    'camera=(), display-capture=(), geolocation=(), microphone=(), payment=(), usb=()',
+  'Referrer-Policy': 'no-referrer',
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+});
 export const DEFAULT_WEB_APPLICATION_ROOT = fileURLToPath(
   new URL('../../../web/dist/', import.meta.url),
 );
@@ -68,6 +80,16 @@ export async function createNestRuntimeHttpApplication(options: {
   );
   application.useBodyParser('json', {limit: M1C_JSON_BODY_LIMIT});
   application.disable('x-powered-by');
+  application.use(
+    (_request: Request, response: Response, next: NextFunction): void => {
+      for (const [name, value] of Object.entries(
+        RUNTIME_HTTP_SECURITY_HEADERS,
+      )) {
+        response.setHeader(name, value);
+      }
+      next();
+    },
+  );
   if (options.api !== undefined) {
     application.useStaticAssets(
       options.webRoot ?? DEFAULT_WEB_APPLICATION_ROOT,
