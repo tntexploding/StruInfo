@@ -1,0 +1,59 @@
+# Local secrets and environment overrides.
+.env
+.env.*
+!.env.example
+.secrets/
+*.pem
+*.p12
+*.pfx
+
+# Private runtime data. Synthetic test data belongs under testdata/.
+/local-data/
+/runtime/
+/snapshots/
+/uploads/
+/workspace-data/
+/user-profiles/
+/exports/
+/backups/
+
+# Local multi-agent coordination and disposable architecture spikes.
+/.agents/
+
+# Logs, temporary files, and generated output.
+*.log
+/logs/
+/tmp/
+/temp/
+/.cache/
+/build/
+/dist/
+/out/
+/output/
+/coverage/
+**/.cache/
+**/dist/
+**/*.tsbuildinfo
+/playwright-report/
+/test-results/
+
+# Common dependency and language caches. Extend this list with the stack.
+node_modules/
+/.pnpm-store/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editor and operating-system state.
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini

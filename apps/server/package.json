@@ -1,0 +1,36 @@
+{
+  "name": "@struinfo/server",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24.18.0",
+    "pnpm": "11.20.0"
+  },
+  "scripts": {
+    "db:migrate": "tsx src/entrypoints/migrate.ts",
+    "db:prepare-queue": "tsx src/entrypoints/prepare_queue.ts",
+    "maintenance": "tsx src/entrypoints/maintenance.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "11.1.28",
+    "@nestjs/core": "11.1.28",
+    "@nestjs/platform-express": "11.1.28",
+    "drizzle-orm": "0.45.2",
+    "fast-xml-parser": "5.11.0",
+    "mdast-util-from-markdown": "2.0.3",
+    "parse5": "8.0.1",
+    "pdfjs-dist": "6.2.108",
+    "pg": "8.22.0",
+    "pg-boss": "12.26.3",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "@types/express": "5.0.6",
+    "@types/node": "24.13.3",
+    "@types/pg": "8.20.3",
+    "tsx": "4.23.11"
+  }
+}

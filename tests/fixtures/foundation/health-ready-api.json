@@ -1,0 +1,7 @@
+{
+  "schema_version": "1",
+  "service": "struinfo",
+  "role": "api",
+  "status": "ready",
+  "checks": {"database": "ready"}
+}

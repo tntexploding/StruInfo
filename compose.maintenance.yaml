@@ -1,0 +1,33 @@
+name: struinfo
+
+x-struinfo-maintenance: &struinfo-maintenance
+  image: ${STRUIINFO_IMAGE:-struinfo:0.1.0}
+  init: true
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 128
+  mem_limit: 512m
+  cpus: 1.0
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=32m
+  profiles: [maintenance]
+  environment:
+    STRUIINFO_MIGRATION_DATABASE_URL_FILE: /run/secrets/migration_database_url
+  secrets:
+    - migration_database_url
+
+services:
+  migrate:
+    <<: *struinfo-maintenance
+    command: [node, dist/entrypoints/migrate.js]
+
+  prepare-queue:
+    <<: *struinfo-maintenance
+    command: [node, dist/entrypoints/prepare_queue.js]
+
+secrets:
+  migration_database_url:
+    file: ${STRUIINFO_MIGRATION_DATABASE_URL_SECRET_FILE:?set STRUIINFO_MIGRATION_DATABASE_URL_SECRET_FILE}
