@@ -95,8 +95,9 @@ describe('M1D product workspaces', () => {
     expect(markup).toContain('标签');
     expect(markup).toContain('联系');
     expect(markup).toContain('查询');
-    expect(markup).toContain('正式知识');
-    expect(markup.indexOf('查询')).toBeLessThan(markup.indexOf('正式知识'));
+    expect(markup).toContain('知识');
+    expect(markup.indexOf('查询')).toBeLessThan(markup.indexOf('知识'));
+    expect(markup).not.toContain('M1D / FLOW');
     expect(markup).toContain('<dd>未启用</dd>');
     expect(markup).toContain('TRACEABLE CORE · MANUAL AUTHORITY');
     expect(markup.match(/<h1/g)).toHaveLength(1);
@@ -376,11 +377,18 @@ describe('M1D product workspaces', () => {
 
     expect(markup).toContain('<h1>拆分</h1>');
     expect(markup).toContain('来源文档导航');
+    expect(markup).toContain('split-studio-grid__documents');
+    expect(markup).toContain('split-studio-grid__preview');
+    expect(markup).toContain('split-studio-grid__tools');
     expect(markup).toContain('批量构建文档条目');
-    expect(markup).toContain('构建所选文档');
     expect(markup).toContain('人工拆分工作台');
     expect(markup).toContain('可替换的本地拆分规则');
-    expect(markup).toContain('按结构生成条目');
+    expect(markup).toContain('按结构直接生成');
+    expect(markup.indexOf('entry-manual-split')).toBeLessThan(
+      markup.indexOf('split-quick-action'),
+    );
+    expect(markup.match(/点击展开/g)).toHaveLength(4);
+    expect(markup.match(/点击收起/g)).toHaveLength(4);
     expect(markup).not.toContain('类型关键词');
     expect(markup).not.toContain('领域关键词');
     expect(markup).not.toContain('高级筛选');
@@ -622,8 +630,9 @@ describe('M1D product workspaces', () => {
     expect(reviewFallback).toContain('标签别名合并');
     expect(reviewFallback).toContain('会话工具');
     expect(formal).toContain('Entry 正式关系图谱');
-    expect(formal).toContain('选择图谱中心');
-    expect(formal).toContain('打开最高匹配图谱');
+    expect(formal).toContain('选择知识中心');
+    expect(formal).toContain('搜索中心条目');
+    expect(formal).toContain('设为知识中心');
     expect(formal).toContain('关系列表');
     expect(formal).not.toContain('当前不会写入数据');
   });

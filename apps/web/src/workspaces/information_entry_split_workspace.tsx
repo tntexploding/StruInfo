@@ -172,7 +172,7 @@ export function InformationEntrySplitWorkspace({
       setFeedback({
         kind: 'error',
         title: '本地接口不可达',
-        detail: 'Entry 没有生成；Evidence 与正式知识保持不变。',
+        detail: '条目没有生成；原始证据与知识图谱保持不变。',
       });
     } finally {
       setMaterializing(false);
@@ -184,7 +184,7 @@ export function InformationEntrySplitWorkspace({
       setFeedback({
         kind: 'error',
         title: '请选择尚未生成的文档',
-        detail: '只有明确勾选的 Snapshot 才会构建 Entry。',
+        detail: '只有明确勾选的来源文档才会构建条目。',
       });
       return;
     }
@@ -223,8 +223,8 @@ export function InformationEntrySplitWorkspace({
         failedDocuments.length === 0
           ? {
               kind: 'success',
-              title: '所选文档已完成 Entry 构建',
-              detail: `${createdDocuments.toString()} 份新增 ${createdEntries.toString()} 个 Entry；${existingDocuments.toString()} 份保持既有状态。`,
+              title: '所选文档已完成条目构建',
+              detail: `${createdDocuments.toString()} 份新增 ${createdEntries.toString()} 个条目；${existingDocuments.toString()} 份保持既有状态。`,
             }
           : {
               kind: 'error',
@@ -265,143 +265,105 @@ export function InformationEntrySplitWorkspace({
         </span>
       </header>
 
-      <section className="workflow-capability-strip" aria-label="拆分能力">
-        <div className="workflow-capability-strip__primary">
-          <p className="section-index">SPLIT MODE</p>
-          <strong>先确认全文，再选择拆分方式</strong>
-          <span>
-            可保存一份当前修改并生成派生文档；原始 Snapshot 始终不变。
-          </span>
-        </div>
-        <div className="workflow-capability-strip__options">
-          <span data-active="true">人工拆分 / 合并</span>
-          <span data-active="true">拆分前全文修改</span>
-          <span data-active="true">可配置结构规则</span>
-          <span data-active="true">明确批量选择</span>
-          <span data-active={aiEnabled}>OpenAI 提案 · 手动接受</span>
-        </div>
-      </section>
+      <aside className="workflow-mode-summary" aria-label="拆分页操作指南">
+        <strong>拆分文档</strong>
+        <span>1. 从左侧选择来源文档</span>
+        <span>2. 在中间检查条目与正文</span>
+        <span>3. 从右侧拆分并保存结构</span>
+      </aside>
 
-      <InformationDocumentNavigator
-        state={controller.documentView}
-        selectedSnapshotId={controller.snapshotId}
-        onSelect={(snapshotId) => {
-          setFeedback(undefined);
-          controller.setSnapshotId(snapshotId);
-        }}
-        onRetry={() => void controller.refreshDocuments()}
-      />
+      <div className="split-studio-grid">
+        <aside className="split-studio-grid__documents">
+          <InformationDocumentNavigator
+            state={controller.documentView}
+            selectedSnapshotId={controller.snapshotId}
+            onSelect={(snapshotId) => {
+              setFeedback(undefined);
+              controller.setSnapshotId(snapshotId);
+            }}
+            onRetry={() => void controller.refreshDocuments()}
+          />
+        </aside>
 
-      <InformationDocumentWorkingCopy
-        key={`${controller.snapshotId}:${controller.includePrivate ? 'private' : 'public'}:${(selectedDocument?.entryCount ?? 0) > 0 ? 'materialized' : 'editable'}`}
-        snapshotId={controller.snapshotId}
-        isPrivate={selectedDocument?.isPrivate === true}
-        includePrivate={controller.includePrivate}
-        alreadyMaterialized={(selectedDocument?.entryCount ?? 0) > 0}
-        onLoad={onLoadDocumentWorkingCopy}
-        onSave={onSaveDocumentWorkingCopy}
-        onRestore={onRestoreDocumentWorkingCopy}
-        onCommit={onCommitDocumentWorkingCopy}
-        onCommitted={async (derivedSnapshotId) => {
-          await controller.refreshDocuments();
-          controller.setSnapshotId(derivedSnapshotId);
-          setFeedback({
-            kind: 'success',
-            title: '已切换到派生文档',
-            detail: '现在可以选择人工、规则或 AI 提案进行拆分。',
-          });
-        }}
-      />
+        <main className="split-studio-grid__preview">
+          <InformationEntryResults
+            ariaLabel="拆分条目预览"
+            emptyDescription="从左侧选择文档，再在右侧人工拆分或应用结构规则。"
+            state={controller.view}
+            selectedEntryId={controller.selectedEntryId}
+            pageIndex={controller.pageIndex}
+            onSelectEntry={controller.setSelectedEntryId}
+            onRetry={() => void controller.executeSearch()}
+            onPreviousPage={() => {
+              controller.showPreviousPage();
+            }}
+            onNextPage={() => {
+              controller.showNextPage();
+            }}
+          >
+            {controller.selectedEntry === undefined ? undefined : (
+              <InformationEntryReadOnlyDetail
+                entry={controller.selectedEntry}
+                variant="split"
+                onOpenEvidence={onOpenEvidence}
+              />
+            )}
+          </InformationEntryResults>
+          <InformationEntryAiSplit
+            enabled={aiEnabled}
+            snapshotId={controller.snapshotId}
+            isPrivate={selectedDocument?.isPrivate === true}
+            alreadyMaterialized={
+              (selectedDocument?.entryCount ?? 0) > 0 ||
+              selectedDocument?.workingCopy !== undefined
+            }
+            onLoadSnapshot={onLoadEvidenceSnapshot}
+            onList={onListAiSplitProposals}
+            onStart={onStartAiSplitProposal}
+            onAccept={onAcceptAiSplitProposal}
+            onReject={onRejectAiSplitProposal}
+            onAccepted={async () => {
+              await controller.executeSearch();
+              await controller.refreshDocuments();
+            }}
+          />
+        </main>
 
-      <InformationEntrySplitRule
-        snapshotId={controller.snapshotId}
-        isPrivate={selectedDocument?.isPrivate === true}
-        includePrivate={controller.includePrivate}
-        alreadyMaterialized={
-          (selectedDocument?.entryCount ?? 0) > 0 ||
-          selectedDocument?.workingCopy !== undefined
-        }
-        onLoad={onLoadSplitRuleProfile}
-        onSave={onSaveSplitRuleProfile}
-        onTrial={onTrialSplitRule}
-        onApply={onApplySplitRule}
-        onCommitted={async () => {
-          await controller.executeSearch();
-          await controller.refreshDocuments();
-        }}
-      />
+        <aside className="split-studio-grid__tools">
+          <InformationEntryManualSplit
+            snapshotId={controller.snapshotId}
+            isPrivate={selectedDocument?.isPrivate === true}
+            includePrivate={controller.includePrivate}
+            alreadyMaterialized={
+              (selectedDocument?.entryCount ?? 0) > 0 ||
+              selectedDocument?.workingCopy !== undefined
+            }
+            onLoadSnapshot={onLoadEvidenceSnapshot}
+            onMaterialize={onMaterializeManual}
+            onCommitted={async () => {
+              await controller.executeSearch();
+              await controller.refreshDocuments();
+            }}
+          />
 
-      <InformationEntryManualSplit
-        snapshotId={controller.snapshotId}
-        isPrivate={selectedDocument?.isPrivate === true}
-        includePrivate={controller.includePrivate}
-        alreadyMaterialized={
-          (selectedDocument?.entryCount ?? 0) > 0 ||
-          selectedDocument?.workingCopy !== undefined
-        }
-        onLoadSnapshot={onLoadEvidenceSnapshot}
-        onMaterialize={onMaterializeManual}
-        onCommitted={async () => {
-          await controller.executeSearch();
-          await controller.refreshDocuments();
-        }}
-      />
-      <InformationEntryRestructure
-        snapshotId={controller.snapshotId}
-        isPrivate={selectedDocument?.isPrivate === true}
-        includePrivate={controller.includePrivate}
-        alreadyMaterialized={(selectedDocument?.entryCount ?? 0) > 0}
-        onLoadSnapshot={onLoadEvidenceSnapshot}
-        onPreview={onPreviewRestructure}
-        onApply={onApplyRestructure}
-        onCommitted={async () => {
-          await controller.executeSearch();
-          await controller.refreshDocuments();
-        }}
-      />
-      <InformationEntryBatchMaterializer
-        state={controller.documentView}
-        busy={materializing}
-        selectedSnapshotIds={availableBatchSnapshotIds}
-        onClear={() => {
-          setSelectedBatchSnapshotIds(Object.freeze([]));
-        }}
-        onSelectAll={() => {
-          setSelectedBatchSnapshotIds(
-            Object.freeze(
-              availableBatchDocuments.map((document) => document.snapshotId),
-            ),
-          );
-        }}
-        onSubmit={() => void materializeBatch()}
-        onToggle={toggleBatchSnapshot}
-      />
-
-      <section
-        className="entry-command-panel"
-        aria-labelledby="split-command-title"
-      >
-        <header className="console-heading">
-          <div>
-            <p className="section-index">SPLIT / SELECTED DOCUMENT</p>
-            <h2 id="split-command-title">生成当前文档的条目</h2>
-          </div>
-        </header>
-        <div className="entry-search-form">
-          <label className="privacy-query-toggle entry-private-toggle">
-            <input
-              type="checkbox"
-              checked={controller.includePrivate}
-              onChange={(event) => {
-                controller.setIncludePrivate(event.currentTarget.checked);
-                controller.setOnlyPrivate(false);
-              }}
-            />
-            查看并处理隐私文档
-          </label>
-          <div className="entry-command-actions">
+          <section className="split-quick-action" aria-label="构建当前文档条目">
+            <header>
+              <p className="section-index">BUILD / CURRENT</p>
+              <strong>构建当前文档</strong>
+            </header>
+            <label className="privacy-query-toggle">
+              <input
+                type="checkbox"
+                checked={controller.includePrivate}
+                onChange={(event) => {
+                  controller.setIncludePrivate(event.currentTarget.checked);
+                  controller.setOnlyPrivate(false);
+                }}
+              />
+              查看并处理隐私文档
+            </label>
             <button
-              className="primary-action entry-materialize-action"
+              className="secondary-action"
               type="button"
               disabled={
                 materializing ||
@@ -411,55 +373,132 @@ export function InformationEntrySplitWorkspace({
               }
               onClick={() => void materialize(controller.snapshotId)}
             >
-              {materializing ? '正在生成…' : '按结构生成条目'}
+              {materializing ? '正在生成…' : '按结构直接生成'}
             </button>
-          </div>
-        </div>
-        <ActionNotice feedback={feedback} />
-      </section>
+            <ActionNotice feedback={feedback} />
+          </section>
 
-      <InformationEntryAiSplit
-        enabled={aiEnabled}
-        snapshotId={controller.snapshotId}
-        isPrivate={selectedDocument?.isPrivate === true}
-        alreadyMaterialized={
-          (selectedDocument?.entryCount ?? 0) > 0 ||
-          selectedDocument?.workingCopy !== undefined
-        }
-        onLoadSnapshot={onLoadEvidenceSnapshot}
-        onList={onListAiSplitProposals}
-        onStart={onStartAiSplitProposal}
-        onAccept={onAcceptAiSplitProposal}
-        onReject={onRejectAiSplitProposal}
-        onAccepted={async () => {
-          await controller.executeSearch();
-          await controller.refreshDocuments();
-        }}
-      />
+          <details className="workflow-tool-drawer split-batch-drawer">
+            <summary>
+              <span>批量构建文档条目</span>
+              <span className="workflow-tool-drawer__hint" aria-hidden="true">
+                <span className="workflow-tool-drawer__hint-closed">
+                  点击展开
+                </span>
+                <span className="workflow-tool-drawer__hint-open">
+                  点击收起
+                </span>
+              </span>
+            </summary>
+            <InformationEntryBatchMaterializer
+              state={controller.documentView}
+              busy={materializing}
+              selectedSnapshotIds={availableBatchSnapshotIds}
+              onClear={() => {
+                setSelectedBatchSnapshotIds(Object.freeze([]));
+              }}
+              onSelectAll={() => {
+                setSelectedBatchSnapshotIds(
+                  Object.freeze(
+                    availableBatchDocuments.map(
+                      (document) => document.snapshotId,
+                    ),
+                  ),
+                );
+              }}
+              onSubmit={() => void materializeBatch()}
+              onToggle={toggleBatchSnapshot}
+            />
+          </details>
 
-      <InformationEntryResults
-        ariaLabel="拆分条目预览"
-        emptyDescription="选择尚未生成 Entry 的文档并执行拆分。"
-        state={controller.view}
-        selectedEntryId={controller.selectedEntryId}
-        pageIndex={controller.pageIndex}
-        onSelectEntry={controller.setSelectedEntryId}
-        onRetry={() => void controller.executeSearch()}
-        onPreviousPage={() => {
-          controller.showPreviousPage();
-        }}
-        onNextPage={() => {
-          controller.showNextPage();
-        }}
-      >
-        {controller.selectedEntry === undefined ? undefined : (
-          <InformationEntryReadOnlyDetail
-            entry={controller.selectedEntry}
-            variant="split"
-            onOpenEvidence={onOpenEvidence}
-          />
-        )}
-      </InformationEntryResults>
+          <details className="workflow-tool-drawer">
+            <summary>
+              <span>拆分前全文修改</span>
+              <span className="workflow-tool-drawer__hint" aria-hidden="true">
+                <span className="workflow-tool-drawer__hint-closed">
+                  点击展开
+                </span>
+                <span className="workflow-tool-drawer__hint-open">
+                  点击收起
+                </span>
+              </span>
+            </summary>
+            <InformationDocumentWorkingCopy
+              key={`${controller.snapshotId}:${controller.includePrivate ? 'private' : 'public'}:${(selectedDocument?.entryCount ?? 0) > 0 ? 'materialized' : 'editable'}`}
+              snapshotId={controller.snapshotId}
+              isPrivate={selectedDocument?.isPrivate === true}
+              includePrivate={controller.includePrivate}
+              alreadyMaterialized={(selectedDocument?.entryCount ?? 0) > 0}
+              onLoad={onLoadDocumentWorkingCopy}
+              onSave={onSaveDocumentWorkingCopy}
+              onRestore={onRestoreDocumentWorkingCopy}
+              onCommit={onCommitDocumentWorkingCopy}
+              onCommitted={async (derivedSnapshotId) => {
+                await controller.refreshDocuments();
+                controller.setSnapshotId(derivedSnapshotId);
+              }}
+            />
+          </details>
+
+          <details className="workflow-tool-drawer">
+            <summary>
+              <span>结构规则</span>
+              <span className="workflow-tool-drawer__hint" aria-hidden="true">
+                <span className="workflow-tool-drawer__hint-closed">
+                  点击展开
+                </span>
+                <span className="workflow-tool-drawer__hint-open">
+                  点击收起
+                </span>
+              </span>
+            </summary>
+            <InformationEntrySplitRule
+              snapshotId={controller.snapshotId}
+              isPrivate={selectedDocument?.isPrivate === true}
+              includePrivate={controller.includePrivate}
+              alreadyMaterialized={
+                (selectedDocument?.entryCount ?? 0) > 0 ||
+                selectedDocument?.workingCopy !== undefined
+              }
+              onLoad={onLoadSplitRuleProfile}
+              onSave={onSaveSplitRuleProfile}
+              onTrial={onTrialSplitRule}
+              onApply={onApplySplitRule}
+              onCommitted={async () => {
+                await controller.executeSearch();
+                await controller.refreshDocuments();
+              }}
+            />
+          </details>
+
+          <details className="workflow-tool-drawer">
+            <summary>
+              <span>调整已经拆分的结构</span>
+              <span className="workflow-tool-drawer__hint" aria-hidden="true">
+                <span className="workflow-tool-drawer__hint-closed">
+                  点击展开
+                </span>
+                <span className="workflow-tool-drawer__hint-open">
+                  点击收起
+                </span>
+              </span>
+            </summary>
+            <InformationEntryRestructure
+              snapshotId={controller.snapshotId}
+              isPrivate={selectedDocument?.isPrivate === true}
+              includePrivate={controller.includePrivate}
+              alreadyMaterialized={(selectedDocument?.entryCount ?? 0) > 0}
+              onLoadSnapshot={onLoadEvidenceSnapshot}
+              onPreview={onPreviewRestructure}
+              onApply={onApplyRestructure}
+              onCommitted={async () => {
+                await controller.executeSearch();
+                await controller.refreshDocuments();
+              }}
+            />
+          </details>
+        </aside>
+      </div>
     </div>
   );
 }

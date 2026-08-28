@@ -25,10 +25,18 @@ RUN --network=none pnpm --offline --config.trust-lockfile=true --config.inject-w
 
 FROM node:24-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS runtime
 
+ARG STRUIINFO_VERSION=0.1.0
 ENV NODE_ENV=production
 WORKDIR /opt/struinfo/apps/server
 
-RUN groupadd --gid 10001 struinfo \
+LABEL org.opencontainers.image.title="StruInfo" \
+  org.opencontainers.image.version="${STRUIINFO_VERSION}" \
+  org.opencontainers.image.licenses="MIT" \
+  org.opencontainers.image.source="https://github.com/tntexploding/StruInfo"
+
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v1.22.22 \
+  && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+  && groupadd --gid 10001 struinfo \
   && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin struinfo
 
 COPY --from=build --chown=10001:10001 /runtime-server/node_modules ./node_modules

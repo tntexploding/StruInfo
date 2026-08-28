@@ -85,6 +85,7 @@ describe('M1C local HTTP transport', () => {
     const workspaceResponse = await fetch(`${base}/api/v1/workspace`);
     expect(workspaceResponse.status).toBe(200);
     expect(workspaceResponse.headers.get('cache-control')).toBe('no-store');
+    expectPrivateHttpSecurityHeaders(workspaceResponse);
     await expect(workspaceResponse.json()).resolves.toEqual({
       status: 'ok',
       workspaceId: 'synthetic-workspace',
@@ -192,6 +193,7 @@ describe('M1C local HTTP transport', () => {
 
     const healthResponse = await fetch(`${base}/health/ready`);
     expect(healthResponse.status).toBe(200);
+    expectPrivateHttpSecurityHeaders(healthResponse);
     await expect(healthResponse.json()).resolves.toMatchObject({
       status: 'ready',
       role: 'api',
@@ -227,9 +229,29 @@ describe('M1C local HTTP transport', () => {
     const response = await fetch(`http://127.0.0.1:${String(address.port)}/`);
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/html');
+    expectPrivateHttpSecurityHeaders(response);
     await expect(response.text()).resolves.toContain('synthetic M1C workspace');
   });
 });
+
+function expectPrivateHttpSecurityHeaders(response: Response): void {
+  expect(response.headers.get('content-security-policy')).toContain(
+    "default-src 'self'",
+  );
+  expect(response.headers.get('content-security-policy')).toContain(
+    "frame-ancestors 'none'",
+  );
+  expect(response.headers.get('cross-origin-opener-policy')).toBe(
+    'same-origin',
+  );
+  expect(response.headers.get('cross-origin-resource-policy')).toBe(
+    'same-origin',
+  );
+  expect(response.headers.get('permissions-policy')).toContain('camera=()');
+  expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+  expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+  expect(response.headers.get('x-frame-options')).toBe('DENY');
+}
 
 function stubApi(
   overrides: Partial<M1cApiServicePort> = {},

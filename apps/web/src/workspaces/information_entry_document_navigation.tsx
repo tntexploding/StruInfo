@@ -33,21 +33,17 @@ export function InformationEntryBatchMaterializer({
     >
       <header className="console-heading">
         <div>
-          <p className="section-index">EXPLICIT BATCH / NO SEED</p>
+          <p className="section-index">EXPLICIT BATCH</p>
           <h2 id="entry-batch-panel-title">批量构建文档条目</h2>
         </div>
         <span className="record-count">
           {state.status === 'ready'
-            ? selectedSnapshotIds.length.toString() +
-              ' / ' +
-              documents.length.toString() +
-              ' 已选'
+            ? `${selectedSnapshotIds.length.toString()} / ${documents.length.toString()} 已选`
             : '等待文档'}
         </span>
       </header>
       <p className="entry-batch-panel__summary">
-        只处理你在这里明确选择、且尚未生成 Entry 的
-        Snapshot。原始证据和正式知识不会被改写，重试也不会创建重复条目。
+        只处理明确选中且尚未生成条目的来源文档；重试不会创建重复条目。
       </p>
       {state.status === 'loading' ? (
         <p className="entry-batch-panel__state" role="status">
@@ -58,13 +54,10 @@ export function InformationEntryBatchMaterializer({
           文档列表恢复后才能批量构建；当前数据没有被修改。
         </p>
       ) : documents.length === 0 ? (
-        <p className="entry-batch-panel__state">
-          当前可见文档均已有
-          Entry。隐私文档只有在本次勾选“查询隐私文档”后才会进入候选。
-        </p>
+        <p className="entry-batch-panel__state">当前可见文档均已有条目。</p>
       ) : (
         <fieldset className="entry-batch-panel__fieldset">
-          <legend>选择要构建的来源文档</legend>
+          <legend>选择来源文档</legend>
           <div className="entry-batch-panel__list">
             {documents.map((document) => (
               <label
@@ -81,8 +74,7 @@ export function InformationEntryBatchMaterializer({
                 <span>
                   <strong>{document.sourceKey}</strong>
                   <small>
-                    尚未生成
-                    {document.isPrivate === true ? ' · 私密文档' : ''}
+                    尚未生成{document.isPrivate === true ? ' · 私密文档' : ''}
                   </small>
                 </span>
               </label>
@@ -97,7 +89,7 @@ export function InformationEntryBatchMaterializer({
           onClick={onSelectAll}
           disabled={documents.length === 0 || busy}
         >
-          全选未生成文档
+          全选
         </button>
         <button
           className="text-action"
@@ -105,7 +97,7 @@ export function InformationEntryBatchMaterializer({
           onClick={onClear}
           disabled={selectedSnapshotIds.length === 0 || busy}
         >
-          清空选择
+          清空
         </button>
         <button
           className="primary-action"

@@ -1,10 +1,7 @@
-import type {SyntheticEvent} from 'react';
 import {useState} from 'react';
 
-import {ActionNotice} from '../components/action_notice.js';
-import type {ActionFeedback} from '../components/product_types.js';
 import {
-  InformationEntryResults,
+  type InformationEntryViewState,
   type InformationEntryServices,
 } from './information_entry_components.js';
 import {InformationEntryAssociationPanel} from './information_entry_association_panel.js';
@@ -32,13 +29,13 @@ export function InformationEntryAssociationsWorkspace({
   onSearch,
 }: InformationEntryAssociationsWorkspaceProps) {
   const controller = useInformationEntryController({onSearch});
-  const [feedback, setFeedback] = useState<ActionFeedback>();
-
-  function submitSearch(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFeedback(undefined);
-    void controller.executeSearch();
-  }
+  const [selectedRightEntryId, setSelectedRightEntryId] = useState<string>();
+  const selectedRightEntry =
+    controller.view.status === 'ready'
+      ? controller.view.response.items.find(
+          ({entry}) => entry.entryId === selectedRightEntryId,
+        )?.entry
+      : undefined;
 
   return (
     <div
@@ -58,65 +55,37 @@ export function InformationEntryAssociationsWorkspace({
         </span>
       </header>
 
-      <section className="workflow-capability-strip" aria-label="联系能力">
-        <div className="workflow-capability-strip__primary">
-          <p className="section-index">ASSOCIATION MODE</p>
-          <strong>候选联系与人工覆盖分离</strong>
-          <span>内容、类型和领域评分可解释；投影重建不会覆盖人工决定。</span>
-        </div>
-        <div className="workflow-capability-strip__options">
-          <span data-active="true">一跳候选</span>
-          <span data-active="true">人工增强 / 削弱 / 屏蔽</span>
-          <span data-active="false">AI 建议 · 待接入</span>
-        </div>
-      </section>
+      <aside className="workflow-mode-summary" aria-label="联系页操作指南">
+        <strong>建立联系</strong>
+        <span>1. 分别从两侧选择条目</span>
+        <span>2. 在中间检查或编辑关系</span>
+        <span>3. 确认后保存联系与权重</span>
+      </aside>
 
-      <section
-        className="entry-command-panel"
-        aria-labelledby="association-select-title"
-      >
-        <header className="console-heading">
-          <div>
-            <p className="section-index">ASSOCIATION / START</p>
-            <h2 id="association-select-title">选择联系起点</h2>
-          </div>
-          <span className="record-count">
-            {controller.view.status === 'ready'
-              ? `${controller.view.response.totalCount.toString()} 条`
-              : '读取中'}
-          </span>
-        </header>
-        <form
-          className="entry-search-form"
-          role="search"
-          onSubmit={submitSearch}
-        >
-          <label className="field entry-search-query">
-            <span>查找条目</span>
-            <input
-              type="search"
-              value={controller.query}
-              onChange={(event) => {
-                controller.setQuery(event.currentTarget.value);
-              }}
-              placeholder="标题、正文或关键词"
-            />
-          </label>
-          <label className="privacy-query-toggle entry-private-toggle">
-            <input
-              type="checkbox"
-              checked={controller.includePrivate}
-              onChange={(event) => {
-                controller.setIncludePrivate(event.currentTarget.checked);
-                controller.setOnlyPrivate(false);
-              }}
-            />
-            查看隐私联系
-          </label>
-          <div className="entry-command-actions">
+      <div className="association-studio-grid">
+        <AssociationEntryPicker
+          label="联系起点"
+          state={controller.view}
+          selectedEntryId={controller.selectedEntryId}
+          disabledEntryId={undefined}
+          onSelect={controller.setSelectedEntryId}
+        />
+        <main className="association-studio-grid__editor">
+          <div className="association-studio-toolbar" aria-label="联系显示范围">
+            <label className="privacy-query-toggle association-privacy-toggle">
+              <input
+                type="checkbox"
+                checked={controller.includePrivate}
+                onChange={(event) => {
+                  controller.setIncludePrivate(event.currentTarget.checked);
+                  controller.setOnlyPrivate(false);
+                }}
+              />
+              查看隐私条目与联系
+            </label>
             {controller.advancedFilters.association === undefined ? null : (
               <button
-                className="secondary-action"
+                className="text-action"
                 type="button"
                 onClick={() => {
                   controller.setAdvancedFilters((current) => {
@@ -126,64 +95,101 @@ export function InformationEntryAssociationsWorkspace({
                   });
                 }}
               >
-                清除邻域筛选
+                返回全部条目
               </button>
             )}
-            <button className="primary-action entry-query-action" type="submit">
-              查找起点
-            </button>
           </div>
-        </form>
-        <ActionNotice feedback={feedback} />
-      </section>
-
-      <InformationEntryResults
-        ariaLabel="联系起点条目"
-        emptyDescription="当前范围没有可用于联系检查的 Entry。"
-        state={controller.view}
-        selectedEntryId={controller.selectedEntryId}
-        pageIndex={controller.pageIndex}
-        onSelectEntry={controller.setSelectedEntryId}
-        onRetry={() => void controller.executeSearch()}
-        onPreviousPage={() => {
-          controller.showPreviousPage();
-        }}
-        onNextPage={() => {
-          controller.showNextPage();
-        }}
-      >
-        {controller.selectedEntry === undefined ? undefined : (
-          <InformationEntryAssociationPanel
-            key={`${controller.selectedEntry.entryId}:${controller.selectedEntry.revision.toString()}:${controller.includePrivate ? 'private' : 'public'}`}
-            entry={controller.selectedEntry}
-            includePrivate={controller.includePrivate}
-            onList={onListAssociations}
-            onOpenEvidence={onOpenEvidence}
-            onRebuild={onRebuildAssociations}
-            onRevisePolicy={onReviseAssociationPolicy}
-            onRevise={onReviseAssociation}
-            onSearchNeighborhood={() => {
-              controller.setAdvancedFilters((current) =>
-                Object.freeze({
-                  ...current,
-                  association: Object.freeze({
-                    entryId: controller.selectedEntry?.entryId ?? '',
-                    label:
-                      controller.selectedEntry?.value.titlePath ?? '未命名条目',
-                    maximumDepth: 2,
-                    minimumScore: 0,
+          {controller.selectedEntry === undefined ? (
+            <section className="entry-state empty-state">
+              <h2>先选择联系起点</h2>
+              <p>左右两侧使用同一批查询结果；选中后会在中区编辑这对联系。</p>
+            </section>
+          ) : (
+            <InformationEntryAssociationPanel
+              key={`${controller.selectedEntry.entryId}:${controller.selectedEntry.revision.toString()}:${controller.includePrivate ? 'private' : 'public'}`}
+              entry={controller.selectedEntry}
+              targetEntry={selectedRightEntry}
+              includePrivate={controller.includePrivate}
+              onList={onListAssociations}
+              onOpenEvidence={onOpenEvidence}
+              onRebuild={onRebuildAssociations}
+              onRevisePolicy={onReviseAssociationPolicy}
+              onRevise={onReviseAssociation}
+              onSelectRelated={(entry) => {
+                setSelectedRightEntryId(entry.entryId);
+              }}
+              onSearchNeighborhood={() => {
+                controller.setAdvancedFilters((current) =>
+                  Object.freeze({
+                    ...current,
+                    association: Object.freeze({
+                      entryId: controller.selectedEntry?.entryId ?? '',
+                      label:
+                        controller.selectedEntry?.value.titlePath ??
+                        '未命名条目',
+                      maximumDepth: 2,
+                      minimumScore: 0,
+                    }),
                   }),
-                }),
-              );
-              setFeedback({
-                kind: 'success',
-                title: '已设为关联搜索起点',
-                detail: '当前列表展示最多两跳的有限邻域。',
-              });
-            }}
-          />
-        )}
-      </InformationEntryResults>
+                );
+              }}
+            />
+          )}
+        </main>
+        <AssociationEntryPicker
+          label="联系终点"
+          state={controller.view}
+          selectedEntryId={selectedRightEntryId}
+          disabledEntryId={controller.selectedEntryId}
+          onSelect={setSelectedRightEntryId}
+        />
+      </div>
     </div>
+  );
+}
+
+function AssociationEntryPicker({
+  disabledEntryId,
+  label,
+  onSelect,
+  selectedEntryId,
+  state,
+}: {
+  readonly disabledEntryId: string | undefined;
+  readonly label: string;
+  readonly onSelect: (entryId: string) => void;
+  readonly selectedEntryId: string | undefined;
+  readonly state: InformationEntryViewState;
+}) {
+  return (
+    <aside className="association-entry-picker" aria-label={label}>
+      <header>
+        <strong>{label}</strong>
+        <span>
+          {state.status === 'ready' ? state.response.totalCount : '—'}
+        </span>
+      </header>
+      {state.status !== 'ready' ? (
+        <p>{state.status === 'loading' ? '正在读取…' : state.message}</p>
+      ) : (
+        <ol>
+          {state.response.items.map(({entry}) => (
+            <li key={entry.entryId}>
+              <button
+                type="button"
+                disabled={entry.entryId === disabledEntryId}
+                aria-pressed={entry.entryId === selectedEntryId}
+                onClick={() => {
+                  onSelect(entry.entryId);
+                }}
+              >
+                <strong>{entry.value.titlePath || '未命名条目'}</strong>
+                <small>{entry.sourceKey}</small>
+              </button>
+            </li>
+          ))}
+        </ol>
+      )}
+    </aside>
   );
 }

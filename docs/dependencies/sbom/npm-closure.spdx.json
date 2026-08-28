@@ -23,7 +23,7 @@
     {
       "SPDXID": "SPDXRef-RootPackage",
       "name": "struinfo",
-      "versionInfo": "0.0.0",
+      "versionInfo": "0.1.0",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",

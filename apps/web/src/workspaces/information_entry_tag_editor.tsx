@@ -457,19 +457,6 @@ export function InformationEntryEditor({
           />
           <small>编辑会更新当前成品态，不会修改原始 Fragment。</small>
         </label>
-        <InformationEntryReviewControls
-          entry={entry}
-          contentKeywords={contentKeywords}
-          usefulnessScore={usefulnessScore}
-          interestScore={interestScore}
-          preferences={reviewPreferences}
-          onContentKeywordsChange={setContentKeywords}
-          onUsefulnessScoreChange={setUsefulnessScore}
-          onInterestScoreChange={setInterestScore}
-          onSavePreferences={onSavePreferences}
-          onPreferencesChange={onPreferencesChange}
-          overridePreferences={overridePreferences}
-        />
         <label className="field field--full">
           <span>内容关键词（逗号或换行分隔）</span>
           <textarea
@@ -549,6 +536,19 @@ export function InformationEntryEditor({
               value,
             ]);
           }}
+        />
+        <InformationEntryReviewControls
+          entry={entry}
+          contentKeywords={contentKeywords}
+          usefulnessScore={usefulnessScore}
+          interestScore={interestScore}
+          preferences={reviewPreferences}
+          onContentKeywordsChange={setContentKeywords}
+          onUsefulnessScoreChange={setUsefulnessScore}
+          onInterestScoreChange={setInterestScore}
+          onSavePreferences={onSavePreferences}
+          onPreferencesChange={onPreferencesChange}
+          overridePreferences={overridePreferences}
         />
         <ActionNotice feedback={localFeedback} />
         <div className="form-commit field--full">

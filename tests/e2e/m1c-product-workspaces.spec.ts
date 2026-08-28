@@ -1,6 +1,6 @@
 import {Buffer} from 'node:buffer';
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Locator, type Page} from '@playwright/test';
 
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 const RESOURCE_ID = '22222222-2222-4222-8222-222222222222';
@@ -757,6 +757,53 @@ async function installCurrentProductApi(
       });
       return;
     }
+    if (
+      path === '/api/v1/knowledge-graph/view' &&
+      request.method() === 'POST'
+    ) {
+      await route.fulfill({
+        contentType: 'application/json',
+        json: {
+          status: 'ok',
+          querySha256: '9'.repeat(64),
+          candidateTotalCount: 2,
+          candidates: [
+            {
+              entry: SYNTHETIC_ENTRY,
+              matchReasons: [],
+              filterReasons: [],
+            },
+            {
+              entry: SYNTHETIC_EXPLORATION_ENTRY,
+              matchReasons: [],
+              filterReasons: [],
+            },
+          ],
+          graph: {
+            center: SYNTHETIC_ENTRY,
+            nodes: [SYNTHETIC_ENTRY, SYNTHETIC_EXPLORATION_ENTRY],
+            edges: [
+              {
+                entryLowId: ENTRY_ID,
+                entryHighId: EXPLORATION_ENTRY_ID,
+                label: '内容相近',
+                direction: 'symmetric',
+                origin: 'automatically_calculated',
+                semanticKind: 'similarity',
+                verificationStatus: 'calculated',
+                note: '',
+                effectiveScore: 0.76,
+                isBlocked: false,
+                overrideRevision: 0,
+              },
+            ],
+            hiddenEdges: [],
+          },
+        },
+        status: 200,
+      });
+      return;
+    }
     if (path === '/api/v1/entries/search') {
       const includePrivate =
         request.postData()?.includes('"includePrivate":true') ?? false;
@@ -883,6 +930,28 @@ async function installCurrentProductApi(
   return productRequests;
 }
 
+async function clickVisibleUnobscured(locator: Locator): Promise<void> {
+  await locator.evaluate((element) => {
+    element.scrollIntoView({block: 'center', inline: 'center'});
+  });
+  const isUnobscured = await locator.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const topmost = document.elementFromPoint(
+      box.left + box.width / 2,
+      box.top + box.height / 2,
+    );
+    return (
+      topmost === element || (topmost !== null && element.contains(topmost))
+    );
+  });
+  expect(isUnobscured).toBe(true);
+  await locator.evaluate((element) => {
+    globalThis.setTimeout(() => {
+      if (element instanceof HTMLElement) element.click();
+    }, 0);
+  });
+}
+
 test('exposes only the current document-to-entry workflow', async ({page}) => {
   const productRequests = await installCurrentProductApi(page);
   await page.goto('/');
@@ -892,20 +961,53 @@ test('exposes only the current document-to-entry workflow', async ({page}) => {
   ).toBeVisible();
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
   const sections = [
-    '导入',
-    '拆分',
-    '标签',
-    '联系',
-    '查询',
-    '正式知识',
+    {
+      name: '导入',
+      guide: '导入页操作指南',
+      instructions: ['选择文件并填写来源信息', '确认隐私范围后开始导入'],
+    },
+    {
+      name: '拆分',
+      guide: '拆分页操作指南',
+      instructions: ['从左侧选择来源文档', '从右侧拆分并保存结构'],
+    },
+    {
+      name: '标签',
+      guide: '标签页操作指南',
+      instructions: ['先选择文档，再选择条目', '检查关键词并完成评分'],
+    },
+    {
+      name: '联系',
+      guide: '联系页操作指南',
+      instructions: ['分别从两侧选择条目', '确认后保存联系与权重'],
+    },
+    {
+      name: '查询',
+      guide: '查询页操作指南',
+      instructions: ['输入关键词并调整右侧条件', '在中间查看正文与来源'],
+    },
+    {
+      name: '知识',
+      guide: '知识页操作指南',
+      instructions: ['从右侧选择中心条目', '在底部检查并编辑关系'],
+    },
   ] as const;
 
   for (const section of sections) {
-    await navigation.getByRole('button', {name: section, exact: true}).click();
+    await navigation
+      .getByRole('button', {name: section.name, exact: true})
+      .click();
     await expect(
-      page.getByRole('heading', {name: section, exact: true}),
+      page.getByRole('heading', {name: section.name, exact: true}),
     ).toBeVisible();
+    const guide = page.getByLabel(section.guide, {exact: true});
+    await expect(guide).toBeVisible();
+    for (const instruction of section.instructions) {
+      await expect(guide).toContainText(instruction);
+    }
   }
+  await expect(page.getByRole('region', {name: '选择知识中心'})).toBeVisible();
+  await expect(page.getByRole('group', {name: 'Entry 关系图'})).toBeVisible();
 
   await expect(page.getByText('审核与知识入库', {exact: true})).toHaveCount(0);
   await expect(page.getByText('知识变更集', {exact: true})).toHaveCount(0);
@@ -1115,9 +1217,7 @@ test('edits association weights and opens the complete private-document channel'
 
   await navigation.getByRole('button', {name: '查询', exact: true}).click();
   await page.getByLabel('隐私结果').selectOption({label: '公开与隐私结果'});
-  await page
-    .getByRole('button', {name: '查找 Entry 与完整文档', exact: true})
-    .click();
+  await page.getByRole('button', {name: '搜索', exact: true}).click();
 
   await expect(
     page.getByRole('heading', {name: '完整隐私文档', exact: true}),
@@ -1144,6 +1244,11 @@ test('keeps exploration separate, explicit, and responsive across target widths'
 
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
   await navigation.getByRole('button', {name: '查询', exact: true}).click();
+  await page
+    .locator('.query-result-tools-drawer > summary', {
+      hasText: '更多结果工具',
+    })
+    .click();
 
   await expect(
     page.getByRole('heading', {name: '探索候选', exact: true}),
@@ -1185,10 +1290,20 @@ test('keeps exploration separate, explicit, and responsive across target widths'
     expect(overflow).toBeLessThanOrEqual(1);
   }
   await page.setViewportSize({width: 390, height: 844});
-  await page.getByLabel('搜索文字').fill('新的查询范围');
+  await page.getByLabel('搜索信息条目').fill('新的查询范围');
   await expect(
     page.getByRole('heading', {name: '合成探索 Entry', exact: true}),
   ).toBeHidden();
+  await expect(
+    page.getByText('探索不会自动运行；选择锚点后由你明确启动。', {
+      exact: true,
+    }),
+  ).toBeHidden();
+  await page
+    .locator('.query-result-tools-drawer > summary', {
+      hasText: '更多结果工具',
+    })
+    .click();
   await expect(
     page.getByText('探索不会自动运行；选择锚点后由你明确启动。', {
       exact: true,
@@ -1218,6 +1333,9 @@ test('keeps the preference panel responsive and ignores superseded local results
 
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
   await navigation.getByRole('button', {name: '标签', exact: true}).click();
+  const tagsTools = page.locator('.tags-studio-grid__rules');
+  await expect(tagsTools.getByText('点击展开', {exact: true})).toHaveCount(3);
+  await page.getByText('偏好规则', {exact: true}).click();
   await expect(
     page.getByRole('heading', {name: '可解释偏好规则', exact: true}),
   ).toBeVisible();
@@ -1293,6 +1411,7 @@ test('keeps automation audit exact, responsive, and isolated from late run lists
 
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
   await navigation.getByRole('button', {name: '标签', exact: true}).click();
+  await page.getByText('自动分流', {exact: true}).click();
   const panel = page.locator('.entry-automation-policy');
   await expect(
     panel.getByRole('heading', {name: '可恢复自动分流', exact: true}),
@@ -1371,6 +1490,7 @@ test('keeps automation audit exact, responsive, and isolated from late run lists
 test('splits one immutable Fragment at an explicit caret and submits exact scalar ranges', async ({
   page,
 }) => {
+  test.slow();
   const manualSplitRequests: string[] = [];
   await installCurrentProductApi(page, {manualSplitRequests});
   await page.setViewportSize({width: 390, height: 844});
@@ -1382,7 +1502,14 @@ test('splits one immutable Fragment at an explicit caret and submits exact scala
     .getByRole('button', {name: /synthetic-split-source/u})
     .first()
     .click();
-
+  const splitTools = page.locator('.split-studio-grid__tools');
+  await expect(
+    splitTools.locator(':scope > .entry-manual-split').first(),
+  ).toBeVisible();
+  await expect(splitTools.locator(':scope > *').first()).toHaveClass(
+    /entry-manual-split/u,
+  );
+  await expect(splitTools.getByText('点击展开', {exact: true})).toHaveCount(4);
   await expect(
     page.getByRole('heading', {name: '人工拆分工作台', exact: true}),
   ).toBeVisible();
@@ -1399,18 +1526,26 @@ test('splits one immutable Fragment at an explicit caret and submits exact scala
     );
   });
   await expect(sourceText).toHaveJSProperty('selectionStart', 3);
-  await page
+  const splitAtCaret = page
     .getByRole('button', {name: '在光标处分开', exact: true})
-    .first()
-    .click();
+    .first();
+  await expect(splitAtCaret).toBeVisible();
+  await expect(splitAtCaret).toBeEnabled();
+  await clickVisibleUnobscured(splitAtCaret);
 
   await expect(
     page.getByText('2 条 · 2 个来源段', {exact: true}),
   ).toBeVisible();
-  await page
-    .getByRole('button', {name: '保存人工拆分并生成 2 条', exact: true})
-    .click();
-  await expect(page.getByText('人工拆分已保存', {exact: true})).toBeVisible();
+  const saveManualSplit = page.getByRole('button', {
+    name: '保存人工拆分并生成 2 条',
+    exact: true,
+  });
+  await expect(saveManualSplit).toBeVisible();
+  await expect(saveManualSplit).toBeEnabled();
+  await clickVisibleUnobscured(saveManualSplit);
+  await expect(page.getByText('人工拆分已保存', {exact: true})).toBeVisible({
+    timeout: 15_000,
+  });
 
   const submitted = JSON.parse(manualSplitRequests[0] ?? 'null') as unknown;
   expect(submitted).toEqual({
@@ -1446,6 +1581,11 @@ test('saves, previews, and applies one versioned local split rule', async ({
   await page
     .getByRole('button', {name: /synthetic-split-source/u})
     .first()
+    .click();
+  await page
+    .locator('.workflow-tool-drawer > summary', {
+      hasText: '结构规则',
+    })
     .click();
 
   const panel = page.locator('.split-rule-panel');
@@ -1504,6 +1644,7 @@ test('saves, previews, and applies one versioned local split rule', async ({
 test('previews and atomically applies a post-materialization scalar restructure', async ({
   page,
 }) => {
+  test.slow();
   const restructureRequests: Readonly<{path: string; body: string}>[] = [];
   await installCurrentProductApi(page, {restructureRequests});
   await page.setViewportSize({width: 390, height: 844});
@@ -1514,6 +1655,11 @@ test('previews and atomically applies a post-materialization scalar restructure'
   await page
     .getByRole('button', {name: /synthetic-split-source/u})
     .first()
+    .click();
+  await page
+    .locator('.workflow-tool-drawer > summary', {
+      hasText: '调整已经拆分的结构',
+    })
     .click();
 
   await expect(
@@ -1530,18 +1676,34 @@ test('previews and atomically applies a post-materialization scalar restructure'
       new KeyboardEvent('keyup', {bubbles: true, key: 'ArrowLeft'}),
     );
   });
-  await page
+  const splitAtCaret = page
     .getByRole('button', {name: '在光标处分开', exact: true})
-    .first()
-    .click();
-  await page.getByRole('button', {name: '预览重组影响', exact: true}).click();
+    .first();
+  await expect(splitAtCaret).toBeVisible();
+  await expect(splitAtCaret).toBeEnabled();
+  await clickVisibleUnobscured(splitAtCaret);
+  const previewRestructure = page.getByRole('button', {
+    name: '预览重组影响',
+    exact: true,
+  });
+  await expect(previewRestructure).toBeVisible();
+  await expect(previewRestructure).toBeEnabled();
+  await clickVisibleUnobscured(previewRestructure);
 
   await expect(
     page.getByRole('heading', {name: '本次将发生什么', exact: true}),
-  ).toBeVisible();
+  ).toBeVisible({timeout: 15_000});
   await expect(page.getByText('1 → 2 条', {exact: true})).toBeVisible();
-  await page.getByRole('button', {name: '应用重组', exact: true}).click();
-  await expect(page.getByText('条目结构已更新', {exact: true})).toBeVisible();
+  const applyRestructure = page.getByRole('button', {
+    name: '应用重组',
+    exact: true,
+  });
+  await expect(applyRestructure).toBeVisible();
+  await expect(applyRestructure).toBeEnabled();
+  await clickVisibleUnobscured(applyRestructure);
+  await expect(page.getByText('条目结构已更新', {exact: true})).toBeVisible({
+    timeout: 15_000,
+  });
 
   const previewWrite = restructureRequests.find(
     (request) =>

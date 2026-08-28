@@ -65,7 +65,10 @@ export function InformationEntryQueryWorkspace({
   reviewPreferences,
   snapshots,
 }: InformationEntryQueryWorkspaceProps) {
-  const controller = useInformationEntryController({onSearch});
+  const controller = useInformationEntryController({
+    autoSearchDelayMs: 300,
+    onSearch,
+  });
   const [semanticIndexReady, setSemanticIndexReady] = useState(false);
   const comparisonScopeKey = informationEntryQueryScopeKey({
     query: controller.query,
@@ -130,188 +133,184 @@ export function InformationEntryQueryWorkspace({
         </span>
       </header>
 
-      <section className="workflow-capability-strip" aria-label="查询能力">
-        <div className="workflow-capability-strip__primary">
-          <p className="section-index">QUERY MODE</p>
-          <strong>文本与结构化筛选联合查询</strong>
-          <span>隐私范围在计数、排序、分页和关联遍历之前生效。</span>
-        </div>
-        <div className="workflow-capability-strip__options">
-          <span data-active="true">标题 / 正文 / 标签</span>
-          <span data-active="true">精确结构筛选</span>
-          <span data-active="true">精确 / 包含 / 模糊</span>
-          <span data-active={semanticSearchEnabled}>语义 / 混合召回</span>
-          <span data-active="true">关联联想 / 双条比较</span>
-          <span data-active={aiQuerySynthesisEnabled}>可选 AI 证据综合</span>
-        </div>
-      </section>
+      <aside className="workflow-mode-summary" aria-label="查询页操作指南">
+        <strong>查询条目</strong>
+        <span>1. 输入关键词并调整右侧条件</span>
+        <span>2. 从结果列表选择一个条目</span>
+        <span>3. 在中间查看正文与来源</span>
+      </aside>
 
-      <section
-        className="entry-command-panel"
-        aria-labelledby="query-command-title"
-      >
-        <header className="console-heading">
-          <div>
-            <p className="section-index">QUERY / FILTER</p>
-            <h2 id="query-command-title">搜索信息条目</h2>
-          </div>
-          <span className="record-count">
-            {controller.view.status === 'ready'
-              ? controller.includePrivate
-                ? `${controller.view.response.totalCount.toString()} Entry · ${controller.view.response.privateDocuments.totalCount.toString()} 完整隐私文档`
-                : `${controller.view.response.totalCount.toString()} 条`
-              : '读取中'}
-          </span>
-        </header>
+      <div className="query-studio-grid">
         <form
-          className="entry-search-form"
+          className="query-studio-form"
           role="search"
           onSubmit={submitSearch}
         >
-          <label className="field entry-search-query">
-            <span>搜索文字</span>
-            <input
-              type="search"
-              value={controller.query}
-              onChange={(event) => {
-                controller.setQuery(event.currentTarget.value);
-              }}
-              placeholder="输入标题、正文或标签；留空浏览当前 Entry"
-            />
-          </label>
-          <InformationEntryTextSearchOptions
-            mode={controller.textMode}
-            fields={controller.textFields}
-            onModeChange={controller.setTextMode}
-            onFieldsChange={controller.setTextFields}
-          />
-          <InformationEntryRetrievalOptions
-            mode={controller.retrievalMode}
-            semanticAvailable={semanticSearchEnabled}
-            semanticReady={semanticIndexReady}
-            publicScope={!controller.includePrivate && !controller.onlyPrivate}
-            queryPresent={controller.query.trim() !== ''}
-            onChange={controller.setRetrievalMode}
-          />
-          <label className="field entry-source-filter">
-            <span>来源文档</span>
-            <select
-              value={controller.snapshotId}
-              onChange={(event) => {
-                controller.setSnapshotId(event.currentTarget.value);
-              }}
-            >
-              <option value="">全部 Snapshot</option>
-              {snapshots.map((snapshot) => (
-                <option key={snapshot.snapshotId} value={snapshot.snapshotId}>
-                  {snapshot.sourceKey}
-                  {snapshot.isPrivate === true ? '（私密）' : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field entry-type-filter">
-            <span>类型关键词</span>
-            <select
-              value={controller.typeKeyword}
-              onChange={(event) => {
-                controller.setTypeKeyword(
-                  event.currentTarget.value as '' | EntryTypeKeyword,
-                );
-              }}
-            >
-              <option value="">全部类型</option>
-              {ENTRY_TYPE_KEYWORDS.map((keyword) => (
-                <option key={keyword} value={keyword}>
-                  {TYPE_LABELS[keyword]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field entry-domain-filter">
-            <span>领域关键词</span>
-            <select
-              value={controller.domainKeyword}
-              onChange={(event) => {
-                controller.setDomainKeyword(
-                  event.currentTarget.value as '' | EntryDomainKeyword,
-                );
-              }}
-            >
-              <option value="">全部领域</option>
-              {ENTRY_DOMAIN_KEYWORDS.map((keyword) => (
-                <option key={keyword} value={keyword}>
-                  {DOMAIN_LABELS[keyword]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <InformationEntryAdvancedSearchFields
-            snapshots={snapshots}
-            typeKeyword={controller.typeKeyword}
-            domainKeyword={controller.domainKeyword}
-            filters={controller.advancedFilters}
-            onChange={controller.setAdvancedFilters}
-          />
-          <InformationEntryPrivacyScope
-            includePrivate={controller.includePrivate}
-            onlyPrivate={controller.onlyPrivate}
-            onChange={controller.setPrivacyScope}
-          />
-          <div className="entry-command-actions">
-            <button
-              className="secondary-action"
-              type="button"
-              onClick={controller.clearSearchFilters}
-            >
-              清除筛选
-            </button>
+          <section className="query-studio-search" aria-label="主搜索">
+            <label className="field entry-search-query">
+              <span>搜索信息条目</span>
+              <input
+                type="search"
+                value={controller.query}
+                onChange={(event) => {
+                  controller.setQuery(event.currentTarget.value);
+                }}
+                placeholder="输入标题、正文或标签；留空浏览当前 Entry"
+              />
+            </label>
+            <span className="record-count" role="status" aria-live="polite">
+              {controller.searchDirty
+                ? '条件已更改'
+                : controller.view.status === 'ready'
+                  ? controller.includePrivate
+                    ? `${controller.view.response.totalCount.toString()} Entry · ${controller.view.response.privateDocuments.totalCount.toString()} 完整隐私文档`
+                    : `${controller.view.response.totalCount.toString()} 条`
+                  : controller.view.status === 'loading'
+                    ? '正在搜索…'
+                    : '搜索失败'}
+            </span>
             <button className="primary-action entry-query-action" type="submit">
-              {controller.includePrivate
-                ? '查找 Entry 与完整文档'
-                : '查找 Entry'}
+              搜索
             </button>
-          </div>
+          </section>
+          <aside className="query-studio-settings" aria-label="搜索与显示设置">
+            <header>
+              <p className="section-index">SEARCH / DISPLAY</p>
+              <h2>搜索与显示设置</h2>
+            </header>
+            <InformationEntryTextSearchOptions
+              mode={controller.textMode}
+              fields={controller.textFields}
+              onModeChange={controller.setTextMode}
+              onFieldsChange={controller.setTextFields}
+            />
+            <InformationEntryRetrievalOptions
+              mode={controller.retrievalMode}
+              semanticAvailable={semanticSearchEnabled}
+              semanticReady={semanticIndexReady}
+              publicScope={
+                !controller.includePrivate && !controller.onlyPrivate
+              }
+              queryPresent={controller.query.trim() !== ''}
+              onChange={controller.setRetrievalMode}
+            />
+            <label className="field entry-source-filter">
+              <span>来源文档</span>
+              <select
+                value={controller.snapshotId}
+                onChange={(event) => {
+                  controller.setSnapshotId(event.currentTarget.value);
+                }}
+              >
+                <option value="">全部 Snapshot</option>
+                {snapshots.map((snapshot) => (
+                  <option key={snapshot.snapshotId} value={snapshot.snapshotId}>
+                    {snapshot.sourceKey}
+                    {snapshot.isPrivate === true ? '（私密）' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field entry-type-filter">
+              <span>类型关键词</span>
+              <select
+                value={controller.typeKeyword}
+                onChange={(event) => {
+                  controller.setTypeKeyword(
+                    event.currentTarget.value as '' | EntryTypeKeyword,
+                  );
+                }}
+              >
+                <option value="">全部类型</option>
+                {ENTRY_TYPE_KEYWORDS.map((keyword) => (
+                  <option key={keyword} value={keyword}>
+                    {TYPE_LABELS[keyword]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field entry-domain-filter">
+              <span>领域关键词</span>
+              <select
+                value={controller.domainKeyword}
+                onChange={(event) => {
+                  controller.setDomainKeyword(
+                    event.currentTarget.value as '' | EntryDomainKeyword,
+                  );
+                }}
+              >
+                <option value="">全部领域</option>
+                {ENTRY_DOMAIN_KEYWORDS.map((keyword) => (
+                  <option key={keyword} value={keyword}>
+                    {DOMAIN_LABELS[keyword]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <InformationEntryAdvancedSearchFields
+              snapshots={snapshots}
+              typeKeyword={controller.typeKeyword}
+              domainKeyword={controller.domainKeyword}
+              filters={controller.advancedFilters}
+              onChange={controller.setAdvancedFilters}
+            />
+            <InformationEntryPrivacyScope
+              includePrivate={controller.includePrivate}
+              onlyPrivate={controller.onlyPrivate}
+              onChange={controller.setPrivacyScope}
+            />
+            <div className="entry-command-actions">
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={controller.clearSearchFilters}
+              >
+                清除筛选
+              </button>
+            </div>
+            {onLoadSearchIndex === undefined ||
+            onRebuildSearchIndex === undefined ? null : (
+              <InformationEntrySearchIndexPanel
+                semanticEnabled={semanticSearchEnabled}
+                onLoad={onLoadSearchIndex}
+                onReadyChange={setSemanticIndexReady}
+                onRebuild={onRebuildSearchIndex}
+              />
+            )}
+          </aside>
         </form>
-        {onLoadSearchIndex === undefined ||
-        onRebuildSearchIndex === undefined ? null : (
-          <InformationEntrySearchIndexPanel
-            semanticEnabled={semanticSearchEnabled}
-            onLoad={onLoadSearchIndex}
-            onReadyChange={setSemanticIndexReady}
-            onRebuild={onRebuildSearchIndex}
+
+        <main className="query-studio-results">
+          {controller.view.status === 'ready' && controller.includePrivate ? (
+            <PrivateDocumentResults
+              items={controller.view.response.privateDocuments.items}
+              totalCount={controller.view.response.privateDocuments.totalCount}
+              onOpenEvidence={onOpenEvidence}
+            />
+          ) : null}
+
+          <InformationEntryQueryResults
+            key={comparisonScopeKey}
+            comparisonScopeKey={comparisonScopeKey}
+            controller={controller}
+            selectedItem={selectedItem}
+            onAssociationToggle={(enabled) => {
+              if (enabled) {
+                setSelectedAssociationAnchor();
+              } else {
+                clearAssociationAnchor();
+              }
+            }}
+            onOpenEvidence={onOpenEvidence}
+            onExplore={onExplore}
+            onReviseExplorationPolicy={onReviseExplorationPolicy}
+            reviewPreferences={reviewPreferences}
+            onReplaceAssociationAnchor={setSelectedAssociationAnchor}
+            aiQuerySynthesisEnabled={aiQuerySynthesisEnabled}
+            onSynthesize={onSynthesize}
           />
-        )}
-      </section>
-
-      {controller.view.status === 'ready' && controller.includePrivate ? (
-        <PrivateDocumentResults
-          items={controller.view.response.privateDocuments.items}
-          totalCount={controller.view.response.privateDocuments.totalCount}
-          onOpenEvidence={onOpenEvidence}
-        />
-      ) : null}
-
-      <InformationEntryQueryResults
-        key={comparisonScopeKey}
-        comparisonScopeKey={comparisonScopeKey}
-        controller={controller}
-        selectedItem={selectedItem}
-        onAssociationToggle={(enabled) => {
-          if (enabled) {
-            setSelectedAssociationAnchor();
-          } else {
-            clearAssociationAnchor();
-          }
-        }}
-        onOpenEvidence={onOpenEvidence}
-        onExplore={onExplore}
-        onReviseExplorationPolicy={onReviseExplorationPolicy}
-        reviewPreferences={reviewPreferences}
-        onReplaceAssociationAnchor={setSelectedAssociationAnchor}
-        aiQuerySynthesisEnabled={aiQuerySynthesisEnabled}
-        onSynthesize={onSynthesize}
-      />
+        </main>
+      </div>
     </div>
   );
 }
@@ -364,31 +363,6 @@ function InformationEntryQueryResults({
 
   return (
     <>
-      <InformationEntryQueryTools
-        association={controller.advancedFilters.association}
-        comparisonCount={comparisonItems.length}
-        comparisonFull={comparisonItems.length >= 2}
-        selectedItem={selectedItem}
-        selectedIsCompared={selectedIsCompared}
-        onAssociationToggle={onAssociationToggle}
-        onReplaceAssociationAnchor={onReplaceAssociationAnchor}
-        onToggleComparison={() => {
-          if (selectedItem === undefined) return;
-          setComparisonState((current) =>
-            toggleInformationEntryComparison(
-              current,
-              comparisonScopeKey,
-              selectedItem,
-            ),
-          );
-        }}
-        onClearComparisons={() => {
-          setComparisonState(
-            clearInformationEntryComparisons(comparisonScopeKey),
-          );
-        }}
-      />
-
       <InformationEntryResults
         ariaLabel="Entry 查询结果"
         emptyDescription="当前查询没有匹配条目；可清除部分筛选后重试。"
@@ -413,51 +387,81 @@ function InformationEntryQueryResults({
         )}
       </InformationEntryResults>
 
-      <InformationEntryExploration
-        key={`${explorationScopeKey}:${selectedItem?.entry.entryId ?? 'none'}:${explorationPolicyIdentity(reviewPreferences)}`}
-        includePrivate={controller.includePrivate}
-        onlyPrivate={controller.onlyPrivate}
-        pageItems={
-          controller.view.status === 'ready'
-            ? controller.view.response.items
-            : Object.freeze([])
-        }
-        reviewPreferences={reviewPreferences}
-        selectedItem={selectedItem}
-        onExplore={onExplore}
-        onOpenEvidence={onOpenEvidence}
-        onReviseExplorationPolicy={onReviseExplorationPolicy}
-      />
+      <details className="workflow-tool-drawer query-result-tools-drawer">
+        <summary>更多结果工具</summary>
+        <div className="query-result-tools-drawer__body">
+          <InformationEntryQueryTools
+            association={controller.advancedFilters.association}
+            comparisonCount={comparisonItems.length}
+            comparisonFull={comparisonItems.length >= 2}
+            selectedItem={selectedItem}
+            selectedIsCompared={selectedIsCompared}
+            onAssociationToggle={onAssociationToggle}
+            onReplaceAssociationAnchor={onReplaceAssociationAnchor}
+            onToggleComparison={() => {
+              if (selectedItem === undefined) return;
+              setComparisonState((current) =>
+                toggleInformationEntryComparison(
+                  current,
+                  comparisonScopeKey,
+                  selectedItem,
+                ),
+              );
+            }}
+            onClearComparisons={() => {
+              setComparisonState(
+                clearInformationEntryComparisons(comparisonScopeKey),
+              );
+            }}
+          />
 
-      <InformationEntryQuerySynthesis
-        key={comparisonScopeKey}
-        enabled={aiQuerySynthesisEnabled}
-        retrievalMode={controller.retrievalMode}
-        includePrivate={controller.includePrivate}
-        onlyPrivate={controller.onlyPrivate}
-        resultCount={
-          controller.view.status === 'ready'
-            ? controller.view.response.totalCount
-            : 0
-        }
-        searchRequest={controller.searchRequest}
-        onOpenEvidence={onOpenEvidence}
-        onSynthesize={onSynthesize}
-      />
+          <InformationEntryExploration
+            key={`${explorationScopeKey}:${selectedItem?.entry.entryId ?? 'none'}:${explorationPolicyIdentity(reviewPreferences)}`}
+            includePrivate={controller.includePrivate}
+            onlyPrivate={controller.onlyPrivate}
+            pageItems={
+              controller.view.status === 'ready'
+                ? controller.view.response.items
+                : Object.freeze([])
+            }
+            reviewPreferences={reviewPreferences}
+            selectedItem={selectedItem}
+            onExplore={onExplore}
+            onOpenEvidence={onOpenEvidence}
+            onReviseExplorationPolicy={onReviseExplorationPolicy}
+          />
 
-      <InformationEntryQueryComparison
-        items={comparisonItems}
-        onOpenEvidence={onOpenEvidence}
-        onRemove={(entryId) => {
-          setComparisonState((current) =>
-            removeInformationEntryComparison(
-              current,
-              comparisonScopeKey,
-              entryId,
-            ),
-          );
-        }}
-      />
+          <InformationEntryQuerySynthesis
+            key={comparisonScopeKey}
+            enabled={aiQuerySynthesisEnabled}
+            retrievalMode={controller.retrievalMode}
+            includePrivate={controller.includePrivate}
+            onlyPrivate={controller.onlyPrivate}
+            resultCount={
+              controller.view.status === 'ready'
+                ? controller.view.response.totalCount
+                : 0
+            }
+            searchRequest={controller.searchRequest}
+            onOpenEvidence={onOpenEvidence}
+            onSynthesize={onSynthesize}
+          />
+
+          <InformationEntryQueryComparison
+            items={comparisonItems}
+            onOpenEvidence={onOpenEvidence}
+            onRemove={(entryId) => {
+              setComparisonState((current) =>
+                removeInformationEntryComparison(
+                  current,
+                  comparisonScopeKey,
+                  entryId,
+                ),
+              );
+            }}
+          />
+        </div>
+      </details>
     </>
   );
 }

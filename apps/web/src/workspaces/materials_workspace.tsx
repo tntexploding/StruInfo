@@ -363,6 +363,13 @@ export function MaterialsWorkspace({
         </button>
       </header>
 
+      <aside className="workflow-mode-summary" aria-label="导入页操作指南">
+        <strong>导入文档</strong>
+        <span>1. 选择文件并填写来源信息</span>
+        <span>2. 确认隐私范围后开始导入</span>
+        <span>3. 在右侧查看已导入文档</span>
+      </aside>
+
       <section className="intake-console" aria-labelledby="import-title">
         <header className="console-heading">
           <div>
@@ -852,7 +859,7 @@ export function MaterialsWorkspace({
             <h3>导出全部个人数据</h3>
             <p>
               将原始文件、拆分结果、Entry
-              与文档标签、联系、正式知识、审核偏好和个人标签规则写入外部 exports
+              与文档标签、联系、知识图谱、审核偏好和个人标签规则写入外部 exports
               区。导出文件始终位于代码仓库和应用包之外。
             </p>
             <button

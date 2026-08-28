@@ -271,12 +271,7 @@ export function InformationEntryManualSplit({
           <ol className="entry-manual-split__groups">
             {groups.map((group, groupIndex) => (
               <ManualSplitGroupEditor
-                key={group.pieces
-                  .map(
-                    (piece) =>
-                      `${piece.fragment.fragmentId}:${piece.startCodePoint.toString()}:${piece.endCodePoint.toString()}`,
-                  )
-                  .join('|')}
+                key={`${group.pieces[0]?.fragment.fragmentId ?? 'manual-group'}:${group.pieces[0]?.startCodePoint.toString() ?? groupIndex.toString()}`}
                 busy={busy}
                 group={group}
                 groupIndex={groupIndex}

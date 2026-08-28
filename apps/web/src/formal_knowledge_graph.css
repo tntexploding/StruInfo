@@ -5,6 +5,184 @@
   --knowledge-edge-ai: var(--si-color-warning);
 }
 
+/* Entry-centred knowledge studio: graph first, centre picker right, editor below. */
+
+.formal-knowledge-workspace {
+  grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
+  align-items: start;
+}
+
+.formal-knowledge-workspace > .workflow-page-heading {
+  grid-column: 1;
+}
+
+.formal-knowledge-workspace > .workflow-mode-summary {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.formal-knowledge-workspace > .knowledge-command-panel {
+  grid-column: 2;
+  grid-row: 2;
+  grid-template-columns: minmax(0, 1fr);
+  position: sticky;
+  inset-block-start: calc(var(--si-command-height) + var(--si-space-4));
+  z-index: 2;
+}
+
+.formal-knowledge-workspace .knowledge-search-form {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.formal-knowledge-workspace .knowledge-view-switch {
+  inline-size: 100%;
+}
+
+.formal-knowledge-workspace > .knowledge-candidate-strip {
+  grid-column: 2;
+  grid-row: 3;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+}
+
+.formal-knowledge-workspace .knowledge-candidate-strip > header {
+  border-inline-end: 0;
+  border-block-end: var(--si-rule-thin) solid var(--si-color-border-default);
+}
+
+.formal-knowledge-workspace .knowledge-candidate-strip > div {
+  display: grid;
+  max-block-size: 30rem;
+  overflow: auto;
+}
+
+.formal-knowledge-workspace .knowledge-candidate-strip button {
+  min-inline-size: 0;
+  inline-size: 100%;
+}
+
+.formal-knowledge-workspace > .knowledge-workbench {
+  grid-column: 1;
+  grid-row: 2 / span 4;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--si-space-4);
+  margin: 0;
+}
+
+.formal-knowledge-workspace .knowledge-network-panel {
+  min-block-size: 32rem;
+}
+
+.formal-knowledge-workspace .knowledge-inspector {
+  position: static;
+  grid-template-columns:
+    minmax(12rem, 0.9fr)
+    minmax(8rem, 0.55fr)
+    minmax(0, 1.2fr);
+  align-items: start;
+  max-block-size: none;
+  overflow: visible;
+  border-inline-start: var(--si-space-1) solid var(--si-color-signal);
+  box-shadow: none;
+  background: var(--si-color-surface-raised);
+}
+
+.formal-knowledge-workspace .knowledge-inspector > section,
+.formal-knowledge-workspace .knowledge-hidden-relations {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  box-sizing: border-box;
+  padding-block-end: 0;
+  padding-inline-end: var(--si-space-4);
+  border-block-end: 0;
+  border-inline-end: var(--si-rule-thin) solid var(--si-color-border-default);
+}
+
+.formal-knowledge-workspace
+  .knowledge-inspector
+  :where(form, fieldset, div, dl, label, input, textarea, select) {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  box-sizing: border-box;
+}
+
+.formal-knowledge-workspace .knowledge-node-inspector dd {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.formal-knowledge-workspace .knowledge-hidden-relations {
+  grid-column: 1 / -1;
+  padding-block-start: var(--si-space-3);
+  border-block-start: var(--si-rule-thin) solid var(--si-color-border-default);
+  border-inline-end: 0;
+}
+
+.formal-knowledge-workspace .knowledge-node-inspector > p:not(.section-index) {
+  display: -webkit-box;
+  max-block-size: none;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 8;
+}
+
+.formal-knowledge-workspace .knowledge-create-relation {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--si-space-3);
+}
+
+.formal-knowledge-workspace .knowledge-create-relation > .section-index,
+.formal-knowledge-workspace .knowledge-create-relation > h2,
+.formal-knowledge-workspace .knowledge-create-relation > form,
+.formal-knowledge-workspace .knowledge-create-relation > .primary-action {
+  grid-column: 1 / -1;
+}
+
+.formal-knowledge-workspace .knowledge-create-relation textarea {
+  min-block-size: 4.5rem;
+}
+
+@media (max-width: 70rem) {
+  .formal-knowledge-workspace {
+    grid-template-columns: minmax(0, 1fr) minmax(15rem, 19rem);
+  }
+
+  .formal-knowledge-workspace .knowledge-spokes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .formal-knowledge-workspace .knowledge-inspector {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-block-size: none;
+    position: static;
+  }
+}
+
+@media (max-width: 47.9375rem), (orientation: portrait) {
+  .formal-knowledge-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .formal-knowledge-workspace > .workflow-page-heading,
+  .formal-knowledge-workspace > .workflow-mode-summary,
+  .formal-knowledge-workspace > .knowledge-command-panel,
+  .formal-knowledge-workspace > .knowledge-candidate-strip,
+  .formal-knowledge-workspace > .knowledge-workbench {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .formal-knowledge-workspace > .knowledge-command-panel {
+    position: static;
+  }
+
+  .formal-knowledge-workspace .knowledge-spokes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .knowledge-command-panel,
 .knowledge-candidate-strip,
 .knowledge-network-panel,
@@ -133,7 +311,7 @@
 }
 
 .knowledge-network-panel {
-  min-block-size: 40rem;
+  min-block-size: 32rem;
   padding: var(--si-space-6);
   overflow: hidden;
 }
@@ -156,7 +334,7 @@
 }
 
 .knowledge-graph {
-  min-block-size: 35rem;
+  min-block-size: 27rem;
   display: grid;
   grid-template-rows: auto 1fr;
   align-content: start;

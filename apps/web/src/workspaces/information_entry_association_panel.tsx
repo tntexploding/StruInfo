@@ -28,21 +28,25 @@ type AssociationViewState =
 
 export function InformationEntryAssociationPanel({
   entry,
+  targetEntry,
   includePrivate,
   onList,
   onOpenEvidence,
   onRebuild,
   onRevisePolicy,
   onRevise,
+  onSelectRelated,
   onSearchNeighborhood,
 }: {
   readonly entry: Readonly<InformationEntry>;
+  readonly targetEntry: Readonly<InformationEntry> | undefined;
   readonly includePrivate: boolean;
   readonly onList: InformationEntryServices['onListAssociations'];
   readonly onOpenEvidence: InformationEntryServices['onOpenEvidence'];
   readonly onRebuild: InformationEntryServices['onRebuildAssociations'];
   readonly onRevisePolicy: InformationEntryServices['onReviseAssociationPolicy'];
   readonly onRevise: InformationEntryServices['onReviseAssociation'];
+  readonly onSelectRelated: (entry: Readonly<InformationEntry>) => void;
   readonly onSearchNeighborhood: () => void;
 }) {
   const [view, setView] = useState<AssociationViewState>({status: 'loading'});
@@ -218,6 +222,12 @@ export function InformationEntryAssociationPanel({
   }
 
   const headingId = `entry-association-title-${entry.entryId}`;
+  const targetedAssociation =
+    view.status === 'ready' && targetEntry !== undefined
+      ? view.response.associations.find(
+          ({relatedEntry}) => relatedEntry.entryId === targetEntry.entryId,
+        )
+      : undefined;
   return (
     <section className="entry-association-panel" aria-labelledby={headingId}>
       <header className="console-heading">
@@ -235,16 +245,66 @@ export function InformationEntryAssociationPanel({
         </span>
       </header>
 
-      {view.status === 'ready' ? (
-        <AssociationPolicyPanel
-          key={view.response.policy.revision}
-          policy={view.response.policy}
-          saving={savingPolicy}
-          onSave={(draft) => {
-            void savePolicy(draft);
-          }}
-        />
-      ) : null}
+      <section className="association-pair-editor" aria-label="联系编辑">
+        <article>
+          <span>起点</span>
+          <strong>{entry.value.titlePath || '未命名条目'}</strong>
+        </article>
+        <div aria-hidden="true">↔</div>
+        <article>
+          <span>终点</span>
+          <strong>
+            {targetEntry?.value.titlePath ?? '从右侧选择一个条目'}
+          </strong>
+        </article>
+        <div className="association-pair-editor__actions">
+          <button
+            className="primary-action"
+            type="button"
+            disabled={targetEntry === undefined || updatingId !== undefined}
+            onClick={() => {
+              if (targetEntry === undefined) return;
+              void revise(
+                targetEntry.entryId,
+                targetedAssociation?.override?.revision ?? 0,
+                'enhance',
+              );
+            }}
+          >
+            {targetedAssociation === undefined ? '保存新联系' : '增强此联系'}
+          </button>
+          <button
+            className="secondary-action"
+            type="button"
+            disabled={targetEntry === undefined || updatingId !== undefined}
+            onClick={() => {
+              if (targetEntry === undefined) return;
+              void revise(
+                targetEntry.entryId,
+                targetedAssociation?.override?.revision ?? 0,
+                'weaken',
+              );
+            }}
+          >
+            削弱
+          </button>
+          <button
+            className="secondary-action"
+            type="button"
+            disabled={targetEntry === undefined || updatingId !== undefined}
+            onClick={() => {
+              if (targetEntry === undefined) return;
+              void revise(
+                targetEntry.entryId,
+                targetedAssociation?.override?.revision ?? 0,
+                'block',
+              );
+            }}
+          >
+            屏蔽
+          </button>
+        </div>
+      </section>
 
       <div className="entry-association-toolbar">
         <p>
@@ -395,6 +455,15 @@ export function InformationEntryAssociationPanel({
                       <button
                         className="secondary-action"
                         type="button"
+                        onClick={() => {
+                          onSelectRelated(related);
+                        }}
+                      >
+                        载入编辑区
+                      </button>
+                      <button
+                        className="secondary-action"
+                        type="button"
                         disabled={busy}
                         onClick={() =>
                           void revise(
@@ -460,6 +529,18 @@ export function InformationEntryAssociationPanel({
           </ul>
         )}
       </div>
+      {view.status === 'ready' ? (
+        <section className="association-policy-dock" aria-label="联系权重">
+          <AssociationPolicyPanel
+            key={view.response.policy.revision}
+            policy={view.response.policy}
+            saving={savingPolicy}
+            onSave={(draft) => {
+              void savePolicy(draft);
+            }}
+          />
+        </section>
+      ) : null}
     </section>
   );
 }
