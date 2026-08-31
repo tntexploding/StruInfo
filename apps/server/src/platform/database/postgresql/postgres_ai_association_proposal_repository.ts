@@ -288,9 +288,13 @@ async function loadRows(
 ): Promise<readonly Readonly<ProcessingProposal>[]> {
   if (rows.length === 0) return Object.freeze([]);
   const proposalIds = rows.map((row) => canonicalUuid(row.proposal_id));
-  const [inputRows, payloadRows] = await Promise.all([
-    client.query<Row>(READ_INPUTS_SQL, [workspaceId, proposalIds]),
-    client.query<Row>(READ_PAYLOADS_SQL, [workspaceId, proposalIds]),
+  const inputRows = await client.query<Row>(READ_INPUTS_SQL, [
+    workspaceId,
+    proposalIds,
+  ]);
+  const payloadRows = await client.query<Row>(READ_PAYLOADS_SQL, [
+    workspaceId,
+    proposalIds,
   ]);
   const inputs = groupOrderedInputs(inputRows.rows);
   const payloads = new Map<

@@ -2,10 +2,29 @@ import type {RuntimeConfig} from '../config/runtime_config.js';
 import {createRuntimeDatabase} from '../database/database_readiness.js';
 import {NodeTimerScheduler, SystemDeadline} from '../lifecycle/deadline.js';
 import {createPostgresRepositories} from '../platform/database/postgresql/postgres_repository_factory.js';
+import {
+  BulkIngestionAdjudicationService,
+  BulkIngestionCodexApplyService,
+  BulkIngestionCodexReviewService,
+  BulkIngestionEnrichmentService,
+  BulkIngestionPipelineService,
+  BulkIngestionService,
+  type DecideBulkIngestionAdjudicationRequest,
+  type ExecuteBulkIngestionEnrichmentRequest,
+  type ExecuteBulkIngestionRequest,
+  type ExportBulkIngestionCodexReviewRequest,
+  type PlanBulkIngestionRequest,
+  type SampleBulkIngestionAdjudicationRequest,
+  type StartBulkIngestionPipelineRequest,
+} from '../modules/processing/index.js';
 import {LocalFilesystemBlobStore} from '../platform/storage/local_filesystem_blob_store.js';
+import {LocalBulkIngestionCodexReviewFileStore} from '../platform/storage/local_bulk_ingestion_codex_review_file_store.js';
 import {LocalReviewPreferencesStore} from '../platform/storage/local_review_preferences_store.js';
 import {LocalWorkspaceBundleFileStore} from '../platform/storage/local_workspace_bundle_file_store.js';
-import {initializeLocalDataRoot} from '../platform/storage/local_data_root.js';
+import {
+  ensurePrivateSubdirectory,
+  initializeLocalDataRoot,
+} from '../platform/storage/local_data_root.js';
 import {M1cWorkspaceTransfer} from '../workspace_transfer/m1c_workspace_transfer.js';
 import type {M1mMaintenanceRuntimePort} from './m1m_maintenance.js';
 
@@ -20,6 +39,9 @@ export async function createM1mMaintenanceRuntime(
   const backupFiles = new LocalWorkspaceBundleFileStore(
     layout.areaRoots.backups,
   );
+  const codexReviewFiles = new LocalBulkIngestionCodexReviewFileStore(
+    await ensurePrivateSubdirectory(layout.areaRoots.exports, 'codex-work'),
+  );
   const database = createRuntimeDatabase(
     config,
     new SystemDeadline(new NodeTimerScheduler()),
@@ -31,11 +53,80 @@ export async function createM1mMaintenanceRuntime(
     reviewPreferences,
     fileStore: backupFiles,
   });
+  const bulkIngestion = new BulkIngestionService({
+    workspaceId: config.workspaceId,
+    repository: repositories.bulkIngestion,
+    evidence: repositories.evidenceRead,
+    entries: repositories.informationEntries,
+    blobStore,
+  });
+  const bulkIngestionEnrichment = new BulkIngestionEnrichmentService({
+    workspaceId: config.workspaceId,
+    repository: repositories.bulkIngestionEnrichment,
+    entries: repositories.informationEntries,
+    associations: repositories.informationEntryAssociations,
+    preferences: reviewPreferences,
+  });
+  const bulkIngestionAdjudication = new BulkIngestionAdjudicationService({
+    workspaceId: config.workspaceId,
+    prerequisite: repositories.bulkIngestionEnrichment,
+    repository: repositories.bulkIngestionAdjudication,
+  });
+  const bulkIngestionCodexReview = new BulkIngestionCodexReviewService({
+    workspaceId: config.workspaceId,
+    adjudication: bulkIngestionAdjudication,
+    entries: repositories.informationEntries,
+    fileStore: codexReviewFiles,
+  });
+  const bulkIngestionCodexApply = new BulkIngestionCodexApplyService({
+    workspaceId: config.workspaceId,
+    fileStore: codexReviewFiles,
+    entries: repositories.informationEntries,
+    adjudication: bulkIngestionAdjudication,
+    associations: repositories.informationEntryAssociations,
+    preferences: reviewPreferences,
+  });
+  const bulkIngestionPipeline = new BulkIngestionPipelineService({
+    ingestion: bulkIngestion,
+    enrichment: bulkIngestionEnrichment,
+    adjudication: bulkIngestionAdjudication,
+  });
   return Object.freeze({
     checkReadiness: () => database.readiness.check(),
     backup: () => transfer.exportWorkspace(config.workspaceId),
     restore: (fileName: string) =>
       transfer.restoreWorkspace(config.workspaceId, fileName),
+    planIngestion: (input: Readonly<PlanBulkIngestionRequest>) =>
+      bulkIngestion.plan(input),
+    executeIngestion: (input: Readonly<ExecuteBulkIngestionRequest>) =>
+      bulkIngestion.execute(input),
+    pauseIngestion: (batchId: string) => bulkIngestion.requestPause(batchId),
+    loadIngestion: (batchId: string) => bulkIngestion.load(batchId),
+    executeIngestionEnrichment: (
+      input: Readonly<ExecuteBulkIngestionEnrichmentRequest>,
+    ) => bulkIngestionEnrichment.execute(input),
+    loadIngestionEnrichment: (batchId: string) =>
+      bulkIngestionEnrichment.load(batchId),
+    summarizeIngestionExceptions: (batchId: string) =>
+      bulkIngestionAdjudication.summarize(batchId),
+    sampleIngestionExceptions: (
+      input: Readonly<SampleBulkIngestionAdjudicationRequest>,
+    ) => bulkIngestionAdjudication.sample(input),
+    adjudicateIngestionExceptions: (
+      input: Readonly<DecideBulkIngestionAdjudicationRequest>,
+    ) => bulkIngestionAdjudication.decide(input),
+    exportIngestionReviewPacket: (
+      input: Readonly<ExportBulkIngestionCodexReviewRequest>,
+    ) => bulkIngestionCodexReview.export(input),
+    applyIngestionReviewResult: (packetId: string) =>
+      bulkIngestionCodexApply.apply({packetId}),
+    startIngestionPipeline: (
+      input: Readonly<StartBulkIngestionPipelineRequest>,
+    ) => bulkIngestionPipeline.start(input),
+    advanceIngestionPipeline: (batchId: string, maxItems: number) =>
+      bulkIngestionPipeline.advance({batchId, maxItems}),
+    loadIngestionPipelineStatus: (batchId: string) =>
+      bulkIngestionPipeline.status(batchId),
     close: () => database.close(),
   });
 }

@@ -1,7 +1,7 @@
 # StruInfo 运行配置与数据根
 
-- 状态：外部工作区选择、严格 secret 文件注入及 M1M 维护运行已实现
-- 最近更新：2026-08-27
+- 状态：外部工作区选择、严格 secret 文件注入、M1M 维护运行及 M2-P0E 外部审阅工作区已实现
+- 最近更新：2026-08-31
 - 对应决策：[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)
 
 ## 1. 边界
@@ -76,19 +76,25 @@ query/fragment 覆盖或含糊的 authority。这样既支持本机 `localhost`�
 
 普通运行角色在取得规范数据根后创建或验证五个固定区域。区域名由程序内部生成，调用方不能提供文件路径或目录片段；已有区域必须是位于数据根内的普通目录，文件、symlink 和 Windows junction 都会使启动或存储操作失败。
 
-| 相对目录       | 当前用途                                   | 当前实现状态                                |
-| -------------- | ------------------------------------------ | ------------------------------------------- |
-| `blobs/`       | 不可变原始响应、大文本、图片和未来媒体字节 | 本地内容寻址适配器已实现                    |
-| `uploads/`     | 未来上传暂存；暂存内容不是已准入证据       | 只保留独立区域，尚无公开 reader/writer      |
-| `exports/`     | 版本化工作区领域 Bundle                    | M1C v1 规范文件落盘与同 ID 空库恢复已实现   |
-| `backups/`     | 完整个人数据备份与空工作区恢复工件         | M1M 维护命令已实现；自动保留/异地复制未实现 |
-| `preferences/` | 工作区个人 UI 偏好                         | 审核快捷标记与自动标签筛选 v1 JSON 已实现   |
+| 相对目录       | 当前用途                                    | 当前实现状态                                |
+| -------------- | ------------------------------------------- | ------------------------------------------- |
+| `blobs/`       | 不可变原始响应、大文本、图片和未来媒体字节  | 本地内容寻址适配器已实现                    |
+| `uploads/`     | 未来上传暂存；暂存内容不是已准入证据        | 只保留独立区域，尚无公开 reader/writer      |
+| `exports/`     | 版本化工作区领域 Bundle 与临时 Codex 审阅包 | Bundle 落盘/恢复及 `codex-work/` 已实现     |
+| `backups/`     | 完整个人数据备份与空工作区恢复工件          | M1M 维护命令已实现；自动保留/异地复制未实现 |
+| `preferences/` | 工作区个人 UI 偏好                          | 审核快捷标记与自动标签筛选 v1 JSON 已实现   |
 
 本地 Blob 使用 `blobs/sha256/<前两位>/<次两位>/<完整摘要>` 布局。写入边界先把普通、非共享的 `Uint8Array` 精确可见范围复制到自有内存，再从该副本计算 SHA-256、字节长度和身份；默认单 Blob 上限为 64 MiB。调用方只能提交字节或经验证的 `{algorithm, digest, byteLength}` 身份，不能提交目标路径。
 
 发布采用同目录临时文件和原子硬链接；相同内容幂等去重，已有或读取中的字节必须重新通过长度与摘要校验，损坏会作为可见错误返回。当前端口只负责不可变字节，不授予工作区访问权，也不是 HTTP/WS 接口；逻辑 Blob 记录、工作区所有权、引用、保留和删除授权由后续数据库与应用层实现。
 
-当前 64 MiB 是适配器安全默认值，尚未成为外部运行配置项。工作区 Bundle 已具有 16 MiB 默认预算的 v1 规范 JSON reader/writer、`exports/` 文件落盘和同 ID 空库恢复用例；M1M 的 `maintenance backup/restore` 复用完整个人数据包，把 61 表、引用 Blob 和偏好写入 `backups/`，并只恢复到同 workspace 空数据库。自动保留、异地复制与非空合并仍未实现；详见[工作区 Bundle 合同](workspace-bundle-contract.md)和[生产运行与维护](production-operations.md)。
+当前 64 MiB 是适配器安全默认值，尚未成为外部运行配置项。工作区 Bundle 已具有 16 MiB 默认预算的 v1 规范 JSON reader/writer、`exports/` 文件落盘和同 ID 空库恢复用例；M1M 的 `maintenance backup/restore` 复用完整个人数据包，把当前 66 表、引用 Blob 和偏好写入 `backups/`，并只恢复到同 workspace 空数据库。自动保留、异地复制与非空合并仍未实现；详见[工作区 Bundle 合同](workspace-bundle-contract.md)和[生产运行与维护](production-operations.md)。
+
+M2-P0E 的临时 Codex 审阅文件只允许落在 `exports/codex-work/` 的直接子文件中。程序生成稳定的
+`<packetId>.codex-review.json` 与 `<packetId>.codex-result.json`，拒绝 symlink/junction、路径片段、
+超限文件和相同身份不同内容；重复导出不会覆盖已编辑结果。这里可能包含用户正文，因此不进入
+Git、镜像、日志或应用制品。操作方可以在结果成功回写后按自己的保留策略删除这些临时文件；
+完整个人数据备份仍由 `backups/` 负责。
 
 审核快捷栏、自动标签筛选和轻量词表整理规则使用
 `preferences/<workspaceId>.review-preferences.json`。文件格式为

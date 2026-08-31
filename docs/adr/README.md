@@ -228,3 +228,45 @@ runtime and maintenance manifests, external secret files, explicit migration,
 queue preparation and grant order, and executable personal-data backup/empty-
 workspace restore operations. Target-image, real PostgreSQL 18, public-network
 and distribution certification remain explicit release-time gates.
+
+ADR 0046 starts M2-P0A with a Codex-operated, Provider-free bulk ingestion
+control plane. It freezes bounded Snapshot plans, treats one Snapshot as one
+atomic transaction shard, records every attempt through existing ProcessingRun
+state and adds pause/resume/retry/status/report maintenance commands. Processing
+Bundle v8 carries only typed batch control rows; source bytes remain external.
+
+ADR 0047 completes M2-P0B by continuing a successful P0A batch through the
+existing deterministic tag rules and an incremental Association rebuild. Entry
+updates are atomic per Snapshot, user overrides survive projection replacement,
+typed exceptions expose rule gaps without copying content, and Processing Bundle
+v9 carries the recoverable state. Its 15,000-entry synthetic core benchmark is
+performance direction evidence, not end-to-end acceptance.
+
+ADR 0048 completes M2-P0C with a maintenance-only exception review control
+plane. It separates current and stale Entry revisions, returns deterministic
+content-free samples and applies only exact-count guarded group transitions.
+Processing Bundle v10 carries one current adjudication table; no decision writes
+Entry content, tags, Associations or Provider state.
+
+ADR 0049 completes M2-P0D with a disposable PostgreSQL 18 benchmark over the
+real Evidence, P0A, P0B and P0C boundaries. A fixed synthetic 500-Snapshot /
+15,000-Entry workload proves migration replay, controlled failure recovery,
+persisted counts and cleanup in about 15 minutes on the recorded local machine.
+It is development-cycle engineering evidence, not a real-corpus or production
+SLO, and ordinary verification remains independent of Docker.
+
+ADR 0050 completes M2-P0E with external, deterministic Codex review work
+packages for current pending exceptions. Packets and invalid-by-default result
+templates live only under the external data root, bind exact Entry/adjudication
+revisions and require an explicit current-command opt-in before including private
+content. No Provider, database write or browser executor is introduced.
+
+ADR 0051 completes M2-P0F with a closed review-result decoder and idempotent
+application boundary. Exact packet/result identity gates one atomic set of Entry
+annotation revisions, exact adjudication transitions and an incremental
+Association rebuild while rejecting placeholders, open fields and stale state.
+
+ADR 0052 completes M2-P0G with one thin, bounded bulk-ingestion state machine.
+It advances P0A materialization, P0B enrichment and P0C review in that order,
+returns a closed next action and never hides stage-specific recovery or creates
+a second background workflow engine.

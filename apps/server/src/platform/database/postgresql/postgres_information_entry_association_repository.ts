@@ -11,6 +11,7 @@ import {
   type InformationEntryAssociationOverrideWrite,
   type InformationEntryAssociationProjection,
   type InformationEntryAssociationRepositoryPort,
+  type InformationEntryAssociationIncrementalRepositoryPort,
   type InformationEntryAssociationRepositorySnapshot,
   type InformationEntryGraphRelationValue,
 } from '../../../modules/entries/index.js';
@@ -89,6 +90,21 @@ export const DELETE_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL = sql(
   '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
 );
 
+export const DELETE_INCREMENTAL_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL =
+  sql(
+    'DELETE FROM struinfo.information_entry_association_projection AS projection',
+    'USING struinfo.information_entry AS low_entry,',
+    '      struinfo.information_entry AS high_entry',
+    'WHERE projection.workspace_id = $1',
+    '  AND low_entry.workspace_id = projection.workspace_id',
+    '  AND low_entry.entry_id = projection.entry_low_id',
+    '  AND high_entry.workspace_id = projection.workspace_id',
+    '  AND high_entry.entry_id = projection.entry_high_id',
+    '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
+    '  AND (projection.entry_low_id = ANY($3::uuid[])',
+    '    OR projection.entry_high_id = ANY($3::uuid[]))',
+  );
+
 export const INSERT_INFORMATION_ENTRY_ASSOCIATION_PROJECTION_SQL = sql(
   'INSERT INTO struinfo.information_entry_association_projection (',
   '  workspace_id, entry_low_id, entry_high_id,',
@@ -140,7 +156,11 @@ const UPDATE_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
 
 type Row = Readonly<Record<string, unknown>>;
 
-export class PostgresInformationEntryAssociationRepository implements InformationEntryAssociationRepositoryPort {
+export class PostgresInformationEntryAssociationRepository
+  implements
+    InformationEntryAssociationRepositoryPort,
+    InformationEntryAssociationIncrementalRepositoryPort
+{
   readonly #pool: PostgresPoolBoundary;
 
   public constructor(pool: PostgresPoolBoundary) {
@@ -166,6 +186,51 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
           if (canonicalUuid(projection.workspaceId) !== workspaceId) {
             throw new PostgresAdapterError();
           }
+          const result = await client.query<Row>(
+            INSERT_INFORMATION_ENTRY_ASSOCIATION_PROJECTION_SQL,
+            informationEntryAssociationProjectionParameters(projection),
+          );
+          expectOneAffected(result.rowCount);
+        }
+        return projections.length;
+      },
+    );
+  }
+
+  public replaceAssociationProjectionsForEntries(
+    workspaceIdInput: string,
+    sourceEntryIdsInput: readonly string[],
+    projections: readonly Readonly<InformationEntryAssociationProjection>[],
+    includePrivate: boolean,
+  ): Promise<number> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    const sourceEntryIds = sourceEntryIdsInput.map(canonicalUuid);
+    if (
+      sourceEntryIds.length === 0 ||
+      new Set(sourceEntryIds).size !== sourceEntryIds.length
+    ) {
+      throw new PostgresAdapterError();
+    }
+    const sources = new Set(sourceEntryIds);
+    for (const projection of projections) {
+      if (
+        canonicalUuid(projection.workspaceId) !== workspaceId ||
+        (!sources.has(projection.entryLowId) &&
+          !sources.has(projection.entryHighId))
+      ) {
+        throw new PostgresAdapterError();
+      }
+    }
+    return runPostgresTransaction(
+      this.#pool,
+      'read_committed',
+      async (client) => {
+        await acquireWorkspaceWriteLock(client, workspaceId);
+        await client.query<Row>(
+          DELETE_INCREMENTAL_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL,
+          [workspaceId, includePrivate, sourceEntryIds],
+        );
+        for (const projection of projections) {
           const result = await client.query<Row>(
             INSERT_INFORMATION_ENTRY_ASSOCIATION_PROJECTION_SQL,
             informationEntryAssociationProjectionParameters(projection),

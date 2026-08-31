@@ -252,7 +252,7 @@ AI 可以参与：
 - 确定性关键词候选、用户快捷标签、排除词、URL 过滤和确认别名；
 - 文档标签聚合、可解释 Entry 联系及人工增强/削弱/屏蔽/恢复；
 - 文本子串、结构、来源、时间、隐私和一至两跳联系查询；
-- 含 61 张工作区表、引用 Blob 字节和偏好的个人数据包导出/空工作区恢复；
+- 含 66 张工作区表、引用 Blob 字节和偏好的个人数据包导出/空工作区恢复；
 - 最高匹配 Entry 中心、有界图谱/列表、边来源、用户关系编辑和三种隐私范围。
 
 尚未实现的是来源重排、任意脚本或自定义解析器规则、集合/树/时间线、第二向量 Provider、私密向量/RAG、
@@ -268,6 +268,8 @@ AssociationProjection 达到可见条件后可直接进入图谱，不需要逐�
 边界；模型、来源适配器和后台任务只能产生提案，不能直接改表。其他自动化仍按人工操作、
 范围授权、自动分流和委托维护逐级开放；合并、重要冲突裁决、大规模重排和扩大外部权限
 保持人工确认。
+
+开发周期另有一条不依赖模型 API 的高吞吐路径：Codex 只能通过公开 maintenance 命令冻结批次、分窗口执行、暂停、恢复、重试和读取脱敏报告。P0A/P0B 让确定性结构、标签和增量联系优先执行，并把规则不能裁决的 Entry 归入 typed 异常；P0E/P0F 再把当前疑难项变成外部有界工作包和闭合幂等回写，P0G 统一报告下一动作，浏览器不再是逐条执行器。只有未来使用周期的低置信度项目才进入 Provider 微批次。固定合成 PostgreSQL 证据已经在约 15 分钟内完成 15,000 Entry，满足 4–6 小时开发周期工程预算；真实语料和生产容量仍必须另行测量，不能由该结果推导。
 
 ### 5.6 可信度与来源说明
 
@@ -865,6 +867,57 @@ M1H-5B 在导入页显示逐文件准备、写入、成功、失败和停止状�
 
 M1M 是可操作的单机生产代码边界。2026-08-27 已在本地 Docker 与 disposable PostgreSQL 18.6 上用合成数据通过迁移、队列准备、runtime grant、健康、备份、同 workspace 空库恢复和重启。`v0.1.0` 在此基础上加入运行镜像瘦身、浏览器安全响应头和宿主认证反向代理示例；目标云端仍需落实域名、证书、防火墙、备份保留和监控。项目代码采用 MIT License。这些门只阻断对应部署/分发，不重新打开已完成的五步产品主线。
 
+### 7.1.33 M2-P0A Codex 操作的批量 Snapshot→Entry 基础（已实现）
+
+[ADR 0046](adr/0046-codex-operated-bulk-ingestion.md) 增加无 Provider 的 maintenance 批次。一次计划按幂等键、隐私范围和稳定 Snapshot 次序冻结最多 500 个尚未拥有当前 Entry 结构的 Snapshot，并限制总计划 Entry 不超过 50,000。执行以 Snapshot 为原子事务分片；每个窗口产生 ProcessingRun，成功项保持不变，失败或中断项可显式重试，暂停在当前分片完成后生效。
+
+批次和逐项记录只保存身份、摘要、计数、状态、尝试次数和稳定错误码。CLI 的 status/report 不返回正文、URL、路径、凭据或 Provider 数据。`000026` 与 Processing Bundle v8 让控制状态可备份恢复。P0A 的成功只表示确定性 Entry 已形成并可进入既有查询；标签、联系、Provider 微批次、批次审核 UI 和 15,000 Entry / 4–6 小时验收属于后续增量。
+
+### 7.1.34 M2-P0B 确定性批量标签与增量联系（已实现）
+
+[ADR 0047](adr/0047-deterministic-bulk-enrichment.md) 只接续成功的 P0A 批次。每次有限窗口绑定当前确定性标签规则、排除词、确认别名和联系权重摘要；一个 Snapshot 的所有 Entry 标签 revision 在同一事务写入。规则标签不覆盖人工/AI/导入标签，重试识别同版本既有结果，不重复追加。
+
+标签关闭、没有可提取标签或关键词容量已满分别形成 closed typed exception，只保存 Entry/revision 身份和代码。标签完成后只计算“本窗口 Entry ↔ 现有候选”与“本窗口 Entry ↔ 同窗口 Entry”，Repository 只替换至少一个端点属于 source 集合的 projection；pair override、正式知识关系和其他历史 pair 保持不变。`ingest enrich/enrich-resume/enrich-retry/enrich-status/enrich-report` 提供可恢复、脱敏控制面。
+
+迁移 `000027` 与 Processing Bundle v9/18 表携带 enrichment item 和 exception，完整个人数据包覆盖 65 张表。15,000 Entry / 500 Snapshot 的合成内存核心基准只证明本地规则计算不是小时级瓶颈；后续 M2-P0D 已用 disposable PostgreSQL 补齐 Blob、事务、恢复和异常控制的合成完整链证据，真实语料与生产 SLO 仍不由该结果推导。
+
+### 7.1.35 M2-P0C 批量异常汇总、抽样与裁决（已实现）
+
+[ADR 0048](adr/0048-bulk-ingestion-exception-adjudication.md) 在成功 P0B 批次上增加 maintenance-only 复核控制面。异常按 closed code 与 `pending / accepted / manual_review / deferred` 当前状态汇总；最多 50 项的稳定抽样只返回 Snapshot/Entry/revision 身份、隐私事实、当前性和状态，不返回正文、来源、Blob 或 Provider 数据。
+
+批量状态转换必须提交刚观察到的 exact `expectedCount`，并只锁定仍匹配当前 Entry revision、异常代码和原状态的行；数量漂移时整组返回 stale，过期异常保持可见但不进入批量裁决。裁决状态可显式再次修改或回到 pending，但不直接写 Entry、标签、Document 标签、联系、正式图谱或 AI 提案。迁移 `000028` 与 Processing Bundle v10/19 表携带当前裁决状态，完整个人数据包覆盖 66 张表；v1–v9 恢复缺失状态为空。
+
+### 7.1.36 M2-P0D disposable PostgreSQL 性能与恢复证据（已实现）
+
+[ADR 0049](adr/0049-disposable-postgresql-bulk-ingestion-benchmark.md) 增加显式、仓库拥有的合成 PostgreSQL 18 基准。标准工作负载为 500 个 Snapshot、每个 30 个 Entry，共 15,000 Entry；它必须从当前 28 份迁移和 Blob/Evidence 开始，依次执行 P0A、P0B、P0C，并以数据库精确计数证明最终 Entry、规则标签、增量联系、typed exception 和裁决状态。
+
+基准必须包含一次 P0A 读取故障、一次 P0B 联系写故障、重试、幂等重放和 P0C expected-count stale guard；成功或失败后删除 disposable 容器与临时数据根。2026-08-30 的固定本地运行约 15 分 20 秒完成 15,000 Entry，低于 4–6 小时工程预算。该结果是无真实资料的开发周期证据，不是所有者真实语料、长期数据库、Provider、云端容量或生产 SLO。普通 `verify` 不得依赖 Docker 基准。
+
+### 7.1.37 M2-P0E 外部 Codex 审阅工作包（已实现）
+
+[ADR 0050](adr/0050-external-codex-review-work-packages.md) 把当前 `pending` typed exception 按
+1–20 项导出为稳定 packet 和默认无效的结果模板。packet 精确绑定 Entry revision、裁决 version、
+正文和当前三维标注，只落在外部数据根 `exports/codex-work/`，不进入 Git、数据库新表、镜像、
+日志或应用制品。公开内容是默认范围；隐私内容必须由当前命令显式 opt-in。相同输入重放不能
+覆盖已编辑结果，终端只输出文件名、摘要和计数。
+
+### 7.1.38 M2-P0F 闭合 Codex 结果回写（已实现）
+
+[ADR 0051](adr/0051-closed-codex-review-result-application.md) 只接受 `annotate / accept /
+manual_review / deferred`。结果必须是 canonical UTF-8 JSON，并逐项匹配 packet、Entry revision、
+异常身份和裁决 version；placeholder、缺项、额外字段或 stale 状态整包失败。`annotate` 使用既有
+Entry revision 边界写完整 content/type/domain 标签，再 exact 关闭原异常并只重建涉及这些 Entry
+的可替换 Association projection；重放相同结果不会追加重复 revision，也不能改 body、隐私、评分、
+来源证据、人工 override 或正式知识关系。
+
+### 7.1.39 M2-P0G 统一批量推进（已实现）
+
+[ADR 0052](adr/0052-unified-bulk-ingestion-pipeline-control.md) 增加 `pipeline-start / pipeline-advance /
+pipeline-status`。状态机严格按 P0A 物化、P0B enrichment、P0C 复核顺序推进；一次调用只执行
+1–500 项的有限窗口，并返回 `advance / wait / export_review_packet / none`。它只组合现有领域服务，
+不创建第二套批次表、后台无限循环、自动接受、Provider 调用或 UI 前置条件。`complete` 仅表示
+当前批次工程状态闭合，不等于真实内容质量或生产 SLO。
+
 ### 7.2 MVP-1：偏好学习与每周自适应摄取
 
 MVP-0 证明知识核心可用后，再让系统持续处理该信源并逐步学习用户偏好：
@@ -905,7 +958,7 @@ MVP-0 证明知识核心可用后，再让系统持续处理该信源并逐步�
 5. **已完成**：结果解释文本/结构/联系路径，并能打开精确证据。
 6. **已完成**：Entry 当前态使用乐观版本，前端请求标识避免迟到响应覆盖新状态。
 7. **已完成**：“正式知识”按 ADR 0010/0011/0042 显示最高匹配 Entry 中心与有界邻域，区分自动/用户编辑/用户创建/AI 边，并支持八类关系语义、名称、方向、维护说明、来源核验状态、双端精确来源、编辑、隐藏、恢复、创建和列表替代；不调用旧 Knowledge API，也不把 `source_checked` 表述为事实证明。
-8. **已完成**：个人数据包携带 61 张当前工作区表、引用 Blob 字节、偏好、Entry v5 当前结构/精确区间/全文工作副本、Association v4 图谱元数据与 Processing v7 section；Association v1–v3 与其他旧 Bundle 可读，恢复限空工作区。
+8. **已完成**：个人数据包携带 66 张当前工作区表、引用 Blob 字节、偏好、Entry v5 当前结构/精确区间/全文工作副本、Association v4 图谱元数据与 Processing v10 section；Association v1–v3、Processing v1–v9 与其他旧 Bundle 可读，恢复限空工作区。
 9. **已完成（运行边界）**：运行配置和个人数据位于包体外，Git 与应用制品审计通过；非 root 多阶段 Dockerfile、分权 Compose、外部 secret、维护命令和生产操作手册已经实现。目标镜像 digest/扫描与发布许可仍是部署/分发审核，不是产品能力缺失。
 10. **已完成**：隐私导入、完整字节保存、Entry/联系默认隐藏、包含隐私/只看隐私查询、独立完整隐私文档结果通道和材料页全文查看已实现。
 11. **已完成**：Provider-neutral ProcessingRun 可持久化、列出和按期望版本取消；无任务与无 Provider 状态诚实显示，三类提案信封可携带。

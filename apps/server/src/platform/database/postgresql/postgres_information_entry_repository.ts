@@ -8,9 +8,11 @@ import {
   type EntryContentKeyword,
   type EntryDomainAssignment,
   type InformationEntryEmptySnapshotMaterializeResult,
+  type InformationEntryBulkRevisionResult,
   type InformationEntryMaterializeResult,
   type InformationEntryMaterializeRow,
   type InformationEntryRepositoryPort,
+  type InformationEntryBulkRevisionRepositoryPort,
   type InformationEntryRevisionOutcome,
   type InformationEntryRevisionValue,
   type InformationEntryRevisionWrite,
@@ -208,7 +210,11 @@ const INSERT_DOMAIN_KEYWORD_SQL = sql(
 
 type Row = Readonly<Record<string, unknown>>;
 
-export class PostgresInformationEntryRepository implements InformationEntryRepositoryPort {
+export class PostgresInformationEntryRepository
+  implements
+    InformationEntryRepositoryPort,
+    InformationEntryBulkRevisionRepositoryPort
+{
   readonly #pool: PostgresPoolBoundary;
 
   public constructor(pool: PostgresPoolBoundary) {
@@ -354,6 +360,99 @@ export class PostgresInformationEntryRepository implements InformationEntryRepos
     );
   }
 
+  public reviseEntriesAtomically(
+    writes: readonly Readonly<InformationEntryRevisionWrite>[],
+  ): Promise<Readonly<InformationEntryBulkRevisionResult>> {
+    if (writes.length === 0) {
+      return Promise.resolve(
+        Object.freeze({outcome: 'unchanged' as const, appliedCount: 0}),
+      );
+    }
+    const workspaceId = canonicalUuid(writes[0]?.workspaceId);
+    const entryIds = new Set<string>();
+    for (const write of writes) {
+      if (
+        canonicalUuid(write.workspaceId) !== workspaceId ||
+        entryIds.has(canonicalUuid(write.entryId)) ||
+        !Number.isSafeInteger(write.expectedRevision) ||
+        write.expectedRevision < 1
+      ) {
+        throw new PostgresAdapterError();
+      }
+      canonicalUuid(write.revisionId);
+      informationEntryValueParameters(write.value);
+      entryIds.add(write.entryId);
+    }
+    return runPostgresTransaction(
+      this.#pool,
+      'read_committed',
+      async (client) => {
+        await acquireWorkspaceWriteLock(client, workspaceId);
+        const prepared: {
+          write: Readonly<InformationEntryRevisionWrite>;
+          currentRevision: number;
+          changed: boolean;
+        }[] = [];
+        for (const write of writes) {
+          const locked = await client.query<Row>(LOCK_CURRENT_ENTRY_SQL, [
+            workspaceId,
+            write.entryId,
+          ]);
+          if (locked.rows.length === 0) {
+            return Object.freeze({
+              outcome: 'not_found' as const,
+              appliedCount: 0,
+            });
+          }
+          if (locked.rows.length !== 1 || locked.rows[0] === undefined) {
+            throw new PostgresAdapterError();
+          }
+          const row = locked.rows[0];
+          const currentRevision = integer(row.current_revision, 1);
+          if (currentRevision !== write.expectedRevision) {
+            return Object.freeze({
+              outcome: 'stale' as const,
+              appliedCount: 0,
+            });
+          }
+          const current = await loadOneCurrentValue(client, row);
+          prepared.push({
+            write,
+            currentRevision,
+            changed: !sameRevisionValue(current, write.value),
+          });
+        }
+        let appliedCount = 0;
+        for (const item of prepared) {
+          if (!item.changed) continue;
+          const nextRevision = item.currentRevision + 1;
+          if (nextRevision > 2_147_483_647) throw new PostgresAdapterError();
+          const updated = await client.query<Row>(UPDATE_ENTRY_SQL, [
+            workspaceId,
+            item.write.entryId,
+            nextRevision,
+            item.write.revisionId,
+            ...informationEntryValueParameters(item.write.value),
+            item.currentRevision,
+          ]);
+          expectOneAffected(updated.rowCount);
+          await replaceEntryChildren(
+            client,
+            workspaceId,
+            item.write.entryId,
+            item.write.value,
+          );
+          appliedCount += 1;
+        }
+        return Object.freeze({
+          outcome:
+            appliedCount === 0 ? ('unchanged' as const) : ('applied' as const),
+          appliedCount,
+        });
+      },
+    );
+  }
+
   public loadCurrentEntries(
     workspaceIdInput: string,
     includePrivate: boolean,
@@ -363,24 +462,22 @@ export class PostgresInformationEntryRepository implements InformationEntryRepos
       this.#pool,
       'repeatable_read_only',
       async (client) => {
-        const [core, inputs, keywords, domains] = await Promise.all([
-          client.query<Row>(READ_CURRENT_INFORMATION_ENTRIES_SQL, [
-            workspaceId,
-            includePrivate,
-          ]),
-          client.query<Row>(READ_CURRENT_INFORMATION_ENTRY_INPUTS_SQL, [
-            workspaceId,
-            includePrivate,
-          ]),
-          client.query<Row>(READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_SQL, [
-            workspaceId,
-            includePrivate,
-          ]),
-          client.query<Row>(READ_CURRENT_INFORMATION_ENTRY_DOMAINS_SQL, [
-            workspaceId,
-            includePrivate,
-          ]),
-        ]);
+        const core = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRIES_SQL,
+          [workspaceId, includePrivate],
+        );
+        const inputs = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_INPUTS_SQL,
+          [workspaceId, includePrivate],
+        );
+        const keywords = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_SQL,
+          [workspaceId, includePrivate],
+        );
+        const domains = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_DOMAINS_SQL,
+          [workspaceId, includePrivate],
+        );
         return Object.freeze(
           core.rows.map((row) =>
             mapCurrentEntry(row, inputs.rows, keywords.rows, domains.rows),
@@ -535,10 +632,17 @@ async function loadOneCurrentValue(
 ): Promise<Readonly<InformationEntryRevisionValue>> {
   const workspaceId = canonicalUuid(row.workspace_id);
   const entryId = canonicalUuid(row.entry_id);
-  const [inputs, keywords, domains] = await Promise.all([
-    client.query<Row>(READ_ENTRY_INPUTS_SQL, [workspaceId, entryId]),
-    client.query<Row>(READ_ENTRY_KEYWORDS_SQL, [workspaceId, entryId]),
-    client.query<Row>(READ_ENTRY_DOMAINS_SQL, [workspaceId, entryId]),
+  const inputs = await client.query<Row>(READ_ENTRY_INPUTS_SQL, [
+    workspaceId,
+    entryId,
+  ]);
+  const keywords = await client.query<Row>(READ_ENTRY_KEYWORDS_SQL, [
+    workspaceId,
+    entryId,
+  ]);
+  const domains = await client.query<Row>(READ_ENTRY_DOMAINS_SQL, [
+    workspaceId,
+    entryId,
   ]);
   return mapRevisionValue(row, inputs.rows, keywords.rows, domains.rows);
 }

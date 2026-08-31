@@ -1,6 +1,6 @@
 # Database Migrations and Roles
 
-- Status: First-party runner and twenty-five forward migrations implemented;
+- Status: First-party runner and twenty-seven forward migrations implemented;
   M1M queue preparation and operator-managed runtime grant boundary available
 - Contract: `C-M0-S-r2`
 - Database direction: PostgreSQL 18 with separate migration and runtime
@@ -61,6 +61,9 @@ apps/server/migrations/000022_create_information_document_working_copies.sql
 apps/server/migrations/000023_add_remote_document_resource_kind.sql
 apps/server/migrations/000024_add_information_entry_graph_semantics.sql
 apps/server/migrations/000025_create_information_entry_search_index.sql
+apps/server/migrations/000026_create_bulk_ingestion_batches.sql
+apps/server/migrations/000027_create_bulk_ingestion_enrichment.sql
+apps/server/migrations/000028_create_bulk_ingestion_adjudications.sql
 ```
 
 The runner is first-party code over the already admitted `pg@8.22.0` driver.
@@ -242,6 +245,37 @@ excluded from personal-data packages. The migration adds no `pgvector` or other
 extension, source text, Provider secret, prompt, personal seed, role or grant;
 operators grant only the typed SELECT and scoped replacement operations used by
 the search-index repository.
+
+`000026_create_bulk_ingestion_batches.sql` adds two typed M2-P0A control tables:
+one current batch header and one ordered Snapshot item table. They store only
+workspace-scoped identities, digests, privacy facts, counts, execution state,
+attempts and stable error codes. Each execution attempt references the existing
+`processing_run`; each item references an immutable Snapshot. They do not store
+source text, Entry bodies, Provider payloads, prompts, credentials or arbitrary
+JSON. Runtime grants permit the narrow insert/update/read state machine but do
+not broaden schema or migration authority.
+
+`000027_create_bulk_ingestion_enrichment.sql` adds two typed M2-P0B control
+tables: one current enrichment item per successful P0A batch item and one
+bounded exception row per Entry revision that deterministic rules cannot settle.
+They store only identities, rule digests, counters, state and stable exception
+codes. They do not copy Entry bodies, source text, Provider payloads, prompts,
+credentials or arbitrary JSON. Runtime grants permit the narrow read/insert/update
+state machine; deterministic tag revisions and incremental Association replacement
+continue through their existing typed repositories. The exception row references
+the active stable `information_entry` identity; its frozen revision number and
+revision ID are comparison facts used to derive current/stale state, not a foreign
+key to the retired revision table removed by `000011`. The disposable M2-P0D
+PostgreSQL run verifies this migration against the complete current migration chain.
+
+`000028_create_bulk_ingestion_adjudications.sql` adds one typed M2-P0C current
+decision table keyed by the existing exception identity. It stores only the
+closed pending/accepted/manual-review/deferred state, an optimistic version and
+timestamps. Current/stale Entry revision facts remain derived from the referenced
+exception and current Entry row; the table does not copy Entry bodies, titles,
+sources, Provider payloads, prompts, credentials or arbitrary JSON. Runtime
+grants permit only the narrow read/insert/update state transition used by the
+maintenance control plane.
 
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.

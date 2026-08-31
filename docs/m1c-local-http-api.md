@@ -199,7 +199,7 @@ M1H action POST 接受 `{expectedVersion, operation: "apply" | "undo", includePr
 
 ## 5. 个人数据包
 
-export 接口生成当前五分区 Bundle，包含 61 张当前工作区表、被引用的 Blob 字节和含版本化联系、探索、Entry 偏好、AutomationPolicy 与信源串联开关的当前偏好文件。Entry v5 section 在可选精确 Fragment 标量区间和 `is_current_structure` 之外携带拆分前工作副本；v1–v4 Entry section 恢复时把既有 Entry 解释为当前结构并补空工作副本。Processing v7 section 携带十张既有任务/提案表、两张 typed 自动路由执行表、一张所有者工作队列表和一张确定性动作表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1–v6 保持可读，缺失的新表和偏好字段恢复为空/关闭状态。
+export 接口生成当前五分区 Bundle，包含 66 张当前工作区表、被引用的 Blob 字节和含版本化联系、探索、Entry 偏好、AutomationPolicy 与信源串联开关的当前偏好文件。Entry v5 section 在可选精确 Fragment 标量区间和 `is_current_structure` 之外携带拆分前工作副本；v1–v4 Entry section 恢复时把既有 Entry 解释为当前结构并补空工作副本。Processing v10 section 携带十张既有任务/提案表、两张 typed 自动路由执行表、一张所有者工作队列表、一张确定性动作表、两张 M2-P0A 批量物化控制表、两张 M2-P0B enrichment/exception 表和一张 M2-P0C 当前裁决表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1–v9 保持可读，缺失的新表和偏好字段恢复为空/关闭状态。
 
 Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不进入 Git 或应用安装树。
 

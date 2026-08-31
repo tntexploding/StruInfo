@@ -71,14 +71,14 @@ export class PostgresInformationEntrySearchIndexRepository implements Informatio
       this.#pool,
       'repeatable_read_only',
       async (client) => {
-        const [projections, postings] = await Promise.all([
-          client.query<Row>(READ_INFORMATION_ENTRY_SEARCH_PROJECTIONS_SQL, [
-            workspaceId,
-          ]),
-          client.query<Row>(READ_INFORMATION_ENTRY_TERM_POSTINGS_SQL, [
-            workspaceId,
-          ]),
-        ]);
+        const projections = await client.query<Row>(
+          READ_INFORMATION_ENTRY_SEARCH_PROJECTIONS_SQL,
+          [workspaceId],
+        );
+        const postings = await client.query<Row>(
+          READ_INFORMATION_ENTRY_TERM_POSTINGS_SQL,
+          [workspaceId],
+        );
         return Object.freeze({
           projections: Object.freeze(projections.rows.map(mapProjection)),
           postings: Object.freeze(postings.rows.map(mapPosting)),
