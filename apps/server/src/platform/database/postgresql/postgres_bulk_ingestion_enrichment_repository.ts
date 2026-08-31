@@ -105,6 +105,38 @@ const RESET_RETRY_ITEMS_SQL = sql(
   'WHERE workspace_id = $1 AND batch_id = $2',
   "  AND status IN ('running', 'failed')",
 );
+const DELETE_REFRESH_ADJUDICATIONS_SQL = sql(
+  'DELETE FROM struinfo.processing_bulk_ingestion_adjudication AS adjudication',
+  'USING struinfo.processing_bulk_ingestion_enrichment_item AS enrichment',
+  'WHERE adjudication.workspace_id = enrichment.workspace_id',
+  '  AND adjudication.batch_id = enrichment.batch_id',
+  '  AND adjudication.item_ordinal = enrichment.item_ordinal',
+  '  AND adjudication.workspace_id = $1 AND adjudication.batch_id = $2',
+  "  AND enrichment.status = 'succeeded'",
+  '  AND enrichment.rules_sha256 IS DISTINCT FROM $3',
+);
+const DELETE_REFRESH_EXCEPTIONS_SQL = sql(
+  'DELETE FROM struinfo.processing_bulk_ingestion_exception AS exception',
+  'USING struinfo.processing_bulk_ingestion_enrichment_item AS enrichment',
+  'WHERE exception.workspace_id = enrichment.workspace_id',
+  '  AND exception.batch_id = enrichment.batch_id',
+  '  AND exception.item_ordinal = enrichment.item_ordinal',
+  '  AND exception.workspace_id = $1 AND exception.batch_id = $2',
+  "  AND enrichment.status = 'succeeded'",
+  '  AND enrichment.rules_sha256 IS DISTINCT FROM $3',
+);
+const RESET_REFRESH_ITEMS_SQL = sql(
+  'UPDATE struinfo.processing_bulk_ingestion_enrichment_item SET',
+  "  status = 'pending', claimed_run_id = NULL, rules_sha256 = NULL,",
+  '  result_entry_count = NULL, revised_entry_count = NULL,',
+  '  added_tag_count = NULL, association_projection_count = NULL,',
+  '  exception_entry_count = NULL, error_code = NULL,',
+  '  started_at = NULL, finished_at = NULL,',
+  '  current_version = current_version + 1, updated_at = CURRENT_TIMESTAMP',
+  'WHERE workspace_id = $1 AND batch_id = $2',
+  "  AND status = 'succeeded'",
+  '  AND rules_sha256 IS DISTINCT FROM $3',
+);
 const INSERT_ATTEMPT_RUN_SQL = sql(
   'INSERT INTO struinfo.processing_run (',
   '  workspace_id, run_id, idempotency_key, origin, status, privacy_scope,',
@@ -304,11 +336,19 @@ export class PostgresBulkIngestionEnrichmentRepository implements BulkIngestionE
           locked.rows,
           [],
         );
+        const refreshableCount = locked.rows.filter(
+          (row) =>
+            row.status === 'succeeded' &&
+            optionalText(row.rules_sha256) !== input.rulesSha256,
+        ).length;
         const allowed =
           (input.mode === 'run' && batch.status === 'planned') ||
           (input.mode === 'resume' && batch.status === 'paused') ||
           (input.mode === 'retry' &&
-            (batch.status === 'failed' || batch.status === 'running'));
+            (batch.status === 'failed' || batch.status === 'running')) ||
+          (input.mode === 'refresh' &&
+            batch.status === 'succeeded' &&
+            refreshableCount > 0);
         if (!allowed) return 'invalid_state';
         await client.query<Row>(
           FAIL_ORPHANED_BULK_INGESTION_ENRICHMENT_RUNS_SQL,
@@ -324,6 +364,22 @@ export class PostgresBulkIngestionEnrichmentRepository implements BulkIngestionE
             input.batchId,
           ]);
         }
+        if (input.mode === 'refresh') {
+          const refreshArguments = [
+            input.workspaceId,
+            input.batchId,
+            input.rulesSha256,
+          ];
+          await client.query<Row>(
+            DELETE_REFRESH_ADJUDICATIONS_SQL,
+            refreshArguments,
+          );
+          await client.query<Row>(
+            DELETE_REFRESH_EXCEPTIONS_SQL,
+            refreshArguments,
+          );
+          await client.query<Row>(RESET_REFRESH_ITEMS_SQL, refreshArguments);
+        }
         const attempt = batch.attempt + 1;
         expectOneAffected(
           (
@@ -332,7 +388,9 @@ export class PostgresBulkIngestionEnrichmentRepository implements BulkIngestionE
               input.runId,
               `m2-p0b:${input.batchId}:${attempt.toString()}`,
               enumValue(baseRow.privacy_scope, PROCESSING_PRIVACY_SCOPES),
-              batch.succeededSnapshotCount,
+              input.mode === 'refresh'
+                ? batch.succeededSnapshotCount - refreshableCount
+                : batch.succeededSnapshotCount,
               batch.snapshotCount,
               attempt,
             ])
@@ -677,7 +735,7 @@ function validateBegin(
   canonicalUuid(input.runId);
   sha256(input.rulesSha256);
   if (
-    !['run', 'resume', 'retry'].includes(input.mode) ||
+    !['run', 'resume', 'retry', 'refresh'].includes(input.mode) ||
     !validCount(input.maximumItems, 1, BULK_INGESTION_MAXIMUM_SNAPSHOTS)
   ) {
     throw new PostgresAdapterError();

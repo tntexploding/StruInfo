@@ -111,6 +111,41 @@ describe('M1cApiService', () => {
     expect(listSnapshots).toHaveBeenCalledExactlyOnceWith(WORKSPACE_ID);
   });
 
+  it('uses bounded evidence pages and returns the total document count', async () => {
+    const listSnapshotPage = vi.fn(() =>
+      Promise.resolve({
+        items: [],
+        totalCount: 407,
+        nextCursor: {
+          capturedAt: '2040-01-02T03:04:05.000Z',
+          snapshotId: SNAPSHOT_ID,
+        },
+      }),
+    );
+    const service = createService({
+      evidenceReadRepository: {
+        listSnapshots: () => Promise.resolve([]),
+        listSnapshotPage,
+        loadSnapshot: () => Promise.resolve(undefined),
+      },
+    });
+
+    await expect(service.listEvidence('200')).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        totalCount: 407,
+        nextCursor: {
+          capturedAt: '2040-01-02T03:04:05.000Z',
+          snapshotId: SNAPSHOT_ID,
+        },
+      },
+    });
+    expect(listSnapshotPage).toHaveBeenCalledExactlyOnceWith(WORKSPACE_ID, {
+      limit: 200,
+    });
+  });
+
   it('loads and saves workspace-scoped review quick tags', async () => {
     let quickTags: readonly string[] = [];
     let automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences> = {
@@ -2165,7 +2200,7 @@ describe('M1cApiService', () => {
     expect(loadAssociationSnapshot).toHaveBeenCalledTimes(3);
   });
 
-  it('loads one Entry snapshot for lexical search and does not reload it after semantic retrieval', async () => {
+  it('routes public lexical and semantic search through the retrieval service without duplicate loads', async () => {
     const loadCurrentEntries = vi.fn(() => Promise.resolve([]));
     const retrievalSearch = vi.fn(() =>
       Promise.resolve(
@@ -2207,8 +2242,8 @@ describe('M1cApiService', () => {
       statusCode: 200,
       body: {status: 'ok', privateDocuments: {totalCount: 0, items: []}},
     });
-    expect(loadCurrentEntries).toHaveBeenCalledTimes(1);
-    expect(retrievalSearch).not.toHaveBeenCalled();
+    expect(loadCurrentEntries).not.toHaveBeenCalled();
+    expect(retrievalSearch).toHaveBeenCalledTimes(1);
 
     await expect(
       service.searchInformationEntries({
@@ -2225,8 +2260,8 @@ describe('M1cApiService', () => {
         privateDocuments: {totalCount: 0, items: []},
       },
     });
-    expect(retrievalSearch).toHaveBeenCalledTimes(1);
-    expect(loadCurrentEntries).toHaveBeenCalledTimes(1);
+    expect(retrievalSearch).toHaveBeenCalledTimes(2);
+    expect(loadCurrentEntries).not.toHaveBeenCalled();
   });
 
   it('closes text mode and field scope at the HTTP boundary', async () => {

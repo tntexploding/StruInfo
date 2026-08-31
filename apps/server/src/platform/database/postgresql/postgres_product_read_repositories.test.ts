@@ -6,6 +6,8 @@ import type {
   PostgresQueryResult,
 } from './postgres_pool.js';
 import {
+  COUNT_EVIDENCE_SNAPSHOTS_SQL,
+  LIST_EVIDENCE_SNAPSHOT_PAGE_SQL,
   LIST_EVIDENCE_SNAPSHOTS_SQL,
   PostgresEvidenceReadRepository,
   READ_EVIDENCE_FRAGMENTS_SQL,
@@ -27,6 +29,46 @@ const FRAGMENT_ID = '00000000-0000-4000-8000-000000000006';
 type Row = Readonly<Record<string, unknown>>;
 
 describe('Postgres product read repositories', () => {
+  it('pages every evidence snapshot with a stable captured-at/UUID cursor', async () => {
+    const firstId = '10000000-0000-4000-8000-000000000001';
+    const secondId = '10000000-0000-4000-8000-000000000002';
+    const thirdId = '10000000-0000-4000-8000-000000000003';
+    const respond = vi.fn((sql: string) => {
+      if (sql === LIST_EVIDENCE_SNAPSHOT_PAGE_SQL) {
+        return rows(
+          snapshotSummaryRow(firstId, '2040-01-03T00:00:00.000Z'),
+          snapshotSummaryRow(secondId, '2040-01-02T00:00:00.000Z'),
+          snapshotSummaryRow(thirdId, '2040-01-01T00:00:00.000Z'),
+        );
+      }
+      if (sql === COUNT_EVIDENCE_SNAPSHOTS_SQL) {
+        return rows({total_count: '407'});
+      }
+      return rows();
+    });
+    const repository = new PostgresEvidenceReadRepository(createPool(respond));
+
+    await expect(
+      repository.listSnapshotPage(WORKSPACE_ID, {limit: 2}),
+    ).resolves.toEqual({
+      items: [
+        expect.objectContaining({snapshotId: firstId}),
+        expect.objectContaining({snapshotId: secondId}),
+      ],
+      totalCount: 407,
+      nextCursor: {
+        capturedAt: '2040-01-02T00:00:00.000Z',
+        snapshotId: secondId,
+      },
+    });
+    expect(respond).toHaveBeenCalledWith(LIST_EVIDENCE_SNAPSHOT_PAGE_SQL, [
+      WORKSPACE_ID,
+      null,
+      null,
+      3,
+    ]);
+  });
+
   it('maps an immutable evidence snapshot and exact fragment locator', async () => {
     const snapshotRow = {
       workspace_id: WORKSPACE_ID,
@@ -150,6 +192,25 @@ function createPool(
     },
     connect: () => Promise.resolve(client),
     end: () => Promise.resolve(),
+  };
+}
+
+function snapshotSummaryRow(snapshotId: string, capturedAt: string): Row {
+  return {
+    workspace_id: WORKSPACE_ID,
+    snapshot_id: snapshotId,
+    resource_id: RESOURCE_ID,
+    resource_kind: 'git_file',
+    source_key: `git:synthetic/${snapshotId}.md`,
+    canonical_uri: null,
+    is_private: false,
+    captured_at: new Date(capturedAt),
+    published_at: null,
+    published_timezone: null,
+    published_precision: null,
+    published_source_text: null,
+    published_inferred: false,
+    fragment_count: 1,
   };
 }
 

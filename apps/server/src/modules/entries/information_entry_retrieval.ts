@@ -9,6 +9,7 @@ import {searchCurrentInformationEntries} from './information_entry_search.js';
 import {
   cosineSimilarityBasisPoints,
   prepareInformationEntrySearchProjection,
+  tokenizeInformationEntryText,
   withInformationEntryEmbedding,
 } from './information_entry_search_index.js';
 import {
@@ -50,6 +51,24 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
   ): Promise<Readonly<InformationEntrySearchResult>> {
     const mode = request.retrievalMode ?? 'lexical';
     if (mode !== 'lexical') this.#assertSemanticRequest(request);
+    if (mode === 'lexical') {
+      const accelerated = await this.#loadAcceleratedLexicalEntries(request);
+      const [entries, associations] = await Promise.all([
+        accelerated === undefined
+          ? this.#dependencies.entries.loadCurrentEntries(
+              this.#dependencies.workspaceId,
+              request.includePrivate,
+            )
+          : Promise.resolve(accelerated),
+        request.association === undefined
+          ? Promise.resolve({projections: [], overrides: []})
+          : this.#dependencies.associations.loadAssociationSnapshot(
+              this.#dependencies.workspaceId,
+              request.includePrivate,
+            ),
+      ]);
+      return searchCurrentInformationEntries(entries, request, associations);
+    }
     const [entries, associations] = await Promise.all([
       this.#dependencies.entries.loadCurrentEntries(
         this.#dependencies.workspaceId,
@@ -62,9 +81,6 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
             request.includePrivate,
           ),
     ]);
-    if (mode === 'lexical') {
-      return searchCurrentInformationEntries(entries, request, associations);
-    }
     const provider = this.#dependencies.embeddingProvider;
     if (provider === undefined) {
       throw new InformationEntryRetrievalServiceError(
@@ -246,6 +262,53 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
         'semantic_search_text_required',
       );
     }
+  }
+
+  async #loadAcceleratedLexicalEntries(
+    request: Readonly<InformationEntrySearchRequest>,
+  ): Promise<readonly Readonly<CurrentInformationEntry>[] | undefined> {
+    const findCandidates =
+      this.#dependencies.index.findLexicalCandidateEntryIds?.bind(
+        this.#dependencies.index,
+      );
+    const loadCandidates =
+      this.#dependencies.entries.loadCurrentEntriesByIds?.bind(
+        this.#dependencies.entries,
+      );
+    const mode = request.textMode ?? 'substring';
+    if (
+      findCandidates === undefined ||
+      loadCandidates === undefined ||
+      request.includePrivate ||
+      request.onlyPrivate ||
+      request.association !== undefined ||
+      mode === 'fuzzy' ||
+      (request.text ?? '').trim() === ''
+    ) {
+      return undefined;
+    }
+    const fields = (['title', 'body', 'tags'] as const).filter(
+      (field) =>
+        request.textFields === undefined || request.textFields.includes(field),
+    );
+    const terms = [...new Set(tokenizeInformationEntryText(request.text ?? ''))]
+      .sort(
+        (left, right) =>
+          Array.from(right).length - Array.from(left).length ||
+          left.localeCompare(right),
+      )
+      .slice(0, 8);
+    if (fields.length === 0 || terms.length === 0) return undefined;
+    const candidateIds = await findCandidates(
+      this.#dependencies.workspaceId,
+      Object.freeze({
+        fields: Object.freeze(fields),
+        terms: Object.freeze(terms),
+      }),
+    );
+    return candidateIds === undefined
+      ? undefined
+      : loadCandidates(this.#dependencies.workspaceId, false, candidateIds);
   }
 }
 

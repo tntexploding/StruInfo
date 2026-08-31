@@ -38,7 +38,7 @@ export type M1mMaintenanceRequest =
   | Readonly<{operation: 'ingest_report'; batchId: string}>
   | Readonly<{
       operation: 'ingest_enrich_execute';
-      mode: 'run' | 'resume' | 'retry';
+      mode: 'run' | 'resume' | 'retry' | 'refresh';
       batchId: string;
       maxItems: number;
     }>
@@ -236,7 +236,7 @@ export interface M1mMaintenanceRuntimePort {
   executeIngestionEnrichment(
     input: Readonly<{
       batchId: string;
-      mode: 'run' | 'resume' | 'retry';
+      mode: 'run' | 'resume' | 'retry' | 'refresh';
       maxItems: number;
     }>,
   ): Promise<Readonly<ExecuteBulkIngestionEnrichmentResult>>;
@@ -462,7 +462,11 @@ function decodeIngestRequest(
       maxItems,
     });
   }
-  if (['enrich', 'enrich-resume', 'enrich-retry'].includes(action ?? '')) {
+  if (
+    ['enrich', 'enrich-resume', 'enrich-retry', 'enrich-refresh'].includes(
+      action ?? '',
+    )
+  ) {
     const batchId = flags.get('batch');
     const maxItems = parseBoundedInteger(
       flags.get('max-items') ?? '500',
@@ -483,7 +487,9 @@ function decodeIngestRequest(
           ? ('run' as const)
           : action === 'enrich-resume'
             ? ('resume' as const)
-            : ('retry' as const),
+            : action === 'enrich-retry'
+              ? ('retry' as const)
+              : ('refresh' as const),
       batchId,
       maxItems,
     });

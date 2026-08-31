@@ -2,7 +2,7 @@
 
 - 状态：`v0.1.0` 私人单用户运行边界；本地演练已通过，目标云端待配置
 - 最近更新：2026-08-30
-- 决策：[ADR 0045](adr/0045-operational-production-baseline.md)、[ADR 0046](adr/0046-codex-operated-bulk-ingestion.md)
+- 决策：[ADR 0045](adr/0045-operational-production-baseline.md)、[ADR 0046](adr/0046-codex-operated-bulk-ingestion.md)、[ADR 0053](adr/0053-real-scale-capacity-classification-and-query-follow-up.md)
 
 ## 1. 适用范围
 
@@ -134,7 +134,22 @@ corepack pnpm run maintenance -- ingest enrich-resume --batch <batchId> --max-it
 corepack pnpm run maintenance -- ingest enrich-retry --batch <batchId> --max-items 100
 ```
 
-标签以一个 Snapshot 为原子修订分片；规则关闭、无确定性候选或关键词容量已满会进入只含身份和稳定代码的异常队列。联系只重建至少一个端点属于当前批次窗口的可重建 projection，pair override 与正式知识关系不被覆盖。这里不调用 Provider，也不输出正文。
+标签以一个 Snapshot 为原子修订分片；内容关键词和唯一高置信度类型/领域分类在同一 Entry revision
+写入。规则关闭、无确定性候选、关键词容量已满或分类仍不确定会进入只含身份和稳定代码的异常队列。
+联系只重建至少一个端点属于当前批次窗口的可重建 projection，pair override 与正式知识关系不被
+覆盖。这里不调用 Provider，也不输出正文。
+
+部署新的确定性规则后，已经 succeeded 的旧批次不会自动重写。显式刷新一个批次，并以有限窗口
+继续处理：
+
+```powershell
+corepack pnpm run maintenance -- ingest enrich-refresh --batch <batchId> --max-items 100
+corepack pnpm run maintenance -- ingest enrich-resume --batch <batchId> --max-items 100
+corepack pnpm run maintenance -- ingest enrich-status --batch <batchId>
+```
+
+refresh 只重置规则摘要已经变化的成功项，并先删除这些项对应的旧异常和当前裁决；人工/AI/导入
+分类、pair override、Evidence 和不受影响的成功项保持不变。没有规则摘要变化时命令不应伪造新工作。
 
 P0B 全部成功后，先查看异常汇总，再按 closed code、状态和 current/stale 范围抽取最多 50 个稳定样本：
 
@@ -207,6 +222,20 @@ corepack pnpm run performance:m2-p0d -- --full
 标准记录结果为 500 Snapshot / 15,000 Entry，约 15 分 20 秒。该命令不属于普通 `verify`，
 也不得连接已有 PostgreSQL 实例或作为生产 SLO。
 
+### 4.2 M2-P1 首次真实规模升级顺序
+
+M2-P1 代码不会自动读取或改变现有外部工作区。升级已有批量入库结果时按以下顺序操作：
+
+1. 停止写入；用 migration credential 执行 `db:migrate`，确认 `000029` 已应用；
+2. 重新应用 `deploy/postgresql/apply-runtime-grants.sql`，随后用 runtime credential 执行 preflight；
+3. 保持停写，立即用新版本执行 `maintenance -- backup`，确认返回文件名、SHA-256、Blob 和行数；
+4. 对需要补齐分类的既有 succeeded batch 逐个执行 `enrich-refresh`，再以 `enrich-resume` 有界推进；
+5. 启动应用，在“查询”页的“本地检索索引”执行重建；配置了 Embedding 时同一动作也重建公开向量；
+6. 复核文档总数、分类异常汇总和查询延迟，最后在停写状态再生成一次正式 post-backup。
+
+旧版入库前备份仍是恢复点；在第 3 步的新备份真实成功前，不得把容量代码通过描述成已经获得
+post-backup。索引不完整时查询会回退完整加载，因此可用性优先于速度，但必须在第 5 步后重新测量。
+
 容器中可复用已挂载 runtime secret 和数据根的 `preflight` 服务并覆盖命令，例如：
 
 ```powershell
@@ -258,7 +287,8 @@ sudo systemctl reload caddy
 docker compose -f compose.production.yaml --profile maintenance run --rm backup
 ```
 
-命令在外部数据根 `backups/` 下生成版本化 `*.personal-data.json`，并只输出文件名、字节数、
+命令在外部数据根 `backups/` 下生成版本化 `*.personal-data.json`，当前闭合预算为 1 GiB / 3200 万
+canonical JSON value，并只输出文件名、字节数、
 SHA-256、Blob 数和表行数。内容包括当前完整工作区数据库分区、引用 Blob 字节和外部偏好；
 不包括运行配置、secret 或可重建的 pg-boss 内部队列表。
 

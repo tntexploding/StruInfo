@@ -918,6 +918,19 @@ pipeline-status`。状态机严格按 P0A 物化、P0B enrichment、P0C 复核�
 不创建第二套批次表、后台无限循环、自动接受、Provider 调用或 UI 前置条件。`complete` 仅表示
 当前批次工程状态闭合，不等于真实内容质量或生产 SLO。
 
+### 7.1.40 M2-P1A–D 首次真实规模入库收口（已实现）
+
+[ADR 0053](adr/0053-real-scale-capacity-classification-and-query-follow-up.md) 直接处理首次 Codex
+完整入库暴露出的四项可达问题：个人数据包的默认闭合预算提高到 1 GiB / 3200 万 canonical
+JSON value；Snapshot API 保持每页最多 200 条但提供稳定 cursor、总数和 Web 自动续页；确定性
+enrichment 在不覆盖既有人工/AI/导入分类的前提下补齐唯一高置信度的类型和领域，并把歧义保留为
+`classification_incomplete`；公开 exact/substring 查询使用当前 term posting 先筛候选，再由原查询
+核心完成全部语义。
+
+这四项均保持 fail-safe fallback。备份仍有显式容量上限；文档 SQL 不返回无界单页；分类不猜测
+平局或低置信度内容；索引缺失、不完整、fuzzy、隐私或 Association 查询继续使用完整加载。升级不会
+自动触碰所有者数据：必须由操作方先应用 `000029`，再显式执行 backup、`enrich-refresh` 和索引重建。
+
 ### 7.2 MVP-1：偏好学习与每周自适应摄取
 
 MVP-0 证明知识核心可用后，再让系统持续处理该信源并逐步学习用户偏好：

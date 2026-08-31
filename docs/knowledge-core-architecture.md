@@ -745,6 +745,14 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 - 一次调用只推进 1–500 项，根据 persisted state 选择 run/resume/retry，并返回 advance/wait/export-review/none；
 - 没有进程内无限循环、后台调度、自动接受或 Provider；complete 只表示当前批次状态闭合。
 
-### 12.39 延期审核与环境门
+### 12.39 M2-P1A–D 首次真实规模收口（已实现）
+
+- 个人数据包的四个数据库 section 与信封共享 1 GiB / 3200 万 value 上限，保持 closed-schema、canonical JSON、Blob 摘要与跨表引用闭包；
+- Snapshot 目录在 repository/API 层以捕获时间和 Snapshot ID 游标分页；200 是单页上限，不再是工作区文档上限；
+- 确定性分类器只写空的 type/domain 且要求唯一高置信度赢家；人工、AI、导入结果优先，歧义成为可复核异常；
+- enrichment refresh 绑定新规则摘要并只替换旧规则结果/异常/裁决，复用既有 Entry revision 与 Association source replacement，不改变 Evidence 或 pair override；
+- public exact/substring retrieval 以 current term posting 缩小候选并选择性 hydration，最终裁决仍由原搜索核心完成；不能证明索引完整时必须完整加载，不能以优化换取漏检。
+
+### 12.40 延期审核与环境门
 
 实际内容和所有者体验、真实 Provider 质量/费用、正式 TM2、目标云端容器/Linux 等价性、私人网络入口、真实资源限制、保留/告警和发布分发仍需统一审核。本地合成容器、数据库与备份恢复演练已经通过，但不能冒充这些目标环境结论。它们必须如实报告状态，也不能在没有当前产品阻断证据时拖停 Entry 主线开发；活动工作区仍禁止恢复真实资料。单元、集成、构建和合成浏览器验证继续作为开发质量门运行。

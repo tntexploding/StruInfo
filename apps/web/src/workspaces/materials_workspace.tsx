@@ -803,7 +803,7 @@ export function MaterialsWorkspace({
       >
         <header className="subsection-heading">
           <div>
-            <p className="section-index">IMPORT HISTORY / RECENT 200</p>
+            <p className="section-index">IMPORT HISTORY / ALL DOCUMENTS</p>
             <h2 id="evidence-list-title">已导入文档</h2>
           </div>
           {snapshots.status === 'ready' ? (

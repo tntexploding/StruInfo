@@ -10,6 +10,7 @@ export const BULK_INGESTION_ENRICHMENT_EXCEPTION_CODES = [
   'automatic_tagging_disabled',
   'no_deterministic_tags',
   'keyword_capacity_reached',
+  'classification_incomplete',
 ] as const;
 
 export type BulkIngestionEnrichmentItemStatus =
@@ -18,7 +19,8 @@ export type BulkIngestionEnrichmentExceptionCode =
   (typeof BULK_INGESTION_ENRICHMENT_EXCEPTION_CODES)[number];
 export type BulkIngestionEnrichmentStatus =
   'planned' | 'running' | 'paused' | 'succeeded' | 'failed';
-export type BulkIngestionEnrichmentMode = 'run' | 'resume' | 'retry';
+export type BulkIngestionEnrichmentMode =
+  'run' | 'resume' | 'retry' | 'refresh';
 
 export interface BulkIngestionEnrichmentException {
   readonly entryId: string;

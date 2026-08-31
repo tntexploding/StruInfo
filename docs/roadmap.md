@@ -1,6 +1,6 @@
 # StruInfo 分阶段计划
 
-- 状态：`v0.1.0` 已发布；M2-P0A–P0G 开发周期批量完整入库链已实现
+- 状态：`v0.1.0` 已发布；M2-P0A–P0G 批量链及 M2-P1A–D 真实规模收口已实现
 - 最近更新：2026-08-31
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
@@ -29,7 +29,7 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 | Entry 查询                   | 已实现 | 标题/正文/标签的精确、包含和近似词法匹配，可见分数、组合筛选、绑定分页、查询页关联联想、双条比较及显式隐私范围内的独立完整文档结果                                |
 | 完整个人数据包               | 已实现 | 66 表、引用 Blob 字节、偏好、Entry v5、Association v4 与 Processing v10                                                                                           |
 | Codex 批量 Snapshot→Entry    | 已实现 | 最多 500 Snapshot / 50,000 计划 Entry；逐 Snapshot 原子分片、ProcessingRun 尝试、暂停/恢复/重试和脱敏报告                                                         |
-| Codex 批量标签与增量联系     | 已实现 | 成功 P0A 批次接续确定性标签、typed 规则异常、只触及本批 Entry 的联系投影、有限窗口恢复/重试和脱敏报告                                                             |
+| Codex 批量标签与增量联系     | 已实现 | 成功 P0A 批次接续内容关键词及唯一高置信度类型/领域分类、typed 规则异常、只触及本批 Entry 的联系投影、有限窗口恢复/重试和脱敏报告                                  |
 | Codex 批量异常复核           | 已实现 | 当前/过期 revision 分组、稳定无正文抽样、精确数量保护的 accepted/manual-review/deferred 状态转换和显式回退                                                        |
 | Disposable PostgreSQL 基准   | 已实现 | 500 Snapshot / 15,000 Entry 合成完整链、28 迁移重放、P0A/P0B 故障恢复、P0C stale guard、持久化计数与资源清理；记录结果约 15 分 20 秒                              |
 | Codex 外部批次审阅与回写     | 已实现 | 当前 pending 异常的 1–20 项稳定工作包、默认无效结果模板、显式隐私范围、closed result、幂等标签 revision、exact 裁决与增量联系                                     |
@@ -47,7 +47,7 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 
 ## 当前开发停点
 
-首版主线已完成并发布。M2-P0A–P0C 建立无 Provider、由 Codex 直接操作的可恢复 Snapshot→Entry、确定性标签、增量联系和异常复核底座；P0D 已在 disposable PostgreSQL 18.6 中用 500 个合成 Snapshot / 15,000 Entry 跑通迁移、Blob/Evidence、两次受控故障恢复、裁决和精确计数，记录耗时约 15 分 20 秒。P0E/P0F 又把疑难内容转为外部稳定批次工作包和闭合幂等回写，P0G 提供有限窗口统一推进。该证据满足无真实资料阶段的 4–6 小时工程预算，但不替代真实语料和生产容量测量。
+首版主线已完成并发布。M2-P0A–P0C 建立无 Provider、由 Codex 直接操作的可恢复 Snapshot→Entry、确定性标签、增量联系和异常复核底座；P0D 已在 disposable PostgreSQL 18.6 中用 500 个合成 Snapshot / 15,000 Entry 跑通迁移、Blob/Evidence、两次受控故障恢复、裁决和精确计数，记录耗时约 15 分 20 秒。P0E/P0F 又把疑难内容转为外部稳定批次工作包和闭合幂等回写，P0G 提供有限窗口统一推进。首次真实规模使用随后暴露并由 M2-P1A–D 关闭备份预算、407 份文档完整分页、空类型/领域分类及公开词法候选筛选四项缺口。升级后仍需操作方显式执行迁移、备份、enrichment refresh 和索引重建；真实延迟与备份结果不能由合成测试代替。
 
 M1E-3B、M1E-3C 和 M1E-3D 已依次完成单个公开 Entry 标签提案、用户明确选择的公开 Entry 对联系提案，以及用户明确选择的公开 Snapshot 拆分提案。三者都只创建 typed proposal，只有人工接受才调用现有 Entry/图谱命令；私密内容在网络前拒绝。
 
@@ -415,6 +415,14 @@ M1H-5 完成后，导入页同时具备单份精细录入和显式多文件顺�
 11. **统一有限推进（已实现）**：[ADR 0052](adr/0052-unified-bulk-ingestion-pipeline-control.md) 以 `pipeline-start/advance/status` 严格复用 P0A→P0B→P0C，一次最多推进 500 项并返回明确下一动作，不新建后台循环或第二套批次状态；
 12. **冻结审计（已完成）**：P0A retry 兼容 ProcessingRun 已先被取消/失败的恢复路径；P0B 从持久 ProcessingRun 历史取得下一 attempt，即使执行器在首次 claim 前退出也不会复用任务身份；P0F exact 裁决绑定 annotation 写入后预期的当前 Entry revision，避免并发人工修改被误判为已裁决；
 13. **当前停点**：开发周期批量完整入库链已满足合成 4–6 小时预算，并且不再要求浏览器逐条执行。真实语料、人工抽查节奏、长期增长和生产资源只在所有者后续使用时测量；未来 Provider 微批次自动化必须另立明确边界，不能反向阻塞当前可运行主线。
+
+## 已完成增量：M2-P1A–P1D 首次真实规模收口
+
+1. **P1A 备份容量**：完整个人数据包统一为 1 GiB / 3200 万 value 的显式闭合预算，覆盖已观察到的约 425.6 万个 Domain value，同时保持字节、结构、Blob 和引用闭包校验；
+2. **P1B 文档分页**：服务端每页仍最多返回 200 份 Snapshot，但用稳定 cursor、`total` 和 `next` 允许客户端读完全部 407 份及后续增长文档；
+3. **P1C 三维分类**：确定性 enrichment 只补空且唯一高置信度的类型/领域，不覆盖人工、AI 或导入值；歧义进入 `classification_incomplete`，既有成功批次必须显式 `enrich-refresh`；
+4. **P1D 查询候选**：公开 exact/substring 查询先从完整、当前且未触及 posting 截断上限的词项投影取得候选并选择性加载 Entry，再复用原搜索核心；索引不完整、存在截断风险、fuzzy、隐私和 Association 查询自动完整回退；
+5. **部署停点**：先应用 `000029` 和 runtime grants，停写生成新正式备份，再按批次 refresh enrichment 并重建词项/向量索引。完成这些操作后再测 14,910 Entry 的真实备份与查询延迟。
 
 ## 首版发布后的部署与使用
 

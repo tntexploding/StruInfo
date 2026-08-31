@@ -15,7 +15,8 @@
   [ADR 0030](adr/0030-entry-automation-owner-work-queue.md)、
   [ADR 0031](adr/0031-subscription-deterministic-entry-routing-chain.md)、
   [ADR 0032](adr/0032-deterministic-entry-advance-actions.md)、
-  [ADR 0033](adr/0033-post-materialization-entry-restructuring.md)
+  [ADR 0033](adr/0033-post-materialization-entry-restructuring.md)、
+  [ADR 0053](adr/0053-real-scale-capacity-classification-and-query-follow-up.md)
 - 信封 Schema：[`workspace-bundle.v1.schema.json`](../packages/contracts/json-schema/workspace-bundle.v1.schema.json)
 
 ## 1. 目标
@@ -23,13 +24,13 @@
 Workspace Bundle v1 现在是“当前已实现的全部工作区个人数据”的便携包，而不再只是数据库行和 Blob 身份清单。一次新导出包含：
 
 - 36 张 Evidence、Curation 与正式 Knowledge 工作区表；
-- 8 张当前成品态 Entry / Document 标签及精确 Fragment 区间表；
+- 9 张当前成品态 Entry / Document 标签、精确 Fragment 区间及全文工作副本表；
 - 2 张 Entry 联系投影与当前控制表；
-- 14 张处理任务、提案信封、AI 拆分/标签/联系提案、自动路由执行、所有者工作队列及确定性动作表；
+- 19 张处理任务、提案信封、AI 拆分/标签/联系提案、自动路由执行、所有者工作队列、确定性动作及批量入库控制表；
 - 所有被 Evidence 引用的原始/规范化 Blob 字节；
 - 当前工作区的快捷标签、自动标签筛选、标签别名、Entry Profile、AutomationPolicy、联系/探索策略和信源订阅偏好。
 
-共计 61 张数据库表。运行配置、数据库 URL、密码、API key、访问令牌、外部工作区路径和其他秘密不属于个人数据包，继续由外部配置/秘密机制提供。
+共计 66 张数据库表。运行配置、数据库 URL、密码、API key、访问令牌、外部工作区路径和其他秘密不属于个人数据包，继续由外部配置/秘密机制提供。
 
 真实包文件只能位于用户选择的外部数据根 `exports/`，不得进入 Git、源码目录、安装包、容器镜像或测试 fixture。tracked 测试只能使用合成且无个人价值的数据。
 
@@ -45,7 +46,7 @@ Workspace Bundle v1 现在是“当前已实现的全部工作区个人数据”
 | `sections`       | 按 `type + version` 排序且唯一          |
 | `blobReferences` | 按 SHA-256 摘要排序且唯一的完整引用清单 |
 
-当前默认完整包上限为 256 MiB、1,000,000 个 canonical JSON value。Blob 字节在个人数据分区中恰好保存一份 base64 表示，同时信封继续保留独立 Blob identity 清单用于引用闭包核验。每个字节块必须同时满足声明长度和 SHA-256；导入时不能用路径或文件名替代内容身份。
+当前默认完整包上限为 1 GiB、32,000,000 个 canonical JSON value。该上限覆盖首次真实规模入库暴露出的约 425.6 万个 Domain value，同时继续拒绝无界对象图或超大文件。Blob 字节在个人数据分区中恰好保存一份 base64 表示，同时信封继续保留独立 Blob identity 清单用于引用闭包核验。每个字节块必须同时满足声明长度和 SHA-256；导入时不能用路径或文件名替代内容身份。
 
 ## 3. 当前分区
 

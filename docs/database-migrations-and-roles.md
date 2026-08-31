@@ -1,6 +1,6 @@
 # Database Migrations and Roles
 
-- Status: First-party runner and twenty-seven forward migrations implemented;
+- Status: First-party runner and twenty-nine forward migrations implemented;
   M1M queue preparation and operator-managed runtime grant boundary available
 - Contract: `C-M0-S-r2`
 - Database direction: PostgreSQL 18 with separate migration and runtime
@@ -64,6 +64,7 @@ apps/server/migrations/000025_create_information_entry_search_index.sql
 apps/server/migrations/000026_create_bulk_ingestion_batches.sql
 apps/server/migrations/000027_create_bulk_ingestion_enrichment.sql
 apps/server/migrations/000028_create_bulk_ingestion_adjudications.sql
+apps/server/migrations/000029_add_bulk_ingestion_classification_exception.sql
 ```
 
 The runner is first-party code over the already admitted `pg@8.22.0` driver.
@@ -276,6 +277,13 @@ exception and current Entry row; the table does not copy Entry bodies, titles,
 sources, Provider payloads, prompts, credentials or arbitrary JSON. Runtime
 grants permit only the narrow read/insert/update state transition used by the
 maintenance control plane.
+
+`000029_add_bulk_ingestion_classification_exception.sql` changes only the
+closed exception-code CHECK to admit `classification_incomplete`. It creates no
+table and stores no source, tag, Provider or arbitrary payload. An explicit
+M2-P1 refresh may delete stale exception and matching adjudication rows before
+rebuilding them under the new rules; runtime DELETE remains limited to those two
+processing tables and does not grant deletion of Entry or evidence rows.
 
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.

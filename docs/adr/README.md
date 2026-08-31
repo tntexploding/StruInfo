@@ -65,6 +65,14 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0043](0043-rebuildable-entry-search-index-and-rag.md) | Accepted | Rebuildable Entry term/vector index, optional semantic recall and evidence-bounded RAG |
 | [0044](0044-evidence-driven-local-performance.md) | Accepted | Repeatable data-free performance workload and evidence-driven local optimizations |
 | [0045](0045-operational-production-baseline.md) | Accepted | Maintainable single-host production runtime, secrets, backup/restore and upgrade boundary |
+| [0046](0046-codex-operated-bulk-ingestion.md) | Accepted | Provider-free Codex-operated recoverable bulk Snapshot-to-Entry ingestion |
+| [0047](0047-deterministic-bulk-enrichment.md) | Accepted | Deterministic bulk tags, typed exceptions and incremental Association replacement |
+| [0048](0048-bulk-ingestion-exception-adjudication.md) | Accepted | Closed bulk-ingestion exception summary, sampling and guarded adjudication |
+| [0049](0049-disposable-postgresql-bulk-ingestion-benchmark.md) | Accepted | Disposable PostgreSQL 18 end-to-end bulk-ingestion benchmark and recovery evidence |
+| [0050](0050-external-codex-review-work-packages.md) | Accepted | External bounded Codex review work packages for current ingestion exceptions |
+| [0051](0051-closed-codex-review-result-application.md) | Accepted | Closed stale-safe Codex review-result application and incremental rebuild |
+| [0052](0052-unified-bulk-ingestion-pipeline-control.md) | Accepted | Unified bounded P0A–P0F pipeline control over persisted stage state |
+| [0053](0053-real-scale-capacity-classification-and-query-follow-up.md) | Accepted | Real-scale backup capacity, complete document paging, deterministic classification and indexed lexical candidates |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -270,3 +278,9 @@ ADR 0052 completes M2-P0G with one thin, bounded bulk-ingestion state machine.
 It advances P0A materialization, P0B enrichment and P0C review in that order,
 returns a closed next action and never hides stage-specific recovery or creates
 a second background workflow engine.
+
+ADR 0053 completes M2-P1A–D from the first real-scale ingestion feedback. It
+raises the still-bounded complete-package capacity, pages the complete Snapshot
+catalog, fills only missing unambiguous type/domain classifications through an
+explicit enrichment refresh, and uses the existing derived term index to narrow
+eligible public lexical queries while retaining a semantics-complete fallback.

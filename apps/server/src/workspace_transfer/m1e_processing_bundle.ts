@@ -7,7 +7,10 @@ import {
   type JsonPrimitive,
   type JsonValue,
 } from '../serialization/canonical_json.js';
-import type {WorkspaceBundleSectionCodec} from './workspace_bundle.js';
+import {
+  DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES,
+  type WorkspaceBundleSectionCodec,
+} from './workspace_bundle.js';
 
 export const M1E_PROCESSING_BUNDLE_SECTION_TYPE = 'struinfo.m1e-processing';
 export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 10;
@@ -39,7 +42,7 @@ export const M1E_PROCESSING_VERSION_TWO_BUNDLE_SCHEMA =
 export const M1E_PROCESSING_LEGACY_BUNDLE_SECTION_VERSION = 1;
 export const M1E_PROCESSING_LEGACY_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v1';
 
-const PROCESSING_VALUE_LIMIT = 1_000_000;
+const PROCESSING_VALUE_LIMIT = DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES;
 const ROW_BYTE_LIMIT = 1024 * 1024;
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;

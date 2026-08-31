@@ -1,7 +1,7 @@
 # StruInfo 当前项目状态与实现清单
 
-- 状态：`v0.1.0` 私人单用户版本已发布；M2-P0A–P0G 已在无真实资料基线上完成
-- 实现基线：M1I-1A/B 至 M1M + 首版 UI/发行基线 + M2-P0A–P0G
+- 状态：`v0.1.0` 私人单用户版本已发布；M2-P0A–P0G 与 M2-P1A–D 已完成
+- 实现基线：M1I-1A/B 至 M1M + 首版 UI/发行基线 + M2-P0A–P0G + M2-P1A–D
 - 最近核对：2026-08-31
 - 需求边界：[产品需求](product-requirements.md)
 - 交付顺序：[分阶段计划](roadmap.md)
@@ -25,7 +25,7 @@
 
 本文是“当前代码到底能做什么”的实现真值表。产品需求描述长期目标，路线图描述交付顺序，
 ADR 记录已经接受的决策；当历史文档中的旧 M1C 示例与当前代码冲突时，以 ADR 0008、
-ADR 0009、ADR 0010、ADR 0011、ADR 0012、ADR 0013、ADR 0014、ADR 0015、ADR 0016、ADR 0017、ADR 0018、ADR 0019、ADR 0020、ADR 0021、ADR 0022、ADR 0023、ADR 0024、ADR 0025、ADR 0026、ADR 0027、ADR 0028、ADR 0029、ADR 0030、ADR 0031、ADR 0032、ADR 0033、ADR 0034、ADR 0035、ADR 0036、ADR 0037、ADR 0038、ADR 0039、ADR 0040、ADR 0041、ADR 0042、ADR 0043、ADR 0044、ADR 0045、ADR 0046、ADR 0047、ADR 0048 和本文列出的活动入口为准。
+ADR 0009、ADR 0010、ADR 0011、ADR 0012、ADR 0013、ADR 0014、ADR 0015、ADR 0016、ADR 0017、ADR 0018、ADR 0019、ADR 0020、ADR 0021、ADR 0022、ADR 0023、ADR 0024、ADR 0025、ADR 0026、ADR 0027、ADR 0028、ADR 0029、ADR 0030、ADR 0031、ADR 0032、ADR 0033、ADR 0034、ADR 0035、ADR 0036、ADR 0037、ADR 0038、ADR 0039、ADR 0040、ADR 0041、ADR 0042、ADR 0043、ADR 0044、ADR 0045、ADR 0046、ADR 0047、ADR 0048、ADR 0049、ADR 0050、ADR 0051、ADR 0052、ADR 0053 和本文列出的活动入口为准。
 
 状态只使用三种含义：
 
@@ -42,7 +42,7 @@ ADR 0009、ADR 0010、ADR 0011、ADR 0012、ADR 0013、ADR 0014、ADR 0015、ADR
   → 外部内容寻址 Blob + PostgreSQL Resource/Snapshot
   → DocumentNode/Fragment 结构与精确证据
   → 可选：Codex 通过 maintenance 批次冻结最多 500 个尚未物化的 Snapshot，并逐 Snapshot 可恢复生成 Entry
-  → 可选：同一成功批次按 Snapshot 原子追加确定性规则标签，只增量重建与本批 Entry 相接的联系，并汇总规则异常
+  → 可选：同一成功批次按 Snapshot 原子追加确定性内容关键词并补齐唯一高置信度类型/领域，只增量重建与本批 Entry 相接的联系，并汇总规则异常
   → 可选：Codex 汇总异常；将当前疑难项成批导出到外部审阅工作包，闭合回写完整标签、接受、转人工或延期
   → 可选：用统一有限窗口命令按物化 → enrichment → 复核顺序推进，并根据持久状态恢复
   → 用户选择尚未物化的 Snapshot，以人工 Fragment/标量区间分组、确定性规则或已接受 AI 提案生成当前 InformationEntry
@@ -374,7 +374,7 @@ node-postgres 的多语句结果现在安全投影最终结果，使首次队列
 - 精确 GitHub Markdown、公开 RSS/Atom、声明式 JSON API、受限同源网页和已安装受信任连接器的手动/间隔检查、变化检测和可选确定性拆分/分流已实现；尚无开放式爬虫、目录订阅、交互式认证信源、日历时区调度、任意工作流编排或自动内容修改；
 - 知识树、集合、时间线、冲突维护、报告/推送和复杂事实关系类型尚未实现；当前图谱只提供有界 Entry 邻域；
 - 历史 Curation/Knowledge 表尚未通过数据退役迁移移除；在确认不再需要兼容前继续保留；
-- 当前完整加载式 Entry 查询尚未做 SQL query pushdown；M1L 合成工作负载只证明关联遍历的重复构图值得优化，没有证据支持提前引入另一套查询或缓存基础设施。
+- 公开 exact/substring Entry 查询已用完整、当前且未触及 4,096 posting 截断上限的投影做 SQL 候选缩小和选择性 hydration；fuzzy、隐私、Association 遍历、索引不完整或存在截断风险时仍完整加载。尚未做全语义 SQL pushdown，也没有证据支持引入另一套查询或缓存基础设施。
 
 ### 7.31 发布与部署边界
 
@@ -403,12 +403,21 @@ node-postgres 的多语句结果现在安全投影最终结果，使首次队列
 - P0G 用 `pipeline-start/advance/status` 薄编排既有 P0A、P0B、P0C 服务，一次只推进调用者给出的 1–500 项窗口，并明确返回 `advance / wait / export_review_packet / none`；
 - P0E–P0G 没有增加迁移、依赖、Provider、浏览器逐条执行器或第二套批次表；`complete` 只表示当前批次工程状态闭合。
 
+### 7.33 已完成：M2-P1A–D 首次真实规模入库收口
+
+- 完整个人数据包的统一默认预算为 1 GiB / 3200 万 canonical JSON value，覆盖已观察到的约 425.6 万个 Domain value；编码、解码、本地文件存取和四个数据库 section 使用同一上限；
+- Evidence Snapshot 公共读取以 `capturedAt + snapshotId` 稳定 cursor 分页，每页最多 200 条并返回总数/后续 cursor；Web 导入、拆分、标签和总览会自动续页，不再把 200 当成工作区总数；
+- P0B 规则版本现在同时产生内容关键词和唯一高置信度类型/领域分类。既有非规则分类保持原值，歧义/无唯一赢家不猜测并记录 `classification_incomplete`；
+- `ingest enrich-refresh` 只重置旧规则摘要的成功项，先移除对应旧异常和裁决，再通过原 Snapshot 原子 revision 与增量联系边界重算；迁移 `000029` 只扩充闭合异常代码；
+- 公开 exact/substring 查询可使用完整、当前且未触及 4,096 posting 截断上限的 term posting 先筛 Entry ID，再选择性读取候选；原纯查询继续负责所有字段、筛选、排序、计数与 cursor。fuzzy、隐私、Association、空查询、索引不完整或存在截断风险时完整回退；
+- 本代码增量没有读取或修改外部真实资料，也没有替所有者生成 post-backup。部署后必须显式迁移、停写备份、refresh 既有批次、重建索引并重新测量真实备份与查询延迟。
+
 以上未完成项只有在进入相应产品边界或出现当前可达 `PRODUCT_BLOCKER` 时才阻断；测试工具自证、
 未来环境强化和不可达边缘情况继续按开发总则记入延期强化，不拖住当前主线。
 
 ## 8. 当前验证快照
 
-当前 M2-P0A–P0G 无数据开发候选完成以下验证：
+当前 M2-P0A–P0G 与 M2-P1A–D 无数据开发候选完成以下验证：
 
 - AutomationPolicy decoder、纯分流核心、外部偏好文件、typed execution service/PostgreSQL adapter、迁移和完整个人数据包边界均有合成测试；
 - 回归覆盖默认关闭、策略/Profile/Entry 过期、独立正负阈值、预算、人工接管、显式隐私范围、请求重放/冲突、运行中重校验、claim 完成/补偿、策略暂停失败后的待恢复重试、旧包升级及兄弟偏好字段保留；
@@ -421,7 +430,8 @@ node-postgres 的多语句结果现在安全投影最终结果，使首次队列
 - M1H-5 复用单文件导入协议，增加会话批次、逐文件状态、稳定失败重试、停止后续项及合成浏览器回归；没有迁移、数据库队列表或新依赖；
 - M1I-1A/B 至 M1I-5 新增连接器闭合结果、Registry、多文档幂等 Evidence 准备器、`remote_document` 迁移、Git 兼容、RSS/Atom、JSON API 与受限 Web adapter、条件请求/声明式映射、分页与增量游标、已安装 capability 发现、opaque 外部配置引用、批量订阅服务、外部偏好 union、API 与导入页合成回归；没有真实 Feed、API、网页、插件配置或网络测试资料；
 - M1J 新增迁移 `000024`、八类闭合关系语义、500 code-point 维护说明、来源核验状态、双端来源操作和 Association v4 向后升级；M1K 新增迁移 `000025`、可重建词项/向量投影、可选 OpenAI Embedding、三种 Query 和公开证据 RAG；M1L 新增可重复合成性能工具、单次关联读取索引与 HTTP 搜索去重；M1M 新增外部 secret 文件、维护/队列入口、容器与 grant 源码和 deployment verifier；没有第二套图谱/搜索服务、真实知识 fixture、私密外发、迁移或新依赖；
-- 完整 `corepack pnpm run verify` 退出码为 0：155 个单元测试文件、927 项单元测试、2 个集成测试文件、4 项集成测试全部通过，Web 构建转换 80 个模块，制品审计覆盖 1,096 个候选文件，部署静态门通过；
+- 完整 `corepack pnpm run verify` 退出码为 0：156 个单元测试文件、941 项单元测试、2 个集成测试文件、4 项集成测试全部通过，Web 构建转换 80 个模块，制品审计覆盖 1,101 个候选文件，部署静态门通过；
+- M2-P1A–D 以合成回归覆盖超过 425.6 万 canonical JSON value 的个人数据包、407 份 Snapshot 的稳定完整分页、唯一高置信度类型/领域补齐及歧义异常、既有成功批次显式 refresh、词法索引完整性检查、候选 Entry 选择性读取和所有规定的完整回退；本轮没有读取真实资料、执行真实 refresh、生成正式 post-backup 或把合成延迟冒充 14,910 Entry 的部署后实测；
 - M2-P0A 以合成测试覆盖批次计划、单 Snapshot 原子物化、提交后中断的 exact-existing 恢复、ProcessingRun 已先取消/失败时的 retry、计划漂移失败、有限窗口失败退出、CLI 解码/脱敏报告、PostgreSQL 查询边界、`000026` 静态语义和 Processing v7→v8 升级；
 - M2-P0B 以合成测试覆盖 Snapshot 原子标签修订、首次 claim 前退出后的持久 attempt 恢复、孤立 running attempt 收束、规则异常、增量联系 source 范围、override 隔离、CLI 解码/脱敏报告、`000027` 静态语义和 Processing v8→v9 升级；
 - M2-P0C 以合成测试覆盖当前/过期 revision 分离、分组计数、稳定抽样、精确数量冲突、批量接受与回退、CLI 脱敏输出、`000028` 静态语义、PostgreSQL current-revision 锁定和 Processing v9→v10 升级；它没有运行真实资料或 Provider；

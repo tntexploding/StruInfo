@@ -8,7 +8,9 @@ import type {
 } from './postgres_pool.js';
 import {
   PostgresInformationEntrySearchIndexRepository,
+  FIND_INFORMATION_ENTRY_LEXICAL_CANDIDATES_SQL,
   READ_INFORMATION_ENTRY_SEARCH_PROJECTIONS_SQL,
+  READ_INFORMATION_ENTRY_SEARCH_INDEX_READINESS_SQL,
   READ_INFORMATION_ENTRY_TERM_POSTINGS_SQL,
 } from './postgres_information_entry_search_index_repository.js';
 import {READ_WORKSPACE_SQL} from './workspace_write_lock.js';
@@ -115,6 +117,74 @@ describe('PostgresInformationEntrySearchIndexRepository', () => {
           ) && parameters?.[3] === 'alpha',
       ),
     ).toBe(true);
+  });
+
+  it('returns indexed lexical candidates only when every public Entry projection is current', async () => {
+    const statements: {sql: string; parameters?: readonly unknown[]}[] = [];
+    const repository = new PostgresInformationEntrySearchIndexRepository(
+      createPool((sql, parameters) => {
+        statements.push({
+          sql,
+          ...(parameters === undefined ? {} : {parameters}),
+        });
+        if (sql === READ_INFORMATION_ENTRY_SEARCH_INDEX_READINESS_SQL) {
+          return rows({
+            public_entry_count: 14_910,
+            current_projection_count: 14_910,
+          });
+        }
+        if (sql === FIND_INFORMATION_ENTRY_LEXICAL_CANDIDATES_SQL) {
+          return rows({entry_id: ENTRY_ID});
+        }
+        return rows();
+      }),
+    );
+
+    await expect(
+      repository.findLexicalCandidateEntryIds(WORKSPACE_ID, {
+        fields: ['title', 'body'],
+        terms: ['postgresql'],
+      }),
+    ).resolves.toEqual([ENTRY_ID]);
+    expect(
+      statements.find(
+        ({sql}) => sql === FIND_INFORMATION_ENTRY_LEXICAL_CANDIDATES_SQL,
+      )?.parameters,
+    ).toEqual([WORKSPACE_ID, ['title', 'body'], ['postgresql']]);
+    expect(
+      statements.find(
+        ({sql}) => sql === READ_INFORMATION_ENTRY_SEARCH_INDEX_READINESS_SQL,
+      )?.parameters,
+    ).toEqual([WORKSPACE_ID, 'struinfo.entry-terms.unicode-v1', 4_096]);
+    expect(READ_INFORMATION_ENTRY_SEARCH_INDEX_READINESS_SQL).toContain(
+      'count(*)',
+    );
+    expect(READ_INFORMATION_ENTRY_SEARCH_INDEX_READINESS_SQL).toContain(
+      '< $3::integer',
+    );
+  });
+
+  it('requires the complete current projection before narrowing candidates', async () => {
+    const candidateQuery = vi.fn();
+    const repository = new PostgresInformationEntrySearchIndexRepository(
+      createPool((sql) => {
+        if (sql === READ_INFORMATION_ENTRY_SEARCH_INDEX_READINESS_SQL) {
+          return rows({public_entry_count: 407, current_projection_count: 406});
+        }
+        if (sql === FIND_INFORMATION_ENTRY_LEXICAL_CANDIDATES_SQL) {
+          candidateQuery();
+        }
+        return rows();
+      }),
+    );
+
+    await expect(
+      repository.findLexicalCandidateEntryIds(WORKSPACE_ID, {
+        fields: ['tags'],
+        terms: ['docker'],
+      }),
+    ).resolves.toBeUndefined();
+    expect(candidateQuery).not.toHaveBeenCalled();
   });
 });
 

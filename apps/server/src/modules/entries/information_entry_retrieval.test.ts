@@ -138,6 +138,92 @@ describe('InformationEntryRetrievalService', () => {
     ).rejects.toMatchObject({code: 'semantic_search_not_configured'});
   });
 
+  it('hydrates only indexed lexical candidates and falls back for fuzzy search', async () => {
+    const entries = [
+      currentEntry(
+        '22222222-2222-4222-8222-222222222221',
+        'Alpha',
+        'first body',
+      ),
+      currentEntry(
+        '22222222-2222-4222-8222-222222222222',
+        'Beta',
+        'literal-only second body',
+      ),
+    ];
+    const loadAll = vi.fn(() => Promise.resolve(entries));
+    const loadByIds = vi.fn(
+      (
+        _workspaceId: string,
+        _includePrivate: boolean,
+        entryIds: readonly string[],
+      ) =>
+        Promise.resolve(
+          entries.filter((entry) => entryIds.includes(entry.entryId)),
+        ),
+    );
+    const findCandidates = vi.fn(() =>
+      Promise.resolve(Object.freeze([entries[1]?.entryId ?? ''])),
+    );
+    const service = new InformationEntryRetrievalService({
+      workspaceId: WORKSPACE_ID,
+      entries: {
+        materializeEntries: () => Promise.reject(new Error('unexpected write')),
+        reviseEntry: () => Promise.reject(new Error('unexpected write')),
+        loadCurrentEntries: loadAll,
+        loadCurrentEntriesByIds: loadByIds,
+      },
+      associations: {
+        replaceAssociationProjections: () =>
+          Promise.reject(new Error('unexpected write')),
+        loadAssociationSnapshot: () =>
+          Promise.resolve({
+            projections: Object.freeze([]),
+            overrides: Object.freeze([]),
+          }),
+        writeAssociationOverride: () =>
+          Promise.reject(new Error('unexpected write')),
+      },
+      index: {
+        loadSearchIndex: () =>
+          Promise.resolve({
+            projections: Object.freeze([]),
+            postings: Object.freeze([]),
+          }),
+        replaceSearchIndex: () => Promise.reject(new Error('unexpected write')),
+        findLexicalCandidateEntryIds: findCandidates,
+      },
+    });
+
+    await expect(
+      service.search({
+        text: 'literal-only',
+        textMode: 'substring',
+        includePrivate: false,
+        onlyPrivate: false,
+        limit: 20,
+      }),
+    ).resolves.toMatchObject({
+      totalCount: 1,
+      items: [{entry: {entryId: entries[1]?.entryId}}],
+    });
+    expect(findCandidates).toHaveBeenCalledTimes(1);
+    expect(loadByIds).toHaveBeenCalledWith(WORKSPACE_ID, false, [
+      entries[1]?.entryId,
+    ]);
+    expect(loadAll).not.toHaveBeenCalled();
+
+    await service.search({
+      text: 'literal-onli',
+      textMode: 'fuzzy',
+      includePrivate: false,
+      onlyPrivate: false,
+      limit: 20,
+    });
+    expect(findCandidates).toHaveBeenCalledTimes(1);
+    expect(loadAll).toHaveBeenCalledTimes(1);
+  });
+
   it('does not report an empty workspace as a ready semantic index', async () => {
     const fixture = harness(true, []);
 

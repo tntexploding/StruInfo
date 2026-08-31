@@ -737,6 +737,18 @@ export interface EvidenceSnapshotSummary {
   readonly fragmentCount: number;
 }
 
+export interface EvidenceSnapshotPageCursor {
+  readonly capturedAt: string;
+  readonly snapshotId: string;
+}
+
+export interface EvidenceSnapshotListResponse {
+  readonly status: 'ok';
+  readonly snapshots: readonly Readonly<EvidenceSnapshotSummary>[];
+  readonly totalCount: number;
+  readonly nextCursor?: Readonly<EvidenceSnapshotPageCursor>;
+}
+
 export interface EvidenceFragment {
   readonly fragmentId: string;
   readonly structureId: string;
