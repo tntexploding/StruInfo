@@ -14,6 +14,10 @@ import {
   type ReviewPreferences,
 } from '../storage/review_preferences_store.js';
 import {
+  decodeEntryClassificationProfile,
+  type EntryClassificationProfile,
+} from '../modules/entries/information_entry_deterministic_classification.js';
+import {
   decodeEntrySplitRuleProfile,
   type EntrySplitRuleProfile,
 } from '../modules/entries/information_entry_split_rule.js';
@@ -194,6 +198,11 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     value.entrySplitRuleProfile === undefined
       ? undefined
       : decodeEntrySplitRuleProfile(value.entrySplitRuleProfile);
+  const entryClassificationProfile:
+    Readonly<EntryClassificationProfile> | undefined =
+    value.entryClassificationProfile === undefined
+      ? undefined
+      : decodeEntryClassificationProfile(value.entryClassificationProfile);
   if (
     value.format !== 'struinfo.review-preferences' ||
     value.version !== 1 ||
@@ -212,7 +221,9 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     (value.entryAutomationPolicy !== undefined &&
       entryAutomationPolicy === undefined) ||
     (value.entrySplitRuleProfile !== undefined &&
-      entrySplitRuleProfile === undefined)
+      entrySplitRuleProfile === undefined) ||
+    (value.entryClassificationProfile !== undefined &&
+      entryClassificationProfile === undefined)
   ) {
     fail();
   }
@@ -227,6 +238,7 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     entryPreferenceProfile,
     entryAutomationPolicy,
     entrySplitRuleProfile,
+    entryClassificationProfile,
   );
 }
 

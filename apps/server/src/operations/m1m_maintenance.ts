@@ -1,4 +1,5 @@
 import type {M1cWorkspaceTransferSummary} from '../workspace_transfer/m1c_workspace_transfer.js';
+import {BULK_INGESTION_ENRICHMENT_EXCEPTION_CODES} from '../modules/processing/bulk_ingestion_enrichment_contract.js';
 import type {
   ApplyBulkIngestionCodexReviewResult,
   BulkIngestionAdjudicationSample,
@@ -710,11 +711,9 @@ function validIdempotencyKey(value: string | undefined): value is string {
 function validExceptionCode(
   value: string | undefined,
 ): value is BulkIngestionEnrichmentExceptionCode {
-  return [
-    'automatic_tagging_disabled',
-    'no_deterministic_tags',
-    'keyword_capacity_reached',
-  ].includes(value ?? '');
+  return BULK_INGESTION_ENRICHMENT_EXCEPTION_CODES.includes(
+    value as BulkIngestionEnrichmentExceptionCode,
+  );
 }
 
 function validAdjudicationStatus(

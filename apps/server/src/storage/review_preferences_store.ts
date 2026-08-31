@@ -2,6 +2,10 @@ import {
   DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
   type EntrySplitRuleProfile,
 } from '../modules/entries/information_entry_split_rule.js';
+import {
+  DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+  type EntryClassificationProfile,
+} from '../modules/entries/information_entry_deterministic_classification.js';
 
 export const REVIEW_PREFERENCES_FORMAT = 'struinfo.review-preferences';
 export const REVIEW_PREFERENCES_VERSION = 1;
@@ -307,6 +311,7 @@ export interface ReviewPreferences {
   readonly entryPreferenceProfile?: Readonly<EntryPreferenceProfile>;
   readonly entryAutomationPolicy?: Readonly<EntryAutomationPolicy>;
   readonly entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>;
+  readonly entryClassificationProfile?: Readonly<EntryClassificationProfile>;
 }
 
 export interface ReviewPreferencesStore {
@@ -322,6 +327,7 @@ export interface ReviewPreferencesStore {
     entryPreferenceProfile?: Readonly<EntryPreferenceProfile>,
     entryAutomationPolicy?: Readonly<EntryAutomationPolicy>,
     entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>,
+    entryClassificationProfile?: Readonly<EntryClassificationProfile>,
   ): Promise<Readonly<ReviewPreferences>>;
   update?<T>(
     workspaceId: string,
@@ -353,6 +359,7 @@ export interface ReviewPreferencesPatch {
   readonly entryPreferenceProfile?: Readonly<EntryPreferenceProfile>;
   readonly entryAutomationPolicy?: Readonly<EntryAutomationPolicy>;
   readonly entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>;
+  readonly entryClassificationProfile?: Readonly<EntryClassificationProfile>;
 }
 
 export function patchReviewPreferences(
@@ -386,6 +393,9 @@ export function patchReviewPreferences(
     patch.entrySplitRuleProfile ??
       current.entrySplitRuleProfile ??
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+    patch.entryClassificationProfile ??
+      current.entryClassificationProfile ??
+      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
   );
 }
 
@@ -419,6 +429,7 @@ export async function updateReviewPreferences<T>(
           update.next.entryPreferenceProfile,
           update.next.entryAutomationPolicy,
           update.next.entrySplitRuleProfile,
+          update.next.entryClassificationProfile,
         );
   return Object.freeze({preferences, result: update.result});
 }
@@ -718,6 +729,7 @@ export function createReviewPreferences(
   entryPreferenceProfile: Readonly<EntryPreferenceProfile> = DEFAULT_ENTRY_PREFERENCE_PROFILE,
   entryAutomationPolicy: Readonly<EntryAutomationPolicy> = DEFAULT_ENTRY_AUTOMATION_POLICY,
   entrySplitRuleProfile: Readonly<EntrySplitRuleProfile> = DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+  entryClassificationProfile: Readonly<EntryClassificationProfile> = DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
 ): Readonly<ReviewPreferences> {
   const advanceActions =
     entryAutomationPolicy.advanceActions ??
@@ -775,6 +787,27 @@ export function createReviewPreferences(
       failureMode: entryAutomationPolicy.failureMode,
     }),
     entrySplitRuleProfile: Object.freeze({...entrySplitRuleProfile}),
+    entryClassificationProfile: Object.freeze({
+      format: entryClassificationProfile.format,
+      version: entryClassificationProfile.version,
+      revision: entryClassificationProfile.revision,
+      aliases: Object.freeze(
+        entryClassificationProfile.aliases.map((alias) =>
+          Object.freeze({...alias}),
+        ),
+      ),
+      typeMappings: Object.freeze(
+        entryClassificationProfile.typeMappings.map((mapping) =>
+          Object.freeze({...mapping}),
+        ),
+      ),
+      domainMappings: Object.freeze(
+        entryClassificationProfile.domainMappings.map((mapping) =>
+          Object.freeze({...mapping}),
+        ),
+      ),
+      exclusions: Object.freeze([...entryClassificationProfile.exclusions]),
+    }),
   });
 }
 

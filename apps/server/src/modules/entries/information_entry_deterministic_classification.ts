@@ -1,11 +1,73 @@
-import type {
-  EntryDomainAssignment,
-  EntryDomainKeyword,
-  EntryTypeKeyword,
+import {
+  ENTRY_DOMAIN_KEYWORDS,
+  ENTRY_TYPE_KEYWORDS,
+  type EntryChunkMode,
+  type EntryDomainAssignment,
+  type EntryDomainKeyword,
+  type EntryTypeKeyword,
 } from './information_entry_contract.js';
 
 export const DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION =
-  'struinfo.entry-classification.deterministic.v1';
+  'struinfo.entry-classification.deterministic.v2';
+
+export const ENTRY_CLASSIFICATION_PROFILE_FORMAT =
+  'struinfo.entry-classification-profile';
+export const ENTRY_CLASSIFICATION_PROFILE_VERSION = 1;
+export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_ALIASES = 256;
+export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_MAPPINGS = 256;
+export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_EXCLUSIONS = 256;
+export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_TERM_CODE_POINTS = 96;
+
+type ClassifiedEntryTypeKeyword = Exclude<EntryTypeKeyword, 'other'>;
+type ClassifiedEntryDomainKeyword = Exclude<EntryDomainKeyword, 'other'>;
+
+export interface EntryClassificationAlias {
+  readonly source: string;
+  readonly canonical: string;
+}
+
+export interface EntryClassificationTypeMapping {
+  readonly term: string;
+  readonly keyword: ClassifiedEntryTypeKeyword;
+}
+
+export interface EntryClassificationDomainMapping {
+  readonly term: string;
+  readonly keyword: ClassifiedEntryDomainKeyword;
+}
+
+export interface EntryClassificationProfile {
+  readonly format: typeof ENTRY_CLASSIFICATION_PROFILE_FORMAT;
+  readonly version: typeof ENTRY_CLASSIFICATION_PROFILE_VERSION;
+  readonly revision: number;
+  readonly aliases: readonly Readonly<EntryClassificationAlias>[];
+  readonly typeMappings: readonly Readonly<EntryClassificationTypeMapping>[];
+  readonly domainMappings: readonly Readonly<EntryClassificationDomainMapping>[];
+  readonly exclusions: readonly string[];
+}
+
+export const DEFAULT_ENTRY_CLASSIFICATION_PROFILE: Readonly<EntryClassificationProfile> =
+  Object.freeze({
+    format: ENTRY_CLASSIFICATION_PROFILE_FORMAT,
+    version: ENTRY_CLASSIFICATION_PROFILE_VERSION,
+    revision: 0,
+    aliases: Object.freeze([]),
+    typeMappings: Object.freeze([]),
+    domainMappings: Object.freeze([]),
+    exclusions: Object.freeze([]),
+  });
+
+export type DeterministicClassificationDiagnosticReason =
+  'assigned' | 'no_signal' | 'below_threshold' | 'tied' | 'low_margin';
+
+export interface DeterministicClassificationDiagnostic<
+  TKeyword extends string,
+> {
+  readonly reason: DeterministicClassificationDiagnosticReason;
+  readonly winner?: TKeyword;
+  readonly winnerScore: number;
+  readonly runnerUpScore: number;
+}
 
 interface WeightedRule<TKeyword extends string> {
   readonly keyword: TKeyword;
@@ -152,71 +214,474 @@ export interface DeterministicEntryClassificationInput {
   readonly titlePath: string;
   readonly body: string;
   readonly contentKeywords: readonly string[];
+  readonly chunkMode?: EntryChunkMode;
+  readonly profile?: Readonly<EntryClassificationProfile>;
+  readonly originVersion?: string;
 }
 
 export interface DeterministicEntryClassification {
   readonly typeKeyword?: EntryTypeKeyword;
   readonly domains: readonly Readonly<EntryDomainAssignment>[];
+  readonly diagnostics: Readonly<{
+    type: Readonly<DeterministicClassificationDiagnostic<EntryTypeKeyword>>;
+    domain: Readonly<DeterministicClassificationDiagnostic<EntryDomainKeyword>>;
+  }>;
 }
 
 export function classifyInformationEntryDeterministically(
   input: Readonly<DeterministicEntryClassificationInput>,
 ): Readonly<DeterministicEntryClassification> {
-  const text = normalizeClassificationText(input);
-  const typeKeyword = selectUniqueWinner(TYPE_RULES, text);
-  const domainKeyword = selectUniqueWinner(DOMAIN_RULES, text);
-  return Object.freeze({
-    ...(typeKeyword === undefined ? {} : {typeKeyword}),
-    domains:
-      domainKeyword === undefined
-        ? Object.freeze([])
-        : Object.freeze([
+  const profile = input.profile ?? DEFAULT_ENTRY_CLASSIFICATION_PROFILE;
+  const fields = normalizeClassificationFields(input, profile);
+  const typeScores = scoreRules(
+    TYPE_RULES,
+    fields,
+    profile.typeMappings,
+    input,
+  );
+  const domainScores = scoreRules(
+    DOMAIN_RULES,
+    fields,
+    profile.domainMappings,
+    input,
+  );
+  const typeDiagnostic = classifyScores<EntryTypeKeyword>(typeScores);
+  const domainDiagnostic = classifyScores<EntryDomainKeyword>(domainScores);
+  const originVersion =
+    input.originVersion ??
+    `${DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION}:profile-${profile.revision.toString()}`;
+  const domains =
+    domainDiagnostic.reason === 'assigned' &&
+    domainDiagnostic.winner !== undefined
+      ? Object.freeze(
+          selectDomains(domainScores, domainDiagnostic.winner).map((keyword) =>
             Object.freeze({
-              keyword: domainKeyword,
+              keyword,
               origin: 'rule' as const,
-              originVersion: DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION,
+              originVersion,
             }),
-          ]),
+          ),
+        )
+      : Object.freeze([]);
+  return Object.freeze({
+    ...(typeDiagnostic.reason === 'assigned' &&
+    typeDiagnostic.winner !== undefined
+      ? {typeKeyword: typeDiagnostic.winner}
+      : {}),
+    domains,
+    diagnostics: Object.freeze({
+      type: Object.freeze(typeDiagnostic),
+      domain: Object.freeze(domainDiagnostic),
+    }),
   });
 }
 
-function normalizeClassificationText(
-  input: Readonly<DeterministicEntryClassificationInput>,
-): string {
-  return [
-    input.titlePath,
-    input.titlePath,
-    ...input.contentKeywords,
-    input.body.slice(0, 32_000),
-  ]
-    .join('\n')
-    .normalize('NFKC')
-    .toLocaleLowerCase('und');
+export function decodeEntryClassificationProfile(
+  value: unknown,
+): Readonly<EntryClassificationProfile> | undefined {
+  if (
+    !isClosedRecord(value, [
+      'format',
+      'version',
+      'revision',
+      'aliases',
+      'typeMappings',
+      'domainMappings',
+      'exclusions',
+    ]) ||
+    value.format !== ENTRY_CLASSIFICATION_PROFILE_FORMAT ||
+    value.version !== ENTRY_CLASSIFICATION_PROFILE_VERSION ||
+    !Number.isSafeInteger(value.revision) ||
+    (value.revision as number) < 0
+  ) {
+    return undefined;
+  }
+  const aliases = decodeAliases(value.aliases);
+  const typeMappings = decodeMappings(
+    value.typeMappings,
+    ENTRY_TYPE_KEYWORDS,
+    MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_MAPPINGS,
+  );
+  const domainMappings = decodeMappings(
+    value.domainMappings,
+    ENTRY_DOMAIN_KEYWORDS,
+    MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_MAPPINGS,
+  );
+  const exclusions = decodeTerms(
+    value.exclusions,
+    MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_EXCLUSIONS,
+  );
+  if (
+    aliases === undefined ||
+    typeMappings === undefined ||
+    domainMappings === undefined ||
+    exclusions === undefined
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    format: ENTRY_CLASSIFICATION_PROFILE_FORMAT,
+    version: ENTRY_CLASSIFICATION_PROFILE_VERSION,
+    revision: value.revision as number,
+    aliases,
+    typeMappings,
+    domainMappings,
+    exclusions,
+  });
 }
 
-function selectUniqueWinner<TKeyword extends string>(
+interface ClassificationFields {
+  readonly title: string;
+  readonly keywords: string;
+  readonly body: string;
+}
+
+interface ScoredCandidate<TKeyword extends string> {
+  readonly keyword: TKeyword;
+  readonly score: number;
+}
+
+function normalizeClassificationFields(
+  input: Readonly<DeterministicEntryClassificationInput>,
+  profile: Readonly<EntryClassificationProfile>,
+): Readonly<ClassificationFields> {
+  return Object.freeze({
+    title: applyProfile(input.titlePath, profile),
+    keywords: applyProfile(input.contentKeywords.join('\n'), profile),
+    body: applyProfile(input.body.slice(0, 32_000), profile),
+  });
+}
+
+function applyProfile(
+  value: string,
+  profile: Readonly<EntryClassificationProfile>,
+): string {
+  let result = replaceAliasesOnce(normalizeTerm(value), profile.aliases);
+  for (const exclusion of profile.exclusions) {
+    result = replaceLiteral(result, normalizeTerm(exclusion), ' ');
+  }
+  return result;
+}
+
+function replaceAliasesOnce(
+  value: string,
+  aliases: readonly Readonly<EntryClassificationAlias>[],
+): string {
+  if (aliases.length === 0) return value;
+  const replacements = new Map(
+    aliases.map((alias) => [
+      normalizeTerm(alias.source),
+      normalizeTerm(alias.canonical),
+    ]),
+  );
+  const pattern = new RegExp(
+    [...replacements.keys()]
+      .sort((left, right) =>
+        right.length === left.length
+          ? left.localeCompare(right)
+          : right.length - left.length,
+      )
+      .map(escapeRegExp)
+      .join('|'),
+    'gu',
+  );
+  return value.replace(
+    pattern,
+    (matched) => replacements.get(matched) ?? matched,
+  );
+}
+
+function scoreRules<TKeyword extends string>(
   rules: readonly WeightedRule<TKeyword>[],
-  text: string,
-): TKeyword | undefined {
-  const scored = rules
-    .map((candidate) => ({
-      keyword: candidate.keyword,
-      score: candidate.signals.reduce(
-        (total, item) => total + (item.pattern.test(text) ? item.weight : 0),
-        0,
-      ),
-    }))
-    .filter((candidate) => candidate.score >= 3)
-    .sort(
-      (left, right) =>
-        right.score - left.score || left.keyword.localeCompare(right.keyword),
+  fields: Readonly<ClassificationFields>,
+  mappings: readonly Readonly<{term: string; keyword: TKeyword}>[],
+  input: Readonly<DeterministicEntryClassificationInput>,
+): readonly Readonly<ScoredCandidate<TKeyword>>[] {
+  const mappingScores = new Map<TKeyword, number>();
+  for (const mapping of mappings) {
+    const term = normalizeTerm(mapping.term);
+    const score =
+      (fields.title.includes(term) ? 12 : 0) +
+      (fields.keywords.includes(term) ? 10 : 0) +
+      (fields.body.includes(term) ? 8 : 0);
+    mappingScores.set(
+      mapping.keyword,
+      (mappingScores.get(mapping.keyword) ?? 0) + score,
     );
-  const first = scored[0];
-  const second = scored[1];
-  return first !== undefined &&
-    (second === undefined || first.score > second.score)
-    ? first.keyword
+  }
+  return Object.freeze(
+    rules
+      .map((candidate) =>
+        Object.freeze({
+          keyword: candidate.keyword,
+          score: Math.max(
+            0,
+            scoreSignals(candidate.signals, fields) +
+              structuralScore(candidate.keyword, input) -
+              negativeScore(candidate.keyword, fields) +
+              (mappingScores.get(candidate.keyword) ?? 0),
+          ),
+        }),
+      )
+      .sort(
+        (left, right) =>
+          right.score - left.score || left.keyword.localeCompare(right.keyword),
+      ),
+  );
+}
+
+function scoreSignals(
+  signals: readonly Readonly<{pattern: RegExp; weight: number}>[],
+  fields: Readonly<ClassificationFields>,
+): number {
+  return signals.reduce(
+    (total, item) =>
+      total +
+      (item.pattern.test(fields.title) ? item.weight * 3 : 0) +
+      (item.pattern.test(fields.keywords) ? item.weight * 2 : 0) +
+      (item.pattern.test(fields.body) ? item.weight : 0),
+    0,
+  );
+}
+
+function structuralScore(
+  keyword: string,
+  input: Readonly<DeterministicEntryClassificationInput>,
+): number {
+  if (
+    keyword === 'operating_guideline' &&
+    (/(?:^|\n)\s*(?:\d+[.)]|[-*])\s+/u.test(input.body) ||
+      input.body.includes('```'))
+  ) {
+    return 2;
+  }
+  if (
+    keyword === 'factual_material' &&
+    input.chunkMode === 'whole' &&
+    (input.body.match(/(?:^|\n)\s*[-*]\s+/gu)?.length ?? 0) >= 3
+  ) {
+    return 2;
+  }
+  if (
+    keyword === 'public_communication' &&
+    /(?:^|\s)v?\d+\.\d+(?:\.\d+)?(?:\s|$)/iu.test(input.titlePath)
+  ) {
+    return 1;
+  }
+  return 0;
+}
+
+function negativeScore(
+  keyword: string,
+  fields: Readonly<ClassificationFields>,
+): number {
+  const pattern =
+    keyword === 'operating_guideline'
+      ? /(?:观点|评论|新闻稿|opinion|commentary|press release)/iu
+      : keyword === 'public_communication'
+        ? /(?:教程|指南|深入分析|tutorial|benchmark)/iu
+        : keyword === 'argument'
+          ? /(?:数据集|安装步骤|release notes?|dataset)/iu
+          : undefined;
+  return pattern === undefined
+    ? 0
+    : (pattern.test(fields.title) ? 6 : 0) +
+        (pattern.test(fields.keywords) ? 4 : 0) +
+        (pattern.test(fields.body) ? 2 : 0);
+}
+
+function classifyScores<TKeyword extends string>(
+  scores: readonly Readonly<ScoredCandidate<TKeyword>>[],
+): DeterministicClassificationDiagnostic<TKeyword> {
+  const first = scores[0];
+  const second = scores[1];
+  const winnerScore = first?.score ?? 0;
+  const runnerUpScore = second?.score ?? 0;
+  if (first === undefined || winnerScore === 0) {
+    return {reason: 'no_signal', winnerScore, runnerUpScore};
+  }
+  if (winnerScore < 6) {
+    return {reason: 'below_threshold', winnerScore, runnerUpScore};
+  }
+  if (winnerScore === runnerUpScore) {
+    return {reason: 'tied', winnerScore, runnerUpScore};
+  }
+  if (winnerScore - runnerUpScore < 3) {
+    return {reason: 'low_margin', winnerScore, runnerUpScore};
+  }
+  return {
+    reason: 'assigned',
+    winner: first.keyword,
+    winnerScore,
+    runnerUpScore,
+  };
+}
+
+function selectDomains(
+  scores: readonly Readonly<ScoredCandidate<EntryDomainKeyword>>[],
+  primary: EntryDomainKeyword,
+): readonly EntryDomainKeyword[] {
+  const primaryScore =
+    scores.find((candidate) => candidate.keyword === primary)?.score ?? 0;
+  return Object.freeze(
+    scores
+      .filter(
+        (candidate) =>
+          candidate.keyword === primary ||
+          (candidate.score >= 6 && candidate.score * 2 >= primaryScore),
+      )
+      .slice(0, 3)
+      .map((candidate) => candidate.keyword),
+  );
+}
+
+function decodeAliases(
+  value: unknown,
+): readonly Readonly<EntryClassificationAlias>[] | undefined {
+  if (
+    !Array.isArray(value) ||
+    value.length > MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_ALIASES
+  ) {
+    return undefined;
+  }
+  const aliases: EntryClassificationAlias[] = [];
+  const sources = new Set<string>();
+  for (const candidate of value) {
+    if (!isClosedRecord(candidate, ['source', 'canonical'])) return undefined;
+    const source = decodeTerm(candidate.source);
+    const canonical = decodeTerm(candidate.canonical);
+    if (source === undefined || canonical === undefined) return undefined;
+    const identity = normalizeTerm(source);
+    if (identity === normalizeTerm(canonical) || sources.has(identity)) {
+      return undefined;
+    }
+    sources.add(identity);
+    aliases.push(Object.freeze({source, canonical}));
+  }
+  if (hasAliasCycle(aliases)) return undefined;
+  return Object.freeze(aliases);
+}
+
+function decodeMappings<TKeyword extends string>(
+  value: unknown,
+  keywords: readonly TKeyword[],
+  maximum: number,
+):
+  | readonly Readonly<{term: string; keyword: Exclude<TKeyword, 'other'>}>[]
+  | undefined {
+  if (!Array.isArray(value) || value.length > maximum) return undefined;
+  const result: {term: string; keyword: Exclude<TKeyword, 'other'>}[] = [];
+  const identities = new Set<string>();
+  for (const candidate of value) {
+    if (!isClosedRecord(candidate, ['term', 'keyword'])) return undefined;
+    const term = decodeTerm(candidate.term);
+    if (
+      term === undefined ||
+      typeof candidate.keyword !== 'string' ||
+      candidate.keyword === 'other' ||
+      !keywords.includes(candidate.keyword as TKeyword)
+    ) {
+      return undefined;
+    }
+    const identity = `${normalizeTerm(term)}\u0000${candidate.keyword}`;
+    if (identities.has(identity)) return undefined;
+    identities.add(identity);
+    result.push(
+      Object.freeze({
+        term,
+        keyword: candidate.keyword as Exclude<TKeyword, 'other'>,
+      }),
+    );
+  }
+  return Object.freeze(result);
+}
+
+function decodeTerms(
+  value: unknown,
+  maximum: number,
+): readonly string[] | undefined {
+  if (!Array.isArray(value) || value.length > maximum) return undefined;
+  const result: string[] = [];
+  const identities = new Set<string>();
+  for (const candidate of value) {
+    const term = decodeTerm(candidate);
+    if (term === undefined) return undefined;
+    const identity = normalizeTerm(term);
+    if (identities.has(identity)) return undefined;
+    identities.add(identity);
+    result.push(term);
+  }
+  return Object.freeze(result);
+}
+
+function decodeTerm(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const term = value.normalize('NFC').trim();
+  return term.length > 0 &&
+    Array.from(term).length <=
+      MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_TERM_CODE_POINTS &&
+    !containsControlCodePoint(term)
+    ? term
     : undefined;
+}
+
+function hasAliasCycle(
+  aliases: readonly Readonly<EntryClassificationAlias>[],
+): boolean {
+  const targets = new Map(
+    aliases.map((alias) => [
+      normalizeTerm(alias.source),
+      normalizeTerm(alias.canonical),
+    ]),
+  );
+  for (const source of targets.keys()) {
+    const visited = new Set<string>();
+    let current: string | undefined = source;
+    while (current !== undefined && targets.has(current)) {
+      if (visited.has(current)) return true;
+      visited.add(current);
+      current = targets.get(current);
+    }
+  }
+  return false;
+}
+
+function replaceLiteral(value: string, source: string, target: string): string {
+  return source.length === 0
+    ? value
+    : value.replace(new RegExp(escapeRegExp(source), 'gu'), target);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+
+function normalizeTerm(value: string): string {
+  return value.normalize('NFKC').toLocaleLowerCase('und');
+}
+
+function containsControlCodePoint(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const codePoint = character.codePointAt(0);
+    return codePoint !== undefined && (codePoint <= 0x1f || codePoint === 0x7f);
+  });
+}
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isClosedRecord(
+  value: unknown,
+  expectedKeys: readonly string[],
+): value is Readonly<Record<string, unknown>> {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(value).sort();
+  const expected = [...expectedKeys].sort();
+  return (
+    keys.length === expected.length &&
+    keys.every((key, index) => key === expected[index])
+  );
 }
 
 function rule<TKeyword extends string>(

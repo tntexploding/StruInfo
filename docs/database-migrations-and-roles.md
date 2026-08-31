@@ -65,6 +65,7 @@ apps/server/migrations/000026_create_bulk_ingestion_batches.sql
 apps/server/migrations/000027_create_bulk_ingestion_enrichment.sql
 apps/server/migrations/000028_create_bulk_ingestion_adjudications.sql
 apps/server/migrations/000029_add_bulk_ingestion_classification_exception.sql
+apps/server/migrations/000030_refine_bulk_ingestion_classification_exceptions.sql
 ```
 
 The runner is first-party code over the already admitted `pg@8.22.0` driver.
@@ -284,6 +285,13 @@ table and stores no source, tag, Provider or arbitrary payload. An explicit
 M2-P1 refresh may delete stale exception and matching adjudication rows before
 rebuilding them under the new rules; runtime DELETE remains limited to those two
 processing tables and does not grant deletion of Entry or evidence rows.
+
+`000030_refine_bulk_ingestion_classification_exceptions.sql` replaces only that
+closed CHECK so new M2-P2 enrichment can distinguish `classification_no_signal`,
+`classification_type_missing`, `classification_domain_missing` and
+`classification_tied`. The legacy `classification_incomplete` value remains
+valid for historical rows. The migration adds no table, column, payload or new
+runtime privilege; the existing processing-table grants remain sufficient.
 
 The ledger itself is infrastructure metadata. Business modules and ordinary
 runtime roles do not write it.

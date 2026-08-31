@@ -18,6 +18,10 @@ const CLASSIFICATION_EXCEPTION_MIGRATION = new URL(
   '../../../migrations/000029_add_bulk_ingestion_classification_exception.sql',
   import.meta.url,
 );
+const CLASSIFICATION_DIAGNOSTIC_MIGRATION = new URL(
+  '../../../migrations/000030_refine_bulk_ingestion_classification_exceptions.sql',
+  import.meta.url,
+);
 const RUNTIME_GRANTS = new URL(
   '../../../../../deploy/postgresql/apply-runtime-grants.sql',
   import.meta.url,
@@ -112,6 +116,23 @@ describe('M2-P1C deterministic classification migration', () => {
     );
     expect(deleteGrant).toContain(
       'struinfo.processing_bulk_ingestion_adjudication',
+    );
+  });
+});
+
+describe('M2-P2A classification diagnostic migration', () => {
+  it('admits only the legacy and refined closed exception codes', async () => {
+    const sql = await readFile(CLASSIFICATION_DIAGNOSTIC_MIGRATION, 'utf8');
+
+    expect(sql).toContain('processing_bulk_ingestion_exception_code_ck');
+    expect(sql).toContain('classification_incomplete');
+    expect(sql).toContain('classification_no_signal');
+    expect(sql).toContain('classification_type_missing');
+    expect(sql).toContain('classification_domain_missing');
+    expect(sql).toContain('classification_tied');
+    expect(sql).not.toMatch(/\bjsonb?\b/iu);
+    expect(sql).not.toMatch(
+      /\b(source_text|body|title|url|provider_payload|secret|prompt)\b/iu,
     );
   });
 });

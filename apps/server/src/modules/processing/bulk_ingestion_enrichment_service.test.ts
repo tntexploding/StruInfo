@@ -8,6 +8,7 @@ import {
 } from '../../storage/review_preferences_store.js';
 import type {
   CurrentInformationEntry,
+  EntryClassificationProfile,
   InformationEntryAssociationProjection,
   InformationEntryBulkRevisionRepositoryPort,
   InformationEntryRepositoryPort,
@@ -96,7 +97,7 @@ describe('M2-P0B bulk ingestion enrichment', () => {
       entry(
         '44444444-4444-4444-8444-444444444444',
         SNAPSHOT_ID,
-        'Useful tool\nUse **TypeScript** with `Vitest`.',
+        'TypeScript tool\nUse **TypeScript** with `Vitest`.',
       ),
     ]);
     const service = new BulkIngestionEnrichmentService({
@@ -114,7 +115,7 @@ describe('M2-P0B bulk ingestion enrichment', () => {
     });
 
     expect(result.outcome).toBe('succeeded');
-    expect(result.batch.revisedEntryCount).toBe(1);
+    expect(result.batch.revisedEntryCount).toBe(0);
     expect(result.batch.addedTagCount).toBe(0);
     expect(result.batch.exceptionEntryCount).toBe(1);
     expect(result.batch.items[0]?.exceptions).toEqual([
@@ -149,13 +150,65 @@ describe('M2-P0B bulk ingestion enrichment', () => {
     });
 
     expect(result.batch.items[0]?.exceptions).toEqual([
-      expect.objectContaining({code: 'classification_incomplete'}),
+      expect.objectContaining({code: 'classification_no_signal'}),
     ]);
     expect(entries.values[0]?.value.typeKeyword).toBeUndefined();
     expect(entries.values[0]?.value.domains).toEqual([]);
     expect(entries.values[0]?.revision).toBe(current.revision);
     expect(result.batch.revisedEntryCount).toBe(0);
   });
+
+  it.each([
+    {
+      label: 'missing domain',
+      keywords: ['教程'],
+      code: 'classification_domain_missing',
+      revisedEntryCount: 1,
+    },
+    {
+      label: 'missing type',
+      keywords: ['Docker'],
+      code: 'classification_type_missing',
+      revisedEntryCount: 1,
+    },
+    {
+      label: 'tied evidence',
+      keywords: ['医学健康', '软件数据库'],
+      code: 'classification_tied',
+      revisedEntryCount: 0,
+    },
+  ] as const)(
+    'records the refined diagnostic for $label',
+    async ({keywords, code, revisedEntryCount}) => {
+      const repository = new MemoryEnrichmentRepository();
+      const entries = new MemoryEntries([
+        entry(
+          '44444444-4444-4444-8444-444444444444',
+          SNAPSHOT_ID,
+          'Synthetic body.',
+          keywords.map(keyword),
+        ),
+      ]);
+      const service = new BulkIngestionEnrichmentService({
+        workspaceId: WORKSPACE_ID,
+        repository,
+        entries,
+        associations: new MemoryAssociations(),
+        preferences: preferences(false),
+      });
+
+      const result = await service.execute({
+        batchId: BATCH_ID,
+        mode: 'run',
+        maxItems: 1,
+      });
+
+      expect(result.batch.items[0]?.exceptions).toEqual([
+        expect.objectContaining({code}),
+      ]);
+      expect(result.batch.revisedEntryCount).toBe(revisedEntryCount);
+    },
+  );
 
   it('preserves existing manual type and domain when deterministic rules disagree', async () => {
     const repository = new MemoryEnrichmentRepository();
@@ -200,6 +253,63 @@ describe('M2-P0B bulk ingestion enrichment', () => {
     expect(entries.values[0]?.value.domains).toEqual([
       expect.objectContaining({keyword: 'culture_arts', origin: 'manual'}),
     ]);
+  });
+
+  it('applies the external classification profile through the batch service', async () => {
+    const repository = new MemoryEnrichmentRepository();
+    const entries = new MemoryEntries([
+      entry(
+        '44444444-4444-4444-8444-444444444444',
+        SNAPSHOT_ID,
+        'Synthetic material with no built-in classification signal.',
+        [keyword('owner-term')],
+      ),
+    ]);
+    const service = new BulkIngestionEnrichmentService({
+      workspaceId: WORKSPACE_ID,
+      repository,
+      entries,
+      associations: new MemoryAssociations(),
+      preferences: preferences(
+        false,
+        Object.freeze({
+          format: 'struinfo.entry-classification-profile',
+          version: 1,
+          revision: 4,
+          aliases: Object.freeze([]),
+          typeMappings: Object.freeze([
+            Object.freeze({
+              term: 'owner-term',
+              keyword: 'investigation_analysis',
+            }),
+          ]),
+          domainMappings: Object.freeze([
+            Object.freeze({
+              term: 'owner-term',
+              keyword: 'humanities_history',
+            }),
+          ]),
+          exclusions: Object.freeze([]),
+        }),
+      ),
+    });
+
+    const result = await service.execute({
+      batchId: BATCH_ID,
+      mode: 'run',
+      maxItems: 1,
+    });
+
+    expect(result.batch.exceptionEntryCount).toBe(0);
+    expect(entries.values[0]?.value.typeKeyword).toBe('investigation_analysis');
+    expect(entries.values[0]?.value.domains).toHaveLength(1);
+    expect(entries.values[0]?.value.domains[0]).toMatchObject({
+      keyword: 'humanities_history',
+      origin: 'rule',
+    });
+    expect(entries.values[0]?.value.domains[0]?.originVersion).toContain(
+      'struinfo.entry-classification.deterministic.v2:m2-p2:',
+    );
   });
 });
 
@@ -387,8 +497,11 @@ class MemoryAssociations {
   }
 }
 
-function preferences(enabled: boolean): ReviewPreferencesStore {
-  const value = createReviewPreferences(
+function preferences(
+  enabled: boolean,
+  entryClassificationProfile?: Readonly<EntryClassificationProfile>,
+): ReviewPreferencesStore {
+  const base = createReviewPreferences(
     WORKSPACE_ID,
     [],
     Object.freeze({
@@ -399,6 +512,10 @@ function preferences(enabled: boolean): ReviewPreferencesStore {
     DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
     DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   );
+  const value =
+    entryClassificationProfile === undefined
+      ? base
+      : Object.freeze({...base, entryClassificationProfile});
   return {
     load: () => Promise.resolve(value),
     save: () => Promise.resolve(value),
