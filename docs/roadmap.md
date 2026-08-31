@@ -1,7 +1,7 @@
 # StruInfo 分阶段计划
 
-- 状态：`v0.1.0` 私人单用户发行已获授权；进入目标云主机部署
-- 最近更新：2026-08-28
+- 状态：`v0.1.0` 已发布；M2-P0A–P0G 开发周期批量完整入库链已实现
+- 最近更新：2026-08-31
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
 - 当前实现与未完成项：[当前项目状态与实现清单](current-project-state.md)
@@ -27,7 +27,13 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 | InformationEntry             | 已实现 | 确定性/人工/AI 首次物化、当前成品态、三维标签、两项评分、文档标签、隐私和来源                                                                                     |
 | Entry 联系                   | 已实现 | 确定性投影、分项解释、外部版本化权重和逐对人工 override                                                                                                           |
 | Entry 查询                   | 已实现 | 标题/正文/标签的精确、包含和近似词法匹配，可见分数、组合筛选、绑定分页、查询页关联联想、双条比较及显式隐私范围内的独立完整文档结果                                |
-| 完整个人数据包               | 已实现 | 61 表、引用 Blob 字节、偏好、Entry v5、Association v4 与 Processing v7                                                                                            |
+| 完整个人数据包               | 已实现 | 66 表、引用 Blob 字节、偏好、Entry v5、Association v4 与 Processing v10                                                                                           |
+| Codex 批量 Snapshot→Entry    | 已实现 | 最多 500 Snapshot / 50,000 计划 Entry；逐 Snapshot 原子分片、ProcessingRun 尝试、暂停/恢复/重试和脱敏报告                                                         |
+| Codex 批量标签与增量联系     | 已实现 | 成功 P0A 批次接续确定性标签、typed 规则异常、只触及本批 Entry 的联系投影、有限窗口恢复/重试和脱敏报告                                                             |
+| Codex 批量异常复核           | 已实现 | 当前/过期 revision 分组、稳定无正文抽样、精确数量保护的 accepted/manual-review/deferred 状态转换和显式回退                                                        |
+| Disposable PostgreSQL 基准   | 已实现 | 500 Snapshot / 15,000 Entry 合成完整链、28 迁移重放、P0A/P0B 故障恢复、P0C stale guard、持久化计数与资源清理；记录结果约 15 分 20 秒                              |
+| Codex 外部批次审阅与回写     | 已实现 | 当前 pending 异常的 1–20 项稳定工作包、默认无效结果模板、显式隐私范围、closed result、幂等标签 revision、exact 裁决与增量联系                                     |
+| 统一批量推进                 | 已实现 | `pipeline-start/advance/status` 严格按 P0A→P0B→P0C 推进有界窗口，并返回 advance/wait/export-review/none 下一动作                                                  |
 | 旧 Curation/Knowledge 运行时 | 已退役 | 迁移和数据兼容保留，活动代码/HTTP/Web 已删除                                                                                                                      |
 | 正式知识页面                 | 已实现 | 最高匹配中心、有界图/列表、关系语义/说明/来源核验、用户编辑、隐私范围与 selected-pair AI 联系提案                                                                 |
 | ProcessingRun / AI 提案      | 已实现 | 中性任务状态、取消；OpenAI split/tags/selected-pair association 的启动、列表、接受与拒绝                                                                          |
@@ -41,13 +47,13 @@ M1C 已经证明来源证据、人工审核、正式知识和确定性搜索可�
 
 ## 当前开发停点
 
-开发主线已完成；所有者已经使用外部真实数据完成首轮使用审核并授权首版发行。真实 Provider 质量、费用、长期运行和灾难恢复仍需在实际使用中继续观察，但不阻塞当前私人单用户部署。
+首版主线已完成并发布。M2-P0A–P0C 建立无 Provider、由 Codex 直接操作的可恢复 Snapshot→Entry、确定性标签、增量联系和异常复核底座；P0D 已在 disposable PostgreSQL 18.6 中用 500 个合成 Snapshot / 15,000 Entry 跑通迁移、Blob/Evidence、两次受控故障恢复、裁决和精确计数，记录耗时约 15 分 20 秒。P0E/P0F 又把疑难内容转为外部稳定批次工作包和闭合幂等回写，P0G 提供有限窗口统一推进。该证据满足无真实资料阶段的 4–6 小时工程预算，但不替代真实语料和生产容量测量。
 
 M1E-3B、M1E-3C 和 M1E-3D 已依次完成单个公开 Entry 标签提案、用户明确选择的公开 Entry 对联系提案，以及用户明确选择的公开 Snapshot 拆分提案。三者都只创建 typed proposal，只有人工接受才调用现有 Entry/图谱命令；私密内容在网络前拒绝。
 
 M1E-4A/4B 已补齐无 Provider 的人工首次拆分；M1E-5A/5B 又把本地 Markdown、纯文本、HTML 或带文字层 PDF 接入相同 Blob → Snapshot → Fragment → Split 主链。M1F-1/2/3 完成可解释词法查询、查询内联想/比较与公开证据综合。M1G-1–5 建立探索、精确信源订阅、外部偏好规则、独立自动化权力、可恢复路由与所有者队列；M1H 完成确定性推进动作、结构纠错、拆分前派生全文、版本化拆分规则和显式多文件队列；M1I/M1J 完成订阅连接器和正式知识深化；M1K 完成可替换词项/向量索引、混合召回评估与公开证据 RAG；M1L 建立可重复合成性能基准并优化实测到的关联遍历与重复读取；M1M 已补齐容器、外部秘密、维护命令、备份恢复、运行权限和升级手册。第二 Provider、自动接受和私密外发仍后置。
 
-所有者冻结的上线前顺序已经完成：RSS/API/网页订阅与插件兼容采集、正式知识深化、分词/向量/RAG、性能评估优化，以及容器/维护/生产收口均已落地。后续功能来自统一实际审核中的可达缺口，不再自动扩展新的里程碑。
+上线前顺序已经完成：RSS/API/网页订阅与插件兼容采集、正式知识深化、分词/向量/RAG、性能评估优化，以及容器/维护/生产收口均已落地。M2 只针对已确认的高吞吐入库瓶颈继续扩展，不重开首版合同验收循环。
 
 ## 已完成主线：M1D Entry 网络
 
@@ -390,13 +396,29 @@ M1H-5 完成后，导入页同时具备单份精细录入和显式多文件顺�
 
 1. **容器与隔离（已完成）**：[ADR 0045](adr/0045-operational-production-baseline.md) 提供非 root 多阶段镜像、只读根、回环端口、资源上限和分离的 runtime/高权限 maintenance Compose；普通应用清单不接触 migrator secret；
 2. **秘密与启动（已完成）**：数据库和 OpenAI secret 支持互斥的直接变量或严格单行 `*_FILE` 注入；迁移、pg-boss schema 准备、runtime grant、preflight 与应用启动具有明确顺序；
-3. **备份恢复（已完成）**：维护命令复用完整个人数据包，把 61 表、引用 Blob 和偏好写入外部 `backups/`，只恢复到同 workspace 空数据库；
+3. **备份恢复（已完成）**：维护命令复用完整个人数据包，把 66 表、引用 Blob 和偏好写入外部 `backups/`，只恢复到同 workspace 空数据库；
 4. **监控与升级（已完成）**：容器复用 live/ready 健康端点、结构化日志和优雅关闭；操作手册冻结备份、前向升级、失败处理和干净目标恢复流程；
 5. **发布边界（首版发行）**：Compose 语法、production deploy、静态 deployment verifier 以及本地 Docker/PostgreSQL 18.6 的合成迁移、队列准备、runtime grant、健康、完整备份、空库恢复和重启演练已通过；项目采用 MIT License。`v0.1.0` 增加运行镜像瘦身、浏览器安全响应头和宿主 Caddy 认证反向代理示例；目标云端仍需记录实际镜像 digest，配置域名/证书/防火墙、备份保留和监控。
 
-## 开发完成后的下一步
+## 已完成增量：M2-P0A–P0G Codex 操作的批量完整入库链
 
-不再预设 M1N。先把同一 `v0.1.0` 镜像和运行顺序部署到目标私人云服务器；是否迁移本地个人数据、从备份恢复或以空工作区启动，由所有者单独决定。只有部署或后续使用中可复现的产品阻断才进入新的窄增量；目标环境和分发条件不倒推重开已完成的主线。
+1. **冻结计划（已实现）**：[ADR 0046](adr/0046-codex-operated-bulk-ingestion.md) 以幂等键、隐私范围、Snapshot 内容摘要、计划 Entry 数和稳定次序冻结最多 500 个 Snapshot / 50,000 个 Entry；
+2. **可恢复执行（已实现）**：每个 Snapshot 独立调用既有确定性 section 物化边界并原子提交；每次执行窗口形成 ProcessingRun，成功项不重做，失败/中断项可显式 retry；
+3. **维护控制（已实现）**：`ingest plan/run/pause/resume/retry/status/report` 只返回身份、计数、状态和稳定错误码；没有正文、Provider、浏览器逐条保存或新的正式知识写入；
+4. **确定性 enrichment（已实现）**：[ADR 0047](adr/0047-deterministic-bulk-enrichment.md) 把成功批次接到现有标签/别名/排除规则，按 Snapshot 原子写 Entry revision，并把不能处理的 Entry 记入 typed 异常；
+5. **增量联系（已实现）**：只重建与本窗口 Entry 相接的可替换 projection，保留 pair override、正式知识关系和其他历史 pair；
+6. **异常复核（已实现）**：[ADR 0048](adr/0048-bulk-ingestion-exception-adjudication.md) 按代码/当前状态汇总异常，稳定抽样最多 50 项，并只在 current revision 和精确预期数量一致时批量转换状态；过期异常不进入裁决；
+7. **可移植性（已实现）**：`000026`/`000027`/`000028` 增加五张控制表，Processing Bundle v10/19 表和 runtime grant 携带其当前状态；旧 v1–v9 包升级为空的后续状态；
+8. **性能与恢复证据（已完成）**：[ADR 0049](adr/0049-disposable-postgresql-bulk-ingestion-benchmark.md) 在 disposable PostgreSQL 18.6 中用固定 500 Snapshot / 15,000 Entry 跑通 28 迁移、Blob/Evidence、P0A/P0B/P0C、故障恢复、幂等重放和数据库计数，总耗时约 15 分 20 秒；普通 `verify` 不依赖 Docker；
+9. **外部 Codex 审阅包（已实现）**：[ADR 0050](adr/0050-external-codex-review-work-packages.md) 只把当前 pending 异常按精确 revision/version 导出为 1–20 项工作包和默认无效结果模板；文件位于外部 `exports/codex-work/`，隐私需要本次显式 opt-in；
+10. **闭合幂等回写（已实现）**：[ADR 0051](adr/0051-closed-codex-review-result-application.md) 只接受 annotate/accept/manual-review/deferred，原子写完整标签 revision、exact 裁决并只重建涉及这些 Entry 的投影；placeholder、开放字段、缺项和过期状态全部拒绝；
+11. **统一有限推进（已实现）**：[ADR 0052](adr/0052-unified-bulk-ingestion-pipeline-control.md) 以 `pipeline-start/advance/status` 严格复用 P0A→P0B→P0C，一次最多推进 500 项并返回明确下一动作，不新建后台循环或第二套批次状态；
+12. **冻结审计（已完成）**：P0A retry 兼容 ProcessingRun 已先被取消/失败的恢复路径；P0B 从持久 ProcessingRun 历史取得下一 attempt，即使执行器在首次 claim 前退出也不会复用任务身份；P0F exact 裁决绑定 annotation 写入后预期的当前 Entry revision，避免并发人工修改被误判为已裁决；
+13. **当前停点**：开发周期批量完整入库链已满足合成 4–6 小时预算，并且不再要求浏览器逐条执行。真实语料、人工抽查节奏、长期增长和生产资源只在所有者后续使用时测量；未来 Provider 微批次自动化必须另立明确边界，不能反向阻塞当前可运行主线。
+
+## 首版发布后的部署与使用
+
+`v0.1.0` 保持已发布基线；是否迁移个人数据、从备份恢复或以空工作区启动，由所有者单独决定。M2 的开发和合成验证继续保持无真实资料；目标环境和分发条件不倒推重开已完成的首版主线。
 
 ## 历史基线：M1C 可运行核心闭环（运行时已退役）
 

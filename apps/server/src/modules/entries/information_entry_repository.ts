@@ -19,6 +19,11 @@ export type InformationEntryEmptySnapshotMaterializeOutcome =
 export type InformationEntryRevisionOutcome =
   'applied' | 'unchanged' | 'not_found' | 'stale';
 
+export interface InformationEntryBulkRevisionResult {
+  readonly outcome: InformationEntryRevisionOutcome;
+  readonly appliedCount: number;
+}
+
 export interface InformationEntryMaterializeResult {
   readonly outcome: InformationEntryMaterializeOutcome;
   readonly createdCount: number;
@@ -48,6 +53,17 @@ export interface InformationEntryEmptySnapshotRepositoryPort extends Information
   materializeEntriesIfSnapshotEmpty(
     entries: readonly Readonly<InformationEntryMaterializeRow>[],
   ): Promise<Readonly<InformationEntryEmptySnapshotMaterializeResult>>;
+}
+
+/**
+ * Applies one closed set of current Entry revisions in a single workspace
+ * transaction. The caller prepares every revision through the ordinary Entry
+ * domain boundary; this port only batches the existing write semantics.
+ */
+export interface InformationEntryBulkRevisionRepositoryPort {
+  reviseEntriesAtomically(
+    writes: readonly Readonly<InformationEntryRevisionWrite>[],
+  ): Promise<Readonly<InformationEntryBulkRevisionResult>>;
 }
 
 export type InformationEntryRestructureOutcome =

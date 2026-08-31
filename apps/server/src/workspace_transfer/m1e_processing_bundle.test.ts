@@ -7,6 +7,12 @@ import {
   M1E_PROCESSING_LEGACY_BUNDLE_CODEC,
   M1E_PROCESSING_LEGACY_BUNDLE_SCHEMA,
   M1E_PROCESSING_TABLES,
+  M1E_PROCESSING_VERSION_EIGHT_BUNDLE_CODEC,
+  M1E_PROCESSING_VERSION_EIGHT_BUNDLE_SCHEMA,
+  M1E_PROCESSING_VERSION_NINE_BUNDLE_CODEC,
+  M1E_PROCESSING_VERSION_NINE_BUNDLE_SCHEMA,
+  M1E_PROCESSING_VERSION_SEVEN_BUNDLE_CODEC,
+  M1E_PROCESSING_VERSION_SEVEN_BUNDLE_SCHEMA,
   M1E_PROCESSING_VERSION_FOUR_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_FOUR_BUNDLE_SCHEMA,
   M1E_PROCESSING_VERSION_FIVE_BUNDLE_CODEC,
@@ -23,12 +29,48 @@ import {
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('M1E processing Bundle section', () => {
-  it('keeps the fourteen typed processing tables in a closed canonical order', () => {
+  it('keeps the nineteen typed processing tables in a closed canonical order', () => {
     const empty = createEmptyM1eProcessingSnapshot();
     expect(empty.schemaVersion).toBe(M1E_PROCESSING_BUNDLE_SCHEMA);
     expect(empty.tables.map((table) => table.name)).toEqual(
       M1E_PROCESSING_TABLES.map((table) => table.name),
     );
+  });
+
+  it('upgrades the v9 enrichment section with empty adjudication state', () => {
+    const upgraded = M1E_PROCESSING_VERSION_NINE_BUNDLE_CODEC.decode({
+      schemaVersion: M1E_PROCESSING_VERSION_NINE_BUNDLE_SCHEMA,
+      tables: M1E_PROCESSING_TABLES.slice(0, 18).map((descriptor) => ({
+        name: descriptor.name,
+        rows: [],
+      })),
+    });
+
+    expect(upgraded).toEqual(createEmptyM1eProcessingSnapshot());
+  });
+
+  it('upgrades the v8 bulk-ingestion section with empty enrichment state', () => {
+    const upgraded = M1E_PROCESSING_VERSION_EIGHT_BUNDLE_CODEC.decode({
+      schemaVersion: M1E_PROCESSING_VERSION_EIGHT_BUNDLE_SCHEMA,
+      tables: M1E_PROCESSING_TABLES.slice(0, 16).map((descriptor) => ({
+        name: descriptor.name,
+        rows: [],
+      })),
+    });
+
+    expect(upgraded).toEqual(createEmptyM1eProcessingSnapshot());
+  });
+
+  it('upgrades the v7 deterministic-action section with empty bulk batches', () => {
+    const upgraded = M1E_PROCESSING_VERSION_SEVEN_BUNDLE_CODEC.decode({
+      schemaVersion: M1E_PROCESSING_VERSION_SEVEN_BUNDLE_SCHEMA,
+      tables: M1E_PROCESSING_TABLES.slice(0, 14).map((descriptor) => ({
+        name: descriptor.name,
+        rows: [],
+      })),
+    });
+
+    expect(upgraded).toEqual(createEmptyM1eProcessingSnapshot());
   });
 
   it('upgrades the v6 owner queue section with empty automation actions', () => {

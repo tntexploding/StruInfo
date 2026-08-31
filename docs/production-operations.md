@@ -1,8 +1,8 @@
 # StruInfo 生产运行与维护
 
 - 状态：`v0.1.0` 私人单用户运行边界；本地演练已通过，目标云端待配置
-- 最近更新：2026-08-28
-- 决策：[ADR 0045](adr/0045-operational-production-baseline.md)
+- 最近更新：2026-08-30
+- 决策：[ADR 0045](adr/0045-operational-production-baseline.md)、[ADR 0046](adr/0046-codex-operated-bulk-ingestion.md)
 
 ## 1. 适用范围
 
@@ -97,6 +97,121 @@ corepack pnpm run start:all
 可用 `corepack pnpm run start:all:built` 从与容器相同的编译产物启动。需要拆分角色时使用
 `start:api`、`start:scheduler` 和 `start:worker`。前台进程按 `Ctrl+C` 触发优雅关闭。
 这些启动脚本和本手册都不要求把 URL 或个人路径提交到 Git。
+
+### 4.1 M2-P0A–P0G Codex 批量入库
+
+这组命令只把尚未拥有当前 Entry 结构的 Snapshot 按确定性 section 规则批量物化。先以唯一、稳定的操作键冻结计划：
+
+```powershell
+corepack pnpm run maintenance -- ingest plan --key m2-p0a-20400101 --scope public_only --limit 500
+```
+
+命令返回 `batchId` 后，分窗口执行并检查状态：
+
+```powershell
+corepack pnpm run maintenance -- ingest run --batch <batchId> --max-items 100
+corepack pnpm run maintenance -- ingest status --batch <batchId>
+corepack pnpm run maintenance -- ingest report --batch <batchId>
+```
+
+需要停止时执行 `ingest pause`；当前 Snapshot 事务结算后批次进入 paused。继续 pending 项用 `resume`，只重置 failed/中断项用 `retry`：
+
+```powershell
+corepack pnpm run maintenance -- ingest pause --batch <batchId>
+corepack pnpm run maintenance -- ingest resume --batch <batchId> --max-items 100
+corepack pnpm run maintenance -- ingest retry --batch <batchId> --max-items 100
+```
+
+`scope` 只接受 `public_only`、`include_private` 或 `private_only`。计划最多 500 个 Snapshot、50,000 个 Entry；报告只输出身份、计数、状态和稳定错误码。它不执行标签、联系、Provider 调用或正文导出。若计划后同一 Snapshot 已从其他入口生成 Entry，该分片以结构冲突失败，不会覆盖既有结构。
+
+P0A 批次成功后，P0B 在同一批次上执行本地确定性标签和增量联系。每次最多处理一个有界窗口；失败后可继续未完成项，或只重试失败项：
+
+```powershell
+corepack pnpm run maintenance -- ingest enrich --batch <batchId> --max-items 100
+corepack pnpm run maintenance -- ingest enrich-status --batch <batchId>
+corepack pnpm run maintenance -- ingest enrich-report --batch <batchId>
+corepack pnpm run maintenance -- ingest enrich-resume --batch <batchId> --max-items 100
+corepack pnpm run maintenance -- ingest enrich-retry --batch <batchId> --max-items 100
+```
+
+标签以一个 Snapshot 为原子修订分片；规则关闭、无确定性候选或关键词容量已满会进入只含身份和稳定代码的异常队列。联系只重建至少一个端点属于当前批次窗口的可重建 projection，pair override 与正式知识关系不被覆盖。这里不调用 Provider，也不输出正文。
+
+P0B 全部成功后，先查看异常汇总，再按 closed code、状态和 current/stale 范围抽取最多 50 个稳定样本：
+
+```powershell
+corepack pnpm run maintenance -- ingest exceptions-summary --batch <batchId>
+corepack pnpm run maintenance -- ingest exceptions-sample --batch <batchId> --code no_deterministic_tags --status pending --scope current --limit 20
+```
+
+样本只返回 Snapshot/Entry/revision 身份、隐私事实、异常代码和当前状态。需要阅读内容时，使用现有 Query/Tags 页面按 Entry ID 查看；maintenance 不输出正文。确认整组后，把汇总中刚观察到的 current pending 数作为 `expected-count`：
+
+```powershell
+corepack pnpm run maintenance -- ingest exceptions-adjudicate --batch <batchId> --code no_deterministic_tags --from pending --to accepted --expected-count <count>
+```
+
+`to` 可选 `accepted`、`manual_review`、`deferred` 或用于重新打开的 `pending`。实际数量、原状态或 Entry revision 已改变时命令返回 `stale` 且整组不写入；过期异常只能查看，不能被批量裁决。裁决状态不修改 Entry、标签、联系、图谱或 AI 提案。
+
+当前开发周期需要 Codex 阅读疑难内容时，不再逐条打开浏览器。P0E 把当前 `pending` 异常按
+1–20 条导出到外部数据根 `exports/codex-work/`，同时创建一个默认无效的结果模板：
+
+```powershell
+corepack pnpm run maintenance -- ingest review-export --batch <batchId> --code no_deterministic_tags --limit 20
+```
+
+默认只处理公开 Entry。只有本次确实需要在本机审阅隐私内容时才显式追加
+`--include-private true`。终端只打印 packet ID、文件名、摘要和数量，不打印正文。Codex 编辑
+`<packetId>.codex-result.json` 后，用 packet ID 回写：
+
+```powershell
+corepack pnpm run maintenance -- ingest review-apply --packet <packetId>
+```
+
+每项动作只接受 `annotate`、`accept`、`manual_review` 或 `deferred`。模板中的 `replace_me`、缺项、
+额外字段、过期 Entry/adjudication revision 或内容摘要不匹配都会整包拒绝。`annotate` 写入完整三维
+标签、关闭对应异常并只重建涉及这些 Entry 的可替换联系；重复执行同一结果不会追加重复 revision。
+结果成功回写后可以人工删除对应两个临时文件，数据库与完整个人数据备份不依赖它们。
+
+P0G 提供推荐的统一入口。它每次最多推进 1–500 项，严格按 P0A → P0B → P0C 顺序运行，并
+返回下一动作而不是在一个进程内无限循环：
+
+```powershell
+corepack pnpm run maintenance -- ingest pipeline-start --key m2-p0g-20400101 --scope public_only --limit 500 --max-items 100
+corepack pnpm run maintenance -- ingest pipeline-advance --batch <batchId> --max-items 100
+corepack pnpm run maintenance -- ingest pipeline-status --batch <batchId>
+```
+
+`nextAction=advance` 表示继续执行下一窗口，`wait` 表示当前阶段仍在运行或等待显式恢复，
+`export_review_packet` 表示用上述 P0E 命令处理疑难项，`none` 才表示当前批次闭合完成。P0G 只是
+现有服务的薄编排，不替代各阶段的 pause/resume/retry，也不表示真实语料质量或生产 SLO 已通过。
+
+无真实资料的核心吞吐工具可直接运行：
+
+```powershell
+corepack pnpm exec tsx tools/run_m2_p0b_performance.ts
+```
+
+该工具只测内存中的确定性标签与增量联系规则；不包含 PostgreSQL、Blob、事务、恢复、Codex 操作或异常复核，因此不能作为 15,000 Entry / 4–6 小时端到端验收。
+
+M2-P0D 提供不接触现有数据库或所有者资料的一次性 PostgreSQL 18 完整链演练。需要 Docker
+Desktop/daemon 可用并能使用固定 `postgres:18.6` 镜像。快速 smoke 与标准 15,000 Entry
+工作负载分别为：
+
+```powershell
+corepack pnpm run performance:m2-p0d -- --smoke
+corepack pnpm run performance:m2-p0d -- --full
+```
+
+工具创建随机命名的 disposable 容器、随机本地端口和临时外部数据根，执行 28 份迁移、queue
+准备、runtime grant、合成 Evidence 导入、P0A/P0B 故障恢复及 P0C 裁决，然后独立核对数据库
+计数。成功或失败都必须移除容器和临时数据根；报告不得包含 URL、密码、正文或宿主个人路径。
+标准记录结果为 500 Snapshot / 15,000 Entry，约 15 分 20 秒。该命令不属于普通 `verify`，
+也不得连接已有 PostgreSQL 实例或作为生产 SLO。
+
+容器中可复用已挂载 runtime secret 和数据根的 `preflight` 服务并覆盖命令，例如：
+
+```powershell
+docker compose -f compose.production.yaml --profile maintenance run --rm preflight node dist/entrypoints/maintenance.js ingest status --batch <batchId>
+```
 
 ## 5. 健康与日志
 

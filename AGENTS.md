@@ -589,6 +589,43 @@ There is no inferred M1N: further work comes from owner-authorized unified use
 and deployment review or a reachable product defect. Do not restore real
 material merely to demonstrate the deployment boundary.
 
+ADR 0046 through ADR 0048 complete the current M2-P0A/P0B/P0C Codex-operated
+bulk foundation. A bounded P0A plan materializes Entry structure one Snapshot
+per transaction; P0B then applies the existing deterministic tag/alias rules
+and replaces only Association projections touching that batch's Entries. Typed
+exception rows contain identities and codes rather than content. P0C separates
+current from stale revisions, returns deterministic content-free samples and
+requires an exact observed count before changing a decision group. User
+overrides survive rebuilds, and Processing Bundle v10 carries all 19 processing
+tables. ADR 0049 completes M2-P0D with a repository-owned disposable PostgreSQL
+18 benchmark over migrations, Blob/Evidence, P0A/P0B/P0C, controlled recovery
+and exact persisted counts. The fixed 500-Snapshot / 15,000-Entry synthetic run
+completed in about 15 minutes on the recorded local machine and removed all
+temporary resources, so the data-free development path is comfortably inside
+the 4–6 hour engineering budget. Treat this as development-cycle evidence, not
+as a real-corpus, long-running database or production SLO. Ordinary `verify`
+must remain independent of Docker, and real material remains prohibited until
+the owner explicitly authorizes it.
+
+ADR 0050 through ADR 0052 complete M2-P0E/P0F/P0G. P0E exports only current
+pending exceptions as bounded, deterministic review packets and invalid-by-
+default result templates under the external `exports/codex-work/` directory;
+private content requires explicit current-command opt-in. P0F accepts only one
+closed canonical result per exact packet, writes idempotent Entry annotation
+revisions through the existing boundary, performs exact adjudication transitions
+and incrementally rebuilds only affected Association projections. P0G is a thin,
+bounded state machine over P0A materialization, P0B enrichment and P0C review and
+returns an explicit next action. These stages add no migration, Provider, UI
+executor or second workflow engine. Review work files are personal external data
+and MUST NOT enter Git, images, logs or application artifacts.
+
+The M2-P0 freeze audit closes three reachable recovery/integrity gaps without
+expanding the product boundary: P0A retry tolerates an active-run reference whose
+ProcessingRun was already cancelled or failed; P0B derives its next attempt from
+durable ProcessingRun history even when a process stopped before claiming its
+first item and retires orphaned running attempts; P0F exact adjudication is bound
+to the precise current Entry revision expected after any annotation write.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

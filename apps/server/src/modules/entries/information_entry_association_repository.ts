@@ -23,3 +23,13 @@ export interface InformationEntryAssociationRepositoryPort {
     write: Readonly<InformationEntryAssociationOverrideWrite>,
   ): Promise<InformationEntryAssociationOverrideOutcome>;
 }
+
+/** Replaces only calculated projections touching the supplied source Entries. */
+export interface InformationEntryAssociationIncrementalRepositoryPort {
+  replaceAssociationProjectionsForEntries(
+    workspaceId: string,
+    sourceEntryIds: readonly string[],
+    projections: readonly Readonly<InformationEntryAssociationProjection>[],
+    includePrivate: boolean,
+  ): Promise<number>;
+}

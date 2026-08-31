@@ -1,15 +1,15 @@
 # StruInfo 当前项目状态与实现清单
 
-- 状态：`v0.1.0` 私人单用户发行候选；所有者已使用外部真实数据完成首轮使用审核，进入云端部署
-- 实现基线：M1I-1A/B 至 M1M + 首版 UI 重构与发行加固
-- 最近核对：2026-08-28
+- 状态：`v0.1.0` 私人单用户版本已发布；M2-P0A–P0G 已在无真实资料基线上完成
+- 实现基线：M1I-1A/B 至 M1M + 首版 UI/发行基线 + M2-P0A–P0G
+- 最近核对：2026-08-31
 - 需求边界：[产品需求](product-requirements.md)
 - 交付顺序：[分阶段计划](roadmap.md)
 - 架构边界：[知识核心架构](knowledge-core-architecture.md)
 
 ## 0. 当前数据与发行基线
 
-2026-08-24，既有文档、条目、标签、联系、历史兼容行、Blob、偏好和导出曾完整移入项目目录外的恢复归档，以建立无数据开发基线。项目开发完成后，所有者已经明确授权在同一主项目中重新导入外部真实数据，并据此完成首轮使用审核。
+2026-08-24，既有文档、条目、标签、联系、历史兼容行、Blob、偏好和导出曾完整移入项目目录外的恢复归档，以建立无数据开发基线。首版曾由所有者使用外部资料完成直接审核；当前 M2 开发基线再次保持无真实资料，批量能力只以合成数据验证，不从恢复归档导入或复制内容。
 
 现在必须同时保持两条不混淆的边界：
 
@@ -25,7 +25,7 @@
 
 本文是“当前代码到底能做什么”的实现真值表。产品需求描述长期目标，路线图描述交付顺序，
 ADR 记录已经接受的决策；当历史文档中的旧 M1C 示例与当前代码冲突时，以 ADR 0008、
-ADR 0009、ADR 0010、ADR 0011、ADR 0012、ADR 0013、ADR 0014、ADR 0015、ADR 0016、ADR 0017、ADR 0018、ADR 0019、ADR 0020、ADR 0021、ADR 0022、ADR 0023、ADR 0024、ADR 0025、ADR 0026、ADR 0027、ADR 0028、ADR 0029、ADR 0030、ADR 0031、ADR 0032、ADR 0033、ADR 0034、ADR 0035、ADR 0036、ADR 0037、ADR 0038、ADR 0039、ADR 0040、ADR 0041、ADR 0042、ADR 0043、ADR 0044、ADR 0045 和本文列出的活动入口为准。
+ADR 0009、ADR 0010、ADR 0011、ADR 0012、ADR 0013、ADR 0014、ADR 0015、ADR 0016、ADR 0017、ADR 0018、ADR 0019、ADR 0020、ADR 0021、ADR 0022、ADR 0023、ADR 0024、ADR 0025、ADR 0026、ADR 0027、ADR 0028、ADR 0029、ADR 0030、ADR 0031、ADR 0032、ADR 0033、ADR 0034、ADR 0035、ADR 0036、ADR 0037、ADR 0038、ADR 0039、ADR 0040、ADR 0041、ADR 0042、ADR 0043、ADR 0044、ADR 0045、ADR 0046、ADR 0047、ADR 0048 和本文列出的活动入口为准。
 
 状态只使用三种含义：
 
@@ -41,6 +41,10 @@ ADR 0009、ADR 0010、ADR 0011、ADR 0012、ADR 0013、ADR 0014、ADR 0015、ADR
   → 或从外部配置的 GitHub Markdown、RSS/Atom、JSON API、受限网页或已安装连接器手动/到期检查变化
   → 外部内容寻址 Blob + PostgreSQL Resource/Snapshot
   → DocumentNode/Fragment 结构与精确证据
+  → 可选：Codex 通过 maintenance 批次冻结最多 500 个尚未物化的 Snapshot，并逐 Snapshot 可恢复生成 Entry
+  → 可选：同一成功批次按 Snapshot 原子追加确定性规则标签，只增量重建与本批 Entry 相接的联系，并汇总规则异常
+  → 可选：Codex 汇总异常；将当前疑难项成批导出到外部审阅工作包，闭合回写完整标签、接受、转人工或延期
+  → 可选：用统一有限窗口命令按物化 → enrichment → 复核顺序推进，并根据持久状态恢复
   → 用户选择尚未物化的 Snapshot，以人工 Fragment/标量区间分组、确定性规则或已接受 AI 提案生成当前 InformationEntry
   → 已物化后仍可由所有者编辑完整分组、预览标签/沿袭/关系影响并原子替换当前 Entry 结构
   → 可选：订阅变化后按已启用的单订阅开关直接复用确定性物化与可恢复分流
@@ -77,17 +81,18 @@ ADR 0009、ADR 0010、ADR 0011、ADR 0012、ADR 0013、ADR 0014、ADR 0015、ADR
 
 ## 4. 当前数据表示与存储
 
-| 数据         | 当前表示                                                                                                                                                                        | 存储位置与更新方式                                                                 |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| 原始资料     | `Resource`、不可变 `Snapshot`、原始/规范化 Blob 身份                                                                                                                            | 元数据在 PostgreSQL；字节在包体外内容寻址 Blob 根；相同命令幂等                    |
-| 文档结构     | `DocumentNode`、`Fragment`、媒体引用                                                                                                                                            | PostgreSQL；跟随 Snapshot 不可变，可返回精确来源位置                               |
-| 当前 Entry   | 稳定 Entry ID、来源/Snapshot、顺序、标题路径、正文及哈希、整篇/拆分、隐私、Fragment 输入及可选精确标量区间、三维标签、两项评分、当前结构标记与 successor/predecessor lineage    | PostgreSQL 当前成品态；普通修订推进版本；结构替换保留旧 Entry 行并切换唯一当前分区 |
-| 当前文档标签 | Snapshot 级标签及 Entry 覆盖/全文出现证据                                                                                                                                       | PostgreSQL 当前成品态；可确定性重算或人工覆盖                                      |
-| Entry 联系   | 可重建分项投影 + 当前人工 override；自动 `similarity / calculated` 与用户编辑/创建/AI 关系的语义、名称、方向、说明和来源核验状态                                                | PostgreSQL；投影可替换，人工图谱控制不被重建覆盖                                   |
-| 检索派生索引 | 当前 Entry revision、投影摘要、tokenizer/model 身份、三字段词项 posting 和可选向量                                                                                              | PostgreSQL 两张派生表；可整库原子重建，不进入个人数据包，私密 Entry 不进入外部向量 |
-| 处理任务     | 当前 ProcessingRun、订阅 import 检查、三类 AI 提案、Entry 自动路由 header/逐条 claim，以及成功 claim 派生的所有者工作项                                                         | PostgreSQL 当前任务态；claim 固定路由事实，工作项单独保存待处理/完成/跳过状态      |
-| 个人偏好     | 快捷标签、自动提取开关、URL 域名开关、排除词、别名、联系/探索/Entry 偏好策略、AutomationPolicy，以及 Git/RSS/JSON API/网页/插件信源配置、外部配置或凭据变量引用、分流开关和游标 | 外部数据根 `preferences/`；不进入 Git 或应用包体                                   |
-| 个人数据包   | 61 张当前工作区表、引用 Blob 字节和当前偏好；Entry v5、Association v4 与 Processing v7 section                                                                                  | 外部数据根 `exports/`；恢复只接受同工作区的空目标；旧 Bundle 仍可读                |
+| 数据             | 当前表示                                                                                                                                                                        | 存储位置与更新方式                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 原始资料         | `Resource`、不可变 `Snapshot`、原始/规范化 Blob 身份                                                                                                                            | 元数据在 PostgreSQL；字节在包体外内容寻址 Blob 根；相同命令幂等                       |
+| 文档结构         | `DocumentNode`、`Fragment`、媒体引用                                                                                                                                            | PostgreSQL；跟随 Snapshot 不可变，可返回精确来源位置                                  |
+| 当前 Entry       | 稳定 Entry ID、来源/Snapshot、顺序、标题路径、正文及哈希、整篇/拆分、隐私、Fragment 输入及可选精确标量区间、三维标签、两项评分、当前结构标记与 successor/predecessor lineage    | PostgreSQL 当前成品态；普通修订推进版本；结构替换保留旧 Entry 行并切换唯一当前分区    |
+| 当前文档标签     | Snapshot 级标签及 Entry 覆盖/全文出现证据                                                                                                                                       | PostgreSQL 当前成品态；可确定性重算或人工覆盖                                         |
+| Entry 联系       | 可重建分项投影 + 当前人工 override；自动 `similarity / calculated` 与用户编辑/创建/AI 关系的语义、名称、方向、说明和来源核验状态                                                | PostgreSQL；投影可替换，人工图谱控制不被重建覆盖                                      |
+| 检索派生索引     | 当前 Entry revision、投影摘要、tokenizer/model 身份、三字段词项 posting 和可选向量                                                                                              | PostgreSQL 两张派生表；可整库原子重建，不进入个人数据包，私密 Entry 不进入外部向量    |
+| 处理任务         | 当前 ProcessingRun、订阅 import 检查、三类 AI 提案、Entry 自动路由 header/逐条 claim、所有者工作项，以及 M2-P0A/P0B/P0C 批量物化、enrichment、typed exception 和当前裁决状态    | PostgreSQL 当前任务态；批次只存身份、计数、规则摘要、状态和稳定代码，不保存来源正文   |
+| Codex 审阅工作包 | 精确绑定当前 Entry/adjudication revision 的有界 packet 与默认无效结果模板；完成结果只允许闭合动作和完整三维标签                                                                 | 外部数据根 `exports/codex-work/`；可含正文，不进入 Git/镜像/日志/应用制品或数据库新表 |
+| 个人偏好         | 快捷标签、自动提取开关、URL 域名开关、排除词、别名、联系/探索/Entry 偏好策略、AutomationPolicy，以及 Git/RSS/JSON API/网页/插件信源配置、外部配置或凭据变量引用、分流开关和游标 | 外部数据根 `preferences/`；不进入 Git 或应用包体                                      |
+| 个人数据包       | 66 张当前工作区表、引用 Blob 字节和当前偏好；Entry v5、Association v4 与 Processing v10 section                                                                                 | 外部数据根 `exports/`；恢复只接受同工作区的空目标；旧 Bundle 仍可读                   |
 
 隐私文档在导入时保存完整原始和规范化字节。默认 Entry、联系、查询和完整文档通道都排除
 隐私；只有当次显式选择才扩大范围。查询 API 在 Entry 分页之外返回独立的完整隐私文档结果，
@@ -110,6 +115,12 @@ M1I-1A/B 已增加内建读取器和受信任插件适配器共享的 SourceConn
 - InformationEntry 当前 revision 绑定的可重建词项/向量索引与召回评估；
 - Provider-neutral ProcessingRun/提案信封，以及 typed split/tags/association payload；
 - Entry 自动路由执行、成功 claim 派生的所有者工作队列；
+- M2-P0A 可恢复批量 Snapshot→Entry 计划、逐 Snapshot 事务分片和 maintenance 控制；
+- M2-P0B 可恢复确定性标签、typed 异常队列、增量联系替换和 maintenance 控制；
+- M2-P0C 当前/过期异常汇总、稳定无正文抽样、精确数量保护的可恢复批量裁决和 maintenance 控制；
+- M2-P0E 外部 Codex 审阅 packet/结果模板、稳定恢复身份和显式隐私 opt-in；
+- M2-P0F 闭合结果校验、幂等 Entry revision、exact 裁决及只触及回写 Entry 的增量联系；
+- M2-P0G 按 P0A→P0B→P0C 顺序推进的有界统一状态机和下一动作报告；
 - 外部版本化信源订阅服务和精确公开 GitHub Markdown reader；
 - 插件兼容的 SourceConnector Registry、远程文档闭合结果和幂等多文档 Evidence 入库准备器；
 - Workspace/个人数据包传输。
@@ -120,7 +131,7 @@ M1I-1A/B 已增加内建读取器和受信任插件适配器共享的 SourceConn
 ### 5.2 必要支持模块
 
 - 外部运行配置、数据根路径隔离和 PostgreSQL 连接；
-- 二十五份前向迁移及独立迁移进程；
+- 二十八份前向迁移及独立迁移进程；
 - 本地内容寻址 Blob、偏好、导出与备份文件存储；
 - 健康检查、结构化日志、生命周期与优雅关闭；
 - API、scheduler、worker 和 `all` 运行角色、非重叠订阅轮询及共享队列基础；
@@ -345,7 +356,7 @@ Feed adapter 只接受无凭据 HTTPS，连接前拒绝本地/私有地址，不
 
 [ADR 0045](adr/0045-operational-production-baseline.md) 增加多阶段非 root Dockerfile、普通 runtime 与高权限 maintenance 分离的 Compose、严格的 `*_FILE` secret 注入、独立 pg-boss schema 准备、runtime grant、维护 preflight/backup/restore 和完整[生产运行手册](production-operations.md)。普通应用清单不接触 migrator secret，容器复用现有 health、结构化日志与优雅关闭。
 
-备份复用完整个人数据包，把 61 张工作区表、引用 Blob 和偏好写入外部 `backups/`；恢复仍只允许同 workspace 空数据库。静态 verifier 已纳入根 `verify`，Compose 语法和 pnpm production deploy 独立验证。2026-08-27 又在本地 Docker Desktop 与 disposable PostgreSQL 18.6 上，用纯合成数据完成全部 25 份迁移、首次 pg-boss schema 准备、runtime grant、preflight、回环 HTTP 健康、完整备份、同 workspace 空库恢复、数据/Blob 对照和重启；它不冒充目标云服务器镜像或网络验收。
+备份复用完整个人数据包；当前 writer 把 66 张工作区表、引用 Blob 和偏好写入外部 `backups/`，恢复仍只允许同 workspace 空数据库。静态 verifier 已纳入根 `verify`，Compose 语法和 pnpm production deploy 独立验证。2026-08-27 的 M1M 演练当时在本地 Docker Desktop 与 disposable PostgreSQL 18.6 上，用纯合成数据完成 25 份迁移、首次 pg-boss schema 准备、runtime grant、preflight、回环 HTTP 健康、完整备份、同 workspace 空库恢复、数据/Blob 对照和重启；它不冒充目标云服务器镜像或网络验收。
 
 上线前代码复查关闭了三个可达启动缺口：根脚本现在可按 `api`、`scheduler`、`worker` 或
 `all` 从 server tsconfig 正确启动，也可从编译产物启动；部署静态门会阻止这些脚本再次缺失；
@@ -374,12 +385,30 @@ node-postgres 的多语句结果现在安全投影最终结果，使首次队列
 - 完整个人数据备份与同 workspace 空库恢复命令已实现；定期保留、异地灾难恢复、跨工作区克隆、非空目标合并和删除策略未完成；
 - 项目代码采用 MIT License；发行包与镜像必须携带项目许可证、第三方声明、依赖许可证和 SBOM。
 
+### 7.32 当前开发增量：M2-P0A–P0G Codex 批量完整入库链
+
+- maintenance CLI 可以按幂等键和隐私范围冻结最多 500 个尚未拥有当前 Entry 结构的 Snapshot；单批计划最多 50,000 个 Entry；
+- 执行始终以一个 Snapshot 为一个原子事务分片，成功分片不会因后续失败或重试而重写；每次执行窗口继续使用真实 ProcessingRun 记录；
+- 批次支持状态、逐项报告、请求暂停、恢复和只重试失败/中断项；报告只含 UUID、计数、状态和稳定错误码，不输出正文、路径、URL 或 secret；
+- 成功 P0A 批次可继续执行本地确定性标签：规则、排除词、确认别名和联系权重被摘要绑定；一个 Snapshot 内的 Entry revision 一次原子写入，重试不重复追加同版本规则标签；
+- 联系只删除并替换至少一个端点属于本窗口 Entry 的可重建 projection；人工/AI pair override、正式知识关系和其他历史 pair 不被重建覆盖；
+- 规则关闭、无可提取标签或容量已满进入只含 Entry revision 身份和闭合代码的异常队列；不复制正文或 Provider 数据；
+- P0C 把异常按代码与当前裁决状态汇总，提供最多 50 项的稳定无正文抽样；批量转换必须提交精确 `expectedCount`，只更新仍匹配当前 Entry revision 的行，过期异常保持可见但不可批量裁决；
+- `pending`、`accepted`、`manual_review` 和 `deferred` 只描述异常复核状态，可显式再次修改或回到 pending，不直接写 Entry、标签、联系或 Provider 状态；
+- `000026`/`000027`/`000028` 共新增五张 typed 控制表；Processing Bundle v10/19 表携带它们并把 v1–v9 缺失状态升级为空；
+- P0D 使用 disposable PostgreSQL 18.6 将固定 500 Snapshot / 15,000 Entry 工作负载跑过当前 28 份迁移、Blob/Evidence、P0A、P0B 与 P0C；受控 P0A/P0B 失败均可恢复和幂等重放，P0C 错误数量先 stale 后按精确数量接受；
+- 记录运行持久化 15,000 Entry、54,000 规则关键词、123,000 条 projection 和 1,500 条已接受异常，总耗时约 919.6 秒（15 分 20 秒，16.311 Entry/s），结束后容器与临时外部数据根均移除；这证明合成开发路径远低于 4–6 小时预算，不代表真实语料或生产 SLO。
+- P0E 将当前 pending 异常以 1–20 项的确定性 packet 输出到外部 `exports/codex-work/`，保留标题、正文和现有标签供当前 Codex 对话成批判断；默认排除隐私，显式 opt-in 也只在本机外部数据根工作；
+- P0F 严格校验 canonical packet/result、精确 revision/version 和 closed action；`annotate` 原子追加完整标签 revision，exact 关闭异常并增量重建联系，重放不产生重复 revision；
+- P0G 用 `pipeline-start/advance/status` 薄编排既有 P0A、P0B、P0C 服务，一次只推进调用者给出的 1–500 项窗口，并明确返回 `advance / wait / export_review_packet / none`；
+- P0E–P0G 没有增加迁移、依赖、Provider、浏览器逐条执行器或第二套批次表；`complete` 只表示当前批次工程状态闭合。
+
 以上未完成项只有在进入相应产品边界或出现当前可达 `PRODUCT_BLOCKER` 时才阻断；测试工具自证、
 未来环境强化和不可达边缘情况继续按开发总则记入延期强化，不拖住当前主线。
 
 ## 8. 当前验证快照
 
-当前 M1M 无数据开发候选完成以下验证：
+当前 M2-P0A–P0G 无数据开发候选完成以下验证：
 
 - AutomationPolicy decoder、纯分流核心、外部偏好文件、typed execution service/PostgreSQL adapter、迁移和完整个人数据包边界均有合成测试；
 - 回归覆盖默认关闭、策略/Profile/Entry 过期、独立正负阈值、预算、人工接管、显式隐私范围、请求重放/冲突、运行中重校验、claim 完成/补偿、策略暂停失败后的待恢复重试、旧包升级及兄弟偏好字段保留；
@@ -392,7 +421,12 @@ node-postgres 的多语句结果现在安全投影最终结果，使首次队列
 - M1H-5 复用单文件导入协议，增加会话批次、逐文件状态、稳定失败重试、停止后续项及合成浏览器回归；没有迁移、数据库队列表或新依赖；
 - M1I-1A/B 至 M1I-5 新增连接器闭合结果、Registry、多文档幂等 Evidence 准备器、`remote_document` 迁移、Git 兼容、RSS/Atom、JSON API 与受限 Web adapter、条件请求/声明式映射、分页与增量游标、已安装 capability 发现、opaque 外部配置引用、批量订阅服务、外部偏好 union、API 与导入页合成回归；没有真实 Feed、API、网页、插件配置或网络测试资料；
 - M1J 新增迁移 `000024`、八类闭合关系语义、500 code-point 维护说明、来源核验状态、双端来源操作和 Association v4 向后升级；M1K 新增迁移 `000025`、可重建词项/向量投影、可选 OpenAI Embedding、三种 Query 和公开证据 RAG；M1L 新增可重复合成性能工具、单次关联读取索引与 HTTP 搜索去重；M1M 新增外部 secret 文件、维护/队列入口、容器与 grant 源码和 deployment verifier；没有第二套图谱/搜索服务、真实知识 fixture、私密外发、迁移或新依赖；
-- 完整 `corepack pnpm run verify` 退出码为 0：142 个单元测试文件、882 项单元测试、2 个集成测试文件、4 项集成测试全部通过，Web 构建转换 80 个模块，制品审计覆盖 1,029 个候选文件，部署静态门通过；
+- 完整 `corepack pnpm run verify` 退出码为 0：155 个单元测试文件、927 项单元测试、2 个集成测试文件、4 项集成测试全部通过，Web 构建转换 80 个模块，制品审计覆盖 1,096 个候选文件，部署静态门通过；
+- M2-P0A 以合成测试覆盖批次计划、单 Snapshot 原子物化、提交后中断的 exact-existing 恢复、ProcessingRun 已先取消/失败时的 retry、计划漂移失败、有限窗口失败退出、CLI 解码/脱敏报告、PostgreSQL 查询边界、`000026` 静态语义和 Processing v7→v8 升级；
+- M2-P0B 以合成测试覆盖 Snapshot 原子标签修订、首次 claim 前退出后的持久 attempt 恢复、孤立 running attempt 收束、规则异常、增量联系 source 范围、override 隔离、CLI 解码/脱敏报告、`000027` 静态语义和 Processing v8→v9 升级；
+- M2-P0C 以合成测试覆盖当前/过期 revision 分离、分组计数、稳定抽样、精确数量冲突、批量接受与回退、CLI 脱敏输出、`000028` 静态语义、PostgreSQL current-revision 锁定和 Processing v9→v10 升级；它没有运行真实资料或 Provider；
+- M2-P0D 用标准库、当前产品边界和 disposable PostgreSQL 18.6 执行 500 Snapshot / 15,000 Entry 合成完整链，证明 28 迁移 exact no-op、P0A Blob 失败恢复、P0B 联系失败恢复、P0C stale guard、数据库精确计数与资源清理；实测同时修复了 `000027` 对退役 revision 表的外键、两处 PostgreSQL status 参数类型推断及同一 client 并发查询；
+- M2-P0E 覆盖 packet 确定性、显式隐私范围、过期 revision 拒绝、外部文件边界以及不覆盖已编辑结果；M2-P0F 覆盖 closed decoder、placeholder/缺项/过期拒绝、标签+裁决+联系幂等重放、annotation 写入后的精确当前 Entry revision 围栏及 PostgreSQL exact identity 锁定；M2-P0G 覆盖严格阶段顺序、有限窗口恢复、无执行 status 和闭合下一动作；
 - Docker Desktop Linux Engine 27.4.0 使用纯合成、一次性资源完成普通与 maintenance Compose 解析、镜像构建和运行；最终本地候选 `struinfo:0.1.0` / `struinfo:release-candidate` 的镜像 ID 为 `sha256:de269bec525745961f4fd5f3344391f6168a5ae00c5a80fdd29e031c8af96c6f`，以 UID/GID 10001 运行并携带 MIT License、第三方声明和 SBOM；Trivy 0.66.0 对最终镜像报告 HIGH 0、CRITICAL 0；运行容器已移除 npm/Corepack/Yarn，保持只读根、无 Linux capability、`no-new-privileges` 和回环端口；
 - disposable PostgreSQL 18.6 演练从空库完成 25 份迁移、首次队列 schema、runtime grant 和 preflight；一份合成 Markdown 经公开 API 形成 1 个 Resource、1 个 Snapshot、3 个 Fragment，备份生成 11,659-byte/13-row/1-Blob 个人数据包，空库恢复后数据库投影、85-byte Blob、精确读取和停止/重启健康结果一致；全部一次性资源在验证后清理，既有 `struinfo-owner-pg18` 未被修改；
 - M1G-4D 聚焦 Chrome 回归验证迟到旧列表不会覆盖新列表、精确运行详情真正经独立端点读取，并在 320、390、768、1024、1440 CSS 像素下没有整页水平溢出；
