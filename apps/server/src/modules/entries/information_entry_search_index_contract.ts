@@ -37,6 +37,11 @@ export interface InformationEntrySearchIndexSnapshot {
   readonly postings: readonly Readonly<InformationEntryTermPosting>[];
 }
 
+export interface InformationEntryLexicalCandidateRequest {
+  readonly fields: readonly InformationEntrySearchIndexField[];
+  readonly terms: readonly string[];
+}
+
 export interface InformationEntrySearchIndexRepositoryPort {
   loadSearchIndex(
     workspaceId: string,
@@ -45,6 +50,15 @@ export interface InformationEntrySearchIndexRepositoryPort {
     workspaceId: string,
     snapshot: Readonly<InformationEntrySearchIndexSnapshot>,
   ): Promise<void>;
+  /**
+   * Returns a semantics-preserving candidate superset when every current
+   * public Entry has a current projection. Undefined means callers must use
+   * the complete-load fallback.
+   */
+  findLexicalCandidateEntryIds?(
+    workspaceId: string,
+    request: Readonly<InformationEntryLexicalCandidateRequest>,
+  ): Promise<readonly string[] | undefined>;
 }
 
 export interface InformationEntryEmbeddingProviderPort {

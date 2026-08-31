@@ -10,7 +10,9 @@ import {
 } from '../../storage/review_preferences_store.js';
 import {
   buildIncrementalInformationEntryAssociationProjection,
+  classifyInformationEntryDeterministically,
   deriveInformationEntryRevisionId,
+  DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION,
   DETERMINISTIC_ENTRY_TAG_RULE_VERSION,
   extractDeterministicEntryTagCandidates,
   INFORMATION_ENTRY_ASSOCIATION_POLICY,
@@ -108,7 +110,7 @@ export class BulkIngestionEnrichmentService {
       this.#dependencies.workspaceId,
     );
     const rules = prepareRules(preferences);
-    if (before.status === 'succeeded') {
+    if (before.status === 'succeeded' && request.mode !== 'refresh') {
       return Object.freeze({
         outcome: 'succeeded' as const,
         batch: before,
@@ -334,9 +336,7 @@ function prepareItem(
   let addedTagCount = 0;
   for (const entry of entries) {
     const existingRuleTagCount = entry.value.contentKeywords.filter(
-      (keyword) =>
-        keyword.origin === 'rule' &&
-        keyword.originVersion === rules.originVersion,
+      (keyword) => keyword.origin === 'rule',
     ).length;
     addedTagCount += existingRuleTagCount;
     const existing = new Set(
@@ -352,34 +352,59 @@ function prepareItem(
       rules.vocabulary,
       capacity,
     ).filter((candidate) => !existing.has(candidate.normalizedValue));
-    if (candidates.length === 0 && existingRuleTagCount === 0) {
+    const classification = classifyInformationEntryDeterministically({
+      titlePath: entry.value.titlePath,
+      body: entry.value.body,
+      contentKeywords: [
+        ...entry.value.contentKeywords.map((keyword) => keyword.displayValue),
+        ...candidates.map((candidate) => candidate.displayValue),
+      ],
+    });
+    const typeKeyword = entry.value.typeKeyword ?? classification.typeKeyword;
+    const domains =
+      entry.value.domains.length > 0
+        ? entry.value.domains
+        : classification.domains;
+    const classificationChanged =
+      typeKeyword !== entry.value.typeKeyword ||
+      (entry.value.domains.length === 0 && domains.length > 0);
+    const willWrite = candidates.length > 0 || classificationChanged;
+    const resultRevision = entry.revision + (willWrite ? 1 : 0);
+    const resultRevisionId = willWrite
+      ? deriveInformationEntryRevisionId(entry.entryId, resultRevision)
+      : entry.revisionId;
+    const contentIncomplete =
+      entry.value.contentKeywords.length === 0 && candidates.length === 0;
+    const classificationIncomplete =
+      typeKeyword === undefined || domains.length === 0;
+    if (contentIncomplete || classificationIncomplete) {
       exceptions.push(
         Object.freeze({
           entryId: entry.entryId,
-          entryRevision: entry.revision,
-          entryRevisionId: entry.revisionId,
-          code: !rules.automaticKeywords.enabled
-            ? ('automatic_tagging_disabled' as const)
-            : capacity === 0
-              ? ('keyword_capacity_reached' as const)
-              : ('no_deterministic_tags' as const),
+          entryRevision: resultRevision,
+          entryRevisionId: resultRevisionId,
+          code: contentIncomplete
+            ? !rules.automaticKeywords.enabled
+              ? ('automatic_tagging_disabled' as const)
+              : capacity === 0
+                ? ('keyword_capacity_reached' as const)
+                : ('no_deterministic_tags' as const)
+            : ('classification_incomplete' as const),
         }),
       );
-      continue;
     }
-    if (candidates.length === 0) continue;
+    if (!willWrite) continue;
     addedTagCount += candidates.length;
     writes.push(
       Object.freeze({
         workspaceId: entry.workspaceId,
         entryId: entry.entryId,
         expectedRevision: entry.revision,
-        revisionId: deriveInformationEntryRevisionId(
-          entry.entryId,
-          entry.revision + 1,
-        ),
+        revisionId: resultRevisionId,
         value: Object.freeze({
           ...entry.value,
+          ...(typeKeyword === undefined ? {} : {typeKeyword}),
+          domains: Object.freeze([...domains]),
           contentKeywords: Object.freeze([
             ...entry.value.contentKeywords,
             ...candidates.map((candidate) =>
@@ -422,8 +447,10 @@ function prepareRules(preferences: Readonly<ReviewPreferences>) {
       threshold: association.threshold,
     });
   const sha256 = digest({
-    schemaVersion: 'struinfo.bulk-ingestion-enrichment-rules.v1',
+    schemaVersion: 'struinfo.bulk-ingestion-enrichment-rules.v2',
     deterministicTagRuleVersion: DETERMINISTIC_ENTRY_TAG_RULE_VERSION,
+    deterministicClassificationRuleVersion:
+      DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION,
     automaticKeywords,
     vocabulary,
     associationPolicy: {
@@ -466,7 +493,7 @@ function validRequest(
 ): boolean {
   return (
     CANONICAL_UUID.test(request.batchId) &&
-    ['run', 'resume', 'retry'].includes(request.mode) &&
+    ['run', 'resume', 'retry', 'refresh'].includes(request.mode) &&
     Number.isSafeInteger(request.maxItems) &&
     request.maxItems >= 1 &&
     request.maxItems <= BULK_INGESTION_MAXIMUM_SNAPSHOTS

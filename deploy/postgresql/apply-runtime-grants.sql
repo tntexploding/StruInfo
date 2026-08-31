@@ -36,7 +36,8 @@ GRANT DELETE ON TABLE
   struinfo.information_document_working_copy,
   struinfo.information_entry_search_projection,
   struinfo.information_entry_term_posting,
-  struinfo.processing_bulk_ingestion_exception
+  struinfo.processing_bulk_ingestion_exception,
+  struinfo.processing_bulk_ingestion_adjudication
 TO struinfo_tm2_runtime;
 
 GRANT USAGE ON SCHEMA pgboss TO struinfo_tm2_runtime;

@@ -33,8 +33,16 @@ export class M1cApiController {
   }
 
   @Get('evidence')
-  public async evidence(@Res() response: Response): Promise<void> {
-    writeLocalApiResponse(response, await this.#service.listEvidence());
+  public async evidence(
+    @Query('limit') limit: string | undefined,
+    @Query('afterCapturedAt') afterCapturedAt: string | undefined,
+    @Query('afterSnapshotId') afterSnapshotId: string | undefined,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.listEvidence(limit, afterCapturedAt, afterSnapshotId),
+    );
   }
 
   @Get('evidence/snapshots/:snapshotId')

@@ -177,6 +177,21 @@ describe('M1M maintenance command', () => {
     expect(
       decodeM1mMaintenanceRequest([
         'ingest',
+        'enrich-refresh',
+        '--batch',
+        BATCH_ID,
+        '--max-items',
+        '500',
+      ]),
+    ).toEqual({
+      operation: 'ingest_enrich_execute',
+      mode: 'refresh',
+      batchId: BATCH_ID,
+      maxItems: 500,
+    });
+    expect(
+      decodeM1mMaintenanceRequest([
+        'ingest',
         'enrich-report',
         '--batch',
         BATCH_ID,

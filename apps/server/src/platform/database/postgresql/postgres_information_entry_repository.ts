@@ -64,6 +64,14 @@ export const READ_CURRENT_INFORMATION_ENTRIES_SQL = sql(
   'ORDER BY snapshot.captured_at DESC, e.snapshot_id, e.document_order, e.entry_id',
 );
 
+export const READ_CURRENT_INFORMATION_ENTRIES_BY_ID_SQL = sql(
+  CURRENT_ENTRY_SELECT,
+  'WHERE e.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
+  '  AND e.entry_id = ANY($3::uuid[])',
+  'ORDER BY snapshot.captured_at DESC, e.snapshot_id, e.document_order, e.entry_id',
+);
+
 export const READ_CURRENT_INFORMATION_ENTRY_INPUTS_SQL = sql(
   'SELECT i.entry_id::text, i.input_ordinal, i.fragment_id::text,',
   '  r.start_code_point, r.end_code_point',
@@ -77,6 +85,20 @@ export const READ_CURRENT_INFORMATION_ENTRY_INPUTS_SQL = sql(
   '  AND ($2::boolean OR NOT e.is_private)',
   'ORDER BY i.entry_id, i.input_ordinal',
 );
+const READ_CURRENT_INFORMATION_ENTRY_INPUTS_BY_ID_SQL = sql(
+  'SELECT i.entry_id::text, i.input_ordinal, i.fragment_id::text,',
+  '  r.start_code_point, r.end_code_point',
+  'FROM struinfo.information_entry_fragment_input AS i',
+  'LEFT JOIN struinfo.information_entry_fragment_range AS r',
+  '  ON r.workspace_id = i.workspace_id',
+  ' AND r.entry_id = i.entry_id AND r.input_ordinal = i.input_ordinal',
+  'JOIN struinfo.information_entry AS e',
+  '  ON e.workspace_id = i.workspace_id AND e.entry_id = i.entry_id',
+  'WHERE i.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
+  '  AND e.entry_id = ANY($3::uuid[])',
+  'ORDER BY i.entry_id, i.input_ordinal',
+);
 
 export const READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_SQL = sql(
   'SELECT k.entry_id::text, k.keyword_ordinal,',
@@ -88,6 +110,17 @@ export const READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_SQL = sql(
   '  AND ($2::boolean OR NOT e.is_private)',
   'ORDER BY k.entry_id, k.keyword_ordinal',
 );
+const READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_BY_ID_SQL = sql(
+  'SELECT k.entry_id::text, k.keyword_ordinal,',
+  '  k.display_value, k.normalized_value, k.origin, k.origin_version',
+  'FROM struinfo.information_entry_content_keyword AS k',
+  'JOIN struinfo.information_entry AS e',
+  '  ON e.workspace_id = k.workspace_id AND e.entry_id = k.entry_id',
+  'WHERE k.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
+  '  AND e.entry_id = ANY($3::uuid[])',
+  'ORDER BY k.entry_id, k.keyword_ordinal',
+);
 
 export const READ_CURRENT_INFORMATION_ENTRY_DOMAINS_SQL = sql(
   'SELECT d.entry_id::text, d.domain_ordinal,',
@@ -97,6 +130,17 @@ export const READ_CURRENT_INFORMATION_ENTRY_DOMAINS_SQL = sql(
   '  ON e.workspace_id = d.workspace_id AND e.entry_id = d.entry_id',
   'WHERE d.workspace_id = $1 AND e.is_current_structure',
   '  AND ($2::boolean OR NOT e.is_private)',
+  'ORDER BY d.entry_id, d.domain_ordinal',
+);
+const READ_CURRENT_INFORMATION_ENTRY_DOMAINS_BY_ID_SQL = sql(
+  'SELECT d.entry_id::text, d.domain_ordinal,',
+  '  d.domain_keyword, d.custom_name, d.origin, d.origin_version',
+  'FROM struinfo.information_entry_domain_keyword AS d',
+  'JOIN struinfo.information_entry AS e',
+  '  ON e.workspace_id = d.workspace_id AND e.entry_id = d.entry_id',
+  'WHERE d.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
+  '  AND e.entry_id = ANY($3::uuid[])',
   'ORDER BY d.entry_id, d.domain_ordinal',
 );
 
@@ -477,6 +521,46 @@ export class PostgresInformationEntryRepository
         const domains = await client.query<Row>(
           READ_CURRENT_INFORMATION_ENTRY_DOMAINS_SQL,
           [workspaceId, includePrivate],
+        );
+        return Object.freeze(
+          core.rows.map((row) =>
+            mapCurrentEntry(row, inputs.rows, keywords.rows, domains.rows),
+          ),
+        );
+      },
+    );
+  }
+
+  public loadCurrentEntriesByIds(
+    workspaceIdInput: string,
+    includePrivate: boolean,
+    entryIdsInput: readonly string[],
+  ): Promise<readonly Readonly<CurrentInformationEntry>[]> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    const entryIds = Object.freeze([
+      ...new Set(entryIdsInput.map((entryId) => canonicalUuid(entryId))),
+    ]);
+    if (entryIds.length === 0) return Promise.resolve(Object.freeze([]));
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const parameters = [workspaceId, includePrivate, entryIds] as const;
+        const core = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRIES_BY_ID_SQL,
+          parameters,
+        );
+        const inputs = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_INPUTS_BY_ID_SQL,
+          parameters,
+        );
+        const keywords = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_BY_ID_SQL,
+          parameters,
+        );
+        const domains = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_DOMAINS_BY_ID_SQL,
+          parameters,
         );
         return Object.freeze(
           core.rows.map((row) =>

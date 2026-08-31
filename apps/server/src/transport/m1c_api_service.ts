@@ -84,8 +84,10 @@ import {
   importMarkdownEvidence,
   importStructuredDocumentEvidence,
   materializeEvidenceSnapshot,
+  EVIDENCE_SNAPSHOT_PAGE_LIMIT,
   type EvidenceReadRepositoryPort,
   type EvidenceRepositoryPort,
+  type EvidenceSnapshotPageCursor,
   type EvidenceSnapshotSummary,
   type ImportMarkdownEvidenceInput,
   type ImportStructuredDocumentEvidenceInput,
@@ -198,7 +200,11 @@ type LoadedInformationEntryRestructure =
 
 export interface M1cApiServicePort {
   workspace(): M1cHttpResult;
-  listEvidence(): Promise<M1cHttpResult>;
+  listEvidence(
+    limit?: unknown,
+    afterCapturedAt?: unknown,
+    afterSnapshotId?: unknown,
+  ): Promise<M1cHttpResult>;
   loadEvidenceSnapshot(
     snapshotId: string,
     includePrivate?: unknown,
@@ -622,13 +628,54 @@ export class M1cApiService implements M1cApiServicePort {
     });
   }
 
-  public async listEvidence(): Promise<M1cHttpResult> {
+  public async listEvidence(
+    limitInput: unknown = EVIDENCE_SNAPSHOT_PAGE_LIMIT,
+    afterCapturedAt?: unknown,
+    afterSnapshotId?: unknown,
+  ): Promise<M1cHttpResult> {
+    const limit = parseEvidencePageLimit(limitInput);
+    if (limit === undefined) return inputFailure('query.limit');
+    if ((afterCapturedAt === undefined) !== (afterSnapshotId === undefined)) {
+      return inputFailure('query.after');
+    }
+    const after =
+      afterCapturedAt === undefined && afterSnapshotId === undefined
+        ? undefined
+        : typeof afterCapturedAt === 'string' &&
+            isCanonicalIsoTimestamp(afterCapturedAt) &&
+            typeof afterSnapshotId === 'string' &&
+            CANONICAL_UUID.test(afterSnapshotId)
+          ? Object.freeze({
+              capturedAt: afterCapturedAt,
+              snapshotId: afterSnapshotId,
+            })
+          : undefined;
+    if (
+      (afterCapturedAt !== undefined || afterSnapshotId !== undefined) &&
+      after === undefined
+    ) {
+      return inputFailure('query.after');
+    }
     try {
-      const snapshots =
-        await this.#dependencies.evidenceReadRepository.listSnapshots(
-          this.#dependencies.workspaceId,
-        );
-      return httpResult(200, {status: 'ok', snapshots});
+      const page =
+        this.#dependencies.evidenceReadRepository.listSnapshotPage === undefined
+          ? createCompatibilityEvidencePage(
+              await this.#dependencies.evidenceReadRepository.listSnapshots(
+                this.#dependencies.workspaceId,
+              ),
+              limit,
+              after,
+            )
+          : await this.#dependencies.evidenceReadRepository.listSnapshotPage(
+              this.#dependencies.workspaceId,
+              {limit, ...(after === undefined ? {} : {after})},
+            );
+      return httpResult(200, {
+        status: 'ok',
+        snapshots: page.items,
+        totalCount: page.totalCount,
+        ...(page.nextCursor === undefined ? {} : {nextCursor: page.nextCursor}),
+      });
     } catch {
       return repositoryFailure();
     }
@@ -2577,7 +2624,7 @@ export class M1cApiService implements M1cApiServicePort {
       const retrievalMode = request.retrievalMode ?? 'lexical';
       if (
         this.#dependencies.informationEntryRetrieval !== undefined &&
-        retrievalMode !== 'lexical'
+        (retrievalMode !== 'lexical' || !request.includePrivate)
       ) {
         const result =
           await this.#dependencies.informationEntryRetrieval.search(request);
@@ -5792,6 +5839,62 @@ function repositoryFailure(): M1cHttpResult {
   return httpResult(503, {
     status: 'failed',
     issue: Object.freeze({code: 'repository_failed'}),
+  });
+}
+
+function parseEvidencePageLimit(value: unknown): number | undefined {
+  const parsed =
+    typeof value === 'string' && /^[1-9]\d{0,2}$/u.test(value)
+      ? Number(value)
+      : value;
+  return typeof parsed === 'number' &&
+    Number.isSafeInteger(parsed) &&
+    parsed >= 1 &&
+    parsed <= EVIDENCE_SNAPSHOT_PAGE_LIMIT
+    ? parsed
+    : undefined;
+}
+
+function isCanonicalIsoTimestamp(value: string): boolean {
+  const milliseconds = Date.parse(value);
+  return (
+    Number.isFinite(milliseconds) &&
+    new Date(milliseconds).toISOString() === value
+  );
+}
+
+function createCompatibilityEvidencePage(
+  snapshots: readonly Readonly<EvidenceSnapshotSummary>[],
+  limit: number,
+  after: Readonly<EvidenceSnapshotPageCursor> | undefined,
+) {
+  const ordered = [...snapshots].sort(
+    (left, right) =>
+      right.capturedAt.localeCompare(left.capturedAt) ||
+      left.snapshotId.localeCompare(right.snapshotId),
+  );
+  const candidates =
+    after === undefined
+      ? ordered
+      : ordered.filter(
+          (snapshot) =>
+            snapshot.capturedAt < after.capturedAt ||
+            (snapshot.capturedAt === after.capturedAt &&
+              snapshot.snapshotId > after.snapshotId),
+        );
+  const items = Object.freeze(candidates.slice(0, limit));
+  const last = items.at(-1);
+  return Object.freeze({
+    items,
+    totalCount: ordered.length,
+    ...(candidates.length > limit && last !== undefined
+      ? {
+          nextCursor: Object.freeze({
+            capturedAt: last.capturedAt,
+            snapshotId: last.snapshotId,
+          }),
+        }
+      : {}),
   });
 }
 

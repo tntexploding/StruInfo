@@ -47,6 +47,16 @@ export interface InformationEntryRepositoryPort {
     workspaceId: string,
     includePrivate: boolean,
   ): Promise<readonly Readonly<CurrentInformationEntry>[]>;
+
+  /**
+   * Optional optimized hydration path for a closed set of current Entry ids.
+   * Implementations that do not provide it keep the complete-load behavior.
+   */
+  loadCurrentEntriesByIds?(
+    workspaceId: string,
+    includePrivate: boolean,
+    entryIds: readonly string[],
+  ): Promise<readonly Readonly<CurrentInformationEntry>[]>;
 }
 
 export interface InformationEntryEmptySnapshotRepositoryPort extends InformationEntryRepositoryPort {

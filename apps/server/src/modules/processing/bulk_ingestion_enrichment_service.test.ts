@@ -31,7 +31,8 @@ describe('M2-P0B bulk ingestion enrichment', () => {
       entry(
         '44444444-4444-4444-8444-444444444444',
         SNAPSHOT_ID,
-        'Useful tool\nUse **TypeScript** with `Vitest`.',
+        'TypeScript 配置指南\nUse **TypeScript** with `Vitest`.',
+        [keyword('TypeScript')],
       ),
       entry(
         '55555555-5555-4555-8555-555555555555',
@@ -67,11 +68,18 @@ describe('M2-P0B bulk ingestion enrichment', () => {
     expect(entries.values[0]?.value.contentKeywords).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          normalizedValue: 'typescript',
+          normalizedValue: 'vitest',
           origin: 'rule',
         }),
       ]),
     );
+    expect(entries.values[0]?.value.typeKeyword).toBe('operating_guideline');
+    expect(entries.values[0]?.value.domains).toEqual([
+      expect.objectContaining({
+        keyword: 'engineering_computing',
+        origin: 'rule',
+      }),
+    ]);
     expect(associations.sourceEntryIds).toEqual([
       '44444444-4444-4444-8444-444444444444',
     ]);
@@ -106,7 +114,7 @@ describe('M2-P0B bulk ingestion enrichment', () => {
     });
 
     expect(result.outcome).toBe('succeeded');
-    expect(result.batch.revisedEntryCount).toBe(0);
+    expect(result.batch.revisedEntryCount).toBe(1);
     expect(result.batch.addedTagCount).toBe(0);
     expect(result.batch.exceptionEntryCount).toBe(1);
     expect(result.batch.items[0]?.exceptions).toEqual([
@@ -114,6 +122,83 @@ describe('M2-P0B bulk ingestion enrichment', () => {
         entryId: '44444444-4444-4444-8444-444444444444',
         code: 'automatic_tagging_disabled',
       }),
+    ]);
+  });
+
+  it('routes ambiguous missing classification to review without overwriting existing annotations', async () => {
+    const repository = new MemoryEnrichmentRepository();
+    const current = entry(
+      '44444444-4444-4444-8444-444444444444',
+      SNAPSHOT_ID,
+      '一则短消息\n今天记录了一件事情。',
+      [keyword('记录')],
+    );
+    const entries = new MemoryEntries([current]);
+    const service = new BulkIngestionEnrichmentService({
+      workspaceId: WORKSPACE_ID,
+      repository,
+      entries,
+      associations: new MemoryAssociations(),
+      preferences: preferences(false),
+    });
+
+    const result = await service.execute({
+      batchId: BATCH_ID,
+      mode: 'run',
+      maxItems: 1,
+    });
+
+    expect(result.batch.items[0]?.exceptions).toEqual([
+      expect.objectContaining({code: 'classification_incomplete'}),
+    ]);
+    expect(entries.values[0]?.value.typeKeyword).toBeUndefined();
+    expect(entries.values[0]?.value.domains).toEqual([]);
+    expect(entries.values[0]?.revision).toBe(current.revision);
+    expect(result.batch.revisedEntryCount).toBe(0);
+  });
+
+  it('preserves existing manual type and domain when deterministic rules disagree', async () => {
+    const repository = new MemoryEnrichmentRepository();
+    const base = entry(
+      '44444444-4444-4444-8444-444444444444',
+      SNAPSHOT_ID,
+      'Docker 配置指南\n这是一份软件开发教程。',
+      [keyword('Docker')],
+    );
+    const entries = new MemoryEntries([
+      Object.freeze({
+        ...base,
+        value: Object.freeze({
+          ...base.value,
+          typeKeyword: 'argument' as const,
+          domains: Object.freeze([
+            Object.freeze({
+              keyword: 'culture_arts' as const,
+              origin: 'manual' as const,
+              originVersion: 'synthetic.manual.v1',
+            }),
+          ]),
+        }),
+      }),
+    ]);
+    const service = new BulkIngestionEnrichmentService({
+      workspaceId: WORKSPACE_ID,
+      repository,
+      entries,
+      associations: new MemoryAssociations(),
+      preferences: preferences(true),
+    });
+
+    const result = await service.execute({
+      batchId: BATCH_ID,
+      mode: 'run',
+      maxItems: 1,
+    });
+
+    expect(result.batch.exceptionEntryCount).toBe(0);
+    expect(entries.values[0]?.value.typeKeyword).toBe('argument');
+    expect(entries.values[0]?.value.domains).toEqual([
+      expect.objectContaining({keyword: 'culture_arts', origin: 'manual'}),
     ]);
   });
 });

@@ -1,5 +1,7 @@
 import {
+  INFORMATION_ENTRY_TERM_MAXIMUM_POSTINGS_PER_ENTRY,
   INFORMATION_ENTRY_TERM_TOKENIZER_VERSION,
+  type InformationEntryLexicalCandidateRequest,
   type InformationEntrySearchIndexRepositoryPort,
   type InformationEntrySearchIndexSnapshot,
   type InformationEntrySearchProjection,
@@ -37,6 +39,50 @@ export const READ_INFORMATION_ENTRY_TERM_POSTINGS_SQL = [
   'FROM struinfo.information_entry_term_posting',
   'WHERE workspace_id = $1',
   'ORDER BY entry_id, field, term',
+].join('\n');
+
+export const READ_INFORMATION_ENTRY_SEARCH_INDEX_READINESS_SQL = [
+  'SELECT',
+  '  (SELECT count(*)::integer',
+  '   FROM struinfo.information_entry AS entry',
+  '   WHERE entry.workspace_id = $1 AND entry.is_current_structure',
+  '     AND NOT entry.is_private) AS public_entry_count,',
+  '  (SELECT count(*)::integer',
+  '   FROM struinfo.information_entry_search_projection AS projection',
+  '   JOIN struinfo.information_entry AS entry',
+  '     ON entry.workspace_id = projection.workspace_id',
+  '    AND entry.entry_id = projection.entry_id',
+  '    AND entry.current_revision = projection.entry_revision',
+  '    AND entry.current_revision_id = projection.entry_revision_id',
+  '   WHERE projection.workspace_id = $1 AND entry.is_current_structure',
+  '     AND NOT entry.is_private',
+  '     AND projection.tokenizer_version = $2',
+  '     AND (SELECT count(*)',
+  '          FROM struinfo.information_entry_term_posting AS posting',
+  '          WHERE posting.workspace_id = projection.workspace_id',
+  '            AND posting.entry_id = projection.entry_id) < $3::integer',
+  '  ) AS current_projection_count',
+].join('\n');
+
+export const FIND_INFORMATION_ENTRY_LEXICAL_CANDIDATES_SQL = [
+  'SELECT DISTINCT posting.entry_id::text',
+  'FROM struinfo.information_entry_term_posting AS posting',
+  'JOIN struinfo.information_entry_search_projection AS projection',
+  '  ON projection.workspace_id = posting.workspace_id',
+  ' AND projection.entry_id = posting.entry_id',
+  'JOIN struinfo.information_entry AS entry',
+  '  ON entry.workspace_id = projection.workspace_id',
+  ' AND entry.entry_id = projection.entry_id',
+  ' AND entry.current_revision = projection.entry_revision',
+  ' AND entry.current_revision_id = projection.entry_revision_id',
+  'WHERE posting.workspace_id = $1 AND entry.is_current_structure',
+  '  AND NOT entry.is_private',
+  '  AND posting.field = ANY($2::text[])',
+  '  AND EXISTS (',
+  '    SELECT 1 FROM unnest($3::text[]) AS candidate(term)',
+  '    WHERE strpos(posting.term, candidate.term) > 0',
+  '  )',
+  'ORDER BY posting.entry_id::text',
 ].join('\n');
 
 const DELETE_POSTINGS_SQL =
@@ -114,6 +160,58 @@ export class PostgresInformationEntrySearchIndexRepository implements Informatio
         }
       },
     );
+  }
+
+  public findLexicalCandidateEntryIds(
+    workspaceIdInput: string,
+    request: Readonly<InformationEntryLexicalCandidateRequest>,
+  ): Promise<readonly string[] | undefined> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    assertCandidateRequest(request);
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const readiness = await client.query<Row>(
+          READ_INFORMATION_ENTRY_SEARCH_INDEX_READINESS_SQL,
+          [
+            workspaceId,
+            INFORMATION_ENTRY_TERM_TOKENIZER_VERSION,
+            INFORMATION_ENTRY_TERM_MAXIMUM_POSTINGS_PER_ENTRY,
+          ],
+        );
+        if (readiness.rows.length !== 1) throw new PostgresAdapterError();
+        const row = readiness.rows[0];
+        if (
+          row === undefined ||
+          integer(row.public_entry_count) !==
+            integer(row.current_projection_count)
+        ) {
+          return undefined;
+        }
+        const candidates = await client.query<Row>(
+          FIND_INFORMATION_ENTRY_LEXICAL_CANDIDATES_SQL,
+          [workspaceId, request.fields, request.terms],
+        );
+        return Object.freeze(
+          candidates.rows.map((candidate) => canonicalUuid(candidate.entry_id)),
+        );
+      },
+    );
+  }
+}
+
+function assertCandidateRequest(
+  request: Readonly<InformationEntryLexicalCandidateRequest>,
+): void {
+  if (
+    request.fields.length < 1 ||
+    request.fields.length > 3 ||
+    request.terms.length < 1 ||
+    request.terms.length > 8 ||
+    request.terms.some((term) => term.length < 1 || term.length > 80)
+  ) {
+    throw new PostgresAdapterError();
   }
 }
 

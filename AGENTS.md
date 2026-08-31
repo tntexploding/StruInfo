@@ -626,6 +626,19 @@ durable ProcessingRun history even when a process stopped before claiming its
 first item and retires orphaned running attempts; P0F exact adjudication is bound
 to the precise current Entry revision expected after any annotation write.
 
+ADR 0053 completes M2-P1A through P1D from the first real-scale ingestion
+feedback. Complete personal-data packages now share a bounded 1 GiB / 32 million
+value profile; Snapshot catalog reads use stable 200-item pages that the Web
+client follows to completion; P0B fills only missing, unambiguous deterministic
+type/domain classifications through an explicit rules-version refresh; and
+eligible public exact/substring queries use the current term index for candidate
+hydration before the original search core makes the final decision. Missing or
+stale indexes, fuzzy/private/Association queries and ambiguous classification
+must fail safe to the existing complete/manual path. Do not claim a real backup
+or latency improvement until the owner deploys migration `000029`, stops writes,
+creates a new external backup, refreshes the affected batches and rebuilds the
+derived index. Never read or copy real material merely to validate this code.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

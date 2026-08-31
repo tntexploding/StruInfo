@@ -1,10 +1,12 @@
 import {
-  EVIDENCE_SNAPSHOT_LIST_LIMIT,
   DOCUMENT_NODE_KINDS,
+  EVIDENCE_SNAPSHOT_PAGE_LIMIT,
   PUBLICATION_PRECISIONS,
   RESOURCE_KINDS,
   type EvidenceFragmentReadState,
   type EvidenceReadRepositoryPort,
+  type EvidenceSnapshotPage,
+  type EvidenceSnapshotPageRequest,
   type EvidenceSnapshotReadState,
   type EvidenceSnapshotSummary,
   type EvidenceStructureReadState,
@@ -41,7 +43,37 @@ GROUP BY
   s.published_timezone, s.published_precision, s.published_source_text,
   s.published_inferred
 ORDER BY s.captured_at DESC, s.snapshot_id
-LIMIT ${String(EVIDENCE_SNAPSHOT_LIST_LIMIT)}` as const;
+` as const;
+
+export const LIST_EVIDENCE_SNAPSHOT_PAGE_SQL = `SELECT
+  s.workspace_id::text, s.snapshot_id::text, s.resource_id::text,
+  r.resource_kind, r.source_key, r.canonical_uri, r.is_private, s.captured_at,
+  s.published_at, s.published_timezone, s.published_precision,
+  s.published_source_text, s.published_inferred,
+  count(f.fragment_id)::integer AS fragment_count
+FROM struinfo.snapshot AS s
+JOIN struinfo.resource AS r
+  ON r.workspace_id = s.workspace_id AND r.resource_id = s.resource_id
+LEFT JOIN struinfo.fragment AS f
+  ON f.workspace_id = s.workspace_id AND f.snapshot_id = s.snapshot_id
+WHERE s.workspace_id = $1
+  AND (
+    $2::timestamptz IS NULL
+    OR s.captured_at < $2::timestamptz
+    OR (s.captured_at = $2::timestamptz AND s.snapshot_id > $3::uuid)
+  )
+GROUP BY
+  s.workspace_id, s.snapshot_id, s.resource_id, r.resource_kind,
+  r.source_key, r.canonical_uri, r.is_private, s.captured_at, s.published_at,
+  s.published_timezone, s.published_precision, s.published_source_text,
+  s.published_inferred
+ORDER BY s.captured_at DESC, s.snapshot_id
+LIMIT $4` as const;
+
+export const COUNT_EVIDENCE_SNAPSHOTS_SQL =
+  `SELECT count(*)::text AS total_count
+FROM struinfo.snapshot
+WHERE workspace_id = $1` as const;
 
 export const READ_EVIDENCE_SNAPSHOT_SQL = `SELECT
   s.workspace_id::text, s.snapshot_id::text, s.resource_id::text,
@@ -97,6 +129,65 @@ export class PostgresEvidenceReadRepository implements EvidenceReadRepositoryPor
       workspaceId,
     ]);
     return Object.freeze(result.rows.map(mapSnapshotSummary));
+  }
+
+  public async listSnapshotPage(
+    workspaceIdInput: string,
+    request: Readonly<EvidenceSnapshotPageRequest>,
+  ): Promise<Readonly<EvidenceSnapshotPage>> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    if (
+      !Number.isSafeInteger(request.limit) ||
+      request.limit < 1 ||
+      request.limit > EVIDENCE_SNAPSHOT_PAGE_LIMIT
+    ) {
+      throw new PostgresAdapterError();
+    }
+    const after =
+      request.after === undefined
+        ? undefined
+        : Object.freeze({
+            capturedAt: canonicalTimestamp(request.after.capturedAt),
+            snapshotId: canonicalUuid(request.after.snapshotId),
+          });
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const pageResult = await client.query<Row>(
+          LIST_EVIDENCE_SNAPSHOT_PAGE_SQL,
+          [
+            workspaceId,
+            after?.capturedAt ?? null,
+            after?.snapshotId ?? null,
+            request.limit + 1,
+          ],
+        );
+        const countResult = await client.query<Row>(
+          COUNT_EVIDENCE_SNAPSHOTS_SQL,
+          [workspaceId],
+        );
+        if (countResult.rows.length !== 1) throw new PostgresAdapterError();
+        const countRow = countResult.rows[0];
+        if (countRow === undefined) throw new PostgresAdapterError();
+        const mapped = pageResult.rows.map(mapSnapshotSummary);
+        const hasNext = mapped.length > request.limit;
+        const items = Object.freeze(mapped.slice(0, request.limit));
+        const last = items.at(-1);
+        return Object.freeze({
+          items,
+          totalCount: postgresSafeInteger(countRow.total_count),
+          ...(hasNext && last !== undefined
+            ? {
+                nextCursor: Object.freeze({
+                  capturedAt: last.capturedAt,
+                  snapshotId: last.snapshotId,
+                }),
+              }
+            : {}),
+        });
+      },
+    );
   }
 
   public loadSnapshot(
@@ -258,6 +349,13 @@ function timestamp(value: unknown): string {
     if (Number.isFinite(parsed.valueOf())) return parsed.toISOString();
   }
   throw new PostgresAdapterError();
+}
+
+function canonicalTimestamp(value: unknown): string {
+  if (typeof value !== 'string') throw new PostgresAdapterError();
+  const normalized = timestamp(value);
+  if (normalized !== value) throw new PostgresAdapterError();
+  return normalized;
 }
 
 function optionalTimestamp(value: unknown): string | undefined {
