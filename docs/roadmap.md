@@ -422,7 +422,9 @@ M1H-5 完成后，导入页同时具备单份精细录入和显式多文件顺�
 2. **P1B 文档分页**：服务端每页仍最多返回 200 份 Snapshot，但用稳定 cursor、`total` 和 `next` 允许客户端读完全部 407 份及后续增长文档；
 3. **P1C 三维分类**：确定性 enrichment 只补空且唯一高置信度的类型/领域，不覆盖人工、AI 或导入值；歧义进入 `classification_incomplete`，既有成功批次必须显式 `enrich-refresh`；
 4. **P1D 查询候选**：公开 exact/substring 查询先从完整、当前且未触及 posting 截断上限的词项投影取得候选并选择性加载 Entry，再复用原搜索核心；索引不完整、存在截断风险、fuzzy、隐私和 Association 查询自动完整回退；
-5. **部署停点**：先应用 `000029` 和 runtime grants，停写生成新正式备份，再按批次 refresh enrichment 并重建词项/向量索引。完成这些操作后再测 14,910 Entry 的真实备份与查询延迟。
+5. **部署收口（已完成）**：本地 Docker 私人部署已应用 `000029` 和 runtime grants，保留刷新前/后的正式备份，以 397/397 成功 refresh 14,565 条批次 Entry，并重建 14,910 个当前词项投影；407 份文档通过 3 页完整可见；
+6. **真实性能边界**：非空 exact/substring 已从候选索引路径稳定返回，三次实测约 1.0–1.3 秒；空条件全量浏览仍约 10.2–14.5 秒。后者只有在直接使用需要时再进入列表投影或 SQL query-pushdown 增量，不回开 P1A–P1D；
+7. **生产资源档位**：app 固定 3 GiB 容器 / 2 GiB heap，backup/restore 固定 6 GiB / 4 GiB，其他维护任务保持 1 GiB；该档位来自真实 OOM 复现并由部署 verifier 锁定。
 
 ## 首版发布后的部署与使用
 

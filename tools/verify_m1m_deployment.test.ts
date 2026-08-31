@@ -51,6 +51,32 @@ describe('M1M deployment source policy', () => {
     }).toThrow(M1mDeploymentError);
   });
 
+  it('requires the production-scale memory profile on app, backup and restore', () => {
+    const sources = readSources();
+    for (const [serviceName, memoryLimit, heapMegabytes] of [
+      ['app', '3g', '2048'],
+      ['backup', '6g', '4096'],
+      ['restore', '6g', '4096'],
+    ] as const) {
+      const servicePattern = new RegExp(
+        `^  ${serviceName}:\\r?\\n([\\s\\S]*?)(?=^  [a-z][a-z0-9-]*:|^secrets:)`,
+        'mu',
+      );
+      for (const requiredSetting of [
+        `mem_limit: ${memoryLimit}`,
+        `NODE_OPTIONS: --max-old-space-size=${heapMegabytes}`,
+      ]) {
+        const compose = sources.compose.replace(servicePattern, (service) =>
+          service.replace(requiredSetting, ''),
+        );
+        expect(compose).not.toBe(sources.compose);
+        expect(() => {
+          validateM1mDeploymentSources({...sources, compose});
+        }).toThrow(M1mDeploymentError);
+      }
+    }
+  });
+
   it('rejects a missing executable start boundary', () => {
     const sources = readSources();
     const rootPackage = JSON.parse(sources.rootPackage) as {

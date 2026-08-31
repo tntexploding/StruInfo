@@ -410,7 +410,10 @@ node-postgres 的多语句结果现在安全投影最终结果，使首次队列
 - P0B 规则版本现在同时产生内容关键词和唯一高置信度类型/领域分类。既有非规则分类保持原值，歧义/无唯一赢家不猜测并记录 `classification_incomplete`；
 - `ingest enrich-refresh` 只重置旧规则摘要的成功项，先移除对应旧异常和裁决，再通过原 Snapshot 原子 revision 与增量联系边界重算；迁移 `000029` 只扩充闭合异常代码；
 - 公开 exact/substring 查询可使用完整、当前且未触及 4,096 posting 截断上限的 term posting 先筛 Entry ID，再选择性读取候选；原纯查询继续负责所有字段、筛选、排序、计数与 cursor。fuzzy、隐私、Association、空查询、索引不完整或存在截断风险时完整回退；
-- 本代码增量没有读取或修改外部真实资料，也没有替所有者生成 post-backup。部署后必须显式迁移、停写备份、refresh 既有批次、重建索引并重新测量真实备份与查询延迟。
+- 2026-08-31 已在所有者授权的本地 Docker 私人部署完成操作收口：应用 `000029`、重授 runtime grant，并保留刷新前及刷新后两个独立校验的正式个人数据包；最终包约 305.9 MB、804 个 Blob 引用、489,871 行；
+- 一个 397 Snapshot / 14,565 Entry 的既有成功批次已 refresh，397/397 成功、0 失败；10,066 条 Entry 产生新修订，新增 46,378 个标签并增量重建 99,057 条联系投影；全工作区 14,910 条 Entry 均有内容关键词，其中 3,768 条有类型、8,951 条有领域，12,613 条不唯一的分类保持 `classification_incomplete`；
+- 文档公共分页以三页完整返回 407/407。公开索引以 3 GiB 容器 / 2 GiB heap 在约 491 秒内构建 14,910 个当前投影和 2,984,177 条 posting；backup/restore 因更大闭合状态固定为 6 GiB / 4 GiB；
+- 三次实测中 `docker` exact/substring 查询约为 1.0–1.3 秒，无匹配 substring 约为 2.1–2.4 秒；空条件全量浏览仍约 10.2–14.5 秒，属于下一轮列表/查询下推性能边界，不影响本次非空 P1D 候选目标。
 
 以上未完成项只有在进入相应产品边界或出现当前可达 `PRODUCT_BLOCKER` 时才阻断；测试工具自证、
 未来环境强化和不可达边缘情况继续按开发总则记入延期强化，不拖住当前主线。
@@ -430,8 +433,8 @@ node-postgres 的多语句结果现在安全投影最终结果，使首次队列
 - M1H-5 复用单文件导入协议，增加会话批次、逐文件状态、稳定失败重试、停止后续项及合成浏览器回归；没有迁移、数据库队列表或新依赖；
 - M1I-1A/B 至 M1I-5 新增连接器闭合结果、Registry、多文档幂等 Evidence 准备器、`remote_document` 迁移、Git 兼容、RSS/Atom、JSON API 与受限 Web adapter、条件请求/声明式映射、分页与增量游标、已安装 capability 发现、opaque 外部配置引用、批量订阅服务、外部偏好 union、API 与导入页合成回归；没有真实 Feed、API、网页、插件配置或网络测试资料；
 - M1J 新增迁移 `000024`、八类闭合关系语义、500 code-point 维护说明、来源核验状态、双端来源操作和 Association v4 向后升级；M1K 新增迁移 `000025`、可重建词项/向量投影、可选 OpenAI Embedding、三种 Query 和公开证据 RAG；M1L 新增可重复合成性能工具、单次关联读取索引与 HTTP 搜索去重；M1M 新增外部 secret 文件、维护/队列入口、容器与 grant 源码和 deployment verifier；没有第二套图谱/搜索服务、真实知识 fixture、私密外发、迁移或新依赖；
-- 完整 `corepack pnpm run verify` 退出码为 0：156 个单元测试文件、941 项单元测试、2 个集成测试文件、4 项集成测试全部通过，Web 构建转换 80 个模块，制品审计覆盖 1,101 个候选文件，部署静态门通过；
-- M2-P1A–D 以合成回归覆盖超过 425.6 万 canonical JSON value 的个人数据包、407 份 Snapshot 的稳定完整分页、唯一高置信度类型/领域补齐及歧义异常、既有成功批次显式 refresh、词法索引完整性检查、候选 Entry 选择性读取和所有规定的完整回退；本轮没有读取真实资料、执行真实 refresh、生成正式 post-backup 或把合成延迟冒充 14,910 Entry 的部署后实测；
+- 完整 `corepack pnpm run verify` 退出码为 0：156 个单元测试文件、942 项单元测试、2 个集成测试文件、4 项集成测试全部通过，Web 构建转换 80 个模块，制品审计覆盖 1,101 个候选文件，部署静态门通过；
+- M2-P1A–D 的合成回归继续覆盖超过 425.6 万 canonical JSON value 的个人数据包、407 份 Snapshot 的稳定完整分页、唯一高置信度类型/领域补齐及歧义异常、既有成功批次显式 refresh、词法索引完整性检查、候选 Entry 选择性读取和所有规定的完整回退；同一冻结实现随后按上节记录的真实规模完成迁移、双恢复点、refresh、索引重建、分页与查询耗时核验，真实正文与个人配置仍未进入 Git、日志或测试制品；
 - M2-P0A 以合成测试覆盖批次计划、单 Snapshot 原子物化、提交后中断的 exact-existing 恢复、ProcessingRun 已先取消/失败时的 retry、计划漂移失败、有限窗口失败退出、CLI 解码/脱敏报告、PostgreSQL 查询边界、`000026` 静态语义和 Processing v7→v8 升级；
 - M2-P0B 以合成测试覆盖 Snapshot 原子标签修订、首次 claim 前退出后的持久 attempt 恢复、孤立 running attempt 收束、规则异常、增量联系 source 范围、override 隔离、CLI 解码/脱敏报告、`000027` 静态语义和 Processing v8→v9 升级；
 - M2-P0C 以合成测试覆盖当前/过期 revision 分离、分组计数、稳定抽样、精确数量冲突、批量接受与回退、CLI 脱敏输出、`000028` 静态语义、PostgreSQL current-revision 锁定和 Processing v9→v10 升级；它没有运行真实资料或 Provider；

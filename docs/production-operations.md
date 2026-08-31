@@ -288,7 +288,10 @@ docker compose -f compose.production.yaml --profile maintenance run --rm backup
 ```
 
 命令在外部数据根 `backups/` 下生成版本化 `*.personal-data.json`，当前闭合预算为 1 GiB / 3200 万
-canonical JSON value，并只输出文件名、字节数、
+canonical JSON value。生产 Compose 为 app 提供 3 GiB 容器内存和 2 GiB Node heap，为 backup 和
+restore 提供 6 GiB 容器内存和 4 GiB Node heap；preflight 等普通维护任务仍保持 1 GiB 配额。
+不要删除或绕过这些生产规模资源档位，否则百万级 JSON value 的传输或万级 Entry 的公开索引
+重建可能在闭合操作完成前因 JavaScript heap 不足退出。命令只输出文件名、字节数、
 SHA-256、Blob 数和表行数。内容包括当前完整工作区数据库分区、引用 Blob 字节和外部偏好；
 不包括运行配置、secret 或可重建的 pg-boss 内部队列表。
 
