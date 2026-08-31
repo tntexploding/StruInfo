@@ -91,6 +91,15 @@ describe('LocalReviewPreferencesStore', () => {
         maximumGroupCodePoints: 4000,
         maximumFragmentsPerGroup: 8,
       },
+      entryClassificationProfile: {
+        format: 'struinfo.entry-classification-profile',
+        version: 1,
+        revision: 0,
+        aliases: [],
+        typeMappings: [],
+        domainMappings: [],
+        exclusions: [],
+      },
     });
   });
 
@@ -119,6 +128,49 @@ describe('LocalReviewPreferencesStore', () => {
         minimumGroupCodePoints: 250,
         maximumGroupCodePoints: 2500,
         maximumFragmentsPerGroup: 6,
+      },
+    });
+  });
+
+  it('stores classification aliases, mappings and exclusions outside the database', async () => {
+    const {store} = createStore();
+
+    await store.update(WORKSPACE_A, (current) =>
+      Object.freeze({
+        next: patchReviewPreferences(current, {
+          entryClassificationProfile: Object.freeze({
+            format: 'struinfo.entry-classification-profile',
+            version: 1,
+            revision: 1,
+            aliases: Object.freeze([
+              Object.freeze({source: '容器平台', canonical: 'Docker'}),
+            ]),
+            typeMappings: Object.freeze([
+              Object.freeze({
+                term: '动手实验',
+                keyword: 'operating_guideline',
+              }),
+            ]),
+            domainMappings: Object.freeze([
+              Object.freeze({
+                term: 'Docker',
+                keyword: 'engineering_computing',
+              }),
+            ]),
+            exclusions: Object.freeze(['广告']),
+          }),
+        }),
+        result: undefined,
+      }),
+    );
+
+    await expect(store.load(WORKSPACE_A)).resolves.toMatchObject({
+      entryClassificationProfile: {
+        revision: 1,
+        aliases: [{source: '容器平台', canonical: 'Docker'}],
+        typeMappings: [{term: '动手实验', keyword: 'operating_guideline'}],
+        domainMappings: [{term: 'Docker', keyword: 'engineering_computing'}],
+        exclusions: ['广告'],
       },
     });
   });

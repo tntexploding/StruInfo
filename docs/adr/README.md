@@ -284,3 +284,10 @@ raises the still-bounded complete-package capacity, pages the complete Snapshot
 catalog, fills only missing unambiguous type/domain classifications through an
 explicit enrichment refresh, and uses the existing derived term index to narrow
 eligible public lexical queries while retaining a semantics-complete fallback.
+
+ADR 0054 completes M2-P2A–D without touching owner data. It separates missing
+classification causes, replaces flattened v1 matching with field-weighted and
+fail-closed v2 scoring, emits one primary plus at most two qualified secondary
+domains, and carries owner aliases/mappings/exclusions in external preferences
+and the complete personal-data package. Residual Codex review and UI controls
+remain deferred until the refreshed real distribution is measured.

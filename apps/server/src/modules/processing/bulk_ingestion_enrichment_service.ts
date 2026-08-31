@@ -11,6 +11,7 @@ import {
 import {
   buildIncrementalInformationEntryAssociationProjection,
   classifyInformationEntryDeterministically,
+  DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
   deriveInformationEntryRevisionId,
   DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION,
   DETERMINISTIC_ENTRY_TAG_RULE_VERSION,
@@ -355,10 +356,13 @@ function prepareItem(
     const classification = classifyInformationEntryDeterministically({
       titlePath: entry.value.titlePath,
       body: entry.value.body,
+      chunkMode: entry.value.chunkMode,
       contentKeywords: [
         ...entry.value.contentKeywords.map((keyword) => keyword.displayValue),
         ...candidates.map((candidate) => candidate.displayValue),
       ],
+      profile: rules.classificationProfile,
+      originVersion: rules.classificationOriginVersion,
     });
     const typeKeyword = entry.value.typeKeyword ?? classification.typeKeyword;
     const domains =
@@ -389,7 +393,11 @@ function prepareItem(
               : capacity === 0
                 ? ('keyword_capacity_reached' as const)
                 : ('no_deterministic_tags' as const)
-            : ('classification_incomplete' as const),
+            : classificationExceptionCode(
+                typeKeyword,
+                domains,
+                classification.diagnostics,
+              ),
         }),
       );
     }
@@ -437,6 +445,9 @@ function prepareRules(preferences: Readonly<ReviewPreferences>) {
   const association =
     preferences.associationPolicy ??
     DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES;
+  const classificationProfile =
+    preferences.entryClassificationProfile ??
+    DEFAULT_ENTRY_CLASSIFICATION_PROFILE;
   const associationPolicy: Readonly<InformationEntryAssociationPolicy> =
     Object.freeze({
       ...INFORMATION_ENTRY_ASSOCIATION_POLICY,
@@ -447,12 +458,13 @@ function prepareRules(preferences: Readonly<ReviewPreferences>) {
       threshold: association.threshold,
     });
   const sha256 = digest({
-    schemaVersion: 'struinfo.bulk-ingestion-enrichment-rules.v2',
+    schemaVersion: 'struinfo.bulk-ingestion-enrichment-rules.v3',
     deterministicTagRuleVersion: DETERMINISTIC_ENTRY_TAG_RULE_VERSION,
     deterministicClassificationRuleVersion:
       DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION,
     automaticKeywords,
     vocabulary,
+    classificationProfile,
     associationPolicy: {
       revision: associationPolicy.revision,
       contentWeight: associationPolicy.contentWeight,
@@ -467,10 +479,30 @@ function prepareRules(preferences: Readonly<ReviewPreferences>) {
   return Object.freeze({
     automaticKeywords,
     vocabulary,
+    classificationProfile,
     associationPolicy,
     sha256,
     originVersion: `${DETERMINISTIC_ENTRY_TAG_RULE_VERSION}:m2-p0b:${sha256}`,
+    classificationOriginVersion: `${DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION}:m2-p2:${sha256}`,
   });
+}
+
+function classificationExceptionCode(
+  typeKeyword: CurrentInformationEntry['value']['typeKeyword'],
+  domains: CurrentInformationEntry['value']['domains'],
+  diagnostics: ReturnType<
+    typeof classifyInformationEntryDeterministically
+  >['diagnostics'],
+): BulkIngestionEnrichmentException['code'] {
+  if (typeKeyword === undefined && domains.length === 0) {
+    return diagnostics.type.reason === 'no_signal' &&
+      diagnostics.domain.reason === 'no_signal'
+      ? 'classification_no_signal'
+      : 'classification_tied';
+  }
+  return typeKeyword === undefined
+    ? 'classification_type_missing'
+    : 'classification_domain_missing';
 }
 
 function filterPrivacyScope(

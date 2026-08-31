@@ -19,7 +19,10 @@ import type {
   InformationEntryRestructureWrite,
   InformationEntrySearchCursor,
 } from '../modules/entries/index.js';
-import {DEFAULT_ENTRY_SPLIT_RULE_PROFILE} from '../modules/entries/index.js';
+import {
+  DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+  DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+} from '../modules/entries/index.js';
 import type {
   EntryAutomationClaim,
   EntryAutomationExecution,
@@ -243,6 +246,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_PREFERENCE_PROFILE,
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
     );
   });
 
@@ -375,6 +379,7 @@ describe('M1cApiService', () => {
       {revision: 1, enabled: true, rules: [rule]},
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
     );
     await expect(
       service.saveInformationEntryPreferenceProfile({
@@ -741,6 +746,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_PREFERENCE_PROFILE,
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
     );
     await expect(
       service.reviseInformationEntryAssociationPolicy({
@@ -860,6 +866,7 @@ describe('M1cApiService', () => {
       entryPreferenceProfile,
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
     );
 
     await expect(
@@ -921,6 +928,7 @@ describe('M1cApiService', () => {
       entryPreferenceProfile,
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
     );
   });
 

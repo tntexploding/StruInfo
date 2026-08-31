@@ -11,6 +11,10 @@ export const BULK_INGESTION_ENRICHMENT_EXCEPTION_CODES = [
   'no_deterministic_tags',
   'keyword_capacity_reached',
   'classification_incomplete',
+  'classification_no_signal',
+  'classification_type_missing',
+  'classification_domain_missing',
+  'classification_tied',
 ] as const;
 
 export type BulkIngestionEnrichmentItemStatus =

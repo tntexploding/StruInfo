@@ -222,16 +222,16 @@ corepack pnpm run performance:m2-p0d -- --full
 标准记录结果为 500 Snapshot / 15,000 Entry，约 15 分 20 秒。该命令不属于普通 `verify`，
 也不得连接已有 PostgreSQL 实例或作为生产 SLO。
 
-### 4.2 M2-P1 首次真实规模升级顺序
+### 4.2 M2-P1/P2 真实规模升级顺序
 
-M2-P1 代码不会自动读取或改变现有外部工作区。升级已有批量入库结果时按以下顺序操作：
+M2-P1/P2 代码不会自动读取或改变现有外部工作区。升级已有批量入库结果时按以下顺序操作：
 
-1. 停止写入；用 migration credential 执行 `db:migrate`，确认 `000029` 已应用；
+1. 停止写入；用 migration credential 执行 `db:migrate`，确认 `000029` 与 `000030` 已应用；
 2. 重新应用 `deploy/postgresql/apply-runtime-grants.sql`，随后用 runtime credential 执行 preflight；
 3. 保持停写，立即用新版本执行 `maintenance -- backup`，确认返回文件名、SHA-256、Blob 和行数；
-4. 对需要补齐分类的既有 succeeded batch 逐个执行 `enrich-refresh`，再以 `enrich-resume` 有界推进；
+4. 如需使用个人分类规则，先通过受支持的外部偏好边界保存并复核 Profile；再对目标 succeeded batch 逐个执行 `enrich-refresh`，并以 `enrich-resume` 有界推进；
 5. 启动应用，在“查询”页的“本地检索索引”执行重建；配置了 Embedding 时同一动作也重建公开向量；
-6. 复核文档总数、分类异常汇总和查询延迟，最后在停写状态再生成一次正式 post-backup。
+6. 复核文档总数、类型/领域覆盖率、主次领域数量、四类新分类异常和查询延迟，最后在停写状态再生成一次正式 post-backup。
 
 旧版入库前备份仍是恢复点；在第 3 步的新备份真实成功前，不得把容量代码通过描述成已经获得
 post-backup。索引不完整时查询会回退完整加载，因此可用性优先于速度，但必须在第 5 步后重新测量。
