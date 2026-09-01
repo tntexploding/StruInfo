@@ -41,11 +41,13 @@ import {
   type DecodedBulkIngestionCodexReviewFiles,
 } from './bulk_ingestion_codex_apply_contract.js';
 import {
+  BULK_INGESTION_CODEX_LEGACY_PACKET_MAXIMUM_ITEMS,
   BULK_INGESTION_CODEX_PACKET_MAXIMUM_BYTES,
   BULK_INGESTION_CODEX_PACKET_MAXIMUM_ITEMS,
   BULK_INGESTION_CODEX_PACKET_SCHEMA_VERSION,
   BULK_INGESTION_CODEX_RESULT_MAXIMUM_BYTES,
   BULK_INGESTION_CODEX_RESULT_SCHEMA_VERSION,
+  isBulkIngestionCodexClassificationExceptionCode,
   type BulkIngestionCodexReviewFileStorePort,
   type BulkIngestionCodexReviewPacket,
   type BulkIngestionCodexReviewPacketItem,
@@ -440,6 +442,15 @@ function decodePacket(
     1,
     BULK_INGESTION_CODEX_PACKET_MAXIMUM_ITEMS,
   ).map(decodePacketItem);
+  if (
+    items.length > BULK_INGESTION_CODEX_LEGACY_PACKET_MAXIMUM_ITEMS &&
+    items.some(
+      (item) =>
+        !isBulkIngestionCodexClassificationExceptionCode(item.exceptionCode),
+    )
+  ) {
+    throw new Error('packet item limit');
+  }
   return Object.freeze({
     schemaVersion: exactLiteral(
       root.schemaVersion,

@@ -1,5 +1,10 @@
 import type {M1cWorkspaceTransferSummary} from '../workspace_transfer/m1c_workspace_transfer.js';
 import {BULK_INGESTION_ENRICHMENT_EXCEPTION_CODES} from '../modules/processing/bulk_ingestion_enrichment_contract.js';
+import {
+  BULK_INGESTION_CODEX_CLASSIFICATION_PACKET_MAXIMUM_ITEMS,
+  BULK_INGESTION_CODEX_LEGACY_PACKET_MAXIMUM_ITEMS,
+  isBulkIngestionCodexClassificationExceptionCode,
+} from '../modules/processing/bulk_ingestion_codex_review_contract.js';
 import type {
   ApplyBulkIngestionCodexReviewResult,
   BulkIngestionAdjudicationSample,
@@ -584,10 +589,18 @@ function decodeIngestRequest(
   if (action === 'review-export') {
     const batchId = flags.get('batch');
     const exceptionCode = flags.get('code');
+    const classificationReview =
+      isBulkIngestionCodexClassificationExceptionCode(exceptionCode);
     const includePrivate = parseBoolean(
       flags.get('include-private') ?? 'false',
     );
-    const limit = parseBoundedInteger(flags.get('limit') ?? '12', 1, 20);
+    const limit = parseBoundedInteger(
+      flags.get('limit') ?? (classificationReview ? '100' : '12'),
+      1,
+      classificationReview
+        ? BULK_INGESTION_CODEX_CLASSIFICATION_PACKET_MAXIMUM_ITEMS
+        : BULK_INGESTION_CODEX_LEGACY_PACKET_MAXIMUM_ITEMS,
+    );
     if (
       !onlyFlags(flags, ['batch', 'code', 'include-private', 'limit']) ||
       batchId === undefined ||

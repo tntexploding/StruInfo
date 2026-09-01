@@ -5,9 +5,33 @@ export const BULK_INGESTION_CODEX_PACKET_SCHEMA_VERSION =
   'struinfo.m2-p0e.codex-review-packet.v1' as const;
 export const BULK_INGESTION_CODEX_RESULT_SCHEMA_VERSION =
   'struinfo.m2-p0f.codex-review-result.v1' as const;
-export const BULK_INGESTION_CODEX_PACKET_MAXIMUM_ITEMS = 20;
+export const BULK_INGESTION_CODEX_LEGACY_PACKET_MAXIMUM_ITEMS = 20;
+export const BULK_INGESTION_CODEX_CLASSIFICATION_PACKET_MAXIMUM_ITEMS = 100;
+export const BULK_INGESTION_CODEX_PACKET_MAXIMUM_ITEMS =
+  BULK_INGESTION_CODEX_CLASSIFICATION_PACKET_MAXIMUM_ITEMS;
 export const BULK_INGESTION_CODEX_PACKET_MAXIMUM_BYTES = 16 * 1_024 * 1_024;
 export const BULK_INGESTION_CODEX_RESULT_MAXIMUM_BYTES = 2 * 1_024 * 1_024;
+
+export const BULK_INGESTION_CODEX_CLASSIFICATION_EXCEPTION_CODES = [
+  'classification_no_signal',
+  'classification_type_missing',
+  'classification_domain_missing',
+  'classification_tied',
+] as const satisfies readonly BulkIngestionEnrichmentExceptionCode[];
+
+export type BulkIngestionCodexClassificationExceptionCode =
+  (typeof BULK_INGESTION_CODEX_CLASSIFICATION_EXCEPTION_CODES)[number];
+
+export function isBulkIngestionCodexClassificationExceptionCode(
+  value: unknown,
+): value is BulkIngestionCodexClassificationExceptionCode {
+  return (
+    typeof value === 'string' &&
+    (
+      BULK_INGESTION_CODEX_CLASSIFICATION_EXCEPTION_CODES as readonly string[]
+    ).includes(value)
+  );
+}
 
 export interface BulkIngestionCodexReviewPacketItem {
   readonly ordinal: number;

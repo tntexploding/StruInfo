@@ -761,6 +761,14 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 - 个人 Profile 是外部偏好状态，提供有界别名、类型/领域映射和噪声排除；它进入规则摘要与完整个人数据包，但不进入领域表、Git 或制品；
 - `000030` 只扩展既有 CHECK。已有成功批次必须经显式 refresh 才重算，pair override 与 Evidence 不受影响；P2E/P2F 由真实刷新分布决定。
 
-### 12.41 延期审核与环境门
+### 12.41 M2-P2E 残余分类 Codex 复核（已实现）
+
+- 四类分类异常沿用 P0C typed code 分组，并复用 P0E/P0F packet/result schema 和外部文件边界；
+- 分类 packet 可含 1–100 条，其他异常仍为 1–20 条；16 MiB/2 MiB 字节门继续独立生效；
+- 结果模板从 current Entry 投影完整现有 annotation，缺失 type/domain 保留无效 placeholder，避免重复生成已有标签；
+- 导出读取优先使用选中 Entry ID；写回仍是完整 Entry revision、exact adjudication 和局部 Association replacement；
+- 这不是 Provider 自动分类、后台循环或新数据库权限；P2F UI 与检索性能保持独立。
+
+### 12.42 延期审核与环境门
 
 实际内容和所有者体验、真实 Provider 质量/费用、正式 TM2、目标云端容器/Linux 等价性、私人网络入口、真实资源限制、保留/告警和发布分发仍需统一审核。本地合成容器、数据库与备份恢复演练已经通过，但不能冒充这些目标环境结论。它们必须如实报告状态，也不能在没有当前产品阻断证据时拖停 Entry 主线开发；活动工作区仍禁止恢复真实资料。单元、集成、构建和合成浏览器验证继续作为开发质量门运行。

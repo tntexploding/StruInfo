@@ -639,6 +639,16 @@ or latency improvement until the owner deploys migration `000029`, stops writes,
 creates a new external backup, refreshes the affected batches and rebuilds the
 derived index. Never read or copy real material merely to validate this code.
 
+ADR 0054 and ADR 0055 complete M2-P2A through P2E. Classification now records
+separate no-signal, missing-type, missing-domain and tied/low-confidence causes,
+uses field-weighted deterministic scoring, supports bounded primary/secondary
+domains and consumes only external personal classification rules. After a real
+refresh measured 11,794 residual classification exceptions, P2E reuses P0E/P0F
+for explicit classification groups of at most 100 items, prefills current
+annotations and leaves only missing dimensions as invalid placeholders. Other
+exception packets remain at 20. Do not add a Provider, UI authority, automatic
+acceptance or repository-owned personal vocabulary under this decision.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

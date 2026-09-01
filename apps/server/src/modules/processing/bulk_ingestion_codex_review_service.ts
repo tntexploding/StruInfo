@@ -8,10 +8,12 @@ import type {
 import type {BulkIngestionAdjudicationSample} from './bulk_ingestion_adjudication_contract.js';
 import type {BulkIngestionAdjudicationService} from './bulk_ingestion_adjudication_service.js';
 import {
+  BULK_INGESTION_CODEX_CLASSIFICATION_PACKET_MAXIMUM_ITEMS,
+  BULK_INGESTION_CODEX_LEGACY_PACKET_MAXIMUM_ITEMS,
   BULK_INGESTION_CODEX_PACKET_MAXIMUM_BYTES,
-  BULK_INGESTION_CODEX_PACKET_MAXIMUM_ITEMS,
   BULK_INGESTION_CODEX_PACKET_SCHEMA_VERSION,
   BULK_INGESTION_CODEX_RESULT_SCHEMA_VERSION,
+  isBulkIngestionCodexClassificationExceptionCode,
   type BulkIngestionCodexReviewFileStorePort,
   type BulkIngestionCodexReviewPacket,
   type BulkIngestionCodexReviewPacketItem,
@@ -44,7 +46,10 @@ export class BulkIngestionCodexReviewServiceError extends Error {
 export interface BulkIngestionCodexReviewServiceDependencies {
   readonly workspaceId: string;
   readonly adjudication: Pick<BulkIngestionAdjudicationService, 'sample'>;
-  readonly entries: Pick<InformationEntryRepositoryPort, 'loadCurrentEntries'>;
+  readonly entries: Pick<
+    InformationEntryRepositoryPort,
+    'loadCurrentEntries' | 'loadCurrentEntriesByIds'
+  >;
   readonly fileStore: BulkIngestionCodexReviewFileStorePort;
 }
 
@@ -81,10 +86,22 @@ export class BulkIngestionCodexReviewService {
     if (!request.includePrivate && samples.some((item) => item.isPrivate)) {
       throw new BulkIngestionCodexReviewServiceError('privacy_scope_required');
     }
-    const currentEntries = await this.#dependencies.entries.loadCurrentEntries(
-      this.#dependencies.workspaceId,
-      request.includePrivate,
+    const selectedEntryIds = Object.freeze(
+      samples.map((sample) => sample.entryId),
     );
+    const loadByIds = this.#dependencies.entries.loadCurrentEntriesByIds?.bind(
+      this.#dependencies.entries,
+    );
+    const currentEntries = await (loadByIds === undefined
+      ? this.#dependencies.entries.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          request.includePrivate,
+        )
+      : loadByIds(
+          this.#dependencies.workspaceId,
+          request.includePrivate,
+          selectedEntryIds,
+        ));
     const entryById = new Map(
       currentEntries.map((entry) => [entry.entryId, entry] as const),
     );
@@ -219,6 +236,31 @@ function prepareResultTemplate(
           entryRevisionId: item.entryRevisionId,
           adjudicationVersion: item.adjudicationVersion,
           action: 'replace_me',
+          ...(isBulkIngestionCodexClassificationExceptionCode(
+            item.exceptionCode,
+          )
+            ? {
+                annotation: Object.freeze({
+                  contentKeywords: Object.freeze([
+                    ...item.currentAnnotations.contentKeywords,
+                  ]),
+                  typeKeyword:
+                    item.currentAnnotations.typeKeyword ?? 'replace_me',
+                  ...(item.currentAnnotations.typeCustomName === undefined
+                    ? {}
+                    : {
+                        typeCustomName: item.currentAnnotations.typeCustomName,
+                      }),
+                  domains: Object.freeze(
+                    item.currentAnnotations.domains.length === 0
+                      ? [Object.freeze({keyword: 'replace_me'})]
+                      : item.currentAnnotations.domains.map((domain) =>
+                          Object.freeze({...domain}),
+                        ),
+                  ),
+                }),
+              }
+            : {}),
         }),
       ),
     ),
@@ -228,6 +270,11 @@ function prepareResultTemplate(
 function validRequest(
   request: Readonly<ExportBulkIngestionCodexReviewRequest>,
 ): boolean {
+  const maximumItems = isBulkIngestionCodexClassificationExceptionCode(
+    request.exceptionCode,
+  )
+    ? BULK_INGESTION_CODEX_CLASSIFICATION_PACKET_MAXIMUM_ITEMS
+    : BULK_INGESTION_CODEX_LEGACY_PACKET_MAXIMUM_ITEMS;
   return (
     CANONICAL_UUID.test(request.batchId) &&
     (request.exceptionCode === undefined ||
@@ -237,7 +284,7 @@ function validRequest(
     typeof request.includePrivate === 'boolean' &&
     Number.isSafeInteger(request.limit) &&
     request.limit >= 1 &&
-    request.limit <= BULK_INGESTION_CODEX_PACKET_MAXIMUM_ITEMS
+    request.limit <= maximumItems
   );
 }
 

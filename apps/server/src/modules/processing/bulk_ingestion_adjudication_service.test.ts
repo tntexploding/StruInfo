@@ -78,6 +78,12 @@ describe('M2-P0C bulk ingestion exception adjudication', () => {
         }),
       ],
     );
+    await expect(
+      service.sample({...request, limit: 100}),
+    ).resolves.toHaveLength(2);
+    await expect(service.sample({...request, limit: 101})).rejects.toEqual(
+      new BulkIngestionAdjudicationServiceError('input_invalid'),
+    );
   });
 
   it('guards batch transitions by exact current count and supports reopening', async () => {
@@ -124,6 +130,33 @@ describe('M2-P0C bulk ingestion exception adjudication', () => {
 
     expect(repository.values.find((value) => !value.isCurrent)?.status).toBe(
       'pending',
+    );
+  });
+
+  it('accepts one exact 100-item classification transition and rejects 101', async () => {
+    const repository = new MemoryAdjudicationRepository();
+    repository.values = Array.from({length: 100}, (_, index) =>
+      classificationException(index),
+    );
+    const service = createService(repository);
+    const decisions = repository.values.map(exactDecision);
+
+    await expect(
+      service.decideExact({batchId: BATCH_ID, decisions}),
+    ).resolves.toMatchObject({outcome: 'applied', appliedCount: 100});
+    expect(
+      repository.values.every((value) => value.status === 'accepted'),
+    ).toBe(true);
+
+    await expect(
+      service.decideExact({
+        batchId: BATCH_ID,
+        decisions: Array.from({length: 101}, (_, index) =>
+          exactDecision(classificationException(index)),
+        ),
+      }),
+    ).rejects.toEqual(
+      new BulkIngestionAdjudicationServiceError('input_invalid'),
     );
   });
 
@@ -279,5 +312,44 @@ function exception(
     exceptionCode,
     status,
     version: 1,
+  });
+}
+
+function classificationException(
+  ordinal: number,
+): BulkIngestionAdjudicationException {
+  const entryId =
+    'a0000000-0000-4000-8000-' + ordinal.toString().padStart(12, '0');
+  const revisionId =
+    'b0000000-0000-4000-8000-' + ordinal.toString().padStart(12, '0');
+  return Object.freeze({
+    workspaceId: WORKSPACE_ID,
+    batchId: BATCH_ID,
+    ordinal,
+    snapshotId: '33333333-3333-4333-8333-333333333333',
+    isPrivate: false,
+    entryId,
+    entryRevision: 1,
+    entryRevisionId: revisionId,
+    currentEntryRevision: 1,
+    currentEntryRevisionId: revisionId,
+    isCurrent: true,
+    exceptionCode: 'classification_type_missing',
+    status: 'pending',
+    version: 1,
+  });
+}
+
+function exactDecision(value: Readonly<BulkIngestionAdjudicationException>) {
+  return Object.freeze({
+    ordinal: value.ordinal,
+    entryId: value.entryId,
+    entryRevision: value.entryRevision,
+    entryRevisionId: value.entryRevisionId,
+    expectedVersion: value.version,
+    fromStatus: 'pending' as const,
+    toStatus: 'accepted' as const,
+    expectedCurrentEntryRevision: value.currentEntryRevision,
+    expectedCurrentEntryRevisionId: value.currentEntryRevisionId,
   });
 }

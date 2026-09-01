@@ -943,6 +943,17 @@ enrichment 在不覆盖既有人工/AI/导入分类的前提下补齐唯一高�
 自动改写已有 Entry，升级后仍需显式 backup、`enrich-refresh` 和测量。M2-P2E/P2F 等待真实刷新
 后的覆盖率、歧义和人工复核规模再决定，不属于本增量的隐含承诺。
 
+### 7.1.42 M2-P2E 残余分类批量复核（已实现）
+
+[ADR 0055](adr/0055-scaled-codex-classification-review.md) 在真实 refresh 确认仍有 11,794 个分类
+异常后，复用 P0E/P0F 的外部 Codex 工作包与闭合写回。四个分类异常必须按 code 分组，可用最多
+100 条的微批次；其他异常仍限 20 条。结果模板预填当前内容关键词、已有类型和已有领域，只把缺失
+维度留为无效 placeholder，因此 Codex 不必重复构造完整标签。
+
+模板在 `action` 和缺失维度被补齐前不得应用；成功写回仍绑定 packet digest、Entry revision、
+adjudication version、完整 annotation revision 和增量 Association 重建。默认不导出隐私内容，
+正文和结果只位于外部数据根。该增量不增加 Provider、迁移、UI、自动接受或后台任务。
+
 ### 7.2 MVP-1：偏好学习与每周自适应摄取
 
 MVP-0 证明知识核心可用后，再让系统持续处理该信源并逐步学习用户偏好：

@@ -1,5 +1,6 @@
 import {
   BULK_INGESTION_ADJUDICATION_STATUSES,
+  BULK_INGESTION_CODEX_PACKET_MAXIMUM_ITEMS,
   BULK_INGESTION_ENRICHMENT_EXCEPTION_CODES,
   type BulkIngestionAdjudicationException,
   type BulkIngestionAdjudicationExactDecision,
@@ -407,7 +408,10 @@ function validateExactTransition(
 ): void {
   canonicalUuid(input.workspaceId);
   canonicalUuid(input.batchId);
-  if (input.decisions.length < 1 || input.decisions.length > 20) {
+  if (
+    input.decisions.length < 1 ||
+    input.decisions.length > BULK_INGESTION_CODEX_PACKET_MAXIMUM_ITEMS
+  ) {
     throw new PostgresAdapterError();
   }
   const identities = new Set<string>();

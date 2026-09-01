@@ -20,7 +20,8 @@ import {
 
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
-const MAXIMUM_SAMPLE_SIZE = 50;
+const MAXIMUM_SAMPLE_SIZE = 100;
+const MAXIMUM_EXACT_DECISION_COUNT = 100;
 const MAXIMUM_DECISION_COUNT = 50_000;
 
 export type BulkIngestionAdjudicationServiceErrorCode =
@@ -293,7 +294,7 @@ function validExactDecisionRequest(
   if (
     !CANONICAL_UUID.test(request.batchId) ||
     request.decisions.length < 1 ||
-    request.decisions.length > 20
+    request.decisions.length > MAXIMUM_EXACT_DECISION_COUNT
   ) {
     return false;
   }

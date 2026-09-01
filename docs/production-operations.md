@@ -151,7 +151,7 @@ corepack pnpm run maintenance -- ingest enrich-status --batch <batchId>
 refresh 只重置规则摘要已经变化的成功项，并先删除这些项对应的旧异常和当前裁决；人工/AI/导入
 分类、pair override、Evidence 和不受影响的成功项保持不变。没有规则摘要变化时命令不应伪造新工作。
 
-P0B 全部成功后，先查看异常汇总，再按 closed code、状态和 current/stale 范围抽取最多 50 个稳定样本：
+P0B 全部成功后，先查看异常汇总，再按 closed code、状态和 current/stale 范围抽取最多 100 个稳定样本：
 
 ```powershell
 corepack pnpm run maintenance -- ingest exceptions-summary --batch <batchId>
@@ -166,12 +166,26 @@ corepack pnpm run maintenance -- ingest exceptions-adjudicate --batch <batchId> 
 
 `to` 可选 `accepted`、`manual_review`、`deferred` 或用于重新打开的 `pending`。实际数量、原状态或 Entry revision 已改变时命令返回 `stale` 且整组不写入；过期异常只能查看，不能被批量裁决。裁决状态不修改 Entry、标签、联系、图谱或 AI 提案。
 
-当前开发周期需要 Codex 阅读疑难内容时，不再逐条打开浏览器。P0E 把当前 `pending` 异常按
-1–20 条导出到外部数据根 `exports/codex-work/`，同时创建一个默认无效的结果模板：
+当前开发周期需要 Codex 阅读疑难内容时，不再逐条打开浏览器。普通 P0E 异常仍按 1–20 条导出到
+外部数据根 `exports/codex-work/`，同时创建一个默认无效的结果模板：
 
 ```powershell
 corepack pnpm run maintenance -- ingest review-export --batch <batchId> --code no_deterministic_tags --limit 20
 ```
+
+M2-P2E 对四类残余分类异常提供最多 100 条的分组工作包。建议先处理只缺一个维度的组，再处理需要
+完整判断的组：
+
+```powershell
+corepack pnpm run maintenance -- ingest review-export --batch <batchId> --code classification_type_missing
+corepack pnpm run maintenance -- ingest review-export --batch <batchId> --code classification_domain_missing
+corepack pnpm run maintenance -- ingest review-export --batch <batchId> --code classification_tied
+corepack pnpm run maintenance -- ingest review-export --batch <batchId> --code classification_no_signal
+```
+
+这四个命令默认 `--limit 100`；也可显式降低。结果模板已经带入现有内容关键词、类型和领域，
+只需把 `action` 改为 `annotate` 并替换缺失维度的 `replace_me`。若选择 `accept`、
+`manual_review` 或 `deferred`，必须删除该项的 `annotation`。
 
 默认只处理公开 Entry。只有本次确实需要在本机审阅隐私内容时才显式追加
 `--include-private true`。终端只打印 packet ID、文件名、摘要和数量，不打印正文。Codex 编辑
