@@ -43,6 +43,52 @@ describe('deterministic InformationEntry classification', () => {
     });
   });
 
+  it('classifies a short linked tool card as factual material', () => {
+    const result = classifyInformationEntryDeterministically({
+      titlePath: 'TinyGraph 开源工具',
+      body: '一个用于查看本地关系图的开源命令行工具：https://example.test/tinygraph',
+      contentKeywords: ['TinyGraph'],
+      chunkMode: 'split',
+    });
+
+    expect(result.typeKeyword).toBe('factual_material');
+    expect(result.diagnostics.type).toMatchObject({
+      reason: 'assigned',
+      winner: 'factual_material',
+    });
+  });
+
+  it('keeps an explicit linked tutorial as an operating guideline', () => {
+    const result = classifyInformationEntryDeterministically({
+      titlePath: 'TinyGraph 使用教程',
+      body: '这个开源工具的操作步骤见 https://example.test/guide 。',
+      contentKeywords: ['TinyGraph'],
+    });
+
+    expect(result.typeKeyword).toBe('operating_guideline');
+  });
+
+  it('accepts an explicit body-only analysis signal', () => {
+    const result = classifyInformationEntryDeterministically({
+      titlePath: '年度结果',
+      body: '这是一份对多个实现进行对比的基准测试与深入分析。',
+      contentKeywords: [],
+    });
+
+    expect(result.typeKeyword).toBe('investigation_analysis');
+  });
+
+  it('does not guess a type from a generic software mention without a link', () => {
+    const result = classifyInformationEntryDeterministically({
+      titlePath: '一个软件',
+      body: '这里提到一个普通软件。',
+      contentKeywords: [],
+    });
+
+    expect(result.typeKeyword).toBeUndefined();
+    expect(result.diagnostics.type.reason).toBe('no_signal');
+  });
+
   it('fails closed and exposes tied domain evidence', () => {
     const result = classifyInformationEntryDeterministically({
       titlePath: '跨领域研究',

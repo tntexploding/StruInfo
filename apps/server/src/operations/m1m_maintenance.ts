@@ -15,7 +15,9 @@ import type {
   BulkIngestionEnrichmentBatch,
   BulkIngestionEnrichmentExceptionCode,
   BulkIngestionPipelineStatus,
+  BulkIngestionTypeCompletionPreview,
   DecideBulkIngestionAdjudicationResult,
+  ApplyBulkIngestionTypeCompletionResult,
   ExecuteBulkIngestionEnrichmentResult,
   ExecuteBulkIngestionResult,
   ExportBulkIngestionCodexReviewResult,
@@ -75,6 +77,18 @@ export type M1mMaintenanceRequest =
       limit: number;
     }>
   | Readonly<{operation: 'ingest_review_apply'; packetId: string}>
+  | Readonly<{
+      operation: 'ingest_type_completion_preview';
+      batchId: string;
+      privacyScope: ProcessingPrivacyScope;
+      sampleLimit: number;
+    }>
+  | Readonly<{
+      operation: 'ingest_type_completion_apply';
+      batchId: string;
+      maxItems: number;
+      sampleLimit: number;
+    }>
   | Readonly<{
       operation: 'ingest_pipeline_start';
       idempotencyKey: string;
@@ -206,6 +220,16 @@ export type M1mMaintenanceReport =
       result: Readonly<ApplyBulkIngestionCodexReviewResult>;
     }>
   | Readonly<{
+      event: 'm2_p2g_type_completion_previewed';
+      outcome: 'ready';
+      preview: Readonly<BulkIngestionTypeCompletionPreview>;
+    }>
+  | Readonly<{
+      event: 'm2_p2g_type_completion_applied';
+      outcome: ApplyBulkIngestionTypeCompletionResult['outcome'];
+      result: Readonly<ApplyBulkIngestionTypeCompletionResult>;
+    }>
+  | Readonly<{
       event: 'm2_p0g_pipeline_empty';
       outcome: 'empty';
     }>
@@ -281,6 +305,16 @@ export interface M1mMaintenanceRuntimePort {
   applyIngestionReviewResult(
     packetId: string,
   ): Promise<Readonly<ApplyBulkIngestionCodexReviewResult>>;
+  previewIngestionTypeCompletion(input: {
+    batchId: string;
+    privacyScope: ProcessingPrivacyScope;
+    sampleLimit: number;
+  }): Promise<Readonly<BulkIngestionTypeCompletionPreview>>;
+  applyIngestionTypeCompletion(input: {
+    batchId: string;
+    maxItems: number;
+    sampleLimit: number;
+  }): Promise<Readonly<ApplyBulkIngestionTypeCompletionResult>>;
   startIngestionPipeline(
     input: Readonly<{
       idempotencyKey: string;
@@ -387,6 +421,12 @@ export async function executeM1mMaintenance(
     request.operation === 'ingest_review_apply'
   ) {
     return executeIngestionCodexReviewMaintenance(request, runtime);
+  }
+  if (
+    request.operation === 'ingest_type_completion_preview' ||
+    request.operation === 'ingest_type_completion_apply'
+  ) {
+    return executeIngestionTypeCompletionMaintenance(request, runtime);
   }
   if (
     request.operation === 'ingest_pipeline_start' ||
@@ -629,6 +669,55 @@ function decodeIngestRequest(
     return Object.freeze({
       operation: 'ingest_review_apply' as const,
       packetId,
+    });
+  }
+  if (action === 'type-completion-preview') {
+    const batchId = flags.get('batch');
+    const privacyScope = flags.get('scope') ?? 'public_only';
+    const sampleLimit = parseBoundedInteger(
+      flags.get('sample-limit') ?? '20',
+      0,
+      50,
+    );
+    if (
+      !onlyFlags(flags, ['batch', 'scope', 'sample-limit']) ||
+      batchId === undefined ||
+      !CANONICAL_UUID.test(batchId) ||
+      !['public_only', 'include_private', 'private_only'].includes(privacyScope)
+    ) {
+      throw new M1mMaintenanceError('usage_invalid');
+    }
+    return Object.freeze({
+      operation: 'ingest_type_completion_preview' as const,
+      batchId,
+      privacyScope: privacyScope as ProcessingPrivacyScope,
+      sampleLimit,
+    });
+  }
+  if (action === 'type-completion-apply') {
+    const batchId = flags.get('batch');
+    const maxItems = parseBoundedInteger(
+      flags.get('max-items') ?? '100',
+      1,
+      500,
+    );
+    const sampleLimit = parseBoundedInteger(
+      flags.get('sample-limit') ?? '20',
+      0,
+      50,
+    );
+    if (
+      !onlyFlags(flags, ['batch', 'max-items', 'sample-limit']) ||
+      batchId === undefined ||
+      !CANONICAL_UUID.test(batchId)
+    ) {
+      throw new M1mMaintenanceError('usage_invalid');
+    }
+    return Object.freeze({
+      operation: 'ingest_type_completion_apply' as const,
+      batchId,
+      maxItems,
+      sampleLimit,
     });
   }
   if (action === 'pipeline-start') {
@@ -1026,6 +1115,31 @@ async function executeIngestionCodexReviewMaintenance(
   const result = await runtime.applyIngestionReviewResult(request.packetId);
   return Object.freeze({
     event: 'm2_p0f_review_result_applied' as const,
+    outcome: result.outcome,
+    result,
+  });
+}
+
+async function executeIngestionTypeCompletionMaintenance(
+  request: Extract<
+    M1mMaintenanceRequest,
+    {
+      operation:
+        'ingest_type_completion_preview' | 'ingest_type_completion_apply';
+    }
+  >,
+  runtime: M1mMaintenanceRuntimePort,
+): Promise<Readonly<M1mMaintenanceReport>> {
+  if (request.operation === 'ingest_type_completion_preview') {
+    return Object.freeze({
+      event: 'm2_p2g_type_completion_previewed' as const,
+      outcome: 'ready' as const,
+      preview: await runtime.previewIngestionTypeCompletion(request),
+    });
+  }
+  const result = await runtime.applyIngestionTypeCompletion(request);
+  return Object.freeze({
+    event: 'm2_p2g_type_completion_applied' as const,
     outcome: result.outcome,
     result,
   });

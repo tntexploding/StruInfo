@@ -200,6 +200,25 @@ corepack pnpm run maintenance -- ingest review-apply --packet <packetId>
 标签、关闭对应异常并只重建涉及这些 Entry 的可替换联系；重复执行同一结果不会追加重复 revision。
 结果成功回写后可以人工删除对应两个临时文件，数据库与完整个人数据备份不依赖它们。
 
+M2-P2G 应先预览，再执行有限窗口补全。预览只输出计数、类型/原因分布和最多 50 个稳定 Entry ID
+样本，不输出正文、标题或来源：
+
+```powershell
+corepack pnpm run maintenance -- ingest type-completion-preview --batch <batchId> --scope public_only --sample-limit 20
+```
+
+`nextAction=apply_type_completion` 表示当前规则能够安全补一部分空类型。先人工检查分布和样本，再在
+已停写且备份成功后执行：
+
+```powershell
+corepack pnpm run maintenance -- ingest type-completion-apply --batch <batchId> --max-items 100 --sample-limit 20
+```
+
+该命令根据批次当前状态自动选择 run/resume/retry/refresh，只补空类型，不覆盖已有人工、AI、导入
+或先前规则结果。`continue_apply` 表示继续下一有限窗口；`export_codex_review` 表示高置信度规则已经
+用尽，应改用上面的 P2E 分类工作包；`none` 才表示当前类型补全链闭合。不要通过反复运行把未解决项
+强制写为 `other`。apply 严格继承批次原隐私范围；预览私密范围也必须由当前操作显式选择。
+
 P0G 提供推荐的统一入口。它每次最多推进 1–500 项，严格按 P0A → P0B → P0C 顺序运行，并
 返回下一动作而不是在一个进程内无限循环：
 
@@ -243,9 +262,10 @@ M2-P1/P2 代码不会自动读取或改变现有外部工作区。升级已有�
 1. 停止写入；用 migration credential 执行 `db:migrate`，确认 `000029` 与 `000030` 已应用；
 2. 重新应用 `deploy/postgresql/apply-runtime-grants.sql`，随后用 runtime credential 执行 preflight；
 3. 保持停写，立即用新版本执行 `maintenance -- backup`，确认返回文件名、SHA-256、Blob 和行数；
-4. 如需使用个人分类规则，先通过受支持的外部偏好边界保存并复核 Profile；再对目标 succeeded batch 逐个执行 `enrich-refresh`，并以 `enrich-resume` 有界推进；
-5. 启动应用，在“查询”页的“本地检索索引”执行重建；配置了 Embedding 时同一动作也重建公开向量；
-6. 复核文档总数、类型/领域覆盖率、主次领域数量、四类新分类异常和查询延迟，最后在停写状态再生成一次正式 post-backup。
+4. 如需使用个人分类规则，先通过受支持的外部偏好边界保存并复核 Profile；对目标 batch 运行 `type-completion-preview`，检查分布与稳定样本后再以 `type-completion-apply` 有界推进；
+5. 若补全结果返回 `export_codex_review`，按异常 code 使用 P2E 工作包处理剩余项，并用 P2F 标签页纠正少量误判；
+6. 启动应用，在“查询”页的“本地检索索引”执行重建；配置了 Embedding 时同一动作也重建公开向量；
+7. 复核文档总数、类型/领域覆盖率、主次领域数量、四类分类异常和查询延迟，最后在停写状态再生成一次正式 post-backup。
 
 旧版入库前备份仍是恢复点；在第 3 步的新备份真实成功前，不得把容量代码通过描述成已经获得
 post-backup。索引不完整时查询会回退完整加载，因此可用性优先于速度，但必须在第 5 步后重新测量。

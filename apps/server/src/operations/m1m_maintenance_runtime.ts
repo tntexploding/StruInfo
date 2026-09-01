@@ -9,11 +9,14 @@ import {
   BulkIngestionEnrichmentService,
   BulkIngestionPipelineService,
   BulkIngestionService,
+  BulkIngestionTypeCompletionService,
   type DecideBulkIngestionAdjudicationRequest,
   type ExecuteBulkIngestionEnrichmentRequest,
   type ExecuteBulkIngestionRequest,
   type ExportBulkIngestionCodexReviewRequest,
+  type ApplyBulkIngestionTypeCompletionRequest,
   type PlanBulkIngestionRequest,
+  type PreviewBulkIngestionTypeCompletionRequest,
   type SampleBulkIngestionAdjudicationRequest,
   type StartBulkIngestionPipelineRequest,
 } from '../modules/processing/index.js';
@@ -91,6 +94,13 @@ export async function createM1mMaintenanceRuntime(
     enrichment: bulkIngestionEnrichment,
     adjudication: bulkIngestionAdjudication,
   });
+  const bulkIngestionTypeCompletion = new BulkIngestionTypeCompletionService({
+    workspaceId: config.workspaceId,
+    entries: repositories.informationEntries,
+    adjudication: repositories.bulkIngestionAdjudication,
+    enrichment: bulkIngestionEnrichment,
+    preferences: reviewPreferences,
+  });
   return Object.freeze({
     checkReadiness: () => database.readiness.check(),
     backup: () => transfer.exportWorkspace(config.workspaceId),
@@ -120,6 +130,12 @@ export async function createM1mMaintenanceRuntime(
     ) => bulkIngestionCodexReview.export(input),
     applyIngestionReviewResult: (packetId: string) =>
       bulkIngestionCodexApply.apply({packetId}),
+    previewIngestionTypeCompletion: (
+      input: Readonly<PreviewBulkIngestionTypeCompletionRequest>,
+    ) => bulkIngestionTypeCompletion.preview(input),
+    applyIngestionTypeCompletion: (
+      input: Readonly<ApplyBulkIngestionTypeCompletionRequest>,
+    ) => bulkIngestionTypeCompletion.apply(input),
     startIngestionPipeline: (
       input: Readonly<StartBulkIngestionPipelineRequest>,
     ) => bulkIngestionPipeline.start(input),
