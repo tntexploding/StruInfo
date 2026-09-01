@@ -967,9 +967,9 @@ adjudication version、完整 annotation revision 和增量 Association 重建�
 ### 7.1.44 M2-P2G 高覆盖确定性类型补全（已实现）
 
 [ADR 0057](adr/0057-high-coverage-deterministic-type-completion.md) 要求在扩大 Codex/人工工作量前先补足
-可解释的本地类型信号。明确体裁词可在正文独立达到门槛；有界短篇同时包含链接和资源语义时可判为
-`factual_material`，但教程、分析、公告、观点、经历、访谈和文学信号必须优先。模糊内容不得猜测，
-`other` 不得由自动规则写入。
+可解释的本地类型信号。明确体裁词可在正文独立达到门槛；`factual_material` 只接受数据集、统计数据、
+资料汇总和事实记录等强信号。普通工具、项目、软件、网站或仓库介绍即使含链接也不得自动赋型。
+模糊内容不得猜测，`other` 不得由自动规则写入。
 
 系统必须先提供不含正文的批次预览，分别报告可补全、未解决、过期、已有类型和已受人工决定保护的
 数量及稳定样本。实际应用必须复用既有 enrichment 的 run/resume/retry/refresh、每 Snapshot 原子

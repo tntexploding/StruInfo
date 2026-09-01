@@ -43,11 +43,23 @@ describe('deterministic InformationEntry classification', () => {
     });
   });
 
-  it('classifies a short linked tool card as factual material', () => {
+  it('does not treat a short linked tool card as factual material', () => {
     const result = classifyInformationEntryDeterministically({
       titlePath: 'TinyGraph 开源工具',
       body: '一个用于查看本地关系图的开源命令行工具：https://example.test/tinygraph',
       contentKeywords: ['TinyGraph'],
+      chunkMode: 'split',
+    });
+
+    expect(result.typeKeyword).toBeUndefined();
+    expect(result.diagnostics.type.reason).toBe('below_threshold');
+  });
+
+  it('keeps explicit datasets and statistics as factual material', () => {
+    const result = classifyInformationEntryDeterministically({
+      titlePath: '年度统计数据集',
+      body: '这里汇总了可复核的统计数据与事实记录。',
+      contentKeywords: ['dataset'],
       chunkMode: 'split',
     });
 

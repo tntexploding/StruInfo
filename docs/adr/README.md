@@ -306,9 +306,10 @@ type saves reuse the existing Entry CAS revision while preserving all other
 annotation and evidence fields. Privacy remains explicit; no migration,
 Provider, dependency or automatic rewrite is introduced.
 
-ADR 0057 completes M2-P2G with a high-coverage deterministic type-completion
-lane. Classifier v3 accepts explicit body-level genre signals and bounded linked
-resource cards without guessing `other`. A redacted preview reports coverage and
+ADR 0057 completes M2-P2G with a high-confidence deterministic type-completion
+lane. Classifier v4 accepts explicit body-level genre signals and only explicit
+dataset/statistics/reference-material signals without guessing generic linked
+resource cards or `other`. A redacted preview reports coverage and
 stable samples; apply reuses the recoverable enrichment refresh and never
 overwrites an existing type. Remaining uncertainty is routed to the existing
 Codex packet and Tags correction paths.
