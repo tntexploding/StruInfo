@@ -230,4 +230,114 @@ describe('deterministic InformationEntry classification', () => {
       }),
     ).toBeUndefined();
   });
+
+  it('upgrades a closed legacy v1 profile and preserves its text mappings', () => {
+    const profile = decodeEntryClassificationProfile({
+      format: ENTRY_CLASSIFICATION_PROFILE_FORMAT,
+      version: 1,
+      revision: 2,
+      aliases: [],
+      typeMappings: [{term: 'owner phrase', keyword: 'argument'}],
+      domainMappings: [],
+      exclusions: [],
+    });
+
+    expect(profile).toMatchObject({
+      version: ENTRY_CLASSIFICATION_PROFILE_VERSION,
+      revision: 2,
+      typeMappings: [
+        {term: 'owner phrase', keyword: 'argument', scope: 'text'},
+      ],
+    });
+    expect(profile?.typeThresholds).toHaveLength(9);
+    expect(profile?.domainThresholds).toHaveLength(11);
+    expect(profile?.neighborPolicy).toMatchObject({enabled: true});
+  });
+
+  it('uses exact content-keyword mappings without matching body substrings', () => {
+    const profile = decodeEntryClassificationProfile({
+      format: ENTRY_CLASSIFICATION_PROFILE_FORMAT,
+      version: ENTRY_CLASSIFICATION_PROFILE_VERSION,
+      revision: 4,
+      aliases: [],
+      typeMappings: [
+        {
+          term: 'owner-tool',
+          keyword: 'operating_guideline',
+          scope: 'content_keyword',
+        },
+      ],
+      domainMappings: [],
+      exclusions: [],
+    });
+    expect(profile).toBeDefined();
+    if (profile === undefined) throw new Error('synthetic profile rejected');
+
+    expect(
+      classifyInformationEntryDeterministically({
+        titlePath: '短条目',
+        body: '没有体裁线索。',
+        contentKeywords: ['owner-tool'],
+        profile,
+      }).typeKeyword,
+    ).toBe('operating_guideline');
+    expect(
+      classifyInformationEntryDeterministically({
+        titlePath: '短条目',
+        body: '正文只是顺带写到 owner-tool。',
+        contentKeywords: [],
+        profile,
+      }).typeKeyword,
+    ).toBeUndefined();
+  });
+
+  it('admits large exact maps but keeps substring maps deliberately bounded', () => {
+    const exactMappings = Array.from({length: 300}, (_, index) => ({
+      term: `term-${index.toString()}`,
+      keyword: 'knowledge_explanation',
+      scope: 'content_keyword',
+    }));
+    const base = {
+      format: ENTRY_CLASSIFICATION_PROFILE_FORMAT,
+      version: ENTRY_CLASSIFICATION_PROFILE_VERSION,
+      revision: 1,
+      aliases: [],
+      domainMappings: [],
+      exclusions: [],
+    };
+
+    expect(
+      decodeEntryClassificationProfile({...base, typeMappings: exactMappings}),
+    ).toBeDefined();
+    expect(
+      decodeEntryClassificationProfile({
+        ...base,
+        typeMappings: exactMappings.slice(0, 257).map((mapping) => ({
+          term: mapping.term,
+          keyword: mapping.keyword,
+          scope: 'text',
+        })),
+      }),
+    ).toBeUndefined();
+  });
+
+  it('uses stricter thresholds only for empirically noisier categories', () => {
+    const weakAnnouncement = classifyInformationEntryDeterministically({
+      titlePath: '项目消息',
+      body: 'This is an announcement.',
+      contentKeywords: [],
+    });
+    const explicitAnnouncement = classifyInformationEntryDeterministically({
+      titlePath: 'Project announcement',
+      body: 'A concise update.',
+      contentKeywords: [],
+    });
+
+    expect(weakAnnouncement.typeKeyword).toBeUndefined();
+    expect(weakAnnouncement.diagnostics.type).toMatchObject({
+      reason: 'below_threshold',
+      minimumScore: 12,
+    });
+    expect(explicitAnnouncement.typeKeyword).toBe('public_communication');
+  });
 });

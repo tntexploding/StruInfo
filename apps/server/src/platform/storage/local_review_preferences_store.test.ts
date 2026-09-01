@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {afterEach, describe, expect, it} from 'vitest';
 
 import {patchReviewPreferences} from '../../storage/review_preferences_store.js';
+import {DEFAULT_ENTRY_CLASSIFICATION_PROFILE} from '../../modules/entries/information_entry_deterministic_classification.js';
 import {LocalReviewPreferencesStore} from './local_review_preferences_store.js';
 
 const roots: string[] = [];
@@ -91,15 +92,7 @@ describe('LocalReviewPreferencesStore', () => {
         maximumGroupCodePoints: 4000,
         maximumFragmentsPerGroup: 8,
       },
-      entryClassificationProfile: {
-        format: 'struinfo.entry-classification-profile',
-        version: 1,
-        revision: 0,
-        aliases: [],
-        typeMappings: [],
-        domainMappings: [],
-        exclusions: [],
-      },
+      entryClassificationProfile: DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
     });
   });
 

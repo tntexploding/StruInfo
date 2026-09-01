@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 
 import {
+  buildInformationEntryClassificationContext,
   classifyInformationEntryDeterministically,
   DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
   DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION,
@@ -152,6 +153,19 @@ export class BulkIngestionTypeCompletionService {
     const profile =
       preferences.entryClassificationProfile ??
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE;
+    const includePrivate = request.privacyScope !== 'public_only';
+    const referenceEntries = (
+      await this.#dependencies.entries.loadCurrentEntries(
+        this.#dependencies.workspaceId,
+        includePrivate,
+      )
+    ).filter((entry) =>
+      matchesPrivacyScope(entry.value.isPrivate, request.privacyScope),
+    );
+    const classificationContext = buildInformationEntryClassificationContext(
+      referenceEntries,
+      profile.neighborPolicy,
+    );
     const candidates: CandidateResult[] = [];
     let staleEntryCount = 0;
     let alreadyClassifiedCount = 0;
@@ -181,6 +195,7 @@ export class BulkIngestionTypeCompletionService {
         ),
         chunkMode: entry.value.chunkMode,
         profile,
+        neighborEvidence: classificationContext.evidenceFor(entry),
       });
       candidates.push(
         Object.freeze({
@@ -195,6 +210,11 @@ export class BulkIngestionTypeCompletionService {
     }
     const assignableCount = candidates.filter(
       (candidate) => candidate.predictedType !== undefined,
+    ).length;
+    const neighborAssignableCount = candidates.filter(
+      (candidate) =>
+        candidate.predictedType !== undefined &&
+        candidate.diagnostic.evidenceSource === 'neighbor_consensus',
     ).length;
     const unresolvedCount = candidates.length - assignableCount;
     const samples = stableSamples(
@@ -215,6 +235,7 @@ export class BulkIngestionTypeCompletionService {
       alreadyClassifiedCount,
       missingTypeCount: candidates.length,
       assignableCount,
+      neighborAssignableCount,
       unresolvedCount,
       byPredictedType: Object.freeze(
         ENTRY_TYPE_KEYWORDS.map((typeKeyword) =>
@@ -412,6 +433,13 @@ function stableSamples(
             : {predictedType: candidate.predictedType}),
           winnerScore: candidate.diagnostic.winnerScore,
           runnerUpScore: candidate.diagnostic.runnerUpScore,
+          ...(candidate.diagnostic.evidenceSource === undefined
+            ? {}
+            : {
+                evidenceSource: candidate.diagnostic.evidenceSource,
+                referenceCount: candidate.diagnostic.referenceCount,
+                consensusBasisPoints: candidate.diagnostic.consensusBasisPoints,
+              }),
         }),
       ),
   );

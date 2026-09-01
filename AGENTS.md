@@ -649,6 +649,15 @@ annotations and leaves only missing dimensions as invalid placeholders. Other
 exception packets remain at 20. Do not add a Provider, UI authority, automatic
 acceptance or repository-owned personal vocabulary under this decision.
 
+ADR 0056 through ADR 0058 complete M2-P2F/P2G and M2-P3A through P3C. The Tags
+workspace exposes bounded type coverage/correction; the recoverable completion
+path reuses P0B rather than adding a writer; classification v5 uses per-category
+thresholds, backward-compatible external Profile v2 exact maps and bounded
+labelled-neighbor consensus. Privacy is filtered before neighbors, type evidence
+excludes the same Snapshot, and `other` remains manual/Codex-only. Real-data
+evaluation is read-only and aggregate-only; no refresh or apply is authorized by
+these ADRs. Personal mappings and evaluation inputs remain external data.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

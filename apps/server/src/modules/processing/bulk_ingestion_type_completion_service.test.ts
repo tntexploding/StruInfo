@@ -73,7 +73,7 @@ describe('BulkIngestionTypeCompletionService', () => {
       sampleLimit: 20,
     });
 
-    expect(loadCurrentEntries).not.toHaveBeenCalled();
+    expect(loadCurrentEntries).toHaveBeenCalledWith(WORKSPACE_ID, false);
     expect(loadCurrentEntriesByIds).toHaveBeenCalledWith(
       WORKSPACE_ID,
       false,
