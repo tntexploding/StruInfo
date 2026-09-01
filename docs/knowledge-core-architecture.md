@@ -769,9 +769,9 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 - 导出读取优先使用选中 Entry ID；写回仍是完整 Entry revision、exact adjudication 和局部 Association replacement；
 - 这不是 Provider 自动分类、后台循环或新数据库权限；P2F UI 与检索性能保持独立。
 
-### 12.42 M2-P2G 高覆盖确定性类型补全（已实现）
+### 12.42 M2-P2G 高置信度确定性类型补全（已实现）
 
-- v3 分类器仍是纯本地函数：强体裁词、短篇链接资源卡、字段权重、负信号、最低分和领先幅度共同决定是否产生类型；
+- v4 分类器仍是纯本地函数：强体裁词、明确资料信号、字段权重、负信号、最低分和领先幅度共同决定是否产生类型；普通链接资源卡不再构成类型证据；
 - `other` 不属于确定性候选。类型为空、平局或低置信度时保留诊断，不以默认值消灭不确定性；
 - preview 以 adjudication identity 选中 current pending 缺类型 Entry，并优先分块使用 `loadCurrentEntriesByIds`；返回值是可公开到维护终端的计数、代码、分数和 ID 投影；
 - apply 仅编排现有 BulkIngestionEnrichmentService。Entry revision、Snapshot 原子性、rules SHA、恢复、隐私范围和 Association replacement 都沿用原实现；

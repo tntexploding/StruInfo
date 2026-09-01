@@ -8,7 +8,7 @@ import {
 } from './information_entry_contract.js';
 
 export const DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION =
-  'struinfo.entry-classification.deterministic.v3';
+  'struinfo.entry-classification.deterministic.v4';
 
 export const ENTRY_CLASSIFICATION_PROFILE_FORMAT =
   'struinfo.entry-classification-profile';
@@ -132,10 +132,6 @@ const TYPE_RULES: readonly WeightedRule<EntryTypeKeyword>[] = [
   ]),
 ];
 
-const RESOURCE_CARD_LINK_PATTERN =
-  /(?:https?:\/\/|www\.|github\.com\/|gitlab\.com\/|codeberg\.org\/)/iu;
-const RESOURCE_CARD_TERM_PATTERN =
-  /(?:开源|项目|工具|软件|应用|插件|扩展|库|框架|平台|网站|服务|资源|仓库|命令行|客户端|编辑器|浏览器|数据库|\b(?:open[ -]source|projects?|tools?|software|apps?|plugins?|extensions?|libraries|frameworks?|platforms?|services?|repositories|command[ -]line|clients?|editors?|browsers?|databases?)\b)/iu;
 const FACTUAL_MATERIAL_NEGATIVE_PATTERN =
   /(?:教程|指南|操作步骤|使用方法|深入分析|调查报告|研究报告|评测|基准测试|我认为|作者认为|本文主张|反驳|发布公告|正式发布|新闻稿|版本说明|亲身经历|个人体验|项目复盘|访谈|采访|问答|圆桌|小说|诗歌|散文|how[ -]to|tutorial|getting started|quickstart|walkthrough|benchmark|analysis|research report|opinion|commentary|press release|release notes?|my experience|retrospective|interview|q&a|roundtable|fiction|novel|poem|short story)/iu;
 
@@ -457,9 +453,6 @@ function structuralScore(
   ) {
     return 2;
   }
-  if (keyword === 'factual_material' && isLinkedResourceCard(input)) {
-    return 6;
-  }
   if (
     keyword === 'factual_material' &&
     input.chunkMode === 'whole' &&
@@ -495,17 +488,6 @@ function negativeScore(
     : (pattern.test(fields.title) ? 6 : 0) +
         (pattern.test(fields.keywords) ? 4 : 0) +
         (pattern.test(fields.body) ? 3 : 0);
-}
-
-function isLinkedResourceCard(
-  input: Readonly<DeterministicEntryClassificationInput>,
-): boolean {
-  if (Array.from(input.body).length > 2_400) return false;
-  const text = `${input.titlePath}\n${input.contentKeywords.join('\n')}\n${input.body}`;
-  return (
-    RESOURCE_CARD_LINK_PATTERN.test(text) &&
-    RESOURCE_CARD_TERM_PATTERN.test(text)
-  );
 }
 
 function classifyScores<TKeyword extends string>(

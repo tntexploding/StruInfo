@@ -24,8 +24,8 @@ const BATCH_ID = '22222222-2222-4222-8222-222222222222';
 describe('BulkIngestionTypeCompletionService', () => {
   it('previews only current pending missing types with stable redacted samples', async () => {
     const assignable = entry(1, {
-      title: 'TinyGraph 开源工具',
-      body: '一个本地关系图工具：https://example.test/tinygraph',
+      title: '年度统计数据集',
+      body: '这份资料汇总包含可复核的统计数据。',
     });
     const unresolved = entry(2, {
       title: '一则短消息',
@@ -120,8 +120,8 @@ describe('BulkIngestionTypeCompletionService', () => {
     'uses the recoverable %s enrichment mode instead of a second writer',
     async (status, expectedMode) => {
       let current = entry(10, {
-        title: 'SmallDB 开源数据库',
-        body: '一个开源数据库项目：https://example.test/db',
+        title: '数据库统计资料汇总',
+        body: '这份数据集包含可复核的统计数据。',
       });
       const execute = vi.fn(() => {
         current = entry(10, {
