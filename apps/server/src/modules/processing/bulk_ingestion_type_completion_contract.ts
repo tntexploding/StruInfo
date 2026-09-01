@@ -34,6 +34,9 @@ export interface BulkIngestionTypeCompletionSample {
   readonly predictedType?: EntryTypeKeyword;
   readonly winnerScore: number;
   readonly runnerUpScore: number;
+  readonly evidenceSource?: 'neighbor_consensus';
+  readonly referenceCount?: number;
+  readonly consensusBasisPoints?: number;
 }
 
 export interface BulkIngestionTypeCompletionPreview {
@@ -49,6 +52,7 @@ export interface BulkIngestionTypeCompletionPreview {
   readonly alreadyClassifiedCount: number;
   readonly missingTypeCount: number;
   readonly assignableCount: number;
+  readonly neighborAssignableCount?: number;
   readonly unresolvedCount: number;
   readonly byPredictedType: readonly Readonly<{
     typeKeyword: EntryTypeKeyword;

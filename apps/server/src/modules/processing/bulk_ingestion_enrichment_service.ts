@@ -10,6 +10,7 @@ import {
 } from '../../storage/review_preferences_store.js';
 import {
   buildIncrementalInformationEntryAssociationProjection,
+  buildInformationEntryClassificationContext,
   classifyInformationEntryDeterministically,
   DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
   deriveInformationEntryRevisionId,
@@ -38,7 +39,7 @@ import {deriveProcessingRunId} from './processing_identity.js';
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const MAXIMUM_CONTENT_KEYWORDS = 32;
-const MAXIMUM_DIGEST_INPUT_BYTES = 1_048_576;
+const MAXIMUM_DIGEST_INPUT_BYTES = 8_388_608;
 
 export type BulkIngestionEnrichmentServiceErrorCode =
   | 'input_invalid'
@@ -152,9 +153,18 @@ export class BulkIngestionEnrichmentService {
       ),
       before.privacyScope,
     );
+    const classificationContext = buildInformationEntryClassificationContext(
+      allVisibleEntries,
+      rules.classificationProfile.neighborPolicy,
+    );
     const successful: SuccessfulItem[] = [];
     for (const item of claimed) {
-      const prepared = prepareItem(item, allVisibleEntries, rules);
+      const prepared = prepareItem(
+        item,
+        allVisibleEntries,
+        rules,
+        classificationContext,
+      );
       if (prepared === undefined) {
         await this.#settleFailed(item, runId, 'entry_snapshot_mismatch');
         continue;
@@ -322,6 +332,9 @@ function prepareItem(
   item: Readonly<BulkIngestionEnrichmentItem>,
   allEntries: readonly Readonly<CurrentInformationEntry>[],
   rules: ReturnType<typeof prepareRules>,
+  classificationContext: ReturnType<
+    typeof buildInformationEntryClassificationContext
+  >,
 ): Readonly<PreparedItem> | undefined {
   const entries = allEntries
     .filter((entry) => entry.snapshotId === item.snapshotId)
@@ -353,15 +366,35 @@ function prepareItem(
       rules.vocabulary,
       capacity,
     ).filter((candidate) => !existing.has(candidate.normalizedValue));
+    const classificationKeywords = Object.freeze([
+      ...entry.value.contentKeywords,
+      ...candidates.map((candidate) =>
+        Object.freeze({
+          ...candidate,
+          origin: 'rule' as const,
+          originVersion: rules.originVersion,
+        }),
+      ),
+    ]);
+    const classificationEntry =
+      candidates.length === 0
+        ? entry
+        : Object.freeze({
+            ...entry,
+            value: Object.freeze({
+              ...entry.value,
+              contentKeywords: classificationKeywords,
+            }),
+          });
     const classification = classifyInformationEntryDeterministically({
       titlePath: entry.value.titlePath,
       body: entry.value.body,
       chunkMode: entry.value.chunkMode,
-      contentKeywords: [
-        ...entry.value.contentKeywords.map((keyword) => keyword.displayValue),
-        ...candidates.map((candidate) => candidate.displayValue),
-      ],
+      contentKeywords: classificationKeywords.map(
+        (keyword) => keyword.displayValue,
+      ),
       profile: rules.classificationProfile,
+      neighborEvidence: classificationContext.evidenceFor(classificationEntry),
       originVersion: rules.classificationOriginVersion,
     });
     const typeKeyword = entry.value.typeKeyword ?? classification.typeKeyword;
@@ -413,16 +446,7 @@ function prepareItem(
           ...entry.value,
           ...(typeKeyword === undefined ? {} : {typeKeyword}),
           domains: Object.freeze([...domains]),
-          contentKeywords: Object.freeze([
-            ...entry.value.contentKeywords,
-            ...candidates.map((candidate) =>
-              Object.freeze({
-                ...candidate,
-                origin: 'rule' as const,
-                originVersion: rules.originVersion,
-              }),
-            ),
-          ]),
+          contentKeywords: classificationKeywords,
         }),
       }),
     );

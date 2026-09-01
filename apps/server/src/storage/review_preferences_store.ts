@@ -3,7 +3,11 @@ import {
   type EntrySplitRuleProfile,
 } from '../modules/entries/information_entry_split_rule.js';
 import {
+  DEFAULT_ENTRY_CLASSIFICATION_DOMAIN_THRESHOLDS,
+  DEFAULT_ENTRY_CLASSIFICATION_NEIGHBOR_POLICY,
   DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+  DEFAULT_ENTRY_CLASSIFICATION_TYPE_THRESHOLDS,
+  ENTRY_CLASSIFICATION_PROFILE_VERSION,
   type EntryClassificationProfile,
 } from '../modules/entries/information_entry_deterministic_classification.js';
 
@@ -789,7 +793,7 @@ export function createReviewPreferences(
     entrySplitRuleProfile: Object.freeze({...entrySplitRuleProfile}),
     entryClassificationProfile: Object.freeze({
       format: entryClassificationProfile.format,
-      version: entryClassificationProfile.version,
+      version: ENTRY_CLASSIFICATION_PROFILE_VERSION,
       revision: entryClassificationProfile.revision,
       aliases: Object.freeze(
         entryClassificationProfile.aliases.map((alias) =>
@@ -807,6 +811,22 @@ export function createReviewPreferences(
         ),
       ),
       exclusions: Object.freeze([...entryClassificationProfile.exclusions]),
+      typeThresholds: Object.freeze(
+        (
+          entryClassificationProfile.typeThresholds ??
+          DEFAULT_ENTRY_CLASSIFICATION_TYPE_THRESHOLDS
+        ).map((threshold) => Object.freeze({...threshold})),
+      ),
+      domainThresholds: Object.freeze(
+        (
+          entryClassificationProfile.domainThresholds ??
+          DEFAULT_ENTRY_CLASSIFICATION_DOMAIN_THRESHOLDS
+        ).map((threshold) => Object.freeze({...threshold})),
+      ),
+      neighborPolicy: Object.freeze({
+        ...(entryClassificationProfile.neighborPolicy ??
+          DEFAULT_ENTRY_CLASSIFICATION_NEIGHBOR_POLICY),
+      }),
     }),
   });
 }

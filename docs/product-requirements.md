@@ -976,6 +976,18 @@ adjudication version、完整 annotation revision 和增量 Association 重建�
 revision 与规则摘要，并且只补当前为空的类型。剩余项必须转入 P2E/P2F，不得建立第二套写入、扩大
 隐私范围、自动重开人工裁决或把代码完成冒充真实资料已应用。
 
+### 7.1.45 M2-P3A–C 类别校准、Profile v2 与邻居共识（已实现）
+
+[ADR 0058](adr/0058-calibrated-classification-profile-and-neighbor-consensus.md) 在不降低全部门槛的前提下
+扩展类型/领域覆盖。每个非 `other` 类别必须具有独立最低分与领先幅度；自动规则不得写 `other` 或
+覆盖已有分类。外部 Profile v2 必须向后读取 v1，并支持有界别名、排除词、精确内容关键词映射和少量
+正文映射；个人词表仍只能位于外部偏好与个人数据包。
+
+邻居分类必须先应用隐私范围、关键词 fan-out、相似度、邻居数量和共识比例限制。类型不得从同一
+Snapshot 复制，领域允许利用同文档共识；结果必须显示证据来源、参考数量和共识比例。首次 enrichment
+和补全预览必须共享同一分类上下文，写入继续复用既有 enrichment 原子边界。该增量不得增加 Provider、
+第二套 writer、自动 apply 或把弱监督共识描述为正式知识关系。
+
 ### 7.2 MVP-1：偏好学习与每周自适应摄取
 
 MVP-0 证明知识核心可用后，再让系统持续处理该信源并逐步学习用户偏好：

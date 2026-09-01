@@ -8,14 +8,15 @@ import {
 } from './information_entry_contract.js';
 
 export const DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION =
-  'struinfo.entry-classification.deterministic.v4';
+  'struinfo.entry-classification.deterministic.v5';
 
 export const ENTRY_CLASSIFICATION_PROFILE_FORMAT =
   'struinfo.entry-classification-profile';
-export const ENTRY_CLASSIFICATION_PROFILE_VERSION = 1;
-export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_ALIASES = 256;
-export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_MAPPINGS = 256;
-export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_EXCLUSIONS = 256;
+export const ENTRY_CLASSIFICATION_PROFILE_VERSION = 2;
+export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_ALIASES = 1_024;
+export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_MAPPINGS = 4_096;
+export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_TEXT_MAPPINGS = 256;
+export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_EXCLUSIONS = 1_024;
 export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_TERM_CODE_POINTS = 96;
 
 type ClassifiedEntryTypeKeyword = Exclude<EntryTypeKeyword, 'other'>;
@@ -29,22 +30,98 @@ export interface EntryClassificationAlias {
 export interface EntryClassificationTypeMapping {
   readonly term: string;
   readonly keyword: ClassifiedEntryTypeKeyword;
+  readonly scope?: EntryClassificationMappingScope;
 }
 
 export interface EntryClassificationDomainMapping {
   readonly term: string;
   readonly keyword: ClassifiedEntryDomainKeyword;
+  readonly scope?: EntryClassificationMappingScope;
+}
+
+export type EntryClassificationMappingScope = 'text' | 'content_keyword';
+
+export interface EntryClassificationThreshold<TKeyword extends string> {
+  readonly keyword: TKeyword;
+  readonly minimumScore: number;
+  readonly minimumMargin: number;
+}
+
+export interface EntryClassificationNeighborPolicy {
+  readonly enabled: boolean;
+  readonly minimumReferenceCount: number;
+  readonly minimumConsensusBasisPoints: number;
+  readonly minimumSharedKeywordCount: number;
+  readonly minimumSimilarityBasisPoints: number;
+  readonly maximumNeighbors: number;
+  readonly maximumReferencesPerKeyword: number;
+  readonly evidenceScore: number;
+}
+
+export interface EntryClassificationNeighborEvidence<TKeyword extends string> {
+  readonly keyword: TKeyword;
+  readonly referenceCount: number;
+  readonly consensusBasisPoints: number;
+  readonly score: number;
+}
+
+export interface DeterministicEntryClassificationNeighborEvidence {
+  readonly type?: Readonly<
+    EntryClassificationNeighborEvidence<ClassifiedEntryTypeKeyword>
+  >;
+  readonly domains: readonly Readonly<
+    EntryClassificationNeighborEvidence<ClassifiedEntryDomainKeyword>
+  >[];
 }
 
 export interface EntryClassificationProfile {
   readonly format: typeof ENTRY_CLASSIFICATION_PROFILE_FORMAT;
-  readonly version: typeof ENTRY_CLASSIFICATION_PROFILE_VERSION;
+  readonly version: 1 | typeof ENTRY_CLASSIFICATION_PROFILE_VERSION;
   readonly revision: number;
   readonly aliases: readonly Readonly<EntryClassificationAlias>[];
   readonly typeMappings: readonly Readonly<EntryClassificationTypeMapping>[];
   readonly domainMappings: readonly Readonly<EntryClassificationDomainMapping>[];
   readonly exclusions: readonly string[];
+  readonly typeThresholds?: readonly Readonly<
+    EntryClassificationThreshold<ClassifiedEntryTypeKeyword>
+  >[];
+  readonly domainThresholds?: readonly Readonly<
+    EntryClassificationThreshold<ClassifiedEntryDomainKeyword>
+  >[];
+  readonly neighborPolicy?: Readonly<EntryClassificationNeighborPolicy>;
 }
+
+export const DEFAULT_ENTRY_CLASSIFICATION_TYPE_THRESHOLDS = Object.freeze([
+  threshold('factual_material', 12, 3),
+  threshold('knowledge_explanation', 6, 3),
+  threshold('operating_guideline', 6, 3),
+  threshold('investigation_analysis', 6, 3),
+  threshold('argument', 6, 3),
+  threshold('personal_experience', 12, 3),
+  threshold('interactive_collaboration', 18, 6),
+  threshold('public_communication', 12, 3),
+  threshold('literary_creation', 6, 3),
+] as const satisfies readonly Readonly<
+  EntryClassificationThreshold<ClassifiedEntryTypeKeyword>
+>[]);
+
+export const DEFAULT_ENTRY_CLASSIFICATION_DOMAIN_THRESHOLDS = Object.freeze(
+  ENTRY_DOMAIN_KEYWORDS.filter(
+    (keyword): keyword is ClassifiedEntryDomainKeyword => keyword !== 'other',
+  ).map((keyword) => threshold(keyword, 6, 3)),
+);
+
+export const DEFAULT_ENTRY_CLASSIFICATION_NEIGHBOR_POLICY: Readonly<EntryClassificationNeighborPolicy> =
+  Object.freeze({
+    enabled: true,
+    minimumReferenceCount: 4,
+    minimumConsensusBasisPoints: 8_500,
+    minimumSharedKeywordCount: 1,
+    minimumSimilarityBasisPoints: 1_500,
+    maximumNeighbors: 12,
+    maximumReferencesPerKeyword: 64,
+    evidenceScore: 12,
+  });
 
 export const DEFAULT_ENTRY_CLASSIFICATION_PROFILE: Readonly<EntryClassificationProfile> =
   Object.freeze({
@@ -55,6 +132,9 @@ export const DEFAULT_ENTRY_CLASSIFICATION_PROFILE: Readonly<EntryClassificationP
     typeMappings: Object.freeze([]),
     domainMappings: Object.freeze([]),
     exclusions: Object.freeze([]),
+    typeThresholds: DEFAULT_ENTRY_CLASSIFICATION_TYPE_THRESHOLDS,
+    domainThresholds: DEFAULT_ENTRY_CLASSIFICATION_DOMAIN_THRESHOLDS,
+    neighborPolicy: DEFAULT_ENTRY_CLASSIFICATION_NEIGHBOR_POLICY,
   });
 
 export type DeterministicClassificationDiagnosticReason =
@@ -67,6 +147,11 @@ export interface DeterministicClassificationDiagnostic<
   readonly winner?: TKeyword;
   readonly winnerScore: number;
   readonly runnerUpScore: number;
+  readonly minimumScore?: number;
+  readonly minimumMargin?: number;
+  readonly evidenceSource?: 'neighbor_consensus';
+  readonly referenceCount?: number;
+  readonly consensusBasisPoints?: number;
 }
 
 interface WeightedRule<TKeyword extends string> {
@@ -214,6 +299,7 @@ export interface DeterministicEntryClassificationInput {
   readonly contentKeywords: readonly string[];
   readonly chunkMode?: EntryChunkMode;
   readonly profile?: Readonly<EntryClassificationProfile>;
+  readonly neighborEvidence?: Readonly<DeterministicEntryClassificationNeighborEvidence>;
   readonly originVersion?: string;
 }
 
@@ -236,15 +322,29 @@ export function classifyInformationEntryDeterministically(
     fields,
     profile.typeMappings,
     input,
+    input.neighborEvidence?.type === undefined
+      ? Object.freeze([])
+      : Object.freeze([input.neighborEvidence.type]),
   );
   const domainScores = scoreRules(
     DOMAIN_RULES,
     fields,
     profile.domainMappings,
     input,
+    input.neighborEvidence?.domains ?? Object.freeze([]),
   );
-  const typeDiagnostic = classifyScores<EntryTypeKeyword>(typeScores);
-  const domainDiagnostic = classifyScores<EntryDomainKeyword>(domainScores);
+  const typeDiagnostic = classifyScores<EntryTypeKeyword>(
+    typeScores,
+    profile.typeThresholds ?? DEFAULT_ENTRY_CLASSIFICATION_TYPE_THRESHOLDS,
+    input.neighborEvidence?.type === undefined
+      ? Object.freeze([])
+      : Object.freeze([input.neighborEvidence.type]),
+  );
+  const domainDiagnostic = classifyScores<EntryDomainKeyword>(
+    domainScores,
+    profile.domainThresholds ?? DEFAULT_ENTRY_CLASSIFICATION_DOMAIN_THRESHOLDS,
+    input.neighborEvidence?.domains ?? Object.freeze([]),
+  );
   const originVersion =
     input.originVersion ??
     `${DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION}:profile-${profile.revision.toString()}`;
@@ -252,7 +352,12 @@ export function classifyInformationEntryDeterministically(
     domainDiagnostic.reason === 'assigned' &&
     domainDiagnostic.winner !== undefined
       ? Object.freeze(
-          selectDomains(domainScores, domainDiagnostic.winner).map((keyword) =>
+          selectDomains(
+            domainScores,
+            domainDiagnostic.winner,
+            profile.domainThresholds ??
+              DEFAULT_ENTRY_CLASSIFICATION_DOMAIN_THRESHOLDS,
+          ).map((keyword) =>
             Object.freeze({
               keyword,
               origin: 'rule' as const,
@@ -277,18 +382,28 @@ export function classifyInformationEntryDeterministically(
 export function decodeEntryClassificationProfile(
   value: unknown,
 ): Readonly<EntryClassificationProfile> | undefined {
+  const legacyKeys = [
+    'format',
+    'version',
+    'revision',
+    'aliases',
+    'typeMappings',
+    'domainMappings',
+    'exclusions',
+  ] as const;
+  const currentOptionalKeys = [
+    'typeThresholds',
+    'domainThresholds',
+    'neighborPolicy',
+  ] as const;
   if (
-    !isClosedRecord(value, [
-      'format',
-      'version',
-      'revision',
-      'aliases',
-      'typeMappings',
-      'domainMappings',
-      'exclusions',
-    ]) ||
+    !isRecord(value) ||
+    !hasRequiredAndAllowedKeys(value, legacyKeys, currentOptionalKeys) ||
     value.format !== ENTRY_CLASSIFICATION_PROFILE_FORMAT ||
-    value.version !== ENTRY_CLASSIFICATION_PROFILE_VERSION ||
+    (value.version !== 1 &&
+      value.version !== ENTRY_CLASSIFICATION_PROFILE_VERSION) ||
+    (value.version === 1 &&
+      currentOptionalKeys.some((key) => Object.hasOwn(value, key))) ||
     !Number.isSafeInteger(value.revision) ||
     (value.revision as number) < 0
   ) {
@@ -299,21 +414,46 @@ export function decodeEntryClassificationProfile(
     value.typeMappings,
     ENTRY_TYPE_KEYWORDS,
     MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_MAPPINGS,
+    value.version === 1,
   );
   const domainMappings = decodeMappings(
     value.domainMappings,
     ENTRY_DOMAIN_KEYWORDS,
     MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_MAPPINGS,
+    value.version === 1,
   );
   const exclusions = decodeTerms(
     value.exclusions,
     MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_EXCLUSIONS,
   );
+  const typeThresholds =
+    value.typeThresholds === undefined
+      ? DEFAULT_ENTRY_CLASSIFICATION_TYPE_THRESHOLDS
+      : decodeThresholds(
+          value.typeThresholds,
+          ENTRY_TYPE_KEYWORDS,
+          DEFAULT_ENTRY_CLASSIFICATION_TYPE_THRESHOLDS,
+        );
+  const domainThresholds =
+    value.domainThresholds === undefined
+      ? DEFAULT_ENTRY_CLASSIFICATION_DOMAIN_THRESHOLDS
+      : decodeThresholds(
+          value.domainThresholds,
+          ENTRY_DOMAIN_KEYWORDS,
+          DEFAULT_ENTRY_CLASSIFICATION_DOMAIN_THRESHOLDS,
+        );
+  const neighborPolicy =
+    value.neighborPolicy === undefined
+      ? DEFAULT_ENTRY_CLASSIFICATION_NEIGHBOR_POLICY
+      : decodeNeighborPolicy(value.neighborPolicy);
   if (
     aliases === undefined ||
     typeMappings === undefined ||
     domainMappings === undefined ||
-    exclusions === undefined
+    exclusions === undefined ||
+    typeThresholds === undefined ||
+    domainThresholds === undefined ||
+    neighborPolicy === undefined
   ) {
     return undefined;
   }
@@ -325,6 +465,9 @@ export function decodeEntryClassificationProfile(
     typeMappings,
     domainMappings,
     exclusions,
+    typeThresholds,
+    domainThresholds,
+    neighborPolicy,
   });
 }
 
@@ -332,6 +475,7 @@ interface ClassificationFields {
   readonly title: string;
   readonly keywords: string;
   readonly body: string;
+  readonly exactContentKeywords: ReadonlySet<string>;
 }
 
 interface ScoredCandidate<TKeyword extends string> {
@@ -339,14 +483,33 @@ interface ScoredCandidate<TKeyword extends string> {
   readonly score: number;
 }
 
+interface CompiledMappings {
+  readonly text: readonly Readonly<{term: string; keyword: string}>[];
+  readonly exact: ReadonlyMap<
+    string,
+    readonly Readonly<{term: string; keyword: string}>[]
+  >;
+}
+
+const compiledMappingCache = new WeakMap<object, Readonly<CompiledMappings>>();
+const compiledAliasCache = new WeakMap<
+  object,
+  Readonly<{replacements: ReadonlyMap<string, string>; pattern: RegExp}>
+>();
+const compiledExclusionCache = new WeakMap<object, RegExp>();
+
 function normalizeClassificationFields(
   input: Readonly<DeterministicEntryClassificationInput>,
   profile: Readonly<EntryClassificationProfile>,
 ): Readonly<ClassificationFields> {
+  const exactContentKeywords = new Set(
+    input.contentKeywords.map((keyword) => applyProfile(keyword, profile)),
+  );
   return Object.freeze({
     title: applyProfile(input.titlePath, profile),
-    keywords: applyProfile(input.contentKeywords.join('\n'), profile),
+    keywords: [...exactContentKeywords].join('\n'),
     body: applyProfile(input.body.slice(0, 32_000), profile),
+    exactContentKeywords,
   });
 }
 
@@ -354,11 +517,10 @@ function applyProfile(
   value: string,
   profile: Readonly<EntryClassificationProfile>,
 ): string {
-  let result = replaceAliasesOnce(normalizeTerm(value), profile.aliases);
-  for (const exclusion of profile.exclusions) {
-    result = replaceLiteral(result, normalizeTerm(exclusion), ' ');
-  }
-  return result;
+  return replaceExclusionsOnce(
+    replaceAliasesOnce(normalizeTerm(value), profile.aliases),
+    profile.exclusions,
+  );
 }
 
 function replaceAliasesOnce(
@@ -366,47 +528,102 @@ function replaceAliasesOnce(
   aliases: readonly Readonly<EntryClassificationAlias>[],
 ): string {
   if (aliases.length === 0) return value;
+  const compiled = compileAliases(aliases);
+  return value.replace(
+    compiled.pattern,
+    (matched) => compiled.replacements.get(matched) ?? matched,
+  );
+}
+
+function compileAliases(
+  aliases: readonly Readonly<EntryClassificationAlias>[],
+): Readonly<{replacements: ReadonlyMap<string, string>; pattern: RegExp}> {
+  const cached = compiledAliasCache.get(aliases);
+  if (cached !== undefined) return cached;
   const replacements = new Map(
     aliases.map((alias) => [
       normalizeTerm(alias.source),
       normalizeTerm(alias.canonical),
     ]),
   );
-  const pattern = new RegExp(
-    [...replacements.keys()]
-      .sort((left, right) =>
-        right.length === left.length
-          ? left.localeCompare(right)
-          : right.length - left.length,
-      )
-      .map(escapeRegExp)
-      .join('|'),
-    'gu',
-  );
-  return value.replace(
-    pattern,
-    (matched) => replacements.get(matched) ?? matched,
-  );
+  const compiled = Object.freeze({
+    replacements,
+    pattern: new RegExp(
+      [...replacements.keys()]
+        .sort((left, right) =>
+          right.length === left.length
+            ? left.localeCompare(right)
+            : right.length - left.length,
+        )
+        .map(escapeRegExp)
+        .join('|'),
+      'gu',
+    ),
+  });
+  compiledAliasCache.set(aliases, compiled);
+  return compiled;
+}
+
+function replaceExclusionsOnce(
+  value: string,
+  exclusions: readonly string[],
+): string {
+  if (exclusions.length === 0) return value;
+  let pattern = compiledExclusionCache.get(exclusions);
+  if (pattern === undefined) {
+    pattern = new RegExp(
+      exclusions
+        .map(normalizeTerm)
+        .sort((left, right) =>
+          right.length === left.length
+            ? left.localeCompare(right)
+            : right.length - left.length,
+        )
+        .map(escapeRegExp)
+        .join('|'),
+      'gu',
+    );
+    compiledExclusionCache.set(exclusions, pattern);
+  }
+  return value.replace(pattern, ' ');
 }
 
 function scoreRules<TKeyword extends string>(
   rules: readonly WeightedRule<TKeyword>[],
   fields: Readonly<ClassificationFields>,
-  mappings: readonly Readonly<{term: string; keyword: TKeyword}>[],
+  mappings: readonly Readonly<{
+    term: string;
+    keyword: TKeyword;
+    scope?: EntryClassificationMappingScope;
+  }>[],
   input: Readonly<DeterministicEntryClassificationInput>,
+  neighborEvidence: readonly Readonly<
+    EntryClassificationNeighborEvidence<TKeyword>
+  >[],
 ): readonly Readonly<ScoredCandidate<TKeyword>>[] {
   const mappingScores = new Map<TKeyword, number>();
-  for (const mapping of mappings) {
-    const term = normalizeTerm(mapping.term);
+  const compiledMappings = compileMappings(mappings);
+  for (const mapping of compiledMappings.text) {
     const score =
-      (fields.title.includes(term) ? 12 : 0) +
-      (fields.keywords.includes(term) ? 10 : 0) +
-      (fields.body.includes(term) ? 8 : 0);
+      (fields.title.includes(mapping.term) ? 12 : 0) +
+      (fields.keywords.includes(mapping.term) ? 12 : 0) +
+      (fields.body.includes(mapping.term) ? 8 : 0);
     mappingScores.set(
       mapping.keyword,
       (mappingScores.get(mapping.keyword) ?? 0) + score,
     );
   }
+  for (const keyword of fields.exactContentKeywords) {
+    for (const mapping of compiledMappings.exact.get(keyword) ?? []) {
+      mappingScores.set(
+        mapping.keyword,
+        (mappingScores.get(mapping.keyword) ?? 0) + 12,
+      );
+    }
+  }
+  const neighborScores = new Map(
+    neighborEvidence.map((evidence) => [evidence.keyword, evidence.score]),
+  );
   return Object.freeze(
     rules
       .map((candidate) =>
@@ -417,7 +634,8 @@ function scoreRules<TKeyword extends string>(
             scoreSignals(candidate.signals, fields) +
               structuralScore(candidate.keyword, input) -
               negativeScore(candidate.keyword, fields) +
-              (mappingScores.get(candidate.keyword) ?? 0),
+              (mappingScores.get(candidate.keyword) ?? 0) +
+              (neighborScores.get(candidate.keyword) ?? 0),
           ),
         }),
       )
@@ -426,6 +644,59 @@ function scoreRules<TKeyword extends string>(
           right.score - left.score || left.keyword.localeCompare(right.keyword),
       ),
   );
+}
+
+function compileMappings<TKeyword extends string>(
+  mappings: readonly Readonly<{
+    term: string;
+    keyword: TKeyword;
+    scope?: EntryClassificationMappingScope;
+  }>[],
+): Readonly<{
+  text: readonly Readonly<{term: string; keyword: TKeyword}>[];
+  exact: ReadonlyMap<
+    string,
+    readonly Readonly<{term: string; keyword: TKeyword}>[]
+  >;
+}> {
+  const cached = compiledMappingCache.get(mappings);
+  if (cached !== undefined) {
+    return cached as Readonly<{
+      text: readonly Readonly<{term: string; keyword: TKeyword}>[];
+      exact: ReadonlyMap<
+        string,
+        readonly Readonly<{term: string; keyword: TKeyword}>[]
+      >;
+    }>;
+  }
+  const text: Readonly<{term: string; keyword: TKeyword}>[] = [];
+  const exact = new Map<
+    string,
+    Readonly<{term: string; keyword: TKeyword}>[]
+  >();
+  for (const mapping of mappings) {
+    const normalized = Object.freeze({
+      term: normalizeTerm(mapping.term),
+      keyword: mapping.keyword,
+    });
+    if ((mapping.scope ?? 'text') === 'content_keyword') {
+      const current = exact.get(normalized.term) ?? [];
+      exact.set(normalized.term, [...current, normalized]);
+    } else {
+      text.push(normalized);
+    }
+  }
+  const compiled = Object.freeze({
+    text: Object.freeze(text),
+    exact: new Map(
+      [...exact.entries()].map(([term, values]) => [
+        term,
+        Object.freeze(values),
+      ]),
+    ),
+  });
+  compiledMappingCache.set(mappings, compiled);
+  return compiled;
 }
 
 function scoreSignals(
@@ -492,6 +763,10 @@ function negativeScore(
 
 function classifyScores<TKeyword extends string>(
   scores: readonly Readonly<ScoredCandidate<TKeyword>>[],
+  thresholds: readonly Readonly<EntryClassificationThreshold<TKeyword>>[],
+  neighborEvidence: readonly Readonly<
+    EntryClassificationNeighborEvidence<TKeyword>
+  >[],
 ): DeterministicClassificationDiagnostic<TKeyword> {
   const first = scores[0];
   const second = scores[1];
@@ -500,26 +775,47 @@ function classifyScores<TKeyword extends string>(
   if (first === undefined || winnerScore === 0) {
     return {reason: 'no_signal', winnerScore, runnerUpScore};
   }
-  if (winnerScore < 6) {
-    return {reason: 'below_threshold', winnerScore, runnerUpScore};
+  const threshold = thresholds.find(
+    (candidate) => candidate.keyword === first.keyword,
+  ) ?? {minimumScore: 6, minimumMargin: 3};
+  const base = {
+    winnerScore,
+    runnerUpScore,
+    minimumScore: threshold.minimumScore,
+    minimumMargin: threshold.minimumMargin,
+  };
+  if (winnerScore < threshold.minimumScore) {
+    return {reason: 'below_threshold', ...base};
   }
   if (winnerScore === runnerUpScore) {
-    return {reason: 'tied', winnerScore, runnerUpScore};
+    return {reason: 'tied', ...base};
   }
-  if (winnerScore - runnerUpScore < 3) {
-    return {reason: 'low_margin', winnerScore, runnerUpScore};
+  if (winnerScore - runnerUpScore < threshold.minimumMargin) {
+    return {reason: 'low_margin', ...base};
   }
+  const evidence = neighborEvidence.find(
+    (candidate) => candidate.keyword === first.keyword,
+  );
   return {
     reason: 'assigned',
     winner: first.keyword,
-    winnerScore,
-    runnerUpScore,
+    ...base,
+    ...(evidence === undefined
+      ? {}
+      : {
+          evidenceSource: 'neighbor_consensus' as const,
+          referenceCount: evidence.referenceCount,
+          consensusBasisPoints: evidence.consensusBasisPoints,
+        }),
   };
 }
 
 function selectDomains(
   scores: readonly Readonly<ScoredCandidate<EntryDomainKeyword>>[],
   primary: EntryDomainKeyword,
+  thresholds: readonly Readonly<
+    EntryClassificationThreshold<EntryDomainKeyword>
+  >[],
 ): readonly EntryDomainKeyword[] {
   const primaryScore =
     scores.find((candidate) => candidate.keyword === primary)?.score ?? 0;
@@ -528,7 +824,11 @@ function selectDomains(
       .filter(
         (candidate) =>
           candidate.keyword === primary ||
-          (candidate.score >= 6 && candidate.score * 2 >= primaryScore),
+          (candidate.score >=
+            (thresholds.find(
+              (threshold_) => threshold_.keyword === candidate.keyword,
+            )?.minimumScore ?? 6) &&
+            candidate.score * 2 >= primaryScore),
       )
       .slice(0, 3)
       .map((candidate) => candidate.keyword),
@@ -566,22 +866,47 @@ function decodeMappings<TKeyword extends string>(
   value: unknown,
   keywords: readonly TKeyword[],
   maximum: number,
+  materializeDefaultScope: boolean,
 ):
-  | readonly Readonly<{term: string; keyword: Exclude<TKeyword, 'other'>}>[]
+  | readonly Readonly<{
+      term: string;
+      keyword: Exclude<TKeyword, 'other'>;
+      scope?: EntryClassificationMappingScope;
+    }>[]
   | undefined {
   if (!Array.isArray(value) || value.length > maximum) return undefined;
-  const result: {term: string; keyword: Exclude<TKeyword, 'other'>}[] = [];
+  const result: {
+    term: string;
+    keyword: Exclude<TKeyword, 'other'>;
+    scope?: EntryClassificationMappingScope;
+  }[] = [];
   const identities = new Set<string>();
+  let textMappingCount = 0;
   for (const candidate of value) {
-    if (!isClosedRecord(candidate, ['term', 'keyword'])) return undefined;
+    if (
+      !isClosedRecord(candidate, ['term', 'keyword']) &&
+      !isClosedRecord(candidate, ['term', 'keyword', 'scope'])
+    ) {
+      return undefined;
+    }
     const term = decodeTerm(candidate.term);
+    const scope = candidate.scope ?? 'text';
     if (
       term === undefined ||
       typeof candidate.keyword !== 'string' ||
       candidate.keyword === 'other' ||
-      !keywords.includes(candidate.keyword as TKeyword)
+      !keywords.includes(candidate.keyword as TKeyword) ||
+      (scope !== 'text' && scope !== 'content_keyword')
     ) {
       return undefined;
+    }
+    if (scope === 'text') {
+      textMappingCount += 1;
+      if (
+        textMappingCount > MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_TEXT_MAPPINGS
+      ) {
+        return undefined;
+      }
     }
     const identity = `${normalizeTerm(term)}\u0000${candidate.keyword}`;
     if (identities.has(identity)) return undefined;
@@ -590,6 +915,9 @@ function decodeMappings<TKeyword extends string>(
       Object.freeze({
         term,
         keyword: candidate.keyword as Exclude<TKeyword, 'other'>,
+        ...(candidate.scope === undefined && !materializeDefaultScope
+          ? {}
+          : {scope}),
       }),
     );
   }
@@ -612,6 +940,98 @@ function decodeTerms(
     result.push(term);
   }
   return Object.freeze(result);
+}
+
+function decodeThresholds<TKeyword extends string>(
+  value: unknown,
+  keywords: readonly TKeyword[],
+  defaults: readonly Readonly<
+    EntryClassificationThreshold<Exclude<TKeyword, 'other'>>
+  >[],
+):
+  | readonly Readonly<
+      EntryClassificationThreshold<Exclude<TKeyword, 'other'>>
+    >[]
+  | undefined {
+  if (!Array.isArray(value) || value.length !== defaults.length) {
+    return undefined;
+  }
+  const expected = new Set(defaults.map((item) => item.keyword));
+  const seen = new Set<string>();
+  const result: EntryClassificationThreshold<Exclude<TKeyword, 'other'>>[] = [];
+  for (const candidate of value) {
+    if (
+      !isClosedRecord(candidate, [
+        'keyword',
+        'minimumScore',
+        'minimumMargin',
+      ]) ||
+      typeof candidate.keyword !== 'string' ||
+      candidate.keyword === 'other' ||
+      !keywords.includes(candidate.keyword as TKeyword) ||
+      !expected.has(candidate.keyword as Exclude<TKeyword, 'other'>) ||
+      seen.has(candidate.keyword) ||
+      !isBoundedInteger(candidate.minimumScore, 1, 60) ||
+      !isBoundedInteger(candidate.minimumMargin, 1, 30)
+    ) {
+      return undefined;
+    }
+    seen.add(candidate.keyword);
+    result.push(
+      Object.freeze({
+        keyword: candidate.keyword as Exclude<TKeyword, 'other'>,
+        minimumScore: candidate.minimumScore,
+        minimumMargin: candidate.minimumMargin,
+      }),
+    );
+  }
+  return seen.size === expected.size
+    ? Object.freeze(
+        result.sort(
+          (left, right) =>
+            defaults.findIndex((item) => item.keyword === left.keyword) -
+            defaults.findIndex((item) => item.keyword === right.keyword),
+        ),
+      )
+    : undefined;
+}
+
+function decodeNeighborPolicy(
+  value: unknown,
+): Readonly<EntryClassificationNeighborPolicy> | undefined {
+  if (
+    !isClosedRecord(value, [
+      'enabled',
+      'minimumReferenceCount',
+      'minimumConsensusBasisPoints',
+      'minimumSharedKeywordCount',
+      'minimumSimilarityBasisPoints',
+      'maximumNeighbors',
+      'maximumReferencesPerKeyword',
+      'evidenceScore',
+    ]) ||
+    (value.enabled !== true && value.enabled !== false) ||
+    !isBoundedInteger(value.minimumReferenceCount, 2, 32) ||
+    !isBoundedInteger(value.minimumConsensusBasisPoints, 5_000, 10_000) ||
+    !isBoundedInteger(value.minimumSharedKeywordCount, 1, 16) ||
+    !isBoundedInteger(value.minimumSimilarityBasisPoints, 1, 10_000) ||
+    !isBoundedInteger(value.maximumNeighbors, 2, 32) ||
+    !isBoundedInteger(value.maximumReferencesPerKeyword, 4, 1_024) ||
+    !isBoundedInteger(value.evidenceScore, 1, 24) ||
+    value.minimumReferenceCount > value.maximumNeighbors
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    enabled: value.enabled,
+    minimumReferenceCount: value.minimumReferenceCount,
+    minimumConsensusBasisPoints: value.minimumConsensusBasisPoints,
+    minimumSharedKeywordCount: value.minimumSharedKeywordCount,
+    minimumSimilarityBasisPoints: value.minimumSimilarityBasisPoints,
+    maximumNeighbors: value.maximumNeighbors,
+    maximumReferencesPerKeyword: value.maximumReferencesPerKeyword,
+    evidenceScore: value.evidenceScore,
+  });
 }
 
 function decodeTerm(value: unknown): string | undefined {
@@ -646,12 +1066,6 @@ function hasAliasCycle(
   return false;
 }
 
-function replaceLiteral(value: string, source: string, target: string): string {
-  return source.length === 0
-    ? value
-    : value.replace(new RegExp(escapeRegExp(source), 'gu'), target);
-}
-
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
 }
@@ -684,6 +1098,31 @@ function isClosedRecord(
   );
 }
 
+function hasRequiredAndAllowedKeys(
+  value: Readonly<Record<string, unknown>>,
+  requiredKeys: readonly string[],
+  optionalKeys: readonly string[],
+): boolean {
+  const allowed = new Set([...requiredKeys, ...optionalKeys]);
+  const keys = Object.keys(value);
+  return (
+    requiredKeys.every((key) => Object.hasOwn(value, key)) &&
+    keys.every((key) => allowed.has(key))
+  );
+}
+
+function isBoundedInteger(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+): value is number {
+  return (
+    Number.isSafeInteger(value) &&
+    (value as number) >= minimum &&
+    (value as number) <= maximum
+  );
+}
+
 function rule<TKeyword extends string>(
   keyword: TKeyword,
   signals: readonly Readonly<{pattern: RegExp; weight: number}>[],
@@ -693,4 +1132,12 @@ function rule<TKeyword extends string>(
 
 function signal(pattern: RegExp, weight: number) {
   return Object.freeze({pattern, weight});
+}
+
+function threshold<TKeyword extends string>(
+  keyword: TKeyword,
+  minimumScore: number,
+  minimumMargin: number,
+): Readonly<EntryClassificationThreshold<TKeyword>> {
+  return Object.freeze({keyword, minimumScore, minimumMargin});
 }

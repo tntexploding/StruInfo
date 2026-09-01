@@ -312,6 +312,58 @@ describe('M2-P0B bulk ingestion enrichment', () => {
       `${DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION}:m2-p2:`,
     );
   });
+
+  it('uses bounded labelled-neighbor consensus through the existing atomic writer', async () => {
+    const repository = new MemoryEnrichmentRepository();
+    const candidate = entry(
+      '44444444-4444-4444-8444-444444444444',
+      SNAPSHOT_ID,
+      'Synthetic body without a built-in genre signal.',
+      [keyword('shared-alpha'), keyword('shared-beta')],
+    );
+    const references = [
+      classifiedReference(
+        '55555555-5555-4555-8555-555555555551',
+        '66666666-6666-4666-8666-666666666661',
+      ),
+      classifiedReference(
+        '55555555-5555-4555-8555-555555555552',
+        '66666666-6666-4666-8666-666666666662',
+      ),
+      classifiedReference(
+        '55555555-5555-4555-8555-555555555553',
+        '66666666-6666-4666-8666-666666666663',
+      ),
+      classifiedReference(
+        '55555555-5555-4555-8555-555555555554',
+        '66666666-6666-4666-8666-666666666664',
+      ),
+    ];
+    const entries = new MemoryEntries([candidate, ...references]);
+    const service = new BulkIngestionEnrichmentService({
+      workspaceId: WORKSPACE_ID,
+      repository,
+      entries,
+      associations: new MemoryAssociations(),
+      preferences: preferences(false),
+    });
+
+    const result = await service.execute({
+      batchId: BATCH_ID,
+      mode: 'run',
+      maxItems: 1,
+    });
+
+    expect(result.batch.exceptionEntryCount).toBe(0);
+    expect(entries.values[0]?.value.typeKeyword).toBe('operating_guideline');
+    expect(entries.values[0]?.value.domains).toEqual([
+      expect.objectContaining({
+        keyword: 'engineering_computing',
+        origin: 'rule',
+      }),
+    ]);
+    expect(entries.values[0]?.revision).toBe(2);
+  });
 });
 
 class MemoryEnrichmentRepository implements BulkIngestionEnrichmentRepositoryPort {
@@ -559,5 +611,29 @@ function keyword(displayValue: string) {
     normalizedValue: displayValue.toLowerCase(),
     origin: 'manual' as const,
     originVersion: 'synthetic.manual.v1',
+  });
+}
+
+function classifiedReference(
+  entryId: string,
+  snapshotId: string,
+): CurrentInformationEntry {
+  const base = entry(entryId, snapshotId, 'Synthetic labelled reference.', [
+    keyword('shared-alpha'),
+    keyword('shared-beta'),
+  ]);
+  return Object.freeze({
+    ...base,
+    value: Object.freeze({
+      ...base.value,
+      typeKeyword: 'operating_guideline' as const,
+      domains: Object.freeze([
+        Object.freeze({
+          keyword: 'engineering_computing' as const,
+          origin: 'manual' as const,
+          originVersion: 'synthetic.manual.v1',
+        }),
+      ]),
+    }),
   });
 }

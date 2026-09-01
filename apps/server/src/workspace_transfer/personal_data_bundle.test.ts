@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {createReviewPreferences} from '../storage/review_preferences_store.js';
+import {DEFAULT_ENTRY_CLASSIFICATION_PROFILE} from '../modules/entries/information_entry_deterministic_classification.js';
 import type {JsonValue} from '../serialization/canonical_json.js';
 import {
   PERSONAL_DATA_BUNDLE_CODEC,
@@ -47,15 +48,9 @@ describe('personal data Bundle preference compatibility', () => {
       maximumGroupCodePoints: 4000,
       maximumFragmentsPerGroup: 8,
     });
-    expect(decoded.reviewPreferences.entryClassificationProfile).toEqual({
-      format: 'struinfo.entry-classification-profile',
-      version: 1,
-      revision: 0,
-      aliases: [],
-      typeMappings: [],
-      domainMappings: [],
-      exclusions: [],
-    });
+    expect(decoded.reviewPreferences.entryClassificationProfile).toEqual(
+      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+    );
   });
 
   it('round-trips a closed preference profile in the existing v1 section', () => {
