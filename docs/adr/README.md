@@ -298,3 +298,10 @@ P0E/P0F packet and exact-apply protocol in batches of up to 100, with current
 annotations prefilled and only missing dimensions left as invalid placeholders.
 Other exception packets remain capped at 20; privacy, byte limits, stale-state
 rejection and external-file isolation remain unchanged.
+
+ADR 0056 completes M2-P2F for the largest observed residual category: missing
+Entry types. The Tags workspace exposes current coverage, per-type counts and a
+cursor-paged correction queue. PostgreSQL hydrates only the visible page and
+type saves reuse the existing Entry CAS revision while preserving all other
+annotation and evidence fields. Privacy remains explicit; no migration,
+Provider, dependency or automatic rewrite is introduced.

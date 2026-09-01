@@ -13,6 +13,9 @@ import {
   type InformationEntryMaterializeRow,
   type InformationEntryRepositoryPort,
   type InformationEntryBulkRevisionRepositoryPort,
+  type InformationEntryTypeCoverage,
+  type InformationEntryTypeReviewRequest,
+  type InformationEntryTypeReviewResult,
   type InformationEntryRevisionOutcome,
   type InformationEntryRevisionValue,
   type InformationEntryRevisionWrite,
@@ -70,6 +73,40 @@ export const READ_CURRENT_INFORMATION_ENTRIES_BY_ID_SQL = sql(
   '  AND ($2::boolean OR NOT e.is_private)',
   '  AND e.entry_id = ANY($3::uuid[])',
   'ORDER BY snapshot.captured_at DESC, e.snapshot_id, e.document_order, e.entry_id',
+);
+
+export const READ_INFORMATION_ENTRY_TYPE_COVERAGE_SQL = sql(
+  'SELECT e.type_keyword::text, count(*)::integer AS entry_count',
+  'FROM struinfo.information_entry AS e',
+  'WHERE e.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
+  'GROUP BY e.type_keyword',
+);
+
+export const READ_INFORMATION_ENTRY_TYPE_REVIEW_PAGE_SQL = sql(
+  'SELECT e.entry_id::text, e.snapshot_id::text, e.document_order,',
+  '  snapshot.captured_at',
+  'FROM struinfo.information_entry AS e',
+  'JOIN struinfo.snapshot AS snapshot',
+  '  ON snapshot.workspace_id = e.workspace_id',
+  ' AND snapshot.resource_id = e.resource_id',
+  ' AND snapshot.snapshot_id = e.snapshot_id',
+  'WHERE e.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
+  "  AND (($3::text = 'missing' AND e.type_keyword IS NULL)",
+  "    OR ($3::text <> 'missing' AND e.type_keyword::text = $3::text))",
+  '  AND (',
+  '    $4::timestamptz IS NULL',
+  '    OR snapshot.captured_at < $4::timestamptz',
+  '    OR (snapshot.captured_at = $4::timestamptz AND (',
+  '      e.snapshot_id > $5::uuid',
+  '      OR (e.snapshot_id = $5::uuid AND e.document_order > $6::integer)',
+  '      OR (e.snapshot_id = $5::uuid AND e.document_order = $6::integer',
+  '        AND e.entry_id > $7::uuid)',
+  '    ))',
+  '  )',
+  'ORDER BY snapshot.captured_at DESC, e.snapshot_id, e.document_order, e.entry_id',
+  'LIMIT $8',
 );
 
 export const READ_CURRENT_INFORMATION_ENTRY_INPUTS_SQL = sql(
@@ -570,6 +607,105 @@ export class PostgresInformationEntryRepository
       },
     );
   }
+
+  public reviewCurrentEntryTypes(
+    request: Readonly<InformationEntryTypeReviewRequest>,
+  ): Promise<Readonly<InformationEntryTypeReviewResult>> {
+    const workspaceId = canonicalUuid(request.workspaceId);
+    const filter =
+      request.filter === 'missing'
+        ? request.filter
+        : enumValue(request.filter, ENTRY_TYPE_KEYWORDS);
+    const limit = integer(request.limit, 1);
+    if (limit > 50) throw new PostgresAdapterError();
+    const after =
+      request.after === undefined
+        ? undefined
+        : Object.freeze({
+            capturedAt: timestamp(request.after.capturedAt),
+            snapshotId: canonicalUuid(request.after.snapshotId),
+            documentOrder: integer(request.after.documentOrder),
+            entryId: canonicalUuid(request.after.entryId),
+          });
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const coverageRows = await client.query<Row>(
+          READ_INFORMATION_ENTRY_TYPE_COVERAGE_SQL,
+          [workspaceId, request.includePrivate],
+        );
+        const page = await client.query<Row>(
+          READ_INFORMATION_ENTRY_TYPE_REVIEW_PAGE_SQL,
+          [
+            workspaceId,
+            request.includePrivate,
+            filter,
+            after?.capturedAt ?? null,
+            after?.snapshotId ?? null,
+            after?.documentOrder ?? null,
+            after?.entryId ?? null,
+            limit + 1,
+          ],
+        );
+        const pageRows = page.rows.slice(0, limit);
+        const entryIds = pageRows.map((row) => canonicalUuid(row.entry_id));
+        const parameters = [
+          workspaceId,
+          request.includePrivate,
+          entryIds,
+        ] as const;
+        const core =
+          entryIds.length === 0
+            ? Object.freeze({rows: Object.freeze([])})
+            : await client.query<Row>(
+                READ_CURRENT_INFORMATION_ENTRIES_BY_ID_SQL,
+                parameters,
+              );
+        const inputs =
+          entryIds.length === 0
+            ? Object.freeze({rows: Object.freeze([])})
+            : await client.query<Row>(
+                READ_CURRENT_INFORMATION_ENTRY_INPUTS_BY_ID_SQL,
+                parameters,
+              );
+        const keywords =
+          entryIds.length === 0
+            ? Object.freeze({rows: Object.freeze([])})
+            : await client.query<Row>(
+                READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_BY_ID_SQL,
+                parameters,
+              );
+        const domains =
+          entryIds.length === 0
+            ? Object.freeze({rows: Object.freeze([])})
+            : await client.query<Row>(
+                READ_CURRENT_INFORMATION_ENTRY_DOMAINS_BY_ID_SQL,
+                parameters,
+              );
+        const items = Object.freeze(
+          core.rows.map((row) =>
+            mapCurrentEntry(row, inputs.rows, keywords.rows, domains.rows),
+          ),
+        );
+        const last = pageRows.at(-1);
+        return Object.freeze({
+          coverage: mapTypeCoverage(coverageRows.rows),
+          items,
+          ...(page.rows.length > limit && last !== undefined
+            ? {
+                nextCursor: Object.freeze({
+                  capturedAt: timestamp(last.captured_at),
+                  snapshotId: canonicalUuid(last.snapshot_id),
+                  documentOrder: integer(last.document_order),
+                  entryId: canonicalUuid(last.entry_id),
+                }),
+              }
+            : {}),
+        });
+      },
+    );
+  }
 }
 
 export async function insertNewEntry(
@@ -807,6 +943,42 @@ function mapRevisionValue(
       inputRows.map((candidate) => canonicalUuid(candidate.fragment_id)),
     ),
     ...(fragmentRanges === undefined ? {} : {fragmentRanges}),
+  });
+}
+
+function mapTypeCoverage(
+  rows: readonly Row[],
+): Readonly<InformationEntryTypeCoverage> {
+  const counts = new Map<(typeof ENTRY_TYPE_KEYWORDS)[number], number>(
+    ENTRY_TYPE_KEYWORDS.map((typeKeyword) => [typeKeyword, 0]),
+  );
+  let totalCount = 0;
+  let missingCount = 0;
+  for (const row of rows) {
+    const count = integer(row.entry_count);
+    totalCount += count;
+    if (row.type_keyword === null) {
+      missingCount += count;
+      continue;
+    }
+    const typeKeyword = enumValue(row.type_keyword, ENTRY_TYPE_KEYWORDS);
+    counts.set(typeKeyword, count);
+  }
+  if (!Number.isSafeInteger(totalCount) || totalCount > 2_147_483_647) {
+    throw new PostgresAdapterError();
+  }
+  return Object.freeze({
+    totalCount,
+    classifiedCount: totalCount - missingCount,
+    missingCount,
+    byType: Object.freeze(
+      ENTRY_TYPE_KEYWORDS.map((typeKeyword) =>
+        Object.freeze({
+          typeKeyword,
+          count: counts.get(typeKeyword) ?? 0,
+        }),
+      ),
+    ),
   });
 }
 

@@ -390,6 +390,19 @@ function stubApi(
       Promise.resolve(result(409, {status: 'rejected'})),
     reviseInformationEntry: () =>
       Promise.resolve(result(200, {status: 'applied'})),
+    reviewInformationEntryTypes: () =>
+      Promise.resolve(
+        result(200, {
+          status: 'ok',
+          coverage: {
+            totalCount: 0,
+            classifiedCount: 0,
+            missingCount: 0,
+            byType: [],
+          },
+          items: [],
+        }),
+      ),
     searchInformationEntries: () =>
       Promise.resolve(result(200, {status: 'ok', entries: []})),
     informationEntrySearchIndexStatus: () =>

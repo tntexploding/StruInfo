@@ -1,5 +1,7 @@
 import type {
   CurrentInformationEntry,
+  InformationEntryTypeReviewRequest,
+  InformationEntryTypeReviewResult,
   InformationEntryMaterializeRow,
   InformationEntryRevisionWrite,
 } from './information_entry_contract.js';
@@ -57,6 +59,14 @@ export interface InformationEntryRepositoryPort {
     includePrivate: boolean,
     entryIds: readonly string[],
   ): Promise<readonly Readonly<CurrentInformationEntry>[]>;
+
+  /**
+   * Optional scale-aware read used by the owner-facing type correction queue.
+   * The pure fallback keeps synthetic and in-memory repositories compatible.
+   */
+  reviewCurrentEntryTypes?(
+    request: Readonly<InformationEntryTypeReviewRequest>,
+  ): Promise<Readonly<InformationEntryTypeReviewResult>>;
 }
 
 export interface InformationEntryEmptySnapshotRepositoryPort extends InformationEntryRepositoryPort {

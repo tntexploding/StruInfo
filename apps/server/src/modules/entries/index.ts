@@ -10,6 +10,7 @@ export * from './information_entry_search.js';
 export * from './information_entry_search_index_contract.js';
 export * from './information_entry_search_index.js';
 export * from './information_entry_retrieval.js';
+export * from './information_entry_type_review.js';
 export * from './information_document_tag.js';
 export * from './information_document_tag_contract.js';
 export * from './information_document_tag_identity.js';

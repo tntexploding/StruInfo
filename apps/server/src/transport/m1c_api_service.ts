@@ -39,6 +39,7 @@ import {
   prepareManualSplitInformationEntries,
   prepareInformationEntryRestructure,
   prepareSplitInformationEntries,
+  reviewCurrentInformationEntryTypes,
   decodeEntrySplitRuleProfile,
   decodeEntrySplitRuleSettings,
   DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
@@ -70,6 +71,8 @@ import {
   type InformationEntryDocumentView,
   type InformationEntryEmptySnapshotRepositoryPort,
   type InformationEntrySearchRequest,
+  type InformationEntryTypeReviewCursor,
+  type InformationEntryTypeReviewFilter,
   type InformationEntryQuerySynthesisRequest,
   type InformationEntryQuerySynthesisServicePort,
   type InformationEntryRetrievalServicePort,
@@ -270,6 +273,7 @@ export interface M1cApiServicePort {
     entryId: string,
     body: unknown,
   ): Promise<M1cHttpResult>;
+  reviewInformationEntryTypes(body: unknown): Promise<M1cHttpResult>;
   searchInformationEntries(body: unknown): Promise<M1cHttpResult>;
   informationEntrySearchIndexStatus(): Promise<M1cHttpResult>;
   rebuildInformationEntrySearchIndex(): Promise<M1cHttpResult>;
@@ -369,6 +373,23 @@ export class M1cApiService implements M1cApiServicePort {
 
   public constructor(dependencies: Readonly<M1cApiServiceDependencies>) {
     this.#dependencies = dependencies;
+  }
+
+  async #loadCurrentInformationEntriesByIds(
+    entryIds: readonly string[],
+    includePrivate: boolean,
+  ): Promise<readonly Readonly<CurrentInformationEntry>[]> {
+    const repository = this.#dependencies.informationEntryRepository;
+    return repository.loadCurrentEntriesByIds === undefined
+      ? repository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          includePrivate,
+        )
+      : repository.loadCurrentEntriesByIds(
+          this.#dependencies.workspaceId,
+          includePrivate,
+          entryIds,
+        );
   }
 
   async #loadInformationEntryAssociationPolicy(): Promise<
@@ -2566,11 +2587,10 @@ export class M1cApiService implements M1cApiServicePort {
     const input = decodeEntryRevisionBody(body);
     if (input === undefined) return inputFailure('body');
     try {
-      const entries =
-        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          input.includePrivate,
-        );
+      const entries = await this.#loadCurrentInformationEntriesByIds(
+        [entryId],
+        input.includePrivate,
+      );
       const current = entries.find((entry) => entry.entryId === entryId);
       if (current === undefined) {
         return httpResult(404, {
@@ -2603,15 +2623,36 @@ export class M1cApiService implements M1cApiServicePort {
           issue: Object.freeze({code: 'stale_entry_revision'}),
         });
       }
-      const refreshed =
-        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          input.includePrivate,
-        );
+      const refreshed = await this.#loadCurrentInformationEntriesByIds(
+        [entryId],
+        input.includePrivate,
+      );
       return httpResult(200, {
         status: outcome,
         entry: refreshed.find((entry) => entry.entryId === entryId),
       });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async reviewInformationEntryTypes(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const input = decodeInformationEntryTypeReviewBody(body);
+    if (input === undefined) return inputFailure('body');
+    try {
+      const result = await reviewCurrentInformationEntryTypes(
+        this.#dependencies.informationEntryRepository,
+        {
+          workspaceId: this.#dependencies.workspaceId,
+          includePrivate: input.includePrivate,
+          filter: input.filter,
+          limit: input.limit,
+          ...(input.after === undefined ? {} : {after: input.after}),
+        },
+      );
+      return httpResult(200, {status: 'ok', ...result});
     } catch {
       return repositoryFailure();
     }
@@ -4553,6 +4594,59 @@ function decodeEntrySearchBody(
     onlyPrivate,
     limit,
     ...(after === undefined ? {} : {after}),
+  });
+}
+
+function decodeInformationEntryTypeReviewBody(body: unknown):
+  | Readonly<{
+      includePrivate: boolean;
+      filter: InformationEntryTypeReviewFilter;
+      limit: number;
+      after?: Readonly<InformationEntryTypeReviewCursor>;
+    }>
+  | undefined {
+  if (!isRecord(body)) return undefined;
+  const {includePrivate, filter, limit, after} = body;
+  if (
+    typeof includePrivate !== 'boolean' ||
+    typeof filter !== 'string' ||
+    (filter !== 'missing' &&
+      !ENTRY_TYPE_KEYWORDS.includes(filter as EntryTypeKeyword)) ||
+    typeof limit !== 'number' ||
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > 50
+  ) {
+    return undefined;
+  }
+  let cursor: Readonly<InformationEntryTypeReviewCursor> | undefined;
+  if (after !== undefined) {
+    if (
+      !isRecord(after) ||
+      typeof after.capturedAt !== 'string' ||
+      !isCanonicalIsoTimestamp(after.capturedAt) ||
+      typeof after.snapshotId !== 'string' ||
+      !CANONICAL_UUID.test(after.snapshotId) ||
+      typeof after.documentOrder !== 'number' ||
+      !Number.isSafeInteger(after.documentOrder) ||
+      after.documentOrder < 0 ||
+      typeof after.entryId !== 'string' ||
+      !CANONICAL_UUID.test(after.entryId)
+    ) {
+      return undefined;
+    }
+    cursor = Object.freeze({
+      capturedAt: after.capturedAt,
+      snapshotId: after.snapshotId,
+      documentOrder: after.documentOrder,
+      entryId: after.entryId,
+    });
+  }
+  return Object.freeze({
+    includePrivate,
+    filter: filter as InformationEntryTypeReviewFilter,
+    limit,
+    ...(cursor === undefined ? {} : {after: cursor}),
   });
 }
 

@@ -101,6 +101,54 @@ describe('M1cApiClient', () => {
     });
   });
 
+  it('posts the type correction scope through its narrow local route', async () => {
+    let request: Readonly<{url: string; init?: RequestInit}> | undefined;
+    const fetchImplementation: M1cApiFetch = (input, init) => {
+      request = {url: requestUrl(input), ...(init === undefined ? {} : {init})};
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: 'ok',
+            coverage: {
+              totalCount: 3,
+              classifiedCount: 2,
+              missingCount: 1,
+              byType: [],
+            },
+            items: [],
+          }),
+          {status: 200, headers: {'content-type': 'application/json'}},
+        ),
+      );
+    };
+    const client = createM1cApiClient(
+      'http://127.0.0.1:3000/',
+      fetchImplementation,
+    );
+
+    const response = await client.reviewInformationEntryTypes({
+      includePrivate: false,
+      filter: 'missing',
+      limit: 20,
+    });
+
+    expect(response.body).toMatchObject({
+      status: 'ok',
+      coverage: {missingCount: 1},
+    });
+    expect(request?.url).toBe(
+      'http://127.0.0.1:3000/api/v1/entries/type-review',
+    );
+    expect(request?.init).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({
+        includePrivate: false,
+        filter: 'missing',
+        limit: 20,
+      }),
+    });
+  });
+
   it('posts AI query synthesis through the narrow route and forwards cancellation', async () => {
     let request: Readonly<{url: string; init?: RequestInit}> | undefined;
     const fetchImplementation: M1cApiFetch = (input, init) => {

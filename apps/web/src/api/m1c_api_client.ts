@@ -41,6 +41,7 @@ import type {
   InformationEntryKnowledgeGraphResponse,
   InformationEntryMaterializeResponse,
   InformationEntryRevisionResponse,
+  InformationEntryTypeReviewResponse,
   InformationEntryRestructureApplyResponse,
   InformationEntryRestructurePreviewResponse,
   InformationEntrySearchResponse,
@@ -275,6 +276,10 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryRevisionResponse>>;
+  reviewInformationEntryTypes(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryTypeReviewResponse>>;
   searchInformationEntries(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -482,6 +487,7 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     previewInformationEntryRestructure: reject,
     applyInformationEntryRestructure: reject,
     reviseInformationEntry: reject,
+    reviewInformationEntryTypes: reject,
     searchInformationEntries: reject,
     loadInformationEntrySearchIndex: reject,
     rebuildInformationEntrySearchIndex: reject,
@@ -775,6 +781,12 @@ export function createM1cApiClient(
     reviseInformationEntry: (entryId, body, options) =>
       put<InformationEntryRevisionResponse>(
         `api/v1/entries/${encodeURIComponent(entryId)}`,
+        body,
+        options,
+      ),
+    reviewInformationEntryTypes: (body, options) =>
+      post<InformationEntryTypeReviewResponse>(
+        'api/v1/entries/type-review',
         body,
         options,
       ),

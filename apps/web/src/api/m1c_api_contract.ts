@@ -877,6 +877,32 @@ export interface InformationEntry {
   }>;
 }
 
+export type InformationEntryTypeReviewFilter = 'missing' | EntryTypeKeyword;
+
+export interface InformationEntryTypeReviewCursor {
+  readonly capturedAt: string;
+  readonly snapshotId: string;
+  readonly documentOrder: number;
+  readonly entryId: string;
+}
+
+export interface InformationEntryTypeCoverage {
+  readonly totalCount: number;
+  readonly classifiedCount: number;
+  readonly missingCount: number;
+  readonly byType: readonly Readonly<{
+    typeKeyword: EntryTypeKeyword;
+    count: number;
+  }>[];
+}
+
+export interface InformationEntryTypeReviewResponse {
+  readonly status: 'ok';
+  readonly coverage: Readonly<InformationEntryTypeCoverage>;
+  readonly items: readonly Readonly<InformationEntry>[];
+  readonly nextCursor?: Readonly<InformationEntryTypeReviewCursor>;
+}
+
 export interface InformationDocumentTag {
   readonly displayValue: string;
   readonly normalizedValue: string;
