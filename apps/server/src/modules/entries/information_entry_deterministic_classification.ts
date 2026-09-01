@@ -8,7 +8,7 @@ import {
 } from './information_entry_contract.js';
 
 export const DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION =
-  'struinfo.entry-classification.deterministic.v2';
+  'struinfo.entry-classification.deterministic.v3';
 
 export const ENTRY_CLASSIFICATION_PROFILE_FORMAT =
   'struinfo.entry-classification-profile';
@@ -80,62 +80,64 @@ interface WeightedRule<TKeyword extends string> {
 const TYPE_RULES: readonly WeightedRule<EntryTypeKeyword>[] = [
   rule('operating_guideline', [
     signal(
-      /(?:教程|指南|入门|安装|配置|操作步骤|使用方法|how[ -]to|tutorial|guide|getting started)/iu,
-      3,
+      /(?:教程|指南|操作步骤|使用方法|快速开始|how[ -]to|tutorial|getting started|quickstart|walkthrough)/iu,
+      6,
     ),
-    signal(/(?:实践|示例|命令行|quickstart|walkthrough)/iu, 1),
+    signal(/(?:入门|安装|配置|实践|示例|命令行|guide)/iu, 3),
   ]),
   rule('investigation_analysis', [
     signal(
-      /(?:调查|分析|研究报告|评测|基准测试|benchmark|analysis|research|survey)/iu,
-      3,
+      /(?:调查报告|深入分析|研究报告|评测|基准测试|benchmark|analysis|research report|survey)/iu,
+      6,
     ),
-    signal(/(?:数据表明|实验结果|对比测试|case study)/iu, 1),
+    signal(/(?:调查|分析|研究|数据表明|实验结果|对比测试|case study)/iu, 3),
   ]),
   rule('knowledge_explanation', [
     signal(
-      /(?:原理|解释|为什么|是什么|概念|机制|explained|explanation|what is|how .* works)/iu,
-      3,
+      /(?:工作原理|原理解析|为什么|是什么|机制解释|explained|explanation|what is|how .* works)/iu,
+      6,
     ),
-    signal(/(?:基础知识|概览|overview|introduction)/iu, 1),
+    signal(/(?:原理|解释|概念|机制|基础知识|概览|overview|introduction)/iu, 3),
   ]),
   rule('public_communication', [
     signal(
-      /(?:发布公告|正式发布|宣布|公告|新闻稿|press release|announc(?:e|ed|ement)|released?)/iu,
-      3,
+      /(?:发布公告|正式发布|新闻稿|版本说明|press release|release notes?|announcement)/iu,
+      6,
     ),
-    signal(/(?:版本更新|上线|launch(?:ed)?)/iu, 1),
+    signal(/(?:宣布|公告|版本更新|上线|发布|released?|launch(?:ed)?)/iu, 3),
   ]),
   rule('argument', [
     signal(
-      /(?:观点|评论|主张|争论|反驳|我认为|作者认为|opinion|argu(?:e|ment)|commentary)/iu,
-      3,
+      /(?:我认为|作者认为|本文主张|反驳|opinion|commentary|argu(?:e|ment))/iu,
+      6,
     ),
-    signal(/(?:应该|不应该|利弊|pros and cons)/iu, 1),
+    signal(/(?:观点|评论|主张|争论|应该|不应该|利弊|pros and cons)/iu, 3),
   ]),
   rule('personal_experience', [
-    signal(
-      /(?:亲历|经历|体验|复盘|访谈|采访|interview|my experience|journey|retrospective)/iu,
-      3,
-    ),
-    signal(/(?:故事|回忆|心得)/iu, 1),
+    signal(/(?:亲身经历|个人体验|项目复盘|my experience|retrospective)/iu, 6),
+    signal(/(?:亲历|经历|体验|复盘|journey|故事|回忆|心得)/iu, 3),
   ]),
   rule('interactive_collaboration', [
-    signal(
-      /(?:讨论|问答|圆桌|协作|对话|discussion|q&a|roundtable|collaboration)/iu,
-      3,
-    ),
+    signal(/(?:访谈|采访|问答|圆桌|interview|q&a|roundtable)/iu, 6),
+    signal(/(?:讨论|协作|对话|discussion|collaboration)/iu, 3),
   ]),
   rule('literary_creation', [
-    signal(/(?:小说|诗歌|散文|文学作品|fiction|novel|poem|short story)/iu, 3),
+    signal(/(?:小说|诗歌|散文|文学作品|fiction|novel|poem|short story)/iu, 6),
   ]),
   rule('factual_material', [
     signal(
       /(?:数据集|资料汇总|事实记录|统计数据|dataset|reference data|statistics)/iu,
-      3,
+      6,
     ),
   ]),
 ];
+
+const RESOURCE_CARD_LINK_PATTERN =
+  /(?:https?:\/\/|www\.|github\.com\/|gitlab\.com\/|codeberg\.org\/)/iu;
+const RESOURCE_CARD_TERM_PATTERN =
+  /(?:开源|项目|工具|软件|应用|插件|扩展|库|框架|平台|网站|服务|资源|仓库|命令行|客户端|编辑器|浏览器|数据库|\b(?:open[ -]source|projects?|tools?|software|apps?|plugins?|extensions?|libraries|frameworks?|platforms?|services?|repositories|command[ -]line|clients?|editors?|browsers?|databases?)\b)/iu;
+const FACTUAL_MATERIAL_NEGATIVE_PATTERN =
+  /(?:教程|指南|操作步骤|使用方法|深入分析|调查报告|研究报告|评测|基准测试|我认为|作者认为|本文主张|反驳|发布公告|正式发布|新闻稿|版本说明|亲身经历|个人体验|项目复盘|访谈|采访|问答|圆桌|小说|诗歌|散文|how[ -]to|tutorial|getting started|quickstart|walkthrough|benchmark|analysis|research report|opinion|commentary|press release|release notes?|my experience|retrospective|interview|q&a|roundtable|fiction|novel|poem|short story)/iu;
 
 const DOMAIN_RULES: readonly WeightedRule<EntryDomainKeyword>[] = [
   rule('engineering_computing', [
@@ -455,6 +457,9 @@ function structuralScore(
   ) {
     return 2;
   }
+  if (keyword === 'factual_material' && isLinkedResourceCard(input)) {
+    return 6;
+  }
   if (
     keyword === 'factual_material' &&
     input.chunkMode === 'whole' &&
@@ -482,12 +487,25 @@ function negativeScore(
         ? /(?:教程|指南|深入分析|tutorial|benchmark)/iu
         : keyword === 'argument'
           ? /(?:数据集|安装步骤|release notes?|dataset)/iu
-          : undefined;
+          : keyword === 'factual_material'
+            ? FACTUAL_MATERIAL_NEGATIVE_PATTERN
+            : undefined;
   return pattern === undefined
     ? 0
     : (pattern.test(fields.title) ? 6 : 0) +
         (pattern.test(fields.keywords) ? 4 : 0) +
-        (pattern.test(fields.body) ? 2 : 0);
+        (pattern.test(fields.body) ? 3 : 0);
+}
+
+function isLinkedResourceCard(
+  input: Readonly<DeterministicEntryClassificationInput>,
+): boolean {
+  if (Array.from(input.body).length > 2_400) return false;
+  const text = `${input.titlePath}\n${input.contentKeywords.join('\n')}\n${input.body}`;
+  return (
+    RESOURCE_CARD_LINK_PATTERN.test(text) &&
+    RESOURCE_CARD_TERM_PATTERN.test(text)
+  );
 }
 
 function classifyScores<TKeyword extends string>(

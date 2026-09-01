@@ -14,6 +14,7 @@ import type {
   InformationEntryRepositoryPort,
   InformationEntryRevisionWrite,
 } from '../entries/index.js';
+import {DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION} from '../entries/index.js';
 import type {
   BulkIngestionEnrichmentBatch,
   BulkIngestionEnrichmentItem,
@@ -308,7 +309,7 @@ describe('M2-P0B bulk ingestion enrichment', () => {
       origin: 'rule',
     });
     expect(entries.values[0]?.value.domains[0]?.originVersion).toContain(
-      'struinfo.entry-classification.deterministic.v2:m2-p2:',
+      `${DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION}:m2-p2:`,
     );
   });
 });

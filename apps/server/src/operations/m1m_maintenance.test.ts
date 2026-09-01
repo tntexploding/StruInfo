@@ -10,6 +10,7 @@ import type {
   BulkIngestionAdjudicationSummary,
   BulkIngestionBatch,
   BulkIngestionEnrichmentBatch,
+  BulkIngestionTypeCompletionPreview,
 } from '../modules/processing/index.js';
 
 const SUMMARY = Object.freeze({
@@ -111,6 +112,34 @@ const ADJUDICATION_SUMMARY: Readonly<BulkIngestionAdjudicationSummary> =
         deferredCount: 0,
       }),
     ]),
+  });
+const TYPE_COMPLETION_PREVIEW: Readonly<BulkIngestionTypeCompletionPreview> =
+  Object.freeze({
+    batchId: BATCH_ID,
+    privacyScope: 'public_only',
+    ruleVersion: 'struinfo.entry-classification.deterministic.v3',
+    profileRevision: 0,
+    candidateExceptionCount: 2,
+    staleExceptionCount: 0,
+    protectedDecisionCount: 0,
+    scopeExcludedCount: 0,
+    staleEntryCount: 0,
+    alreadyClassifiedCount: 0,
+    missingTypeCount: 2,
+    assignableCount: 1,
+    unresolvedCount: 1,
+    byPredictedType: Object.freeze([
+      Object.freeze({typeKeyword: 'factual_material', count: 1}),
+    ]),
+    byReason: Object.freeze([
+      Object.freeze({reason: 'assigned', count: 1}),
+      Object.freeze({reason: 'no_signal', count: 1}),
+    ]),
+    byExceptionCode: Object.freeze([
+      Object.freeze({exceptionCode: 'classification_type_missing', count: 2}),
+    ]),
+    samples: Object.freeze([]),
+    nextAction: 'apply_type_completion',
   });
 
 describe('M1M maintenance command', () => {
@@ -323,6 +352,38 @@ describe('M1M maintenance command', () => {
         BATCH_ID,
       ]),
     ).toEqual({operation: 'ingest_pipeline_status', batchId: BATCH_ID});
+    expect(
+      decodeM1mMaintenanceRequest([
+        'ingest',
+        'type-completion-preview',
+        '--batch',
+        BATCH_ID,
+        '--scope',
+        'public_only',
+        '--sample-limit',
+        '25',
+      ]),
+    ).toEqual({
+      operation: 'ingest_type_completion_preview',
+      batchId: BATCH_ID,
+      privacyScope: 'public_only',
+      sampleLimit: 25,
+    });
+    expect(
+      decodeM1mMaintenanceRequest([
+        'ingest',
+        'type-completion-apply',
+        '--batch',
+        BATCH_ID,
+        '--max-items',
+        '250',
+      ]),
+    ).toEqual({
+      operation: 'ingest_type_completion_apply',
+      batchId: BATCH_ID,
+      maxItems: 250,
+      sampleLimit: 20,
+    });
     for (const candidate of [
       [],
       ['restore'],
@@ -362,6 +423,22 @@ describe('M1M maintenance command', () => {
         '101',
       ],
       ['ingest', 'review-apply', '--packet', 'not-a-uuid'],
+      [
+        'ingest',
+        'type-completion-preview',
+        '--batch',
+        BATCH_ID,
+        '--sample-limit',
+        '51',
+      ],
+      [
+        'ingest',
+        'type-completion-apply',
+        '--batch',
+        BATCH_ID,
+        '--max-items',
+        '0',
+      ],
       ['ingest', 'pipeline-start', '--key', 'synthetic', '--limit', '501'],
       [
         'ingest',
@@ -428,6 +505,41 @@ describe('M1M maintenance command', () => {
       status: {stage: 'complete', nextAction: 'none'},
     });
     expect(JSON.stringify([applied, pipeline])).not.toMatch(
+      /body|titlePath|sourceKey/iu,
+    );
+  });
+
+  it('previews and applies high-confidence type completion without content', async () => {
+    const runtime = createRuntime();
+    const preview = await executeM1mMaintenance(
+      {
+        operation: 'ingest_type_completion_preview',
+        batchId: BATCH_ID,
+        privacyScope: 'public_only',
+        sampleLimit: 20,
+      },
+      runtime,
+    );
+    expect(preview).toEqual({
+      event: 'm2_p2g_type_completion_previewed',
+      outcome: 'ready',
+      preview: TYPE_COMPLETION_PREVIEW,
+    });
+    const applied = await executeM1mMaintenance(
+      {
+        operation: 'ingest_type_completion_apply',
+        batchId: BATCH_ID,
+        maxItems: 100,
+        sampleLimit: 20,
+      },
+      runtime,
+    );
+    expect(applied).toMatchObject({
+      event: 'm2_p2g_type_completion_applied',
+      outcome: 'unchanged',
+      result: {nextAction: 'export_codex_review'},
+    });
+    expect(JSON.stringify([preview, applied])).not.toMatch(
       /body|titlePath|sourceKey/iu,
     );
   });
@@ -706,6 +818,23 @@ function createRuntime(
       associationProjectionCount: 0,
     }),
   );
+  const previewIngestionTypeCompletion = vi.fn(() =>
+    Promise.resolve(TYPE_COMPLETION_PREVIEW),
+  );
+  const applyIngestionTypeCompletion = vi.fn(() =>
+    Promise.resolve({
+      outcome: 'unchanged' as const,
+      enrichmentStatus: 'succeeded' as const,
+      before: TYPE_COMPLETION_PREVIEW,
+      after: Object.freeze({
+        ...TYPE_COMPLETION_PREVIEW,
+        assignableCount: 0,
+        unresolvedCount: 1,
+        nextAction: 'export_codex_review' as const,
+      }),
+      nextAction: 'export_codex_review' as const,
+    }),
+  );
   const pipelineStatus = Object.freeze({
     batchId: BATCH.batchId,
     stage: 'complete' as const,
@@ -744,6 +873,8 @@ function createRuntime(
     adjudicateIngestionExceptions,
     exportIngestionReviewPacket,
     applyIngestionReviewResult,
+    previewIngestionTypeCompletion,
+    applyIngestionTypeCompletion,
     startIngestionPipeline,
     advanceIngestionPipeline,
     loadIngestionPipelineStatus,

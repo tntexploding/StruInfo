@@ -51,6 +51,7 @@ async function main(): Promise<void> {
     (report.event === 'm2_p0a_ingest_executed' ||
       report.event === 'm2_p0b_enrichment_executed' ||
       report.event === 'm2_p0c_exception_adjudicated' ||
+      report.event === 'm2_p2g_type_completion_applied' ||
       report.event === 'm2_p0g_pipeline_started' ||
       report.event === 'm2_p0g_pipeline_advanced' ||
       report.event === 'm2_p0g_pipeline_status') &&

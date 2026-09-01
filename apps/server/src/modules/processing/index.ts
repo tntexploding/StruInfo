@@ -13,6 +13,8 @@ export * from './bulk_ingestion_codex_apply_contract.js';
 export * from './bulk_ingestion_codex_apply_service.js';
 export * from './bulk_ingestion_enrichment_contract.js';
 export * from './bulk_ingestion_enrichment_service.js';
+export * from './bulk_ingestion_type_completion_contract.js';
+export * from './bulk_ingestion_type_completion_service.js';
 export * from './bulk_ingestion_service.js';
 export * from './bulk_ingestion_pipeline_contract.js';
 export * from './bulk_ingestion_pipeline_service.js';
