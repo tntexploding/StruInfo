@@ -3391,6 +3391,72 @@ describe('M1E provider-neutral processing API', () => {
     });
   });
 });
+describe('M2-P2F type review API', () => {
+  it('validates the closed request and returns the scale-aware repository page', async () => {
+    const reviewCurrentEntryTypes = vi.fn(() =>
+      Promise.resolve(
+        Object.freeze({
+          coverage: Object.freeze({
+            totalCount: 12,
+            classifiedCount: 7,
+            missingCount: 5,
+            byType: Object.freeze([]),
+          }),
+          items: Object.freeze([]),
+        }),
+      ),
+    );
+    const service = createService({
+      informationEntryRepository: {
+        materializeEntries: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        materializeEntriesIfSnapshotEmpty: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        reviseEntry: () => Promise.resolve('not_found'),
+        loadCurrentEntries: () =>
+          Promise.reject(new Error('optimized review path was not used')),
+        reviewCurrentEntryTypes,
+      },
+    });
+
+    await expect(
+      service.reviewInformationEntryTypes({
+        includePrivate: false,
+        filter: 'missing',
+        limit: 20,
+      }),
+    ).resolves.toEqual({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        coverage: {
+          totalCount: 12,
+          classifiedCount: 7,
+          missingCount: 5,
+          byType: [],
+        },
+        items: [],
+      },
+    });
+    expect(reviewCurrentEntryTypes).toHaveBeenCalledWith({
+      workspaceId: WORKSPACE_ID,
+      includePrivate: false,
+      filter: 'missing',
+      limit: 20,
+    });
+    await expect(
+      service.reviewInformationEntryTypes({
+        includePrivate: false,
+        filter: 'invented_type',
+        limit: 20,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 422,
+      body: {status: 'rejected', issue: {path: 'body'}},
+    });
+  });
+});
+
 describe('M1cApiController', () => {
   it('writes local API responses as no-store JSON', () => {
     const service = createService();

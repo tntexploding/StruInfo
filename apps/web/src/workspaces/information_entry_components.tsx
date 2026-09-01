@@ -25,6 +25,7 @@ import type {
   InformationEntryDocumentListResponse,
   InformationEntryMaterializeResponse,
   InformationEntryRevisionResponse,
+  InformationEntryTypeReviewResponse,
   InformationEntryRestructureApplyResponse,
   InformationEntryRestructurePreviewResponse,
   InformationEntrySearchResponse,
@@ -74,6 +75,10 @@ export interface InformationEntryServices {
     entryId: string,
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationEntryRevisionResponse>>;
+  readonly onReviewTypes: (
+    body: unknown,
+    signal?: AbortSignal,
+  ) => Promise<M1cHttpResponse<InformationEntryTypeReviewResponse>>;
   readonly onSearch: (
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationEntrySearchResponse>>;

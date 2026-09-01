@@ -468,6 +468,17 @@ export class M1cApiController {
     );
   }
 
+  @Post('entries/type-review')
+  public async reviewInformationEntryTypes(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.reviewInformationEntryTypes(body),
+    );
+  }
+
   @Get('entries/search/index')
   public async informationEntrySearchIndexStatus(
     @Res() response: Response,

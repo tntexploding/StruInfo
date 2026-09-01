@@ -25,6 +25,7 @@ import type {
   InformationEntryPreferenceSuggestionResponse,
   InformationEntryPreferenceTrialResponse,
   InformationEntryRevisionResponse,
+  InformationEntryTypeReviewResponse,
   InformationEntryRestructureApplyResponse,
   InformationEntryRestructurePreviewResponse,
   InformationEntrySearchResponse,
@@ -507,6 +508,18 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       body: unknown,
     ): Promise<M1cHttpResponse<InformationEntryRevisionResponse>> =>
       apiClient.reviseInformationEntry(entryId, body),
+    [apiClient],
+  );
+
+  const reviewInformationEntryTypes = useCallback(
+    (
+      body: unknown,
+      signal?: AbortSignal,
+    ): Promise<M1cHttpResponse<InformationEntryTypeReviewResponse>> =>
+      apiClient.reviewInformationEntryTypes(
+        body,
+        signal === undefined ? undefined : {signal},
+      ),
     [apiClient],
   );
 
@@ -1032,6 +1045,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           }
           onRejectAiTagProposal={rejectAiTagProposal}
           onRevise={reviseInformationEntry}
+          onReviewTypes={reviewInformationEntryTypes}
           onReviseDocumentTags={reviseInformationDocumentTags}
           onSaveEntryAutomationPolicy={saveEntryAutomationPolicy}
           onSaveReviewPreferences={saveReviewPreferences}

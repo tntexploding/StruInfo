@@ -1,7 +1,7 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1K 活动接口
-- 最近核对：2026-08-27
+- 状态：M2-P2F 活动接口
+- 最近核对：2026-09-01
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
 
@@ -47,6 +47,7 @@
 | `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/accept`           | 接受提案并从本地 Fragment 物化 Entry                                                  |
 | `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/reject`           | 拒绝提案且不创建 Entry                                                                |
 | `PUT`  | `/api/v1/entries/:entryId`                                                            | 以期望版本更新当前 Entry 成品态                                                       |
+| `POST` | `/api/v1/entries/type-review`                                                         | 分页读取类型覆盖率、缺失队列或指定类型抽查队列                                        |
 | `POST` | `/api/v1/entries/search`                                                              | 查询 Entry，并在显式隐私范围下返回独立完整私密文档通道                                |
 | `GET`  | `/api/v1/entries/search/index`                                                        | 读取当前工作区可重建词项/向量索引状态                                                 |
 | `POST` | `/api/v1/entries/search/index/rebuild`                                                | 显式原子重建当前公共 Entry 的词项和可选向量投影                                       |
@@ -134,6 +135,12 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 - 主/副领域关键词和可选自定义领域；
 - 可选的有用程度与有趣程度 1–5 评分；
 - 隐私 Entry 的当次 `includePrivate`。
+
+`POST /entries/type-review` 接受显式 `includePrivate`、`missing` 或十种闭合类型之一、
+1–50 的 `limit`，以及可选的稳定 cursor。响应给出当前隐私范围内的总数、已分类数、
+缺失数、十类分布和当前页完整 Entry；Web 固定每页读取最多 20 条。PostgreSQL 在只读
+可重复读事务内完成统计和页选择，再只加载当前页正文与标签。该读取不写状态；页面保存
+类型仍调用上述 Entry 修订接口并使用 `expectedRevision`。
 
 文档级标签通过 aggregate 接口确定性重算，或通过 tags 接口人工覆盖。快捷标签、排除词、域名策略、已确认别名、联系策略和探索策略由 preferences 边界写入外部偏好文件，不进入数据库迁移、Git 或应用包。旧客户端不传 `associationPolicy` 或 `explorationPolicy` 时分别保留现值。
 
