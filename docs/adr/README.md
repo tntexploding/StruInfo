@@ -291,3 +291,10 @@ fail-closed v2 scoring, emits one primary plus at most two qualified secondary
 domains, and carries owner aliases/mappings/exclusions in external preferences
 and the complete personal-data package. Residual Codex review and UI controls
 remain deferred until the refreshed real distribution is measured.
+
+ADR 0055 completes M2-P2E after that real refresh measured 11,794 residual
+classification exceptions. Explicit classification groups may reuse the existing
+P0E/P0F packet and exact-apply protocol in batches of up to 100, with current
+annotations prefilled and only missing dimensions left as invalid placeholders.
+Other exception packets remain capped at 20; privacy, byte limits, stale-state
+rejection and external-file isolation remain unchanged.

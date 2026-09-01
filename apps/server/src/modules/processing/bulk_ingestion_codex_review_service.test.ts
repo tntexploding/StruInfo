@@ -127,6 +127,120 @@ describe('M2-P0E Codex review package export', () => {
     ).resolves.toMatchObject({itemCount: 1, privateItemCount: 1});
   });
 
+  it('exports 100-item classification batches with existing annotations prefilled', async () => {
+    const memory = createMemoryStore();
+    const sample =
+      vi.fn<Pick<BulkIngestionAdjudicationService, 'sample'>['sample']>();
+    const samples = Object.freeze(
+      Array.from({length: 100}, (_, index) =>
+        Object.freeze({
+          ...adjudicationSample(false, 'classification_type_missing'),
+          sampleRank: index + 1,
+          ordinal: index,
+          entryId: classificationEntryId(index),
+          entryRevisionId: classificationRevisionId(index),
+        }),
+      ),
+    );
+    sample.mockResolvedValue(samples);
+    const loadCurrentEntries = vi
+      .fn<InformationEntryRepositoryPort['loadCurrentEntries']>()
+      .mockRejectedValue(new Error('complete load must not run'));
+    const loadCurrentEntriesByIds = vi
+      .fn<
+        NonNullable<InformationEntryRepositoryPort['loadCurrentEntriesByIds']>
+      >()
+      .mockResolvedValue(
+        samples.map((sampleValue) =>
+          Object.freeze({
+            ...currentEntry(false, false),
+            entryId: sampleValue.entryId,
+            revisionId: sampleValue.entryRevisionId,
+          }),
+        ),
+      );
+    const service = new BulkIngestionCodexReviewService({
+      workspaceId: WORKSPACE_ID,
+      adjudication: {sample},
+      entries: {loadCurrentEntries, loadCurrentEntriesByIds},
+      fileStore: memory.store,
+    });
+
+    await expect(
+      service.export({
+        batchId: BATCH_ID,
+        exceptionCode: 'classification_type_missing',
+        includePrivate: false,
+        limit: 100,
+      }),
+    ).resolves.toMatchObject({itemCount: 100});
+
+    const result = JSON.parse(new TextDecoder().decode(memory.resultBytes)) as {
+      decisions: unknown[];
+    };
+    expect(result.decisions).toHaveLength(100);
+    expect(result.decisions[0]).toMatchObject({
+      entryId: classificationEntryId(0),
+      action: 'replace_me',
+      annotation: {
+        contentKeywords: ['Existing'],
+        typeKeyword: 'replace_me',
+        domains: [{keyword: 'engineering_computing'}],
+      },
+    });
+    expect(result.decisions[99]).toMatchObject({
+      entryId: classificationEntryId(99),
+      action: 'replace_me',
+      annotation: {
+        contentKeywords: ['Existing'],
+        typeKeyword: 'replace_me',
+        domains: [{keyword: 'engineering_computing'}],
+      },
+    });
+    expect(sample).toHaveBeenCalledWith({
+      batchId: BATCH_ID,
+      exceptionCode: 'classification_type_missing',
+      status: 'pending',
+      scope: 'current',
+      limit: 100,
+    });
+    expect(loadCurrentEntriesByIds).toHaveBeenCalledWith(
+      WORKSPACE_ID,
+      false,
+      samples.map((sampleValue) => sampleValue.entryId),
+    );
+    expect(loadCurrentEntries).not.toHaveBeenCalled();
+  });
+
+  it('keeps legacy packets at 20 items and classification packets at 100', async () => {
+    const service = new BulkIngestionCodexReviewService({
+      workspaceId: WORKSPACE_ID,
+      adjudication: {sample: vi.fn().mockResolvedValue([])},
+      entries: {loadCurrentEntries: vi.fn().mockResolvedValue([])},
+      fileStore: createMemoryStore().store,
+    });
+
+    await expect(
+      service.export({
+        batchId: BATCH_ID,
+        includePrivate: false,
+        limit: 21,
+      }),
+    ).rejects.toEqual(
+      new BulkIngestionCodexReviewServiceError('input_invalid'),
+    );
+    await expect(
+      service.export({
+        batchId: BATCH_ID,
+        exceptionCode: 'classification_domain_missing',
+        includePrivate: false,
+        limit: 101,
+      }),
+    ).rejects.toEqual(
+      new BulkIngestionCodexReviewServiceError('input_invalid'),
+    );
+  });
+
   it('fails closed when the sampled Entry revision is no longer current', async () => {
     const service = new BulkIngestionCodexReviewService({
       workspaceId: WORKSPACE_ID,
@@ -153,7 +267,20 @@ describe('M2-P0E Codex review package export', () => {
   });
 });
 
-function adjudicationSample(isPrivate: boolean) {
+function classificationEntryId(index: number): string {
+  return '00000000-0000-4000-8000-' + index.toString().padStart(12, '0');
+}
+
+function classificationRevisionId(index: number): string {
+  return '10000000-0000-4000-8000-' + index.toString().padStart(12, '0');
+}
+
+function adjudicationSample(
+  isPrivate: boolean,
+  exceptionCode:
+    | 'no_deterministic_tags'
+    | 'classification_type_missing' = 'no_deterministic_tags',
+) {
   return Object.freeze({
     sampleRank: 1,
     ordinal: 0,
@@ -163,13 +290,16 @@ function adjudicationSample(isPrivate: boolean) {
     entryRevision: 3,
     entryRevisionId: REVISION_ID,
     isCurrent: true,
-    exceptionCode: 'no_deterministic_tags' as const,
+    exceptionCode,
     status: 'pending' as const,
     version: 1,
   });
 }
 
-function currentEntry(isPrivate: boolean): Readonly<CurrentInformationEntry> {
+function currentEntry(
+  isPrivate: boolean,
+  includeType = true,
+): Readonly<CurrentInformationEntry> {
   return Object.freeze({
     workspaceId: WORKSPACE_ID,
     entryId: ENTRY_ID,
@@ -187,7 +317,7 @@ function currentEntry(isPrivate: boolean): Readonly<CurrentInformationEntry> {
       chunkMode: 'split' as const,
       splitRuleVersion: 'synthetic.v1',
       isPrivate,
-      typeKeyword: 'factual_material' as const,
+      ...(includeType ? {typeKeyword: 'factual_material' as const} : {}),
       contentKeywords: Object.freeze([
         Object.freeze({
           displayValue: 'Existing',

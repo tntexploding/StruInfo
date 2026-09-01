@@ -1,7 +1,7 @@
 # StruInfo 当前项目状态与实现清单
 
-- 状态：`v0.1.0` 私人单用户版本已发布；M2-P0A–P0G、M2-P1A–D 与 M2-P2A–D 已完成
-- 实现基线：M1I-1A/B 至 M1M + 首版 UI/发行基线 + M2-P0A–P0G + M2-P1A–D + M2-P2A–D
+- 状态：`v0.1.0` 私人单用户版本已发布；M2-P0A–P0G、M2-P1A–D、M2-P2A–D 与 M2-P2E 已完成
+- 实现基线：M1I-1A/B 至 M1M + 首版 UI/发行基线 + M2-P0A–P0G + M2-P1A–D + M2-P2A–E
 - 最近核对：2026-08-31
 - 需求边界：[产品需求](product-requirements.md)
 - 交付顺序：[分阶段计划](roadmap.md)
@@ -422,14 +422,23 @@ node-postgres 的多语句结果现在安全投影最终结果，使首次队列
 - 领域输出允许一个主领域加最多两个达到门槛的次领域，仍使用现有有序领域关键词表示，因此没有引入第二套分类结构；
 - 外部个人分类 Profile 支持别名、类型映射、领域映射和噪声排除，使用闭合 schema、版本和数量边界；它只保存在外部偏好文件并随完整个人数据包迁移，不进入 Git、数据库、日志或制品；
 - 迁移 `000030` 只扩展既有批处理异常代码 CHECK。规则和 Profile 内容都进入 enrichment 摘要，已有成功批次只有在所有者显式执行 refresh 时才重算；
-- 本轮只用合成资料完成实现与回归，没有读取或修改真实工作区。M2-P2E 残余复核和 M2-P2F UI 是否仍有必要，等待真实 refresh 后的覆盖率与异常分布再决定。
+- 随后的显式真实 refresh 已测得 11,794 个当前分类异常：缺类型 7,528、缺领域 1,069、平局/低置信度 1,868、无信号 1,329。该结果确认 P2E 有必要；P2F UI 仍等待批量复核后的实际体验再决定。
+
+### 7.35 已完成：M2-P2E 残余分类批量复核
+
+- 继续使用 P0E/P0F 的外部 packet/result 与 exact apply，不增加第二套 Codex 协议；
+- 显式选择四类 classification exception 时，工作包默认且最多包含 100 条；其他异常仍保持 20 条；
+- 分类结果模板保留 invalid-by-default action，同时预填已有内容关键词、类型和领域，只把缺失维度留为 `replace_me`；
+- 导出器优先通过 Entry ID 选择性 hydration；100 条 packet 的 decoder、领域 exact decision 和 PostgreSQL adapter 上限已对齐；
+- packet/result 字节上限、显式隐私 opt-in、revision/version stale rejection、完整标签 revision 与增量 Association 重建保持不变；
+- 本轮代码与测试仅使用合成资料，没有再次读取或修改真实工作区。P2F UI 和查询性能是独立后续边界。
 
 以上未完成项只有在进入相应产品边界或出现当前可达 `PRODUCT_BLOCKER` 时才阻断；测试工具自证、
 未来环境强化和不可达边缘情况继续按开发总则记入延期强化，不拖住当前主线。
 
 ## 8. 当前验证快照
 
-当前 M2-P0A–P0G、M2-P1A–D 与 M2-P2A–D 开发候选完成以下验证：
+当前 M2-P0A–P0G、M2-P1A–D 与 M2-P2A–E 开发候选完成以下验证：
 
 - AutomationPolicy decoder、纯分流核心、外部偏好文件、typed execution service/PostgreSQL adapter、迁移和完整个人数据包边界均有合成测试；
 - 回归覆盖默认关闭、策略/Profile/Entry 过期、独立正负阈值、预算、人工接管、显式隐私范围、请求重放/冲突、运行中重校验、claim 完成/补偿、策略暂停失败后的待恢复重试、旧包升级及兄弟偏好字段保留；

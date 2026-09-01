@@ -274,6 +274,22 @@ describe('M1M maintenance command', () => {
     expect(
       decodeM1mMaintenanceRequest([
         'ingest',
+        'review-export',
+        '--batch',
+        BATCH_ID,
+        '--code',
+        'classification_type_missing',
+      ]),
+    ).toEqual({
+      operation: 'ingest_review_export',
+      batchId: BATCH_ID,
+      exceptionCode: 'classification_type_missing',
+      includePrivate: false,
+      limit: 100,
+    });
+    expect(
+      decodeM1mMaintenanceRequest([
+        'ingest',
         'review-apply',
         '--packet',
         PACKET_ID,
@@ -324,6 +340,26 @@ describe('M1M maintenance command', () => {
         BATCH_ID,
         '--include-private',
         'yes',
+      ],
+      [
+        'ingest',
+        'review-export',
+        '--batch',
+        BATCH_ID,
+        '--code',
+        'no_deterministic_tags',
+        '--limit',
+        '21',
+      ],
+      [
+        'ingest',
+        'review-export',
+        '--batch',
+        BATCH_ID,
+        '--code',
+        'classification_domain_missing',
+        '--limit',
+        '101',
       ],
       ['ingest', 'review-apply', '--packet', 'not-a-uuid'],
       ['ingest', 'pipeline-start', '--key', 'synthetic', '--limit', '501'],
