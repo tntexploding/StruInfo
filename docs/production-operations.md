@@ -220,17 +220,21 @@ corepack pnpm maintenance ingest type-completion-apply --batch <batchId> --max-i
 用尽，应改用上面的 P2E 分类工作包；`none` 才表示当前类型补全链闭合。不要通过反复运行把未解决项
 强制写为 `other`。apply 严格继承批次原隐私范围；预览私密范围也必须由当前操作显式选择。
 
-#### M2-P4E 下一轮类型标注
+#### M2-P4R 类型学习恢复参考（当前冻结）
 
-类型学习是独立于 Entry 正式写入的校准流程。下一轮先继续使用公开范围和单个最多 100 项的工作包；
-`apply` 只把明确接受的判断保存为外部 Profile 可信样本并训练影子候选，不修改 Entry。不要在同一轮中
-直接串联 `activate` 或类型补全写入。
+> **状态：已冻结，当前不要执行。** 实际标注未通过泛化质量验收，类型学习问题已重新排入
+> `M2-P4R`。以下命令只保留为将来恢复工作的操作参考；当前不要继续 export/apply/activate。
+> 已经生成的结果模板应保持不可导入，不得据此激活模型或补写 Entry。
+
+如果所有者以后明确恢复 `M2-P4R`，类型学习仍是独立于 Entry 正式写入的校准流程。恢复后的单轮只使用
+公开范围和一个最多 100 项的工作包；`apply` 只把明确接受的判断保存为外部 Profile 可信样本并训练
+影子候选，不修改 Entry。不要在同一轮中直接串联 `activate` 或类型补全写入。
 
 P4E 的工作包仍保持最多 100 项，但每类训练最多 64 条时会优先保留既有模型的错误、无信号、低分和
 低 margin 样本，再补 Snapshot 多样性。正文只在本地有界提取词项、相邻短语和字符 trigram；单一
 Snapshot 中出现的偶然词不会形成模型权重。
 
-先确认 maintenance 环境可用，再导出一个新包：
+恢复后先确认 maintenance 环境可用，再导出一个新包：
 
 ```powershell
 corepack pnpm maintenance preflight
