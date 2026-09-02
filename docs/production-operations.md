@@ -220,6 +220,82 @@ corepack pnpm run maintenance -- ingest type-completion-apply --batch <batchId> 
 用尽，应改用上面的 P2E 分类工作包；`none` 才表示当前类型补全链闭合。不要通过反复运行把未解决项
 强制写为 `other`。apply 严格继承批次原隐私范围；预览私密范围也必须由当前操作显式选择。
 
+#### M2-P4D 下一轮类型标注
+
+类型学习是独立于 Entry 正式写入的校准流程。下一轮先继续使用公开范围和单个最多 100 项的工作包；
+`apply` 只把明确接受的判断保存为外部 Profile 可信样本并训练影子候选，不修改 Entry。不要在同一轮中
+直接串联 `activate` 或类型补全写入。
+
+先确认 maintenance 环境可用，再导出一个新包：
+
+```powershell
+corepack pnpm run maintenance -- preflight
+corepack pnpm run maintenance -- type-learning export --include-private false --limit 100
+```
+
+命令只在外部数据根 `exports/codex-work/` 创建 packet 和默认无效的 result 模板。packet 中的
+`targetTypeKeyword` 用于提示当前类别支持缺口或模型候选，不是答案，不能照抄为可信判断。逐项阅读
+`titlePath`、`body` 和 `contentKeywords`，按材料的主要表达目的选择一种类型，而不是按主题选择：
+
+| 类型值                      | 判断口径                                         |
+| --------------------------- | ------------------------------------------------ |
+| `factual_material`          | 以数据、事实记录、资料汇总或客观报道为主要内容   |
+| `knowledge_explanation`     | 解释概念、原理、机制或已有知识                   |
+| `operating_guideline`       | 给出教程、步骤、用法、操作方法或明确规范         |
+| `investigation_analysis`    | 基于材料调查现象、事件、产品或问题并展开分析     |
+| `argument`                  | 主要提出观点、评价、论证、结论或主张             |
+| `personal_experience`       | 主要记录第一人称经历、体验、回顾或感受           |
+| `interactive_collaboration` | 主要是问答、讨论、协作过程或互动记录             |
+| `public_communication`      | 主要是公告、采访、演讲、发布说明或面向公众的传播 |
+| `literary_creation`         | 主要是小说、诗歌、散文或其他文学创作             |
+
+主题交叉时只选主要表达目的；正文过短、上下文不足、多个类型同等成立或无法稳定复述理由时使用 `reject`。
+`other` 不是可学习标签，也不得为了完成数量而强行选择最接近的类型。Codex 确认的项目使用以下精确结构，
+并保留三个 identity 字段原值：
+
+```json
+{
+  "entryId": "原样保留",
+  "entryRevision": 1,
+  "entryRevisionId": "原样保留",
+  "action": "trust",
+  "typeKeyword": "knowledge_explanation",
+  "authority": "codex_accepted"
+}
+```
+
+无法确认的项目必须删除模板中的 `typeKeyword` 和 `authority`，只保留：
+
+```json
+{
+  "entryId": "原样保留",
+  "entryRevision": 1,
+  "entryRevisionId": "原样保留",
+  "action": "reject"
+}
+```
+
+所有项处理完成且没有 `replace_me` 后，用导出报告中的 packet ID 导入结果：
+
+```powershell
+corepack pnpm run maintenance -- type-learning apply --packet <packetId>
+```
+
+检查返回的 `evaluation`，重点看 `supportedClassCount`、全局 precision/coverage、每类可信样本与
+Snapshot 数，以及 `projection` 的总体 coverage、类别数和最大单类占比。`activationEligible=false`
+表示继续导出下一轮类别均衡样本，不是失败；后一次 export 会根据刚保存的支持缺口重新取样。`stale`
+表示 Profile 或 Entry revision 已变化，应丢弃旧包并重新导出，不能手改 revision 或摘要绕过。
+
+只有候选明确返回 `activationEligible=true`、分布符合预期并经所有者决定后，才单独执行：
+
+```powershell
+corepack pnpm run maintenance -- type-learning activate --expected-revision <profileRevision>
+```
+
+激活仍不会改写现有 Entry；它只允许后续确定性分类在强规则未解决时使用该模型。正式补全必须另行
+预览并通过既有 P2G 原子 writer 执行。packet、result、Profile、备份和真实正文都只保留在外部数据根，
+不得复制进 Git、测试夹具、日志或应用制品。
+
 P0G 提供推荐的统一入口。它每次最多推进 1–500 项，严格按 P0A → P0B → P0C 顺序运行，并
 返回下一动作而不是在一个进程内无限循环：
 
