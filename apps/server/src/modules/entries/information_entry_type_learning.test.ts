@@ -29,6 +29,23 @@ describe('Entry type learning', () => {
     expect(model?.evaluation.validationCount).toBeGreaterThanOrEqual(8);
     expect(model?.evaluation.precisionBasisPoints).toBe(10_000);
     expect(model?.evaluation.supportedClassCount).toBe(4);
+    expect(model?.evaluation.crossValidationFoldCount).toBe(3);
+    expect(model?.evaluation.targetPrecisionBasisPoints).toBe(9_200);
+    expect(
+      model?.evaluation.confusionMatrix?.reduce(
+        (total, cell) => total + cell.count,
+        0,
+      ),
+    ).toBe(model?.evaluation.validationCount);
+    expect(
+      model?.classes
+        .find((item) => item.keyword === 'operating_guideline')
+        ?.features.some(
+          (feature) =>
+            feature.feature.startsWith('body:phrase:') ||
+            feature.feature.startsWith('body:ngram:'),
+        ),
+    ).toBe(true);
     expect(model?.evaluation.projection).toMatchObject({
       populationCount: 40,
       assignedCount: 40,
@@ -43,6 +60,186 @@ describe('Entry type learning', () => {
     );
     expect(prediction?.keyword).toBe('operating_guideline');
     expect(prediction?.matchedFeatures.length).toBeGreaterThan(0);
+  });
+
+  it('learns bounded body semantics while suppressing one-snapshot features', () => {
+    const entries = Array.from({length: 8}, (_, index) =>
+      entry(
+        index + 1,
+        0,
+        'Neutral record',
+        [],
+        undefined,
+        false,
+        `common evidence marker ${index === 0 ? 'singularxyz' : 'repeated context'}`,
+      ),
+    );
+    const model = trainEntryTypeLearningModel(
+      entries.map((item) => trusted(item, 'factual_material')),
+      entries,
+    );
+    const features =
+      model?.classes.find((item) => item.keyword === 'factual_material')
+        ?.features ?? [];
+
+    expect(
+      features.some(
+        (feature) => feature.feature === 'body:phrase:common evidence',
+      ),
+    ).toBe(true);
+    expect(
+      features.some((feature) => feature.feature === 'body:token:singularxyz'),
+    ).toBe(false);
+  });
+
+  it('calibrates out-of-fold predictions to 92 percent and exports mistakes', () => {
+    const entries = Object.freeze(
+      Array.from({length: 25}, (_, snapshot) =>
+        TYPE_CASES.map((item, order) =>
+          entry(snapshot + 1, order, item.title, item.keywords),
+        ),
+      ).flat(),
+    );
+    const examples = entries.map((item) =>
+      trusted(
+        item,
+        item.entryId === entries[0]?.entryId
+          ? 'investigation_analysis'
+          : typeForTitle(item.value.titlePath),
+      ),
+    );
+
+    const model = trainEntryTypeLearningModel(examples, entries);
+    const mistake = model?.evaluation.misclassifications?.[0];
+
+    expect(model?.evaluation.crossValidationFoldCount).toBe(3);
+    expect(model?.evaluation.validationCount).toBe(entries.length);
+    expect(model?.evaluation.precisionBasisPoints).toBeGreaterThanOrEqual(
+      9_200,
+    );
+    expect(
+      model?.evaluation.byType
+        .filter((item) => item.supported)
+        .every(
+          (item) =>
+            item.assignedCount >= 2 && item.precisionBasisPoints >= 9_200,
+        ),
+    ).toBe(true);
+    expect(mistake).toMatchObject({
+      entryId: entries[0]?.entryId,
+      snapshotId: entries[0]?.snapshotId,
+      expectedTypeKeyword: 'investigation_analysis',
+      predictedTypeKeyword: 'operating_guideline',
+    });
+    expect(
+      model?.evaluation.confusionMatrix?.find(
+        (cell) =>
+          cell.expectedTypeKeyword === 'investigation_analysis' &&
+          cell.predictedTypeKeyword === 'operating_guideline',
+      )?.count,
+    ).toBe(1);
+  });
+
+  it('raises the class margin when tied evidence would miss target precision', () => {
+    const calibrationCases = [
+      Object.freeze({
+        typeKeyword: 'factual_material' as const,
+        marker: 'aaaaaa',
+      }),
+      Object.freeze({
+        typeKeyword: 'operating_guideline' as const,
+        marker: 'zzzzzz',
+      }),
+      Object.freeze({
+        typeKeyword: 'investigation_analysis' as const,
+        marker: 'mmmmmm',
+      }),
+      Object.freeze({
+        typeKeyword: 'literary_creation' as const,
+        marker: 'qqqqqq',
+      }),
+    ];
+    const entries = Object.freeze(
+      Array.from({length: 10}, (_, snapshot) =>
+        calibrationCases.map((item, order) =>
+          entry(
+            snapshot + 1,
+            order,
+            'Neutral record',
+            [],
+            undefined,
+            false,
+            snapshot === 0 && order < 2 ? 'aaaaaa zzzzzz' : item.marker,
+          ),
+        ),
+      ).flat(),
+    );
+    const model = trainEntryTypeLearningModel(
+      entries.map((item) =>
+        trusted(
+          item,
+          calibrationCases[item.value.documentOrder]?.typeKeyword ??
+            'factual_material',
+        ),
+      ),
+      entries,
+    );
+
+    expect(
+      model?.classes.find((item) => item.keyword === 'factual_material')
+        ?.minimumMargin,
+    ).toBeGreaterThan(0);
+    expect(
+      model?.evaluation.byType.find(
+        (item) => item.keyword === 'factual_material',
+      )?.precisionBasisPoints,
+    ).toBeGreaterThanOrEqual(9_200);
+    expect(
+      predictEntryType(
+        entry(99, 0, 'Neutral record', [], undefined, false, 'aaaaaa zzzzzz'),
+        model,
+      ),
+    ).toBeUndefined();
+  });
+
+  it('keeps difficult minority patterns inside the 64-example class cap', () => {
+    const entries = Object.freeze(
+      Array.from({length: 70}, (_, snapshot) =>
+        TYPE_CASES.map((item, order) =>
+          snapshot < 64
+            ? entry(snapshot + 1, order, item.title, item.keywords)
+            : entry(
+                snapshot + 1,
+                order,
+                'Neutral record',
+                [],
+                undefined,
+                false,
+                `hardmarker${order.toString()} context`,
+              ),
+        ),
+      ).flat(),
+    );
+    const examples = entries.map((item) =>
+      trusted(
+        item,
+        TYPE_CASES[item.value.documentOrder]?.typeKeyword ?? 'factual_material',
+      ),
+    );
+
+    const model = trainEntryTypeLearningModel(examples, entries);
+
+    expect(model?.evaluation.trainingCount).toBe(4 * 64);
+    for (const [order, item] of TYPE_CASES.entries()) {
+      expect(
+        model?.classes
+          .find((candidate) => candidate.keyword === item.typeKeyword)
+          ?.features.some(
+            (feature) =>
+              feature.feature === `body:token:hardmarker${order.toString()}`,
+          ),
+      ).toBe(true);
+    }
   });
 
   it('fills class support deficits before the stable missing-entry stream', () => {
@@ -172,15 +369,29 @@ describe('Entry type learning', () => {
       ),
     ) as {
       candidateModel: {
+        featureVersion: string;
         evaluation: Record<string, unknown> & {
           byType: Record<string, unknown>[];
         };
       };
     };
-    delete serialized.candidateModel.evaluation.activationPolicyVersion;
-    delete serialized.candidateModel.evaluation.supportedClassCount;
-    delete serialized.candidateModel.evaluation.projection;
-    for (const item of serialized.candidateModel.evaluation.byType) {
+    serialized.candidateModel.featureVersion =
+      'struinfo.entry-type-learning.features.v1';
+    serialized.candidateModel.evaluation.activationPolicyVersion =
+      'struinfo.entry-type-learning.activation.v2';
+    delete serialized.candidateModel.evaluation.crossValidationFoldCount;
+    delete serialized.candidateModel.evaluation.targetPrecisionBasisPoints;
+    delete serialized.candidateModel.evaluation.confusionMatrix;
+    delete serialized.candidateModel.evaluation.misclassifications;
+
+    const legacyV2 = decodeEntryTypeLearningState(serialized);
+    const olderSerialized = JSON.parse(
+      JSON.stringify(serialized),
+    ) as typeof serialized;
+    delete olderSerialized.candidateModel.evaluation.activationPolicyVersion;
+    delete olderSerialized.candidateModel.evaluation.supportedClassCount;
+    delete olderSerialized.candidateModel.evaluation.projection;
+    for (const item of olderSerialized.candidateModel.evaluation.byType) {
       delete item.trustedExampleCount;
       delete item.trustedSnapshotCount;
       delete item.trainingExampleCount;
@@ -188,12 +399,15 @@ describe('Entry type learning', () => {
       delete item.validationSnapshotCount;
       delete item.supported;
     }
+    const older = decodeEntryTypeLearningState(olderSerialized);
 
-    const decoded = decodeEntryTypeLearningState(serialized);
-
-    expect(decoded?.candidateModel).toBeDefined();
+    expect(legacyV2?.candidateModel).toBeDefined();
+    expect(older?.candidateModel).toBeDefined();
     expect(
-      isEntryTypeLearningModelActivationEligible(decoded?.candidateModel),
+      isEntryTypeLearningModelActivationEligible(legacyV2?.candidateModel),
+    ).toBe(false);
+    expect(
+      isEntryTypeLearningModelActivationEligible(older?.candidateModel),
     ).toBe(false);
   });
 
@@ -348,6 +562,7 @@ function entry(
   contentKeywords: readonly string[],
   typeKeyword?: CurrentInformationEntry['value']['typeKeyword'],
   isPrivate = false,
+  body = titlePath + ' body',
 ): Readonly<CurrentInformationEntry> {
   const suffix = (snapshot * 100 + order + 1).toString(16).padStart(12, '0');
   const snapshotSuffix = snapshot.toString(16).padStart(12, '0');
@@ -363,7 +578,7 @@ function entry(
     value: Object.freeze({
       documentOrder: order,
       titlePath,
-      body: titlePath + ' body',
+      body,
       bodySha256: '0'.repeat(64),
       chunkMode: 'split',
       splitRuleVersion: 'synthetic',

@@ -329,3 +329,11 @@ Sampling now fills per-class and per-Snapshot support deficits, unsupported
 classes stay disabled, and activation requires validation coverage plus a stable,
 non-collapsed projection over the current unclassified corpus. Older models stay
 readable but cannot run until retrained under the v2 activation policy.
+
+ADR 0061 completes M2-P4E with bounded body token, phrase and character-trigram
+features, minimum cross-Snapshot support, balanced three-fold Snapshot validation,
+and per-class score/margin calibration directly against 92% precision. Evaluation
+now exports a sparse confusion matrix and bounded misclassification identities;
+the 64-example class cap keeps the hardest rows before adding Snapshot diversity.
+Older feature-v1/activation-v2 models remain readable but cannot run until
+retrained under the v3 activation policy.
