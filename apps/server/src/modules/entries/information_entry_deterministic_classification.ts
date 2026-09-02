@@ -9,6 +9,7 @@ import {
 import {
   decodeEntryTypeLearningState,
   DEFAULT_ENTRY_TYPE_LEARNING_STATE,
+  isEntryTypeLearningModelActivationEligible,
   predictEntryType,
   type EntryTypeLearningState,
 } from './information_entry_type_learning.js';
@@ -526,7 +527,8 @@ function predictEntryTypeForClassification(
   profile: Readonly<EntryClassificationProfile>,
 ) {
   const activeModel = profile.typeLearning?.activeModel;
-  if (activeModel === undefined) return undefined;
+  if (!isEntryTypeLearningModelActivationEligible(activeModel))
+    return undefined;
   return predictEntryType(
     Object.freeze({
       workspaceId: '00000000-0000-0000-0000-000000000000',

@@ -1,6 +1,11 @@
 import {describe, expect, it} from 'vitest';
 
-import type {CurrentInformationEntry} from '../entries/index.js';
+import {
+  entryTypeLearningModelsEqual,
+  isEntryTypeLearningModelActivationEligible,
+  trainEntryTypeLearningModel,
+  type CurrentInformationEntry,
+} from '../entries/index.js';
 import {
   createReviewPreferences,
   type ReviewPreferences,
@@ -54,9 +59,7 @@ describe('EntryTypeLearningCodexService', () => {
           entryRevisionId: item.entryRevisionId,
           action: 'trust',
           authority: index % 2 === 0 ? 'manual' : 'codex_accepted',
-          typeKeyword: item.titlePath.startsWith('Build')
-            ? 'operating_guideline'
-            : 'investigation_analysis',
+          typeKeyword: typeForTitle(item.titlePath),
         })),
       }),
     );
@@ -72,6 +75,29 @@ describe('EntryTypeLearningCodexService', () => {
         ),
       ),
     ).toEqual(new Set(['manual', 'codex_accepted']));
+    const storedState =
+      preferences.current.entryClassificationProfile?.typeLearning;
+    const refreshed = trainEntryTypeLearningModel(
+      storedState?.trustedExamples ?? [],
+      entries,
+      {includePrivate: false},
+    );
+    expect(
+      isEntryTypeLearningModelActivationEligible(storedState?.candidateModel),
+    ).toBe(true);
+    expect(isEntryTypeLearningModelActivationEligible(refreshed)).toBe(true);
+    expect(storedState?.candidateModel?.trainingDigest).toBe(
+      refreshed?.trainingDigest,
+    );
+    expect(storedState?.candidateModel?.classes).toStrictEqual(
+      refreshed?.classes,
+    );
+    expect(storedState?.candidateModel?.evaluation).toStrictEqual(
+      refreshed?.evaluation,
+    );
+    expect(
+      entryTypeLearningModelsEqual(storedState?.candidateModel, refreshed),
+    ).toBe(true);
 
     const activated = await service.activate(applied.profileRevision);
     expect(activated.outcome).toBe('activated');
@@ -79,6 +105,61 @@ describe('EntryTypeLearningCodexService', () => {
       preferences.current.entryClassificationProfile?.typeLearning?.activeModel
         ?.trainingDigest,
     ).toBe(activated.trainingDigest);
+  });
+
+  it('refuses activation when the current full-corpus projection has changed', async () => {
+    let entries = fixtures();
+    const preferences = new MemoryPreferences();
+    const files = new MemoryFiles();
+    const service = new EntryTypeLearningCodexService({
+      workspaceId: WORKSPACE_ID,
+      entries: {loadCurrentEntries: () => Promise.resolve(entries)},
+      preferences,
+      fileStore: files,
+    });
+    const exported = await service.export({
+      includePrivate: false,
+      limit: entries.length,
+    });
+    if (exported.outcome === 'empty') throw new Error('packet_expected');
+    const packet = JSON.parse(
+      new TextDecoder().decode(files.packet),
+    ) as EntryTypeLearningCodexPacket;
+    files.result = new TextEncoder().encode(
+      JSON.stringify({
+        schemaVersion: ENTRY_TYPE_LEARNING_CODEX_RESULT_SCHEMA,
+        packetId: packet.packetId,
+        packetSha256: packet.packetSha256,
+        decisions: packet.items.map((item) => ({
+          entryId: item.entryId,
+          entryRevision: item.entryRevision,
+          entryRevisionId: item.entryRevisionId,
+          action: 'trust',
+          authority: 'manual',
+          typeKeyword: typeForTitle(item.titlePath),
+        })),
+      }),
+    );
+    const applied = await service.apply(packet.packetId);
+    expect(applied.outcome).toBe('applied');
+    expect(applied.evaluation?.activationEligible).toBe(true);
+
+    entries = Object.freeze([
+      ...entries,
+      entry(99, 0, 'Build cmdline recipe changed', [
+        'cmdline-recipe',
+        'terminal-workflow',
+      ]),
+    ]);
+
+    await expect(
+      service.activate(applied.profileRevision),
+    ).resolves.toMatchObject({
+      outcome: 'not_eligible',
+    });
+    expect(
+      preferences.current.entryClassificationProfile?.typeLearning?.activeModel,
+    ).toBeUndefined();
   });
 
   it('keeps the packet bound to the external Profile revision', async () => {
@@ -266,17 +347,41 @@ class MemoryPreferences implements ReviewPreferencesStore {
 
 function fixtures(): readonly Readonly<CurrentInformationEntry>[] {
   return Object.freeze(
-    Array.from({length: 10}, (_, snapshot) => [
-      entry(snapshot + 1, 0, 'Build cmdline recipe', [
-        'cmdline-recipe',
-        'terminal-workflow',
-      ]),
-      entry(snapshot + 1, 1, 'Measure evidence corpus', [
-        'evidence-corpus',
-        'measurement-result',
-      ]),
-    ]).flat(),
+    Array.from({length: 10}, (_, snapshot) =>
+      TYPE_CASES.map((item, order) =>
+        entry(snapshot + 1, order, item.title, item.keywords),
+      ),
+    ).flat(),
   );
+}
+
+const TYPE_CASES = [
+  Object.freeze({
+    typeKeyword: 'operating_guideline' as const,
+    title: 'Build cmdline recipe',
+    keywords: Object.freeze(['cmdline-recipe', 'terminal-workflow']),
+  }),
+  Object.freeze({
+    typeKeyword: 'investigation_analysis' as const,
+    title: 'Measure evidence corpus',
+    keywords: Object.freeze(['evidence-corpus', 'measurement-result']),
+  }),
+  Object.freeze({
+    typeKeyword: 'personal_experience' as const,
+    title: 'My migration diary',
+    keywords: Object.freeze(['migration-diary', 'lessons-learned']),
+  }),
+  Object.freeze({
+    typeKeyword: 'literary_creation' as const,
+    title: 'Poem from moon garden',
+    keywords: Object.freeze(['poetry', 'fiction-writing']),
+  }),
+] as const;
+
+function typeForTitle(title: string) {
+  const matched = TYPE_CASES.find((item) => title.startsWith(item.title));
+  if (matched === undefined) throw new Error('type_fixture_missing');
+  return matched.typeKeyword;
 }
 
 function entry(
@@ -285,7 +390,7 @@ function entry(
   titlePath: string,
   contentKeywords: readonly string[],
 ): Readonly<CurrentInformationEntry> {
-  const suffix = (snapshot * 10 + order + 1).toString(16).padStart(12, '0');
+  const suffix = (snapshot * 100 + order + 1).toString(16).padStart(12, '0');
   return Object.freeze({
     workspaceId: WORKSPACE_ID,
     entryId: '00000000-0000-4000-8000-' + suffix,

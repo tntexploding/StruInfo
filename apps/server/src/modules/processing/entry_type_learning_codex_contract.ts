@@ -31,6 +31,7 @@ export interface EntryTypeLearningCodexPacketItem {
   readonly body: string;
   readonly contentKeywords: readonly string[];
   readonly currentTypeKeyword?: string;
+  readonly targetTypeKeyword?: LearnedEntryTypeKeyword;
 }
 
 export interface EntryTypeLearningCodexPacket {

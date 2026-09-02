@@ -322,3 +322,10 @@ active sampling, a closed Codex work package, an explainable sparse local type
 model and snapshot-grouped shadow evaluation. Candidate models remain inactive
 until an explicit activation gate passes; later API adapters must reuse the same
 packet/result and Profile boundary.
+
+ADR 0060 completes M2-P4D after the first quarantined real-scale labeling trial
+exposed class imbalance, zero-sample smoothing and projection-blind activation.
+Sampling now fills per-class and per-Snapshot support deficits, unsupported
+classes stay disabled, and activation requires validation coverage plus a stable,
+non-collapsed projection over the current unclassified corpus. Older models stay
+readable but cannot run until retrained under the v2 activation policy.
