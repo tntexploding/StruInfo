@@ -18,6 +18,8 @@ export * from './bulk_ingestion_type_completion_service.js';
 export * from './bulk_ingestion_service.js';
 export * from './bulk_ingestion_pipeline_contract.js';
 export * from './bulk_ingestion_pipeline_service.js';
+export * from './entry_type_learning_codex_contract.js';
+export * from './entry_type_learning_codex_service.js';
 export * from './processing.js';
 export * from './processing_contract.js';
 export * from './processing_identity.js';

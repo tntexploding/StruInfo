@@ -1,6 +1,6 @@
 # StruInfo 分阶段计划
 
-- 状态：`v0.1.0` 已发布；M2-P0A–P0G 批量链、M2-P1A–D 真实规模收口、M2-P2A–G 分类强化/补全链及 M2-P3A–C 分类扩展已实现
+- 状态：v0.1.0 已发布；M2-P0A–P0G 批量链、M2-P1A–D 真实规模收口、M2-P2A–G 分类强化/补全链、M2-P3A–C 分类扩展及 M2-P4A–C 可信样本学习底座已实现
 - 最近更新：2026-09-01
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
@@ -471,6 +471,15 @@ M1H-5 完成后，导入页同时具备单份精细录入和显式多文件顺�
 3. **P3C 邻居共识**：只在低 fan-out、达到 15% 相似度、至少 4 个已标注邻居且 85% 一致时形成证据；类型排除同 Snapshot，所有候选先按隐私范围隔离；
 4. **统一执行**：首次 enrichment 与 type-completion preview 使用同一上下文，正式写入仍复用 P0B 原子 revision、恢复和增量联系协议；没有 migration、Provider 或第二套 writer；
 5. **只读实测**：已有类型选择性一致率为 92.16%，邻居类型子集 91.38%；缺类型可预测 355 条，预计总覆盖 30.52%。缺领域可补 242 条，预计总覆盖由 71.39% 升至 73.01%，邻居领域至少一项重叠率 97.87%；这些结果尚未 apply。
+
+## 已完成增量：M2-P4A–P4C 可信样本类型学习
+
+1. **P4A 可信样本与主动抽样**：外部 Profile v3 保存最多 1,024 个带 Entry revision、Snapshot 和 manual/codex_accepted 权威的样本；候选优先缺失、分歧和低置信条目，并跨 Snapshot 轮转；
+2. **P4B Codex 工作包**：maintenance 可把最多 100 条候选写入外部 codex-work，并只接受逐 Entry/revision 绑定的 trust/reject 封闭结果；导入只更新 Profile，不直接改 Entry；
+3. **P4C 可解释模型与影子门**：本地训练有界内容关键词、标题、结构和长度特征，按 Snapshot 分组验证并报告全局/逐类 precision、recall 和 coverage；候选只有满足精确率门槛后才可由独立命令激活；
+4. **执行顺序与复用**：强确定性规则优先，激活模型只处理其未解决项，邻居共识最后兜底；正式补全继续由 P0B/P2G 原子 writer 执行；
+5. **延期 API**：当前没有 Provider/API 调用。后续 API 只适配同一 packet/result 和 Profile，不建立第二套训练、激活或 Entry 写入协议；
+6. **真实数据边界**：本次没有导出所有者样本、激活真实模型或执行补全 apply；这些操作需在外部工作区分别显式启动并测量。
 
 ## 首版发布后的部署与使用
 

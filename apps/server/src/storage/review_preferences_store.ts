@@ -10,6 +10,10 @@ import {
   ENTRY_CLASSIFICATION_PROFILE_VERSION,
   type EntryClassificationProfile,
 } from '../modules/entries/information_entry_deterministic_classification.js';
+import {
+  cloneEntryTypeLearningState,
+  DEFAULT_ENTRY_TYPE_LEARNING_STATE,
+} from '../modules/entries/information_entry_type_learning.js';
 
 export const REVIEW_PREFERENCES_FORMAT = 'struinfo.review-preferences';
 export const REVIEW_PREFERENCES_VERSION = 1;
@@ -827,6 +831,10 @@ export function createReviewPreferences(
         ...(entryClassificationProfile.neighborPolicy ??
           DEFAULT_ENTRY_CLASSIFICATION_NEIGHBOR_POLICY),
       }),
+      typeLearning: cloneEntryTypeLearningState(
+        entryClassificationProfile.typeLearning ??
+          DEFAULT_ENTRY_TYPE_LEARNING_STATE,
+      ),
     }),
   });
 }

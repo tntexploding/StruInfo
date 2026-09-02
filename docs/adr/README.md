@@ -313,3 +313,12 @@ resource cards or `other`. A redacted preview reports coverage and
 stable samples; apply reuses the recoverable enrichment refresh and never
 overwrites an existing type. Remaining uncertainty is routed to the existing
 Codex packet and Tags correction paths.
+
+ADR 0058 completes M2-P3A–C with per-category thresholds, a larger external
+Profile v2 and bounded privacy-separated neighbor consensus.
+
+ADR 0059 completes M2-P4A–C with an external trusted-sample registry, diverse
+active sampling, a closed Codex work package, an explainable sparse local type
+model and snapshot-grouped shadow evaluation. Candidate models remain inactive
+until an explicit activation gate passes; later API adapters must reuse the same
+packet/result and Profile boundary.

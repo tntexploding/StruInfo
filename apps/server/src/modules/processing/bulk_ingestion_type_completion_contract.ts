@@ -34,7 +34,7 @@ export interface BulkIngestionTypeCompletionSample {
   readonly predictedType?: EntryTypeKeyword;
   readonly winnerScore: number;
   readonly runnerUpScore: number;
-  readonly evidenceSource?: 'neighbor_consensus';
+  readonly evidenceSource?: 'neighbor_consensus' | 'learned_type_model';
   readonly referenceCount?: number;
   readonly consensusBasisPoints?: number;
 }
