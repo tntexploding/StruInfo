@@ -67,7 +67,18 @@ describe('EntryTypeLearningCodexService', () => {
     const applied = await service.apply(packet.packetId);
     expect(applied.outcome).toBe('applied');
     expect(applied.trustedExampleCount).toBe(entries.length);
-    expect(applied.evaluation?.activationEligible).toBe(true);
+    expect(applied.evaluation).toMatchObject({
+      activationEligible: true,
+      crossValidationFoldCount: 3,
+      targetPrecisionBasisPoints: 9_200,
+    });
+    expect(
+      applied.evaluation?.confusionMatrix?.reduce(
+        (total, cell) => total + cell.count,
+        0,
+      ),
+    ).toBe(applied.evaluation?.validationCount);
+    expect(applied.evaluation?.misclassifications).toEqual([]);
     expect(
       new Set(
         preferences.current.entryClassificationProfile?.typeLearning?.trustedExamples.map(

@@ -1,6 +1,6 @@
 # StruInfo 分阶段计划
 
-- 状态：v0.1.0 已发布；M2-P0A–P0G 批量链、M2-P1A–D 真实规模收口、M2-P2A–G 分类强化/补全链、M2-P3A–C 分类扩展及 M2-P4A–D 可信样本学习与规模保护已实现
+- 状态：v0.1.0 已发布；M2-P0A–P0G 批量链、M2-P1A–D 真实规模收口、M2-P2A–G 分类强化/补全链、M2-P3A–C 分类扩展及 M2-P4A–E 可信样本学习、规模保护与交叉验证校准已实现
 - 最近更新：2026-09-02
 - 对应需求：[当前产品需求](product-requirements.md)
 - 工程方案：[开发大纲](development-outline.md)
@@ -472,16 +472,19 @@ M1H-5 完成后，导入页同时具备单份精细录入和显式多文件顺�
 4. **统一执行**：首次 enrichment 与 type-completion preview 使用同一上下文，正式写入仍复用 P0B 原子 revision、恢复和增量联系协议；没有 migration、Provider 或第二套 writer；
 5. **只读实测**：已有类型选择性一致率为 92.16%，邻居类型子集 91.38%；缺类型可预测 355 条，预计总覆盖 30.52%。缺领域可补 242 条，预计总覆盖由 71.39% 升至 73.01%，邻居领域至少一项重叠率 97.87%；这些结果尚未 apply。
 
-## 已完成增量：M2-P4A–P4D 可信样本类型学习
+## 已完成增量：M2-P4A–P4E 可信样本类型学习
 
 1. **P4A 可信样本与主动抽样**：外部 Profile v3 保存最多 1,024 个带 Entry revision、Snapshot 和 manual/codex_accepted 权威的样本；候选保持 revision 与隐私绑定；
 2. **P4B Codex 工作包**：maintenance 可把最多 100 条候选写入外部 codex-work，并只接受逐 Entry/revision 绑定的 trust/reject 封闭结果；导入只更新 Profile，不直接改 Entry；
 3. **P4C 可解释模型与影子门**：本地训练有界内容关键词、标题、结构和长度特征，按 Snapshot 分组验证并报告全局/逐类 precision、recall 和 coverage；候选只有满足精确率门槛后才可由独立命令激活；
 4. **P4D 类别均衡与规模保护**：抽样先补每类至少 8 样本/6 Snapshot 的缺口，再轮转模型不确定性和结构分层；零/少样本类别禁用，不再用加一平滑；
-5. **P4D 激活门**：至少 4 个支持类别，验证 precision 不低于 92%、coverage 不低于 15%，每类至少 2 个验证赋型且 precision 不低于 85%；当前全部缺类型 Entry 的投射 coverage 不低于 15%、至少 3 类且单类不超过 50%；
-6. **执行顺序与复用**：激活前按当前 Entry 重训并比对完整投射摘要；强确定性规则优先，激活模型只处理其未解决项，邻居共识最后兜底；正式补全继续由 P0B/P2G 原子 writer 执行；
-7. **延期 API**：当前没有 Provider/API 调用。后续 API 只适配同一 packet/result 和 Profile，不建立第二套训练、激活或 Entry 写入协议；
-8. **真实数据边界**：前两轮隔离标注没有写入真实 Entry；本次没有激活真实模型或执行补全 apply，旧模型无 v2 激活标记时保持可读但不执行。
+5. **P4D 激活门**：至少 4 个支持类别，验证 precision 不低于 92%、coverage 不低于 15%，每类至少 2 个验证赋型；当前全部缺类型 Entry 的投射 coverage 不低于 15%、至少 3 类且单类不超过 50%；
+6. **P4E 正文与正则化**：在前 4,096 code point 内有界提取正文词项、相邻短语和字符 trigram；特征至少跨 2 个可信样本和 2 个 Snapshot，按最多 4 个正 Snapshot 的支持量缩减权重；
+7. **P4E 三折校准与诊断**：类别均衡的三折 Snapshot 交叉验证生成 out-of-fold 预测；逐类搜索 `minimumScore` 和 `minimumMargin`，要求每个执行类别达到 92% precision，并输出混淆矩阵和最多 64 个误判身份；
+8. **P4E 困难样本上限**：每类最多 64 条训练行时先保留 48 条错误、无信号、低 margin 或低分样本，再补未代表 Snapshot 和稳定余量；
+9. **执行顺序与复用**：激活前按当前 Entry 重训并比对完整投射摘要；强确定性规则优先，激活模型只处理其未解决项，邻居共识最后兜底；正式补全继续由 P0B/P2G 原子 writer 执行；
+10. **延期 API**：当前没有 Provider/API 调用。后续 API 只适配同一 packet/result 和 Profile，不建立第二套训练、激活或 Entry 写入协议；
+11. **真实数据边界**：前两轮隔离标注没有写入真实 Entry；本次没有激活真实模型或执行补全 apply，旧 feature-v1/activation-v2 模型保持可读但不执行。
 
 ## 首版发布后的部署与使用
 

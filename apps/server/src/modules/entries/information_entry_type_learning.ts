@@ -8,11 +8,15 @@ import {
 } from './information_entry_contract.js';
 
 export const ENTRY_TYPE_LEARNING_FEATURE_VERSION =
+  'struinfo.entry-type-learning.features.v2';
+const LEGACY_ENTRY_TYPE_LEARNING_FEATURE_VERSION =
   'struinfo.entry-type-learning.features.v1';
 export const ENTRY_TYPE_LEARNING_MODEL_FORMAT =
   'struinfo.entry-type-learning-model';
 export const ENTRY_TYPE_LEARNING_MODEL_VERSION = 1;
 export const ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION =
+  'struinfo.entry-type-learning.activation.v3';
+const LEGACY_ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION =
   'struinfo.entry-type-learning.activation.v2';
 export const MAXIMUM_ENTRY_TYPE_TRUSTED_EXAMPLES = 1_024;
 export const MAXIMUM_ENTRY_TYPE_MODEL_FEATURES_PER_TYPE = 128;
@@ -33,9 +37,25 @@ const MAXIMUM_ENTRY_TYPE_PROJECTED_CLASS_SHARE_BASIS_POINTS = 5_000;
 const MAXIMUM_ENTRY_TYPE_TRAINING_EXAMPLES_PER_CLASS = 64;
 const MAXIMUM_ENTRY_TYPE_FEATURE_WEIGHT = 8_000;
 const DISABLED_ENTRY_TYPE_SCORE = 2_000_000;
+const ENTRY_TYPE_CROSS_VALIDATION_FOLD_COUNT = 3;
+const ENTRY_TYPE_TARGET_PRECISION_BASIS_POINTS = 9_200;
+const MINIMUM_ENTRY_TYPE_FEATURE_EXAMPLES = 2;
+const MINIMUM_ENTRY_TYPE_FEATURE_SNAPSHOTS = 2;
+const MAXIMUM_ENTRY_TYPE_BODY_CODE_POINTS = 4_096;
+const MAXIMUM_ENTRY_TYPE_BODY_TOKENS = 96;
+const MAXIMUM_ENTRY_TYPE_BODY_TOKEN_FEATURES = 48;
+const MAXIMUM_ENTRY_TYPE_BODY_PHRASE_FEATURES = 64;
+const MAXIMUM_ENTRY_TYPE_BODY_NGRAM_FEATURES = 64;
+const MAXIMUM_ENTRY_TYPE_MISCLASSIFICATION_SAMPLES = 64;
 
 export type LearnedEntryTypeKeyword = Exclude<EntryTypeKeyword, 'other'>;
 export type EntryTypeTrustedExampleAuthority = 'manual' | 'codex_accepted';
+type EntryTypeLearningFeatureVersion =
+  | typeof ENTRY_TYPE_LEARNING_FEATURE_VERSION
+  | typeof LEGACY_ENTRY_TYPE_LEARNING_FEATURE_VERSION;
+type EntryTypeLearningActivationPolicyVersion =
+  | typeof ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION
+  | typeof LEGACY_ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION;
 
 export interface EntryTypeTrustedExample {
   readonly entryId: string;
@@ -89,8 +109,24 @@ export interface EntryTypeLearningProjection {
   readonly byType: readonly Readonly<EntryTypeLearningProjectionByType>[];
 }
 
+export interface EntryTypeLearningConfusionCell {
+  readonly expectedTypeKeyword: LearnedEntryTypeKeyword;
+  readonly predictedTypeKeyword: LearnedEntryTypeKeyword | 'unassigned';
+  readonly count: number;
+}
+
+export interface EntryTypeLearningMisclassification {
+  readonly entryId: string;
+  readonly entryRevision: number;
+  readonly snapshotId: string;
+  readonly expectedTypeKeyword: LearnedEntryTypeKeyword;
+  readonly predictedTypeKeyword: LearnedEntryTypeKeyword;
+  readonly score: number;
+  readonly margin: number;
+}
+
 export interface EntryTypeLearningEvaluation {
-  readonly activationPolicyVersion?: typeof ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION;
+  readonly activationPolicyVersion?: EntryTypeLearningActivationPolicyVersion;
   readonly trainingCount: number;
   readonly validationCount: number;
   readonly assignedCount: number;
@@ -98,6 +134,10 @@ export interface EntryTypeLearningEvaluation {
   readonly precisionBasisPoints: number;
   readonly coverageBasisPoints: number;
   readonly supportedClassCount: number;
+  readonly crossValidationFoldCount?: number;
+  readonly targetPrecisionBasisPoints?: number;
+  readonly confusionMatrix?: readonly Readonly<EntryTypeLearningConfusionCell>[];
+  readonly misclassifications?: readonly Readonly<EntryTypeLearningMisclassification>[];
   readonly projection?: Readonly<EntryTypeLearningProjection>;
   readonly activationEligible: boolean;
   readonly byType: readonly Readonly<EntryTypeLearningEvaluationByType>[];
@@ -106,7 +146,7 @@ export interface EntryTypeLearningEvaluation {
 export interface EntryTypeLearningModel {
   readonly format: typeof ENTRY_TYPE_LEARNING_MODEL_FORMAT;
   readonly version: typeof ENTRY_TYPE_LEARNING_MODEL_VERSION;
-  readonly featureVersion: typeof ENTRY_TYPE_LEARNING_FEATURE_VERSION;
+  readonly featureVersion: EntryTypeLearningFeatureVersion;
   readonly trainingDigest: string;
   readonly classes: readonly Readonly<EntryTypeClassModel>[];
   readonly evaluation: Readonly<EntryTypeLearningEvaluation>;
@@ -152,6 +192,28 @@ interface EntryTypeSupport {
 interface RankedEntryTypeLearningCandidate extends EntryTypeLearningCandidate {
   readonly uncertainty: number;
   readonly samplingStratum: string;
+}
+
+interface EntryTypeClassThreshold {
+  readonly minimumScore: number;
+  readonly minimumMargin: number;
+}
+
+interface EntryTypeCrossValidationOutcome {
+  readonly row: Readonly<EntryTypeLearningRow>;
+  readonly scores: readonly Readonly<ReturnType<typeof scoreClass>>[];
+}
+
+interface EntryTypeFeatureSupport {
+  exampleCount: number;
+  readonly snapshotIds: Set<string>;
+}
+
+interface RankedEntryTypeLearningRow {
+  readonly row: Readonly<EntryTypeLearningRow>;
+  readonly difficulty: number;
+  readonly margin: number;
+  readonly expectedScore: number;
 }
 
 export const DEFAULT_ENTRY_TYPE_LEARNING_STATE: Readonly<EntryTypeLearningState> =
@@ -372,54 +434,37 @@ export function trainEntryTypeLearningModel(
   if (rows.length < 4) return undefined;
 
   const allSupport = supportByType(rows.map((row) => row.example));
-  const initiallySupported = new Set(
+  const supportedTypes = new Set(
     LEARNED_TYPES.filter((keyword) =>
       hasFullClassSupport(allSupport.get(keyword)),
     ),
   );
-  const validationSnapshots = selectValidationSnapshots(
+  const folds = buildCrossValidationFolds(rows, supportedTypes);
+  if (folds.length < 2) return undefined;
+  const crossValidationOutcomes = crossValidateRows(
     rows,
-    initiallySupported,
+    supportedTypes,
+    folds,
   );
-  const trainingRows = rows.filter(
-    (row) => !validationSnapshots.has(row.entry.snapshotId),
+  const thresholds = calibrateClassThresholds(
+    crossValidationOutcomes,
+    supportedTypes,
   );
-  const validationRows = rows.filter((row) =>
-    validationSnapshots.has(row.entry.snapshotId),
-  );
-  if (trainingRows.length < 2 || validationRows.length < 1) return undefined;
-
+  const trainingRows = selectHardRowsPerType(rows, supportedTypes);
   const trainingSupport = supportByType(trainingRows.map((row) => row.example));
-  const validationSupport = supportByType(
-    validationRows.map((row) => row.example),
-  );
-  const supportedTypes = new Set(
-    LEARNED_TYPES.filter(
-      (keyword) =>
-        hasFullClassSupport(allSupport.get(keyword)) &&
-        hasTrainingClassSupport(trainingSupport.get(keyword)) &&
-        hasValidationClassSupport(validationSupport.get(keyword)),
-    ),
-  );
-  const calibrationClasses = buildClasses(
-    limitRowsPerType(trainingRows),
-    supportedTypes,
-  );
-  const classes = buildClasses(
-    limitRowsPerType(rows),
-    supportedTypes,
-    calibrationClasses,
-  );
+  const validationSupport = supportByType(rows.map((row) => row.example));
+  const classes = buildClasses(trainingRows, supportedTypes, thresholds);
   const projection = projectEntryTypes(classes, entries, input.includePrivate);
-  const evaluation = evaluateRows(
-    calibrationClasses,
-    validationRows,
+  const evaluation = evaluateCrossValidatedRows(
+    crossValidationOutcomes,
+    thresholds,
     trainingRows.length,
     allSupport,
     trainingSupport,
     validationSupport,
     supportedTypes,
     projection,
+    folds.length,
   );
   const digestRows = rows
     .map((row) => ({...row.example}))
@@ -451,14 +496,21 @@ export function isEntryTypeLearningModelActivationEligible(
   model: Readonly<EntryTypeLearningModel> | undefined,
 ): boolean {
   if (
-    model?.evaluation.activationPolicyVersion !==
+    model?.featureVersion !== ENTRY_TYPE_LEARNING_FEATURE_VERSION ||
+    model.evaluation.activationPolicyVersion !==
       ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION ||
     !model.evaluation.activationEligible ||
     model.evaluation.supportedClassCount <
       MINIMUM_ENTRY_TYPE_SUPPORTED_CLASSES ||
     model.evaluation.precisionBasisPoints < 9_200 ||
     model.evaluation.coverageBasisPoints <
-      MINIMUM_ENTRY_TYPE_VALIDATION_COVERAGE_BASIS_POINTS
+      MINIMUM_ENTRY_TYPE_VALIDATION_COVERAGE_BASIS_POINTS ||
+    model.evaluation.crossValidationFoldCount !==
+      ENTRY_TYPE_CROSS_VALIDATION_FOLD_COUNT ||
+    model.evaluation.targetPrecisionBasisPoints !==
+      ENTRY_TYPE_TARGET_PRECISION_BASIS_POINTS ||
+    model.evaluation.confusionMatrix === undefined ||
+    model.evaluation.misclassifications === undefined
   ) {
     return false;
   }
@@ -476,7 +528,7 @@ export function isEntryTypeLearningModelActivationEligible(
         item.validationSnapshotCount >=
           MINIMUM_ENTRY_TYPE_VALIDATION_SNAPSHOTS &&
         item.assignedCount >= MINIMUM_ENTRY_TYPE_VALIDATION_EXAMPLES &&
-        item.precisionBasisPoints >= 8_500,
+        item.precisionBasisPoints >= ENTRY_TYPE_TARGET_PRECISION_BASIS_POINTS,
     ) &&
     projection !== undefined &&
     projection.populationCount >= MINIMUM_ENTRY_TYPE_PROJECTION_POPULATION &&
@@ -577,7 +629,54 @@ export function cloneEntryTypeLearningState(
 
 function featuresForEntry(
   entry: Readonly<CurrentInformationEntry>,
+  featureVersion: EntryTypeLearningFeatureVersion = ENTRY_TYPE_LEARNING_FEATURE_VERSION,
 ): ReadonlySet<string> {
+  const features = baseFeaturesForEntry(entry);
+  if (featureVersion === LEGACY_ENTRY_TYPE_LEARNING_FEATURE_VERSION) {
+    return features;
+  }
+  const body = Array.from(
+    entry.value.body.normalize('NFKC').toLocaleLowerCase('und'),
+  )
+    .slice(0, MAXIMUM_ENTRY_TYPE_BODY_CODE_POINTS)
+    .join('');
+  const tokens: string[] = [];
+  for (const match of body.matchAll(TOKEN_PATTERN)) {
+    const token = normalizeFeatureValue(match[0]);
+    if (token.length > 1) tokens.push(token);
+    if (tokens.length >= MAXIMUM_ENTRY_TYPE_BODY_TOKENS) break;
+  }
+  addEvenlySampledFeatures(
+    features,
+    [...new Set(tokens)].map((token) => `body:token:${token}`),
+    MAXIMUM_ENTRY_TYPE_BODY_TOKEN_FEATURES,
+  );
+  addEvenlySampledFeatures(
+    features,
+    tokens.slice(1).flatMap((token, index) => {
+      const previous = tokens[index];
+      return previous === undefined ? [] : [`body:phrase:${previous} ${token}`];
+    }),
+    MAXIMUM_ENTRY_TYPE_BODY_PHRASE_FEATURES,
+  );
+  const ngrams: string[] = [];
+  for (const segment of body.split(/[^\p{L}\p{N}+#]+/u)) {
+    const characters = Array.from(segment);
+    for (let index = 0; index + 3 <= characters.length; index += 1) {
+      ngrams.push(`body:ngram:${characters.slice(index, index + 3).join('')}`);
+    }
+  }
+  addEvenlySampledFeatures(
+    features,
+    [...new Set(ngrams)],
+    MAXIMUM_ENTRY_TYPE_BODY_NGRAM_FEATURES,
+  );
+  return features;
+}
+
+function baseFeaturesForEntry(
+  entry: Readonly<CurrentInformationEntry>,
+): Set<string> {
   const features = new Set<string>();
   features.add(`chunk:${entry.value.chunkMode}`);
   const length = Array.from(entry.value.body).length;
@@ -615,17 +714,36 @@ function featuresForEntry(
   return features;
 }
 
+function addEvenlySampledFeatures(
+  target: Set<string>,
+  values: readonly string[],
+  limit: number,
+): void {
+  if (values.length <= limit) {
+    for (const value of values) target.add(value);
+    return;
+  }
+  for (let index = 0; index < limit; index += 1) {
+    const selected = values[Math.floor((index * values.length) / limit)];
+    if (selected !== undefined) target.add(selected);
+  }
+}
+
 function samplingModel(
   state: Readonly<EntryTypeLearningState>,
 ): Readonly<EntryTypeLearningModel> | undefined {
+  const candidate = state.candidateModel;
   if (
-    state.candidateModel?.evaluation.activationPolicyVersion ===
-    ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION
+    candidate?.featureVersion === ENTRY_TYPE_LEARNING_FEATURE_VERSION &&
+    candidate.evaluation.activationPolicyVersion ===
+      ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION
   ) {
-    return state.candidateModel;
+    return candidate;
   }
-  return state.activeModel?.evaluation.activationPolicyVersion ===
-    ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION
+  return state.activeModel?.featureVersion ===
+    ENTRY_TYPE_LEARNING_FEATURE_VERSION &&
+    state.activeModel.evaluation.activationPolicyVersion ===
+      ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION
     ? state.activeModel
     : undefined;
 }
@@ -636,9 +754,18 @@ function scoreEntryTypeClasses(
 ) {
   if (model === undefined)
     return Object.freeze([]) as readonly ReturnType<typeof scoreClass>[];
-  const features = featuresForEntry(entry);
+  return scoreClassesFromFeatures(
+    model.classes,
+    featuresForEntry(entry, model.featureVersion),
+  );
+}
+
+function scoreClassesFromFeatures(
+  classes: readonly Readonly<EntryTypeClassModel>[],
+  features: ReadonlySet<string>,
+) {
   return Object.freeze(
-    model.classes
+    classes
       .map((classModel) => scoreClass(classModel, features))
       .sort(
         (left, right) =>
@@ -738,55 +865,140 @@ function hasFullClassSupport(
   );
 }
 
-function hasTrainingClassSupport(
-  support: Readonly<EntryTypeSupport> | undefined,
-): boolean {
-  return (
-    (support?.exampleCount ?? 0) >= MINIMUM_ENTRY_TYPE_TRAINING_EXAMPLES &&
-    (support?.snapshotCount ?? 0) >= MINIMUM_ENTRY_TYPE_TRAINING_SNAPSHOTS
-  );
-}
-
-function hasValidationClassSupport(
-  support: Readonly<EntryTypeSupport> | undefined,
-): boolean {
-  return (
-    (support?.exampleCount ?? 0) >= MINIMUM_ENTRY_TYPE_VALIDATION_EXAMPLES &&
-    (support?.snapshotCount ?? 0) >= MINIMUM_ENTRY_TYPE_VALIDATION_SNAPSHOTS
-  );
-}
-
-function limitRowsPerType(
+function selectHardRowsPerType(
   rows: readonly Readonly<EntryTypeLearningRow>[],
+  supportedTypes: ReadonlySet<LearnedEntryTypeKeyword>,
 ): readonly Readonly<EntryTypeLearningRow>[] {
+  const provisionalClasses = buildClasses(
+    rows,
+    supportedTypes,
+    rawClassThresholds(supportedTypes),
+  );
   return Object.freeze(
-    LEARNED_TYPES.flatMap((keyword) =>
-      rows
+    LEARNED_TYPES.flatMap((keyword) => {
+      const ranked = rows
         .filter((row) => row.example.typeKeyword === keyword)
-        .sort(
-          (left, right) =>
-            stableHash(left.entry.snapshotId).localeCompare(
-              stableHash(right.entry.snapshotId),
-            ) ||
-            left.entry.value.documentOrder - right.entry.value.documentOrder ||
-            left.entry.entryId.localeCompare(right.entry.entryId),
+        .map((row): RankedEntryTypeLearningRow => {
+          const scores = scoreClassesFromFeatures(
+            provisionalClasses,
+            row.features,
+          );
+          const expectedScore =
+            scores.find((score) => score.keyword === keyword)?.score ?? 0;
+          const competitorScore =
+            scores.find((score) => score.keyword !== keyword)?.score ?? 0;
+          const first = scores[0];
+          return Object.freeze({
+            row,
+            difficulty:
+              first !== undefined &&
+              first.keyword !== keyword &&
+              first.score >= expectedScore
+                ? 0
+                : expectedScore === 0
+                  ? 1
+                  : expectedScore <= competitorScore
+                    ? 2
+                    : 3,
+            margin: expectedScore - competitorScore,
+            expectedScore,
+          });
+        })
+        .sort(compareRankedLearningRows);
+      if (ranked.length <= MAXIMUM_ENTRY_TYPE_TRAINING_EXAMPLES_PER_CLASS) {
+        return ranked.map((item) => item.row);
+      }
+      const hardBudget = Math.floor(
+        (MAXIMUM_ENTRY_TYPE_TRAINING_EXAMPLES_PER_CLASS * 3) / 4,
+      );
+      const selected = ranked.slice(0, hardBudget);
+      const selectedIds = new Set(
+        selected.map(
+          (item) =>
+            `${item.row.example.entryId}\u0000${item.row.example.entryRevision.toString()}`,
+        ),
+      );
+      const selectedSnapshots = new Set(
+        selected.map((item) => item.row.entry.snapshotId),
+      );
+      for (const item of ranked) {
+        if (selected.length >= MAXIMUM_ENTRY_TYPE_TRAINING_EXAMPLES_PER_CLASS)
+          break;
+        const identity = `${item.row.example.entryId}\u0000${item.row.example.entryRevision.toString()}`;
+        if (
+          selectedIds.has(identity) ||
+          selectedSnapshots.has(item.row.entry.snapshotId)
         )
-        .slice(0, MAXIMUM_ENTRY_TYPE_TRAINING_EXAMPLES_PER_CLASS),
-    ),
+          continue;
+        selected.push(item);
+        selectedIds.add(identity);
+        selectedSnapshots.add(item.row.entry.snapshotId);
+      }
+      for (const item of ranked) {
+        if (selected.length >= MAXIMUM_ENTRY_TYPE_TRAINING_EXAMPLES_PER_CLASS)
+          break;
+        const identity = `${item.row.example.entryId}\u0000${item.row.example.entryRevision.toString()}`;
+        if (selectedIds.has(identity)) continue;
+        selected.push(item);
+        selectedIds.add(identity);
+      }
+      return selected.map((item) => item.row);
+    }),
+  );
+}
+
+function compareRankedLearningRows(
+  left: Readonly<RankedEntryTypeLearningRow>,
+  right: Readonly<RankedEntryTypeLearningRow>,
+): number {
+  return (
+    left.difficulty - right.difficulty ||
+    left.margin - right.margin ||
+    left.expectedScore - right.expectedScore ||
+    stableHash(left.row.entry.snapshotId).localeCompare(
+      stableHash(right.row.entry.snapshotId),
+    ) ||
+    left.row.entry.value.documentOrder - right.row.entry.value.documentOrder ||
+    left.row.entry.entryId.localeCompare(right.row.entry.entryId)
   );
 }
 
 function buildClasses(
   rows: readonly Readonly<EntryTypeLearningRow>[],
   supportedTypes: ReadonlySet<LearnedEntryTypeKeyword>,
-  calibration?: readonly Readonly<EntryTypeClassModel>[],
+  thresholds: ReadonlyMap<
+    LearnedEntryTypeKeyword,
+    Readonly<EntryTypeClassThreshold>
+  >,
 ): readonly Readonly<EntryTypeClassModel>[] {
-  const allFeatures = new Set<string>();
-  for (const row of rows)
-    for (const feature of row.features) allFeatures.add(feature);
+  const supportByFeature = new Map<
+    string,
+    Map<LearnedEntryTypeKeyword, EntryTypeFeatureSupport>
+  >();
+  const snapshotsByType = new Map(
+    LEARNED_TYPES.map((keyword) => [keyword, new Set<string>()]),
+  );
+  for (const row of rows) {
+    snapshotsByType.get(row.example.typeKeyword)?.add(row.entry.snapshotId);
+    for (const feature of row.features) {
+      let byType = supportByFeature.get(feature);
+      if (byType === undefined) {
+        byType = new Map();
+        supportByFeature.set(feature, byType);
+      }
+      let support = byType.get(row.example.typeKeyword);
+      if (support === undefined) {
+        support = {exampleCount: 0, snapshotIds: new Set<string>()};
+        byType.set(row.example.typeKeyword, support);
+      }
+      support.exampleCount += 1;
+      support.snapshotIds.add(row.entry.snapshotId);
+    }
+  }
   return Object.freeze(
     LEARNED_TYPES.map((keyword) => {
-      if (!supportedTypes.has(keyword)) {
+      const threshold = thresholds.get(keyword);
+      if (!supportedTypes.has(keyword) || threshold === undefined) {
         return Object.freeze({
           keyword,
           minimumScore: DISABLED_ENTRY_TYPE_SCORE,
@@ -794,108 +1006,363 @@ function buildClasses(
           features: Object.freeze([]),
         });
       }
-      const positive = rows.filter(
-        (row) => row.example.typeKeyword === keyword,
+      const positiveSnapshotCount = snapshotsByType.get(keyword)?.size ?? 0;
+      const negativeSnapshots = new Set(
+        rows
+          .filter((row) => row.example.typeKeyword !== keyword)
+          .map((row) => row.entry.snapshotId),
       );
-      const negative = rows.filter(
-        (row) => row.example.typeKeyword !== keyword,
-      );
-      const weights = [...allFeatures]
-        .map((feature) => {
-          const positiveCount = positive.filter((row) =>
-            row.features.has(feature),
-          ).length;
-          const negativeCount = negative.filter((row) =>
-            row.features.has(feature),
-          ).length;
-          const positiveRate =
-            positive.length === 0
-              ? 0
-              : Math.floor((positiveCount * 10_000) / positive.length);
-          const negativeRate =
-            negative.length === 0
-              ? 0
-              : Math.floor((negativeCount * 10_000) / negative.length);
+      const weights = [...supportByFeature.entries()]
+        .map(([feature, byType]) => {
+          const positive = byType.get(keyword);
+          if (
+            (positive?.exampleCount ?? 0) <
+              MINIMUM_ENTRY_TYPE_FEATURE_EXAMPLES ||
+            (positive?.snapshotIds.size ?? 0) <
+              MINIMUM_ENTRY_TYPE_FEATURE_SNAPSHOTS
+          ) {
+            return undefined;
+          }
+          const negativeFeatureSnapshots = new Set<string>();
+          for (const [otherKeyword, support] of byType) {
+            if (otherKeyword === keyword) continue;
+            for (const snapshotId of support.snapshotIds) {
+              negativeFeatureSnapshots.add(snapshotId);
+            }
+          }
+          const positiveRate = basisPoints(
+            positive?.snapshotIds.size ?? 0,
+            positiveSnapshotCount,
+          );
+          const negativeRate = basisPoints(
+            negativeFeatureSnapshots.size,
+            negativeSnapshots.size,
+          );
+          const observedDifference = positiveRate - negativeRate;
+          const reliabilityBasisPoints = Math.min(
+            10_000,
+            Math.floor(
+              ((positive?.snapshotIds.size ?? 0) * 10_000) /
+                (MINIMUM_ENTRY_TYPE_FEATURE_SNAPSHOTS * 2),
+            ),
+          );
+          const regularizedWeight = Math.floor(
+            (observedDifference * reliabilityBasisPoints) / 10_000,
+          );
           return Object.freeze({
             feature,
             weight: Math.min(
               MAXIMUM_ENTRY_TYPE_FEATURE_WEIGHT,
-              positiveRate - negativeRate,
+              regularizedWeight,
             ),
           });
         })
-        .filter((weight) => weight.weight >= 500)
+        .filter(
+          (weight): weight is Readonly<EntryTypeModelFeatureWeight> =>
+            weight !== undefined && weight.weight >= 500,
+        )
         .sort(
           (left, right) =>
             right.weight - left.weight ||
             left.feature.localeCompare(right.feature),
         )
         .slice(0, MAXIMUM_ENTRY_TYPE_MODEL_FEATURES_PER_TYPE);
-      const calibrated = calibration?.find((item) => item.keyword === keyword);
-      const provisional = Object.freeze({
-        keyword,
-        minimumScore: 500,
-        minimumMargin: 250,
-        features: Object.freeze(weights),
-      });
-      if (calibrated !== undefined) {
-        return Object.freeze({
-          ...provisional,
-          minimumScore: calibrated.minimumScore,
-          minimumMargin: calibrated.minimumMargin,
-        });
-      }
-      const positiveScores = positive
-        .map((row) => scoreClass(provisional, row.features).score)
-        .filter((score) => score > 0)
-        .sort((left, right) => left - right);
       return Object.freeze({
-        ...provisional,
-        minimumScore: Math.max(
-          500,
-          Math.floor(percentile(positiveScores, 20) / 2),
-        ),
-        minimumMargin: Math.max(
-          250,
-          Math.floor(percentile(positiveScores, 20) / 5),
-        ),
+        keyword,
+        minimumScore: threshold.minimumScore,
+        minimumMargin: threshold.minimumMargin,
+        features: Object.freeze(weights),
       });
     }),
   );
 }
 
-function evaluateRows(
-  classes: readonly Readonly<EntryTypeClassModel>[],
+function crossValidateRows(
   rows: readonly Readonly<EntryTypeLearningRow>[],
+  supportedTypes: ReadonlySet<LearnedEntryTypeKeyword>,
+  folds: readonly ReadonlySet<string>[],
+): readonly Readonly<EntryTypeCrossValidationOutcome>[] {
+  const outcomes: EntryTypeCrossValidationOutcome[] = [];
+  for (const validationSnapshots of folds) {
+    const trainingRows = rows.filter(
+      (row) => !validationSnapshots.has(row.entry.snapshotId),
+    );
+    const validationRows = rows.filter((row) =>
+      validationSnapshots.has(row.entry.snapshotId),
+    );
+    const trainingSupport = supportByType(
+      trainingRows.map((row) => row.example),
+    );
+    const foldTypes = new Set(
+      [...supportedTypes].filter((keyword) =>
+        hasCrossValidationTrainingSupport(trainingSupport.get(keyword)),
+      ),
+    );
+    const selectedTrainingRows = selectHardRowsPerType(trainingRows, foldTypes);
+    const classes = buildClasses(
+      selectedTrainingRows,
+      foldTypes,
+      rawClassThresholds(foldTypes),
+    );
+    for (const row of validationRows) {
+      outcomes.push(
+        Object.freeze({
+          row,
+          scores: scoreClassesFromFeatures(classes, row.features),
+        }),
+      );
+    }
+  }
+  return Object.freeze(
+    outcomes.sort(
+      (left, right) =>
+        left.row.entry.entryId.localeCompare(right.row.entry.entryId) ||
+        left.row.entry.revision - right.row.entry.revision,
+    ),
+  );
+}
+
+function hasCrossValidationTrainingSupport(
+  support: Readonly<EntryTypeSupport> | undefined,
+): boolean {
+  return (
+    (support?.exampleCount ?? 0) >= 4 &&
+    (support?.snapshotCount ?? 0) >= MINIMUM_ENTRY_TYPE_TRAINING_SNAPSHOTS
+  );
+}
+
+function buildCrossValidationFolds(
+  rows: readonly Readonly<EntryTypeLearningRow>[],
+  supportedTypes: ReadonlySet<LearnedEntryTypeKeyword>,
+): readonly ReadonlySet<string>[] {
+  const snapshotRows = new Map<string, EntryTypeLearningRow[]>();
+  for (const row of rows) {
+    const bucket = snapshotRows.get(row.entry.snapshotId) ?? [];
+    bucket.push(row);
+    snapshotRows.set(row.entry.snapshotId, bucket);
+  }
+  const foldCount = Math.min(
+    ENTRY_TYPE_CROSS_VALIDATION_FOLD_COUNT,
+    snapshotRows.size,
+  );
+  if (foldCount < 2) return Object.freeze([]);
+  const folds = Array.from({length: foldCount}, () => new Set<string>());
+  const typeCounts = Array.from(
+    {length: foldCount},
+    () => new Map(LEARNED_TYPES.map((keyword) => [keyword, 0])),
+  );
+  const orderedSnapshots = [...snapshotRows.entries()].sort(
+    ([leftId, leftRows], [rightId, rightRows]) => {
+      const leftTypes = new Set(
+        leftRows
+          .map((row) => row.example.typeKeyword)
+          .filter((keyword) => supportedTypes.has(keyword)),
+      );
+      const rightTypes = new Set(
+        rightRows
+          .map((row) => row.example.typeKeyword)
+          .filter((keyword) => supportedTypes.has(keyword)),
+      );
+      return (
+        rightTypes.size - leftTypes.size ||
+        rightRows.length - leftRows.length ||
+        stableHash(leftId).localeCompare(stableHash(rightId))
+      );
+    },
+  );
+  for (const [snapshotId, snapshotEntries] of orderedSnapshots) {
+    const representedTypes = new Set(
+      snapshotEntries
+        .map((row) => row.example.typeKeyword)
+        .filter((keyword) => supportedTypes.has(keyword)),
+    );
+    const targetFold = Array.from(
+      {length: foldCount},
+      (_, index) => index,
+    ).sort((left, right) => {
+      const leftTypeCount = [...representedTypes].reduce(
+        (total, keyword) => total + (typeCounts[left]?.get(keyword) ?? 0),
+        0,
+      );
+      const rightTypeCount = [...representedTypes].reduce(
+        (total, keyword) => total + (typeCounts[right]?.get(keyword) ?? 0),
+        0,
+      );
+      return (
+        leftTypeCount - rightTypeCount ||
+        (folds[left]?.size ?? 0) - (folds[right]?.size ?? 0) ||
+        left - right
+      );
+    })[0];
+    if (targetFold === undefined) continue;
+    folds[targetFold]?.add(snapshotId);
+    for (const keyword of representedTypes) {
+      const counts = typeCounts[targetFold];
+      counts?.set(keyword, (counts.get(keyword) ?? 0) + 1);
+    }
+  }
+  return Object.freeze(
+    folds.filter((fold) => fold.size > 0).map((fold) => new Set([...fold])),
+  );
+}
+
+function rawClassThresholds(
+  supportedTypes: ReadonlySet<LearnedEntryTypeKeyword>,
+): ReadonlyMap<LearnedEntryTypeKeyword, Readonly<EntryTypeClassThreshold>> {
+  return new Map(
+    [...supportedTypes].map((keyword) => [
+      keyword,
+      Object.freeze({minimumScore: 1, minimumMargin: 0}),
+    ]),
+  );
+}
+
+function calibrateClassThresholds(
+  outcomes: readonly Readonly<EntryTypeCrossValidationOutcome>[],
+  supportedTypes: ReadonlySet<LearnedEntryTypeKeyword>,
+): ReadonlyMap<LearnedEntryTypeKeyword, Readonly<EntryTypeClassThreshold>> {
+  const result = new Map<
+    LearnedEntryTypeKeyword,
+    Readonly<EntryTypeClassThreshold>
+  >();
+  for (const keyword of supportedTypes) {
+    const candidates = outcomes
+      .map((outcome) => {
+        const first = outcome.scores[0];
+        const second = outcome.scores[1];
+        if (first?.keyword !== keyword || first.score < 1) return undefined;
+        return Object.freeze({
+          score: first.score,
+          margin: first.score - (second?.score ?? 0),
+          correct: outcome.row.example.typeKeyword === keyword,
+        });
+      })
+      .filter((candidate) => candidate !== undefined);
+    const scoreThresholds = [
+      ...new Set([1, ...candidates.map((candidate) => candidate.score)]),
+    ].sort((left, right) => left - right);
+    let best:
+      | (EntryTypeClassThreshold & {
+          readonly assignedCount: number;
+          readonly precisionBasisPoints: number;
+        })
+      | undefined;
+    for (const minimumScore of scoreThresholds) {
+      const scoreEligible = candidates
+        .filter((candidate) => candidate.score >= minimumScore)
+        .sort(
+          (left, right) =>
+            right.margin - left.margin || right.score - left.score,
+        );
+      const consider = (
+        minimumMargin: number,
+        assignedCount: number,
+        correctCount: number,
+      ): void => {
+        const precisionBasisPoints = basisPoints(correctCount, assignedCount);
+        if (
+          assignedCount < MINIMUM_ENTRY_TYPE_VALIDATION_EXAMPLES ||
+          precisionBasisPoints < ENTRY_TYPE_TARGET_PRECISION_BASIS_POINTS
+        )
+          return;
+        const proposed = Object.freeze({
+          minimumScore,
+          minimumMargin,
+          assignedCount,
+          precisionBasisPoints,
+        });
+        if (
+          best === undefined ||
+          proposed.assignedCount > best.assignedCount ||
+          (proposed.assignedCount === best.assignedCount &&
+            proposed.precisionBasisPoints > best.precisionBasisPoints) ||
+          (proposed.assignedCount === best.assignedCount &&
+            proposed.precisionBasisPoints === best.precisionBasisPoints &&
+            proposed.minimumScore + proposed.minimumMargin <
+              best.minimumScore + best.minimumMargin)
+        ) {
+          best = proposed;
+        }
+      };
+      consider(
+        0,
+        scoreEligible.length,
+        scoreEligible.filter((candidate) => candidate.correct).length,
+      );
+      let assignedCount = 0;
+      let correctCount = 0;
+      for (let index = 0; index < scoreEligible.length; index += 1) {
+        const candidate = scoreEligible[index];
+        if (candidate === undefined) continue;
+        assignedCount += 1;
+        if (candidate.correct) correctCount += 1;
+        if (scoreEligible[index + 1]?.margin === candidate.margin) continue;
+        consider(candidate.margin, assignedCount, correctCount);
+      }
+    }
+    if (best !== undefined) {
+      result.set(
+        keyword,
+        Object.freeze({
+          minimumScore: best.minimumScore,
+          minimumMargin: best.minimumMargin,
+        }),
+      );
+    }
+  }
+  return result;
+}
+
+function predictFromCalibratedScores(
+  scores: readonly Readonly<ReturnType<typeof scoreClass>>[],
+  thresholds: ReadonlyMap<
+    LearnedEntryTypeKeyword,
+    Readonly<EntryTypeClassThreshold>
+  >,
+): Readonly<EntryTypeLearningPrediction> | undefined {
+  const first = scores[0];
+  const second = scores[1];
+  if (first === undefined) return undefined;
+  const threshold = thresholds.get(first.keyword);
+  if (
+    threshold === undefined ||
+    first.score < threshold.minimumScore ||
+    first.score - (second?.score ?? 0) < threshold.minimumMargin
+  )
+    return undefined;
+  return Object.freeze({
+    keyword: first.keyword,
+    score: first.score,
+    runnerUpScore: second?.score ?? 0,
+    minimumScore: threshold.minimumScore,
+    minimumMargin: threshold.minimumMargin,
+    matchedFeatures: first.matchedFeatures,
+  });
+}
+
+function evaluateCrossValidatedRows(
+  crossValidationOutcomes: readonly Readonly<EntryTypeCrossValidationOutcome>[],
+  thresholds: ReadonlyMap<
+    LearnedEntryTypeKeyword,
+    Readonly<EntryTypeClassThreshold>
+  >,
   trainingCount: number,
   allSupport: ReadonlyMap<LearnedEntryTypeKeyword, EntryTypeSupport>,
   trainingSupport: ReadonlyMap<LearnedEntryTypeKeyword, EntryTypeSupport>,
   validationSupport: ReadonlyMap<LearnedEntryTypeKeyword, EntryTypeSupport>,
   supportedTypes: ReadonlySet<LearnedEntryTypeKeyword>,
   projection: Readonly<EntryTypeLearningProjection>,
+  crossValidationFoldCount: number,
 ): Readonly<EntryTypeLearningEvaluation> {
-  const model = Object.freeze({
-    format: ENTRY_TYPE_LEARNING_MODEL_FORMAT,
-    version: ENTRY_TYPE_LEARNING_MODEL_VERSION,
-    featureVersion: ENTRY_TYPE_LEARNING_FEATURE_VERSION,
-    trainingDigest: '0'.repeat(64),
-    classes,
-    evaluation: {
-      trainingCount: 0,
-      validationCount: 0,
-      assignedCount: 0,
-      correctCount: 0,
-      precisionBasisPoints: 0,
-      coverageBasisPoints: 0,
-      supportedClassCount: 0,
-      activationEligible: false,
-      byType: Object.freeze([]),
-    },
+  const outcomes = crossValidationOutcomes.map((outcome) => {
+    const prediction = predictFromCalibratedScores(outcome.scores, thresholds);
+    return Object.freeze({
+      row: outcome.row,
+      expected: outcome.row.example.typeKeyword,
+      prediction,
+      predicted: prediction?.keyword,
+    });
   });
-  const outcomes = rows.map((row) => ({
-    expected: row.example.typeKeyword,
-    predicted: predictEntryType(row.entry, model)?.keyword,
-  }));
   const assignedCount = outcomes.filter(
     (outcome) => outcome.predicted !== undefined,
   ).length;
@@ -927,14 +1394,16 @@ function evaluateRows(
     });
   });
   const precisionBasisPoints = basisPoints(correctCount, assignedCount);
-  const coverageBasisPoints = basisPoints(assignedCount, rows.length);
+  const coverageBasisPoints = basisPoints(assignedCount, outcomes.length);
   const supportedClassCount = supportedTypes.size;
+  const confusionMatrix = buildConfusionMatrix(outcomes);
+  const misclassifications = buildMisclassificationSamples(outcomes);
   const activationEligible =
     supportedClassCount >= MINIMUM_ENTRY_TYPE_SUPPORTED_CLASSES &&
-    rows.length >=
+    outcomes.length >=
       supportedClassCount * MINIMUM_ENTRY_TYPE_VALIDATION_EXAMPLES &&
     assignedCount >= 1 &&
-    precisionBasisPoints >= 9_200 &&
+    precisionBasisPoints >= ENTRY_TYPE_TARGET_PRECISION_BASIS_POINTS &&
     coverageBasisPoints >=
       MINIMUM_ENTRY_TYPE_VALIDATION_COVERAGE_BASIS_POINTS &&
     byType
@@ -945,7 +1414,7 @@ function evaluateRows(
           item.validationSnapshotCount >=
             MINIMUM_ENTRY_TYPE_VALIDATION_SNAPSHOTS &&
           item.assignedCount >= MINIMUM_ENTRY_TYPE_VALIDATION_EXAMPLES &&
-          item.precisionBasisPoints >= 8_500,
+          item.precisionBasisPoints >= ENTRY_TYPE_TARGET_PRECISION_BASIS_POINTS,
       ) &&
     projection.populationCount >= MINIMUM_ENTRY_TYPE_PROJECTION_POPULATION &&
     projection.coverageBasisPoints >=
@@ -957,16 +1426,91 @@ function evaluateRows(
   return Object.freeze({
     activationPolicyVersion: ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION,
     trainingCount,
-    validationCount: rows.length,
+    validationCount: outcomes.length,
     assignedCount,
     correctCount,
     precisionBasisPoints,
     coverageBasisPoints,
     supportedClassCount,
+    crossValidationFoldCount,
+    targetPrecisionBasisPoints: ENTRY_TYPE_TARGET_PRECISION_BASIS_POINTS,
+    confusionMatrix,
+    misclassifications,
     projection,
     activationEligible,
     byType: Object.freeze(byType),
   });
+}
+
+function buildConfusionMatrix(
+  outcomes: readonly Readonly<{
+    expected: LearnedEntryTypeKeyword;
+    predicted: LearnedEntryTypeKeyword | undefined;
+  }>[],
+): readonly Readonly<EntryTypeLearningConfusionCell>[] {
+  const counts = new Map<string, number>();
+  for (const outcome of outcomes) {
+    const predicted = outcome.predicted ?? 'unassigned';
+    const identity = `${outcome.expected}\u0000${predicted}`;
+    counts.set(identity, (counts.get(identity) ?? 0) + 1);
+  }
+  const predictedOrder = [...LEARNED_TYPES, 'unassigned'] as const;
+  return Object.freeze(
+    [...counts.entries()]
+      .map(([identity, count]) => {
+        const [expectedTypeKeyword, predictedTypeKeyword] =
+          identity.split('\u0000');
+        return Object.freeze({
+          expectedTypeKeyword: expectedTypeKeyword as LearnedEntryTypeKeyword,
+          predictedTypeKeyword: predictedTypeKeyword as
+            LearnedEntryTypeKeyword | 'unassigned',
+          count,
+        });
+      })
+      .sort(
+        (left, right) =>
+          LEARNED_TYPES.indexOf(left.expectedTypeKeyword) -
+            LEARNED_TYPES.indexOf(right.expectedTypeKeyword) ||
+          predictedOrder.indexOf(left.predictedTypeKeyword) -
+            predictedOrder.indexOf(right.predictedTypeKeyword),
+      ),
+  );
+}
+
+function buildMisclassificationSamples(
+  outcomes: readonly Readonly<{
+    row: Readonly<EntryTypeLearningRow>;
+    expected: LearnedEntryTypeKeyword;
+    prediction: Readonly<EntryTypeLearningPrediction> | undefined;
+  }>[],
+): readonly Readonly<EntryTypeLearningMisclassification>[] {
+  return Object.freeze(
+    outcomes
+      .flatMap((outcome) => {
+        const prediction = outcome.prediction;
+        return prediction === undefined ||
+          prediction.keyword === outcome.expected
+          ? []
+          : [
+              Object.freeze({
+                entryId: outcome.row.entry.entryId,
+                entryRevision: outcome.row.entry.revision,
+                snapshotId: outcome.row.entry.snapshotId,
+                expectedTypeKeyword: outcome.expected,
+                predictedTypeKeyword: prediction.keyword,
+                score: prediction.score,
+                margin: prediction.score - prediction.runnerUpScore,
+              }),
+            ];
+      })
+      .sort(
+        (left, right) =>
+          right.margin - left.margin ||
+          right.score - left.score ||
+          left.entryId.localeCompare(right.entryId),
+      )
+      .slice(0, MAXIMUM_ENTRY_TYPE_MISCLASSIFICATION_SAMPLES),
+  );
 }
 
 function projectEntryTypes(
@@ -1060,34 +1604,6 @@ function scoreClass(
   });
 }
 
-function selectValidationSnapshots(
-  rows: readonly Readonly<EntryTypeLearningRow>[],
-  supportedTypes: ReadonlySet<LearnedEntryTypeKeyword>,
-): ReadonlySet<string> {
-  const selected = new Set<string>();
-  for (const keyword of LEARNED_TYPES) {
-    if (!supportedTypes.has(keyword)) continue;
-    const snapshots = [
-      ...new Set(
-        rows
-          .filter((row) => row.example.typeKeyword === keyword)
-          .map((row) => row.entry.snapshotId),
-      ),
-    ].sort((left, right) => stableHash(left).localeCompare(stableHash(right)));
-    for (const snapshotId of snapshots.slice(
-      0,
-      MINIMUM_ENTRY_TYPE_VALIDATION_SNAPSHOTS,
-    )) {
-      selected.add(snapshotId);
-    }
-  }
-  if (selected.size > 0) return selected;
-  const unique = [...new Set(rows.map((row) => row.entry.snapshotId))].sort(
-    (left, right) => stableHash(left).localeCompare(stableHash(right)),
-  );
-  return new Set(unique.slice(0, Math.max(1, Math.floor(unique.length / 5))));
-}
-
 function decodeTrustedExamples(
   value: unknown,
 ): readonly Readonly<EntryTypeTrustedExample>[] | undefined {
@@ -1155,10 +1671,16 @@ function decodeEntryTypeLearningModel(
     )
   )
     return undefined;
+  const featureVersion =
+    value.featureVersion === ENTRY_TYPE_LEARNING_FEATURE_VERSION
+      ? ENTRY_TYPE_LEARNING_FEATURE_VERSION
+      : value.featureVersion === LEGACY_ENTRY_TYPE_LEARNING_FEATURE_VERSION
+        ? LEGACY_ENTRY_TYPE_LEARNING_FEATURE_VERSION
+        : undefined;
   if (
     value.format !== ENTRY_TYPE_LEARNING_MODEL_FORMAT ||
     value.version !== ENTRY_TYPE_LEARNING_MODEL_VERSION ||
-    value.featureVersion !== ENTRY_TYPE_LEARNING_FEATURE_VERSION ||
+    featureVersion === undefined ||
     typeof value.trainingDigest !== 'string' ||
     !SHA256.test(value.trainingDigest) ||
     !Array.isArray(value.classes) ||
@@ -1219,7 +1741,7 @@ function decodeEntryTypeLearningModel(
   return cloneModel({
     format: ENTRY_TYPE_LEARNING_MODEL_FORMAT,
     version: ENTRY_TYPE_LEARNING_MODEL_VERSION,
-    featureVersion: ENTRY_TYPE_LEARNING_FEATURE_VERSION,
+    featureVersion,
     trainingDigest: value.trainingDigest,
     classes,
     evaluation,
@@ -1243,7 +1765,15 @@ function decodeEvaluation(
         'activationEligible',
         'byType',
       ],
-      ['activationPolicyVersion', 'supportedClassCount', 'projection'],
+      [
+        'activationPolicyVersion',
+        'supportedClassCount',
+        'crossValidationFoldCount',
+        'targetPrecisionBasisPoints',
+        'confusionMatrix',
+        'misclassifications',
+        'projection',
+      ],
     ) ||
     !Array.isArray(value.byType) ||
     value.byType.length !== LEARNED_TYPES.length
@@ -1262,7 +1792,10 @@ function decodeEvaluation(
       : value.activationPolicyVersion ===
           ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION
         ? ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION
-        : undefined;
+        : value.activationPolicyVersion ===
+            LEGACY_ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION
+          ? LEGACY_ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION
+          : undefined;
   if (
     value.activationPolicyVersion !== undefined &&
     activationPolicyVersion === undefined
@@ -1373,9 +1906,48 @@ function decodeEvaluation(
     value.projection === undefined
       ? undefined
       : decodeEntryTypeLearningProjection(value.projection);
+  const crossValidationFoldCount =
+    value.crossValidationFoldCount === undefined
+      ? undefined
+      : boundedInteger(
+            value.crossValidationFoldCount,
+            2,
+            ENTRY_TYPE_CROSS_VALIDATION_FOLD_COUNT,
+          )
+        ? value.crossValidationFoldCount
+        : undefined;
+  const targetPrecisionBasisPoints =
+    value.targetPrecisionBasisPoints === undefined
+      ? undefined
+      : boundedInteger(value.targetPrecisionBasisPoints, 1, 10_000)
+        ? value.targetPrecisionBasisPoints
+        : undefined;
+  const confusionMatrix =
+    value.confusionMatrix === undefined
+      ? undefined
+      : decodeConfusionMatrix(value.confusionMatrix, value.validationCount);
+  const misclassifications =
+    value.misclassifications === undefined
+      ? undefined
+      : decodeMisclassifications(value.misclassifications);
+  const currentActivation =
+    activationPolicyVersion === ENTRY_TYPE_LEARNING_ACTIVATION_POLICY_VERSION;
   if (
     supportedClassCount === undefined ||
     (value.projection !== undefined && projection === undefined) ||
+    (value.crossValidationFoldCount !== undefined &&
+      crossValidationFoldCount === undefined) ||
+    (value.targetPrecisionBasisPoints !== undefined &&
+      targetPrecisionBasisPoints === undefined) ||
+    (value.confusionMatrix !== undefined && confusionMatrix === undefined) ||
+    (value.misclassifications !== undefined &&
+      misclassifications === undefined) ||
+    (currentActivation &&
+      (crossValidationFoldCount !== ENTRY_TYPE_CROSS_VALIDATION_FOLD_COUNT ||
+        targetPrecisionBasisPoints !==
+          ENTRY_TYPE_TARGET_PRECISION_BASIS_POINTS ||
+        confusionMatrix === undefined ||
+        misclassifications === undefined)) ||
     (activationPolicyVersion !== undefined &&
       (value.supportedClassCount === undefined ||
         projection === undefined ||
@@ -1408,10 +1980,130 @@ function decodeEvaluation(
     precisionBasisPoints: value.precisionBasisPoints as number,
     coverageBasisPoints: value.coverageBasisPoints as number,
     supportedClassCount,
+    ...(crossValidationFoldCount === undefined
+      ? {}
+      : {crossValidationFoldCount}),
+    ...(targetPrecisionBasisPoints === undefined
+      ? {}
+      : {targetPrecisionBasisPoints}),
+    ...(confusionMatrix === undefined ? {} : {confusionMatrix}),
+    ...(misclassifications === undefined ? {} : {misclassifications}),
     ...(projection === undefined ? {} : {projection}),
     activationEligible: value.activationEligible,
     byType: Object.freeze(byType),
   });
+}
+
+function decodeConfusionMatrix(
+  value: unknown,
+  validationCount: unknown,
+): readonly Readonly<EntryTypeLearningConfusionCell>[] | undefined {
+  if (
+    !Array.isArray(value) ||
+    value.length < 1 ||
+    value.length > LEARNED_TYPES.length * (LEARNED_TYPES.length + 1) ||
+    !boundedInteger(validationCount, 1, MAXIMUM_ENTRY_TYPE_TRUSTED_EXAMPLES)
+  )
+    return undefined;
+  const cells: EntryTypeLearningConfusionCell[] = [];
+  const identities = new Set<string>();
+  let total = 0;
+  for (const item of value) {
+    if (
+      !isRecord(item) ||
+      !closedKeys(
+        item,
+        ['expectedTypeKeyword', 'predictedTypeKeyword', 'count'],
+        [],
+      ) ||
+      !LEARNED_TYPES.includes(
+        item.expectedTypeKeyword as LearnedEntryTypeKeyword,
+      ) ||
+      (item.predictedTypeKeyword !== 'unassigned' &&
+        !LEARNED_TYPES.includes(
+          item.predictedTypeKeyword as LearnedEntryTypeKeyword,
+        )) ||
+      !boundedInteger(item.count, 1, MAXIMUM_ENTRY_TYPE_TRUSTED_EXAMPLES)
+    )
+      return undefined;
+    const identity = `${item.expectedTypeKeyword as string}\u0000${item.predictedTypeKeyword as string}`;
+    if (identities.has(identity)) return undefined;
+    identities.add(identity);
+    total += item.count;
+    cells.push(
+      Object.freeze({
+        expectedTypeKeyword:
+          item.expectedTypeKeyword as LearnedEntryTypeKeyword,
+        predictedTypeKeyword: item.predictedTypeKeyword as
+          LearnedEntryTypeKeyword | 'unassigned',
+        count: item.count,
+      }),
+    );
+  }
+  if (total !== validationCount) return undefined;
+  return Object.freeze(cells);
+}
+
+function decodeMisclassifications(
+  value: unknown,
+): readonly Readonly<EntryTypeLearningMisclassification>[] | undefined {
+  if (
+    !Array.isArray(value) ||
+    value.length > MAXIMUM_ENTRY_TYPE_MISCLASSIFICATION_SAMPLES
+  )
+    return undefined;
+  const results: EntryTypeLearningMisclassification[] = [];
+  const identities = new Set<string>();
+  for (const item of value) {
+    if (
+      !isRecord(item) ||
+      !closedKeys(
+        item,
+        [
+          'entryId',
+          'entryRevision',
+          'snapshotId',
+          'expectedTypeKeyword',
+          'predictedTypeKeyword',
+          'score',
+          'margin',
+        ],
+        [],
+      ) ||
+      typeof item.entryId !== 'string' ||
+      !CANONICAL_UUID.test(item.entryId) ||
+      !boundedInteger(item.entryRevision, 1, Number.MAX_SAFE_INTEGER) ||
+      typeof item.snapshotId !== 'string' ||
+      !CANONICAL_UUID.test(item.snapshotId) ||
+      !LEARNED_TYPES.includes(
+        item.expectedTypeKeyword as LearnedEntryTypeKeyword,
+      ) ||
+      !LEARNED_TYPES.includes(
+        item.predictedTypeKeyword as LearnedEntryTypeKeyword,
+      ) ||
+      item.predictedTypeKeyword === item.expectedTypeKeyword ||
+      !boundedInteger(item.score, 0, 2_000_000) ||
+      !boundedInteger(item.margin, 0, 2_000_000)
+    )
+      return undefined;
+    const identity = `${item.entryId}\u0000${item.entryRevision.toString()}`;
+    if (identities.has(identity)) return undefined;
+    identities.add(identity);
+    results.push(
+      Object.freeze({
+        entryId: item.entryId,
+        entryRevision: item.entryRevision,
+        snapshotId: item.snapshotId,
+        expectedTypeKeyword:
+          item.expectedTypeKeyword as LearnedEntryTypeKeyword,
+        predictedTypeKeyword:
+          item.predictedTypeKeyword as LearnedEntryTypeKeyword,
+        score: item.score,
+        margin: item.margin,
+      }),
+    );
+  }
+  return Object.freeze(results);
 }
 
 function decodeEntryTypeLearningProjection(
@@ -1509,6 +2201,24 @@ function cloneModel(
     ),
     evaluation: Object.freeze({
       ...model.evaluation,
+      ...(model.evaluation.confusionMatrix === undefined
+        ? {}
+        : {
+            confusionMatrix: Object.freeze(
+              model.evaluation.confusionMatrix.map((item) =>
+                Object.freeze({...item}),
+              ),
+            ),
+          }),
+      ...(model.evaluation.misclassifications === undefined
+        ? {}
+        : {
+            misclassifications: Object.freeze(
+              model.evaluation.misclassifications.map((item) =>
+                Object.freeze({...item}),
+              ),
+            ),
+          }),
       ...(model.evaluation.projection === undefined
         ? {}
         : {
@@ -1552,11 +2262,6 @@ function stableHash(value: string): string {
 
 function normalizeFeatureValue(value: string): string {
   return value.normalize('NFKC').toLocaleLowerCase('und').trim().slice(0, 96);
-}
-
-function percentile(values: readonly number[], percentage: number): number {
-  if (values.length === 0) return 0;
-  return values[Math.floor(((values.length - 1) * percentage) / 100)] ?? 0;
 }
 
 function basisPoints(numerator: number, denominator: number): number {

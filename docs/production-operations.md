@@ -88,8 +88,8 @@ corepack pnpm run db:migrate
 corepack pnpm run db:prepare-queue
 
 $env:DATABASE_URL_FILE = 'D:\external\secrets\runtime.url'
-corepack pnpm run maintenance -- preflight
-corepack pnpm run maintenance -- backup
+corepack pnpm maintenance preflight
+corepack pnpm maintenance backup
 corepack pnpm run start:all
 ```
 
@@ -103,23 +103,23 @@ corepack pnpm run start:all
 这组命令只把尚未拥有当前 Entry 结构的 Snapshot 按确定性 section 规则批量物化。先以唯一、稳定的操作键冻结计划：
 
 ```powershell
-corepack pnpm run maintenance -- ingest plan --key m2-p0a-20400101 --scope public_only --limit 500
+corepack pnpm maintenance ingest plan --key m2-p0a-20400101 --scope public_only --limit 500
 ```
 
 命令返回 `batchId` 后，分窗口执行并检查状态：
 
 ```powershell
-corepack pnpm run maintenance -- ingest run --batch <batchId> --max-items 100
-corepack pnpm run maintenance -- ingest status --batch <batchId>
-corepack pnpm run maintenance -- ingest report --batch <batchId>
+corepack pnpm maintenance ingest run --batch <batchId> --max-items 100
+corepack pnpm maintenance ingest status --batch <batchId>
+corepack pnpm maintenance ingest report --batch <batchId>
 ```
 
 需要停止时执行 `ingest pause`；当前 Snapshot 事务结算后批次进入 paused。继续 pending 项用 `resume`，只重置 failed/中断项用 `retry`：
 
 ```powershell
-corepack pnpm run maintenance -- ingest pause --batch <batchId>
-corepack pnpm run maintenance -- ingest resume --batch <batchId> --max-items 100
-corepack pnpm run maintenance -- ingest retry --batch <batchId> --max-items 100
+corepack pnpm maintenance ingest pause --batch <batchId>
+corepack pnpm maintenance ingest resume --batch <batchId> --max-items 100
+corepack pnpm maintenance ingest retry --batch <batchId> --max-items 100
 ```
 
 `scope` 只接受 `public_only`、`include_private` 或 `private_only`。计划最多 500 个 Snapshot、50,000 个 Entry；报告只输出身份、计数、状态和稳定错误码。它不执行标签、联系、Provider 调用或正文导出。若计划后同一 Snapshot 已从其他入口生成 Entry，该分片以结构冲突失败，不会覆盖既有结构。
@@ -127,11 +127,11 @@ corepack pnpm run maintenance -- ingest retry --batch <batchId> --max-items 100
 P0A 批次成功后，P0B 在同一批次上执行本地确定性标签和增量联系。每次最多处理一个有界窗口；失败后可继续未完成项，或只重试失败项：
 
 ```powershell
-corepack pnpm run maintenance -- ingest enrich --batch <batchId> --max-items 100
-corepack pnpm run maintenance -- ingest enrich-status --batch <batchId>
-corepack pnpm run maintenance -- ingest enrich-report --batch <batchId>
-corepack pnpm run maintenance -- ingest enrich-resume --batch <batchId> --max-items 100
-corepack pnpm run maintenance -- ingest enrich-retry --batch <batchId> --max-items 100
+corepack pnpm maintenance ingest enrich --batch <batchId> --max-items 100
+corepack pnpm maintenance ingest enrich-status --batch <batchId>
+corepack pnpm maintenance ingest enrich-report --batch <batchId>
+corepack pnpm maintenance ingest enrich-resume --batch <batchId> --max-items 100
+corepack pnpm maintenance ingest enrich-retry --batch <batchId> --max-items 100
 ```
 
 标签以一个 Snapshot 为原子修订分片；内容关键词和唯一高置信度类型/领域分类在同一 Entry revision
@@ -143,9 +143,9 @@ corepack pnpm run maintenance -- ingest enrich-retry --batch <batchId> --max-ite
 继续处理：
 
 ```powershell
-corepack pnpm run maintenance -- ingest enrich-refresh --batch <batchId> --max-items 100
-corepack pnpm run maintenance -- ingest enrich-resume --batch <batchId> --max-items 100
-corepack pnpm run maintenance -- ingest enrich-status --batch <batchId>
+corepack pnpm maintenance ingest enrich-refresh --batch <batchId> --max-items 100
+corepack pnpm maintenance ingest enrich-resume --batch <batchId> --max-items 100
+corepack pnpm maintenance ingest enrich-status --batch <batchId>
 ```
 
 refresh 只重置规则摘要已经变化的成功项，并先删除这些项对应的旧异常和当前裁决；人工/AI/导入
@@ -154,14 +154,14 @@ refresh 只重置规则摘要已经变化的成功项，并先删除这些项对
 P0B 全部成功后，先查看异常汇总，再按 closed code、状态和 current/stale 范围抽取最多 100 个稳定样本：
 
 ```powershell
-corepack pnpm run maintenance -- ingest exceptions-summary --batch <batchId>
-corepack pnpm run maintenance -- ingest exceptions-sample --batch <batchId> --code no_deterministic_tags --status pending --scope current --limit 20
+corepack pnpm maintenance ingest exceptions-summary --batch <batchId>
+corepack pnpm maintenance ingest exceptions-sample --batch <batchId> --code no_deterministic_tags --status pending --scope current --limit 20
 ```
 
 样本只返回 Snapshot/Entry/revision 身份、隐私事实、异常代码和当前状态。需要阅读内容时，使用现有 Query/Tags 页面按 Entry ID 查看；maintenance 不输出正文。确认整组后，把汇总中刚观察到的 current pending 数作为 `expected-count`：
 
 ```powershell
-corepack pnpm run maintenance -- ingest exceptions-adjudicate --batch <batchId> --code no_deterministic_tags --from pending --to accepted --expected-count <count>
+corepack pnpm maintenance ingest exceptions-adjudicate --batch <batchId> --code no_deterministic_tags --from pending --to accepted --expected-count <count>
 ```
 
 `to` 可选 `accepted`、`manual_review`、`deferred` 或用于重新打开的 `pending`。实际数量、原状态或 Entry revision 已改变时命令返回 `stale` 且整组不写入；过期异常只能查看，不能被批量裁决。裁决状态不修改 Entry、标签、联系、图谱或 AI 提案。
@@ -170,17 +170,17 @@ corepack pnpm run maintenance -- ingest exceptions-adjudicate --batch <batchId> 
 外部数据根 `exports/codex-work/`，同时创建一个默认无效的结果模板：
 
 ```powershell
-corepack pnpm run maintenance -- ingest review-export --batch <batchId> --code no_deterministic_tags --limit 20
+corepack pnpm maintenance ingest review-export --batch <batchId> --code no_deterministic_tags --limit 20
 ```
 
 M2-P2E 对四类残余分类异常提供最多 100 条的分组工作包。建议先处理只缺一个维度的组，再处理需要
 完整判断的组：
 
 ```powershell
-corepack pnpm run maintenance -- ingest review-export --batch <batchId> --code classification_type_missing
-corepack pnpm run maintenance -- ingest review-export --batch <batchId> --code classification_domain_missing
-corepack pnpm run maintenance -- ingest review-export --batch <batchId> --code classification_tied
-corepack pnpm run maintenance -- ingest review-export --batch <batchId> --code classification_no_signal
+corepack pnpm maintenance ingest review-export --batch <batchId> --code classification_type_missing
+corepack pnpm maintenance ingest review-export --batch <batchId> --code classification_domain_missing
+corepack pnpm maintenance ingest review-export --batch <batchId> --code classification_tied
+corepack pnpm maintenance ingest review-export --batch <batchId> --code classification_no_signal
 ```
 
 这四个命令默认 `--limit 100`；也可显式降低。结果模板已经带入现有内容关键词、类型和领域，
@@ -192,7 +192,7 @@ corepack pnpm run maintenance -- ingest review-export --batch <batchId> --code c
 `<packetId>.codex-result.json` 后，用 packet ID 回写：
 
 ```powershell
-corepack pnpm run maintenance -- ingest review-apply --packet <packetId>
+corepack pnpm maintenance ingest review-apply --packet <packetId>
 ```
 
 每项动作只接受 `annotate`、`accept`、`manual_review` 或 `deferred`。模板中的 `replace_me`、缺项、
@@ -205,14 +205,14 @@ Codex/人工复核，不以覆盖率为由自动赋型。预览只输出计数�
 样本，不输出正文、标题或来源：
 
 ```powershell
-corepack pnpm run maintenance -- ingest type-completion-preview --batch <batchId> --scope public_only --sample-limit 20
+corepack pnpm maintenance ingest type-completion-preview --batch <batchId> --scope public_only --sample-limit 20
 ```
 
 `nextAction=apply_type_completion` 表示当前规则能够安全补一部分空类型。先人工检查分布和样本，再在
 已停写且备份成功后执行：
 
 ```powershell
-corepack pnpm run maintenance -- ingest type-completion-apply --batch <batchId> --max-items 100 --sample-limit 20
+corepack pnpm maintenance ingest type-completion-apply --batch <batchId> --max-items 100 --sample-limit 20
 ```
 
 该命令根据批次当前状态自动选择 run/resume/retry/refresh，只补空类型，不覆盖已有人工、AI、导入
@@ -220,17 +220,21 @@ corepack pnpm run maintenance -- ingest type-completion-apply --batch <batchId> 
 用尽，应改用上面的 P2E 分类工作包；`none` 才表示当前类型补全链闭合。不要通过反复运行把未解决项
 强制写为 `other`。apply 严格继承批次原隐私范围；预览私密范围也必须由当前操作显式选择。
 
-#### M2-P4D 下一轮类型标注
+#### M2-P4E 下一轮类型标注
 
 类型学习是独立于 Entry 正式写入的校准流程。下一轮先继续使用公开范围和单个最多 100 项的工作包；
 `apply` 只把明确接受的判断保存为外部 Profile 可信样本并训练影子候选，不修改 Entry。不要在同一轮中
 直接串联 `activate` 或类型补全写入。
 
+P4E 的工作包仍保持最多 100 项，但每类训练最多 64 条时会优先保留既有模型的错误、无信号、低分和
+低 margin 样本，再补 Snapshot 多样性。正文只在本地有界提取词项、相邻短语和字符 trigram；单一
+Snapshot 中出现的偶然词不会形成模型权重。
+
 先确认 maintenance 环境可用，再导出一个新包：
 
 ```powershell
-corepack pnpm run maintenance -- preflight
-corepack pnpm run maintenance -- type-learning export --include-private false --limit 100
+corepack pnpm maintenance preflight
+corepack pnpm maintenance type-learning export --include-private false --limit 100
 ```
 
 命令只在外部数据根 `exports/codex-work/` 创建 packet 和默认无效的 result 模板。packet 中的
@@ -278,18 +282,21 @@ corepack pnpm run maintenance -- type-learning export --include-private false --
 所有项处理完成且没有 `replace_me` 后，用导出报告中的 packet ID 导入结果：
 
 ```powershell
-corepack pnpm run maintenance -- type-learning apply --packet <packetId>
+corepack pnpm maintenance type-learning apply --packet <packetId>
 ```
 
-检查返回的 `evaluation`，重点看 `supportedClassCount`、全局 precision/coverage、每类可信样本与
-Snapshot 数，以及 `projection` 的总体 coverage、类别数和最大单类占比。`activationEligible=false`
-表示继续导出下一轮类别均衡样本，不是失败；后一次 export 会根据刚保存的支持缺口重新取样。`stale`
+检查返回的 `evaluation`，确认 `crossValidationFoldCount=3`、`targetPrecisionBasisPoints=9200`，再看
+`supportedClassCount`、全局和逐类 precision/coverage、每类可信样本与 Snapshot 数，以及 `projection`
+的总体 coverage、类别数和最大单类占比。`confusionMatrix` 统计每个预期类型到预测类型或
+`unassigned` 的数量；`misclassifications` 最多列出 64 个误判 Entry/revision/Snapshot 身份、分数和
+margin，不含正文，可直接作为下一轮复核重点。`activationEligible=false` 表示继续导出下一轮类别均衡
+或困难样本，不是失败；后一次 export 会根据刚保存的支持缺口和当前模型不确定性重新取样。`stale`
 表示 Profile 或 Entry revision 已变化，应丢弃旧包并重新导出，不能手改 revision 或摘要绕过。
 
 只有候选明确返回 `activationEligible=true`、分布符合预期并经所有者决定后，才单独执行：
 
 ```powershell
-corepack pnpm run maintenance -- type-learning activate --expected-revision <profileRevision>
+corepack pnpm maintenance type-learning activate --expected-revision <profileRevision>
 ```
 
 激活仍不会改写现有 Entry；它只允许后续确定性分类在强规则未解决时使用该模型。正式补全必须另行
@@ -300,9 +307,9 @@ P0G 提供推荐的统一入口。它每次最多推进 1–500 项，严格按 
 返回下一动作而不是在一个进程内无限循环：
 
 ```powershell
-corepack pnpm run maintenance -- ingest pipeline-start --key m2-p0g-20400101 --scope public_only --limit 500 --max-items 100
-corepack pnpm run maintenance -- ingest pipeline-advance --batch <batchId> --max-items 100
-corepack pnpm run maintenance -- ingest pipeline-status --batch <batchId>
+corepack pnpm maintenance ingest pipeline-start --key m2-p0g-20400101 --scope public_only --limit 500 --max-items 100
+corepack pnpm maintenance ingest pipeline-advance --batch <batchId> --max-items 100
+corepack pnpm maintenance ingest pipeline-status --batch <batchId>
 ```
 
 `nextAction=advance` 表示继续执行下一窗口，`wait` 表示当前阶段仍在运行或等待显式恢复，
