@@ -1,8 +1,8 @@
 # StruInfo 当前项目状态与实现清单
 
-- 状态：v0.1.0 私人单用户版本已发布；M2-P0A–P0G、M2-P1A–D、M2-P2A–G、M2-P3A–C 与 M2-P4A–C 已完成
-- 实现基线：M1I-1A/B 至 M1M + 首版 UI/发行基线 + M2-P0A–P0G + M2-P1A–D + M2-P2A–G + M2-P3A–C + M2-P4A–C
-- 最近核对：2026-09-01
+- 状态：v0.1.0 私人单用户版本已发布；M2-P0A–P0G、M2-P1A–D、M2-P2A–G、M2-P3A–C 与 M2-P4A–D 已完成
+- 实现基线：M1I-1A/B 至 M1M + 首版 UI/发行基线 + M2-P0A–P0G + M2-P1A–D + M2-P2A–G + M2-P3A–C + M2-P4A–D
+- 最近核对：2026-09-02
 - 需求边界：[产品需求](product-requirements.md)
 - 交付顺序：[分阶段计划](roadmap.md)
 - 架构边界：[知识核心架构](knowledge-core-architecture.md)
@@ -461,13 +461,14 @@ node-postgres 的多语句结果现在安全投影最终结果，使首次队列
 - 初次 enrichment 会用同一 revision 中刚生成的确定性关键词查询邻居；补全预览读取同一当前快照。两者都复用原 P0B 写入，不增加迁移、Provider、后台任务或第二套状态；
 - 新增只读聚合评测工具。真实 14,910 条公开 Entry 回放中，已有类型选择性一致率 92.16%，邻居类型子集 91.38%；缺类型可预测 355 条，预计总覆盖 30.52%。缺领域可补 242 条，预计覆盖由 71.39% 升至 73.01%，邻居领域至少一项重叠率 97.87%；没有执行 apply，临时评测文件已删除。
 
-### 7.39 已完成：M2-P4A–C 可信样本类型学习底座
+### 7.39 已完成：M2-P4A–D 可信样本类型学习与规模保护
 
 - 分类 Profile 升级为 v3，并继续向后读取 v1/v2。外部状态保存有界可信样本、候选模型和激活模型；个人数据包无需新增数据库 section 即可携带；
-- 主动抽样优先缺类型、模型分歧、低领先幅度和未确认已有类型，并跨 Snapshot 轮转；默认排除隐私，当前命令必须显式包含隐私；
+- 主动抽样先补每类可信样本和 Snapshot 缺口，再按模型分歧、低领先幅度、预测类别与结构特征轮转；默认排除隐私，当前命令必须显式包含隐私；
 - maintenance 新增 type-learning export/apply/activate：工作包与结果位于外部 codex-work，逐项绑定 Entry revision 和 Profile revision；结果导入只形成 codex_accepted 样本并训练候选，不修改 Entry；
-- 稀疏模型只使用内容关键词、标题 token、chunk、长度和有限结构/语气特征。训练/验证按 Snapshot 分组，保存逐类权重和门槛，并输出全局/逐类 precision、recall、coverage；
-- 激活门要求验证 precision 不低于 92%，且每个实际赋型类别不低于 85%；激活仍为独立显式命令。确定性规则优先、激活模型其次、邻居最后；
+- 稀疏模型只使用内容关键词、标题 token、chunk、长度和有限结构/语气特征。每个支持类别至少需要 8 个可信样本和 6 个 Snapshot；零/少样本类别禁用，权重改为有界观测率差并按类均衡；
+- 激活门同时要求至少 4 个支持类别、验证 precision/coverage、逐类支持量，以及当前全部缺类型 Entry 的覆盖与分布稳定；单类不得占模型赋型结果超过 50%；
+- 激活仍为独立显式命令，并在写入激活状态前重训和比对当前全量投射。旧的无 v2 激活标记模型保持可读但不会执行；确定性规则优先、激活模型其次、邻居最后；
 - 实际类型补全继续复用 P0B/P2G 的原子 revision 和增量联系。没有 migration、新依赖、Provider/API、后台任务或第二套 writer，也没有接触或修改所有者真实数据。
 
 以上未完成项只有在进入相应产品边界或出现当前可达 `PRODUCT_BLOCKER` 时才阻断；测试工具自证、
@@ -475,7 +476,7 @@ node-postgres 的多语句结果现在安全投影最终结果，使首次队列
 
 ## 8. 当前验证快照
 
-当前 M2-P0A–P0G、M2-P1A–D、M2-P2A–G、M2-P3A–C 与 M2-P4A–C 开发候选完成以下验证：
+当前 M2-P0A–P0G、M2-P1A–D、M2-P2A–G、M2-P3A–C 与 M2-P4A–D 开发候选完成以下验证：
 
 - AutomationPolicy decoder、纯分流核心、外部偏好文件、typed execution service/PostgreSQL adapter、迁移和完整个人数据包边界均有合成测试；
 - 回归覆盖默认关闭、策略/Profile/Entry 过期、独立正负阈值、预算、人工接管、显式隐私范围、请求重放/冲突、运行中重校验、claim 完成/补偿、策略暂停失败后的待恢复重试、旧包升级及兄弟偏好字段保留；
@@ -488,11 +489,11 @@ node-postgres 的多语句结果现在安全投影最终结果，使首次队列
 - M1H-5 复用单文件导入协议，增加会话批次、逐文件状态、稳定失败重试、停止后续项及合成浏览器回归；没有迁移、数据库队列表或新依赖；
 - M1I-1A/B 至 M1I-5 新增连接器闭合结果、Registry、多文档幂等 Evidence 准备器、`remote_document` 迁移、Git 兼容、RSS/Atom、JSON API 与受限 Web adapter、条件请求/声明式映射、分页与增量游标、已安装 capability 发现、opaque 外部配置引用、批量订阅服务、外部偏好 union、API 与导入页合成回归；没有真实 Feed、API、网页、插件配置或网络测试资料；
 - M1J 新增迁移 `000024`、八类闭合关系语义、500 code-point 维护说明、来源核验状态、双端来源操作和 Association v4 向后升级；M1K 新增迁移 `000025`、可重建词项/向量投影、可选 OpenAI Embedding、三种 Query 和公开证据 RAG；M1L 新增可重复合成性能工具、单次关联读取索引与 HTTP 搜索去重；M1M 新增外部 secret 文件、维护/队列入口、容器与 grant 源码和 deployment verifier；没有第二套图谱/搜索服务、真实知识 fixture、私密外发、迁移或新依赖；
-- 完整 `corepack pnpm run verify` 退出码为 0：160 个单元测试文件、984 项单元测试、2 个集成测试文件、4 项集成测试全部通过，Web 构建转换 81 个模块，制品审计覆盖 1,118 个候选文件，部署静态门通过；
+- 完整 `corepack pnpm run verify` 退出码为 0：162 个单元测试文件、995 项单元测试、2 个集成测试文件、4 项集成测试全部通过，Web 构建转换 81 个模块，制品审计覆盖 1,130 个候选文件，部署静态门通过；
 - M2-P1A–D 的合成回归继续覆盖超过 425.6 万 canonical JSON value 的个人数据包、407 份 Snapshot 的稳定完整分页、唯一高置信度类型/领域补齐及歧义异常、既有成功批次显式 refresh、词法索引完整性检查、候选 Entry 选择性读取和所有规定的完整回退；同一冻结实现随后按上节记录的真实规模完成迁移、双恢复点、refresh、索引重建、分页与查询耗时核验，真实正文与个人配置仍未进入 Git、日志或测试制品；
 - M2-P2A–D 的合成回归覆盖字段权重、阈值与领先幅度、无信号/单维缺失/平局诊断、主领域与最多两个次领域、外部别名/映射/排除词、旧偏好与旧个人数据包缺省升级、Profile 往返以及迁移 `000030` 的闭合代码；真实覆盖率尚未声明，必须由后续显式 refresh 测量；
 - M2-P3A–C 的合成回归覆盖按类别阈值、v1→v2 Profile 升级、精确/正文映射容量、邻居数量/共识/fan-out、同 Snapshot 类型隔离、公开/隐私隔离、可解释诊断、首次 enrichment 关键词与原子 writer 复用；只读真实回放只输出聚合数字且没有修改数据库；
-- M2-P4A–C 的合成回归覆盖可信 revision 样本、Snapshot 多样抽样、稀疏权重训练、Snapshot 分组影子评估、Profile v3 往返、Codex packet/result 绑定、Profile stale 拒绝和显式激活；API 与真实样本运行仍延期；
+- M2-P4A–D 的合成回归覆盖可信 revision 样本、类别/Snapshot 缺口抽样、零样本禁用、按类有界权重、Snapshot 分组影子评估、全量投射覆盖与单类坍缩门、激活前漂移重算、Profile v3 往返、Codex packet/result 绑定和显式激活；API 与真实样本 apply 仍延期；
 - M2-P0A 以合成测试覆盖批次计划、单 Snapshot 原子物化、提交后中断的 exact-existing 恢复、ProcessingRun 已先取消/失败时的 retry、计划漂移失败、有限窗口失败退出、CLI 解码/脱敏报告、PostgreSQL 查询边界、`000026` 静态语义和 Processing v7→v8 升级；
 - M2-P0B 以合成测试覆盖 Snapshot 原子标签修订、首次 claim 前退出后的持久 attempt 恢复、孤立 running attempt 收束、规则异常、增量联系 source 范围、override 隔离、CLI 解码/脱敏报告、`000027` 静态语义和 Processing v8→v9 升级；
 - M2-P0C 以合成测试覆盖当前/过期 revision 分离、分组计数、稳定抽样、精确数量冲突、批量接受与回退、CLI 脱敏输出、`000028` 静态语义、PostgreSQL current-revision 锁定和 Processing v9→v10 升级；它没有运行真实资料或 Provider；

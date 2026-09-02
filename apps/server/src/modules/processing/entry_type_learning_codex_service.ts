@@ -5,8 +5,10 @@ import {
   cloneEntryTypeLearningState,
   DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
   DEFAULT_ENTRY_TYPE_LEARNING_STATE,
+  entryTypeLearningModelsEqual,
   ENTRY_CLASSIFICATION_PROFILE_VERSION,
   ENTRY_TYPE_KEYWORDS,
+  isEntryTypeLearningModelActivationEligible,
   MAXIMUM_ENTRY_TYPE_LEARNING_CANDIDATES,
   MAXIMUM_ENTRY_TYPE_TRUSTED_EXAMPLES,
   selectEntryTypeLearningCandidates,
@@ -153,6 +155,9 @@ export class EntryTypeLearningCodexService {
           ...(candidate.entry.value.typeKeyword === undefined
             ? {}
             : {currentTypeKeyword: candidate.entry.value.typeKeyword}),
+          ...(candidate.targetTypeKeyword === undefined
+            ? {}
+            : {targetTypeKeyword: candidate.targetTypeKeyword}),
         }),
       ),
     );
@@ -293,6 +298,7 @@ export class EntryTypeLearningCodexService {
         const candidateModel = trainEntryTypeLearningModel(
           merged,
           currentEntries,
+          {includePrivate: packet.includePrivate},
         );
         const nextProfile: Readonly<EntryClassificationProfile> = Object.freeze(
           {
@@ -356,6 +362,10 @@ export class EntryTypeLearningCodexService {
     ) {
       throw new EntryTypeLearningCodexServiceError('input_invalid');
     }
+    const currentEntries = await this.#dependencies.entries.loadCurrentEntries(
+      this.#dependencies.workspaceId,
+      true,
+    );
     const update = await updateReviewPreferences<ActivateProfileUpdate>(
       this.#dependencies.preferences,
       this.#dependencies.workspaceId,
@@ -370,7 +380,28 @@ export class EntryTypeLearningCodexService {
           });
         }
         const state = profile.typeLearning ?? DEFAULT_ENTRY_TYPE_LEARNING_STATE;
-        if (state.candidateModel?.evaluation.activationEligible !== true) {
+        const candidate = state.candidateModel;
+        if (
+          candidate === undefined ||
+          !isEntryTypeLearningModelActivationEligible(candidate)
+        ) {
+          return Object.freeze({
+            next: current,
+            result: Object.freeze({outcome: 'not_eligible' as const}),
+          });
+        }
+        const refreshed = trainEntryTypeLearningModel(
+          state.trustedExamples,
+          currentEntries,
+          {
+            includePrivate:
+              candidate.evaluation.projection?.includePrivate ?? false,
+          },
+        );
+        if (
+          !isEntryTypeLearningModelActivationEligible(refreshed) ||
+          !entryTypeLearningModelsEqual(candidate, refreshed)
+        ) {
           return Object.freeze({
             next: current,
             result: Object.freeze({outcome: 'not_eligible' as const}),
@@ -383,7 +414,7 @@ export class EntryTypeLearningCodexService {
             revision: profile.revision + 1,
             typeLearning: cloneEntryTypeLearningState({
               ...state,
-              activeModel: state.candidateModel,
+              activeModel: candidate,
             }),
           },
         );
@@ -394,7 +425,7 @@ export class EntryTypeLearningCodexService {
           result: Object.freeze({
             outcome: 'activated' as const,
             profileRevision: nextProfile.revision,
-            trainingDigest: state.candidateModel.trainingDigest,
+            trainingDigest: candidate.trainingDigest,
           }),
         });
       },
@@ -498,7 +529,7 @@ function decodePacketItem(
         'body',
         'contentKeywords',
       ],
-      ['currentTypeKeyword'],
+      ['currentTypeKeyword', 'targetTypeKeyword'],
     ) ||
     !Number.isSafeInteger(value.ordinal) ||
     (value.ordinal as number) < 0 ||
@@ -520,7 +551,11 @@ function decodePacketItem(
     !Array.isArray(value.contentKeywords) ||
     !value.contentKeywords.every((item) => typeof item === 'string') ||
     (value.currentTypeKeyword !== undefined &&
-      !ENTRY_TYPE_KEYWORDS.includes(value.currentTypeKeyword as never))
+      !ENTRY_TYPE_KEYWORDS.includes(value.currentTypeKeyword as never)) ||
+    (value.targetTypeKeyword !== undefined &&
+      !LEARNED_TYPES.includes(
+        value.targetTypeKeyword as LearnedEntryTypeKeyword,
+      ))
   )
     return undefined;
   return Object.freeze({
@@ -537,6 +572,11 @@ function decodePacketItem(
     ...(value.currentTypeKeyword === undefined
       ? {}
       : {currentTypeKeyword: value.currentTypeKeyword as string}),
+    ...(value.targetTypeKeyword === undefined
+      ? {}
+      : {
+          targetTypeKeyword: value.targetTypeKeyword as LearnedEntryTypeKeyword,
+        }),
   });
 }
 
