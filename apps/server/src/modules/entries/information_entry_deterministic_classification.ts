@@ -6,13 +6,19 @@ import {
   type EntryDomainKeyword,
   type EntryTypeKeyword,
 } from './information_entry_contract.js';
+import {
+  decodeEntryTypeLearningState,
+  DEFAULT_ENTRY_TYPE_LEARNING_STATE,
+  predictEntryType,
+  type EntryTypeLearningState,
+} from './information_entry_type_learning.js';
 
 export const DETERMINISTIC_ENTRY_CLASSIFICATION_RULE_VERSION =
   'struinfo.entry-classification.deterministic.v5';
 
 export const ENTRY_CLASSIFICATION_PROFILE_FORMAT =
   'struinfo.entry-classification-profile';
-export const ENTRY_CLASSIFICATION_PROFILE_VERSION = 2;
+export const ENTRY_CLASSIFICATION_PROFILE_VERSION = 3;
 export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_ALIASES = 1_024;
 export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_MAPPINGS = 4_096;
 export const MAXIMUM_ENTRY_CLASSIFICATION_PROFILE_TEXT_MAPPINGS = 256;
@@ -76,7 +82,7 @@ export interface DeterministicEntryClassificationNeighborEvidence {
 
 export interface EntryClassificationProfile {
   readonly format: typeof ENTRY_CLASSIFICATION_PROFILE_FORMAT;
-  readonly version: 1 | typeof ENTRY_CLASSIFICATION_PROFILE_VERSION;
+  readonly version: 1 | 2 | typeof ENTRY_CLASSIFICATION_PROFILE_VERSION;
   readonly revision: number;
   readonly aliases: readonly Readonly<EntryClassificationAlias>[];
   readonly typeMappings: readonly Readonly<EntryClassificationTypeMapping>[];
@@ -89,6 +95,7 @@ export interface EntryClassificationProfile {
     EntryClassificationThreshold<ClassifiedEntryDomainKeyword>
   >[];
   readonly neighborPolicy?: Readonly<EntryClassificationNeighborPolicy>;
+  readonly typeLearning?: Readonly<EntryTypeLearningState>;
 }
 
 export const DEFAULT_ENTRY_CLASSIFICATION_TYPE_THRESHOLDS = Object.freeze([
@@ -135,6 +142,7 @@ export const DEFAULT_ENTRY_CLASSIFICATION_PROFILE: Readonly<EntryClassificationP
     typeThresholds: DEFAULT_ENTRY_CLASSIFICATION_TYPE_THRESHOLDS,
     domainThresholds: DEFAULT_ENTRY_CLASSIFICATION_DOMAIN_THRESHOLDS,
     neighborPolicy: DEFAULT_ENTRY_CLASSIFICATION_NEIGHBOR_POLICY,
+    typeLearning: DEFAULT_ENTRY_TYPE_LEARNING_STATE,
   });
 
 export type DeterministicClassificationDiagnosticReason =
@@ -149,7 +157,7 @@ export interface DeterministicClassificationDiagnostic<
   readonly runnerUpScore: number;
   readonly minimumScore?: number;
   readonly minimumMargin?: number;
-  readonly evidenceSource?: 'neighbor_consensus';
+  readonly evidenceSource?: 'neighbor_consensus' | 'learned_type_model';
   readonly referenceCount?: number;
   readonly consensusBasisPoints?: number;
 }
@@ -317,14 +325,12 @@ export function classifyInformationEntryDeterministically(
 ): Readonly<DeterministicEntryClassification> {
   const profile = input.profile ?? DEFAULT_ENTRY_CLASSIFICATION_PROFILE;
   const fields = normalizeClassificationFields(input, profile);
-  const typeScores = scoreRules(
+  const baseTypeScores = scoreRules(
     TYPE_RULES,
     fields,
     profile.typeMappings,
     input,
-    input.neighborEvidence?.type === undefined
-      ? Object.freeze([])
-      : Object.freeze([input.neighborEvidence.type]),
+    Object.freeze([]),
   );
   const domainScores = scoreRules(
     DOMAIN_RULES,
@@ -333,13 +339,48 @@ export function classifyInformationEntryDeterministically(
     input,
     input.neighborEvidence?.domains ?? Object.freeze([]),
   );
-  const typeDiagnostic = classifyScores<EntryTypeKeyword>(
-    typeScores,
+  const baseTypeDiagnostic = classifyScores<EntryTypeKeyword>(
+    baseTypeScores,
     profile.typeThresholds ?? DEFAULT_ENTRY_CLASSIFICATION_TYPE_THRESHOLDS,
-    input.neighborEvidence?.type === undefined
-      ? Object.freeze([])
-      : Object.freeze([input.neighborEvidence.type]),
+    Object.freeze([]),
   );
+  const learnedPrediction =
+    baseTypeDiagnostic.reason === 'assigned'
+      ? undefined
+      : predictEntryTypeForClassification(input, profile);
+  const typeScores =
+    learnedPrediction === undefined
+      ? scoreRules(
+          TYPE_RULES,
+          fields,
+          profile.typeMappings,
+          input,
+          input.neighborEvidence?.type === undefined
+            ? Object.freeze([])
+            : Object.freeze([input.neighborEvidence.type]),
+        )
+      : baseTypeScores;
+  const typeDiagnostic =
+    baseTypeDiagnostic.reason === 'assigned'
+      ? baseTypeDiagnostic
+      : learnedPrediction === undefined
+        ? classifyScores<EntryTypeKeyword>(
+            typeScores,
+            profile.typeThresholds ??
+              DEFAULT_ENTRY_CLASSIFICATION_TYPE_THRESHOLDS,
+            input.neighborEvidence?.type === undefined
+              ? Object.freeze([])
+              : Object.freeze([input.neighborEvidence.type]),
+          )
+        : Object.freeze({
+            reason: 'assigned' as const,
+            winner: learnedPrediction.keyword,
+            winnerScore: learnedPrediction.score,
+            runnerUpScore: learnedPrediction.runnerUpScore,
+            minimumScore: learnedPrediction.minimumScore,
+            minimumMargin: learnedPrediction.minimumMargin,
+            evidenceSource: 'learned_type_model' as const,
+          });
   const domainDiagnostic = classifyScores<EntryDomainKeyword>(
     domainScores,
     profile.domainThresholds ?? DEFAULT_ENTRY_CLASSIFICATION_DOMAIN_THRESHOLDS,
@@ -395,15 +436,18 @@ export function decodeEntryClassificationProfile(
     'typeThresholds',
     'domainThresholds',
     'neighborPolicy',
+    'typeLearning',
   ] as const;
   if (
     !isRecord(value) ||
     !hasRequiredAndAllowedKeys(value, legacyKeys, currentOptionalKeys) ||
     value.format !== ENTRY_CLASSIFICATION_PROFILE_FORMAT ||
     (value.version !== 1 &&
+      value.version !== 2 &&
       value.version !== ENTRY_CLASSIFICATION_PROFILE_VERSION) ||
     (value.version === 1 &&
       currentOptionalKeys.some((key) => Object.hasOwn(value, key))) ||
+    (value.version === 2 && Object.hasOwn(value, 'typeLearning')) ||
     !Number.isSafeInteger(value.revision) ||
     (value.revision as number) < 0
   ) {
@@ -446,6 +490,10 @@ export function decodeEntryClassificationProfile(
     value.neighborPolicy === undefined
       ? DEFAULT_ENTRY_CLASSIFICATION_NEIGHBOR_POLICY
       : decodeNeighborPolicy(value.neighborPolicy);
+  const typeLearning =
+    value.typeLearning === undefined
+      ? DEFAULT_ENTRY_TYPE_LEARNING_STATE
+      : decodeEntryTypeLearningState(value.typeLearning);
   if (
     aliases === undefined ||
     typeMappings === undefined ||
@@ -453,7 +501,8 @@ export function decodeEntryClassificationProfile(
     exclusions === undefined ||
     typeThresholds === undefined ||
     domainThresholds === undefined ||
-    neighborPolicy === undefined
+    neighborPolicy === undefined ||
+    typeLearning === undefined
   ) {
     return undefined;
   }
@@ -468,7 +517,50 @@ export function decodeEntryClassificationProfile(
     typeThresholds,
     domainThresholds,
     neighborPolicy,
+    typeLearning,
   });
+}
+
+function predictEntryTypeForClassification(
+  input: Readonly<DeterministicEntryClassificationInput>,
+  profile: Readonly<EntryClassificationProfile>,
+) {
+  const activeModel = profile.typeLearning?.activeModel;
+  if (activeModel === undefined) return undefined;
+  return predictEntryType(
+    Object.freeze({
+      workspaceId: '00000000-0000-0000-0000-000000000000',
+      entryId: '00000000-0000-0000-0000-000000000000',
+      resourceId: '00000000-0000-0000-0000-000000000000',
+      snapshotId: '00000000-0000-0000-0000-000000000000',
+      revision: 1,
+      revisionId: '00000000-0000-0000-0000-000000000000',
+      sourceKey: 'classification-input',
+      capturedAt: '2000-01-01T00:00:00.000Z',
+      value: Object.freeze({
+        documentOrder: 0,
+        titlePath: input.titlePath,
+        body: input.body,
+        bodySha256: '0'.repeat(64),
+        chunkMode: input.chunkMode ?? 'split',
+        splitRuleVersion: 'classification-input',
+        isPrivate: false,
+        contentKeywords: Object.freeze(
+          input.contentKeywords.map((keyword) =>
+            Object.freeze({
+              displayValue: keyword,
+              normalizedValue: keyword,
+              origin: 'rule' as const,
+              originVersion: 'classification-input',
+            }),
+          ),
+        ),
+        domains: Object.freeze([]),
+        fragmentIds: Object.freeze([]),
+      }),
+    }),
+    activeModel,
+  );
 }
 
 interface ClassificationFields {

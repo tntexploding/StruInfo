@@ -384,6 +384,42 @@ describe('M1M maintenance command', () => {
       maxItems: 250,
       sampleLimit: 20,
     });
+    expect(
+      decodeM1mMaintenanceRequest([
+        'type-learning',
+        'export',
+        '--include-private',
+        'false',
+        '--limit',
+        '80',
+      ]),
+    ).toEqual({
+      operation: 'entry_type_learning_export',
+      includePrivate: false,
+      limit: 80,
+    });
+    expect(
+      decodeM1mMaintenanceRequest([
+        'type-learning',
+        'apply',
+        '--packet',
+        PACKET_ID,
+      ]),
+    ).toEqual({
+      operation: 'entry_type_learning_apply',
+      packetId: PACKET_ID,
+    });
+    expect(
+      decodeM1mMaintenanceRequest([
+        'type-learning',
+        'activate',
+        '--expected-revision',
+        '3',
+      ]),
+    ).toEqual({
+      operation: 'entry_type_learning_activate',
+      expectedProfileRevision: 3,
+    });
     for (const candidate of [
       [],
       ['restore'],
@@ -835,6 +871,24 @@ function createRuntime(
       nextAction: 'export_codex_review' as const,
     }),
   );
+  const exportEntryTypeLearningPacket = vi.fn(() =>
+    Promise.resolve({outcome: 'empty' as const}),
+  );
+  const applyEntryTypeLearningResult = vi.fn(() =>
+    Promise.resolve({
+      outcome: 'applied' as const,
+      profileRevision: 1,
+      trustedExampleCount: 0,
+      acceptedCount: 0,
+      rejectedCount: 0,
+    }),
+  );
+  const activateEntryTypeLearning = vi.fn(() =>
+    Promise.resolve({
+      outcome: 'not_eligible' as const,
+      profileRevision: 0,
+    }),
+  );
   const pipelineStatus = Object.freeze({
     batchId: BATCH.batchId,
     stage: 'complete' as const,
@@ -875,6 +929,9 @@ function createRuntime(
     applyIngestionReviewResult,
     previewIngestionTypeCompletion,
     applyIngestionTypeCompletion,
+    exportEntryTypeLearningPacket,
+    applyEntryTypeLearningResult,
+    activateEntryTypeLearning,
     startIngestionPipeline,
     advanceIngestionPipeline,
     loadIngestionPipelineStatus,

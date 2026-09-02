@@ -10,6 +10,7 @@ import {
   BulkIngestionPipelineService,
   BulkIngestionService,
   BulkIngestionTypeCompletionService,
+  EntryTypeLearningCodexService,
   type DecideBulkIngestionAdjudicationRequest,
   type ExecuteBulkIngestionEnrichmentRequest,
   type ExecuteBulkIngestionRequest,
@@ -19,6 +20,7 @@ import {
   type PreviewBulkIngestionTypeCompletionRequest,
   type SampleBulkIngestionAdjudicationRequest,
   type StartBulkIngestionPipelineRequest,
+  type ExportEntryTypeLearningCodexRequest,
 } from '../modules/processing/index.js';
 import {LocalFilesystemBlobStore} from '../platform/storage/local_filesystem_blob_store.js';
 import {LocalBulkIngestionCodexReviewFileStore} from '../platform/storage/local_bulk_ingestion_codex_review_file_store.js';
@@ -101,6 +103,12 @@ export async function createM1mMaintenanceRuntime(
     enrichment: bulkIngestionEnrichment,
     preferences: reviewPreferences,
   });
+  const entryTypeLearning = new EntryTypeLearningCodexService({
+    workspaceId: config.workspaceId,
+    entries: repositories.informationEntries,
+    preferences: reviewPreferences,
+    fileStore: codexReviewFiles,
+  });
   return Object.freeze({
     checkReadiness: () => database.readiness.check(),
     backup: () => transfer.exportWorkspace(config.workspaceId),
@@ -136,6 +144,13 @@ export async function createM1mMaintenanceRuntime(
     applyIngestionTypeCompletion: (
       input: Readonly<ApplyBulkIngestionTypeCompletionRequest>,
     ) => bulkIngestionTypeCompletion.apply(input),
+    exportEntryTypeLearningPacket: (
+      input: Readonly<ExportEntryTypeLearningCodexRequest>,
+    ) => entryTypeLearning.export(input),
+    applyEntryTypeLearningResult: (packetId: string) =>
+      entryTypeLearning.apply(packetId),
+    activateEntryTypeLearning: (expectedProfileRevision: number) =>
+      entryTypeLearning.activate(expectedProfileRevision),
     startIngestionPipeline: (
       input: Readonly<StartBulkIngestionPipelineRequest>,
     ) => bulkIngestionPipeline.start(input),

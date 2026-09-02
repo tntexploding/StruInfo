@@ -18,9 +18,12 @@ import type {
   BulkIngestionTypeCompletionPreview,
   DecideBulkIngestionAdjudicationResult,
   ApplyBulkIngestionTypeCompletionResult,
+  ActivateEntryTypeLearningResult,
+  ApplyEntryTypeLearningCodexResult,
   ExecuteBulkIngestionEnrichmentResult,
   ExecuteBulkIngestionResult,
   ExportBulkIngestionCodexReviewResult,
+  ExportEntryTypeLearningCodexResult,
   PlanBulkIngestionResult,
   ProcessingPrivacyScope,
 } from '../modules/processing/index.js';
@@ -88,6 +91,16 @@ export type M1mMaintenanceRequest =
       batchId: string;
       maxItems: number;
       sampleLimit: number;
+    }>
+  | Readonly<{
+      operation: 'entry_type_learning_export';
+      includePrivate: boolean;
+      limit: number;
+    }>
+  | Readonly<{operation: 'entry_type_learning_apply'; packetId: string}>
+  | Readonly<{
+      operation: 'entry_type_learning_activate';
+      expectedProfileRevision: number;
     }>
   | Readonly<{
       operation: 'ingest_pipeline_start';
@@ -230,6 +243,35 @@ export type M1mMaintenanceReport =
       result: Readonly<ApplyBulkIngestionTypeCompletionResult>;
     }>
   | Readonly<{
+      event: 'm2_p4_type_learning_packet_empty';
+      outcome: 'empty';
+    }>
+  | Readonly<{
+      event: 'm2_p4_type_learning_packet_exported';
+      outcome: Exclude<
+        ExportEntryTypeLearningCodexResult,
+        {outcome: 'empty'}
+      >['outcome'];
+      packetId: string;
+      packetSha256: string;
+      itemCount: number;
+      privateItemCount: number;
+      packetFileName: string;
+      resultFileName: string;
+      packetByteLength: number;
+      packetFileSha256: string;
+    }>
+  | Readonly<{
+      event: 'm2_p4_type_learning_result_applied';
+      outcome: ApplyEntryTypeLearningCodexResult['outcome'];
+      result: Readonly<ApplyEntryTypeLearningCodexResult>;
+    }>
+  | Readonly<{
+      event: 'm2_p4_type_learning_activated';
+      outcome: ActivateEntryTypeLearningResult['outcome'];
+      result: Readonly<ActivateEntryTypeLearningResult>;
+    }>
+  | Readonly<{
       event: 'm2_p0g_pipeline_empty';
       outcome: 'empty';
     }>
@@ -315,6 +357,16 @@ export interface M1mMaintenanceRuntimePort {
     maxItems: number;
     sampleLimit: number;
   }): Promise<Readonly<ApplyBulkIngestionTypeCompletionResult>>;
+  exportEntryTypeLearningPacket(input: {
+    includePrivate: boolean;
+    limit: number;
+  }): Promise<Readonly<ExportEntryTypeLearningCodexResult>>;
+  applyEntryTypeLearningResult(
+    packetId: string,
+  ): Promise<Readonly<ApplyEntryTypeLearningCodexResult>>;
+  activateEntryTypeLearning(
+    expectedProfileRevision: number,
+  ): Promise<Readonly<ActivateEntryTypeLearningResult>>;
   startIngestionPipeline(
     input: Readonly<{
       idempotencyKey: string;
@@ -374,6 +426,8 @@ export function decodeM1mMaintenanceRequest(
   ) {
     return Object.freeze({operation: 'restore', fileName: arguments_[2] ?? ''});
   }
+  const typeLearning = decodeEntryTypeLearningRequest(arguments_);
+  if (typeLearning !== undefined) return typeLearning;
   const ingest = decodeIngestRequest(arguments_);
   if (ingest !== undefined) return ingest;
   throw new M1mMaintenanceError('usage_invalid');
@@ -435,6 +489,13 @@ export async function executeM1mMaintenance(
   ) {
     return executeIngestionPipelineMaintenance(request, runtime);
   }
+  if (
+    request.operation === 'entry_type_learning_export' ||
+    request.operation === 'entry_type_learning_apply' ||
+    request.operation === 'entry_type_learning_activate'
+  ) {
+    return executeEntryTypeLearningMaintenance(request, runtime);
+  }
 
   let summary: Readonly<M1cWorkspaceTransferSummary>;
   try {
@@ -460,6 +521,60 @@ export async function executeM1mMaintenance(
       0,
     ),
   });
+}
+
+function decodeEntryTypeLearningRequest(
+  arguments_: readonly string[],
+): Readonly<M1mMaintenanceRequest> | undefined {
+  if (arguments_[0] !== 'type-learning' || arguments_.length < 2) {
+    return undefined;
+  }
+  const action = arguments_[1];
+  const flags = decodeFlags(arguments_.slice(2));
+  if (flags === undefined) throw new M1mMaintenanceError('usage_invalid');
+  if (action === 'export') {
+    const includePrivate = parseBoolean(
+      flags.get('include-private') ?? 'false',
+    );
+    const limit = parseBoundedInteger(flags.get('limit') ?? '100', 1, 100);
+    if (!onlyFlags(flags, ['include-private', 'limit'])) {
+      throw new M1mMaintenanceError('usage_invalid');
+    }
+    return Object.freeze({
+      operation: 'entry_type_learning_export' as const,
+      includePrivate,
+      limit,
+    });
+  }
+  if (action === 'apply') {
+    const packetId = flags.get('packet');
+    if (
+      flags.size !== 1 ||
+      packetId === undefined ||
+      !CANONICAL_UUID.test(packetId)
+    ) {
+      throw new M1mMaintenanceError('usage_invalid');
+    }
+    return Object.freeze({
+      operation: 'entry_type_learning_apply' as const,
+      packetId,
+    });
+  }
+  if (action === 'activate') {
+    const expectedProfileRevision = parseBoundedInteger(
+      flags.get('expected-revision') ?? '',
+      0,
+      Number.MAX_SAFE_INTEGER,
+    );
+    if (flags.size !== 1 || !onlyFlags(flags, ['expected-revision'])) {
+      throw new M1mMaintenanceError('usage_invalid');
+    }
+    return Object.freeze({
+      operation: 'entry_type_learning_activate' as const,
+      expectedProfileRevision,
+    });
+  }
+  throw new M1mMaintenanceError('usage_invalid');
 }
 
 function decodeIngestRequest(
@@ -1188,5 +1303,48 @@ async function executeIngestionPipelineMaintenance(
     event: 'm2_p0g_pipeline_status' as const,
     outcome: status.outcome,
     status,
+  });
+}
+
+async function executeEntryTypeLearningMaintenance(
+  request: Extract<
+    M1mMaintenanceRequest,
+    {
+      operation:
+        | 'entry_type_learning_export'
+        | 'entry_type_learning_apply'
+        | 'entry_type_learning_activate';
+    }
+  >,
+  runtime: M1mMaintenanceRuntimePort,
+): Promise<Readonly<M1mMaintenanceReport>> {
+  if (request.operation === 'entry_type_learning_export') {
+    const result = await runtime.exportEntryTypeLearningPacket(request);
+    if (result.outcome === 'empty') {
+      return Object.freeze({
+        event: 'm2_p4_type_learning_packet_empty' as const,
+        outcome: 'empty' as const,
+      });
+    }
+    return Object.freeze({
+      event: 'm2_p4_type_learning_packet_exported' as const,
+      ...result,
+    });
+  }
+  if (request.operation === 'entry_type_learning_apply') {
+    const result = await runtime.applyEntryTypeLearningResult(request.packetId);
+    return Object.freeze({
+      event: 'm2_p4_type_learning_result_applied' as const,
+      outcome: result.outcome,
+      result,
+    });
+  }
+  const result = await runtime.activateEntryTypeLearning(
+    request.expectedProfileRevision,
+  );
+  return Object.freeze({
+    event: 'm2_p4_type_learning_activated' as const,
+    outcome: result.outcome,
+    result,
   });
 }
