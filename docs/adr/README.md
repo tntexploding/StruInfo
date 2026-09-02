@@ -337,3 +337,10 @@ now exports a sparse confusion matrix and bounded misclassification identities;
 the 64-example class cap keeps the hardest rows before adding Snapshot diversity.
 Older feature-v1/activation-v2 models remain readable but cannot run until
 retrained under the v3 activation policy.
+
+The owner subsequently froze M2-P4A–E as an experimental implementation because
+development-time labeling did not establish reliable cross-material
+generalization. The accepted ADRs remain the historical engineering boundary,
+while the unresolved product goal is queued as inactive M2-P4R; no further
+export, apply, activation, or Entry completion is authorized until that item is
+explicitly resumed with an independent representative evaluation set.
