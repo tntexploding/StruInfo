@@ -83,6 +83,24 @@ describe('M1C workspace transfer', () => {
 
     const exported = await transfer.exportWorkspace(WORKSPACE_ID);
     const storedBytes = await fileStore.read(exported.fileName);
+    const verified = await transfer.verifyWorkspace(
+      WORKSPACE_ID,
+      exported.fileName,
+    );
+    expect(verified).toMatchObject({
+      fileName: exported.fileName,
+      sha256: exported.sha256,
+      exportedAt: CREATED_AT,
+      blobCount: 1,
+      personalDataIncluded: true,
+      tableCounts: {
+        workspace: 1,
+        evidence_blob: 1,
+        information_entry: 2,
+        information_entry_association_projection: 1,
+      },
+    });
+    expect(restoreEmptyWorkspace).not.toHaveBeenCalled();
     const restored = await transfer.restoreWorkspace(
       WORKSPACE_ID,
       exported.fileName,
@@ -118,6 +136,8 @@ describe('M1C workspace transfer', () => {
     );
     expect(restored).toMatchObject({
       fileName: exported.fileName,
+      sha256: exported.sha256,
+      exportedAt: CREATED_AT,
       blobCount: 1,
       personalDataIncluded: true,
       tableCounts: {

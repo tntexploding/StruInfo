@@ -1,6 +1,6 @@
 import {defineConfig} from '@playwright/test';
 
-const configuredPort = process.env.STRUIINFO_E2E_PORT ?? '4173';
+const configuredPort = process.env.STRUIINFO_E2E_PORT ?? '41731';
 if (!/^\d{1,5}$/u.test(configuredPort)) {
   throw new Error('STRUIINFO_E2E_PORT must be a numeric TCP port.');
 }
@@ -35,7 +35,7 @@ export default defineConfig({
   webServer: {
     command: `node node_modules/vite/bin/vite.js apps/web --host 127.0.0.1 --port ${configuredPort} --strictPort`,
     url: liveBaseUrl,
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 60_000,
     stdout: 'pipe',
     stderr: 'pipe',

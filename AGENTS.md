@@ -658,6 +658,27 @@ excludes the same Snapshot, and `other` remains manual/Codex-only. Real-data
 evaluation is read-only and aggregate-only; no refresh or apply is authorized by
 these ADRs. Personal mappings and evaluation inputs remain external data.
 
+ADR 0059 through ADR 0061 preserve M2-P4A–E only as a frozen experimental type-
+learning baseline. Reliable cross-material generalization is unresolved and is
+queued as inactive M2-P4R; do not export, apply or activate it unless the owner
+explicitly reopens that task with an independent representative evaluation set.
+ADR 0062 completes M2-P5A by separating the public `v0.1.0` tree, the later M2
+development line and the owner-confirmed live private-cloud Docker instance.
+Do not infer the live commit, image digest, host, secrets, data, backups or
+monitoring state from Git. ADR 0063 completes the M2-P5B engineering boundary:
+maintenance can list current workspace backups, fully verify a named package
+without writing state, and preview a keep-latest policy without deleting files.
+Actual cloud backup identities, the selected retention value and restore-drill
+evidence remain external operations facts. ADR 0064 completes M2-P5C with one
+read-only maintenance status report for database/domain counts, search-index
+completeness, failed or stalled work, filesystem capacity and latest-backup age.
+It emits stable privacy-safe alert codes and leaves scheduling/notification to
+the external host. ADR 0065 completes M2-P5D by extending the disposable
+PostgreSQL 18 regression through current search projection, exact source return,
+Entry-centred knowledge graph and the P5C database observer. M2-P5A–D are now
+complete; a new product increment or deployment action requires explicit owner
+direction. Frozen M2-P4R remains inactive and must not block unrelated work.
+
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable
 PostgreSQL functional smoke is accepted as product evidence, not as formal TM2

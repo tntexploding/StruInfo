@@ -12,12 +12,14 @@ import type {
   BulkIngestionEnrichmentBatch,
   BulkIngestionTypeCompletionPreview,
 } from '../modules/processing/index.js';
+import type {M2P5cOperationalStatusThresholds} from './m2_p5c_operational_status.js';
 
 const SUMMARY = Object.freeze({
   fileName:
     '11111111-1111-4111-8111-111111111111-20400102030405000-11111111-1111-4111-8111-111111111111.personal-data.json',
   byteLength: 1234,
   sha256: 'a'.repeat(64),
+  exportedAt: '2040-01-02T03:04:05.000Z',
   blobCount: 2,
   personalDataIncluded: true,
   tableCounts: Object.freeze({first: 3, second: 4}),
@@ -150,6 +152,51 @@ describe('M1M maintenance command', () => {
     expect(decodeM1mMaintenanceRequest(['backup'])).toEqual({
       operation: 'backup',
     });
+    expect(decodeM1mMaintenanceRequest(['status'])).toEqual({
+      operation: 'operational_status',
+      maxBackupAgeHours: 168,
+      minimumFreePercent: 10,
+      maxRunningAgeMinutes: 60,
+    });
+    expect(
+      decodeM1mMaintenanceRequest([
+        'status',
+        '--max-backup-age-hours',
+        '24',
+        '--minimum-free-percent',
+        '15',
+        '--max-running-age-minutes',
+        '30',
+      ]),
+    ).toEqual({
+      operation: 'operational_status',
+      maxBackupAgeHours: 24,
+      minimumFreePercent: 15,
+      maxRunningAgeMinutes: 30,
+    });
+    expect(decodeM1mMaintenanceRequest(['backup', 'list'])).toEqual({
+      operation: 'backup_list',
+      limit: 20,
+    });
+    expect(
+      decodeM1mMaintenanceRequest(['backup', 'list', '--limit', '50']),
+    ).toEqual({operation: 'backup_list', limit: 50});
+    expect(
+      decodeM1mMaintenanceRequest([
+        'backup',
+        'verify',
+        '--file',
+        SUMMARY.fileName,
+      ]),
+    ).toEqual({operation: 'backup_verify', fileName: SUMMARY.fileName});
+    expect(
+      decodeM1mMaintenanceRequest([
+        'backup',
+        'retention-preview',
+        '--keep-latest',
+        '7',
+      ]),
+    ).toEqual({operation: 'backup_retention_preview', keepLatest: 7});
     expect(
       decodeM1mMaintenanceRequest(['restore', '--file', SUMMARY.fileName]),
     ).toEqual({operation: 'restore', fileName: SUMMARY.fileName});
@@ -425,6 +472,12 @@ describe('M1M maintenance command', () => {
       ['restore'],
       ['restore', '--file', '../outside.personal-data.json'],
       ['backup', '--force'],
+      ['status', '--minimum-free-percent', '0'],
+      ['status', '--unknown', '1'],
+      ['backup', 'list', '--limit', '0'],
+      ['backup', 'verify', '--file', '../outside.personal-data.json'],
+      ['backup', 'retention-preview'],
+      ['backup', 'retention-preview', '--keep-latest', '0'],
       ['ingest', 'plan', '--key', ' synthetic'],
       ['ingest', 'plan', '--key', 'synthetic', '--limit', '501'],
       ['ingest', 'run', '--batch', BATCH_ID, '--max-items', '0'],
@@ -724,6 +777,26 @@ describe('M1M maintenance command', () => {
     expect(runtime.backup.mock.calls).toHaveLength(0);
   });
 
+  it('reports operational attention without hiding it behind readiness', async () => {
+    const runtime = createRuntime({ready: false});
+    const request = {
+      operation: 'operational_status' as const,
+      maxBackupAgeHours: 168,
+      minimumFreePercent: 10,
+      maxRunningAgeMinutes: 60,
+    };
+
+    await expect(
+      executeM1mMaintenance(request, runtime),
+    ).resolves.toMatchObject({
+      event: 'm2_p5c_operational_status',
+      outcome: 'attention',
+      alerts: [{code: 'database_unavailable'}],
+    });
+    expect(runtime.checkReadiness.mock.calls).toHaveLength(0);
+    expect(runtime.observeOperationalStatus.mock.calls).toEqual([[request]]);
+  });
+
   it('creates a complete backup summary and restores only the named package', async () => {
     const runtime = createRuntime();
     await expect(
@@ -750,6 +823,57 @@ describe('M1M maintenance command', () => {
     expect(runtime.restore.mock.calls).toEqual([[SUMMARY.fileName]]);
   });
 
+  it('lists, verifies and previews backup retention without database readiness', async () => {
+    const runtime = createRuntime({ready: false});
+    await expect(
+      executeM1mMaintenance({operation: 'backup_list', limit: 20}, runtime),
+    ).resolves.toEqual({
+      event: 'm2_p5b_backup_catalog',
+      outcome: 'ready',
+      totalCount: 1,
+      backups: [
+        {
+          fileName: SUMMARY.fileName,
+          exportedAt: SUMMARY.exportedAt,
+          byteLength: SUMMARY.byteLength,
+        },
+      ],
+    });
+    await expect(
+      executeM1mMaintenance(
+        {operation: 'backup_verify', fileName: SUMMARY.fileName},
+        runtime,
+      ),
+    ).resolves.toEqual({
+      event: 'm2_p5b_backup_verified',
+      outcome: 'succeeded',
+      fileName: SUMMARY.fileName,
+      exportedAt: SUMMARY.exportedAt,
+      byteLength: SUMMARY.byteLength,
+      sha256: SUMMARY.sha256,
+      blobCount: 2,
+      tableRowCount: 7,
+      personalDataIncluded: true,
+    });
+    await expect(
+      executeM1mMaintenance(
+        {operation: 'backup_retention_preview', keepLatest: 7},
+        runtime,
+      ),
+    ).resolves.toEqual({
+      event: 'm2_p5b_backup_retention_preview',
+      outcome: 'ready',
+      keepLatest: 7,
+      totalCount: 9,
+      retainedCount: 7,
+      removalCandidateCount: 2,
+      removalCandidates: ['synthetic-old-a.personal-data.json'],
+      truncated: true,
+    });
+    expect(runtime.checkReadiness.mock.calls).toHaveLength(0);
+    expect(runtime.verifyBackup.mock.calls).toEqual([[SUMMARY.fileName]]);
+  });
+
   it('fails closed when readiness or a transfer operation fails', async () => {
     const unavailable = createRuntime({ready: false});
     await expect(
@@ -771,7 +895,11 @@ function createRuntime(
   } = {},
 ): M1mMaintenanceRuntimePort & {
   checkReadiness: ReturnType<typeof vi.fn>;
+  observeOperationalStatus: ReturnType<typeof vi.fn>;
   backup: ReturnType<typeof vi.fn>;
+  listBackups: ReturnType<typeof vi.fn>;
+  verifyBackup: ReturnType<typeof vi.fn>;
+  previewBackupRetention: ReturnType<typeof vi.fn>;
   restore: ReturnType<typeof vi.fn>;
   planIngestion: ReturnType<typeof vi.fn>;
   executeIngestion: ReturnType<typeof vi.fn>;
@@ -784,12 +912,60 @@ function createRuntime(
   adjudicateIngestionExceptions: ReturnType<typeof vi.fn>;
 } {
   const checkReadiness = vi.fn(() => Promise.resolve(options.ready ?? true));
+  const observeOperationalStatus = vi.fn(
+    (thresholds: Readonly<M2P5cOperationalStatusThresholds>) =>
+      Promise.resolve({
+        event: 'm2_p5c_operational_status' as const,
+        outcome: 'attention' as const,
+        observedAt: '2040-01-02T03:04:05.000Z',
+        thresholds: Object.freeze({...thresholds}),
+        database: Object.freeze({status: 'unavailable' as const}),
+        dataRoot: Object.freeze({
+          status: 'ready' as const,
+          capacity: Object.freeze({
+            totalBytes: '10000',
+            availableBytes: '5000',
+            availablePercentBasisPoints: 5000,
+          }),
+        }),
+        backups: Object.freeze({status: 'ready' as const, totalCount: 0}),
+        alerts: Object.freeze([
+          Object.freeze({
+            code: 'database_unavailable' as const,
+            severity: 'critical' as const,
+          }),
+        ]),
+      }),
+  );
   const backup = vi.fn(() =>
     options.backupFailure
       ? Promise.reject(new Error('synthetic private failure'))
       : Promise.resolve(SUMMARY),
   );
   const restore = vi.fn(() => Promise.resolve(SUMMARY));
+  const listBackups = vi.fn(() =>
+    Promise.resolve({
+      totalCount: 1,
+      entries: [
+        {
+          fileName: SUMMARY.fileName,
+          exportedAt: SUMMARY.exportedAt,
+          byteLength: SUMMARY.byteLength,
+        },
+      ],
+    }),
+  );
+  const verifyBackup = vi.fn(() => Promise.resolve(SUMMARY));
+  const previewBackupRetention = vi.fn(() =>
+    Promise.resolve({
+      keepLatest: 7,
+      totalCount: 9,
+      retainedCount: 7,
+      removalCandidateCount: 2,
+      removalCandidates: ['synthetic-old-a.personal-data.json'],
+      truncated: true,
+    }),
+  );
   const planIngestion = vi.fn(() =>
     Promise.resolve({outcome: 'created' as const, batch: BATCH}),
   );
@@ -914,7 +1090,11 @@ function createRuntime(
   );
   return {
     checkReadiness,
+    observeOperationalStatus,
     backup,
+    listBackups,
+    verifyBackup,
+    previewBackupRetention,
     restore,
     planIngestion,
     executeIngestion,

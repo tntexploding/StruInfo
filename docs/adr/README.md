@@ -73,6 +73,18 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0051](0051-closed-codex-review-result-application.md) | Accepted | Closed stale-safe Codex review-result application and incremental rebuild |
 | [0052](0052-unified-bulk-ingestion-pipeline-control.md) | Accepted | Unified bounded P0A–P0F pipeline control over persisted stage state |
 | [0053](0053-real-scale-capacity-classification-and-query-follow-up.md) | Accepted | Real-scale backup capacity, complete document paging, deterministic classification and indexed lexical candidates |
+| [0054](0054-classification-diagnostics-field-weighting-and-external-profile.md) | Accepted | Classification diagnostics, field-weighted rules and external personal classification profiles |
+| [0055](0055-scaled-codex-classification-review.md) | Accepted | Scaled Codex classification review through the existing closed packet/result boundary |
+| [0056](0056-entry-type-coverage-and-correction-workbench.md) | Accepted | Entry type coverage reporting and focused correction workbench |
+| [0057](0057-high-coverage-deterministic-type-completion.md) | Accepted | Conservative high-confidence deterministic type completion |
+| [0058](0058-calibrated-classification-profile-and-neighbor-consensus.md) | Accepted | Per-category classification calibration, larger external profiles and bounded neighbor consensus |
+| [0059](0059-trusted-entry-type-learning-profile.md) | Accepted | Trusted Entry type samples and an inactive explainable local learning profile |
+| [0060](0060-balanced-type-learning-and-projection-gate.md) | Accepted | Balanced type-learning samples, zero-support protection and full-projection activation gates |
+| [0061](0061-cross-validated-type-learning-calibration.md) | Accepted | Cross-Snapshot calibration, bounded body features and misclassification diagnostics |
+| [0062](0062-production-release-identity-and-live-deployment-baseline.md) | Accepted | Separate public release, current development and owner-confirmed live deployment identities |
+| [0063](0063-backup-recoverability-and-retention-preview.md) | Accepted | Read-only backup verification and non-destructive retention preview |
+| [0064](0064-operational-health-capacity-and-alerting.md) | Accepted | Privacy-safe operational health, capacity and backup-age alert boundary |
+| [0065](0065-production-flow-release-regression.md) | Accepted | Disposable PostgreSQL 18 five-step release regression |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -344,3 +356,26 @@ generalization. The accepted ADRs remain the historical engineering boundary,
 while the unresolved product goal is queued as inactive M2-P4R; no further
 export, apply, activation, or Entry completion is authorized until that item is
 explicitly resumed with an independent representative evaluation set.
+
+ADR 0062 completes M2-P5A by separating the fixed public `v0.1.0` source tree,
+the later M2 development line and the owner-confirmed private cloud deployment.
+Host-specific identities, secrets, data, backup records and monitoring targets
+remain outside Git; production facts not independently inspected stay marked as
+pending production review.
+
+ADR 0063 completes the M2-P5B engineering boundary with workspace-scoped backup
+listing, full read-only package verification and a bounded retention preview.
+It deliberately adds no automatic deletion: actual cloud backup identities and
+restore-drill evidence remain in the owner's external operations record.
+
+ADR 0064 completes M2-P5C with a read-only maintenance status command covering
+database/domain counts, current search-index completeness, failed or stalled
+work, external-data-root capacity and latest-backup age. It returns stable,
+privacy-safe alert codes while keeping schedules, thresholds and notification
+targets in external operations configuration.
+
+ADR 0065 completes M2-P5D by extending the existing disposable PostgreSQL 18
+regression through Evidence import, Entry materialization, deterministic tags,
+incremental Associations, current search projection, exact source return,
+Entry-centred knowledge graph and the P5C database observer. It uses only
+synthetic temporary resources and does not itself create a release.

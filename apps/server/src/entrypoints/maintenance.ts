@@ -48,18 +48,21 @@ async function main(): Promise<void> {
   }
   process.stdout.write(`${JSON.stringify(report)}\n`);
   process.exitCode =
-    (report.event === 'm2_p0a_ingest_executed' ||
-      report.event === 'm2_p0b_enrichment_executed' ||
-      report.event === 'm2_p0c_exception_adjudicated' ||
-      report.event === 'm2_p2g_type_completion_applied' ||
-      report.event === 'm2_p4_type_learning_result_applied' ||
-      report.event === 'm2_p4_type_learning_activated' ||
-      report.event === 'm2_p0g_pipeline_started' ||
-      report.event === 'm2_p0g_pipeline_advanced' ||
-      report.event === 'm2_p0g_pipeline_status') &&
-    (report.outcome === 'failed' || report.outcome === 'stale')
+    report.event === 'm2_p5c_operational_status' &&
+    report.outcome === 'attention'
       ? 1
-      : 0;
+      : (report.event === 'm2_p0a_ingest_executed' ||
+            report.event === 'm2_p0b_enrichment_executed' ||
+            report.event === 'm2_p0c_exception_adjudicated' ||
+            report.event === 'm2_p2g_type_completion_applied' ||
+            report.event === 'm2_p4_type_learning_result_applied' ||
+            report.event === 'm2_p4_type_learning_activated' ||
+            report.event === 'm2_p0g_pipeline_started' ||
+            report.event === 'm2_p0g_pipeline_advanced' ||
+            report.event === 'm2_p0g_pipeline_status') &&
+          (report.outcome === 'failed' || report.outcome === 'stale')
+        ? 1
+        : 0;
 }
 
 void main();
