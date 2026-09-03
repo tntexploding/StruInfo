@@ -6,6 +6,8 @@ import {join, resolve} from 'node:path';
 import {performance} from 'node:perf_hooks';
 
 import {
+  buildInformationEntryKnowledgeGraph,
+  InformationEntryRetrievalService,
   type InformationEntryAssociationIncrementalRepositoryPort,
   type InformationEntryAssociationProjection,
 } from '../apps/server/src/modules/entries/index.js';
@@ -36,11 +38,12 @@ import {
   createNodePostgresPool,
   createPostgresRepositories,
   decodePostgresConnectionUrl,
+  PostgresOperationalStatusReader,
   type PostgresPoolBoundary,
 } from '../apps/server/src/platform/database/postgresql/index.js';
 
 export const M2_P0D_REPORT_SCHEMA =
-  'struinfo.m2-p0d-postgres-report.v1' as const;
+  'struinfo.m2-p0d-postgres-report.v2' as const;
 export const M2_P0D_POSTGRES_IMAGE = 'postgres:18.6' as const;
 
 export type M2P0dFailureCode =
@@ -58,6 +61,7 @@ export type M2P0dFailureCode =
   | 'p0a_recovery_assertion_failed'
   | 'p0b_recovery_failed'
   | 'p0c_adjudication_failed'
+  | 'p5d_product_flow_failed'
   | 'persistence_verification_failed'
   | 'cleanup_failed';
 
@@ -152,6 +156,16 @@ export interface M2P0dReport {
     associationProjections: number;
     exceptions: number;
     acceptedAdjudications: number;
+    searchProjections: number;
+  }>;
+  readonly productFlow: Readonly<{
+    indexedEntries: number;
+    lexicalMatchCount: number;
+    exactSourceInputCount: number;
+    knowledgeNodeCount: number;
+    knowledgeEdgeCount: number;
+    operationalCurrentEntryCount: number;
+    operationalSearchProjectionCount: number;
   }>;
   readonly measurements: Readonly<{
     containerSetupMilliseconds: number;
@@ -160,6 +174,7 @@ export interface M2P0dReport {
     p0aInitialAndRecoveryMilliseconds: number;
     p0bInitialAndRecoveryMilliseconds: number;
     p0cAdjudicationMilliseconds: number;
+    productFlowMilliseconds: number;
     totalMilliseconds: number;
     completedEntriesPerSecond: number;
   }>;
@@ -180,6 +195,7 @@ interface Timings {
   p0aInitialAndRecoveryMilliseconds: number;
   p0bInitialAndRecoveryMilliseconds: number;
   p0cAdjudicationMilliseconds: number;
+  productFlowMilliseconds: number;
 }
 
 export function parseM2P0dArguments(
@@ -233,7 +249,7 @@ export function createM2P0dSyntheticMarkdown(
     }
     const entryKey = globalOrdinal.toString().padStart(5, '0');
     lines.push(
-      `${index.toString()}、合成条目 ${entryKey}`,
+      `${index.toString()}、TypeScript 教程合成条目 ${entryKey}`,
       '',
       `本条只用于基准，使用 \`Cluster-${snapshotKey}\`、\`TypeScript\` 和 \`PostgreSQL\` 验证确定性标签与增量联系。`,
       '',
@@ -254,6 +270,7 @@ export async function runM2P0dPostgresWorkload(
     p0aInitialAndRecoveryMilliseconds: 0,
     p0bInitialAndRecoveryMilliseconds: 0,
     p0cAdjudicationMilliseconds: 0,
+    productFlowMilliseconds: 0,
   };
   const containerName = `struinfo-m2-p0d-${randomUUID()}`;
   const dataRoot = await mkdtemp(join(tmpdir(), 'struinfo-m2-p0d-'));
@@ -545,6 +562,109 @@ export async function runM2P0dPostgresWorkload(
     }
     timings.p0cAdjudicationMilliseconds = elapsed(p0cStarted);
 
+    stage = 'p5d_product_flow_failed';
+    const productFlowStarted = performance.now();
+    const retrieval = new InformationEntryRetrievalService({
+      workspaceId: WORKSPACE_ID,
+      entries: repositories.informationEntries,
+      associations: repositories.informationEntryAssociations,
+      index: repositories.informationEntrySearchIndex,
+    });
+    const indexStatus = await retrieval.rebuild();
+    const search = await retrieval.search({
+      text: 'TypeScript',
+      retrievalMode: 'lexical',
+      textMode: 'substring',
+      textFields: Object.freeze(['body', 'tags'] as const),
+      includePrivate: false,
+      onlyPrivate: false,
+      limit: 10,
+    });
+    let exactSourceInputCount = 0;
+    const sourceFragmentsBySnapshot = new Map<string, ReadonlySet<string>>();
+    for (const item of search.items) {
+      let sourceFragments = sourceFragmentsBySnapshot.get(
+        item.entry.snapshotId,
+      );
+      if (sourceFragments === undefined) {
+        const snapshot = await repositories.evidenceRead.loadSnapshot(
+          WORKSPACE_ID,
+          item.entry.snapshotId,
+        );
+        if (snapshot === undefined || snapshot.isPrivate === true) {
+          throw new Error('M2-P5D search source Snapshot is unavailable.');
+        }
+        sourceFragments = new Set(
+          snapshot.structures.flatMap((structure) =>
+            structure.fragments.map((fragment) => fragment.fragmentId),
+          ),
+        );
+        sourceFragmentsBySnapshot.set(item.entry.snapshotId, sourceFragments);
+      }
+      if (
+        item.entry.value.fragmentIds.length < 1 ||
+        item.entry.value.fragmentIds.some(
+          (fragmentId) => !sourceFragments.has(fragmentId),
+        )
+      ) {
+        throw new Error('M2-P5D exact Fragment source return is incomplete.');
+      }
+      exactSourceInputCount += item.entry.value.fragmentIds.length;
+    }
+    const [graphEntries, graphAssociations] = await Promise.all([
+      repositories.informationEntries.loadCurrentEntries(WORKSPACE_ID, false),
+      repositories.informationEntryAssociations.loadAssociationSnapshot(
+        WORKSPACE_ID,
+        false,
+      ),
+    ]);
+    const associatedEntryIds = new Set(
+      graphAssociations.projections.flatMap((projection) => [
+        projection.entryLowId,
+        projection.entryHighId,
+      ]),
+    );
+    const graphCenterId = search.items.find((item) =>
+      associatedEntryIds.has(item.entry.entryId),
+    )?.entry.entryId;
+    const graph =
+      graphCenterId === undefined
+        ? undefined
+        : buildInformationEntryKnowledgeGraph(
+            graphCenterId,
+            graphEntries,
+            graphAssociations,
+          );
+    const operational = await new PostgresOperationalStatusReader(
+      runtimePool,
+      WORKSPACE_ID,
+    ).read(60);
+    if (
+      indexStatus.currentProjectionCount !== entryCount ||
+      search.totalCount < 1 ||
+      search.items.length < 1 ||
+      exactSourceInputCount < search.items.length ||
+      graph === undefined ||
+      graph.nodes.length < 2 ||
+      graph.edges.length < 1 ||
+      operational.currentEntryCount !== entryCount ||
+      operational.currentSearchProjectionCount !== entryCount ||
+      operational.missingSearchProjectionCount !== 0
+    ) {
+      throw new Error('M2-P5D product-flow regression is incomplete.');
+    }
+    const productFlow = Object.freeze({
+      indexedEntries: indexStatus.currentProjectionCount,
+      lexicalMatchCount: search.totalCount,
+      exactSourceInputCount,
+      knowledgeNodeCount: graph.nodes.length,
+      knowledgeEdgeCount: graph.edges.length,
+      operationalCurrentEntryCount: operational.currentEntryCount,
+      operationalSearchProjectionCount:
+        operational.currentSearchProjectionCount,
+    });
+    timings.productFlowMilliseconds = elapsed(productFlowStarted);
+
     stage = 'persistence_verification_failed';
     const persisted = await readPersistedCounts(runtimePool);
     assertPersistedCounts(
@@ -586,6 +706,7 @@ export async function runM2P0dPostgresWorkload(
         adjudicationCountGuardRejected: true as const,
       }),
       persisted,
+      productFlow,
       measurements: Object.freeze({
         ...roundedTimings(timings),
         totalMilliseconds: round(totalMilliseconds),
@@ -813,6 +934,7 @@ async function readPersistedCounts(pool: PostgresPoolBoundary) {
       'processing_bulk_ingestion_adjudication',
       " AND status = 'accepted'",
     ),
+    searchProjections: await count('information_entry_search_projection'),
   });
 }
 
@@ -831,7 +953,8 @@ function assertPersistedCounts(
     persisted.ruleKeywords < entryCount - exceptionCount ||
     persisted.associationProjections <= 0 ||
     persisted.exceptions !== exceptionCount ||
-    persisted.acceptedAdjudications !== exceptionCount
+    persisted.acceptedAdjudications !== exceptionCount ||
+    persisted.searchProjections !== entryCount
   ) {
     throw new Error('M2-P0D persisted product state is incomplete.');
   }
@@ -1067,6 +1190,7 @@ function roundedTimings(timings: Timings): Timings {
       timings.p0bInitialAndRecoveryMilliseconds,
     ),
     p0cAdjudicationMilliseconds: round(timings.p0cAdjudicationMilliseconds),
+    productFlowMilliseconds: round(timings.productFlowMilliseconds),
   };
 }
 

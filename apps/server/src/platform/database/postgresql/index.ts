@@ -61,6 +61,10 @@ export {
   createPostgresRepositories,
   type PostgresRepositorySet,
 } from './postgres_repository_factory.js';
+export {
+  PostgresOperationalStatusReader,
+  READ_POSTGRES_OPERATIONAL_STATUS_SQL,
+} from './postgres_operational_status.js';
 export {PostgresProcessingRunRepository} from './postgres_processing_run_repository.js';
 export {
   LIST_BULK_INGESTION_CANDIDATES_SQL,

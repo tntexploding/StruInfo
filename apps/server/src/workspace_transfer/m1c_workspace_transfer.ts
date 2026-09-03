@@ -1,4 +1,6 @@
-import type {BlobStore} from '../storage/blob_store.js';
+import {createHash} from 'node:crypto';
+
+import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
 import type {
   ReviewPreferences,
   ReviewPreferencesStore,
@@ -134,9 +136,15 @@ export interface M1cWorkspaceTransferSummary {
   readonly fileName: string;
   readonly byteLength: number;
   readonly sha256?: string;
+  readonly exportedAt?: string;
   readonly blobCount: number;
   readonly personalDataIncluded: boolean;
   readonly tableCounts: Readonly<Record<string, number>>;
+}
+
+export interface M1cWorkspaceBackupVerificationSummary extends M1cWorkspaceTransferSummary {
+  readonly sha256: string;
+  readonly exportedAt: string;
 }
 
 export interface M1cWorkspaceTransferPort {
@@ -180,6 +188,14 @@ const BUNDLE_CODECS = Object.freeze([
   M1E_PROCESSING_BUNDLE_CODEC,
   PERSONAL_DATA_BUNDLE_CODEC,
 ]);
+
+interface DecodedWorkspaceBackup {
+  readonly bytes: Uint8Array;
+  readonly exportedAt: string;
+  readonly snapshot: Readonly<M1cWorkspaceTransferSnapshot>;
+  readonly references: readonly Readonly<BlobIdentity>[];
+  readonly personalData?: Readonly<PersonalDataBundleSection>;
+}
 
 export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
   readonly #dependencies: Readonly<M1cWorkspaceTransferDependencies>;
@@ -284,6 +300,7 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
         fileName: stored.fileName,
         byteLength: stored.byteLength,
         sha256: stored.sha256,
+        exportedAt,
         blobCount: references.length,
         personalDataIncluded: true,
         tableCounts: transferTableCounts(snapshot),
@@ -293,98 +310,34 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
     }
   }
 
+  public async verifyWorkspace(
+    workspaceId: string,
+    fileName: string,
+  ): Promise<Readonly<M1cWorkspaceBackupVerificationSummary>> {
+    const decoded = await this.#readWorkspaceBackup(workspaceId, fileName);
+    if (decoded.personalData === undefined) {
+      await verifyBlobReferences(
+        this.#dependencies.blobStore,
+        decoded.references,
+      );
+    }
+    return Object.freeze({
+      fileName,
+      byteLength: decoded.bytes.byteLength,
+      sha256: createHash('sha256').update(decoded.bytes).digest('hex'),
+      exportedAt: decoded.exportedAt,
+      blobCount: decoded.references.length,
+      personalDataIncluded: decoded.personalData !== undefined,
+      tableCounts: transferTableCounts(decoded.snapshot),
+    });
+  }
+
   public async restoreWorkspace(
     workspaceId: string,
     fileName: string,
   ): Promise<Readonly<M1cWorkspaceTransferSummary>> {
-    let bytes: Uint8Array;
-    try {
-      bytes = await this.#dependencies.fileStore.read(fileName);
-    } catch (error) {
-      if (
-        error instanceof WorkspaceBundleFileStoreError &&
-        error.code === 'file_not_found'
-      ) {
-        throw new M1cWorkspaceTransferError('bundle_not_found');
-      }
-      throw new M1cWorkspaceTransferError('storage_failed');
-    }
-
-    let snapshot: Readonly<M1cWorkspaceTransferSnapshot>;
-    let references;
-    let personalData: Readonly<PersonalDataBundleSection> | undefined;
-    try {
-      const bundle = readWorkspaceBundle(bytes, BUNDLE_CODECS);
-      if (bundle.workspaceId !== workspaceId) {
-        throw new M1cWorkspaceTransferError('workspace_mismatch');
-      }
-      const domainSection = bundle.sections.find(
-        (section) => section.type === M1C_DOMAIN_BUNDLE_SECTION_TYPE,
-      );
-      const entrySection = bundle.sections.find(
-        (section) => section.type === M1D_ENTRY_BUNDLE_SECTION_TYPE,
-      );
-      const associationSection = bundle.sections.find(
-        (section) => section.type === M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
-      );
-      const processingSection = bundle.sections.find(
-        (section) => section.type === M1E_PROCESSING_BUNDLE_SECTION_TYPE,
-      );
-      const personalSection = bundle.sections.find(
-        (section) => section.type === PERSONAL_DATA_BUNDLE_SECTION_TYPE,
-      );
-      if (
-        domainSection === undefined ||
-        bundle.sections.length > 5 ||
-        ((associationSection !== undefined ||
-          processingSection !== undefined) &&
-          entrySection === undefined)
-      ) {
-        throw new M1cWorkspaceTransferError('bundle_invalid');
-      }
-      snapshot = normalizeTransferSnapshot(
-        {
-          domain: normalizeM1cDomainSnapshot(domainSection.value),
-          entries:
-            entrySection === undefined
-              ? createEmptyM1dEntrySnapshot()
-              : normalizeM1dEntrySnapshot(entrySection.value),
-          associations:
-            associationSection === undefined
-              ? createEmptyM1dAssociationSnapshot()
-              : normalizeM1dAssociationSnapshot(associationSection.value),
-          processing:
-            processingSection === undefined
-              ? createEmptyM1eProcessingSnapshot()
-              : normalizeM1eProcessingSnapshot(processingSection.value),
-        },
-        workspaceId,
-      );
-      references = m1cDomainBlobReferences(snapshot.domain);
-      if (!sameBlobReferences(references, bundle.blobReferences)) {
-        throw new M1cWorkspaceTransferError('bundle_invalid');
-      }
-      if (personalSection !== undefined) {
-        personalData = normalizePersonalDataBundleSection(
-          personalSection.value,
-        );
-        if (
-          personalData.reviewPreferences.workspaceId !== workspaceId ||
-          !sameBlobReferences(
-            references,
-            personalData.blobs.map((blob) => blob.identity),
-          )
-        ) {
-          throw new M1cWorkspaceTransferError('bundle_invalid');
-        }
-      }
-    } catch (error) {
-      if (error instanceof M1cWorkspaceTransferError) throw error;
-      if (error instanceof WorkspaceBundleError) {
-        throw new M1cWorkspaceTransferError('bundle_invalid');
-      }
-      throw new M1cWorkspaceTransferError('bundle_invalid');
-    }
+    const decoded = await this.#readWorkspaceBackup(workspaceId, fileName);
+    const {bytes, snapshot, references, personalData} = decoded;
 
     if (personalData === undefined) {
       await verifyBlobReferences(this.#dependencies.blobStore, references);
@@ -428,10 +381,111 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
     return Object.freeze({
       fileName,
       byteLength: bytes.byteLength,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+      exportedAt: decoded.exportedAt,
       blobCount: references.length,
       personalDataIncluded: personalData !== undefined,
       tableCounts: transferTableCounts(snapshot),
     });
+  }
+
+  async #readWorkspaceBackup(
+    workspaceId: string,
+    fileName: string,
+  ): Promise<Readonly<DecodedWorkspaceBackup>> {
+    let bytes: Uint8Array;
+    try {
+      bytes = await this.#dependencies.fileStore.read(fileName);
+    } catch (error) {
+      if (
+        error instanceof WorkspaceBundleFileStoreError &&
+        error.code === 'file_not_found'
+      ) {
+        throw new M1cWorkspaceTransferError('bundle_not_found');
+      }
+      throw new M1cWorkspaceTransferError('storage_failed');
+    }
+
+    try {
+      const bundle = readWorkspaceBundle(bytes, BUNDLE_CODECS);
+      if (bundle.workspaceId !== workspaceId) {
+        throw new M1cWorkspaceTransferError('workspace_mismatch');
+      }
+      const domainSection = bundle.sections.find(
+        (section) => section.type === M1C_DOMAIN_BUNDLE_SECTION_TYPE,
+      );
+      const entrySection = bundle.sections.find(
+        (section) => section.type === M1D_ENTRY_BUNDLE_SECTION_TYPE,
+      );
+      const associationSection = bundle.sections.find(
+        (section) => section.type === M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
+      );
+      const processingSection = bundle.sections.find(
+        (section) => section.type === M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+      );
+      const personalSection = bundle.sections.find(
+        (section) => section.type === PERSONAL_DATA_BUNDLE_SECTION_TYPE,
+      );
+      if (
+        domainSection === undefined ||
+        bundle.sections.length > 5 ||
+        ((associationSection !== undefined ||
+          processingSection !== undefined) &&
+          entrySection === undefined)
+      ) {
+        throw new M1cWorkspaceTransferError('bundle_invalid');
+      }
+      const snapshot = normalizeTransferSnapshot(
+        {
+          domain: normalizeM1cDomainSnapshot(domainSection.value),
+          entries:
+            entrySection === undefined
+              ? createEmptyM1dEntrySnapshot()
+              : normalizeM1dEntrySnapshot(entrySection.value),
+          associations:
+            associationSection === undefined
+              ? createEmptyM1dAssociationSnapshot()
+              : normalizeM1dAssociationSnapshot(associationSection.value),
+          processing:
+            processingSection === undefined
+              ? createEmptyM1eProcessingSnapshot()
+              : normalizeM1eProcessingSnapshot(processingSection.value),
+        },
+        workspaceId,
+      );
+      const references = m1cDomainBlobReferences(snapshot.domain);
+      if (!sameBlobReferences(references, bundle.blobReferences)) {
+        throw new M1cWorkspaceTransferError('bundle_invalid');
+      }
+      let personalData: Readonly<PersonalDataBundleSection> | undefined;
+      if (personalSection !== undefined) {
+        personalData = normalizePersonalDataBundleSection(
+          personalSection.value,
+        );
+        if (
+          personalData.reviewPreferences.workspaceId !== workspaceId ||
+          !sameBlobReferences(
+            references,
+            personalData.blobs.map((blob) => blob.identity),
+          )
+        ) {
+          throw new M1cWorkspaceTransferError('bundle_invalid');
+        }
+      }
+      return Object.freeze({
+        bytes,
+        exportedAt: bundle.exportedAt,
+        snapshot,
+        references,
+        ...(personalData === undefined ? {} : {personalData}),
+      });
+    } catch (error) {
+      if (error instanceof M1cWorkspaceTransferError) throw error;
+      if (error instanceof WorkspaceBundleError) {
+        throw new M1cWorkspaceTransferError('bundle_invalid');
+      }
+      throw new M1cWorkspaceTransferError('bundle_invalid');
+    }
   }
 }
 

@@ -1,4 +1,11 @@
-import type {M1cWorkspaceTransferSummary} from '../workspace_transfer/m1c_workspace_transfer.js';
+import type {
+  M1cWorkspaceBackupVerificationSummary,
+  M1cWorkspaceTransferSummary,
+} from '../workspace_transfer/m1c_workspace_transfer.js';
+import type {
+  M2P5cOperationalStatusReport,
+  M2P5cOperationalStatusThresholds,
+} from './m2_p5c_operational_status.js';
 import {BULK_INGESTION_ENRICHMENT_EXCEPTION_CODES} from '../modules/processing/bulk_ingestion_enrichment_contract.js';
 import {
   BULK_INGESTION_CODEX_CLASSIFICATION_PACKET_MAXIMUM_ITEMS,
@@ -30,7 +37,13 @@ import type {
 
 export type M1mMaintenanceRequest =
   | Readonly<{operation: 'preflight'}>
+  | Readonly<
+      {operation: 'operational_status'} & M2P5cOperationalStatusThresholds
+    >
   | Readonly<{operation: 'backup'}>
+  | Readonly<{operation: 'backup_list'; limit: number}>
+  | Readonly<{operation: 'backup_verify'; fileName: string}>
+  | Readonly<{operation: 'backup_retention_preview'; keepLatest: number}>
   | Readonly<{operation: 'restore'; fileName: string}>
   | Readonly<{
       operation: 'ingest_plan';
@@ -121,6 +134,7 @@ export type M1mMaintenanceReport =
       event: 'm1m_preflight_completed';
       outcome: 'ready';
     }>
+  | Readonly<M2P5cOperationalStatusReport>
   | Readonly<{
       event: 'm1m_backup_created' | 'm1m_restore_completed';
       outcome: 'succeeded';
@@ -129,6 +143,37 @@ export type M1mMaintenanceReport =
       sha256?: string;
       blobCount: number;
       tableRowCount: number;
+    }>
+  | Readonly<{
+      event: 'm2_p5b_backup_catalog';
+      outcome: 'ready';
+      totalCount: number;
+      backups: readonly Readonly<{
+        fileName: string;
+        exportedAt: string;
+        byteLength: number;
+      }>[];
+    }>
+  | Readonly<{
+      event: 'm2_p5b_backup_verified';
+      outcome: 'succeeded';
+      fileName: string;
+      exportedAt: string;
+      byteLength: number;
+      sha256: string;
+      blobCount: number;
+      tableRowCount: number;
+      personalDataIncluded: boolean;
+    }>
+  | Readonly<{
+      event: 'm2_p5b_backup_retention_preview';
+      outcome: 'ready';
+      keepLatest: number;
+      totalCount: number;
+      retainedCount: number;
+      removalCandidateCount: number;
+      removalCandidates: readonly string[];
+      truncated: boolean;
     }>
   | Readonly<{
       event: 'm2_p0a_ingest_empty';
@@ -287,7 +332,33 @@ export type M1mMaintenanceReport =
 
 export interface M1mMaintenanceRuntimePort {
   checkReadiness(): Promise<boolean>;
+  observeOperationalStatus(
+    thresholds: Readonly<M2P5cOperationalStatusThresholds>,
+  ): Promise<Readonly<M2P5cOperationalStatusReport>>;
   backup(): Promise<Readonly<M1cWorkspaceTransferSummary>>;
+  listBackups(limit: number): Promise<
+    Readonly<{
+      totalCount: number;
+      entries: readonly Readonly<{
+        fileName: string;
+        exportedAt: string;
+        byteLength: number;
+      }>[];
+    }>
+  >;
+  verifyBackup(
+    fileName: string,
+  ): Promise<Readonly<M1cWorkspaceBackupVerificationSummary>>;
+  previewBackupRetention(keepLatest: number): Promise<
+    Readonly<{
+      keepLatest: number;
+      totalCount: number;
+      retainedCount: number;
+      removalCandidateCount: number;
+      removalCandidates: readonly string[];
+      truncated: boolean;
+    }>
+  >;
   restore(fileName: string): Promise<Readonly<M1cWorkspaceTransferSummary>>;
   planIngestion(
     input: Readonly<{
@@ -418,6 +489,68 @@ export function decodeM1mMaintenanceRequest(
   if (arguments_.length === 1 && arguments_[0] === 'backup') {
     return Object.freeze({operation: 'backup'});
   }
+  if (arguments_[0] === 'status') {
+    const flags = decodeFlags(arguments_.slice(1));
+    if (
+      flags === undefined ||
+      !onlyFlags(flags, [
+        'max-backup-age-hours',
+        'minimum-free-percent',
+        'max-running-age-minutes',
+      ])
+    ) {
+      throw new M1mMaintenanceError('usage_invalid');
+    }
+    return Object.freeze({
+      operation: 'operational_status' as const,
+      maxBackupAgeHours: parseBoundedInteger(
+        flags.get('max-backup-age-hours') ?? '168',
+        1,
+        8_760,
+      ),
+      minimumFreePercent: parseBoundedInteger(
+        flags.get('minimum-free-percent') ?? '10',
+        1,
+        99,
+      ),
+      maxRunningAgeMinutes: parseBoundedInteger(
+        flags.get('max-running-age-minutes') ?? '60',
+        1,
+        10_080,
+      ),
+    });
+  }
+  if (arguments_[0] === 'backup' && arguments_.length >= 2) {
+    const action = arguments_[1];
+    const flags = decodeFlags(arguments_.slice(2));
+    if (flags === undefined) throw new M1mMaintenanceError('usage_invalid');
+    if (action === 'list' && onlyFlags(flags, ['limit'])) {
+      return Object.freeze({
+        operation: 'backup_list' as const,
+        limit: parseBoundedInteger(flags.get('limit') ?? '20', 1, 100),
+      });
+    }
+    if (action === 'verify') {
+      const fileName = flags.get('file');
+      if (
+        flags.size === 1 &&
+        fileName !== undefined &&
+        BACKUP_FILE_NAME_PATTERN.test(fileName)
+      ) {
+        return Object.freeze({operation: 'backup_verify' as const, fileName});
+      }
+    }
+    if (action === 'retention-preview') {
+      const keepLatest = flags.get('keep-latest');
+      if (flags.size === 1 && keepLatest !== undefined) {
+        return Object.freeze({
+          operation: 'backup_retention_preview' as const,
+          keepLatest: parseBoundedInteger(keepLatest, 1, 10_000),
+        });
+      }
+    }
+    throw new M1mMaintenanceError('usage_invalid');
+  }
   if (
     arguments_.length === 3 &&
     arguments_[0] === 'restore' &&
@@ -437,7 +570,12 @@ export async function executeM1mMaintenance(
   request: Readonly<M1mMaintenanceRequest>,
   runtime: M1mMaintenanceRuntimePort,
 ): Promise<Readonly<M1mMaintenanceReport>> {
-  if (!(await runtime.checkReadiness())) {
+  const databaseIndependent =
+    request.operation === 'operational_status' ||
+    request.operation === 'backup_list' ||
+    request.operation === 'backup_verify' ||
+    request.operation === 'backup_retention_preview';
+  if (!databaseIndependent && !(await runtime.checkReadiness())) {
     throw new M1mMaintenanceError('database_not_ready');
   }
   if (request.operation === 'preflight') {
@@ -445,6 +583,13 @@ export async function executeM1mMaintenance(
       event: 'm1m_preflight_completed' as const,
       outcome: 'ready' as const,
     });
+  }
+  if (request.operation === 'operational_status') {
+    try {
+      return await runtime.observeOperationalStatus(request);
+    } catch {
+      throw new M1mMaintenanceError('operation_failed');
+    }
   }
 
   if (
@@ -496,6 +641,13 @@ export async function executeM1mMaintenance(
   ) {
     return executeEntryTypeLearningMaintenance(request, runtime);
   }
+  if (
+    request.operation === 'backup_list' ||
+    request.operation === 'backup_verify' ||
+    request.operation === 'backup_retention_preview'
+  ) {
+    return executeBackupReviewMaintenance(request, runtime);
+  }
 
   let summary: Readonly<M1cWorkspaceTransferSummary>;
   try {
@@ -521,6 +673,55 @@ export async function executeM1mMaintenance(
       0,
     ),
   });
+}
+
+async function executeBackupReviewMaintenance(
+  request: Extract<
+    M1mMaintenanceRequest,
+    {
+      operation: 'backup_list' | 'backup_verify' | 'backup_retention_preview';
+    }
+  >,
+  runtime: M1mMaintenanceRuntimePort,
+): Promise<Readonly<M1mMaintenanceReport>> {
+  try {
+    if (request.operation === 'backup_list') {
+      const catalog = await runtime.listBackups(request.limit);
+      return Object.freeze({
+        event: 'm2_p5b_backup_catalog' as const,
+        outcome: 'ready' as const,
+        totalCount: catalog.totalCount,
+        backups: Object.freeze(
+          catalog.entries.map((entry) => Object.freeze({...entry})),
+        ),
+      });
+    }
+    if (request.operation === 'backup_verify') {
+      const summary = await runtime.verifyBackup(request.fileName);
+      return Object.freeze({
+        event: 'm2_p5b_backup_verified' as const,
+        outcome: 'succeeded' as const,
+        fileName: summary.fileName,
+        exportedAt: summary.exportedAt,
+        byteLength: summary.byteLength,
+        sha256: summary.sha256,
+        blobCount: summary.blobCount,
+        tableRowCount: Object.values(summary.tableCounts).reduce(
+          (total, count) => total + count,
+          0,
+        ),
+        personalDataIncluded: summary.personalDataIncluded,
+      });
+    }
+    const preview = await runtime.previewBackupRetention(request.keepLatest);
+    return Object.freeze({
+      event: 'm2_p5b_backup_retention_preview' as const,
+      outcome: 'ready' as const,
+      ...preview,
+    });
+  } catch {
+    throw new M1mMaintenanceError('operation_failed');
+  }
 }
 
 function decodeEntryTypeLearningRequest(

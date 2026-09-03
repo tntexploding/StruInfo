@@ -1,8 +1,8 @@
 # StruInfo 生产运行与维护
 
-- 状态：`v0.1.0` 私人单用户运行边界；本地演练已通过，目标云端待配置
-- 最近更新：2026-08-30
-- 决策：[ADR 0045](adr/0045-operational-production-baseline.md)、[ADR 0046](adr/0046-codex-operated-bulk-ingestion.md)、[ADR 0053](adr/0053-real-scale-capacity-classification-and-query-follow-up.md)
+- 状态：`v0.1.0` 已发布；所有者确认私人云端 Docker 实例已上线；P5A–D 工程边界已完成，实际生产记录继续外置
+- 最近更新：2026-09-03
+- 决策：[ADR 0045](adr/0045-operational-production-baseline.md)、[ADR 0046](adr/0046-codex-operated-bulk-ingestion.md)、[ADR 0053](adr/0053-real-scale-capacity-classification-and-query-follow-up.md)、[ADR 0062](adr/0062-production-release-identity-and-live-deployment-baseline.md)、[ADR 0063](adr/0063-backup-recoverability-and-retention-preview.md)、[ADR 0064](adr/0064-operational-health-capacity-and-alerting.md)、[ADR 0065](adr/0065-production-flow-release-regression.md)
 
 ## 1. 适用范围
 
@@ -374,6 +374,18 @@ docker compose -f compose.production.yaml --profile maintenance run --rm preflig
 readiness 失败时不要自动运行迁移或扩大 runtime 权限。先查看迁移、queue schema、数据库角色、
 外部数据根和只读挂载是否按本手册配置。
 
+M2-P5C 增加一个适合宿主 scheduler/monitor 调用的脱敏状态命令：
+
+```powershell
+docker compose -f compose.production.yaml --profile maintenance run --rm preflight node dist/entrypoints/maintenance.js status
+```
+
+默认在最新备份超过 168 小时、外部数据根可用空间低于 10%、ProcessingRun 连续运行超过 60 分钟，
+或发现数据库/索引/失败任务/观测异常时返回 `attention` 并退出 1。需要不同阈值时只在外部调度配置中
+显式传入 `--max-backup-age-hours`、`--minimum-free-percent` 和 `--max-running-age-minutes`。报告不含
+路径、URL、secret 或正文。当前应用不内置远程通知；外部系统应把非零退出和稳定 alert code 转发到
+所有者选择的告警渠道。
+
 ## 6. 云端 HTTP 反向代理
 
 `compose.production.yaml` 必须继续把应用映射为
@@ -417,6 +429,33 @@ restore 提供 6 GiB 容器内存和 4 GiB Node heap；preflight 等普通维护
 SHA-256、Blob 数和表行数。内容包括当前完整工作区数据库分区、引用 Blob 字节和外部偏好；
 不包括运行配置、secret 或可重建的 pg-boss 内部队列表。
 
+M2-P5B 提供三个只读动作。它们不要求数据库当前 ready，但仍读取同一外部 runtime config 中的
+workspace ID 和数据根。先列出当前格式备份：
+
+```powershell
+docker compose -f compose.production.yaml --profile maintenance run --rm backup node dist/entrypoints/maintenance.js backup list --limit 20
+```
+
+选择一个安全文件名后完整校验。输出的 SHA-256、导出时间、Blob 数、表行数和
+`personalDataIncluded` 应记入仓库外的运维记录；命令不会恢复或改写任何状态：
+
+```powershell
+$backupFile = 'backup-name.personal-data.json'
+docker compose -f compose.production.yaml --profile maintenance run --rm backup node dist/entrypoints/maintenance.js backup verify --file $backupFile
+```
+
+决定保留数量前先预览。下面只显示结果，不删除文件；`keepLatest` 没有仓库默认值，应由所有者按容量、
+异地副本和恢复目标决定：
+
+```powershell
+$keepLatest = 14
+docker compose -f compose.production.yaml --profile maintenance run --rm backup node dist/entrypoints/maintenance.js backup retention-preview --keep-latest $keepLatest
+```
+
+预览最多回显 100 个拟移除文件名；`truncated=true` 时不能把显示出的子集当作完整清单。应用没有
+prune/delete 命令。确认最近备份可读且至少一个独立副本存在后，才可在外部运维流程中删除精确文件；
+不要用目录通配符删除，也不要处理预览未包含的其他 workspace、旧格式或无关文件。
+
 恢复目标必须已经执行全部迁移和队列准备，workspace ID 必须相同，业务工作区必须为空。
 设置安全文件名后运行：
 
@@ -429,7 +468,24 @@ docker compose -f compose.production.yaml --profile maintenance run --rm restore
 都会失败而不应被覆盖。需要回滚升级时，优先修复前向兼容问题；必须恢复时，创建干净数据库
 和数据根、应用同版本 schema 后恢复备份，再切换外部配置。不要在原非空工作区上强制回滚。
 
-## 8. 云端上线检查
+一次受控恢复演练使用相同正式入口，不复制 restore 逻辑：
+
+1. 在停写状态创建新备份，执行 `backup list` 与 `backup verify`，记录版本、时间、SHA-256、Blob 数和表行数；
+2. 把该文件复制到独立、受控的恢复位置，并准备隔离的空 PostgreSQL 18 数据库和空数据根；workspace ID 必须相同；
+3. 对隔离目标依次执行全部迁移、queue 准备、runtime grant 和 preflight；
+4. 将已验证文件放入隔离目标的 `backups/`，执行现有 `restore --file`；
+5. 再次 preflight，启动隔离应用并检查 live/ready；随后创建并 verify 一份恢复后备份；
+6. 原备份与恢复后备份的 Blob 数、表行数及关键页面计数应一致。导出时间不同会导致文件 SHA-256 不同，不能要求两份导出字节相同；
+7. 在仓库外记录结果并清理隔离资源。失败时保留原生产实例和原备份，不在非空生产 workspace 上重试覆盖。
+
+仓库中的合成测试和历史本地 Docker 演练只证明代码路径；云端具体文件名、摘要、策略和演练结论必须
+来自该主机的外部运维记录。
+
+## 8. 云端上线与持续复核
+
+所有者已确认私人云端 Docker 实例投入使用。下面的检查项现在用于持续复核、升级和恢复准备，
+不再表示服务尚未部署。当前仓库没有目标主机访问证据，因此任何未核对项目仍应保留在外部运维
+记录中，不能根据源码或所有者的上线确认自动填写为通过。
 
 - 在目标 Linux/容器宿主拉取固定 `v0.1.0` 源码或镜像，记录不可变 commit、image digest、基础镜像材料和漏洞扫描；
 - 复用本地已通过的 PostgreSQL 18.6 合成演练顺序，在云端 disposable 空库复核迁移、队列准备、grant、preflight、backup、空库 restore 和重启；
@@ -447,3 +503,27 @@ docker compose -f compose.production.yaml --profile maintenance run --rm restore
 云端操作。2026-08-28 的 `struinfo:0.1.0` 本地最终镜像 ID 为
 `sha256:de269bec525745961f4fd5f3344391f6168a5ae00c5a80fdd29e031c8af96c6f`，Trivy 0.66.0
 报告 HIGH 0、CRITICAL 0；这仍不表示云主机自身镜像、宿主防火墙、备份保留或告警已经完成。
+
+## 9. M2-P5 生产收口结果
+
+M2-P5A 已固定公开发行、当前开发和已上线实例的不同身份。M2-P5B 已提供备份盘点、完整只读校验、
+无删除保留预览和受控恢复演练步骤。M2-P5C 已提供健康、容量、失败任务、搜索投影和备份年龄状态，
+M2-P5D 已把一次性 PostgreSQL 18 合成回归贯穿到查询与知识读取。公共 `v0.1.0` 的源码树是
+`6f02768158a9030b1332ea8dab4c1249dd66a68d`；后续 M2 开发线不是该发行版本，也不能仅凭 Git
+推导云端正在运行的 commit 或镜像。
+
+发行候选的开发回归顺序为：
+
+1. `corepack pnpm run verify`；
+2. `corepack pnpm run test:e2e`；
+3. `corepack pnpm run performance:m2-p0d -- --smoke`；
+4. 需要标准规模证据时再执行 `corepack pnpm run performance:m2-p0d -- --full`。
+
+2026-09-03 的本地标准回归使用 PostgreSQL 18.6 完成 500 Snapshot / 15,000 Entry、30 份迁移
+exact no-op 重放、两次受控故障恢复、15,000 个当前搜索投影、13,500 个词法匹配和 13 节点/12 边
+知识图，总耗时约 18 分 9 秒；报告确认一次性容器与临时数据根已经清理。该数字是开发机器上的合成
+证据，不是云端 SLO。
+
+真实域名/IP、镜像 digest、证书、认证、防火墙、secret、数据库、数据根、个人数据、备份文件名和
+告警目标都不得写回本手册或 Git。生产检查结果只记录脱敏状态、时间、版本身份和必要摘要。完成
+上述开发回归不会自动创建发行、升级私人实例或恢复数据；这些动作必须由所有者明确启动。
