@@ -19,6 +19,13 @@ export interface InformationEntryAssociationRepositoryPort {
     includePrivate: boolean,
   ): Promise<Readonly<InformationEntryAssociationRepositorySnapshot>>;
 
+  /** Loads only current visible associations touching the supplied Entries. */
+  loadAssociationSnapshotForEntries?(
+    workspaceId: string,
+    includePrivate: boolean,
+    entryIds: readonly string[],
+  ): Promise<Readonly<InformationEntryAssociationRepositorySnapshot>>;
+
   writeAssociationOverride(
     write: Readonly<InformationEntryAssociationOverrideWrite>,
   ): Promise<InformationEntryAssociationOverrideOutcome>;

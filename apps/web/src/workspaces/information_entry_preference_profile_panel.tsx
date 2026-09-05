@@ -141,7 +141,7 @@ export function InformationEntryPreferenceProfilePanel({
       >
         <ProfileHeading />
         <p className="entry-preference-profile__state" role="status">
-          正在读取外部偏好规则…
+          正在读取偏好规则…
         </p>
       </section>
     );
@@ -217,7 +217,7 @@ export function InformationEntryPreferenceProfilePanel({
     }
     const ruleId = createRuleId();
     if (ruleId === undefined) {
-      setMessage('浏览器无法生成规则标识，请刷新页面后重试。');
+      setMessage('无法新建规则，请刷新页面后重试。');
       return;
     }
     replaceDraft({
@@ -233,7 +233,7 @@ export function InformationEntryPreferenceProfilePanel({
       ],
     });
     setNewRule({...newRule, featureIdentity: '', displayValue: ''});
-    setMessage('新规则已加入草稿；保存后才会写入外部个人配置。');
+    setMessage('新规则已加入草稿，保存后生效。');
   }
 
   function acceptSuggestion(
@@ -252,7 +252,7 @@ export function InformationEntryPreferenceProfilePanel({
         effect: suggestion.effect,
         weight: suggestion.suggestedWeight,
       }));
-      setMessage('候选已更新到现有草稿规则，尚未保存。');
+      setMessage('建议已更新到现有规则草稿，尚未保存。');
       return;
     }
     if (draft.rules.length >= MAXIMUM_RULES) {
@@ -261,7 +261,7 @@ export function InformationEntryPreferenceProfilePanel({
     }
     const ruleId = createRuleId();
     if (ruleId === undefined) {
-      setMessage('浏览器无法生成规则标识，请刷新页面后重试。');
+      setMessage('无法新建规则，请刷新页面后重试。');
       return;
     }
     replaceDraft({
@@ -279,7 +279,7 @@ export function InformationEntryPreferenceProfilePanel({
         },
       ],
     });
-    setMessage('候选已加入草稿；保存后才会写入外部个人配置。');
+    setMessage('建议规则已加入草稿，保存后生效。');
   }
 
   async function saveProfile() {
@@ -304,7 +304,7 @@ export function InformationEntryPreferenceProfilePanel({
         setDraftState(undefined);
         setMessage(
           response.body.status === 'applied'
-            ? '偏好规则已保存到外部个人配置。'
+            ? '偏好规则已保存。'
             : '偏好规则没有变化。',
         );
       } else {
@@ -340,7 +340,7 @@ export function InformationEntryPreferenceProfilePanel({
           ? {status: 'ready', value: response.body}
           : {
               status: 'error',
-              message: '无法生成候选；现有规则和 Entry 均未改变。',
+              message: '无法生成建议；现有规则和条目均未改变。',
             },
       );
     } catch {
@@ -349,7 +349,7 @@ export function InformationEntryPreferenceProfilePanel({
       }
       setSuggestions({
         status: 'error',
-        message: '本地服务当前不可用，未生成候选。',
+        message: '本地服务当前不可用，未生成建议。',
       });
     }
   }
@@ -375,8 +375,8 @@ export function InformationEntryPreferenceProfilePanel({
           response.body.status === 'stale_profile'
             ? '已保存规则发生变化，请重新读取后再试运行。'
             : response.body.status === 'stale_entries'
-              ? '参与试运行的 Entry 已发生变化，请重新运行。'
-              : '试运行失败；没有修改任何 Entry 或查询结果。',
+              ? '参与试运行的条目已发生变化，请重新运行。'
+              : '试运行失败；没有修改任何条目或查询结果。',
       });
     } catch {
       if (!mounted.current || requestId !== trialRequestId.current) return;
@@ -402,7 +402,6 @@ export function InformationEntryPreferenceProfilePanel({
           >
             {draft.enabled ? '已启用' : '默认关闭'}
           </span>
-          <span>修订 {saved.revision.toString()}</span>
           <span>{draft.rules.length.toString()} / 64 条规则</span>
         </div>
         <label className="entry-preference-profile__toggle">
@@ -421,14 +420,13 @@ export function InformationEntryPreferenceProfilePanel({
       <div className="entry-preference-profile__rules">
         <header>
           <div>
-            <p className="section-index">RULES / DRAFT</p>
             <h3>规则草稿</h3>
           </div>
-          <span>{isDirty ? '有未保存修改' : '与外部配置一致'}</span>
+          <span>{isDirty ? '有未保存修改' : '已保存'}</span>
         </header>
         {draft.rules.length === 0 ? (
           <p className="entry-preference-profile__empty">
-            暂无规则。可手动新增，也可从已有明确评分生成候选。
+            暂无规则。可手动新增，也可根据已有评分生成建议。
           </p>
         ) : (
           <ol className="entry-preference-rule-list">
@@ -500,7 +498,7 @@ export function InformationEntryPreferenceProfilePanel({
                     featureIdentity: event.currentTarget.value,
                   });
                 }}
-                placeholder="留空则按显示名称规范化"
+                placeholder="留空时自动生成"
               />
             </label>
             <SelectField
@@ -543,7 +541,7 @@ export function InformationEntryPreferenceProfilePanel({
               setTrial({status: 'idle'});
             }}
           />
-          本次候选与试运行包含隐私 Entry
+          本次建议与试运行包含隐私条目
         </label>
         <div>
           <button
@@ -582,9 +580,8 @@ export function InformationEntryPreferenceProfilePanel({
         <section aria-labelledby="entry-preference-suggestions-title">
           <header>
             <div>
-              <p className="section-index">LOCAL SUGGESTIONS</p>
               <h3 id="entry-preference-suggestions-title">
-                从明确评分生成候选
+                根据评分生成规则建议
               </h3>
             </div>
             <button
@@ -593,7 +590,7 @@ export function InformationEntryPreferenceProfilePanel({
               disabled={suggestions.status === 'loading'}
               onClick={() => void generateSuggestions()}
             >
-              {suggestions.status === 'loading' ? '正在统计…' : '生成候选'}
+              {suggestions.status === 'loading' ? '正在统计…' : '生成规则建议'}
             </button>
           </header>
           <SuggestionResults state={suggestions} onAccept={acceptSuggestion} />
@@ -602,8 +599,7 @@ export function InformationEntryPreferenceProfilePanel({
         <section aria-labelledby="entry-preference-trial-title">
           <header>
             <div>
-              <p className="section-index">READ-ONLY TRIAL</p>
-              <h3 id="entry-preference-trial-title">只读试运行</h3>
+              <h3 id="entry-preference-trial-title">试运行</h3>
             </div>
             <button
               className="secondary-action"
@@ -627,16 +623,9 @@ function ProfileHeading() {
   return (
     <header className="entry-preference-profile__heading">
       <div>
-        <p className="section-index">SECONDARY / PREFERENCE PROFILE</p>
-        <h2 id="entry-preference-profile-title">可解释偏好规则</h2>
-        <p>
-          规则仅保存在外部个人配置中，用于本地解释和试算；不会替你修改条目、重排查询或自动接受
-          AI 结果。
-        </p>
+        <h2 id="entry-preference-profile-title">偏好规则</h2>
+        <p>规则保存在个人配置中，只提供评分建议，不会自动修改条目。</p>
       </div>
-      <span className="origin-label origin-label--deterministic">
-        本地确定性 · 默认关闭
-      </span>
     </header>
   );
 }
@@ -805,10 +794,10 @@ function SuggestionResults({
   readonly state: SuggestionState;
 }) {
   if (state.status === 'idle') {
-    return <p className="entry-preference-profile__empty">尚未生成候选。</p>;
+    return <p className="entry-preference-profile__empty">尚未生成建议。</p>;
   }
   if (state.status === 'loading') {
-    return <p role="status">正在统计当前可见 Entry 的明确评分…</p>;
+    return <p role="status">正在统计当前可见条目的评分…</p>;
   }
   if (state.status === 'error') {
     return <p role="alert">{state.message}</p>;
@@ -817,15 +806,15 @@ function SuggestionResults({
     return (
       <p className="entry-preference-profile__empty">
         已检查 {state.value.visibleEntryCount.toString()} 条可见
-        Entry，当前没有达到样本门槛的候选。
+        条目，当前没有达到样本门槛的建议。
       </p>
     );
   }
   return (
     <>
       <p className="entry-preference-profile__result-summary">
-        {state.value.visibleEntryCount.toString()} 条可见 Entry ·
-        {state.value.totalCandidateCount.toString()} 个候选
+        {state.value.visibleEntryCount.toString()} 条可见条目 ·
+        {state.value.totalCandidateCount.toString()} 个建议
         {state.value.truncated ? ' · 仅显示前 64 个' : ''}
       </p>
       <ul className="entry-preference-suggestion-list">
@@ -860,7 +849,7 @@ function SuggestionResults({
               </div>
             </dl>
             <details>
-              <summary>查看本次统计证据</summary>
+              <summary>查看参考条目</summary>
               <EvidenceEntryIds
                 label="正向"
                 values={candidate.positiveEntryIds}
@@ -877,12 +866,12 @@ function SuggestionResults({
             <button
               className="secondary-action"
               type="button"
-              aria-label={`接受候选到草稿：${candidate.displayValue}`}
+              aria-label={`把建议加入规则：${candidate.displayValue}`}
               onClick={() => {
                 onAccept(candidate);
               }}
             >
-              接受到草稿
+              加入规则
             </button>
           </li>
         ))}
@@ -921,7 +910,7 @@ function TrialResults({state}: {readonly state: TrialState}) {
     );
   }
   if (state.status === 'loading') {
-    return <p role="status">正在计算规则匹配，不会写入 Entry…</p>;
+    return <p role="status">正在计算规则匹配，不会修改条目…</p>;
   }
   if (state.status === 'error') {
     return <p role="alert">{state.message}</p>;
@@ -930,11 +919,11 @@ function TrialResults({state}: {readonly state: TrialState}) {
     <>
       <p className="entry-preference-profile__result-summary">
         已试算 {state.value.evaluatedEntryCount.toString()} /
-        {state.value.visibleEntryCount.toString()} 条可见 Entry
+        {state.value.visibleEntryCount.toString()} 条可见条目
         {state.value.truncated ? ' · 已按上限截断' : ''}
       </p>
       {state.value.items.length === 0 ? (
-        <p className="entry-preference-profile__empty">当前范围没有 Entry。</p>
+        <p className="entry-preference-profile__empty">当前范围没有条目。</p>
       ) : (
         <div
           className="entry-preference-trial-table"
@@ -945,7 +934,7 @@ function TrialResults({state}: {readonly state: TrialState}) {
           <table>
             <thead>
               <tr>
-                <th scope="col">Entry</th>
+                <th scope="col">条目</th>
                 <th scope="col">人工评分</th>
                 <th scope="col">有用净值</th>
                 <th scope="col">有趣净值</th>

@@ -19,7 +19,7 @@ describe('InformationEntryTypeReviewPanel', () => {
 
     expect(markup).toContain('类型覆盖与快速纠错');
     expect(markup).toContain('未分类（优先处理）');
-    expect(markup).toContain('明确包含隐私条目');
+    expect(markup).toContain('包含隐私条目');
     expect(markup).toContain('正在读取类型覆盖率与当前队列');
     expect(markup).not.toContain('批量接受');
   });

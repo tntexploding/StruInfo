@@ -35,6 +35,7 @@ describe('M1C local HTTP transport', () => {
     const entrySearches: unknown[] = [];
     const querySyntheses: unknown[] = [];
     const policyWrites: unknown[] = [];
+    const indexRefreshes: unknown[] = [];
     const api = stubApi({
       importMarkdown(body) {
         importedBodies.push(body);
@@ -47,6 +48,12 @@ describe('M1C local HTTP transport', () => {
       materializeManualInformationEntries(body) {
         manualSplits.push(body);
         return Promise.resolve(result(201, {status: 'created', entries: []}));
+      },
+      refreshInformationEntrySearchIndex(body) {
+        indexRefreshes.push(body);
+        return Promise.resolve(
+          result(200, {status: 'ok', progress: {outcome: 'more'}}),
+        );
       },
       searchInformationEntries(body) {
         entrySearches.push(body);
@@ -150,6 +157,22 @@ describe('M1C local HTTP transport', () => {
       items: [],
     });
     expect(entrySearches).toEqual([{text: 'synthetic', includePrivate: true}]);
+
+    const refreshResponse = await fetch(
+      base + '/api/v1/entries/search/index/refresh',
+      {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({limit: 7}),
+      },
+    );
+    expect(refreshResponse.status).toBe(200);
+    expectPrivateHttpSecurityHeaders(refreshResponse);
+    await expect(refreshResponse.json()).resolves.toEqual({
+      status: 'ok',
+      progress: {outcome: 'more'},
+    });
+    expect(indexRefreshes).toEqual([{limit: 7}]);
 
     const synthesisBody = {
       requestId: 'query-synthesis:1',
@@ -407,6 +430,8 @@ function stubApi(
       Promise.resolve(result(200, {status: 'ok', entries: []})),
     informationEntrySearchIndexStatus: () =>
       Promise.resolve(result(200, {status: 'ok', index: {}})),
+    refreshInformationEntrySearchIndex: () =>
+      Promise.resolve(result(200, {status: 'ok', index: {}, progress: {}})),
     rebuildInformationEntrySearchIndex: () =>
       Promise.resolve(result(200, {status: 'ok', index: {}})),
     evaluateInformationEntrySearch: () =>

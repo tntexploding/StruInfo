@@ -32,9 +32,11 @@ export const DOMAIN_LABELS: Readonly<Record<EntryDomainKeyword, string>> = {
 };
 
 export function describeInformationEntryFailure(value: unknown): string {
-  if (typeof value !== 'object' || value === null) return '返回协议无法识别。';
+  if (typeof value !== 'object' || value === null)
+    return '返回的数据格式无法识别。';
   const issue = Reflect.get(value, 'issue') as unknown;
-  if (typeof issue !== 'object' || issue === null) return '返回协议无法识别。';
+  if (typeof issue !== 'object' || issue === null)
+    return '返回的数据格式无法识别。';
   const code: unknown = Reflect.get(issue, 'code');
   return typeof code === 'string' ? code : 'unknown_failure';
 }

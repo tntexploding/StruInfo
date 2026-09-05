@@ -134,9 +134,8 @@ export function InformationEntryTypeReviewPanel({
     >
       <header className="console-heading type-review-workbench__heading">
         <div>
-          <p className="section-index">M2 / TYPE COVERAGE</p>
           <h2 id="type-review-title">类型覆盖与快速纠错</h2>
-          <p>只修改类型；正文、关键词、领域、评分和来源证据保持原样。</p>
+          <p>这里只修改类型，其他内容不会改变。</p>
         </div>
         <button
           className="secondary-action"
@@ -183,7 +182,7 @@ export function InformationEntryTypeReviewPanel({
               setSelectedEntryId(undefined);
             }}
           />
-          明确包含隐私条目
+          包含隐私条目
         </label>
       </div>
 
@@ -412,7 +411,7 @@ function TypeCorrectionEditor({
       setFeedback({
         kind: 'error',
         title: '本地接口不可达',
-        detail: '当前 Entry 没有发生变化。',
+        detail: '当前条目没有发生变化。',
       });
     } finally {
       setSaving(false);
@@ -423,7 +422,6 @@ function TypeCorrectionEditor({
     <article className="type-correction-editor">
       <header>
         <div>
-          <p className="section-index">ENTRY / {entry.revision.toString()}</p>
           <h3>{entry.value.titlePath || '未命名条目'}</h3>
           <small>{entry.sourceKey}</small>
         </div>

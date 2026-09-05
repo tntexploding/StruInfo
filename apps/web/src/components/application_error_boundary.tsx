@@ -29,7 +29,6 @@ export function ApplicationFailureFallback() {
   return (
     <main className="application-failure" role="alert">
       <section className="error-state">
-        <p className="section-index">VISIBLE RECOVERY</p>
         <h1>界面未能继续显示</h1>
         <p>
           当前操作没有因此写入或删除资料。请重新载入界面；若问题仍在，可返回材料页重新打开该文档。

@@ -68,7 +68,7 @@ export function SourceSubscriptionPanel({
       if (response.body.status !== 'ok') {
         setState({
           status: 'error',
-          message: '外部个人配置当前不可读；没有改变任何订阅。',
+          message: '个人设置当前无法读取；没有改变任何订阅。',
         });
         return;
       }
@@ -107,7 +107,7 @@ export function SourceSubscriptionPanel({
       >
         <PanelHeading />
         <p className="empty-copy" role="status">
-          当前服务未启用信源订阅边界。仍可使用上方的手动文本、固定 Git
+          当前服务未启用订阅功能。仍可使用上方的手动文本、Git
           文件或本地文件导入。
         </p>
       </section>
@@ -325,14 +325,13 @@ export function SourceSubscriptionPanel({
       setFeedback({
         kind: 'success',
         title: response.body.status === 'applied' ? '订阅已保存' : '配置未变化',
-        detail:
-          '设置保存在外部个人配置中。只有开启“定期检查”的订阅会被调度器轮询。',
+        detail: '设置已保存。只有开启“定期检查”的订阅才会自动检查更新。',
       });
     } catch {
       setFeedback({
         kind: 'error',
         title: '订阅未保存',
-        detail: '本地服务当前不可达；外部个人配置保持不变。',
+        detail: '本地服务当前不可达；订阅设置保持不变。',
       });
     } finally {
       setSaving(false);
@@ -368,10 +367,10 @@ export function SourceSubscriptionPanel({
           response.body.status === 'imported'
             ? response.body.automationRunId === undefined
               ? response.body.importedDocumentCount === undefined
-                ? '新的不可变 Snapshot 已进入导入历史；后续拆分与标签步骤仍由你单独决定。'
+                ? '新文档已进入导入历史；后续拆分和标签仍由你决定。'
                 : `已逐条保存 ${String(response.body.importedDocumentCount)} 个外部记录；后续拆分与标签步骤仍由你单独决定。`
-              : `已确定性拆分 ${String(response.body.materializedEntryCount ?? 0)} 个 Entry，并生成可在“标签”页处理的分流工作项。`
-            : '没有创建重复 Snapshot。',
+              : `已生成 ${String(response.body.materializedEntryCount ?? 0)} 个条目，并加入“标签”页的待处理列表。`
+            : '没有重复导入文档。',
       });
       await load();
     } catch {
@@ -414,8 +413,8 @@ export function SourceSubscriptionPanel({
         <>
           <div className="source-subscription-toolbar">
             <p>
-              支持精确 GitHub Markdown、公开 RSS/Atom、声明式 JSON API、
-              受限网页与运行环境已安装的连接器。手动检查始终可用；定期检查默认关闭。
+              支持 GitHub 文档、RSS/Atom、JSON
+              API、网页和已安装插件。可以随时手动检查；定期检查默认关闭。
             </p>
             <button
               className="secondary-action"
@@ -433,7 +432,7 @@ export function SourceSubscriptionPanel({
             </p>
           ) : (
             <ol className="source-subscription-list">
-              {state.drafts.map((subscription, index) => {
+              {state.drafts.map((subscription) => {
                 const saved = state.saved.find(
                   (candidate) =>
                     candidate.subscriptionId === subscription.subscriptionId,
@@ -442,9 +441,6 @@ export function SourceSubscriptionPanel({
                   <li key={subscription.subscriptionId}>
                     <header>
                       <div>
-                        <p className="section-index">
-                          SOURCE {String(index + 1).padStart(2, '0')}
-                        </p>
                         <h3>{subscription.label.trim() || '未命名信源'}</h3>
                       </div>
                       <button
@@ -473,7 +469,7 @@ export function SourceSubscriptionPanel({
                           <option value="github_markdown">
                             GitHub Markdown 文件
                           </option>
-                          <option value="rss_atom">RSS / Atom Feed</option>
+                          <option value="rss_atom">RSS / Atom 订阅</option>
                           <option value="json_api">JSON API</option>
                           <option value="web">受限网页</option>
                           {subscription.kind === 'plugin' ||
@@ -568,7 +564,7 @@ export function SourceSubscriptionPanel({
                       ) : subscription.kind === 'rss_atom' ? (
                         <>
                           <label className="field field--wide">
-                            <span>公开 Feed 地址</span>
+                            <span>RSS / Atom 地址</span>
                             <input
                               type="url"
                               value={subscription.feedUrl}
@@ -780,7 +776,7 @@ export function SourceSubscriptionPanel({
                                 }
                               }}
                             />
-                            使用分页 cursor（最多 5 页）
+                            使用分页游标（最多 5 页）
                           </label>
                           {subscription.pageCursor === undefined ? null : (
                             <>
@@ -802,7 +798,7 @@ export function SourceSubscriptionPanel({
                                 />
                               </label>
                               <label className="field">
-                                <span>下一页 cursor 路径</span>
+                                <span>下一页游标路径</span>
                                 <input
                                   value={subscription.pageCursor.responsePath}
                                   onChange={(event) => {
@@ -841,7 +837,7 @@ export function SourceSubscriptionPanel({
                                 }
                               }}
                             />
-                            使用增量 cursor
+                            使用增量游标
                           </label>
                           {subscription.incrementalCursor ===
                           undefined ? null : (
@@ -867,7 +863,7 @@ export function SourceSubscriptionPanel({
                                 />
                               </label>
                               <label className="field">
-                                <span>增量 checkpoint 路径</span>
+                                <span>增量标记路径</span>
                                 <input
                                   value={
                                     subscription.incrementalCursor.responsePath
@@ -985,7 +981,7 @@ export function SourceSubscriptionPanel({
             <p>
               {dirty
                 ? '有尚未保存的变更；保存后才能手动检查。'
-                : '当前编辑内容已与外部个人配置一致。'}
+                : '当前内容已保存。'}
             </p>
             <button
               className="primary-action"
@@ -1009,12 +1005,8 @@ function PanelHeading() {
   return (
     <header className="subsection-heading">
       <div>
-        <p className="section-index">SOURCE SUBSCRIPTIONS / EXTERNAL</p>
         <h2 id="source-subscription-title">信源订阅</h2>
       </div>
-      <span className="origin-label origin-label--deterministic">
-        变化导入 · 可选确定性分流
-      </span>
     </header>
   );
 }
@@ -1196,9 +1188,9 @@ function pathIsValid(value: string, allowEmpty: boolean): boolean {
 
 function sourceRunIssue(code: string): string {
   if (code === 'source_not_found') return '没有找到指定的远端来源。';
-  if (code === 'source_too_large') return '来源文件超过当前 1 MiB 导入边界。';
+  if (code === 'source_too_large') return '来源文件超过 1 MiB 导入上限。';
   if (code === 'source_invalid') {
-    return '来源地址、字段映射或返回内容不符合当前导入边界。';
+    return '来源地址、字段设置或返回内容不符合导入要求。';
   }
   if (code === 'source_subscription_stale') {
     return '订阅配置已改变，请重新读取后再检查。';

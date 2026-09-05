@@ -15,9 +15,9 @@ describe('InformationEntryAiSplit', () => {
       />,
     );
 
-    expect(markup).toContain('未配置 OpenAI Provider');
-    expect(markup).toContain('按结构拆分仍可完整离线使用');
-    expect(markup).not.toContain('生成 AI 拆分提案</button>');
+    expect(markup).toContain('OpenAI 未启用');
+    expect(markup).toContain('仍可使用人工拆分和结构规则');
+    expect(markup).not.toContain('生成 AI 拆分建议</button>');
   });
 
   it('never offers external submission for a private document', () => {
@@ -31,8 +31,8 @@ describe('InformationEntryAiSplit', () => {
       />,
     );
 
-    expect(markup).toContain('隐私文档不会发送给外部 Provider');
-    expect(markup).not.toContain('生成 AI 拆分提案</button>');
+    expect(markup).toContain('隐私文档不会发送给 OpenAI');
+    expect(markup).not.toContain('生成 AI 拆分建议</button>');
   });
 
   it('makes disclosure, AI origin, manual acceptance and local fallback visible', () => {
@@ -46,11 +46,11 @@ describe('InformationEntryAiSplit', () => {
       />,
     );
 
-    expect(markup).toContain('段落原文才会发送');
-    expect(markup).toContain('结果不会自动写入');
-    expect(markup).toContain('AI 生成 · 待人工确认');
-    expect(markup).toContain('生成 AI 拆分提案');
-    expect(markup).toContain('确定性结构规则');
+    expect(markup).toContain('当前公开文档的段落会发送给 OpenAI');
+    expect(markup).toContain('结果需要你确认后才会保存');
+    expect(markup).toContain('生成 AI 拆分建议');
+    expect(markup).toContain('上方的结构规则');
+    expect(markup).not.toContain('origin-label');
   });
 });
 

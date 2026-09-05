@@ -159,15 +159,8 @@ export function InformationEntryTagsWorkspace({
     >
       <header className="workflow-page-heading">
         <div>
-          <p className="section-index">03 / ENTRY TAGGING</p>
           <h1>标签</h1>
-          <p>在一个连续审核队列中完成评分、关键词、类型和领域标注。</p>
         </div>
-        <span className="origin-label origin-label--manual">
-          {aiEnabled
-            ? '确定性候选 + OpenAI 提案 + 人工接受'
-            : '确定性候选 · 无需 AI'}
-        </span>
       </header>
 
       <aside className="workflow-mode-summary" aria-label="标签页操作指南">
@@ -227,7 +220,6 @@ export function InformationEntryTagsWorkspace({
               >
                 <header className="console-heading">
                   <div>
-                    <p className="section-index">REVIEW / SELECT</p>
                     <h2 id="tag-filter-title">选择要审核的条目</h2>
                   </div>
                   <span

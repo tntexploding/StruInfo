@@ -18,24 +18,20 @@ export function SourceConnectorCapabilityList({
     (connector) => connector.origin === 'plugin',
   ).length;
   return (
-    <aside
-      className="source-connector-capabilities"
-      aria-label="可用信源连接器"
-    >
+    <aside className="source-connector-capabilities" aria-label="可用订阅方式">
       <div>
-        <strong>可用连接器</strong>
+        <strong>可用订阅方式</strong>
         <span>
           {connectors.length} 个 · 已安装插件 {pluginCount} 个
         </span>
       </div>
       {connectors.length === 0 ? (
-        <p>当前运行环境没有公开任何连接器能力。</p>
+        <p>当前没有可用的订阅方式。</p>
       ) : (
         <ul>
           {connectors.map((connector) => (
             <li key={connector.connectorId}>
               <span>{connector.displayName}</span>
-              <code>{connector.connectorId}</code>
               <small>
                 {connector.origin === 'plugin' ? '已安装插件' : '内置'}
               </small>
@@ -89,8 +85,8 @@ export function WebSourceSubscriptionFields({
           }}
         />
         <small>
-          最多 7 条根相对路径；与主网页合计最多请求 8 页。正文按
-          article/main/body 顺序提取。
+          最多添加 7 个同站页面，连同主网页最多读取 8
+          页。系统会优先提取网页正文。
         </small>
       </label>
     </>
@@ -116,7 +112,7 @@ export function PluginSourceSubscriptionFields({
   return (
     <>
       <label className="field field--wide">
-        <span>已安装连接器</span>
+        <span>选择插件</span>
         <select
           value={subscription.connectorId}
           disabled={plugins.length === 0}
@@ -126,12 +122,10 @@ export function PluginSourceSubscriptionFields({
         >
           {!selectedAvailable && subscription.connectorId !== '' ? (
             <option value={subscription.connectorId}>
-              {subscription.connectorId}（当前不可用）
+              已保存的插件（当前不可用）
             </option>
           ) : null}
-          {plugins.length === 0 ? (
-            <option value="">没有已安装插件连接器</option>
-          ) : null}
+          {plugins.length === 0 ? <option value="">没有可用插件</option> : null}
           {plugins.map((connector) => (
             <option key={connector.connectorId} value={connector.connectorId}>
               {connector.displayName}
@@ -139,11 +133,11 @@ export function PluginSourceSubscriptionFields({
           ))}
         </select>
         <small>
-          插件由运行环境安装；个人配置只保存连接器 ID，不保存或加载代码。
+          插件由服务端安装；个人设置只记录所选插件，不保存或加载插件代码。
         </small>
       </label>
       <label className="field field--wide">
-        <span>外部配置引用</span>
+        <span>插件配置名称</span>
         <input
           value={subscription.configurationRef}
           maxLength={200}
@@ -153,12 +147,12 @@ export function PluginSourceSubscriptionFields({
           }}
         />
         <small>
-          这是由已安装连接器解析的外部引用；不要填写密码、正文或文件内容。
+          填写插件预先约定的配置名称；不要在这里填写密码或文档内容。
         </small>
       </label>
       {!selectedAvailable ? (
         <p className="source-connector-warning" role="status">
-          当前连接器未安装。配置可保留和迁移，但“立即检查”会稳定失败。
+          当前插件不可用。设置会保留，但暂时无法检查更新。
         </p>
       ) : null}
     </>

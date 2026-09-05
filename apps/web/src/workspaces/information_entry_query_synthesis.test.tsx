@@ -21,10 +21,12 @@ describe('InformationEntryQuerySynthesis', () => {
       />,
     );
 
-    expect(markup).toContain('AI 综合 · 仅基于当前公开查询结果');
+    expect(markup).toContain(
+      '<h2 id="entry-query-synthesis-title">AI 回答</h2>',
+    );
     expect(markup).toContain('AI 未启用');
-    expect(markup).toContain('本地查询保持完整可用');
-    expect(markup).toContain('不会发送隐私文档');
+    expect(markup).toContain('本地查询仍可使用');
+    expect(markup).toContain('隐私内容不会发送');
     expect(markup).toContain('disabled');
     expect(markup).not.toContain('maxlength=');
   });
@@ -55,12 +57,12 @@ describe('InformationEntryQuerySynthesis', () => {
       />,
     );
 
-    expect(markup).toContain('部分证据支持');
-    expect(markup).toContain('synthetic-model');
-    expect(markup).toContain('struinfo.openai-entry-query-synthesis.v1');
-    expect(markup).toContain('E01 · 查看精确来源');
-    expect(markup).toContain('合成方法 · r1');
-    expect(markup).toContain('正文已按固定上限截断');
+    expect(markup).toContain('部分内容没有引用');
+    expect(markup).not.toContain('synthetic-model');
+    expect(markup).not.toContain('struinfo.openai-entry-query-synthesis.v1');
+    expect(markup).toContain('查看来源 E01');
+    expect(markup).toContain('来源 E01 · 合成方法');
+    expect(markup).toContain('这里只显示部分正文');
     expect(markup).toContain('缺少长期结果证据');
     expect(markup).not.toContain('11111111-1111-4111-8111-111111111111');
   });

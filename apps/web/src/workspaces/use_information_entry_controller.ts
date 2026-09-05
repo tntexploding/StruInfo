@@ -188,7 +188,7 @@ export function useInformationEntryController({
       if (!documentRequests.current.isCurrent(requestId)) return;
       setDocumentView({
         status: 'error',
-        message: '无法读取 Document 聚合视图；现有 Entry 没有被修改。',
+        message: '无法读取文档标签；现有条目没有被修改。',
       });
     }
   }, [includePrivate, loadDocuments, onListDocuments]);
@@ -222,7 +222,7 @@ export function useInformationEntryController({
         if (!searchRequests.current.isCurrent(requestId)) return;
         setView({
           status: 'error',
-          message: '本地 Entry 接口当前不可达；现有条目没有被修改。',
+          message: '本地条目接口当前不可用；现有条目没有被修改。',
         });
       }
     },

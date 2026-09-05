@@ -2,7 +2,7 @@
 
 - 状态：v0.1.0 已发布并由所有者确认已在私人云端运行；M2-P0A–P0G、M2-P1A–D、M2-P2A–G、M2-P3A–C 与 M2-P5A–D 已完成；M2-P4A–E 已冻结并重新排队
 - 实现基线：M1I-1A/B 至 M1M + 首版 UI/发行基线 + M2-P0A–P0G + M2-P1A–D + M2-P2A–G + M2-P3A–C + 冻结的 M2-P4A–E + M2-P5A–D
-- 最近核对：2026-09-03
+- 最近核对：2026-09-05（代码能力盘点、候选收口、增量索引维护及两项集成审查；不替代发行验收）
 - 需求边界：[产品需求](product-requirements.md)
 - 交付顺序：[分阶段计划](roadmap.md)
 - 架构边界：[知识核心架构](knowledge-core-architecture.md)
@@ -27,11 +27,51 @@ M2-P5B 已补齐当前 workspace 备份盘点、完整只读 package 校验和 k
 
 M2-P5C/D 又补齐可外部调度的脱敏运行状态报告，以及贯穿导入、拆分、标签、联系、查询和知识读取的 disposable PostgreSQL 18 发行回归。当前开发候选仍不是云端运行身份；固定提交、镜像验证和升级必须在所有者明确的发行操作中完成。
 
+### 0.1 2026-09-05 代码核对结论
+
+本次核对以提交 `89d7c32a7f0d41066a1e018c2c269aa37523e9f4` 和其上的当前工作树为对象。
+覆盖运行时接线、HTTP 路由、维护命令、主要领域服务、PostgreSQL 读取实现、Web 状态及代表性测试。
+这是代码与入口核对，没有读取外部真实资料、调用真实 Provider 或登录云端。
+
+当前定位是**单用户、证据可追溯的 Entry 摄取、维护和检索工作台**。
+无 AI 主链、可选公开证据 AI、受限来源订阅、确定性自动处理、批量维护和备份工具都已有实现。
+下一阶段应降低已有能力的使用成本；继续增加 Provider、连接器或泛化学习不是默认优先项。
+
+| 能力面         | 当前可达入口与代码证据                                                                                                                                                                                                 | 必须保留的限制                                                                                                                                 |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 文档进入       | [本地文件校验](../apps/web/src/workspaces/local_file_import.ts)、[HTML/PDF 投影](../apps/server/src/modules/evidence/documents/document_projection.ts)及导入页                                                         | 六种扩展名；单文件最多 1 MiB、显式批次最多 20 份；PDF 只读取文字层；上传队列仅在当前页面会话存在                                               |
+| 持续采集       | [运行时接线](../apps/server/src/composition/start_role_runtime.ts)中的 Git reader、RSS/Atom、JSON API、受限 Web 和受信任插件注入                                                                                       | 精确配置、默认关闭间隔检查；固定 Git 文件不会自动发现下一期；网页最多八个同源指定页面；插件注入不等于自带第三方插件或插件市场                  |
+| Entry 与结构   | [Entry 仓储](../apps/server/src/modules/entries/information_entry_repository.ts)、[结构重组](../apps/server/src/modules/entries/information_entry_restructuring.ts)及拆分/标签页                                       | 普通编辑为当前态加并发版本；原始证据不变；首次物化、派生全文及已有结构替换是不同的显式操作                                                     |
+| 查询与图谱     | [检索服务](../apps/server/src/modules/entries/information_entry_retrieval.ts)、[图谱核心](../apps/server/src/modules/entries/information_entry_knowledge_graph.ts)及查询/知识页                                        | 词法完整可用；语义/混合要求公开范围、模型配置和完整当前索引；图谱默认 12、最多 24 个可见直接邻居，另返回可恢复的隐藏关系                       |
+| AI             | [三类提案接线](../apps/server/src/composition/start_role_runtime.ts)、[查询综合](../apps/server/src/modules/entries/information_entry_query_synthesis.ts)                                                              | 拆分、标签、选定条目对联系需人工接受；综合重新读取同一查询范围前八条公开证据，不等于当前页或全库回答；答案仅属会话                             |
+| 偏好与自动处理 | [策略与任务 HTTP](../apps/server/src/transport/m1c_api_controller.ts)、[确定性推进动作](../apps/server/src/modules/processing/entry_automation_action_service.ts)及标签页                                              | 显式策略允许路由、确定性标签及可替换联系投影；不授权 AI 自动接受、正文改写、用户图关系修改、忽略或删除                                         |
+| 批量处理       | [maintenance 命令](../apps/server/src/operations/m1m_maintenance.ts)、[统一推进服务](../apps/server/src/modules/processing/bulk_ingestion_pipeline_service.ts)                                                         | 面向已入库 Snapshot，单批最多 500 Snapshot / 50,000 计划 Entry；分类复核包最多 100 项、其他包最多 20 项；不是后台大文件上传或通用 Web 批处理器 |
+| 运行与迁移     | [个人数据传输](../apps/server/src/workspace_transfer/m1c_workspace_transfer.ts)、[运行状态报告](../apps/server/src/operations/m2_p5c_operational_status.ts)、[认证代理示例](../deploy/reverse-proxy/Caddyfile.example) | 数据包支持同 workspace 空目标恢复；备份保留仅预览；认证依赖私人部署的宿主代理；没有内建多用户权限、非空合并或异地灾备编排                      |
+
+**本次读取候选单独记录：**空条件 Entry 浏览已新增数据库计数/分页，索引状态已新增聚合读取，联系与知识页已新增按端点读取邻域；Web 同时有图谱交互与文案调整。
+对应入口是 `loadCurrentEntryBrowsePage`、`loadSearchIndexMetrics`、`loadAssociationSnapshotForEntries` 和 `readInformationEntryKnowledgeGraph`。
+这些改动在盘点开始前已存在、当时尚未提交，现纳入第一、二项集成提交；不能视为公开发行或云端已部署，也不能再作为“从零实现”的后续任务。
+复杂过滤、fuzzy、Association 查询等仍可能完整加载，局部优化不代表全语义 SQL 下推。
+
+**冻结实验：**maintenance 仍保留类型学习 export/apply/activate 的代码入口，但 M2-P4R 的冻结是明确的产品与操作边界，不代表这些命令已经从代码删除，也不代表泛化质量已通过。
+
+**本轮验证：**在最初代码盘点后，已按所有者选定顺序完成第 1 项本地候选收口。
+完整 `verify` 通过 1,017 项单元测试、4 项集成测试及构建/产物/部署源码检查；14 项真实 Chrome 浏览器回归通过。
+PostgreSQL 18.6 合成 smoke 执行全部 30 个迁移，并通过 45 次分页、48 次图谱和 60 次复杂查询的完整对象等价比较，记录读取行数、耗时和采样 RSS。
+同时修复图谱迟到请求、来源栏焦点/关闭/重试、200% 字号状态栏及运行编号展示；结果、测量限制和环境说明见[当前候选收口记录](current-candidate-closure.md)。
+测试只使用合成内容，没有运行真实 Provider、标准规模 `--full`、镜像或云端检查。以上为第 1 项独立历史记录；最新结果见下述集成审查。
+
+**第 2 项已实现：**[ADR 0066](adr/0066-resumable-incremental-search-index-maintenance.md) 为查询页增加公开 Entry“刷新变化项”。每批最多 32 项，复用未变化的有界输入/向量，已提交投影即恢复检查点；支持本批后暂停、重新打开后继续和失败重试，数据库提交拒绝过期或隐私已收窄的结果。完整重建作为显式修复保留，无模型时词项路径完整可用。新增恢复验证已在一次性 PostgreSQL 18.6 与真实 Chrome 合成场景通过；具体测量、检查结果及未验证环境见[交付记录](incremental-index-maintenance.md)。没有新增迁移、依赖、后台调度或数据包部分，第 3 项仍未开始。
+
+**第一、二项集成通过并提交：**修复人工关系保存失败后接受 AI 提案未刷新图谱的问题，新增对应浏览器回归；查询与增量刷新组合验证确认结果、精确来源、浏览页和游标完整相等。修复后完整 `verify` 通过 1,026 项单元、4 项集成及构建/产物检查，17 项 Chrome 回归与 PostgreSQL 18.6 合成 smoke 通过；没有新增迁移、依赖或未解决的产品阻断。详见[集成审查](incremental-index-maintenance.md#集成审查)。本轮交付为本地提交，未发布或部署。
+
+下一开发顺序和各项退出条件见[路线图：下一开发顺序](roadmap.md#下一开发顺序2026-09-05-代码核对)。
+
 ## 1. 如何阅读本项目状态
 
 本文是“当前代码到底能做什么”的实现真值表。产品需求描述长期目标，路线图描述交付顺序，
 ADR 记录已经接受的决策；当历史文档中的旧 M1C 示例与当前代码冲突时，以 ADR 0008、
-ADR 0009、ADR 0010、ADR 0011、ADR 0012、ADR 0013、ADR 0014、ADR 0015、ADR 0016、ADR 0017、ADR 0018、ADR 0019、ADR 0020、ADR 0021、ADR 0022、ADR 0023、ADR 0024、ADR 0025、ADR 0026、ADR 0027、ADR 0028、ADR 0029、ADR 0030、ADR 0031、ADR 0032、ADR 0033、ADR 0034、ADR 0035、ADR 0036、ADR 0037、ADR 0038、ADR 0039、ADR 0040、ADR 0041、ADR 0042、ADR 0043、ADR 0044、ADR 0045、ADR 0046、ADR 0047、ADR 0048、ADR 0049、ADR 0050、ADR 0051、ADR 0052、ADR 0053、ADR 0054、ADR 0055、ADR 0056、ADR 0057、ADR 0058、ADR 0059、ADR 0060、ADR 0061、ADR 0062、ADR 0063、ADR 0064、ADR 0065 和本文列出的活动入口为准。
+ADR 0009、ADR 0010、ADR 0011、ADR 0012、ADR 0013、ADR 0014、ADR 0015、ADR 0016、ADR 0017、ADR 0018、ADR 0019、ADR 0020、ADR 0021、ADR 0022、ADR 0023、ADR 0024、ADR 0025、ADR 0026、ADR 0027、ADR 0028、ADR 0029、ADR 0030、ADR 0031、ADR 0032、ADR 0033、ADR 0034、ADR 0035、ADR 0036、ADR 0037、ADR 0038、ADR 0039、ADR 0040、ADR 0041、ADR 0042、ADR 0043、ADR 0044、ADR 0045、ADR 0046、ADR 0047、ADR 0048、ADR 0049、ADR 0050、ADR 0051、ADR 0052、ADR 0053、ADR 0054、ADR 0055、ADR 0056、ADR 0057、ADR 0058、ADR 0059、ADR 0060、ADR 0061、ADR 0062、ADR 0063、ADR 0064、ADR 0065、ADR 0066 和本文列出的活动入口为准。
 
 状态只使用三种含义：
 
@@ -160,7 +200,7 @@ M1I-1A/B 至 M1I-5 已完成外部信源底座、三类内建远端 reader 和�
 旧 Manual Curation 命令/读模型、正式 Knowledge 写入/当前读取、旧 Knowledge 检索及其
 PostgreSQL adapter、HTTP、Web 页面和样式已由 ADR 0009 删除。代码删除没有删除用户数据库中的历史行。
 
-## 7. 未完成清单
+## 7. 实现记录与剩余缺口
 
 ### 7.1 已完成主线：M1E-2 正式知识图谱
 
@@ -378,9 +418,12 @@ node-postgres 的多语句结果现在安全投影最终结果，使首次队列
 - OpenAI 目前为用户明确选择的公开 Snapshot、公开 Entry 和公开 Entry 对生成拆分、标签和联系提案，并可显式综合当前公开 Query 证据；私密内容外发、自动接受和第二 Provider 仍未规划；
 - 近似词法、可选语义/混合检索及公开证据 RAG 已实现；尚无私密向量、Provider 自主检索、在线 Web RAG 或通用聊天代理；
 - 精确 GitHub Markdown、公开 RSS/Atom、声明式 JSON API、受限同源网页和已安装受信任连接器的手动/间隔检查、变化检测和可选确定性拆分/分流已实现；尚无开放式爬虫、目录订阅、交互式认证信源、日历时区调度、任意工作流编排或自动内容修改；
-- 知识树、集合、时间线、冲突维护、报告/推送和复杂事实关系类型尚未实现；当前图谱只提供有界 Entry 邻域；
+- 保存查询、跨会话查询上下文、知识树、集合、时间线、集中来源复核/冲突维护、面向复用的引用式导出和报告/推送尚未实现；当前图谱只提供有界 Entry 邻域，普通备份导出不等于资料复用；
 - 历史 Curation/Knowledge 表尚未通过数据退役迁移移除；在确认不再需要兼容前继续保留；
 - 公开 exact/substring Entry 查询已用完整、当前且未触及 4,096 posting 截断上限的投影做 SQL 候选缩小和选择性 hydration；fuzzy、隐私、Association 遍历、索引不完整或存在截断风险时仍完整加载。尚未做全语义 SQL pushdown，也没有证据支持引入另一套查询或缓存基础设施。
+
+- 空条件浏览、索引状态和图谱邻域的定向读取已完成候选收口及集成验证；[集成记录](incremental-index-maintenance.md#集成审查)与[第 1 项测量](current-candidate-closure.md)各保留自己的样本身份，本文更早的历史耗时不能当作这些改动之后的结果。
+- 语义索引仍要求全部当前公开 Entry 与当前模型匹配；Entry 修改、结构替换或模型变化后可能返回 `semantic_search_index_not_ready`。查询页现可显式按最多 32 项窗口刷新变化项，以已提交投影为检查点暂停、继续或重试；输入未变时复用相容向量。`rebuild()` 保留为完整修复，普通词法路径仍完整可用；没有新增后台自动刷新或调度权限。
 
 ### 7.31 发布与部署边界
 
@@ -391,7 +434,7 @@ node-postgres 的多语句结果现在安全投影最终结果，使首次队列
 - 完整个人数据备份与同 workspace 空库恢复命令已实现；定期保留、异地灾难恢复、跨工作区克隆、非空目标合并和删除策略未完成；
 - 项目代码采用 MIT License；发行包与镜像必须携带项目许可证、第三方声明、依赖许可证和 SBOM。
 
-### 7.32 当前开发增量：M2-P0A–P0G Codex 批量完整入库链
+### 7.32 已完成增量：M2-P0A–P0G Codex 批量完整入库链
 
 - maintenance CLI 可以按幂等键和隐私范围冻结最多 500 个尚未拥有当前 Entry 结构的 Snapshot；单批计划最多 50,000 个 Entry；
 - 执行始终以一个 Snapshot 为一个原子事务分片，成功分片不会因后续失败或重试而重写；每次执行窗口继续使用真实 ProcessingRun 记录；
@@ -558,4 +601,6 @@ node-postgres 的多语句结果现在安全投影最终结果，使首次队列
 
 真实资料可以由所有者在外部数据根和数据库中继续使用，但不得进入 Git、公开发行、镜像或 fixture。开发验证继续使用合成、无个人含义、执行后清理的数据；迁移或复制真实资料到云主机仍需所有者明确选择目标和恢复方式。
 
-M1E-4A/4B 已补齐直接人工拆分，M1E-5A/5B 已接通本地 Markdown、纯文本、HTML 和 PDF；M1F 已完成词法查询、关联比较和公开证据综合；M1G/M1H 已完成可解释偏好、可恢复路由、所有者队列、确定性推进动作、结构纠错、全文派生、拆分规则和多文件队列；M1I 已完成连接器/远程文档入库底座、RSS/Atom、声明式 JSON API、受限同源网页与已安装连接器接线；M1J 已完成正式知识关系语义；M1K 已完成词项/向量/RAG；M1L 已完成性能基准与按证据优化；M1M 已完成单机生产运行和维护代码边界。M2-P5A–D 已完成发行身份、备份核验、运行状态可见性和五步主线发行回归。下一步不应由文档自动扩张：先审计并冻结当前候选，再由所有者明确选择私人实例升级或新的产品增量；冻结的 P4R 不阻塞其他工作。
+M1E-4A/4B 已补齐直接人工拆分，M1E-5A/5B 已接通本地 Markdown、纯文本、HTML 和 PDF；M1F 已完成词法查询、关联比较和公开证据综合；M1G/M1H 已完成可解释偏好、可恢复路由、所有者队列、确定性推进动作、结构纠错、全文派生、拆分规则和多文件队列；M1I 已完成连接器/远程文档入库底座、RSS/Atom、声明式 JSON API、受限同源网页与已安装连接器接线；M1J 已完成正式知识关系语义；M1K 已完成词项/向量/RAG；M1L 已完成性能基准与按证据优化；M1M 已完成单机生产运行和维护代码边界。M2-P5A–D 已完成发行身份、备份核验、运行状态可见性和五步主线发行回归。
+2026-09-05 按所有者要求，以代码缺口和使用价值重新整理后续顺序：先收口当前候选，再安排增量索引、查询复用、来源复核和引用式资料导出，详见路线图。
+本次只确定规划，不启动新功能、真实资料操作或私人实例升级；冻结的 P4R 保持不启动，也不阻塞其他工作。

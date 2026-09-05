@@ -34,6 +34,7 @@ import type {
   InformationEntryExplorationPolicyWriteResponse,
   InformationEntryExplorationResponse,
   InformationEntrySearchIndexResponse,
+  InformationEntrySearchIndexRefreshResponse,
   InformationEntrySearchEvaluationResponse,
   InformationEntryAssociationRebuildResponse,
   InformationEntryDocumentListResponse,
@@ -287,6 +288,10 @@ export interface M1cApiClient {
   loadInformationEntrySearchIndex(
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntrySearchIndexResponse>>;
+  refreshInformationEntrySearchIndex(
+    body: Readonly<{limit?: number}>,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntrySearchIndexRefreshResponse>>;
   rebuildInformationEntrySearchIndex(
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntrySearchIndexResponse>>;
@@ -490,6 +495,7 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     reviewInformationEntryTypes: reject,
     searchInformationEntries: reject,
     loadInformationEntrySearchIndex: reject,
+    refreshInformationEntrySearchIndex: reject,
     rebuildInformationEntrySearchIndex: reject,
     evaluateInformationEntrySearch: reject,
     exploreInformationEntries: reject,
@@ -602,7 +608,7 @@ export function createM1cApiClient(
         }
         seenCursors.add(cursorKey);
       }
-      throw new M1cApiClientError('材料分页数量超出本地产品边界。');
+      throw new M1cApiClientError('每页材料数量超出允许范围。');
     },
     loadEvidenceSnapshot: (snapshotId, options) =>
       get<
@@ -799,6 +805,12 @@ export function createM1cApiClient(
     loadInformationEntrySearchIndex: (options) =>
       get<InformationEntrySearchIndexResponse>(
         'api/v1/entries/search/index',
+        options,
+      ),
+    refreshInformationEntrySearchIndex: (body, options) =>
+      post<InformationEntrySearchIndexRefreshResponse>(
+        'api/v1/entries/search/index/refresh',
+        body,
         options,
       ),
     rebuildInformationEntrySearchIndex: (options) =>
@@ -1115,7 +1127,7 @@ function normalizeBaseUrl(value: string): URL {
     url.search !== '' ||
     url.hash !== ''
   ) {
-    throw new M1cApiClientError('产品接口基础地址不符合本地 HTTP(S) 边界。');
+    throw new M1cApiClientError('产品接口地址不是有效的 HTTP(S) 地址。');
   }
   if (!url.pathname.endsWith('/')) url.pathname = `${url.pathname}/`;
   return url;

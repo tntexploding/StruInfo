@@ -17,12 +17,7 @@ export function PrivateDocumentResults({
     >
       <header className="console-heading">
         <div>
-          <p className="section-index">PRIVATE DOCUMENT CHANNEL</p>
           <h2 id="private-document-results-title">完整隐私文档</h2>
-          <p>
-            这是独立于 Entry
-            的全文结果。正文仅在本次明确放宽的隐私范围内打开，不会混入普通结果。
-          </p>
         </div>
         <span className="record-count">{totalCount.toString()} 篇</span>
       </header>
@@ -61,13 +56,13 @@ export function PrivateDocumentResults({
                   {item.textMatch === undefined ? null : (
                     <span>
                       {privateDocumentTextModeLabel(item.textMatch.mode)}匹配 ·{' '}
-                      词法分 {scoreOutOfOneHundred(item.textMatch.score)}/100
+                      匹配度 {scoreOutOfOneHundred(item.textMatch.score)}/100
                     </span>
                   )}{' '}
                   <span>
                     {item.entryMatchCount > 0
-                      ? `${item.entryMatchCount.toString()} 个 Entry 同时符合结构条件`
-                      : '完整文档通道'}
+                      ? `${item.entryMatchCount.toString()} 个条目同时符合筛选条件`
+                      : '完整文档'}
                   </span>
                   <button
                     className="secondary-action"
@@ -99,7 +94,7 @@ function privateDocumentMatchReasonLabel(
     case 'uri':
       return '来源地址命中';
     case 'entry_tags':
-      return '文档内 Entry 标签命中';
+      return '文档内条目标签命中';
   }
 }
 function privateDocumentTextModeLabel(value: string): string {

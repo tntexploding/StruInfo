@@ -276,6 +276,7 @@ export interface M1cApiServicePort {
   reviewInformationEntryTypes(body: unknown): Promise<M1cHttpResult>;
   searchInformationEntries(body: unknown): Promise<M1cHttpResult>;
   informationEntrySearchIndexStatus(): Promise<M1cHttpResult>;
+  refreshInformationEntrySearchIndex(body: unknown): Promise<M1cHttpResult>;
   rebuildInformationEntrySearchIndex(): Promise<M1cHttpResult>;
   evaluateInformationEntrySearch(body: unknown): Promise<M1cHttpResult>;
   exploreInformationEntries(body: unknown): Promise<M1cHttpResult>;
@@ -390,6 +391,60 @@ export class M1cApiService implements M1cApiServicePort {
           includePrivate,
           entryIds,
         );
+  }
+
+  async #loadInformationEntryAssociationNeighborhood(
+    entryIds: readonly string[],
+    includePrivate: boolean,
+  ): Promise<
+    Readonly<{
+      entries: readonly Readonly<CurrentInformationEntry>[];
+      snapshot: Readonly<InformationEntryAssociationRepositorySnapshot>;
+    }>
+  > {
+    const associationRepository =
+      this.#dependencies.informationEntryAssociationRepository;
+    const loadTargeted =
+      associationRepository.loadAssociationSnapshotForEntries?.bind(
+        associationRepository,
+      );
+    const loadEntriesByIds =
+      this.#dependencies.informationEntryRepository.loadCurrentEntriesByIds?.bind(
+        this.#dependencies.informationEntryRepository,
+      );
+    if (loadTargeted === undefined || loadEntriesByIds === undefined) {
+      const [entries, snapshot] = await Promise.all([
+        this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          includePrivate,
+        ),
+        associationRepository.loadAssociationSnapshot(
+          this.#dependencies.workspaceId,
+          includePrivate,
+        ),
+      ]);
+      return Object.freeze({entries, snapshot});
+    }
+    const snapshot = await loadTargeted(
+      this.#dependencies.workspaceId,
+      includePrivate,
+      entryIds,
+    );
+    const endpointIds = new Set(entryIds);
+    for (const projection of snapshot.projections) {
+      endpointIds.add(projection.entryLowId);
+      endpointIds.add(projection.entryHighId);
+    }
+    for (const override of snapshot.overrides) {
+      endpointIds.add(override.entryLowId);
+      endpointIds.add(override.entryHighId);
+    }
+    const entries = await loadEntriesByIds(
+      this.#dependencies.workspaceId,
+      includePrivate,
+      [...endpointIds],
+    );
+    return Object.freeze({entries, snapshot});
   }
 
   async #loadInformationEntryAssociationPolicy(): Promise<
@@ -623,6 +678,10 @@ export class M1cApiService implements M1cApiServicePort {
         ...(this.#dependencies.informationEntryRetrieval === undefined
           ? []
           : ['information_entry_search_index']),
+        ...(this.#dependencies.informationEntryRetrieval
+          ?.incrementalRefreshAvailable === true
+          ? ['information_entry_incremental_search_index']
+          : []),
         'private_documents',
         'processing_runs',
         'review_preferences',
@@ -2732,6 +2791,32 @@ export class M1cApiService implements M1cApiServicePort {
     }
   }
 
+  public async refreshInformationEntrySearchIndex(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const retrieval = this.#dependencies.informationEntryRetrieval;
+    if (retrieval?.incrementalRefreshAvailable !== true)
+      return httpResult(404, {status: 'not_found'});
+    if (!isRecord(body) || Object.keys(body).some((key) => key !== 'limit'))
+      return inputFailure('body');
+    const limit = body.limit === undefined ? 32 : body.limit;
+    if (
+      typeof limit !== 'number' ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 32
+    )
+      return inputFailure('body.limit');
+    try {
+      const result = await retrieval.refresh(limit);
+      return httpResult(200, {status: 'ok', ...result});
+    } catch (error) {
+      return error instanceof InformationEntryRetrievalServiceError
+        ? informationEntryRetrievalFailure(error)
+        : repositoryFailure();
+    }
+  }
+
   public async rebuildInformationEntrySearchIndex(): Promise<M1cHttpResult> {
     const retrieval = this.#dependencies.informationEntryRetrieval;
     if (retrieval === undefined) return httpResult(404, {status: 'not_found'});
@@ -2832,6 +2917,59 @@ export class M1cApiService implements M1cApiServicePort {
     const input = decodeInformationEntryKnowledgeGraphRequest(body);
     if (input === undefined) return inputFailure('body');
     try {
+      const retrieval = this.#dependencies.informationEntryRetrieval;
+      if (
+        retrieval !== undefined &&
+        this.#dependencies.informationEntryRepository
+          .loadCurrentEntriesByIds !== undefined &&
+        this.#dependencies.informationEntryAssociationRepository
+          .loadAssociationSnapshotForEntries !== undefined
+      ) {
+        const searchResult = await retrieval.search({
+          ...(input.query === undefined ? {} : {text: input.query}),
+          includePrivate: input.includePrivate,
+          onlyPrivate: input.onlyPrivate,
+          limit: input.candidateLimit,
+        });
+        const centerEntryId =
+          input.centerEntryId ?? searchResult.items[0]?.entry.entryId;
+        if (centerEntryId === undefined) {
+          return httpResult(200, {
+            status: 'ok',
+            querySha256: searchResult.querySha256,
+            candidateTotalCount: searchResult.totalCount,
+            candidates: searchResult.items,
+            graph: null,
+          });
+        }
+        const neighborhood =
+          await this.#loadInformationEntryAssociationNeighborhood(
+            [centerEntryId],
+            input.includePrivate,
+          );
+        const entries = input.onlyPrivate
+          ? neighborhood.entries.filter((entry) => entry.value.isPrivate)
+          : neighborhood.entries;
+        if (!entries.some((entry) => entry.entryId === centerEntryId)) {
+          return httpResult(404, {
+            status: 'not_found',
+            issue: Object.freeze({code: 'information_entry_not_found'}),
+          });
+        }
+        const graph = buildInformationEntryKnowledgeGraph(
+          centerEntryId,
+          entries,
+          neighborhood.snapshot,
+          input.neighborLimit,
+        );
+        return httpResult(200, {
+          status: 'ok',
+          querySha256: searchResult.querySha256,
+          candidateTotalCount: searchResult.totalCount,
+          candidates: searchResult.items,
+          graph: graph ?? null,
+        });
+      }
       const [loadedEntries, associationSnapshot] = await Promise.all([
         this.#dependencies.informationEntryRepository.loadCurrentEntries(
           this.#dependencies.workspaceId,
@@ -3200,17 +3338,14 @@ export class M1cApiService implements M1cApiServicePort {
       return inputFailure('query.includePrivate');
     }
     try {
-      const [entries, snapshot, policy] = await Promise.all([
-        this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          includePrivate,
-        ),
-        this.#dependencies.informationEntryAssociationRepository.loadAssociationSnapshot(
-          this.#dependencies.workspaceId,
+      const [neighborhood, policy] = await Promise.all([
+        this.#loadInformationEntryAssociationNeighborhood(
+          [entryId],
           includePrivate,
         ),
         this.#loadInformationEntryAssociationPolicy(),
       ]);
+      const {entries, snapshot} = neighborhood;
       if (!entries.some((entry) => entry.entryId === entryId)) {
         return httpResult(404, {
           status: 'not_found',
@@ -5997,7 +6132,8 @@ function informationEntryRetrievalFailure(
 ): M1cHttpResult {
   if (
     error.code === 'semantic_search_private_scope_forbidden' ||
-    error.code === 'semantic_search_text_required'
+    error.code === 'semantic_search_text_required' ||
+    error.code === 'search_index_invalid_refresh_limit'
   ) {
     return httpResult(422, {
       status: 'rejected',
@@ -6006,7 +6142,9 @@ function informationEntryRetrievalFailure(
   }
   if (
     error.code === 'semantic_search_not_configured' ||
-    error.code === 'semantic_search_index_not_ready'
+    error.code === 'semantic_search_index_not_ready' ||
+    error.code === 'search_index_refresh_unavailable' ||
+    error.code === 'search_index_maintenance_busy'
   ) {
     return httpResult(409, {
       status: 'rejected',

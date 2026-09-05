@@ -108,6 +108,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       Readonly<Extract<EvidencePanelState, {status: 'ready'}>['snapshot']>
     >();
   const evidenceReturnTarget = useRef<HTMLElement | undefined>(undefined);
+  const evidenceRequestGeneration = useRef(0);
 
   const refreshWorkspace = useCallback(
     async (signal?: AbortSignal) => {
@@ -174,7 +175,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
         ) {
           setReviewPreferences({
             status: 'error',
-            message: '无法读取外部个人标签设置；Entry 数据仍可继续查看。',
+            message: '无法读取个人标签设置；已有条目仍可继续查看。',
           });
         }
       }
@@ -369,7 +370,17 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       selectedFragmentId?: string,
       includePrivate = false,
     ) => {
-      if (returnFocus !== undefined) evidenceReturnTarget.current = returnFocus;
+      const requestGeneration = ++evidenceRequestGeneration.current;
+      const activeElement = document.activeElement;
+      if (
+        returnFocus !== undefined ||
+        !(activeElement instanceof HTMLElement) ||
+        activeElement.closest('.evidence-rail') === null
+      ) {
+        evidenceReturnTarget.current =
+          returnFocus ??
+          (activeElement instanceof HTMLElement ? activeElement : undefined);
+      }
       setEvidencePanel({
         status: 'loading',
         snapshotId,
@@ -380,6 +391,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
         const response = await apiClient.loadEvidenceSnapshot(snapshotId, {
           includePrivate,
         });
+        if (requestGeneration !== evidenceRequestGeneration.current) return;
         if (response.body.status === 'ok') {
           setSelectedEvidence(response.body.snapshot);
           setEvidencePanel({
@@ -394,9 +406,10 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           snapshotId,
           selectedFragmentId,
           includePrivate,
-          message: '该 Snapshot 不存在于当前工作区，或已切换到其他外部资料集。',
+          message: '找不到这份来源文档；它可能属于另一组资料。',
         });
       } catch {
+        if (requestGeneration !== evidenceRequestGeneration.current) return;
         setEvidencePanel({
           status: 'error',
           snapshotId,
@@ -531,6 +544,11 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
 
   const loadInformationEntrySearchIndex = useCallback(
     () => apiClient.loadInformationEntrySearchIndex(),
+    [apiClient],
+  );
+
+  const refreshInformationEntrySearchIndex = useCallback(
+    () => apiClient.refreshInformationEntrySearchIndex({limit: 32}),
     [apiClient],
   );
 
@@ -831,6 +849,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
   );
 
   function closeEvidence() {
+    evidenceRequestGeneration.current += 1;
     setEvidencePanel({status: 'closed'});
     const target = evidenceReturnTarget.current;
     evidenceReturnTarget.current = undefined;
@@ -896,6 +915,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       const response = await apiClient.restoreWorkspaceBundle(fileName);
       const feedback = workspaceTransferFeedback(response.body, 'restored');
       if (feedback.kind === 'success') {
+        evidenceRequestGeneration.current += 1;
         setEvidencePanel({status: 'closed'});
         setSelectedEvidence(undefined);
         await refreshEvidence();
@@ -1097,6 +1117,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onLoadSearchIndex={loadInformationEntrySearchIndex}
           onReviseExplorationPolicy={reviseInformationEntryExplorationPolicy}
           onSearch={searchInformationEntries}
+          onRefreshSearchIndex={refreshInformationEntrySearchIndex}
           onRebuildSearchIndex={rebuildInformationEntrySearchIndex}
           onSynthesize={synthesizeInformationEntryQuery}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
@@ -1170,14 +1191,14 @@ function importFeedback(
     return {
       kind: 'success',
       title: '材料已保存并拆解',
-      detail: `生成 ${body.fragmentIds.length.toString()} 个 Fragment${opensEvidence ? '；来源档案已打开' : ''}。`,
+      detail: `生成 ${body.fragmentIds.length.toString()} 个原文片段${opensEvidence ? '；原文已打开' : ''}。`,
     };
   }
   if (body.status === 'existing') {
     return {
       kind: 'success',
       title: '相同导入已存在',
-      detail: `幂等重放没有创建重复材料${opensEvidence ? '；来源档案已打开' : ''}。`,
+      detail: `这份材料已经导入，没有重复保存${opensEvidence ? '；原文已打开' : ''}。`,
     };
   }
   return {
@@ -1203,7 +1224,7 @@ function workspaceTransferFeedback(
         expectedStatus === 'exported'
           ? '全部个人数据已导出'
           : '全部个人数据已恢复',
-      detail: `${snapshotCount.toString()} 个文档版本 · ${body.blobCount.toString()} 份原始 Blob · 标签、联系与个人偏好${body.personalDataIncluded ? '已包含' : '未包含'} · ${formatByteCount(body.byteLength)}`,
+      detail: `${snapshotCount.toString()} 个文档版本 · ${body.blobCount.toString()} 份原始文件 · 标签、联系与个人偏好${body.personalDataIncluded ? '已包含' : '未包含'} · ${formatByteCount(body.byteLength)}`,
       fileName: body.fileName,
     };
   }

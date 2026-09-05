@@ -1,4 +1,6 @@
 import {spawn} from 'node:child_process';
+import {verifyCurrentReadCandidate} from './current_read_candidate.js';
+import {verifyIncrementalIndexCandidate} from './incremental_index_candidate.js';
 import {createHash, randomBytes, randomUUID} from 'node:crypto';
 import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import {arch, platform, tmpdir} from 'node:os';
@@ -43,7 +45,7 @@ import {
 } from '../apps/server/src/platform/database/postgresql/index.js';
 
 export const M2_P0D_REPORT_SCHEMA =
-  'struinfo.m2-p0d-postgres-report.v2' as const;
+  'struinfo.m2-p0d-postgres-report.v4' as const;
 export const M2_P0D_POSTGRES_IMAGE = 'postgres:18.6' as const;
 
 export type M2P0dFailureCode =
@@ -158,6 +160,12 @@ export interface M2P0dReport {
     acceptedAdjudications: number;
     searchProjections: number;
   }>;
+  readonly readCandidate: Awaited<
+    ReturnType<typeof verifyCurrentReadCandidate>
+  >;
+  readonly incrementalIndex: Awaited<
+    ReturnType<typeof verifyIncrementalIndexCandidate>
+  >;
   readonly productFlow: Readonly<{
     indexedEntries: number;
     lexicalMatchCount: number;
@@ -175,6 +183,8 @@ export interface M2P0dReport {
     p0bInitialAndRecoveryMilliseconds: number;
     p0cAdjudicationMilliseconds: number;
     productFlowMilliseconds: number;
+    readCandidateMilliseconds: number;
+    incrementalIndexMilliseconds: number;
     totalMilliseconds: number;
     completedEntriesPerSecond: number;
   }>;
@@ -196,6 +206,8 @@ interface Timings {
   p0bInitialAndRecoveryMilliseconds: number;
   p0cAdjudicationMilliseconds: number;
   productFlowMilliseconds: number;
+  readCandidateMilliseconds: number;
+  incrementalIndexMilliseconds: number;
 }
 
 export function parseM2P0dArguments(
@@ -271,6 +283,8 @@ export async function runM2P0dPostgresWorkload(
     p0bInitialAndRecoveryMilliseconds: 0,
     p0cAdjudicationMilliseconds: 0,
     productFlowMilliseconds: 0,
+    readCandidateMilliseconds: 0,
+    incrementalIndexMilliseconds: 0,
   };
   const containerName = `struinfo-m2-p0d-${randomUUID()}`;
   const dataRoot = await mkdtemp(join(tmpdir(), 'struinfo-m2-p0d-'));
@@ -673,6 +687,18 @@ export async function runM2P0dPostgresWorkload(
       entryCount,
       expectedExceptionCount,
     );
+    const readCandidateStarted = performance.now();
+    const readCandidate = await verifyCurrentReadCandidate(
+      runtimePool,
+      WORKSPACE_ID,
+    );
+    timings.readCandidateMilliseconds = elapsed(readCandidateStarted);
+    const incrementalStarted = performance.now();
+    const incrementalIndex = await verifyIncrementalIndexCandidate(
+      runtimePool,
+      WORKSPACE_ID,
+    );
+    timings.incrementalIndexMilliseconds = elapsed(incrementalStarted);
     const totalMilliseconds = elapsed(started);
     result = Object.freeze({
       schemaVersion: M2_P0D_REPORT_SCHEMA,
@@ -707,6 +733,8 @@ export async function runM2P0dPostgresWorkload(
       }),
       persisted,
       productFlow,
+      readCandidate,
+      incrementalIndex,
       measurements: Object.freeze({
         ...roundedTimings(timings),
         totalMilliseconds: round(totalMilliseconds),
@@ -1191,6 +1219,8 @@ function roundedTimings(timings: Timings): Timings {
     ),
     p0cAdjudicationMilliseconds: round(timings.p0cAdjudicationMilliseconds),
     productFlowMilliseconds: round(timings.productFlowMilliseconds),
+    readCandidateMilliseconds: round(timings.readCandidateMilliseconds),
+    incrementalIndexMilliseconds: round(timings.incrementalIndexMilliseconds),
   };
 }
 

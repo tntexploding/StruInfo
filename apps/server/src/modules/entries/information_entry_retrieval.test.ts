@@ -224,6 +224,121 @@ describe('InformationEntryRetrievalService', () => {
     expect(loadAll).toHaveBeenCalledTimes(1);
   });
 
+  it('uses a bounded repository page for an empty chronological browse', async () => {
+    const entries = [
+      currentEntry(
+        '22222222-2222-4222-8222-222222222221',
+        'Alpha',
+        'first body',
+      ),
+      currentEntry(
+        '22222222-2222-4222-8222-222222222222',
+        'Beta',
+        'second body',
+      ),
+    ];
+    const loadAll = vi.fn(() => Promise.reject(new Error('unbounded read')));
+    const loadPage = vi.fn(() =>
+      Promise.resolve(
+        Object.freeze({
+          totalCount: 14_910,
+          entries: Object.freeze(entries),
+        }),
+      ),
+    );
+    const service = new InformationEntryRetrievalService({
+      workspaceId: WORKSPACE_ID,
+      entries: {
+        materializeEntries: () => Promise.reject(new Error('unexpected write')),
+        reviseEntry: () => Promise.reject(new Error('unexpected write')),
+        loadCurrentEntries: loadAll,
+        loadCurrentEntryBrowsePage: loadPage,
+      },
+      associations: {
+        replaceAssociationProjections: () =>
+          Promise.reject(new Error('unexpected write')),
+        loadAssociationSnapshot: () =>
+          Promise.reject(new Error('unbounded association read')),
+        writeAssociationOverride: () =>
+          Promise.reject(new Error('unexpected write')),
+      },
+      index: {
+        loadSearchIndex: () =>
+          Promise.reject(new Error('unbounded index read')),
+        replaceSearchIndex: () => Promise.reject(new Error('unexpected write')),
+      },
+    });
+
+    await expect(
+      service.search({
+        includePrivate: false,
+        onlyPrivate: false,
+        domainScope: 'any',
+        limit: 1,
+      }),
+    ).resolves.toMatchObject({
+      totalCount: 14_910,
+      items: [{entry: {entryId: entries[0]?.entryId}}],
+      nextCursor: {entryId: entries[0]?.entryId},
+    });
+    expect(loadPage).toHaveBeenCalledWith(WORKSPACE_ID, 'public', 2, undefined);
+    expect(loadAll).not.toHaveBeenCalled();
+  });
+
+  it('reports index status from aggregate metrics without loading index rows', async () => {
+    const loadAll = vi.fn(() => Promise.reject(new Error('unbounded read')));
+    const loadIndex = vi.fn(() =>
+      Promise.reject(new Error('unbounded index read')),
+    );
+    const loadMetrics = vi.fn(() =>
+      Promise.resolve(
+        Object.freeze({
+          publicEntryCount: 14_910,
+          currentProjectionCount: 14_910,
+          embeddedProjectionCount: 0,
+          staleProjectionCount: 0,
+          postingCount: 2_989_278,
+        }),
+      ),
+    );
+    const service = new InformationEntryRetrievalService({
+      workspaceId: WORKSPACE_ID,
+      entries: {
+        materializeEntries: () => Promise.reject(new Error('unexpected write')),
+        reviseEntry: () => Promise.reject(new Error('unexpected write')),
+        loadCurrentEntries: loadAll,
+      },
+      associations: {
+        replaceAssociationProjections: () =>
+          Promise.reject(new Error('unexpected write')),
+        loadAssociationSnapshot: () =>
+          Promise.resolve({projections: [], overrides: []}),
+        writeAssociationOverride: () =>
+          Promise.reject(new Error('unexpected write')),
+      },
+      index: {
+        loadSearchIndex: loadIndex,
+        loadSearchIndexMetrics: loadMetrics,
+        replaceSearchIndex: () => Promise.reject(new Error('unexpected write')),
+      },
+    });
+
+    await expect(service.status()).resolves.toMatchObject({
+      publicEntryCount: 14_910,
+      currentProjectionCount: 14_910,
+      postingCount: 2_989_278,
+      semanticSearchAvailable: false,
+      semanticSearchReady: false,
+    });
+    expect(loadMetrics).toHaveBeenCalledWith(
+      WORKSPACE_ID,
+      undefined,
+      undefined,
+    );
+    expect(loadAll).not.toHaveBeenCalled();
+    expect(loadIndex).not.toHaveBeenCalled();
+  });
+
   it('does not report an empty workspace as a ready semantic index', async () => {
     const fixture = harness(true, []);
 

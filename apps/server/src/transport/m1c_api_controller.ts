@@ -489,6 +489,17 @@ export class M1cApiController {
     );
   }
 
+  @Post('entries/search/index/refresh')
+  public async refreshInformationEntrySearchIndex(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.refreshInformationEntrySearchIndex(body),
+    );
+  }
+
   @Post('entries/search/index/rebuild')
   public async rebuildInformationEntrySearchIndex(
     @Res() response: Response,

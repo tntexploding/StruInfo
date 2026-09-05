@@ -45,10 +45,8 @@ export function AssociationPolicyPanel({
     >
       <header>
         <div>
-          <p className="section-index">SCORING PARAMETERS</p>
-          <h3 id="association-policy-title">联系策略权重</h3>
+          <h3 id="association-policy-title">联系权重</h3>
         </div>
-        <span>修订 {policy.revision.toString()}</span>
       </header>
       <form onSubmit={submit}>
         <PolicyControl
@@ -76,7 +74,7 @@ export function AssociationPolicyPanel({
           }}
         />
         <PolicyControl
-          label="候选最低分"
+          label="最低相似度"
           value={draft.threshold}
           maximum={10_000}
           step={100}
@@ -97,7 +95,7 @@ export function AssociationPolicyPanel({
         </p>
         <dl>
           <div>
-            <dt>每条候选上限</dt>
+            <dt>每条推荐上限</dt>
             <dd>{policy.candidateLimit.toString()}</dd>
           </div>
           <div>
@@ -114,9 +112,7 @@ export function AssociationPolicyPanel({
             {saving ? '保存并重建中…' : '保存权重并重建联系'}
           </button>
         </div>
-        <p>
-          权重保存在外部个人配置中；保存后只重算自动候选，人工增强、削弱、屏蔽和图谱关系不会被覆盖。
-        </p>
+        <p>保存后会更新自动推荐，不会覆盖你手动修改的联系。</p>
       </form>
     </aside>
   );

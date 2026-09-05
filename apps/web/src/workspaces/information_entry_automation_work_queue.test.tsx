@@ -22,7 +22,7 @@ describe('InformationEntryAutomationWorkQueue', () => {
 
     expect(markup).toContain('自动分流工作队列');
     expect(markup).toContain('当前服务未启用自动分流');
-    expect(markup).toContain('自动动作可撤销');
+    expect(markup).toContain('仍可逐条编辑');
     expect(markup).not.toContain('标记完成');
     expect(onList).not.toHaveBeenCalled();
     expect(onUpdate).not.toHaveBeenCalled();
@@ -41,7 +41,7 @@ describe('InformationEntryAutomationWorkQueue', () => {
 
     expect(markup).toContain('role="status"');
     expect(markup).toContain('正在读取工作队列');
-    expect(markup).toContain('明确显示隐私 Entry 工作项');
+    expect(markup).toContain('显示隐私条目');
     expect(markup).toContain('刷新队列');
   });
 });
