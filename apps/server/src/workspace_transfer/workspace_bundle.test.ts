@@ -10,6 +10,8 @@ import {
   type BlobIdentity,
 } from '../storage/blob_store.js';
 import {
+  DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_BYTES,
+  DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES,
   readWorkspaceBundle,
   type WorkspaceBundleSectionCodec,
   WORKSPACE_BUNDLE_FORMAT,
@@ -51,6 +53,13 @@ const SYNTHETIC_CODEC: WorkspaceBundleSectionCodec = {
 };
 
 describe('workspace bundle contract', () => {
+  it('keeps an explicit production-scale capacity profile', () => {
+    expect(DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES).toBeGreaterThan(4_256_000);
+    expect(DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_BYTES).toBeGreaterThanOrEqual(
+      1024 * 1024 * 1024,
+    );
+  });
+
   it('admits a domain-scale section above the generic 100,000-value default', () => {
     const largeCodec: WorkspaceBundleSectionCodec = {
       type: 'synthetic.large-domain',

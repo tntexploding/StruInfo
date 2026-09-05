@@ -102,7 +102,6 @@ export function ProcessingRunRail({
   return (
     <aside className="workflow-overview__ai" aria-labelledby="ai-flow-title">
       <header>
-        <p className="section-index">PROCESSING WORKFLOW</p>
         <h2 id="ai-flow-title">处理任务进度</h2>
         <span
           className="status-chip"
@@ -114,8 +113,8 @@ export function ProcessingRunRail({
               ? '任务状态不可用'
               : latest === undefined
                 ? aiEnabled
-                  ? 'AI 已配置 · 暂无任务'
-                  : 'AI 未配置 · 暂无任务'
+                  ? 'AI 已启用，当前没有任务'
+                  : 'AI 未启用，当前没有任务'
                 : runStatusLabel(latest)}
         </span>
       </header>
@@ -145,8 +144,8 @@ export function ProcessingRunRail({
         </strong>
         <p>
           {latest === undefined
-            ? '导入、拆分、手工标签、联系和查询均可继续使用；系统不会虚构 AI 进度。'
-            : `${progress} · ${latest.proposals.length.toString()} 项提案记录`}
+            ? '当前没有处理任务。'
+            : `${progress} · ${latest.proposals.length.toString()} 条 AI 建议`}
         </p>
         {latest !== undefined &&
         (latest.status === 'queued' || latest.status === 'running') ? (
@@ -203,7 +202,7 @@ function runStatusLabel(run: Readonly<ProcessingRunView>): string {
     case 'queued':
       return '排队中';
     case 'running':
-      return run.origin === 'ai' ? 'AI 处理中' : '确定性处理中';
+      return run.origin === 'ai' ? 'AI 处理中' : '自动处理中';
     case 'succeeded':
       return '已完成';
     case 'failed':

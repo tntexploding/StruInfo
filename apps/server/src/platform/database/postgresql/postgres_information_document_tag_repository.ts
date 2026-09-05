@@ -200,16 +200,14 @@ export class PostgresInformationDocumentTagRepository implements InformationDocu
       this.#pool,
       'repeatable_read_only',
       async (client) => {
-        const [core, values] = await Promise.all([
-          client.query<Row>(READ_CURRENT_INFORMATION_DOCUMENT_TAGS_SQL, [
-            workspaceId,
-            includePrivate,
-          ]),
-          client.query<Row>(READ_CURRENT_INFORMATION_DOCUMENT_TAG_VALUES_SQL, [
-            workspaceId,
-            includePrivate,
-          ]),
-        ]);
+        const core = await client.query<Row>(
+          READ_CURRENT_INFORMATION_DOCUMENT_TAGS_SQL,
+          [workspaceId, includePrivate],
+        );
+        const values = await client.query<Row>(
+          READ_CURRENT_INFORMATION_DOCUMENT_TAG_VALUES_SQL,
+          [workspaceId, includePrivate],
+        );
         return Object.freeze(
           core.rows.map((row) => {
             const snapshotId = canonicalUuid(row.snapshot_id);

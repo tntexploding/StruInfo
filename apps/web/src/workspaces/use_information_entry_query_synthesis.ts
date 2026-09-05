@@ -139,15 +139,15 @@ function describeSynthesisFailure(value: unknown): string {
     typeof value.issue.code === 'string'
   ) {
     const labels: Readonly<Record<string, string>> = Object.freeze({
-      ai_provider_not_configured: 'OpenAI Provider 未配置；本地查询不受影响。',
+      ai_provider_not_configured: 'OpenAI 未配置；本地查询不受影响。',
       ai_query_private_scope_forbidden:
-        '隐私查询不能发送给外部 Provider；请切换到“仅公开结果”。',
-      ai_query_no_evidence: '当前公开查询没有可供综合的 Entry。',
+        '隐私查询不能发送给 OpenAI；请切换到“仅公开结果”。',
+      ai_query_no_evidence: '当前公开查询没有可供回答的内容。',
       ai_provider_timeout: 'OpenAI 响应超时；可以稍后重试。',
       ai_provider_unavailable: 'OpenAI 当前不可达；可以稍后重试。',
       ai_provider_rejected: 'OpenAI 拒绝了本次请求；没有保存任何回答。',
       ai_provider_invalid_response:
-        'OpenAI 返回内容不符合证据协议；该回答已被丢弃。',
+        'OpenAI 返回的内容格式不正确；该回答已被丢弃。',
     });
     return labels[value.issue.code] ?? `AI 综合失败：${value.issue.code}`;
   }

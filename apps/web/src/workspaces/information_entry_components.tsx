@@ -1,4 +1,4 @@
-import type {ReactNode} from 'react';
+import {useId, type ReactNode} from 'react';
 
 import type {
   AiTagProposalDecisionResponse,
@@ -11,6 +11,7 @@ import type {
   InformationEntryExplorationPolicyWriteResponse,
   InformationEntryExplorationResponse,
   InformationEntrySearchIndexResponse,
+  InformationEntrySearchIndexRefreshResponse,
   InformationEntryPreferenceProfileWriteResponse,
   InformationEntryPreferenceSuggestionResponse,
   InformationEntryPreferenceTrialResponse,
@@ -25,6 +26,7 @@ import type {
   InformationEntryDocumentListResponse,
   InformationEntryMaterializeResponse,
   InformationEntryRevisionResponse,
+  InformationEntryTypeReviewResponse,
   InformationEntryRestructureApplyResponse,
   InformationEntryRestructurePreviewResponse,
   InformationEntrySearchResponse,
@@ -74,11 +76,18 @@ export interface InformationEntryServices {
     entryId: string,
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationEntryRevisionResponse>>;
+  readonly onReviewTypes: (
+    body: unknown,
+    signal?: AbortSignal,
+  ) => Promise<M1cHttpResponse<InformationEntryTypeReviewResponse>>;
   readonly onSearch: (
     body: unknown,
   ) => Promise<M1cHttpResponse<InformationEntrySearchResponse>>;
   readonly onLoadSearchIndex: () => Promise<
     M1cHttpResponse<InformationEntrySearchIndexResponse>
+  >;
+  readonly onRefreshSearchIndex: () => Promise<
+    M1cHttpResponse<InformationEntrySearchIndexRefreshResponse>
   >;
   readonly onRebuildSearchIndex: () => Promise<
     M1cHttpResponse<InformationEntrySearchIndexResponse>
@@ -291,7 +300,7 @@ export function InformationEntryResults({
   if (state.status === 'error') {
     return (
       <div className="error-state entry-state" role="alert">
-        <h2>Entry 读取失败</h2>
+        <h2>条目读取失败</h2>
         <p>{state.message}</p>
         <button className="secondary-action" type="button" onClick={onRetry}>
           重试
@@ -302,7 +311,7 @@ export function InformationEntryResults({
   if (state.response.items.length === 0) {
     return (
       <div className="empty-state entry-state">
-        <h2>当前范围还没有 Entry</h2>
+        <h2>当前范围还没有条目</h2>
         <p>{emptyDescription}</p>
       </div>
     );
@@ -312,7 +321,7 @@ export function InformationEntryResults({
     <div className="entry-workbench">
       <section className="entry-result-list" aria-label={ariaLabel}>
         <header>
-          <span>ORDER / RESULT</span>
+          <span>条目列表</span>
           <strong>{state.response.totalCount.toString()}</strong>
         </header>
         <ol>
@@ -342,7 +351,7 @@ export function InformationEntryResults({
                   <span>
                     <strong>{entry.value.titlePath || '未命名条目'}</strong>
                     <small>
-                      {entry.sourceKey} · v{entry.revision.toString()}
+                      {entry.sourceKey}
                       {entry.value.isPrivate ? ' · 私密' : ''}
                     </small>
                     {matchReasons.length > 0 ? (
@@ -351,7 +360,7 @@ export function InformationEntryResults({
                         {textMatch === undefined ? null : (
                           <>
                             {' · '}
-                            {textSearchModeLabel(textMatch.mode)} 词法分{' '}
+                            {textSearchModeLabel(textMatch.mode)}匹配{' '}
                             {scorePercentage(textMatch.score)}/100
                           </>
                         )}
@@ -362,7 +371,7 @@ export function InformationEntryResults({
                         语义相似度 {scorePercentage(semanticMatch.score)}/100
                         {retrievalScore === undefined
                           ? null
-                          : ` · 综合排序分 ${scorePercentage(retrievalScore)}/100`}
+                          : ` · 综合匹配 ${scorePercentage(retrievalScore)}/100`}
                       </em>
                     )}
                     {filterReasons.length > 0 ? (
@@ -372,7 +381,7 @@ export function InformationEntryResults({
                     ) : null}
                     {association === undefined ? null : (
                       <em className="entry-result-list__association">
-                        {association.depth.toString()} 跳 · 路径最低分{' '}
+                        {association.depth.toString()} 层联系 · 联系强度{' '}
                         {scorePercentage(association.effectiveScore)}%
                       </em>
                     )}
@@ -382,7 +391,7 @@ export function InformationEntryResults({
             ),
           )}
         </ol>
-        <footer className="entry-pagination" aria-label="Entry 结果分页">
+        <footer className="entry-pagination" aria-label="条目结果分页">
           <button
             className="secondary-action"
             type="button"
@@ -412,26 +421,23 @@ export function InformationEntryResults({
 export function InformationEntryReadOnlyDetail({
   entry,
   variant,
+  headingLevel = 2,
   onOpenEvidence,
 }: {
   readonly entry: Readonly<InformationEntry>;
   readonly variant: 'query' | 'split';
+  readonly headingLevel?: 2 | 4;
   readonly onOpenEvidence: InformationEntryServices['onOpenEvidence'];
 }) {
+  const titleId = useId();
+  const Heading = headingLevel === 4 ? 'h4' : 'h2';
   return (
-    <article
-      className="entry-readonly-detail"
-      aria-labelledby="entry-readonly-title"
-    >
+    <article className="entry-readonly-detail" aria-labelledby={titleId}>
       <header className="console-heading">
         <div>
-          <p className="section-index">
-            {variant === 'split' ? 'SPLIT PREVIEW' : 'RESULT DETAIL'} / r
-            {entry.revision.toString()}
-          </p>
-          <h2 id="entry-readonly-title">
+          <Heading id={titleId}>
             {entry.value.titlePath || '未命名条目'}
-          </h2>
+          </Heading>
           <p>
             {entry.sourceKey} · 第 {(entry.value.documentOrder + 1).toString()}{' '}
             条{entry.value.isPrivate ? ' · 隐私内容' : ''}
@@ -448,7 +454,7 @@ export function InformationEntryReadOnlyDetail({
             );
           }}
         >
-          查看精确来源
+          查看原文
         </button>
       </header>
       <div className="entry-readonly-detail__body">{entry.value.body}</div>
@@ -492,9 +498,7 @@ export function InformationEntryReadOnlyDetail({
       </div>
       {variant === 'split' ? (
         <p className="workflow-boundary-note">
-          原始 Snapshot
-          是不可变证据。这里检查生成后的段落；若要修改拆分前全文，请在“导入”页保存为一个新的
-          Snapshot，再重新生成 Entry。
+          已导入的原文不会改变。这里显示生成后的段落；若要修改拆分前全文，请在“导入”页另存为新文档版本，再重新生成条目。
         </p>
       ) : null}
     </article>

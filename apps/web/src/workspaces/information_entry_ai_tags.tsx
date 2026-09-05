@@ -90,7 +90,7 @@ export function InformationEntryAiTags({
       ) {
         setFeedback({
           kind: 'success',
-          title: '标签提案已生成',
+          title: 'AI 标签建议已生成',
           detail: '请核对关键词、类型和领域；只有点击接受后才会修改条目。',
         });
         await loadProposals();
@@ -128,10 +128,11 @@ export function InformationEntryAiTags({
       ) {
         setFeedback({
           kind: 'success',
-          title: decision === 'accept' ? '已应用标签提案' : '已拒绝标签提案',
+          title:
+            decision === 'accept' ? '已应用 AI 标签' : '已忽略 AI 标签建议',
           detail:
             decision === 'accept'
-              ? '条目已通过现有修订命令更新，仍可在下方人工编辑。'
+              ? '标签已应用，仍可在下方人工修改。'
               : '条目内容没有发生变化。',
         });
         if (decision === 'accept') await onAccepted();
@@ -157,25 +158,23 @@ export function InformationEntryAiTags({
     <section className="entry-ai-tags" aria-labelledby="entry-ai-tags-title">
       <header className="console-heading">
         <div>
-          <p className="section-index">OPTIONAL AI PROPOSAL</p>
-          <h3 id="entry-ai-tags-title">OpenAI 标签提案</h3>
+          <h3 id="entry-ai-tags-title">AI 标签建议</h3>
         </div>
-        <span className="origin-label origin-label--ai">提案 · 不自动写入</span>
       </header>
 
       {!enabled ? (
         <p className="entry-ai-tags__boundary">
-          未配置 OpenAI Provider。人工审核与确定性标签功能保持完整可用。
+          OpenAI 未启用，仍可使用人工评分和自动标签建议。
         </p>
       ) : entry.value.isPrivate ? (
         <p className="entry-ai-tags__boundary">
-          隐私条目不会发送给外部 Provider；请继续使用下方人工编辑。
+          隐私条目不会发送给 OpenAI，请使用人工编辑。
         </p>
       ) : (
         <>
           <p className="entry-ai-tags__boundary">
-            点击生成会把当前条目的标题、正文和已有标签发送给
-            OpenAI；不会发送其他条目，且不会自动接受结果。
+            点击生成后，当前条目的标题、正文和标签会发送给
+            OpenAI。其他条目不会发送，结果需要你确认后才会保存。
           </p>
           <div className="entry-ai-tags__actions">
             <button
@@ -184,12 +183,12 @@ export function InformationEntryAiTags({
               disabled={busy || loading}
               onClick={() => void startProposal()}
             >
-              {busy ? '处理中…' : '生成标签提案'}
+              {busy ? '处理中…' : '生成 AI 标签建议'}
             </button>
             <span>
               {loading
-                ? '读取既有提案…'
-                : `${proposals.length.toString()} 个提案`}
+                ? '读取已有建议…'
+                : `${proposals.length.toString()} 条建议`}
             </span>
           </div>
           {latest === undefined ? null : (
@@ -226,7 +225,7 @@ function ProposalCard({
         <span>{proposalStatusLabel(proposal.status)}</span>
       </header>
       {payload === undefined ? (
-        <p>该提案缺少可应用的标签载荷。</p>
+        <p>这条建议没有可用的标签内容。</p>
       ) : (
         <dl>
           <div>
@@ -253,12 +252,6 @@ function ProposalCard({
                 .join(' · ') || '无'}
             </dd>
           </div>
-          <div>
-            <dt>来源</dt>
-            <dd>
-              {payload.providerModel} · {payload.promptVersion}
-            </dd>
-          </div>
         </dl>
       )}
       {proposal.status === 'pending_review' && payload !== undefined ? (
@@ -277,7 +270,7 @@ function ProposalCard({
             disabled={disabled}
             onClick={onReject}
           >
-            拒绝提案
+            忽略建议
           </button>
         </div>
       ) : null}
@@ -294,17 +287,17 @@ function proposalStatusLabel(status: ProcessingProposalView['status']): string {
 
 function failureFeedback(code: string): ActionFeedback {
   const known: Readonly<Record<string, string>> = Object.freeze({
-    ai_private_entry_forbidden: '隐私条目不会发送给外部 Provider。',
-    ai_provider_not_configured: '当前服务未配置 OpenAI Provider。',
+    ai_private_entry_forbidden: '隐私条目不会发送给 OpenAI。',
+    ai_provider_not_configured: '当前服务未启用 OpenAI。',
     ai_provider_timeout: 'OpenAI 请求超时，条目没有变化。',
     ai_provider_unavailable: 'OpenAI 暂时不可用，条目没有变化。',
     ai_provider_rejected: 'OpenAI 拒绝了本次请求，条目没有变化。',
     ai_provider_invalid_response: 'OpenAI 返回的标签结构无效，条目没有变化。',
-    stale_entry_revision: '条目已被修改；请刷新后重新生成提案。',
+    stale_entry_revision: '条目已被修改；请刷新后重新生成建议。',
   });
   return {
     kind: 'error',
-    title: '标签提案操作未完成',
+    title: 'AI 标签操作未完成',
     detail: known[code] ?? `服务返回：${code}`,
   };
 }
@@ -312,7 +305,7 @@ function failureFeedback(code: string): ActionFeedback {
 function connectionFailure(): ActionFeedback {
   return {
     kind: 'error',
-    title: '无法连接标签提案服务',
+    title: '无法连接 AI 标签服务',
     detail: '条目没有变化；服务恢复后可以重试。',
   };
 }

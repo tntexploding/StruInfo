@@ -1,7 +1,10 @@
 import type {
   CurrentInformationEntry,
+  InformationEntryTypeReviewRequest,
+  InformationEntryTypeReviewResult,
   InformationEntryMaterializeRow,
   InformationEntryRevisionWrite,
+  InformationEntrySearchCursor,
 } from './information_entry_contract.js';
 import type {
   InformationEntryRestructureLineage,
@@ -19,9 +22,21 @@ export type InformationEntryEmptySnapshotMaterializeOutcome =
 export type InformationEntryRevisionOutcome =
   'applied' | 'unchanged' | 'not_found' | 'stale';
 
+export interface InformationEntryBulkRevisionResult {
+  readonly outcome: InformationEntryRevisionOutcome;
+  readonly appliedCount: number;
+}
+
 export interface InformationEntryMaterializeResult {
   readonly outcome: InformationEntryMaterializeOutcome;
   readonly createdCount: number;
+}
+
+export type InformationEntryBrowsePrivacyScope = 'public' | 'all' | 'private';
+
+export interface InformationEntryBrowsePage {
+  readonly totalCount: number;
+  readonly entries: readonly Readonly<CurrentInformationEntry>[];
 }
 
 export interface InformationEntryEmptySnapshotMaterializeResult {
@@ -42,12 +57,55 @@ export interface InformationEntryRepositoryPort {
     workspaceId: string,
     includePrivate: boolean,
   ): Promise<readonly Readonly<CurrentInformationEntry>[]>;
+
+  /**
+   * Optional optimized hydration path for a closed set of current Entry ids.
+   * Implementations that do not provide it keep the complete-load behavior.
+   */
+  loadCurrentEntriesByIds?(
+    workspaceId: string,
+    includePrivate: boolean,
+    entryIds: readonly string[],
+  ): Promise<readonly Readonly<CurrentInformationEntry>[]>;
+
+  /**
+   * Optional scale-aware page for an unfiltered chronological browse. The
+   * cursor fields are the stable suffix used by the ordinary Entry search.
+   */
+  loadCurrentEntryBrowsePage?(
+    workspaceId: string,
+    privacyScope: InformationEntryBrowsePrivacyScope,
+    limit: number,
+    after?: Pick<
+      InformationEntrySearchCursor,
+      'capturedAt' | 'documentOrder' | 'entryId'
+    >,
+  ): Promise<Readonly<InformationEntryBrowsePage>>;
+
+  /**
+   * Optional scale-aware read used by the owner-facing type correction queue.
+   * The pure fallback keeps synthetic and in-memory repositories compatible.
+   */
+  reviewCurrentEntryTypes?(
+    request: Readonly<InformationEntryTypeReviewRequest>,
+  ): Promise<Readonly<InformationEntryTypeReviewResult>>;
 }
 
 export interface InformationEntryEmptySnapshotRepositoryPort extends InformationEntryRepositoryPort {
   materializeEntriesIfSnapshotEmpty(
     entries: readonly Readonly<InformationEntryMaterializeRow>[],
   ): Promise<Readonly<InformationEntryEmptySnapshotMaterializeResult>>;
+}
+
+/**
+ * Applies one closed set of current Entry revisions in a single workspace
+ * transaction. The caller prepares every revision through the ordinary Entry
+ * domain boundary; this port only batches the existing write semantics.
+ */
+export interface InformationEntryBulkRevisionRepositoryPort {
+  reviseEntriesAtomically(
+    writes: readonly Readonly<InformationEntryRevisionWrite>[],
+  ): Promise<Readonly<InformationEntryBulkRevisionResult>>;
 }
 
 export type InformationEntryRestructureOutcome =

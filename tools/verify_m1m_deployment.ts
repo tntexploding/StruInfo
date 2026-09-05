@@ -46,7 +46,7 @@ export function validateM1mDeploymentSources(
     'RUN --network=none pnpm run build',
     'RUN --network=none pnpm --offline --config.trust-lockfile=true --config.inject-workspace-packages=true --filter @struinfo/server deploy --prod --no-optional /runtime-server',
     'COPY --from=build --chown=10001:10001 /workspace/LICENSE /opt/struinfo/LICENSE',
-    'ARG STRUIINFO_VERSION=0.1.0',
+    'ARG STRUIINFO_VERSION=0.2.0',
     'org.opencontainers.image.version="${STRUIINFO_VERSION}"',
     'rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v1.22.22',
     'rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg',
@@ -78,6 +78,9 @@ export function validateM1mDeploymentSources(
       'The ordinary application manifest must not request a migration secret.',
     );
   }
+  validateProductionMemoryService(sources.compose, 'app', '3g', 2048);
+  validateProductionMemoryService(sources.compose, 'backup', '6g', 4096);
+  validateProductionMemoryService(sources.compose, 'restore', '6g', 4096);
 
   requireAll(sources.maintenanceCompose, [
     'read_only: true',
@@ -185,7 +188,7 @@ function validateRootStartScripts(source: string): void {
   }
   if (
     decoded.license !== 'MIT' ||
-    decoded.version !== '0.1.0' ||
+    decoded.version !== '0.2.0' ||
     !Array.isArray(decoded.files) ||
     !decoded.files.includes('LICENSE')
   ) {
@@ -228,6 +231,29 @@ function rejectSecretAssignments(source: string): void {
     /(?:^|\n)\s*(?:DATABASE_URL|OPENAI_API_KEY|STRUIINFO_MIGRATION_DATABASE_URL)\s*:\s*[^\s$]/u,
     /(?:^|\n)\s*(?:DATABASE_URL|OPENAI_API_KEY|STRUIINFO_MIGRATION_DATABASE_URL)\s*=\s*\S+/u,
   ]);
+}
+
+function validateProductionMemoryService(
+  source: string,
+  serviceName: 'app' | 'backup' | 'restore',
+  memoryLimit: '3g' | '6g',
+  heapMegabytes: 2048 | 4096,
+): void {
+  const match = new RegExp(
+    `^  ${serviceName}:\\r?\\n([\\s\\S]*?)(?=^  [a-z][a-z0-9-]*:|^secrets:)`,
+    'mu',
+  ).exec(source);
+  if (
+    match?.[1] === undefined ||
+    !match[1].includes(`mem_limit: ${memoryLimit}`) ||
+    !match[1].includes(
+      `NODE_OPTIONS: --max-old-space-size=${String(heapMegabytes)}`,
+    )
+  ) {
+    throw new M1mDeploymentError(
+      `The ${serviceName} service is missing the production-scale memory profile.`,
+    );
+  }
 }
 
 function meaningfulLines(source: string): readonly string[] {

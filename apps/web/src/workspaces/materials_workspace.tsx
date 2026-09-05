@@ -311,7 +311,7 @@ export function MaterialsWorkspace({
       setFeedback({
         kind: 'error',
         title: '文件未能准备完成',
-        detail: '本机文件摘要或编码失败；没有向数据库写入任何内容。',
+        detail: '无法读取或处理这个文件；没有保存任何内容。',
       });
     } finally {
       setSubmitting(false);
@@ -351,12 +351,7 @@ export function MaterialsWorkspace({
     <div className="workspace-view materials-workspace">
       <header className="workflow-page-heading">
         <div>
-          <p className="section-index">01 / DOCUMENT IMPORT</p>
           <h1>导入</h1>
-          <p>
-            记录来源、格式、日期与隐私范围，并保存不可变 Snapshot。正文进入外部
-            Blob 存储，不进入 Git 或应用包体。
-          </p>
         </div>
         <button className="secondary-action" type="button" onClick={onRefresh}>
           刷新材料列表
@@ -373,14 +368,10 @@ export function MaterialsWorkspace({
       <section className="intake-console" aria-labelledby="import-title">
         <header className="console-heading">
           <div>
-            <p className="section-index">SOURCE / CAPTURE</p>
             <h2 id="import-title" ref={importHeading} tabIndex={-1}>
               导入来源
             </h2>
           </div>
-          <span className="origin-label origin-label--deterministic">
-            确定性解析 · 非 AI
-          </span>
         </header>
         <form
           className="import-form"
@@ -583,7 +574,7 @@ export function MaterialsWorkspace({
             <span>
               <strong>作为隐私文档录入</strong>
               <small>
-                原始文件和规范化全文都会完整保存在外部工作区；拆出的知识与相关关系自动继承私密范围。
+                原始文件和可处理正文都会完整保存在个人数据目录；拆出的条目和联系会自动保持隐私。
               </small>
             </span>
           </label>
@@ -598,22 +589,22 @@ export function MaterialsWorkspace({
                 }}
                 placeholder={
                   sourceMode === 'uploaded_file'
-                    ? '留空时按文件名与 SHA-256 生成'
-                    : '留空时按本次导入身份自动生成'
+                    ? '留空时按文件名和内容自动生成'
+                    : '留空时自动生成'
                 }
               />
             </label>
           ) : (
             <div className="field field--wide batch-identity-note">
-              <span>逐文件来源身份</span>
-              <p>每份文件按文件名与 SHA-256 独立生成，不共享来源别名。</p>
+              <span>每个文件单独命名</span>
+              <p>系统会按文件名和内容分别识别每份文件。</p>
             </div>
           )}
           {sourceMode === 'git_file' ? (
             <fieldset className="git-source-fields field--full">
-              <legend>Git 来源身份</legend>
+              <legend>Git 文件信息</legend>
               <label className="field field--wide">
-                <span>仓库规范 URI</span>
+                <span>仓库地址</span>
                 <input
                   required
                   type="url"
@@ -636,7 +627,7 @@ export function MaterialsWorkspace({
                 />
               </label>
               <label className="field">
-                <span>观察到的 ref</span>
+                <span>分支或标签</span>
                 <input
                   required
                   value={repositoryRef}
@@ -647,7 +638,7 @@ export function MaterialsWorkspace({
                 />
               </label>
               <label className="field">
-                <span>精确 commit（小写 SHA）</span>
+                <span>提交版本号</span>
                 <input
                   required
                   minLength={40}
@@ -657,14 +648,14 @@ export function MaterialsWorkspace({
                   onChange={(event) => {
                     setCommitDigest(event.currentTarget.value);
                   }}
-                  placeholder="40 或 64 位十六进制摘要"
+                  placeholder="40 或 64 位小写字母和数字"
                 />
               </label>
             </fieldset>
           ) : null}
           {sourceMode !== 'uploaded_file' || localCaptureMode === 'single' ? (
             <label className="field field--wide">
-              <span>规范来源链接（可选）</span>
+              <span>来源链接（可选）</span>
               <input
                 type="url"
                 value={canonicalUri}
@@ -693,12 +684,12 @@ export function MaterialsWorkspace({
                 );
               }}
             >
-              <option value="commonmark-v1">通用 CommonMark</option>
+              <option value="commonmark-v1">通用 Markdown</option>
               <option value="ruanyf-weekly-v1">科技爱好者周刊</option>
             </select>
           </label>
           <label className="field">
-            <span>发布日期（UTC，可选）</span>
+            <span>发布日期（可选）</span>
             <input
               type="date"
               value={publicationDate}
@@ -717,12 +708,12 @@ export function MaterialsWorkspace({
               onChange={(event) => {
                 setSourcePreface(event.currentTarget.value);
               }}
-              placeholder="需要时补充标题、导语或上下文；保存后将成为本次 Snapshot 正文的一部分。"
+              placeholder="需要时补充标题、导语或上下文；导入后会放在正文开头。"
             />
             {sourceMode === 'uploaded_file' ? (
               <small>
-                HTML/PDF 始终保留精确原始字节；前置文字只加入可拆分文字投影。
-                Markdown/TXT 填写后会生成一份组合后的新 Snapshot。
+                HTML/PDF 会保留原始文件；前置文字只加入可拆分的正文。
+                Markdown/TXT 会把前置文字与文件内容合并为一份新文档。
               </small>
             ) : null}
           </label>
@@ -765,10 +756,7 @@ export function MaterialsWorkspace({
           ) : null}
           {sourceMode !== 'uploaded_file' || localCaptureMode === 'single' ? (
             <div className="form-commit field--full">
-              <p>
-                导入会创建不可变 Snapshot、结构节点与精确
-                Fragment；相同命令键可安全重试。
-              </p>
+              <p>导入会保存原始文件并生成可供拆分的正文；失败后可以重试。</p>
               <button
                 className="primary-action"
                 type="submit"
@@ -784,13 +772,12 @@ export function MaterialsWorkspace({
                       !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(commitDigest)))
                 }
               >
-                {submitting ? '正在写入…' : '保存来源 Snapshot'}
+                {submitting ? '正在导入…' : '导入文档'}
               </button>
             </div>
           ) : (
             <p className="batch-import-boundary field--full">
-              批次按钮位于文件队列内。每个文件独立保存为一个不可变
-              Snapshot；批次不会自动拆分为 Entry、生成标签、建立联系或调用 AI。
+              选择多个文件后，在文件列表中统一开始导入。每个文件会单独保存；拆分、标签和联系需要另行处理。
             </p>
           )}
         </form>
@@ -803,7 +790,6 @@ export function MaterialsWorkspace({
       >
         <header className="subsection-heading">
           <div>
-            <p className="section-index">IMPORT HISTORY / RECENT 200</p>
             <h2 id="evidence-list-title">已导入文档</h2>
           </div>
           {snapshots.status === 'ready' ? (
@@ -846,21 +832,14 @@ export function MaterialsWorkspace({
       >
         <header className="subsection-heading">
           <div>
-            <p className="section-index">PERSONAL DATA / PORTABILITY</p>
             <h2 id="workspace-transfer-title">全部个人数据导入导出</h2>
           </div>
-          <span className="origin-label origin-label--deterministic">
-            同一 Workspace ID
-          </span>
         </header>
         <div className="workspace-transfer-grid">
           <article className="workspace-transfer-card">
-            <p className="section-index">01 / EXPORT</p>
             <h3>导出全部个人数据</h3>
             <p>
-              将原始文件、拆分结果、Entry
-              与文档标签、联系、知识图谱、审核偏好和个人标签规则写入外部 exports
-              区。导出文件始终位于代码仓库和应用包之外。
+              导出原始文件、拆分结果、条目、标签、联系、知识图谱和个人设置。导出文件不会写入代码仓库。
             </p>
             <button
               className="secondary-action"
@@ -881,12 +860,9 @@ export function MaterialsWorkspace({
               void restoreWorkspace(event);
             }}
           >
-            <p className="section-index">02 / RESTORE</p>
             <h3>恢复全部个人数据</h3>
             <p>
-              只接受同一 Workspace
-              ID，且数据库中尚不存在该工作区。恢复前会验证数据库内容、内嵌原始
-              Blob 和个人偏好；旧版 Workspace Bundle 仍可兼容读取。
+              只能恢复到相同且尚未建立数据的工作区。恢复前会检查数据库、原始文件和个人设置；旧版数据包也可以读取。
             </p>
             <label className="field">
               <span>个人数据文件名</span>
@@ -943,7 +919,7 @@ function SnapshotList({
     return (
       <div className="loading-state" role="status" aria-busy="true">
         <span aria-hidden="true" />
-        正在读取材料索引…
+        正在读取文档列表…
       </div>
     );
   }
@@ -958,9 +934,8 @@ function SnapshotList({
   if (snapshots.status === 'empty') {
     return (
       <div className="empty-state" role="status">
-        <p className="section-index">NO CAPTURED MATERIAL</p>
-        <h3>当前工作区还没有材料</h3>
-        <p>先导入一份 Markdown，即可检查拆分、来源定位和后续审核。</p>
+        <h3>还没有导入文档</h3>
+        <p>先导入一份文档，再进行拆分和标签整理。</p>
         <button
           className="secondary-action"
           type="button"
@@ -984,18 +959,19 @@ function SnapshotList({
           <div className="record-list__main">
             <p className="record-list__title">{snapshot.sourceKey}</p>
             <p className="record-list__meta">
-              {formatDate(snapshot.capturedAt)} · {snapshot.resourceKind}
+              {formatDate(snapshot.capturedAt)} ·{' '}
+              {resourceKindLabel(snapshot.resourceKind)}
               {snapshot.isPrivate === true ? ' · 私密' : ''}
             </p>
           </div>
           <dl className="record-list__facts">
             <div>
-              <dt>Fragments</dt>
+              <dt>原文片段</dt>
               <dd>{snapshot.fragmentCount}</dd>
             </div>
             <div>
-              <dt>发布</dt>
-              <dd>{snapshot.publication?.sourceText ?? '未标注'}</dd>
+              <dt>发布日期</dt>
+              <dd>{snapshot.publication?.sourceText ?? '未填写'}</dd>
             </div>
           </dl>
           <button
@@ -1014,7 +990,7 @@ function SnapshotList({
               ? showPrivateDocuments
                 ? '查看私密全文'
                 : '先勾选查看隐私'
-              : '查看证据'}
+              : '查看原文'}
           </button>
         </li>
       ))}
@@ -1030,6 +1006,15 @@ function createImportIdentity(): ImportIdentity {
     resourceId: createClientUuid(),
     snapshotId: createClientUuid(),
   });
+}
+
+function resourceKindLabel(
+  kind: EvidenceSnapshotSummary['resourceKind'],
+): string {
+  if (kind === 'git_file') return 'Git 文件';
+  if (kind === 'uploaded_file') return '本地文件';
+  if (kind === 'remote_document') return '订阅文档';
+  return '手动文本';
 }
 
 function formatDate(value: string): string {

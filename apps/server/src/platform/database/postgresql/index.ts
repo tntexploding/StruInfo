@@ -61,7 +61,17 @@ export {
   createPostgresRepositories,
   type PostgresRepositorySet,
 } from './postgres_repository_factory.js';
+export {
+  PostgresOperationalStatusReader,
+  READ_POSTGRES_OPERATIONAL_STATUS_SQL,
+} from './postgres_operational_status.js';
 export {PostgresProcessingRunRepository} from './postgres_processing_run_repository.js';
+export {
+  LIST_BULK_INGESTION_CANDIDATES_SQL,
+  PostgresBulkIngestionRepository,
+} from './postgres_bulk_ingestion_repository.js';
+export {PostgresBulkIngestionEnrichmentRepository} from './postgres_bulk_ingestion_enrichment_repository.js';
+export {PostgresBulkIngestionAdjudicationRepository} from './postgres_bulk_ingestion_adjudication_repository.js';
 export {PostgresEntryAutomationExecutionRepository} from './postgres_entry_automation_execution_repository.js';
 export {PostgresAiTagProposalRepository} from './postgres_ai_tag_proposal_repository.js';
 export {

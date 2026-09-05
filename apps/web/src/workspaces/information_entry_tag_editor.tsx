@@ -76,13 +76,13 @@ export function InformationDocumentPanel({
           response.body.status === 'applied'
             ? '文档标签已重新聚合'
             : '聚合结果没有变化',
-        detail: '全文命中频次决定主顺序，Entry 关键词覆盖率作为辅助证据。',
+        detail: '全文出现次数决定主要顺序，条目关键词覆盖率作为辅助参考。',
       });
     } catch {
       setLocalFeedback({
         kind: 'error',
         title: '本地接口不可达',
-        detail: '当前标签状态没有变化；Document 与 Entry 保持不变。',
+        detail: '当前标签没有变化；文档和条目保持不变。',
       });
     } finally {
       setBusy(false);
@@ -142,10 +142,9 @@ export function InformationDocumentPanel({
     >
       <header className="console-heading">
         <div>
-          <p className="section-index">CURRENT DOCUMENT</p>
           <h2 id="entry-document-panel-title">{document.sourceKey}</h2>
           <p>
-            {document.entryCount.toString()} 个 Entry ·{' '}
+            {document.entryCount.toString()} 个条目 ·{' '}
             {document.annotatedEntryCount.toString()} 个已标注
             {document.currentTags === undefined
               ? ' · 尚无文档标签'
@@ -157,7 +156,7 @@ export function InformationDocumentPanel({
           type="button"
           onClick={onOpenDocument}
         >
-          查看完整 Document
+          查看完整文档
         </button>
       </header>
       <div className="entry-document-panel__body">
@@ -165,14 +164,14 @@ export function InformationDocumentPanel({
           <div className="entry-document-tags" aria-label="当前文档标签">
             {(document.currentTags?.value.tags.length ?? 0) === 0 ? (
               <span className="entry-document-tags__empty">
-                标注 Entry 的内容关键词后，可按全文倾向聚合文档标签。
+                为条目标注内容关键词后，可以汇总为文档标签。
               </span>
             ) : (
               document.currentTags?.value.tags.map((tag) => (
                 <span key={tag.normalizedValue} className="entry-document-tag">
                   <strong>{tag.displayValue}</strong>
                   <small>
-                    全文 {tag.fullTextOccurrences.toString()} · Entry{' '}
+                    全文 {tag.fullTextOccurrences.toString()} · 条目{' '}
                     {tag.entryCoverageCount.toString()}/
                     {document.currentTags?.value.entryCount.toString()}
                   </small>
@@ -183,7 +182,9 @@ export function InformationDocumentPanel({
           <p className="entry-document-panel__rule">
             {document.currentTags === undefined
               ? '尚未执行聚合'
-              : `${document.currentTags.value.revisionKind === 'manual' ? '人工设置' : '确定性聚合'} · ${document.currentTags.value.ruleVersion}`}
+              : document.currentTags.value.revisionKind === 'manual'
+                ? '人工设置'
+                : '自动生成'}
           </p>
         </div>
         <div className="entry-document-panel__actions">
@@ -351,7 +352,7 @@ export function InformationEntryEditor({
       setLocalFeedback({
         kind: 'error',
         title: '至少需要一个内容关键词',
-        detail: '关键词用于 Entry 搜索与后续关联候选，不会替代正文。',
+        detail: '关键词用于搜索和推荐联系，不会替代正文。',
       });
       return;
     }
@@ -389,11 +390,11 @@ export function InformationEntryEditor({
         kind: 'success',
         title:
           response.body.status === 'applied'
-            ? 'Entry 当前状态已保存'
-            : 'Entry 内容没有变化',
+            ? '条目已保存'
+            : '条目内容没有变化',
         detail:
           response.body.status === 'applied'
-            ? '原始 Fragment 保持不变；搜索现在读取更新后的最终状态。'
+            ? '已导入的原文保持不变；搜索会读取更新后的条目。'
             : '当前最终状态没有变化。',
       });
       onNext?.();
@@ -401,7 +402,7 @@ export function InformationEntryEditor({
       setLocalFeedback({
         kind: 'error',
         title: '本地接口不可达',
-        detail: '本次编辑没有写入；原始 Snapshot 与当前 Entry 保持不变。',
+        detail: '本次编辑没有保存；原始文档与当前条目保持不变。',
       });
     } finally {
       setSaving(false);
@@ -412,9 +413,6 @@ export function InformationEntryEditor({
     <section className="entry-editor" aria-labelledby="entry-editor-title">
       <header className="console-heading">
         <div>
-          <p className="section-index">
-            CURRENT STATE / {entry.revision.toString()}
-          </p>
           <h2 id="entry-editor-title">
             {entry.value.titlePath || '未命名条目'}
           </h2>
@@ -425,7 +423,7 @@ export function InformationEntryEditor({
             type="button"
             onClick={onLocateDocument}
           >
-            返回所属 Document
+            返回所属文档
           </button>
           <button
             className="secondary-action"
@@ -438,7 +436,7 @@ export function InformationEntryEditor({
               );
             }}
           >
-            查看精确来源
+            查看原文
           </button>
         </div>
       </header>
@@ -447,7 +445,7 @@ export function InformationEntryEditor({
         onSubmit={(event) => void save(event)}
       >
         <label className="field field--full">
-          <span>Entry 正文</span>
+          <span>条目正文</span>
           <textarea
             rows={12}
             value={body}
@@ -455,7 +453,7 @@ export function InformationEntryEditor({
               setBody(event.currentTarget.value);
             }}
           />
-          <small>编辑会更新当前成品态，不会修改原始 Fragment。</small>
+          <small>编辑会更新当前条目，不会修改已导入的原文。</small>
         </label>
         <label className="field field--full">
           <span>内容关键词（逗号或换行分隔）</span>

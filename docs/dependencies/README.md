@@ -170,8 +170,8 @@ at resolution/install time.
 
 | Tracked artifact                              | SHA-256                                                            |
 | --------------------------------------------- | ------------------------------------------------------------------ |
-| `THIRD_PARTY_NOTICES.md`                      | `EA5367975DAB23FBD5907DF041776E068CDFBEB7E8B077923622A9ACD2684242` |
-| `sbom/npm-closure.spdx.json`                  | `AAF46524099C08A9574C236EA51D5F1238B46D8BCA0AC0209C11495ADA60FE25` |
+| `THIRD_PARTY_NOTICES.md`                      | `495922462EE3448D84EE5F91B76263860B49753D6BF65384543A5F282975EF78` |
+| `sbom/npm-closure.spdx.json`                  | `028AF64C6FDBCFAF4C5DB15D03DB128ABC9B28F807C2DEFF2DE22683923F6032` |
 | `sbom/github-actions-runtime.spdx.json`       | `A5CD5A5DBD820926AB6F77766756ECCB61BBC9B172096D3927392AF5064B3B59` |
 | `evidence/source-license-reconciliation.json` | `2613B9B3894A1A1B5AAE3A7857BB96E46720ADAC7ED6C81736482E4197ABE0CF` |
 | `evidence/lzma-sdk-7zdec-review.json`         | `9A9A573E009DA1E035A51164524B7B0E213C29708362F2647F254946E63C42A7` |
@@ -211,3 +211,17 @@ The owner authorized the `v0.1.0` public source release and private single-user
 runtime image on 2026-08-28. The release contains no sample or owner data. A
 later artifact with additional server, browser, container, model, font or sample
 materials requires its own reconciliation before distribution.
+
+## v0.2.0 maintenance security repair
+
+The only runtime dependency change is the exact override `qs: 6.16.0`, replacing
+6.15.3 for GHSA-x5fp-wj9c-mxmx and GHSA-4mjr-xmp4-gh2g. The package remains
+BSD-3-Clause, uses no install lifecycle, and its two dependencies are already in
+the admitted graph. Registry SHA-512, independently computed tarball SHA-256,
+full license text, notices and SPDX relations were checked. The lock remains at
+410 entries; no age or integrity policy was relaxed.
+
+The separate weekly scanner is Trivy 0.74.0, used only as an external CI/local
+verification tool and not bundled into the application. Its official release
+archives are pinned by SHA-256; source, Apache-2.0 license and checksums are
+recorded in [the maintenance security review](evidence/maintenance-security-2026-09-05.md).

@@ -191,6 +191,17 @@ function truncateUtf8(value: string, maximumBytes: number): string {
   return output.join('');
 }
 
+export function isUsableInformationEntryEmbedding(
+  embedding: readonly number[] | undefined,
+): embedding is readonly number[] {
+  return (
+    embedding !== undefined &&
+    embedding.length > 0 &&
+    embedding.length <= 16_384 &&
+    embedding.every(Number.isFinite)
+  );
+}
+
 function validateEmbedding(embedding: readonly number[]): void {
   if (
     embedding.length < 1 ||

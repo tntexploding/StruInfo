@@ -16,9 +16,9 @@ describe('InformationEntryAiAssociations', () => {
       />,
     );
 
-    expect(markup).toContain('未配置 OpenAI Provider');
-    expect(markup).toContain('相似度关系和人工关系编辑仍可完整使用');
-    expect(markup).not.toContain('生成关系提案</button>');
+    expect(markup).toContain('OpenAI 未启用');
+    expect(markup).toContain('仍可查看相似条目并人工编辑关系');
+    expect(markup).not.toContain('生成 AI 关系建议</button>');
   });
 
   it('never offers Provider submission when either selected Entry is private', () => {
@@ -32,8 +32,8 @@ describe('InformationEntryAiAssociations', () => {
       />,
     );
 
-    expect(markup).toContain('隐私条目不会发送给外部 Provider');
-    expect(markup).not.toContain('生成关系提案</button>');
+    expect(markup).toContain('隐私条目不会发送给 OpenAI');
+    expect(markup).not.toContain('生成 AI 关系建议</button>');
   });
 
   it('states the explicit pair disclosure and manual acceptance boundary', () => {
@@ -47,11 +47,13 @@ describe('InformationEntryAiAssociations', () => {
       />,
     );
 
-    expect(markup).toContain('当前选中的两个公开条目');
-    expect(markup).toContain('不会扫描其他条目');
-    expect(markup).toContain('不会自动写入图谱');
-    expect(markup).toContain('生成关系提案');
-    expect(markup).toContain('AI 生成 · 待审核');
+    expect(markup).toContain(
+      '当前两个公开条目的标题、正文和标签会发送给 OpenAI',
+    );
+    expect(markup).toContain('其他条目不会发送');
+    expect(markup).toContain('结果需要你确认后才会保存');
+    expect(markup).toContain('生成 AI 关系建议');
+    expect(markup).not.toContain('origin-label');
   });
 });
 

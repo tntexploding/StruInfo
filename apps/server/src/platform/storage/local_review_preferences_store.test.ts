@@ -5,7 +5,13 @@ import {join} from 'node:path';
 
 import {afterEach, describe, expect, it} from 'vitest';
 
+import {
+  DEFAULT_ENTRY_SAVED_QUERIES,
+  decodeEntrySavedQueryWrite,
+  reviseEntrySavedQueries,
+} from '../../modules/entries/information_entry_saved_queries.js';
 import {patchReviewPreferences} from '../../storage/review_preferences_store.js';
+import {DEFAULT_ENTRY_CLASSIFICATION_PROFILE} from '../../modules/entries/information_entry_deterministic_classification.js';
 import {LocalReviewPreferencesStore} from './local_review_preferences_store.js';
 
 const roots: string[] = [];
@@ -19,6 +25,63 @@ afterEach(() => {
 });
 
 describe('LocalReviewPreferencesStore', () => {
+  it('serializes saved-query revisions with sibling preference writes and reopens the file', async () => {
+    const {store, root} = createStore();
+    const view = {
+      viewId: WORKSPACE_B,
+      name: 'Synthetic saved query',
+      query: {includePrivate: false},
+    };
+    const command = decodeEntrySavedQueryWrite({
+      ...view,
+      expectedRevision: 0,
+      operation: 'save',
+    });
+    if (command === undefined) throw new Error('Invalid synthetic command.');
+    const save = () =>
+      store.update(WORKSPACE_A, (current) => {
+        const result = reviseEntrySavedQueries(
+          current.entrySavedQueries ?? DEFAULT_ENTRY_SAVED_QUERIES,
+          command,
+        );
+        return {
+          next:
+            result.status === 'applied'
+              ? patchReviewPreferences(current, {
+                  entrySavedQueries: result.state,
+                })
+              : current,
+          result,
+        };
+      });
+    const [first, second] = await Promise.all([
+      save(),
+      save(),
+      store.update(WORKSPACE_A, (current) => ({
+        next: patchReviewPreferences(current, {
+          quickTags: ['Synthetic sibling'],
+        }),
+        result: undefined,
+      })),
+    ]);
+    expect(first.result.status).toBe('applied');
+    expect(second.result).toMatchObject({
+      status: 'rejected',
+      code: 'saved_queries_revision_conflict',
+    });
+    const persisted = await store.load(WORKSPACE_A);
+    expect(persisted.quickTags).toEqual(['Synthetic sibling']);
+    expect(persisted.entrySavedQueries).toMatchObject({
+      revision: 1,
+      views: [{name: view.name}],
+    });
+    const reopened = new LocalReviewPreferencesStore(root);
+    expect(await reopened.load(WORKSPACE_A)).toEqual(persisted);
+    expect((await store.load(WORKSPACE_B)).entrySavedQueries?.views).toEqual(
+      [],
+    );
+  });
+
   it('treats a missing external file as an empty workspace preference set', async () => {
     const {store} = createStore();
 
@@ -91,6 +154,8 @@ describe('LocalReviewPreferencesStore', () => {
         maximumGroupCodePoints: 4000,
         maximumFragmentsPerGroup: 8,
       },
+      entryClassificationProfile: DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+      entrySavedQueries: {version: 1, revision: 0, views: []},
     });
   });
 
@@ -119,6 +184,49 @@ describe('LocalReviewPreferencesStore', () => {
         minimumGroupCodePoints: 250,
         maximumGroupCodePoints: 2500,
         maximumFragmentsPerGroup: 6,
+      },
+    });
+  });
+
+  it('stores classification aliases, mappings and exclusions outside the database', async () => {
+    const {store} = createStore();
+
+    await store.update(WORKSPACE_A, (current) =>
+      Object.freeze({
+        next: patchReviewPreferences(current, {
+          entryClassificationProfile: Object.freeze({
+            format: 'struinfo.entry-classification-profile',
+            version: 1,
+            revision: 1,
+            aliases: Object.freeze([
+              Object.freeze({source: '容器平台', canonical: 'Docker'}),
+            ]),
+            typeMappings: Object.freeze([
+              Object.freeze({
+                term: '动手实验',
+                keyword: 'operating_guideline',
+              }),
+            ]),
+            domainMappings: Object.freeze([
+              Object.freeze({
+                term: 'Docker',
+                keyword: 'engineering_computing',
+              }),
+            ]),
+            exclusions: Object.freeze(['广告']),
+          }),
+        }),
+        result: undefined,
+      }),
+    );
+
+    await expect(store.load(WORKSPACE_A)).resolves.toMatchObject({
+      entryClassificationProfile: {
+        revision: 1,
+        aliases: [{source: '容器平台', canonical: 'Docker'}],
+        typeMappings: [{term: '动手实验', keyword: 'operating_guideline'}],
+        domainMappings: [{term: 'Docker', keyword: 'engineering_computing'}],
+        exclusions: ['广告'],
       },
     });
   });

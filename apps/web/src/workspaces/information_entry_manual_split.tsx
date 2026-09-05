@@ -135,7 +135,7 @@ export function InformationEntryManualSplit({
       setFeedback({
         kind: 'error',
         title: '人工拆分尚未完整',
-        detail: '每个条目都需要一个标题，并且全部 Fragment 必须保留。',
+        detail: '每个条目都需要标题，并且必须保留全部原文片段。',
       });
       return;
     }
@@ -172,22 +172,22 @@ export function InformationEntryManualSplit({
           detail:
             'issue' in response.body &&
             response.body.issue.code === 'split_structure_already_materialized'
-              ? '该文档已经由另一种拆分方式生成 Entry；现有结构没有被覆盖。'
-              : '分组必须按原文顺序完整覆盖全部 Fragment，且正文不能超过条目上限。',
+              ? '该文档已经通过另一种方式生成条目；现有结构没有被覆盖。'
+              : '分组必须按原文顺序覆盖全部片段，且正文不能超过条目上限。',
         });
         return;
       }
       setFeedback({
         kind: 'success',
         title: '人工拆分已保存',
-        detail: `当前文档生成 ${response.body.createdCount.toString()} 个 Entry；原始证据保持不变。`,
+        detail: `当前文档生成 ${response.body.createdCount.toString()} 个条目；原文保持不变。`,
       });
       await onCommitted();
     } catch {
       setFeedback({
         kind: 'error',
         title: '本地接口不可达',
-        detail: '人工拆分没有保存，现有证据和 Entry 均未改变。',
+        detail: '人工拆分没有保存，原文和现有条目均未改变。',
       });
     } finally {
       setBusy(false);
@@ -203,7 +203,6 @@ export function InformationEntryManualSplit({
     >
       <header className="console-heading">
         <div>
-          <p className="section-index">MANUAL GROUPING / LOCAL ONLY</p>
           <h2 id="manual-split-title">人工拆分工作台</h2>
         </div>
         <span className="record-count">
@@ -213,8 +212,7 @@ export function InformationEntryManualSplit({
         </span>
       </header>
       <p className="entry-manual-split__boundary">
-        可在既有 Fragment 边界或正文光标处拆分，编辑条目标题后一次保存。
-        原始证据、字符顺序和来源不会被改写。
+        可在段落之间或正文光标处拆分。保存时不会修改原文。
       </p>
       {snapshotId === '' ? (
         <p className="entry-manual-split__state">
@@ -226,11 +224,11 @@ export function InformationEntryManualSplit({
         </p>
       ) : status === 'loading' ? (
         <p className="entry-manual-split__state" role="status">
-          正在读取本地 Fragment…
+          正在读取原文片段…
         </p>
       ) : status === 'error' ? (
         <div className="entry-manual-split__state" role="alert">
-          <span>无法建立人工拆分草稿；文档没有可用 section Fragment。</span>
+          <span>无法建立拆分草稿；文档没有可用的正文片段。</span>
           <button
             className="text-action"
             type="button"
@@ -302,7 +300,7 @@ export function InformationEntryManualSplit({
             ))}
           </ol>{' '}
           <div className="entry-manual-split__commit">
-            <span>保存后生成当前结构；已有 Entry 不会被替换。</span>
+            <span>保存后生成当前结构；已有条目不会被替换。</span>
             <button
               className="primary-action"
               type="button"

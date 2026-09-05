@@ -1,4 +1,9 @@
 import type {
+  EntryMarkdownExportResponse,
+  EntrySavedQueriesResponse,
+  EntryQueryContextResponse,
+} from './m1c_api_contract.js';
+import type {
   AiAssociationProposalDecisionResponse,
   AiAssociationProposalListResponse,
   AiAssociationProposalStartResponse,
@@ -9,6 +14,7 @@ import type {
   AiTagProposalListResponse,
   AiTagProposalStartResponse,
   EvidenceSnapshot,
+  EvidenceSnapshotListResponse,
   EvidenceSnapshotSummary,
   EntryPreferenceProfile,
   EntryPreferenceRule,
@@ -33,13 +39,16 @@ import type {
   InformationEntryExplorationPolicyWriteResponse,
   InformationEntryExplorationResponse,
   InformationEntrySearchIndexResponse,
+  InformationEntrySearchIndexRefreshResponse,
   InformationEntrySearchEvaluationResponse,
   InformationEntryAssociationRebuildResponse,
   InformationEntryDocumentListResponse,
   InformationEntryKnowledgeGraphEdgeWriteResponse,
+  InformationEntrySourceReviewListResponse,
   InformationEntryKnowledgeGraphResponse,
   InformationEntryMaterializeResponse,
   InformationEntryRevisionResponse,
+  InformationEntryTypeReviewResponse,
   InformationEntryRestructureApplyResponse,
   InformationEntryRestructurePreviewResponse,
   InformationEntrySearchResponse,
@@ -77,16 +86,31 @@ export type M1cApiFetch = (
 ) => Promise<Response>;
 
 export interface M1cApiClient {
+  previewEntryMarkdownExport(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntryMarkdownExportResponse>>;
+  generateEntryMarkdownExport(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntryMarkdownExportResponse>>;
+  loadEntrySavedQueries(
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntrySavedQueriesResponse>>;
+  writeEntrySavedQuery(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntrySavedQueriesResponse>>;
+  readEntryQueryContext(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntryQueryContextResponse>>;
   workspace(
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<WorkspaceResponse>>;
   listEvidence(
     options?: M1cApiRequestOptions,
-  ): Promise<
-    M1cHttpResponse<
-      Readonly<{status: 'ok'; snapshots: readonly EvidenceSnapshotSummary[]}>
-    >
-  >;
+  ): Promise<M1cHttpResponse<EvidenceSnapshotListResponse>>;
   loadEvidenceSnapshot(
     snapshotId: string,
     options?: M1cApiRequestOptions,
@@ -278,6 +302,10 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryRevisionResponse>>;
+  reviewInformationEntryTypes(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryTypeReviewResponse>>;
   searchInformationEntries(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -285,6 +313,10 @@ export interface M1cApiClient {
   loadInformationEntrySearchIndex(
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntrySearchIndexResponse>>;
+  refreshInformationEntrySearchIndex(
+    body: Readonly<{limit?: number}>,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntrySearchIndexRefreshResponse>>;
   rebuildInformationEntrySearchIndex(
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntrySearchIndexResponse>>;
@@ -304,6 +336,16 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryKnowledgeGraphResponse>>;
+  listInformationEntrySourceReviews(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntrySourceReviewListResponse>>;
+  reviewInformationEntryGraphSources(
+    entryId: string,
+    relatedEntryId: string,
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryKnowledgeGraphEdgeWriteResponse>>;
   reviseInformationEntryKnowledgeGraphEdge(
     entryId: string,
     relatedEntryId: string,
@@ -459,6 +501,11 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     saveInformationDocumentWorkingCopy: reject,
     restoreInformationDocumentWorkingCopy: reject,
     commitInformationDocumentWorkingCopy: reject,
+    loadEntrySavedQueries: reject,
+    writeEntrySavedQuery: reject,
+    readEntryQueryContext: reject,
+    previewEntryMarkdownExport: reject,
+    generateEntryMarkdownExport: reject,
     loadReviewPreferences: reject,
     saveReviewPreferences: reject,
     loadInformationEntryPreferenceProfile: reject,
@@ -485,14 +532,18 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     previewInformationEntryRestructure: reject,
     applyInformationEntryRestructure: reject,
     reviseInformationEntry: reject,
+    reviewInformationEntryTypes: reject,
     searchInformationEntries: reject,
     loadInformationEntrySearchIndex: reject,
+    refreshInformationEntrySearchIndex: reject,
     rebuildInformationEntrySearchIndex: reject,
     evaluateInformationEntrySearch: reject,
     exploreInformationEntries: reject,
     synthesizeInformationEntryQuery: reject,
     readInformationEntryKnowledgeGraph: reject,
     reviseInformationEntryKnowledgeGraphEdge: reject,
+    listInformationEntrySourceReviews: reject,
+    reviewInformationEntryGraphSources: reject,
     rebuildInformationEntryAssociations: reject,
     reviseInformationEntryAssociationPolicy: reject,
     reviseInformationEntryExplorationPolicy: reject,
@@ -552,10 +603,55 @@ export function createM1cApiClient(
 
   const client: M1cApiClient = {
     workspace: (options) => get<WorkspaceResponse>('api/v1/workspace', options),
-    listEvidence: (options) =>
-      get<
-        Readonly<{status: 'ok'; snapshots: readonly EvidenceSnapshotSummary[]}>
-      >('api/v1/evidence', options),
+    listEvidence: async (options) => {
+      const snapshots: EvidenceSnapshotSummary[] = [];
+      const seenCursors = new Set<string>();
+      let totalCount = 0;
+      let nextCursor:
+        Readonly<{capturedAt: string; snapshotId: string}> | undefined;
+      for (let pageNumber = 0; pageNumber < 10_000; pageNumber += 1) {
+        const query = new URLSearchParams({limit: '200'});
+        if (nextCursor !== undefined) {
+          query.set('afterCapturedAt', nextCursor.capturedAt);
+          query.set('afterSnapshotId', nextCursor.snapshotId);
+        }
+        const response = await get<unknown>(
+          `api/v1/evidence?${query.toString()}`,
+          options,
+        );
+        if (
+          response.statusCode !== 200 ||
+          !isEvidenceSnapshotListResponse(response.body)
+        ) {
+          throw new M1cApiClientError(
+            '本地产品接口未提供可识别的材料列表页面。',
+          );
+        }
+        if (pageNumber === 0) totalCount = response.body.totalCount;
+        snapshots.push(...response.body.snapshots);
+        nextCursor = response.body.nextCursor;
+        if (nextCursor === undefined) {
+          return Object.freeze({
+            statusCode: response.statusCode,
+            body: Object.freeze({
+              status: 'ok' as const,
+              snapshots: Object.freeze([...snapshots]),
+              totalCount,
+            }),
+          });
+        }
+        const cursorKey = `${nextCursor.capturedAt}\u0000${nextCursor.snapshotId}`;
+        if (
+          !isCanonicalTimestamp(nextCursor.capturedAt) ||
+          !isCanonicalUuid(nextCursor.snapshotId) ||
+          seenCursors.has(cursorKey)
+        ) {
+          throw new M1cApiClientError('本地产品接口返回了无效的材料分页游标。');
+        }
+        seenCursors.add(cursorKey);
+      }
+      throw new M1cApiClientError('每页材料数量超出允许范围。');
+    },
     loadEvidenceSnapshot: (snapshotId, options) =>
       get<
         | Readonly<{status: 'ok'; snapshot: Readonly<EvidenceSnapshot>}>
@@ -585,6 +681,32 @@ export function createM1cApiClient(
     commitInformationDocumentWorkingCopy: (snapshotId, body, options) =>
       post<InformationDocumentWorkingCopyCommitResponse>(
         `api/v1/evidence/snapshots/${encodeURIComponent(snapshotId)}/working-copy/commit`,
+        body,
+        options,
+      ),
+    previewEntryMarkdownExport: (body, options) =>
+      post<EntryMarkdownExportResponse>(
+        'api/v1/entries/markdown-export/preview',
+        body,
+        options,
+      ),
+    generateEntryMarkdownExport: (body, options) =>
+      post<EntryMarkdownExportResponse>(
+        'api/v1/entries/markdown-export',
+        body,
+        options,
+      ),
+    loadEntrySavedQueries: (options) =>
+      get<EntrySavedQueriesResponse>('api/v1/entries/saved-queries', options),
+    writeEntrySavedQuery: (body, options) =>
+      post<EntrySavedQueriesResponse>(
+        'api/v1/entries/saved-queries',
+        body,
+        options,
+      ),
+    readEntryQueryContext: (body, options) =>
+      post<EntryQueryContextResponse>(
+        'api/v1/entries/query-context',
         body,
         options,
       ),
@@ -736,6 +858,12 @@ export function createM1cApiClient(
         body,
         options,
       ),
+    reviewInformationEntryTypes: (body, options) =>
+      post<InformationEntryTypeReviewResponse>(
+        'api/v1/entries/type-review',
+        body,
+        options,
+      ),
     searchInformationEntries: (body, options) =>
       post<InformationEntrySearchResponse>(
         'api/v1/entries/search',
@@ -745,6 +873,12 @@ export function createM1cApiClient(
     loadInformationEntrySearchIndex: (options) =>
       get<InformationEntrySearchIndexResponse>(
         'api/v1/entries/search/index',
+        options,
+      ),
+    refreshInformationEntrySearchIndex: (body, options) =>
+      post<InformationEntrySearchIndexRefreshResponse>(
+        'api/v1/entries/search/index/refresh',
+        body,
         options,
       ),
     rebuildInformationEntrySearchIndex: (options) =>
@@ -774,6 +908,27 @@ export function createM1cApiClient(
     readInformationEntryKnowledgeGraph: (body, options) =>
       post<InformationEntryKnowledgeGraphResponse>(
         'api/v1/knowledge-graph/view',
+        body,
+        options,
+      ),
+    listInformationEntrySourceReviews: (body, options) =>
+      post<InformationEntrySourceReviewListResponse>(
+        'api/v1/knowledge-graph/source-reviews',
+        body,
+        options,
+      ),
+    reviewInformationEntryGraphSources: (
+      entryId,
+      relatedEntryId,
+      body,
+      options,
+    ) =>
+      put<InformationEntryKnowledgeGraphEdgeWriteResponse>(
+        'api/v1/knowledge-graph/edges/' +
+          encodeURIComponent(entryId) +
+          '/' +
+          encodeURIComponent(relatedEntryId) +
+          '/source-review',
         body,
         options,
       ),
@@ -1061,7 +1216,7 @@ function normalizeBaseUrl(value: string): URL {
     url.search !== '' ||
     url.hash !== ''
   ) {
-    throw new M1cApiClientError('产品接口基础地址不符合本地 HTTP(S) 边界。');
+    throw new M1cApiClientError('产品接口地址不是有效的 HTTP(S) 地址。');
   }
   if (!url.pathname.endsWith('/')) url.pathname = `${url.pathname}/`;
   return url;
@@ -1190,6 +1345,83 @@ function isReviewVocabularyPreferences(value: unknown): value is Readonly<{
     )
   );
 }
+
+function isCanonicalTimestamp(value: string): boolean {
+  const milliseconds = Date.parse(value);
+  return (
+    Number.isFinite(milliseconds) &&
+    new Date(milliseconds).toISOString() === value
+  );
+}
+
+function isCanonicalUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+    value,
+  );
+}
+
+function isEvidenceSnapshotListResponse(
+  value: unknown,
+): value is EvidenceSnapshotListResponse {
+  if (
+    !isRecord(value) ||
+    value.status !== 'ok' ||
+    !Array.isArray(value.snapshots) ||
+    !value.snapshots.every(isEvidenceSnapshotSummary) ||
+    typeof value.totalCount !== 'number' ||
+    !Number.isSafeInteger(value.totalCount) ||
+    value.totalCount < value.snapshots.length
+  ) {
+    return false;
+  }
+  return (
+    value.nextCursor === undefined ||
+    (isRecord(value.nextCursor) &&
+      typeof value.nextCursor.capturedAt === 'string' &&
+      isCanonicalTimestamp(value.nextCursor.capturedAt) &&
+      typeof value.nextCursor.snapshotId === 'string' &&
+      isCanonicalUuid(value.nextCursor.snapshotId))
+  );
+}
+
+function isEvidenceSnapshotSummary(
+  value: unknown,
+): value is EvidenceSnapshotSummary {
+  return (
+    isRecord(value) &&
+    typeof value.workspaceId === 'string' &&
+    typeof value.snapshotId === 'string' &&
+    typeof value.resourceId === 'string' &&
+    (value.resourceKind === 'git_file' ||
+      value.resourceKind === 'manual_text' ||
+      value.resourceKind === 'uploaded_file' ||
+      value.resourceKind === 'remote_document') &&
+    typeof value.sourceKey === 'string' &&
+    (value.canonicalUri === undefined ||
+      typeof value.canonicalUri === 'string') &&
+    (value.isPrivate === undefined || value.isPrivate === true) &&
+    typeof value.capturedAt === 'string' &&
+    isCanonicalTimestamp(value.capturedAt) &&
+    (value.publication === undefined ||
+      isPublicationState(value.publication)) &&
+    typeof value.fragmentCount === 'number' &&
+    Number.isSafeInteger(value.fragmentCount) &&
+    value.fragmentCount >= 0
+  );
+}
+
+function isPublicationState(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    (value.instant === undefined || typeof value.instant === 'string') &&
+    (value.sourceTimezone === undefined ||
+      typeof value.sourceTimezone === 'string') &&
+    (value.precision === undefined || typeof value.precision === 'string') &&
+    (value.sourceText === undefined || typeof value.sourceText === 'string') &&
+    typeof value.inferred === 'boolean'
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

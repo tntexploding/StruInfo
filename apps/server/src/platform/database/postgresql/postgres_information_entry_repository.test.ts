@@ -6,7 +6,11 @@ import type {
   PostgresPoolBoundary,
   PostgresQueryResult,
 } from './postgres_pool.js';
-import {PostgresInformationEntryRepository} from './postgres_information_entry_repository.js';
+import {
+  COUNT_CURRENT_INFORMATION_ENTRY_BROWSE_SQL,
+  PostgresInformationEntryRepository,
+  READ_CURRENT_INFORMATION_ENTRY_BROWSE_PAGE_SQL,
+} from './postgres_information_entry_repository.js';
 
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 const RESOURCE_ID = '22222222-2222-4222-8222-222222222222';
@@ -81,6 +85,174 @@ describe('PostgresInformationEntryRepository', () => {
       ),
     ).toBe(true);
   });
+
+  it('reads type coverage and hydrates only one bounded correction page', async () => {
+    const calls: Readonly<{sql: string; parameters?: readonly unknown[]}>[] =
+      [];
+    const nextEntryId = '77777777-7777-4777-8777-777777777777';
+    const capturedAt = new Date('2040-01-02T03:04:05.000Z');
+    const pool = createPool((sql, parameters) => {
+      calls.push({sql, ...(parameters === undefined ? {} : {parameters})});
+      if (sql.includes('GROUP BY e.type_keyword')) {
+        return rows(
+          {type_keyword: null, entry_count: 2},
+          {type_keyword: 'argument', entry_count: 3},
+        );
+      }
+      if (sql.includes('LIMIT $8')) {
+        return rows(
+          {
+            entry_id: ENTRY_ID,
+            snapshot_id: SNAPSHOT_ID,
+            document_order: 0,
+            captured_at: capturedAt,
+          },
+          {
+            entry_id: nextEntryId,
+            snapshot_id: SNAPSHOT_ID,
+            document_order: 1,
+            captured_at: capturedAt,
+          },
+        );
+      }
+      if (
+        sql.includes('FROM struinfo.information_entry AS e') &&
+        sql.includes('e.entry_id = ANY')
+      ) {
+        return rows({
+          workspace_id: WORKSPACE_ID,
+          entry_id: ENTRY_ID,
+          resource_id: RESOURCE_ID,
+          snapshot_id: SNAPSHOT_ID,
+          current_revision: 1,
+          current_revision_id: REVISION_ID,
+          document_order: 0,
+          title_path: 'Synthetic type review',
+          body: 'Synthetic body',
+          body_sha256: 'a'.repeat(64),
+          chunk_mode: 'split',
+          split_rule_version: 'synthetic.type-review.v1',
+          is_private: false,
+          type_keyword: null,
+          type_custom_name: null,
+          usefulness_score: null,
+          interest_score: null,
+          source_key: 'synthetic:type-review',
+          canonical_uri: null,
+          captured_at: capturedAt,
+          published_at: null,
+        });
+      }
+      if (sql.includes('information_entry_fragment_input')) {
+        return rows({
+          entry_id: ENTRY_ID,
+          input_ordinal: 0,
+          fragment_id: FRAGMENT_ID,
+          start_code_point: null,
+          end_code_point: null,
+        });
+      }
+      return rows();
+    });
+    const repository = new PostgresInformationEntryRepository(pool);
+
+    const result = await repository.reviewCurrentEntryTypes({
+      workspaceId: WORKSPACE_ID,
+      includePrivate: false,
+      filter: 'missing',
+      limit: 1,
+    });
+
+    expect(result.coverage).toMatchObject({
+      totalCount: 5,
+      classifiedCount: 3,
+      missingCount: 2,
+    });
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.entryId).toBe(ENTRY_ID);
+    expect(result.nextCursor).toEqual({
+      capturedAt: '2040-01-02T03:04:05.000Z',
+      snapshotId: SNAPSHOT_ID,
+      documentOrder: 0,
+      entryId: ENTRY_ID,
+    });
+    expect(
+      calls.find(({sql}) => sql.includes('LIMIT $8'))?.parameters?.at(-1),
+    ).toBe(2);
+  });
+
+  it('counts and hydrates only one chronological browse page', async () => {
+    const calls: Readonly<{sql: string; parameters?: readonly unknown[]}>[] =
+      [];
+    const capturedAt = new Date('2040-01-02T03:04:05.000Z');
+    const pool = createPool((sql, parameters) => {
+      calls.push({sql, ...(parameters === undefined ? {} : {parameters})});
+      if (sql === COUNT_CURRENT_INFORMATION_ENTRY_BROWSE_SQL) {
+        return rows({total_count: 14_910});
+      }
+      if (sql === READ_CURRENT_INFORMATION_ENTRY_BROWSE_PAGE_SQL) {
+        return rows({entry_id: ENTRY_ID});
+      }
+      if (
+        sql.includes('e.current_revision') &&
+        sql.includes('e.entry_id = ANY')
+      ) {
+        return rows({
+          workspace_id: WORKSPACE_ID,
+          entry_id: ENTRY_ID,
+          resource_id: RESOURCE_ID,
+          snapshot_id: SNAPSHOT_ID,
+          current_revision: 1,
+          current_revision_id: REVISION_ID,
+          document_order: 0,
+          title_path: 'Synthetic browse',
+          body: 'Synthetic body',
+          body_sha256: 'a'.repeat(64),
+          chunk_mode: 'split',
+          split_rule_version: 'synthetic.browse.v1',
+          is_private: false,
+          type_keyword: null,
+          type_custom_name: null,
+          usefulness_score: null,
+          interest_score: null,
+          source_key: 'synthetic:browse',
+          canonical_uri: null,
+          captured_at: capturedAt,
+          published_at: null,
+        });
+      }
+      if (sql.includes('information_entry_fragment_input')) {
+        return rows({
+          entry_id: ENTRY_ID,
+          input_ordinal: 0,
+          fragment_id: FRAGMENT_ID,
+          start_code_point: null,
+          end_code_point: null,
+        });
+      }
+      return rows();
+    });
+    const repository = new PostgresInformationEntryRepository(pool);
+
+    await expect(
+      repository.loadCurrentEntryBrowsePage(WORKSPACE_ID, 'public', 2),
+    ).resolves.toMatchObject({
+      totalCount: 14_910,
+      entries: [{entryId: ENTRY_ID, value: {titlePath: 'Synthetic browse'}}],
+    });
+    expect(
+      calls.find(
+        ({sql}) => sql === READ_CURRENT_INFORMATION_ENTRY_BROWSE_PAGE_SQL,
+      )?.parameters,
+    ).toEqual([WORKSPACE_ID, 'public', null, null, null, 2]);
+    expect(
+      calls.filter(
+        ({sql}) =>
+          sql.includes('e.current_revision') &&
+          sql.includes('e.entry_id = ANY'),
+      ),
+    ).toHaveLength(1);
+  });
 });
 
 function materializeRow(
@@ -114,11 +286,16 @@ function materializeRow(
 }
 
 function createPool(
-  respond: (sql: string) => PostgresQueryResult<Row>,
+  respond: (
+    sql: string,
+    parameters?: readonly unknown[],
+  ) => PostgresQueryResult<Row>,
 ): PostgresPoolBoundary {
   const client: PostgresClientBoundary = {
-    query<QueryRow extends Row>(sql: string) {
-      return Promise.resolve(respond(sql) as PostgresQueryResult<QueryRow>);
+    query<QueryRow extends Row>(sql: string, parameters?: readonly unknown[]) {
+      return Promise.resolve(
+        respond(sql, parameters) as PostgresQueryResult<QueryRow>,
+      );
     },
     executeSimple: () => Promise.reject(new Error('unexpected executeSimple')),
     release: vi.fn(),

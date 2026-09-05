@@ -7,11 +7,23 @@ import {
   type JsonPrimitive,
   type JsonValue,
 } from '../serialization/canonical_json.js';
-import type {WorkspaceBundleSectionCodec} from './workspace_bundle.js';
+import {
+  DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES,
+  type WorkspaceBundleSectionCodec,
+} from './workspace_bundle.js';
 
 export const M1E_PROCESSING_BUNDLE_SECTION_TYPE = 'struinfo.m1e-processing';
-export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 7;
-export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v7';
+export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 10;
+export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v10';
+export const M1E_PROCESSING_VERSION_NINE_BUNDLE_SECTION_VERSION = 9;
+export const M1E_PROCESSING_VERSION_NINE_BUNDLE_SCHEMA =
+  'struinfo.m1e-processing.v9';
+export const M1E_PROCESSING_VERSION_EIGHT_BUNDLE_SECTION_VERSION = 8;
+export const M1E_PROCESSING_VERSION_EIGHT_BUNDLE_SCHEMA =
+  'struinfo.m1e-processing.v8';
+export const M1E_PROCESSING_VERSION_SEVEN_BUNDLE_SECTION_VERSION = 7;
+export const M1E_PROCESSING_VERSION_SEVEN_BUNDLE_SCHEMA =
+  'struinfo.m1e-processing.v7';
 export const M1E_PROCESSING_VERSION_SIX_BUNDLE_SECTION_VERSION = 6;
 export const M1E_PROCESSING_VERSION_SIX_BUNDLE_SCHEMA =
   'struinfo.m1e-processing.v6';
@@ -30,7 +42,7 @@ export const M1E_PROCESSING_VERSION_TWO_BUNDLE_SCHEMA =
 export const M1E_PROCESSING_LEGACY_BUNDLE_SECTION_VERSION = 1;
 export const M1E_PROCESSING_LEGACY_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v1';
 
-const PROCESSING_VALUE_LIMIT = 1_000_000;
+const PROCESSING_VALUE_LIMIT = DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES;
 const ROW_BYTE_LIMIT = 1024 * 1024;
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -200,7 +212,94 @@ export const M1E_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescript
       'updated_at',
       'completed_at',
     ]),
+    table('processing_bulk_ingestion_batch', [
+      'workspace_id',
+      'batch_id',
+      'idempotency_key',
+      'request_sha256',
+      'plan_sha256',
+      'privacy_scope',
+      'status',
+      'active_run_id',
+      'attempt',
+      'snapshot_count',
+      'planned_entry_count',
+      'succeeded_snapshot_count',
+      'succeeded_entry_count',
+      'failed_snapshot_count',
+      'current_version',
+      'created_at',
+      'started_at',
+      'finished_at',
+      'updated_at',
+    ]),
+    table('processing_bulk_ingestion_item', [
+      'workspace_id',
+      'batch_id',
+      'item_ordinal',
+      'snapshot_id',
+      'canonical_content_sha256',
+      'is_private',
+      'planned_entry_count',
+      'status',
+      'attempt',
+      'claimed_run_id',
+      'result_entry_count',
+      'error_code',
+      'current_version',
+      'started_at',
+      'finished_at',
+      'updated_at',
+    ]),
+    table('processing_bulk_ingestion_enrichment_item', [
+      'workspace_id',
+      'batch_id',
+      'item_ordinal',
+      'status',
+      'attempt',
+      'claimed_run_id',
+      'rules_sha256',
+      'result_entry_count',
+      'revised_entry_count',
+      'added_tag_count',
+      'association_projection_count',
+      'exception_entry_count',
+      'error_code',
+      'current_version',
+      'started_at',
+      'finished_at',
+      'updated_at',
+    ]),
+    table('processing_bulk_ingestion_exception', [
+      'workspace_id',
+      'batch_id',
+      'item_ordinal',
+      'entry_id',
+      'entry_revision',
+      'entry_revision_id',
+      'exception_code',
+      'created_at',
+    ]),
+    table('processing_bulk_ingestion_adjudication', [
+      'workspace_id',
+      'batch_id',
+      'item_ordinal',
+      'entry_id',
+      'status',
+      'current_version',
+      'decided_at',
+      'updated_at',
+    ]),
   ]);
+
+const VERSION_NINE_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
+  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 18));
+
+const VERSION_EIGHT_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
+  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 16));
+
+const VERSION_SEVEN_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
+  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 14));
 
 const VERSION_SIX_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
   Object.freeze(M1E_PROCESSING_TABLES.slice(0, 13));
@@ -226,6 +325,36 @@ export const M1E_PROCESSING_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     version: M1E_PROCESSING_BUNDLE_SECTION_VERSION,
     encode: normalizeM1eProcessingSnapshot,
     decode: normalizeM1eProcessingSnapshot,
+  });
+
+export const M1E_PROCESSING_VERSION_NINE_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: M1E_PROCESSING_VERSION_NINE_BUNDLE_SECTION_VERSION,
+    encode: normalizeVersionNineSnapshot,
+    decode(payload: JsonValue): unknown {
+      return upgradePreviousSnapshot(normalizeVersionNineSnapshot(payload));
+    },
+  });
+
+export const M1E_PROCESSING_VERSION_EIGHT_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: M1E_PROCESSING_VERSION_EIGHT_BUNDLE_SECTION_VERSION,
+    encode: normalizeVersionEightSnapshot,
+    decode(payload: JsonValue): unknown {
+      return upgradePreviousSnapshot(normalizeVersionEightSnapshot(payload));
+    },
+  });
+
+export const M1E_PROCESSING_VERSION_SEVEN_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: M1E_PROCESSING_VERSION_SEVEN_BUNDLE_SECTION_VERSION,
+    encode: normalizeVersionSevenSnapshot,
+    decode(payload: JsonValue): unknown {
+      return upgradePreviousSnapshot(normalizeVersionSevenSnapshot(payload));
+    },
   });
 
 export const M1E_PROCESSING_VERSION_SIX_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
@@ -295,6 +424,48 @@ export function normalizeM1eProcessingSnapshot(
     M1E_PROCESSING_BUNDLE_SCHEMA,
     M1E_PROCESSING_TABLES,
   ) as M1eProcessingSnapshot;
+}
+
+function normalizeVersionNineSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1E_PROCESSING_VERSION_NINE_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1E_PROCESSING_VERSION_NINE_BUNDLE_SCHEMA,
+    VERSION_NINE_PROCESSING_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1E_PROCESSING_VERSION_NINE_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+  }>;
+}
+
+function normalizeVersionEightSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1E_PROCESSING_VERSION_EIGHT_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1E_PROCESSING_VERSION_EIGHT_BUNDLE_SCHEMA,
+    VERSION_EIGHT_PROCESSING_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1E_PROCESSING_VERSION_EIGHT_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+  }>;
+}
+
+function normalizeVersionSevenSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1E_PROCESSING_VERSION_SEVEN_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1E_PROCESSING_VERSION_SEVEN_BUNDLE_SCHEMA,
+    VERSION_SEVEN_PROCESSING_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1E_PROCESSING_VERSION_SEVEN_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+  }>;
 }
 
 function normalizeVersionSixSnapshot(value: unknown): Readonly<{

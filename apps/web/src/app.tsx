@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 import type {
+  EntryQueryContext,
   AiAssociationProposalDecisionResponse,
   AiAssociationProposalListResponse,
   AiAssociationProposalStartResponse,
@@ -25,6 +26,7 @@ import type {
   InformationEntryPreferenceSuggestionResponse,
   InformationEntryPreferenceTrialResponse,
   InformationEntryRevisionResponse,
+  InformationEntryTypeReviewResponse,
   InformationEntryRestructureApplyResponse,
   InformationEntryRestructurePreviewResponse,
   InformationEntrySearchResponse,
@@ -80,6 +82,30 @@ export interface AppProps {
 
 export function App({apiClient, healthClient, transportMode}: AppProps) {
   const health = useOperationalHealth(healthClient);
+  const loadSavedQueries = useCallback(
+    () => apiClient.loadEntrySavedQueries(),
+    [apiClient],
+  );
+  const writeSavedQuery = useCallback(
+    (body: unknown) => apiClient.writeEntrySavedQuery(body),
+    [apiClient],
+  );
+  const readQueryContext = useCallback(
+    (body: unknown) => apiClient.readEntryQueryContext(body),
+    [apiClient],
+  );
+  const previewMarkdownExport = useCallback(
+    (body: unknown) => apiClient.previewEntryMarkdownExport(body),
+    [apiClient],
+  );
+  const generateMarkdownExport = useCallback(
+    (body: unknown) => apiClient.generateEntryMarkdownExport(body),
+    [apiClient],
+  );
+  const [queryContext, setQueryContext] =
+    useState<Readonly<EntryQueryContext>>();
+  const [queryGraphCenter, setQueryGraphCenter] =
+    useState<Readonly<{entryId: string; includePrivate: boolean}>>();
   const [activeSection, setActiveSection] =
     useState<ProductSection>('overview');
   const [workspace, setWorkspace] = useState<
@@ -107,6 +133,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       Readonly<Extract<EvidencePanelState, {status: 'ready'}>['snapshot']>
     >();
   const evidenceReturnTarget = useRef<HTMLElement | undefined>(undefined);
+  const evidenceRequestGeneration = useRef(0);
 
   const refreshWorkspace = useCallback(
     async (signal?: AbortSignal) => {
@@ -173,7 +200,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
         ) {
           setReviewPreferences({
             status: 'error',
-            message: '无法读取外部个人标签设置；Entry 数据仍可继续查看。',
+            message: '无法读取个人标签设置；已有条目仍可继续查看。',
           });
         }
       }
@@ -368,7 +395,17 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       selectedFragmentId?: string,
       includePrivate = false,
     ) => {
-      if (returnFocus !== undefined) evidenceReturnTarget.current = returnFocus;
+      const requestGeneration = ++evidenceRequestGeneration.current;
+      const activeElement = document.activeElement;
+      if (
+        returnFocus !== undefined ||
+        !(activeElement instanceof HTMLElement) ||
+        activeElement.closest('.evidence-rail') === null
+      ) {
+        evidenceReturnTarget.current =
+          returnFocus ??
+          (activeElement instanceof HTMLElement ? activeElement : undefined);
+      }
       setEvidencePanel({
         status: 'loading',
         snapshotId,
@@ -379,6 +416,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
         const response = await apiClient.loadEvidenceSnapshot(snapshotId, {
           includePrivate,
         });
+        if (requestGeneration !== evidenceRequestGeneration.current) return;
         if (response.body.status === 'ok') {
           setSelectedEvidence(response.body.snapshot);
           setEvidencePanel({
@@ -393,9 +431,10 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           snapshotId,
           selectedFragmentId,
           includePrivate,
-          message: '该 Snapshot 不存在于当前工作区，或已切换到其他外部资料集。',
+          message: '找不到这份来源文档；它可能属于另一组资料。',
         });
       } catch {
+        if (requestGeneration !== evidenceRequestGeneration.current) return;
         setEvidencePanel({
           status: 'error',
           snapshotId,
@@ -510,6 +549,18 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const reviewInformationEntryTypes = useCallback(
+    (
+      body: unknown,
+      signal?: AbortSignal,
+    ): Promise<M1cHttpResponse<InformationEntryTypeReviewResponse>> =>
+      apiClient.reviewInformationEntryTypes(
+        body,
+        signal === undefined ? undefined : {signal},
+      ),
+    [apiClient],
+  );
+
   const searchInformationEntries = useCallback(
     (body: unknown): Promise<M1cHttpResponse<InformationEntrySearchResponse>> =>
       apiClient.searchInformationEntries(body),
@@ -518,6 +569,11 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
 
   const loadInformationEntrySearchIndex = useCallback(
     () => apiClient.loadInformationEntrySearchIndex(),
+    [apiClient],
+  );
+
+  const refreshInformationEntrySearchIndex = useCallback(
+    () => apiClient.refreshInformationEntrySearchIndex({limit: 32}),
     [apiClient],
   );
 
@@ -551,6 +607,19 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const listSourceReviews = useCallback(
+    (body: unknown) => apiClient.listInformationEntrySourceReviews(body),
+    [apiClient],
+  );
+  const reviewGraphSources = useCallback(
+    (entryId: string, relatedEntryId: string, body: unknown) =>
+      apiClient.reviewInformationEntryGraphSources(
+        entryId,
+        relatedEntryId,
+        body,
+      ),
+    [apiClient],
+  );
   const reviseInformationEntryKnowledgeGraphEdge = useCallback(
     (
       entryId: string,
@@ -818,6 +887,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
   );
 
   function closeEvidence() {
+    evidenceRequestGeneration.current += 1;
     setEvidencePanel({status: 'closed'});
     const target = evidenceReturnTarget.current;
     evidenceReturnTarget.current = undefined;
@@ -883,6 +953,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       const response = await apiClient.restoreWorkspaceBundle(fileName);
       const feedback = workspaceTransferFeedback(response.body, 'restored');
       if (feedback.kind === 'success') {
+        evidenceRequestGeneration.current += 1;
         setEvidencePanel({status: 'closed'});
         setSelectedEvidence(undefined);
         await refreshEvidence();
@@ -903,7 +974,11 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       health={health.state}
       transportMode={transportMode}
       workspace={workspace.status === 'ready' ? workspace.value : undefined}
-      onNavigate={setActiveSection}
+      onNavigate={(section) => {
+        setQueryGraphCenter(undefined);
+        closeEvidence();
+        setActiveSection(section);
+      }}
       evidencePanel={
         <EvidenceRail
           state={evidencePanel}
@@ -945,7 +1020,11 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onListDocuments={listInformationEntryDocuments}
           onListProcessingRuns={listProcessingRuns}
           onCancelProcessingRun={cancelProcessingRun}
-          onNavigate={setActiveSection}
+          onNavigate={(section) => {
+            setQueryGraphCenter(undefined);
+            closeEvidence();
+            setActiveSection(section);
+          }}
         />
       ) : null}
       {activeSection === 'import' ? (
@@ -1032,6 +1111,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           }
           onRejectAiTagProposal={rejectAiTagProposal}
           onRevise={reviseInformationEntry}
+          onReviewTypes={reviewInformationEntryTypes}
           onReviseDocumentTags={reviseInformationDocumentTags}
           onSaveEntryAutomationPolicy={saveEntryAutomationPolicy}
           onSaveReviewPreferences={saveReviewPreferences}
@@ -1069,6 +1149,21 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       ) : null}
       {activeSection === 'query' ? (
         <InformationEntryQueryWorkspace
+          onPreviewMarkdownExport={previewMarkdownExport}
+          onGenerateMarkdownExport={generateMarkdownExport}
+          initialContext={queryContext}
+          onContextChange={setQueryContext}
+          onLoadSavedQueries={loadSavedQueries}
+          onWriteSavedQuery={writeSavedQuery}
+          onReadQueryContext={readQueryContext}
+          onOpenGraph={(entry) => {
+            closeEvidence();
+            setQueryGraphCenter({
+              entryId: entry.entryId,
+              includePrivate: entry.value.isPrivate,
+            });
+            setActiveSection('knowledge');
+          }}
           aiQuerySynthesisEnabled={
             workspace.status === 'ready' &&
             workspace.value.capabilities.includes('ai_query_synthesis')
@@ -1083,6 +1178,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onLoadSearchIndex={loadInformationEntrySearchIndex}
           onReviseExplorationPolicy={reviseInformationEntryExplorationPolicy}
           onSearch={searchInformationEntries}
+          onRefreshSearchIndex={refreshInformationEntrySearchIndex}
           onRebuildSearchIndex={rebuildInformationEntrySearchIndex}
           onSynthesize={synthesizeInformationEntryQuery}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
@@ -1092,6 +1188,19 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       ) : null}
       {activeSection === 'knowledge' ? (
         <FormalKnowledgeWorkspace
+          onListSourceReviews={listSourceReviews}
+          onReviewSources={reviewGraphSources}
+          onCloseEvidence={closeEvidence}
+          {...(queryGraphCenter === undefined
+            ? {}
+            : {
+                initialCenter: queryGraphCenter,
+                onReturnToQuery: () => {
+                  closeEvidence();
+                  setQueryGraphCenter(undefined);
+                  setActiveSection('query');
+                },
+              })}
           aiAssociationEnabled={
             workspace.status === 'ready' &&
             workspace.value.capabilities.includes('ai_associations')
@@ -1156,14 +1265,14 @@ function importFeedback(
     return {
       kind: 'success',
       title: '材料已保存并拆解',
-      detail: `生成 ${body.fragmentIds.length.toString()} 个 Fragment${opensEvidence ? '；来源档案已打开' : ''}。`,
+      detail: `生成 ${body.fragmentIds.length.toString()} 个原文片段${opensEvidence ? '；原文已打开' : ''}。`,
     };
   }
   if (body.status === 'existing') {
     return {
       kind: 'success',
       title: '相同导入已存在',
-      detail: `幂等重放没有创建重复材料${opensEvidence ? '；来源档案已打开' : ''}。`,
+      detail: `这份材料已经导入，没有重复保存${opensEvidence ? '；原文已打开' : ''}。`,
     };
   }
   return {
@@ -1189,7 +1298,7 @@ function workspaceTransferFeedback(
         expectedStatus === 'exported'
           ? '全部个人数据已导出'
           : '全部个人数据已恢复',
-      detail: `${snapshotCount.toString()} 个文档版本 · ${body.blobCount.toString()} 份原始 Blob · 标签、联系与个人偏好${body.personalDataIncluded ? '已包含' : '未包含'} · ${formatByteCount(body.byteLength)}`,
+      detail: `${snapshotCount.toString()} 个文档版本 · ${body.blobCount.toString()} 份原始文件 · 标签、联系与个人偏好${body.personalDataIncluded ? '已包含' : '未包含'} · ${formatByteCount(body.byteLength)}`,
       fileName: body.fileName,
     };
   }

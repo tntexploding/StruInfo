@@ -21,6 +21,19 @@ Before frontend implementation or frontend design review, also read:
 
 ## Current Phase
 
+### Maintenance and Owner Use (2026-09-05)
+
+The owner has completed the five accepted roadmap increments and directed the
+project to pause feature development after the finite maintenance closeout.
+Use `docs/maintenance-handoff.md` as the current handoff. Do not start roadmap
+candidates, frozen M2-P4R, refactors or new integrations autonomously. Continue
+only requested usage support, reproducible product fixes, security and necessary
+compatibility maintenance. The owner has authorized this closeout to inspect,
+back up, upgrade and restore-drill the existing private Docker instance; this
+does not authorize placing any of its content, secrets or configuration in Git,
+fixtures or application artifacts. Future material operations remain scoped to
+the owner-selected external instance and purpose.
+
 ### Data-Free Development Baseline
 
 The active workspace is intentionally empty for continued product development. The
@@ -588,6 +601,96 @@ operations, public-network and distribution certification remain deferred.
 There is no inferred M1N: further work comes from owner-authorized unified use
 and deployment review or a reachable product defect. Do not restore real
 material merely to demonstrate the deployment boundary.
+
+ADR 0046 through ADR 0048 complete the current M2-P0A/P0B/P0C Codex-operated
+bulk foundation. A bounded P0A plan materializes Entry structure one Snapshot
+per transaction; P0B then applies the existing deterministic tag/alias rules
+and replaces only Association projections touching that batch's Entries. Typed
+exception rows contain identities and codes rather than content. P0C separates
+current from stale revisions, returns deterministic content-free samples and
+requires an exact observed count before changing a decision group. User
+overrides survive rebuilds, and Processing Bundle v10 carries all 19 processing
+tables. ADR 0049 completes M2-P0D with a repository-owned disposable PostgreSQL
+18 benchmark over migrations, Blob/Evidence, P0A/P0B/P0C, controlled recovery
+and exact persisted counts. The fixed 500-Snapshot / 15,000-Entry synthetic run
+completed in about 15 minutes on the recorded local machine and removed all
+temporary resources, so the data-free development path is comfortably inside
+the 4–6 hour engineering budget. Treat this as development-cycle evidence, not
+as a real-corpus, long-running database or production SLO. Ordinary `verify`
+must remain independent of Docker, and real material remains prohibited until
+the owner explicitly authorizes it.
+
+ADR 0050 through ADR 0052 complete M2-P0E/P0F/P0G. P0E exports only current
+pending exceptions as bounded, deterministic review packets and invalid-by-
+default result templates under the external `exports/codex-work/` directory;
+private content requires explicit current-command opt-in. P0F accepts only one
+closed canonical result per exact packet, writes idempotent Entry annotation
+revisions through the existing boundary, performs exact adjudication transitions
+and incrementally rebuilds only affected Association projections. P0G is a thin,
+bounded state machine over P0A materialization, P0B enrichment and P0C review and
+returns an explicit next action. These stages add no migration, Provider, UI
+executor or second workflow engine. Review work files are personal external data
+and MUST NOT enter Git, images, logs or application artifacts.
+
+The M2-P0 freeze audit closes three reachable recovery/integrity gaps without
+expanding the product boundary: P0A retry tolerates an active-run reference whose
+ProcessingRun was already cancelled or failed; P0B derives its next attempt from
+durable ProcessingRun history even when a process stopped before claiming its
+first item and retires orphaned running attempts; P0F exact adjudication is bound
+to the precise current Entry revision expected after any annotation write.
+
+ADR 0053 completes M2-P1A through P1D from the first real-scale ingestion
+feedback. Complete personal-data packages now share a bounded 1 GiB / 32 million
+value profile; Snapshot catalog reads use stable 200-item pages that the Web
+client follows to completion; P0B fills only missing, unambiguous deterministic
+type/domain classifications through an explicit rules-version refresh; and
+eligible public exact/substring queries use the current term index for candidate
+hydration before the original search core makes the final decision. Missing or
+stale indexes, fuzzy/private/Association queries and ambiguous classification
+must fail safe to the existing complete/manual path. Do not claim a real backup
+or latency improvement until the owner deploys migration `000029`, stops writes,
+creates a new external backup, refreshes the affected batches and rebuilds the
+derived index. Never read or copy real material merely to validate this code.
+
+ADR 0054 and ADR 0055 complete M2-P2A through P2E. Classification now records
+separate no-signal, missing-type, missing-domain and tied/low-confidence causes,
+uses field-weighted deterministic scoring, supports bounded primary/secondary
+domains and consumes only external personal classification rules. After a real
+refresh measured 11,794 residual classification exceptions, P2E reuses P0E/P0F
+for explicit classification groups of at most 100 items, prefills current
+annotations and leaves only missing dimensions as invalid placeholders. Other
+exception packets remain at 20. Do not add a Provider, UI authority, automatic
+acceptance or repository-owned personal vocabulary under this decision.
+
+ADR 0056 through ADR 0058 complete M2-P2F/P2G and M2-P3A through P3C. The Tags
+workspace exposes bounded type coverage/correction; the recoverable completion
+path reuses P0B rather than adding a writer; classification v5 uses per-category
+thresholds, backward-compatible external Profile v2 exact maps and bounded
+labelled-neighbor consensus. Privacy is filtered before neighbors, type evidence
+excludes the same Snapshot, and `other` remains manual/Codex-only. Real-data
+evaluation is read-only and aggregate-only; no refresh or apply is authorized by
+these ADRs. Personal mappings and evaluation inputs remain external data.
+
+ADR 0059 through ADR 0061 preserve M2-P4A–E only as a frozen experimental type-
+learning baseline. Reliable cross-material generalization is unresolved and is
+queued as inactive M2-P4R; do not export, apply or activate it unless the owner
+explicitly reopens that task with an independent representative evaluation set.
+ADR 0062 completes M2-P5A by separating the public `v0.1.0` tree, the later M2
+development line and the owner-confirmed live private-cloud Docker instance.
+Do not infer the live commit, image digest, host, secrets, data, backups or
+monitoring state from Git. ADR 0063 completes the M2-P5B engineering boundary:
+maintenance can list current workspace backups, fully verify a named package
+without writing state, and preview a keep-latest policy without deleting files.
+Actual cloud backup identities, the selected retention value and restore-drill
+evidence remain external operations facts. ADR 0064 completes M2-P5C with one
+read-only maintenance status report for database/domain counts, search-index
+completeness, failed or stalled work, filesystem capacity and latest-backup age.
+It emits stable privacy-safe alert codes and leaves scheduling/notification to
+the external host. ADR 0065 completes M2-P5D by extending the disposable
+PostgreSQL 18 regression through current search projection, exact source return,
+Entry-centred knowledge graph and the P5C database observer. M2-P5A–D are now
+complete; a new product increment or deployment action requires explicit owner
+direction. Frozen M2-P4R remains inactive and must not block unrelated work.
 
 Browser runtime artifacts and production-equivalent PostgreSQL/container
 certification remain behind their named admission gates. The M1C disposable

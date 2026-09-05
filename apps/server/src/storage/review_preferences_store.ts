@@ -1,7 +1,23 @@
 import {
+  DEFAULT_ENTRY_SAVED_QUERIES,
+  type EntrySavedQueries,
+} from '../modules/entries/information_entry_saved_queries.js';
+import {
   DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
   type EntrySplitRuleProfile,
 } from '../modules/entries/information_entry_split_rule.js';
+import {
+  DEFAULT_ENTRY_CLASSIFICATION_DOMAIN_THRESHOLDS,
+  DEFAULT_ENTRY_CLASSIFICATION_NEIGHBOR_POLICY,
+  DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+  DEFAULT_ENTRY_CLASSIFICATION_TYPE_THRESHOLDS,
+  ENTRY_CLASSIFICATION_PROFILE_VERSION,
+  type EntryClassificationProfile,
+} from '../modules/entries/information_entry_deterministic_classification.js';
+import {
+  cloneEntryTypeLearningState,
+  DEFAULT_ENTRY_TYPE_LEARNING_STATE,
+} from '../modules/entries/information_entry_type_learning.js';
 
 export const REVIEW_PREFERENCES_FORMAT = 'struinfo.review-preferences';
 export const REVIEW_PREFERENCES_VERSION = 1;
@@ -307,9 +323,17 @@ export interface ReviewPreferences {
   readonly entryPreferenceProfile?: Readonly<EntryPreferenceProfile>;
   readonly entryAutomationPolicy?: Readonly<EntryAutomationPolicy>;
   readonly entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>;
+  readonly entryClassificationProfile?: Readonly<EntryClassificationProfile>;
+  readonly entrySavedQueries?: Readonly<EntrySavedQueries>;
 }
 
 export interface ReviewPreferencesStore {
+  /** Isolates a temporary preference replacement through restore success or rollback. */
+  replaceForRestore?<T>(
+    workspaceId: string,
+    preferences: Readonly<ReviewPreferences>,
+    restore: () => Promise<T>,
+  ): Promise<T>;
   load(workspaceId: string): Promise<Readonly<ReviewPreferences>>;
   save(
     workspaceId: string,
@@ -322,6 +346,8 @@ export interface ReviewPreferencesStore {
     entryPreferenceProfile?: Readonly<EntryPreferenceProfile>,
     entryAutomationPolicy?: Readonly<EntryAutomationPolicy>,
     entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>,
+    entryClassificationProfile?: Readonly<EntryClassificationProfile>,
+    entrySavedQueries?: Readonly<EntrySavedQueries>,
   ): Promise<Readonly<ReviewPreferences>>;
   update?<T>(
     workspaceId: string,
@@ -353,6 +379,8 @@ export interface ReviewPreferencesPatch {
   readonly entryPreferenceProfile?: Readonly<EntryPreferenceProfile>;
   readonly entryAutomationPolicy?: Readonly<EntryAutomationPolicy>;
   readonly entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>;
+  readonly entryClassificationProfile?: Readonly<EntryClassificationProfile>;
+  readonly entrySavedQueries?: Readonly<EntrySavedQueries>;
 }
 
 export function patchReviewPreferences(
@@ -386,6 +414,12 @@ export function patchReviewPreferences(
     patch.entrySplitRuleProfile ??
       current.entrySplitRuleProfile ??
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+    patch.entryClassificationProfile ??
+      current.entryClassificationProfile ??
+      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+    patch.entrySavedQueries ??
+      current.entrySavedQueries ??
+      DEFAULT_ENTRY_SAVED_QUERIES,
   );
 }
 
@@ -419,6 +453,8 @@ export async function updateReviewPreferences<T>(
           update.next.entryPreferenceProfile,
           update.next.entryAutomationPolicy,
           update.next.entrySplitRuleProfile,
+          update.next.entryClassificationProfile,
+          update.next.entrySavedQueries,
         );
   return Object.freeze({preferences, result: update.result});
 }
@@ -718,6 +754,8 @@ export function createReviewPreferences(
   entryPreferenceProfile: Readonly<EntryPreferenceProfile> = DEFAULT_ENTRY_PREFERENCE_PROFILE,
   entryAutomationPolicy: Readonly<EntryAutomationPolicy> = DEFAULT_ENTRY_AUTOMATION_POLICY,
   entrySplitRuleProfile: Readonly<EntrySplitRuleProfile> = DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+  entryClassificationProfile: Readonly<EntryClassificationProfile> = DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+  entrySavedQueries: Readonly<EntrySavedQueries> = DEFAULT_ENTRY_SAVED_QUERIES,
 ): Readonly<ReviewPreferences> {
   const advanceActions =
     entryAutomationPolicy.advanceActions ??
@@ -730,6 +768,7 @@ export function createReviewPreferences(
     version: REVIEW_PREFERENCES_VERSION,
     workspaceId,
     quickTags: Object.freeze([...quickTags]),
+    entrySavedQueries,
     automaticKeywords: Object.freeze({
       enabled: automaticKeywords.enabled,
       includeLinkDomains: automaticKeywords.includeLinkDomains,
@@ -775,6 +814,47 @@ export function createReviewPreferences(
       failureMode: entryAutomationPolicy.failureMode,
     }),
     entrySplitRuleProfile: Object.freeze({...entrySplitRuleProfile}),
+    entryClassificationProfile: Object.freeze({
+      format: entryClassificationProfile.format,
+      version: ENTRY_CLASSIFICATION_PROFILE_VERSION,
+      revision: entryClassificationProfile.revision,
+      aliases: Object.freeze(
+        entryClassificationProfile.aliases.map((alias) =>
+          Object.freeze({...alias}),
+        ),
+      ),
+      typeMappings: Object.freeze(
+        entryClassificationProfile.typeMappings.map((mapping) =>
+          Object.freeze({...mapping}),
+        ),
+      ),
+      domainMappings: Object.freeze(
+        entryClassificationProfile.domainMappings.map((mapping) =>
+          Object.freeze({...mapping}),
+        ),
+      ),
+      exclusions: Object.freeze([...entryClassificationProfile.exclusions]),
+      typeThresholds: Object.freeze(
+        (
+          entryClassificationProfile.typeThresholds ??
+          DEFAULT_ENTRY_CLASSIFICATION_TYPE_THRESHOLDS
+        ).map((threshold) => Object.freeze({...threshold})),
+      ),
+      domainThresholds: Object.freeze(
+        (
+          entryClassificationProfile.domainThresholds ??
+          DEFAULT_ENTRY_CLASSIFICATION_DOMAIN_THRESHOLDS
+        ).map((threshold) => Object.freeze({...threshold})),
+      ),
+      neighborPolicy: Object.freeze({
+        ...(entryClassificationProfile.neighborPolicy ??
+          DEFAULT_ENTRY_CLASSIFICATION_NEIGHBOR_POLICY),
+      }),
+      typeLearning: cloneEntryTypeLearningState(
+        entryClassificationProfile.typeLearning ??
+          DEFAULT_ENTRY_TYPE_LEARNING_STATE,
+      ),
+    }),
   });
 }
 

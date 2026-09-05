@@ -9,24 +9,21 @@ const NAVIGATION: readonly Readonly<{
   section: ProductSection;
   index: string;
   label: string;
-  microLabel: string;
 }>[] = [
-  {section: 'overview', index: '00', label: '总览', microLabel: 'OVERVIEW'},
-  {section: 'import', index: '01', label: '导入', microLabel: 'IMPORT'},
-  {section: 'split', index: '02', label: '拆分', microLabel: 'SPLIT'},
-  {section: 'tags', index: '03', label: '标签', microLabel: 'TAG'},
+  {section: 'overview', index: '00', label: '总览'},
+  {section: 'import', index: '01', label: '导入'},
+  {section: 'split', index: '02', label: '拆分'},
+  {section: 'tags', index: '03', label: '标签'},
   {
     section: 'associations',
     index: '04',
     label: '联系',
-    microLabel: 'ASSOCIATE',
   },
-  {section: 'query', index: '05', label: '查询', microLabel: 'QUERY'},
+  {section: 'query', index: '05', label: '查询'},
   {
     section: 'knowledge',
     index: '06',
     label: '知识',
-    microLabel: 'KNOWLEDGE',
   },
 ];
 
@@ -46,7 +43,6 @@ export function ProductAppShell({
   evidencePanel,
   health,
   onNavigate,
-  transportMode,
   workspace,
 }: ProductAppShellProps) {
   const healthLabel = describeHealth(health);
@@ -97,31 +93,22 @@ export function ProductAppShell({
                     />
                     <span className="primary-navigation__copy">
                       <strong>{item.label}</strong>
-                      <small>{item.microLabel}</small>
                     </span>
                   </button>
                 </li>
               ))}
             </ol>
           </nav>
-          <p className="primary-rail__scope">LOCAL DATA · ONE WORKSPACE</p>
         </aside>
 
         <header className="product-command-bar">
           <div className="product-lockup">
             <p className="product-lockup__name">StruInfo</p>
-            <p className="product-lockup__descriptor">
-              文档处理台 · 导入 → 拆分 → 标签 → 联系 → 查询 → 知识
-            </p>
           </div>
           <dl className="command-status" aria-label="当前运行状态">
             <div>
               <dt>工作区</dt>
-              <dd title={workspace?.workspaceId}>
-                {workspace === undefined
-                  ? '读取中'
-                  : shortIdentity(workspace.workspaceId)}
-              </dd>
+              <dd>{workspace === undefined ? '读取中' : '已连接'}</dd>
             </div>
             <div data-state={healthLabel.state}>
               <dt>服务</dt>
@@ -139,13 +126,6 @@ export function ProductAppShell({
           {children}
         </main>
         {evidencePanel}
-
-        <footer className="product-status-strip">
-          <span>TRACEABLE CORE · MANUAL AUTHORITY</span>
-          <span>
-            {transportMode === 'mock' ? '健康检查：开发模拟' : '本机同源接口'}
-          </span>
-        </footer>
       </div>
     </>
   );
@@ -168,8 +148,4 @@ function describeHealth(state: HealthPageState): Readonly<{
     case 'unexpected_error':
       return {label: '检查失败', state: 'danger'};
   }
-}
-
-function shortIdentity(value: string): string {
-  return value.length <= 12 ? value : `${value.slice(0, 8)}…${value.slice(-4)}`;
 }

@@ -1,3 +1,7 @@
+import {mkdtempSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {LocalReviewPreferencesStore} from '../platform/storage/local_review_preferences_store.js';
 import {Buffer} from 'node:buffer';
 import {createHash} from 'node:crypto';
 
@@ -6,6 +10,7 @@ import {describe, expect, it, vi} from 'vitest';
 import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
 import {
   createReviewPreferences,
+  patchReviewPreferences,
   type ReviewPreferencesStore,
 } from '../storage/review_preferences_store.js';
 import {
@@ -83,6 +88,24 @@ describe('M1C workspace transfer', () => {
 
     const exported = await transfer.exportWorkspace(WORKSPACE_ID);
     const storedBytes = await fileStore.read(exported.fileName);
+    const verified = await transfer.verifyWorkspace(
+      WORKSPACE_ID,
+      exported.fileName,
+    );
+    expect(verified).toMatchObject({
+      fileName: exported.fileName,
+      sha256: exported.sha256,
+      exportedAt: CREATED_AT,
+      blobCount: 1,
+      personalDataIncluded: true,
+      tableCounts: {
+        workspace: 1,
+        evidence_blob: 1,
+        information_entry: 2,
+        information_entry_association_projection: 1,
+      },
+    });
+    expect(restoreEmptyWorkspace).not.toHaveBeenCalled();
     const restored = await transfer.restoreWorkspace(
       WORKSPACE_ID,
       exported.fileName,
@@ -118,6 +141,8 @@ describe('M1C workspace transfer', () => {
     );
     expect(restored).toMatchObject({
       fileName: exported.fileName,
+      sha256: exported.sha256,
+      exportedAt: CREATED_AT,
       blobCount: 1,
       personalDataIncluded: true,
       tableCounts: {
@@ -391,6 +416,56 @@ describe('M1C workspace transfer', () => {
     expect(restoreEmptyWorkspace).not.toHaveBeenCalled();
   });
 
+  it('restores saved query conditions and selection through the complete personal package', async () => {
+    const snapshot = syntheticSnapshot();
+    const fileStore = new MemoryBundleFileStore();
+    const blobStore = new MemoryBlobStore(BLOB_IDENTITY, BLOB_BYTES);
+    const savedQueries = {
+      version: 1 as const,
+      revision: 2,
+      views: [
+        {
+          viewId: WORKSPACE_ID,
+          name: 'Synthetic packaged query',
+          query: {includePrivate: true, onlyPrivate: true},
+          selectedEntryId: '44444444-4444-4444-8444-444444444444',
+        },
+      ],
+    };
+    const preferences = patchReviewPreferences(
+      createReviewPreferences(WORKSPACE_ID, []),
+      {entrySavedQueries: savedQueries},
+    );
+    const exporter = new M1cWorkspaceTransfer({
+      repository: {
+        exportWorkspace: () => Promise.resolve(snapshot),
+        restoreEmptyWorkspace: () => Promise.resolve(),
+      },
+      blobStore,
+      fileStore,
+      reviewPreferences: {
+        load: () => Promise.resolve(preferences),
+        save: () => Promise.reject(new Error('Unexpected export write.')),
+      },
+      now: () => CREATED_AT,
+    });
+    const exported = await exporter.exportWorkspace(WORKSPACE_ID);
+    const target = memoryReviewPreferences();
+    const importer = new M1cWorkspaceTransfer({
+      repository: {
+        exportWorkspace: () => Promise.resolve(snapshot),
+        restoreEmptyWorkspace: () => Promise.resolve(),
+      },
+      blobStore,
+      fileStore,
+      reviewPreferences: target,
+    });
+    await importer.restoreWorkspace(WORKSPACE_ID, exported.fileName);
+    expect((await target.load(WORKSPACE_ID)).entrySavedQueries).toMatchObject(
+      savedQueries,
+    );
+  });
+
   it('restores previous preferences when an empty-workspace restore is rejected', async () => {
     const snapshot = syntheticSnapshot();
     const fileStore = new MemoryBundleFileStore();
@@ -406,18 +481,27 @@ describe('M1C workspace transfer', () => {
       now: () => CREATED_AT,
     });
     const exported = await exporter.exportWorkspace(WORKSPACE_ID);
-    let current = createReviewPreferences(WORKSPACE_ID, ['before']);
-    const save = vi.fn<ReviewPreferencesStore['save']>(
-      (workspaceId, quickTags, automaticKeywords, vocabulary) => {
-        current = createReviewPreferences(
-          workspaceId,
-          quickTags,
-          automaticKeywords,
-          vocabulary,
-        );
-        return Promise.resolve(current);
+    let current = patchReviewPreferences(
+      createReviewPreferences(WORKSPACE_ID, ['before']),
+      {
+        entrySavedQueries: {
+          version: 1,
+          revision: 3,
+          views: [
+            {
+              viewId: WORKSPACE_ID,
+              name: 'Synthetic prior query',
+              query: {includePrivate: false},
+            },
+          ],
+        },
       },
     );
+    const priorQueries = current.entrySavedQueries;
+    const save = vi.fn<ReviewPreferencesStore['save']>((...args) => {
+      current = createReviewPreferences(...args);
+      return Promise.resolve(current);
+    });
     const importer = new M1cWorkspaceTransfer({
       repository: {
         exportWorkspace: () => Promise.resolve(snapshot),
@@ -439,7 +523,95 @@ describe('M1C workspace transfer', () => {
     ).rejects.toMatchObject({code: 'workspace_not_empty'});
     expect(save).toHaveBeenCalledTimes(2);
     expect(current.quickTags).toEqual(['before']);
+    expect(current.entrySavedQueries).toEqual(priorQueries);
   });
+  it.each([true, false])(
+    'isolates preference reads and writes while a restore settles (accepted=%s)',
+    async (accepted) => {
+      const root = mkdtempSync(join(tmpdir(), 'struinfo-restore-overlap-'));
+      const started = restoreGate();
+      const finish = restoreGate();
+      let restoring: Promise<unknown> | undefined;
+      try {
+        const snapshot = syntheticSnapshot();
+        const fileStore = new MemoryBundleFileStore();
+        const blobStore = new MemoryBlobStore(BLOB_IDENTITY, BLOB_BYTES);
+        const exporter = new M1cWorkspaceTransfer({
+          repository: {
+            exportWorkspace: () => Promise.resolve(snapshot),
+            restoreEmptyWorkspace: () => Promise.resolve(),
+          },
+          blobStore,
+          fileStore,
+          reviewPreferences: memoryReviewPreferences(),
+          now: () => CREATED_AT,
+        });
+        const exported = await exporter.exportWorkspace(WORKSPACE_ID);
+        const store = new LocalReviewPreferencesStore(root);
+        await store.save(WORKSPACE_ID, ['synthetic-before-restore']);
+        const importer = new M1cWorkspaceTransfer({
+          repository: {
+            exportWorkspace: () => Promise.resolve(snapshot),
+            restoreEmptyWorkspace: async () => {
+              started.resolve();
+              await finish.promise;
+              if (!accepted)
+                throw new M1cDomainTransferRepositoryError(
+                  'workspace_not_empty',
+                );
+            },
+          },
+          blobStore,
+          fileStore,
+          reviewPreferences: store,
+        });
+        restoring = importer
+          .restoreWorkspace(WORKSPACE_ID, exported.fileName)
+          .catch((error: unknown) => error);
+        await started.promise;
+        const savedQueries = {
+          version: 1 as const,
+          revision: 1,
+          views: [
+            {
+              viewId: OTHER_WORKSPACE_ID,
+              name: 'Synthetic later query',
+              query: {includePrivate: false},
+            },
+          ],
+        };
+        const write = () =>
+          store.update(WORKSPACE_ID, (current) => ({
+            next: patchReviewPreferences(current, {
+              entrySavedQueries: savedQueries,
+            }),
+            result: undefined,
+          }));
+        const writeFailure = await write().catch((error: unknown) => error);
+        const readFailure = await store
+          .load(WORKSPACE_ID)
+          .catch((error: unknown) => error);
+        finish.resolve();
+        const outcome = await restoring;
+        expect(writeFailure).toMatchObject({code: 'preferences_unavailable'});
+        expect(readFailure).toMatchObject({code: 'preferences_unavailable'});
+        if (!accepted)
+          expect(outcome).toMatchObject({code: 'workspace_not_empty'});
+        else expect(outcome).toMatchObject({personalDataIncluded: true});
+        await write();
+        const final = await store.load(WORKSPACE_ID);
+        expect(final.entrySavedQueries).toMatchObject(savedQueries);
+        expect(final.quickTags).toEqual(
+          accepted ? ['synthetic'] : ['synthetic-before-restore'],
+        );
+      } finally {
+        finish.resolve();
+        await restoring;
+        rmSync(root, {recursive: true, force: true});
+      }
+    },
+  );
+
   it('rejects table drift and derives the exact Blob manifest', () => {
     const snapshot = syntheticSnapshot();
     expect(m1cDomainBlobReferences(snapshot.domain)).toEqual([BLOB_IDENTITY]);
@@ -455,6 +627,14 @@ describe('M1C workspace transfer', () => {
     expect(() => normalizeM1cDomainSnapshot(raw)).toThrow();
   });
 });
+
+function restoreGate() {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((release) => {
+    resolve = release;
+  });
+  return {promise, resolve};
+}
 
 function syntheticSnapshot(): M1cWorkspaceTransferSnapshot {
   const domain: M1cDomainSnapshot = normalizeM1cDomainSnapshot({
@@ -644,6 +824,9 @@ function memoryReviewPreferences(): ReviewPreferencesStore {
       sourceSubscriptions,
       entryPreferenceProfile,
       entryAutomationPolicy,
+      entrySplitRuleProfile,
+      entryClassificationProfile,
+      entrySavedQueries,
     ) {
       if (workspaceId !== WORKSPACE_ID)
         return Promise.reject(new Error('workspace'));
@@ -657,6 +840,9 @@ function memoryReviewPreferences(): ReviewPreferencesStore {
         sourceSubscriptions,
         entryPreferenceProfile,
         entryAutomationPolicy,
+        entrySplitRuleProfile,
+        entryClassificationProfile,
+        entrySavedQueries,
       );
       return Promise.resolve(preferences);
     },

@@ -578,11 +578,16 @@ async function loadProposalRows(
 ): Promise<readonly Readonly<ProcessingProposal>[]> {
   if (rows.length === 0) return Object.freeze([]);
   const proposalIds = rows.map((row) => canonicalUuid(row.proposal_id));
-  const [inputResult, tagPayloads, splitPayloads] = await Promise.all([
-    client.query<Row>(READ_PROPOSAL_INPUTS_SQL, [workspaceId, proposalIds]),
-    loadTagPayloads(client, workspaceId, proposalIds),
-    loadSplitPayloads(client, workspaceId, proposalIds),
+  const inputResult = await client.query<Row>(READ_PROPOSAL_INPUTS_SQL, [
+    workspaceId,
+    proposalIds,
   ]);
+  const tagPayloads = await loadTagPayloads(client, workspaceId, proposalIds);
+  const splitPayloads = await loadSplitPayloads(
+    client,
+    workspaceId,
+    proposalIds,
+  );
   const inputs = groupOrdered(
     inputResult.rows,
     'proposal_id',
@@ -608,10 +613,17 @@ async function loadTagPayloads(
 ): Promise<ReadonlyMap<string, Readonly<ProcessingTagProposalPayload>>> {
   const proposalIds = proposalIdsInput.map(canonicalUuid);
   if (proposalIds.length === 0) return new Map();
-  const [headers, keywordRows, domainRows] = await Promise.all([
-    client.query<Row>(READ_TAG_PAYLOADS_SQL, [workspaceId, proposalIds]),
-    client.query<Row>(READ_TAG_KEYWORDS_SQL, [workspaceId, proposalIds]),
-    client.query<Row>(READ_TAG_DOMAINS_SQL, [workspaceId, proposalIds]),
+  const headers = await client.query<Row>(READ_TAG_PAYLOADS_SQL, [
+    workspaceId,
+    proposalIds,
+  ]);
+  const keywordRows = await client.query<Row>(READ_TAG_KEYWORDS_SQL, [
+    workspaceId,
+    proposalIds,
+  ]);
+  const domainRows = await client.query<Row>(READ_TAG_DOMAINS_SQL, [
+    workspaceId,
+    proposalIds,
   ]);
   const keywords = groupOrdered(
     keywordRows.rows,
@@ -852,14 +864,18 @@ async function loadSplitPayloads(
 ): Promise<ReadonlyMap<string, Readonly<ProcessingSplitProposalPayload>>> {
   const proposalIds = proposalIdsInput.map(canonicalUuid);
   if (proposalIds.length === 0) return new Map();
-  const [headers, entriesResult, fragmentsResult] = await Promise.all([
-    client.query<Row>(READ_SPLIT_PAYLOADS_SQL, [workspaceId, proposalIds]),
-    client.query<Row>(READ_SPLIT_ENTRIES_SQL, [workspaceId, proposalIds]),
-    client.query<Row>(READ_SPLIT_ENTRY_FRAGMENTS_SQL, [
-      workspaceId,
-      proposalIds,
-    ]),
+  const headers = await client.query<Row>(READ_SPLIT_PAYLOADS_SQL, [
+    workspaceId,
+    proposalIds,
   ]);
+  const entriesResult = await client.query<Row>(READ_SPLIT_ENTRIES_SQL, [
+    workspaceId,
+    proposalIds,
+  ]);
+  const fragmentsResult = await client.query<Row>(
+    READ_SPLIT_ENTRY_FRAGMENTS_SQL,
+    [workspaceId, proposalIds],
+  );
   const fragments = new Map<string, string[]>();
   for (const row of fragmentsResult.rows) {
     const proposalId = canonicalUuid(row.proposal_id);

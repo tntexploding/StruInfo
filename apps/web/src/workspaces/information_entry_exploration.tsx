@@ -130,7 +130,7 @@ export function InformationEntryExploration({
           message:
             response.body.status === 'not_found'
               ? '当前锚点已不在这个可见范围内，请重新查询。'
-              : '探索候选没有生成；普通查询结果不受影响。',
+              : '探索推荐没有生成；普通查询结果不受影响。',
         });
         return;
       }
@@ -151,30 +151,25 @@ export function InformationEntryExploration({
     >
       <header className="console-heading">
         <div>
-          <p className="section-index">EXPLORATION / LOCAL</p>
-          <h2 id="entry-exploration-title">探索候选</h2>
+          <h2 id="entry-exploration-title">探索推荐</h2>
         </div>
-        <span className="origin-label origin-label--deterministic">
-          本地联系 · 独立于搜索排序
-        </span>
       </header>
 
       <p className="entry-exploration__boundary">
-        只从当前选中条目的可见直接联系中挑选，不插入普通结果，也不代表事实关系或
-        AI 推荐。
+        从当前条目的已有联系中推荐额外条目，不会改变搜索结果。
       </p>
 
       {reviewPreferences.status === 'loading' ? (
         <p className="entry-exploration__notice" aria-live="polite">
-          正在读取外部探索策略…
+          正在读取探索设置…
         </p>
       ) : reviewPreferences.status === 'error' ? (
         <p className="entry-exploration__notice" role="alert">
-          无法读取外部探索策略；普通查询仍可继续使用。
+          无法读取探索设置；普通查询仍可继续使用。
         </p>
       ) : reviewPreferences.status === 'empty' ? (
         <p className="entry-exploration__notice" role="alert">
-          当前工作区没有可用的探索策略记录。
+          当前没有可用的探索设置。
         </p>
       ) : (
         <form
@@ -194,7 +189,7 @@ export function InformationEntryExploration({
             />
             <span>
               <strong>启用独立探索</strong>
-              <small>默认关闭；关闭时不会生成候选。</small>
+              <small>默认关闭；关闭时不会推荐额外条目。</small>
             </span>
           </label>
           <label className="field">
@@ -250,19 +245,19 @@ export function InformationEntryExploration({
           <div className="entry-exploration-policy__actions">
             <span aria-live="polite">
               {saveState === 'saved'
-                ? '策略已保存到外部个人配置。'
+                ? '探索设置已保存。'
                 : saveState === 'error'
-                  ? '策略未保存，请重试。'
+                  ? '设置未保存，请重试。'
                   : isDirty
                     ? '有尚未保存的修改。'
-                    : `策略修订 ${persistedPolicy.revision.toString()}`}
+                    : '探索设置已保存。'}
             </span>
             <button
               className="secondary-action"
               type="submit"
               disabled={!isDirty || saveState === 'saving'}
             >
-              {saveState === 'saving' ? '保存中…' : '保存探索策略'}
+              {saveState === 'saving' ? '保存中…' : '保存探索设置'}
             </button>
           </div>
         </form>
@@ -277,7 +272,7 @@ export function InformationEntryExploration({
           </strong>
           <span>
             {previewLimit === 0
-              ? '当前策略不会产生候选'
+              ? '当前设置不会推荐额外条目'
               : `本次最多返回 ${previewLimit.toString()} 条`}
           </span>
         </div>
@@ -294,17 +289,17 @@ export function InformationEntryExploration({
           }
           onClick={() => void loadCandidates()}
         >
-          {view.status === 'loading' ? '生成中…' : '生成探索候选'}
+          {view.status === 'loading' ? '生成中…' : '生成探索推荐'}
         </button>
       </div>
 
       {isDirty ? (
         <p className="entry-exploration__notice" aria-live="polite">
-          请先保存策略，再按已保存版本生成候选。
+          请先保存设置，再生成推荐。
         </p>
       ) : view.status === 'idle' ? (
         <p className="entry-exploration__notice" aria-live="polite">
-          探索不会自动运行；选择锚点后由你明确启动。
+          选择一个查询结果后，可以生成探索推荐。
         </p>
       ) : view.status === 'loading' ? (
         <p className="entry-exploration__notice" aria-live="polite">
@@ -316,14 +311,13 @@ export function InformationEntryExploration({
         </p>
       ) : view.response.items.length === 0 ? (
         <p className="entry-exploration__notice">
-          当前锚点在已启用类型中没有页外候选。普通搜索结果保持不变。
+          当前条目没有符合条件的额外推荐。
         </p>
       ) : (
         <>
           <p className="entry-exploration__summary" aria-live="polite">
             显示 {view.response.items.length.toString()} /{' '}
-            {view.response.totalEligibleCount.toString()} 个合格候选 · 策略修订{' '}
-            {view.response.policy.revision.toString()}
+            {view.response.totalEligibleCount.toString()} 个可选结果
           </p>
           <div className="entry-exploration-candidates">
             {view.response.items.map((candidate) => (
@@ -371,7 +365,7 @@ export function InformationEntryExploration({
                     );
                   }}
                 >
-                  查看精确来源
+                  查看原文
                 </button>
               </article>
             ))}

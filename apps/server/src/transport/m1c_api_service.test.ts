@@ -1,3 +1,4 @@
+import {DEFAULT_ENTRY_SAVED_QUERIES} from '../modules/entries/information_entry_saved_queries.js';
 import {createHash} from 'node:crypto';
 
 import type {Response} from 'express';
@@ -19,7 +20,11 @@ import type {
   InformationEntryRestructureWrite,
   InformationEntrySearchCursor,
 } from '../modules/entries/index.js';
-import {DEFAULT_ENTRY_SPLIT_RULE_PROFILE} from '../modules/entries/index.js';
+import {
+  InformationEntryRetrievalServiceError,
+  DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+  DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+} from '../modules/entries/index.js';
 import type {
   EntryAutomationClaim,
   EntryAutomationExecution,
@@ -91,6 +96,190 @@ class MemoryBlobStore implements BlobStore {
 }
 
 describe('M1cApiService', () => {
+  it('exposes explicit Markdown export status codes and forwards only the submitted request to its narrow service', async () => {
+    const body = {title: 'Synthetic export', entries: []};
+    const preview = vi.fn(() =>
+      Promise.resolve({
+        status: 'rejected' as const,
+        issue: {code: 'input_invalid' as const},
+      }),
+    );
+    const generate = vi.fn(() =>
+      Promise.resolve({
+        status: 'rejected' as const,
+        issue: {code: 'preview_stale' as const},
+      }),
+    );
+    const service = createService({entryMarkdownExports: {preview, generate}});
+    expect(
+      (service.workspace().body as {capabilities: readonly string[]})
+        .capabilities,
+    ).toContain('entry_markdown_export');
+    expect(await service.previewEntryMarkdownExport(body)).toMatchObject({
+      statusCode: 400,
+      body: {issue: {code: 'input_invalid'}},
+    });
+    expect(await service.generateEntryMarkdownExport(body)).toMatchObject({
+      statusCode: 409,
+      body: {issue: {code: 'preview_stale'}},
+    });
+    expect(preview).toHaveBeenCalledExactlyOnceWith(body);
+    expect(generate).toHaveBeenCalledExactlyOnceWith(body);
+    expect(
+      await createService().generateEntryMarkdownExport(body),
+    ).toMatchObject({statusCode: 503});
+  });
+
+  it('manages saved queries by expected revision without writing Entry state', async () => {
+    let preferences = createReviewPreferences(WORKSPACE_ID, [
+      'Synthetic sibling',
+    ]);
+    const store: ReviewPreferencesStore = {
+      load: () => Promise.resolve(preferences),
+      save: () => Promise.reject(new Error('Unexpected positional save.')),
+      update: <T>(_workspace: string, updater: ReviewPreferencesUpdater<T>) => {
+        const result = updater(preferences);
+        preferences = result.next;
+        return Promise.resolve({preferences, result: result.result});
+      },
+    };
+    const service = createService({reviewPreferences: store});
+    expect((await service.loadEntrySavedQueries()).body).toMatchObject({
+      savedQueries: {revision: 0, views: []},
+    });
+    const query = {includePrivate: true, onlyPrivate: true, text: 'Synthetic'};
+    const write = {
+      operation: 'save',
+      expectedRevision: 0,
+      viewId: RESOURCE_ID,
+      name: 'Synthetic query',
+      query,
+      selectedEntryId: NODE_ID,
+    };
+    expect(await service.writeEntrySavedQuery(write)).toMatchObject({
+      statusCode: 200,
+      body: {status: 'applied', savedQueries: {revision: 1}},
+    });
+    expect(
+      await service.writeEntrySavedQuery({...write, name: 'Stale'}),
+    ).toMatchObject({statusCode: 409});
+    expect(
+      await service.saveReviewPreferences({
+        quickTags: ['Synthetic changed sibling'],
+      }),
+    ).toMatchObject({statusCode: 200});
+    expect((await service.loadEntrySavedQueries()).body).toMatchObject({
+      savedQueries: {revision: 1, views: [{name: write.name, query}]},
+    });
+    expect(
+      await service.writeEntrySavedQuery({
+        operation: 'rename',
+        expectedRevision: 1,
+        viewId: RESOURCE_ID,
+        name: 'Synthetic renamed',
+      }),
+    ).toMatchObject({statusCode: 200});
+    expect(
+      await service.writeEntrySavedQuery({
+        operation: 'delete',
+        expectedRevision: 2,
+        viewId: RESOURCE_ID,
+      }),
+    ).toMatchObject({statusCode: 200, body: {savedQueries: {views: []}}});
+    expect(
+      await service.writeEntrySavedQuery({
+        ...write,
+        query: {...query, after: {}},
+      }),
+    ).toMatchObject({statusCode: 422});
+  });
+
+  it('restores only a current Entry in the explicit workspace and privacy scope', async () => {
+    const base = currentRestructureEntry(
+      NODE_ID,
+      STRUCTURE_ID,
+      0,
+      'Synthetic selection',
+      'Synthetic current body',
+      FRAGMENT_ID,
+    );
+    let rows: readonly Readonly<CurrentInformationEntry>[] = [
+      base,
+      {...base, entryId: RESOURCE_ID, value: {...base.value, isPrivate: true}},
+    ];
+    const bounded = vi.fn(
+      (_workspace: string, _include: boolean, ids: readonly string[]) =>
+        Promise.resolve(rows.filter((row) => ids.includes(row.entryId))),
+    );
+    const full = vi.fn(() =>
+      Promise.reject(new Error('Unexpected full read.')),
+    );
+    const service = createService({
+      informationEntryRepository: {
+        materializeEntries: () =>
+          Promise.reject(new Error('Unexpected write.')),
+        materializeEntriesIfSnapshotEmpty: () =>
+          Promise.reject(new Error('Unexpected write.')),
+        reviseEntry: () => Promise.reject(new Error('Unexpected write.')),
+        loadCurrentEntries: full,
+        loadCurrentEntriesByIds: bounded,
+      },
+    });
+    expect(
+      await service.readEntryQueryContext({
+        entryId: NODE_ID,
+        includePrivate: false,
+      }),
+    ).toMatchObject({
+      statusCode: 200,
+      body: {entry: {revision: 1, value: {body: base.value.body}}},
+    });
+    expect(bounded).toHaveBeenLastCalledWith(WORKSPACE_ID, false, [NODE_ID]);
+    expect(
+      await service.readEntryQueryContext({
+        entryId: RESOURCE_ID,
+        includePrivate: false,
+      }),
+    ).toMatchObject({statusCode: 404});
+    expect(
+      await service.readEntryQueryContext({
+        entryId: RESOURCE_ID,
+        includePrivate: true,
+        onlyPrivate: true,
+      }),
+    ).toMatchObject({statusCode: 200});
+    expect(
+      await service.readEntryQueryContext({
+        entryId: NODE_ID,
+        includePrivate: true,
+        onlyPrivate: true,
+      }),
+    ).toMatchObject({statusCode: 404});
+    rows = [{...base, workspaceId: RESOURCE_ID}];
+    expect(
+      await service.readEntryQueryContext({
+        entryId: NODE_ID,
+        includePrivate: false,
+      }),
+    ).toMatchObject({statusCode: 404});
+    rows = [];
+    expect(
+      await service.readEntryQueryContext({
+        entryId: NODE_ID,
+        includePrivate: false,
+      }),
+    ).toMatchObject({statusCode: 404});
+    const calls = bounded.mock.calls.length;
+    expect(
+      await service.readEntryQueryContext({
+        entryId: NODE_ID,
+        includePrivate: false,
+        onlyPrivate: true,
+      }),
+    ).toMatchObject({statusCode: 422});
+    expect(bounded).toHaveBeenCalledTimes(calls);
+  });
+
   it('keeps the selected external workspace authoritative for reads', async () => {
     const listSnapshots = vi.fn(() => Promise.resolve([]));
     const service = createService({
@@ -109,6 +298,41 @@ describe('M1cApiService', () => {
       body: {status: 'ok', snapshots: []},
     });
     expect(listSnapshots).toHaveBeenCalledExactlyOnceWith(WORKSPACE_ID);
+  });
+
+  it('uses bounded evidence pages and returns the total document count', async () => {
+    const listSnapshotPage = vi.fn(() =>
+      Promise.resolve({
+        items: [],
+        totalCount: 407,
+        nextCursor: {
+          capturedAt: '2040-01-02T03:04:05.000Z',
+          snapshotId: SNAPSHOT_ID,
+        },
+      }),
+    );
+    const service = createService({
+      evidenceReadRepository: {
+        listSnapshots: () => Promise.resolve([]),
+        listSnapshotPage,
+        loadSnapshot: () => Promise.resolve(undefined),
+      },
+    });
+
+    await expect(service.listEvidence('200')).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        totalCount: 407,
+        nextCursor: {
+          capturedAt: '2040-01-02T03:04:05.000Z',
+          snapshotId: SNAPSHOT_ID,
+        },
+      },
+    });
+    expect(listSnapshotPage).toHaveBeenCalledExactlyOnceWith(WORKSPACE_ID, {
+      limit: 200,
+    });
   });
 
   it('loads and saves workspace-scoped review quick tags', async () => {
@@ -208,6 +432,8 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_PREFERENCE_PROFILE,
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+      DEFAULT_ENTRY_SAVED_QUERIES,
     );
   });
 
@@ -340,6 +566,8 @@ describe('M1cApiService', () => {
       {revision: 1, enabled: true, rules: [rule]},
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+      DEFAULT_ENTRY_SAVED_QUERIES,
     );
     await expect(
       service.saveInformationEntryPreferenceProfile({
@@ -706,6 +934,8 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_PREFERENCE_PROFILE,
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+      DEFAULT_ENTRY_SAVED_QUERIES,
     );
     await expect(
       service.reviseInformationEntryAssociationPolicy({
@@ -825,6 +1055,8 @@ describe('M1cApiService', () => {
       entryPreferenceProfile,
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+      DEFAULT_ENTRY_SAVED_QUERIES,
     );
 
     await expect(
@@ -886,6 +1118,8 @@ describe('M1cApiService', () => {
       entryPreferenceProfile,
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+      DEFAULT_ENTRY_SAVED_QUERIES,
     );
   });
 
@@ -2165,7 +2399,7 @@ describe('M1cApiService', () => {
     expect(loadAssociationSnapshot).toHaveBeenCalledTimes(3);
   });
 
-  it('loads one Entry snapshot for lexical search and does not reload it after semantic retrieval', async () => {
+  it('routes public lexical and semantic search through the retrieval service without duplicate loads', async () => {
     const loadCurrentEntries = vi.fn(() => Promise.resolve([]));
     const retrievalSearch = vi.fn(() =>
       Promise.resolve(
@@ -2190,6 +2424,7 @@ describe('M1cApiService', () => {
         semanticSearchAvailable: true,
         search: retrievalSearch,
         status: () => Promise.reject(new Error('Unexpected status read.')),
+        refresh: () => Promise.reject(new Error('Unexpected index refresh.')),
         rebuild: () => Promise.reject(new Error('Unexpected index rebuild.')),
         evaluate: () =>
           Promise.reject(new Error('Unexpected retrieval evaluation.')),
@@ -2207,8 +2442,8 @@ describe('M1cApiService', () => {
       statusCode: 200,
       body: {status: 'ok', privateDocuments: {totalCount: 0, items: []}},
     });
-    expect(loadCurrentEntries).toHaveBeenCalledTimes(1);
-    expect(retrievalSearch).not.toHaveBeenCalled();
+    expect(loadCurrentEntries).not.toHaveBeenCalled();
+    expect(retrievalSearch).toHaveBeenCalledTimes(1);
 
     await expect(
       service.searchInformationEntries({
@@ -2225,8 +2460,84 @@ describe('M1cApiService', () => {
         privateDocuments: {totalCount: 0, items: []},
       },
     });
-    expect(retrievalSearch).toHaveBeenCalledTimes(1);
-    expect(loadCurrentEntries).toHaveBeenCalledTimes(1);
+    expect(retrievalSearch).toHaveBeenCalledTimes(2);
+    expect(loadCurrentEntries).not.toHaveBeenCalled();
+  });
+
+  it('accepts only bounded incremental index requests and reports busy maintenance', async () => {
+    const index = {
+      indexVersion: 'struinfo.entry-search-index.v1' as const,
+      tokenizerVersion: 'struinfo.entry-terms.unicode-v1' as const,
+      publicEntryCount: 3,
+      currentProjectionCount: 3,
+      embeddedProjectionCount: 0,
+      staleProjectionCount: 0,
+      postingCount: 12,
+      semanticSearchAvailable: false,
+      semanticSearchReady: false,
+    };
+    const progress = {
+      outcome: 'complete' as const,
+      loadedEntryCount: 1,
+      updatedEntryCount: 1,
+      staleEntryCount: 0,
+      removedProjectionCount: 0,
+      reusedEmbeddingCount: 0,
+      embeddingInputCount: 0,
+      remainingEntryCount: 0,
+      remainingObsoleteCount: 0,
+    };
+    const refresh = vi.fn<
+      (
+        limit: number,
+      ) => Promise<{index: typeof index; progress: typeof progress}>
+    >(() => Promise.resolve({index, progress}));
+    const service = createService({
+      informationEntryRetrieval: {
+        semanticSearchAvailable: false,
+        incrementalRefreshAvailable: true,
+        refresh,
+        status: () => Promise.resolve(index),
+        rebuild: () => Promise.reject(new Error('Unexpected complete rebuild')),
+        search: () => Promise.reject(new Error('Unexpected search')),
+        evaluate: () => Promise.reject(new Error('Unexpected evaluation')),
+      },
+    });
+    for (const body of [
+      null,
+      [],
+      {limit: 0},
+      {limit: 33},
+      {limit: 1.5},
+      {limit: null},
+      {includePrivate: true},
+      {limit: 1, model: 'injected'},
+    ]) {
+      await expect(
+        service.refreshInformationEntrySearchIndex(body),
+      ).resolves.toMatchObject({statusCode: 422});
+    }
+    expect(refresh).not.toHaveBeenCalled();
+    await expect(
+      service.refreshInformationEntrySearchIndex({}),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'ok', index, progress},
+    });
+    expect(refresh).toHaveBeenLastCalledWith(32);
+    await service.refreshInformationEntrySearchIndex({limit: 7});
+    expect(refresh).toHaveBeenLastCalledWith(7);
+    refresh.mockRejectedValueOnce(
+      new InformationEntryRetrievalServiceError(
+        'search_index_maintenance_busy',
+      ),
+    );
+    await expect(
+      service.refreshInformationEntrySearchIndex({limit: 7}),
+    ).resolves.toMatchObject({
+      statusCode: 409,
+      body: {issue: {code: 'search_index_maintenance_busy'}},
+    });
   });
 
   it('closes text mode and field scope at the HTTP boundary', async () => {
@@ -3348,6 +3659,72 @@ describe('M1E provider-neutral processing API', () => {
     });
   });
 });
+describe('M2-P2F type review API', () => {
+  it('validates the closed request and returns the scale-aware repository page', async () => {
+    const reviewCurrentEntryTypes = vi.fn(() =>
+      Promise.resolve(
+        Object.freeze({
+          coverage: Object.freeze({
+            totalCount: 12,
+            classifiedCount: 7,
+            missingCount: 5,
+            byType: Object.freeze([]),
+          }),
+          items: Object.freeze([]),
+        }),
+      ),
+    );
+    const service = createService({
+      informationEntryRepository: {
+        materializeEntries: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        materializeEntriesIfSnapshotEmpty: () =>
+          Promise.resolve({outcome: 'existing', createdCount: 0}),
+        reviseEntry: () => Promise.resolve('not_found'),
+        loadCurrentEntries: () =>
+          Promise.reject(new Error('optimized review path was not used')),
+        reviewCurrentEntryTypes,
+      },
+    });
+
+    await expect(
+      service.reviewInformationEntryTypes({
+        includePrivate: false,
+        filter: 'missing',
+        limit: 20,
+      }),
+    ).resolves.toEqual({
+      statusCode: 200,
+      body: {
+        status: 'ok',
+        coverage: {
+          totalCount: 12,
+          classifiedCount: 7,
+          missingCount: 5,
+          byType: [],
+        },
+        items: [],
+      },
+    });
+    expect(reviewCurrentEntryTypes).toHaveBeenCalledWith({
+      workspaceId: WORKSPACE_ID,
+      includePrivate: false,
+      filter: 'missing',
+      limit: 20,
+    });
+    await expect(
+      service.reviewInformationEntryTypes({
+        includePrivate: false,
+        filter: 'invented_type',
+        limit: 20,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 422,
+      body: {status: 'rejected', issue: {path: 'body'}},
+    });
+  });
+});
+
 describe('M1cApiController', () => {
   it('writes local API responses as no-store JSON', () => {
     const service = createService();

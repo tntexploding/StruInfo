@@ -8,9 +8,16 @@ import {
   type EntryContentKeyword,
   type EntryDomainAssignment,
   type InformationEntryEmptySnapshotMaterializeResult,
+  type InformationEntryBulkRevisionResult,
+  type InformationEntryBrowsePage,
+  type InformationEntryBrowsePrivacyScope,
   type InformationEntryMaterializeResult,
   type InformationEntryMaterializeRow,
   type InformationEntryRepositoryPort,
+  type InformationEntryBulkRevisionRepositoryPort,
+  type InformationEntryTypeCoverage,
+  type InformationEntryTypeReviewRequest,
+  type InformationEntryTypeReviewResult,
   type InformationEntryRevisionOutcome,
   type InformationEntryRevisionValue,
   type InformationEntryRevisionWrite,
@@ -62,6 +69,80 @@ export const READ_CURRENT_INFORMATION_ENTRIES_SQL = sql(
   'ORDER BY snapshot.captured_at DESC, e.snapshot_id, e.document_order, e.entry_id',
 );
 
+export const READ_CURRENT_INFORMATION_ENTRIES_BY_ID_SQL = sql(
+  CURRENT_ENTRY_SELECT,
+  'WHERE e.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
+  '  AND e.entry_id = ANY($3::uuid[])',
+  'ORDER BY snapshot.captured_at DESC, e.snapshot_id, e.document_order, e.entry_id',
+);
+
+export const COUNT_CURRENT_INFORMATION_ENTRY_BROWSE_SQL = sql(
+  'SELECT count(*)::integer AS total_count',
+  'FROM struinfo.information_entry AS e',
+  'WHERE e.workspace_id = $1 AND e.is_current_structure',
+  "  AND ($2::text = 'all'",
+  "    OR ($2::text = 'private' AND e.is_private)",
+  "    OR ($2::text = 'public' AND NOT e.is_private))",
+);
+
+export const READ_CURRENT_INFORMATION_ENTRY_BROWSE_PAGE_SQL = sql(
+  'SELECT e.entry_id::text',
+  'FROM struinfo.information_entry AS e',
+  'JOIN struinfo.snapshot AS snapshot',
+  '  ON snapshot.workspace_id = e.workspace_id',
+  ' AND snapshot.resource_id = e.resource_id',
+  ' AND snapshot.snapshot_id = e.snapshot_id',
+  'WHERE e.workspace_id = $1 AND e.is_current_structure',
+  "  AND ($2::text = 'all'",
+  "    OR ($2::text = 'private' AND e.is_private)",
+  "    OR ($2::text = 'public' AND NOT e.is_private))",
+  '  AND (',
+  '    $3::timestamptz IS NULL',
+  '    OR snapshot.captured_at < $3::timestamptz',
+  '    OR (snapshot.captured_at = $3::timestamptz AND (',
+  '      e.document_order > $4::integer',
+  '      OR (e.document_order = $4::integer AND e.entry_id > $5::uuid)',
+  '    ))',
+  '  )',
+  'ORDER BY snapshot.captured_at DESC, e.document_order, e.entry_id',
+  'LIMIT $6',
+);
+
+export const READ_INFORMATION_ENTRY_TYPE_COVERAGE_SQL = sql(
+  'SELECT e.type_keyword::text, count(*)::integer AS entry_count',
+  'FROM struinfo.information_entry AS e',
+  'WHERE e.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
+  'GROUP BY e.type_keyword',
+);
+
+export const READ_INFORMATION_ENTRY_TYPE_REVIEW_PAGE_SQL = sql(
+  'SELECT e.entry_id::text, e.snapshot_id::text, e.document_order,',
+  '  snapshot.captured_at',
+  'FROM struinfo.information_entry AS e',
+  'JOIN struinfo.snapshot AS snapshot',
+  '  ON snapshot.workspace_id = e.workspace_id',
+  ' AND snapshot.resource_id = e.resource_id',
+  ' AND snapshot.snapshot_id = e.snapshot_id',
+  'WHERE e.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
+  "  AND (($3::text = 'missing' AND e.type_keyword IS NULL)",
+  "    OR ($3::text <> 'missing' AND e.type_keyword::text = $3::text))",
+  '  AND (',
+  '    $4::timestamptz IS NULL',
+  '    OR snapshot.captured_at < $4::timestamptz',
+  '    OR (snapshot.captured_at = $4::timestamptz AND (',
+  '      e.snapshot_id > $5::uuid',
+  '      OR (e.snapshot_id = $5::uuid AND e.document_order > $6::integer)',
+  '      OR (e.snapshot_id = $5::uuid AND e.document_order = $6::integer',
+  '        AND e.entry_id > $7::uuid)',
+  '    ))',
+  '  )',
+  'ORDER BY snapshot.captured_at DESC, e.snapshot_id, e.document_order, e.entry_id',
+  'LIMIT $8',
+);
+
 export const READ_CURRENT_INFORMATION_ENTRY_INPUTS_SQL = sql(
   'SELECT i.entry_id::text, i.input_ordinal, i.fragment_id::text,',
   '  r.start_code_point, r.end_code_point',
@@ -75,6 +156,20 @@ export const READ_CURRENT_INFORMATION_ENTRY_INPUTS_SQL = sql(
   '  AND ($2::boolean OR NOT e.is_private)',
   'ORDER BY i.entry_id, i.input_ordinal',
 );
+const READ_CURRENT_INFORMATION_ENTRY_INPUTS_BY_ID_SQL = sql(
+  'SELECT i.entry_id::text, i.input_ordinal, i.fragment_id::text,',
+  '  r.start_code_point, r.end_code_point',
+  'FROM struinfo.information_entry_fragment_input AS i',
+  'LEFT JOIN struinfo.information_entry_fragment_range AS r',
+  '  ON r.workspace_id = i.workspace_id',
+  ' AND r.entry_id = i.entry_id AND r.input_ordinal = i.input_ordinal',
+  'JOIN struinfo.information_entry AS e',
+  '  ON e.workspace_id = i.workspace_id AND e.entry_id = i.entry_id',
+  'WHERE i.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
+  '  AND e.entry_id = ANY($3::uuid[])',
+  'ORDER BY i.entry_id, i.input_ordinal',
+);
 
 export const READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_SQL = sql(
   'SELECT k.entry_id::text, k.keyword_ordinal,',
@@ -86,6 +181,17 @@ export const READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_SQL = sql(
   '  AND ($2::boolean OR NOT e.is_private)',
   'ORDER BY k.entry_id, k.keyword_ordinal',
 );
+const READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_BY_ID_SQL = sql(
+  'SELECT k.entry_id::text, k.keyword_ordinal,',
+  '  k.display_value, k.normalized_value, k.origin, k.origin_version',
+  'FROM struinfo.information_entry_content_keyword AS k',
+  'JOIN struinfo.information_entry AS e',
+  '  ON e.workspace_id = k.workspace_id AND e.entry_id = k.entry_id',
+  'WHERE k.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
+  '  AND e.entry_id = ANY($3::uuid[])',
+  'ORDER BY k.entry_id, k.keyword_ordinal',
+);
 
 export const READ_CURRENT_INFORMATION_ENTRY_DOMAINS_SQL = sql(
   'SELECT d.entry_id::text, d.domain_ordinal,',
@@ -95,6 +201,17 @@ export const READ_CURRENT_INFORMATION_ENTRY_DOMAINS_SQL = sql(
   '  ON e.workspace_id = d.workspace_id AND e.entry_id = d.entry_id',
   'WHERE d.workspace_id = $1 AND e.is_current_structure',
   '  AND ($2::boolean OR NOT e.is_private)',
+  'ORDER BY d.entry_id, d.domain_ordinal',
+);
+const READ_CURRENT_INFORMATION_ENTRY_DOMAINS_BY_ID_SQL = sql(
+  'SELECT d.entry_id::text, d.domain_ordinal,',
+  '  d.domain_keyword, d.custom_name, d.origin, d.origin_version',
+  'FROM struinfo.information_entry_domain_keyword AS d',
+  'JOIN struinfo.information_entry AS e',
+  '  ON e.workspace_id = d.workspace_id AND e.entry_id = d.entry_id',
+  'WHERE d.workspace_id = $1 AND e.is_current_structure',
+  '  AND ($2::boolean OR NOT e.is_private)',
+  '  AND e.entry_id = ANY($3::uuid[])',
   'ORDER BY d.entry_id, d.domain_ordinal',
 );
 
@@ -208,7 +325,11 @@ const INSERT_DOMAIN_KEYWORD_SQL = sql(
 
 type Row = Readonly<Record<string, unknown>>;
 
-export class PostgresInformationEntryRepository implements InformationEntryRepositoryPort {
+export class PostgresInformationEntryRepository
+  implements
+    InformationEntryRepositoryPort,
+    InformationEntryBulkRevisionRepositoryPort
+{
   readonly #pool: PostgresPoolBoundary;
 
   public constructor(pool: PostgresPoolBoundary) {
@@ -354,6 +475,99 @@ export class PostgresInformationEntryRepository implements InformationEntryRepos
     );
   }
 
+  public reviseEntriesAtomically(
+    writes: readonly Readonly<InformationEntryRevisionWrite>[],
+  ): Promise<Readonly<InformationEntryBulkRevisionResult>> {
+    if (writes.length === 0) {
+      return Promise.resolve(
+        Object.freeze({outcome: 'unchanged' as const, appliedCount: 0}),
+      );
+    }
+    const workspaceId = canonicalUuid(writes[0]?.workspaceId);
+    const entryIds = new Set<string>();
+    for (const write of writes) {
+      if (
+        canonicalUuid(write.workspaceId) !== workspaceId ||
+        entryIds.has(canonicalUuid(write.entryId)) ||
+        !Number.isSafeInteger(write.expectedRevision) ||
+        write.expectedRevision < 1
+      ) {
+        throw new PostgresAdapterError();
+      }
+      canonicalUuid(write.revisionId);
+      informationEntryValueParameters(write.value);
+      entryIds.add(write.entryId);
+    }
+    return runPostgresTransaction(
+      this.#pool,
+      'read_committed',
+      async (client) => {
+        await acquireWorkspaceWriteLock(client, workspaceId);
+        const prepared: {
+          write: Readonly<InformationEntryRevisionWrite>;
+          currentRevision: number;
+          changed: boolean;
+        }[] = [];
+        for (const write of writes) {
+          const locked = await client.query<Row>(LOCK_CURRENT_ENTRY_SQL, [
+            workspaceId,
+            write.entryId,
+          ]);
+          if (locked.rows.length === 0) {
+            return Object.freeze({
+              outcome: 'not_found' as const,
+              appliedCount: 0,
+            });
+          }
+          if (locked.rows.length !== 1 || locked.rows[0] === undefined) {
+            throw new PostgresAdapterError();
+          }
+          const row = locked.rows[0];
+          const currentRevision = integer(row.current_revision, 1);
+          if (currentRevision !== write.expectedRevision) {
+            return Object.freeze({
+              outcome: 'stale' as const,
+              appliedCount: 0,
+            });
+          }
+          const current = await loadOneCurrentValue(client, row);
+          prepared.push({
+            write,
+            currentRevision,
+            changed: !sameRevisionValue(current, write.value),
+          });
+        }
+        let appliedCount = 0;
+        for (const item of prepared) {
+          if (!item.changed) continue;
+          const nextRevision = item.currentRevision + 1;
+          if (nextRevision > 2_147_483_647) throw new PostgresAdapterError();
+          const updated = await client.query<Row>(UPDATE_ENTRY_SQL, [
+            workspaceId,
+            item.write.entryId,
+            nextRevision,
+            item.write.revisionId,
+            ...informationEntryValueParameters(item.write.value),
+            item.currentRevision,
+          ]);
+          expectOneAffected(updated.rowCount);
+          await replaceEntryChildren(
+            client,
+            workspaceId,
+            item.write.entryId,
+            item.write.value,
+          );
+          appliedCount += 1;
+        }
+        return Object.freeze({
+          outcome:
+            appliedCount === 0 ? ('unchanged' as const) : ('applied' as const),
+          appliedCount,
+        });
+      },
+    );
+  }
+
   public loadCurrentEntries(
     workspaceIdInput: string,
     includePrivate: boolean,
@@ -363,29 +577,240 @@ export class PostgresInformationEntryRepository implements InformationEntryRepos
       this.#pool,
       'repeatable_read_only',
       async (client) => {
-        const [core, inputs, keywords, domains] = await Promise.all([
-          client.query<Row>(READ_CURRENT_INFORMATION_ENTRIES_SQL, [
-            workspaceId,
-            includePrivate,
-          ]),
-          client.query<Row>(READ_CURRENT_INFORMATION_ENTRY_INPUTS_SQL, [
-            workspaceId,
-            includePrivate,
-          ]),
-          client.query<Row>(READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_SQL, [
-            workspaceId,
-            includePrivate,
-          ]),
-          client.query<Row>(READ_CURRENT_INFORMATION_ENTRY_DOMAINS_SQL, [
-            workspaceId,
-            includePrivate,
-          ]),
-        ]);
-        return Object.freeze(
-          core.rows.map((row) =>
-            mapCurrentEntry(row, inputs.rows, keywords.rows, domains.rows),
-          ),
+        const core = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRIES_SQL,
+          [workspaceId, includePrivate],
         );
+        const inputs = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_INPUTS_SQL,
+          [workspaceId, includePrivate],
+        );
+        const keywords = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_SQL,
+          [workspaceId, includePrivate],
+        );
+        const domains = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_DOMAINS_SQL,
+          [workspaceId, includePrivate],
+        );
+        return mapCurrentEntries(
+          core.rows,
+          inputs.rows,
+          keywords.rows,
+          domains.rows,
+        );
+      },
+    );
+  }
+
+  public loadCurrentEntriesByIds(
+    workspaceIdInput: string,
+    includePrivate: boolean,
+    entryIdsInput: readonly string[],
+  ): Promise<readonly Readonly<CurrentInformationEntry>[]> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    const entryIds = Object.freeze([
+      ...new Set(entryIdsInput.map((entryId) => canonicalUuid(entryId))),
+    ]);
+    if (entryIds.length === 0) return Promise.resolve(Object.freeze([]));
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      (client) =>
+        loadCurrentInformationEntriesByIds(
+          client,
+          workspaceId,
+          includePrivate,
+          entryIds,
+        ),
+    );
+  }
+
+  public loadCurrentEntryBrowsePage(
+    workspaceIdInput: string,
+    privacyScopeInput: InformationEntryBrowsePrivacyScope,
+    limitInput: number,
+    afterInput?: Readonly<{
+      capturedAt: string;
+      documentOrder: number;
+      entryId: string;
+    }>,
+  ): Promise<Readonly<InformationEntryBrowsePage>> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    const privacyScope = browsePrivacyScope(privacyScopeInput);
+    const limit = integer(limitInput, 1);
+    if (limit > 101) throw new PostgresAdapterError();
+    const after =
+      afterInput === undefined
+        ? undefined
+        : Object.freeze({
+            capturedAt: timestamp(afterInput.capturedAt),
+            documentOrder: integer(afterInput.documentOrder),
+            entryId: canonicalUuid(afterInput.entryId),
+          });
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const count = await client.query<Row>(
+          COUNT_CURRENT_INFORMATION_ENTRY_BROWSE_SQL,
+          [workspaceId, privacyScope],
+        );
+        if (count.rows.length !== 1) throw new PostgresAdapterError();
+        const totalCount = integer(count.rows[0]?.total_count);
+        const page = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_BROWSE_PAGE_SQL,
+          [
+            workspaceId,
+            privacyScope,
+            after?.capturedAt ?? null,
+            after?.documentOrder ?? null,
+            after?.entryId ?? null,
+            limit,
+          ],
+        );
+        const entryIds = page.rows.map((row) => canonicalUuid(row.entry_id));
+        if (entryIds.length === 0) {
+          return Object.freeze({
+            totalCount,
+            entries: Object.freeze([]),
+          });
+        }
+        const includePrivate = privacyScope !== 'public';
+        const parameters = [workspaceId, includePrivate, entryIds] as const;
+        const core = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRIES_BY_ID_SQL,
+          parameters,
+        );
+        const inputs = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_INPUTS_BY_ID_SQL,
+          parameters,
+        );
+        const keywords = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_BY_ID_SQL,
+          parameters,
+        );
+        const domains = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_DOMAINS_BY_ID_SQL,
+          parameters,
+        );
+        const entriesById = new Map(
+          mapCurrentEntries(
+            core.rows,
+            inputs.rows,
+            keywords.rows,
+            domains.rows,
+          ).map((entry) => [entry.entryId, entry] as const),
+        );
+        const entries = entryIds.map((entryId) => {
+          const entry = entriesById.get(entryId);
+          if (entry === undefined) throw new PostgresAdapterError();
+          return entry;
+        });
+        return Object.freeze({
+          totalCount,
+          entries: Object.freeze(entries),
+        });
+      },
+    );
+  }
+
+  public reviewCurrentEntryTypes(
+    request: Readonly<InformationEntryTypeReviewRequest>,
+  ): Promise<Readonly<InformationEntryTypeReviewResult>> {
+    const workspaceId = canonicalUuid(request.workspaceId);
+    const filter =
+      request.filter === 'missing'
+        ? request.filter
+        : enumValue(request.filter, ENTRY_TYPE_KEYWORDS);
+    const limit = integer(request.limit, 1);
+    if (limit > 50) throw new PostgresAdapterError();
+    const after =
+      request.after === undefined
+        ? undefined
+        : Object.freeze({
+            capturedAt: timestamp(request.after.capturedAt),
+            snapshotId: canonicalUuid(request.after.snapshotId),
+            documentOrder: integer(request.after.documentOrder),
+            entryId: canonicalUuid(request.after.entryId),
+          });
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const coverageRows = await client.query<Row>(
+          READ_INFORMATION_ENTRY_TYPE_COVERAGE_SQL,
+          [workspaceId, request.includePrivate],
+        );
+        const page = await client.query<Row>(
+          READ_INFORMATION_ENTRY_TYPE_REVIEW_PAGE_SQL,
+          [
+            workspaceId,
+            request.includePrivate,
+            filter,
+            after?.capturedAt ?? null,
+            after?.snapshotId ?? null,
+            after?.documentOrder ?? null,
+            after?.entryId ?? null,
+            limit + 1,
+          ],
+        );
+        const pageRows = page.rows.slice(0, limit);
+        const entryIds = pageRows.map((row) => canonicalUuid(row.entry_id));
+        const parameters = [
+          workspaceId,
+          request.includePrivate,
+          entryIds,
+        ] as const;
+        const core =
+          entryIds.length === 0
+            ? Object.freeze({rows: Object.freeze([])})
+            : await client.query<Row>(
+                READ_CURRENT_INFORMATION_ENTRIES_BY_ID_SQL,
+                parameters,
+              );
+        const inputs =
+          entryIds.length === 0
+            ? Object.freeze({rows: Object.freeze([])})
+            : await client.query<Row>(
+                READ_CURRENT_INFORMATION_ENTRY_INPUTS_BY_ID_SQL,
+                parameters,
+              );
+        const keywords =
+          entryIds.length === 0
+            ? Object.freeze({rows: Object.freeze([])})
+            : await client.query<Row>(
+                READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_BY_ID_SQL,
+                parameters,
+              );
+        const domains =
+          entryIds.length === 0
+            ? Object.freeze({rows: Object.freeze([])})
+            : await client.query<Row>(
+                READ_CURRENT_INFORMATION_ENTRY_DOMAINS_BY_ID_SQL,
+                parameters,
+              );
+        const items = mapCurrentEntries(
+          core.rows,
+          inputs.rows,
+          keywords.rows,
+          domains.rows,
+        );
+        const last = pageRows.at(-1);
+        return Object.freeze({
+          coverage: mapTypeCoverage(coverageRows.rows),
+          items,
+          ...(page.rows.length > limit && last !== undefined
+            ? {
+                nextCursor: Object.freeze({
+                  capturedAt: timestamp(last.captured_at),
+                  snapshotId: canonicalUuid(last.snapshot_id),
+                  documentOrder: integer(last.document_order),
+                  entryId: canonicalUuid(last.entry_id),
+                }),
+              }
+            : {}),
+        });
       },
     );
   }
@@ -410,6 +835,32 @@ export async function insertNewEntry(
     entry.entryId,
     entry.value,
   );
+}
+
+export async function loadCurrentInformationEntriesByIds(
+  client: PostgresClientBoundary,
+  workspaceId: string,
+  includePrivate: boolean,
+  entryIds: readonly string[],
+): Promise<readonly Readonly<CurrentInformationEntry>[]> {
+  const parameters = [workspaceId, includePrivate, entryIds] as const;
+  const core = await client.query<Row>(
+    READ_CURRENT_INFORMATION_ENTRIES_BY_ID_SQL,
+    parameters,
+  );
+  const inputs = await client.query<Row>(
+    READ_CURRENT_INFORMATION_ENTRY_INPUTS_BY_ID_SQL,
+    parameters,
+  );
+  const keywords = await client.query<Row>(
+    READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_BY_ID_SQL,
+    parameters,
+  );
+  const domains = await client.query<Row>(
+    READ_CURRENT_INFORMATION_ENTRY_DOMAINS_BY_ID_SQL,
+    parameters,
+  );
+  return mapCurrentEntries(core.rows, inputs.rows, keywords.rows, domains.rows);
 }
 
 export function informationEntryValueParameters(
@@ -535,10 +986,17 @@ async function loadOneCurrentValue(
 ): Promise<Readonly<InformationEntryRevisionValue>> {
   const workspaceId = canonicalUuid(row.workspace_id);
   const entryId = canonicalUuid(row.entry_id);
-  const [inputs, keywords, domains] = await Promise.all([
-    client.query<Row>(READ_ENTRY_INPUTS_SQL, [workspaceId, entryId]),
-    client.query<Row>(READ_ENTRY_KEYWORDS_SQL, [workspaceId, entryId]),
-    client.query<Row>(READ_ENTRY_DOMAINS_SQL, [workspaceId, entryId]),
+  const inputs = await client.query<Row>(READ_ENTRY_INPUTS_SQL, [
+    workspaceId,
+    entryId,
+  ]);
+  const keywords = await client.query<Row>(READ_ENTRY_KEYWORDS_SQL, [
+    workspaceId,
+    entryId,
+  ]);
+  const domains = await client.query<Row>(READ_ENTRY_DOMAINS_SQL, [
+    workspaceId,
+    entryId,
   ]);
   return mapRevisionValue(row, inputs.rows, keywords.rows, domains.rows);
 }
@@ -563,13 +1021,41 @@ function mapCurrentEntry(
     ...(canonicalUri === undefined ? {} : {canonicalUri}),
     capturedAt: timestamp(row.captured_at),
     ...(publishedAt === undefined ? {} : {publishedAt}),
-    value: mapRevisionValue(
-      row,
-      inputRows.filter((candidate) => candidate.entry_id === entryId),
-      keywordRows.filter((candidate) => candidate.entry_id === entryId),
-      domainRows.filter((candidate) => candidate.entry_id === entryId),
-    ),
+    value: mapRevisionValue(row, inputRows, keywordRows, domainRows),
   });
+}
+
+function mapCurrentEntries(
+  coreRows: readonly Row[],
+  inputRows: readonly Row[],
+  keywordRows: readonly Row[],
+  domainRows: readonly Row[],
+): readonly Readonly<CurrentInformationEntry>[] {
+  const inputsByEntry = groupRowsByEntryId(inputRows);
+  const keywordsByEntry = groupRowsByEntryId(keywordRows);
+  const domainsByEntry = groupRowsByEntryId(domainRows);
+  return Object.freeze(
+    coreRows.map((row) => {
+      const entryId = canonicalUuid(row.entry_id);
+      return mapCurrentEntry(
+        row,
+        inputsByEntry.get(entryId) ?? [],
+        keywordsByEntry.get(entryId) ?? [],
+        domainsByEntry.get(entryId) ?? [],
+      );
+    }),
+  );
+}
+
+function groupRowsByEntryId(rows: readonly Row[]): ReadonlyMap<string, Row[]> {
+  const grouped = new Map<string, Row[]>();
+  for (const row of rows) {
+    const entryId = canonicalUuid(row.entry_id);
+    const existing = grouped.get(entryId);
+    if (existing === undefined) grouped.set(entryId, [row]);
+    else existing.push(row);
+  }
+  return grouped;
 }
 
 function mapRevisionValue(
@@ -619,6 +1105,42 @@ function mapRevisionValue(
       inputRows.map((candidate) => canonicalUuid(candidate.fragment_id)),
     ),
     ...(fragmentRanges === undefined ? {} : {fragmentRanges}),
+  });
+}
+
+function mapTypeCoverage(
+  rows: readonly Row[],
+): Readonly<InformationEntryTypeCoverage> {
+  const counts = new Map<(typeof ENTRY_TYPE_KEYWORDS)[number], number>(
+    ENTRY_TYPE_KEYWORDS.map((typeKeyword) => [typeKeyword, 0]),
+  );
+  let totalCount = 0;
+  let missingCount = 0;
+  for (const row of rows) {
+    const count = integer(row.entry_count);
+    totalCount += count;
+    if (row.type_keyword === null) {
+      missingCount += count;
+      continue;
+    }
+    const typeKeyword = enumValue(row.type_keyword, ENTRY_TYPE_KEYWORDS);
+    counts.set(typeKeyword, count);
+  }
+  if (!Number.isSafeInteger(totalCount) || totalCount > 2_147_483_647) {
+    throw new PostgresAdapterError();
+  }
+  return Object.freeze({
+    totalCount,
+    classifiedCount: totalCount - missingCount,
+    missingCount,
+    byType: Object.freeze(
+      ENTRY_TYPE_KEYWORDS.map((typeKeyword) =>
+        Object.freeze({
+          typeKeyword,
+          count: counts.get(typeKeyword) ?? 0,
+        }),
+      ),
+    ),
   });
 }
 
@@ -686,6 +1208,15 @@ function sameRevisionValue(
 
 function optionalTimestamp(value: unknown): string | undefined {
   return value === null ? undefined : timestamp(value);
+}
+
+function browsePrivacyScope(
+  value: unknown,
+): InformationEntryBrowsePrivacyScope {
+  if (value !== 'public' && value !== 'all' && value !== 'private') {
+    throw new PostgresAdapterError();
+  }
+  return value;
 }
 
 function timestamp(value: unknown): string {

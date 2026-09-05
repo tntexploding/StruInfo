@@ -1,3 +1,8 @@
+import {
+  DEFAULT_ENTRY_SAVED_QUERIES,
+  decodeEntrySavedQueries,
+  type EntrySavedQueries,
+} from '../../modules/entries/information_entry_saved_queries.js';
 import {randomUUID} from 'node:crypto';
 import {lstat, readFile, rename, unlink, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -7,6 +12,11 @@ import {
   DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
   type EntrySplitRuleProfile,
 } from '../../modules/entries/information_entry_split_rule.js';
+import {
+  decodeEntryClassificationProfile,
+  DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+  type EntryClassificationProfile,
+} from '../../modules/entries/information_entry_deterministic_classification.js';
 
 import {
   createReviewPreferences,
@@ -48,6 +58,7 @@ const MAXIMUM_PREFERENCES_FILE_BYTES = 512 * 1024;
 export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
   readonly #preferencesRoot: string;
   readonly #writeTails = new Map<string, Promise<void>>();
+  readonly #restoreAttempts = new Map<string, {active: boolean}>();
 
   public constructor(preferencesRoot: string) {
     this.#preferencesRoot = preferencesRoot;
@@ -55,6 +66,16 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
 
   public async load(workspaceId: string): Promise<Readonly<ReviewPreferences>> {
     validateWorkspaceId(workspaceId);
+    const attempt = this.#restoreAttempts.get(workspaceId);
+    this.#assertRestoreAvailable(workspaceId, attempt);
+    const preferences = await this.#loadUnlocked(workspaceId);
+    this.#assertRestoreAvailable(workspaceId, attempt);
+    return preferences;
+  }
+
+  async #loadUnlocked(
+    workspaceId: string,
+  ): Promise<Readonly<ReviewPreferences>> {
     const path = this.#path(workspaceId);
     let status;
     try {
@@ -101,10 +122,15 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     entryPreferenceProfile: Readonly<EntryPreferenceProfile> = DEFAULT_ENTRY_PREFERENCE_PROFILE,
     entryAutomationPolicy: Readonly<EntryAutomationPolicy> = DEFAULT_ENTRY_AUTOMATION_POLICY,
     entrySplitRuleProfile: Readonly<EntrySplitRuleProfile> = DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+    entryClassificationProfile: Readonly<EntryClassificationProfile> = DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+    entrySavedQueries: Readonly<EntrySavedQueries> = DEFAULT_ENTRY_SAVED_QUERIES,
   ): Promise<Readonly<ReviewPreferences>> {
     validateWorkspaceId(workspaceId);
-    return this.#serializeWrite(workspaceId, () =>
-      this.#saveUnlocked(
+    const attempt = this.#restoreAttempts.get(workspaceId);
+    this.#assertRestoreAvailable(workspaceId, attempt);
+    return this.#serializeWrite(workspaceId, () => {
+      this.#assertRestoreAvailable(workspaceId, attempt);
+      return this.#saveUnlocked(
         workspaceId,
         quickTags,
         automaticKeywords,
@@ -115,8 +141,10 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
         entryPreferenceProfile,
         entryAutomationPolicy,
         entrySplitRuleProfile,
-      ),
-    );
+        entryClassificationProfile,
+        entrySavedQueries,
+      );
+    });
   }
 
   public async update<T>(
@@ -124,32 +152,79 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     updater: ReviewPreferencesUpdater<T>,
   ): Promise<Readonly<ReviewPreferencesUpdateResult<T>>> {
     validateWorkspaceId(workspaceId);
+    const attempt = this.#restoreAttempts.get(workspaceId);
+    this.#assertRestoreAvailable(workspaceId, attempt);
     return this.#serializeWrite(workspaceId, async () => {
-      const current = await this.load(workspaceId);
+      this.#assertRestoreAvailable(workspaceId, attempt);
+      const current = await this.#loadUnlocked(workspaceId);
       const update = updater(current);
       if (update.next.workspaceId !== workspaceId) throw invalid();
       const preferences =
         update.next === current
           ? current
-          : await this.#saveUnlocked(
-              workspaceId,
-              update.next.quickTags,
-              update.next.automaticKeywords ??
-                DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
-              update.next.vocabulary ?? DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
-              update.next.associationPolicy,
-              update.next.explorationPolicy,
-              update.next.sourceSubscriptions ??
-                DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
-              update.next.entryPreferenceProfile ??
-                DEFAULT_ENTRY_PREFERENCE_PROFILE,
-              update.next.entryAutomationPolicy ??
-                DEFAULT_ENTRY_AUTOMATION_POLICY,
-              update.next.entrySplitRuleProfile ??
-                DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
-            );
+          : await this.#savePreferencesUnlocked(workspaceId, update.next);
       return Object.freeze({preferences, result: update.result});
     });
+  }
+
+  public async replaceForRestore<T>(
+    workspaceId: string,
+    replacement: Readonly<ReviewPreferences>,
+    restore: () => Promise<T>,
+  ): Promise<T> {
+    validateWorkspaceId(workspaceId);
+    if (replacement.workspaceId !== workspaceId) throw invalid();
+    const previousAttempt = this.#restoreAttempts.get(workspaceId);
+    this.#assertRestoreAvailable(workspaceId, previousAttempt);
+    return this.#serializeWrite(workspaceId, async () => {
+      this.#assertRestoreAvailable(workspaceId, previousAttempt);
+      const attempt = {active: true};
+      this.#restoreAttempts.set(workspaceId, attempt);
+      try {
+        const previous = await this.#loadUnlocked(workspaceId);
+        await this.#savePreferencesUnlocked(workspaceId, replacement);
+        try {
+          return await restore();
+        } catch (error) {
+          await this.#savePreferencesUnlocked(workspaceId, previous);
+          throw error;
+        }
+      } finally {
+        attempt.active = false;
+      }
+    });
+  }
+
+  #assertRestoreAvailable(
+    workspaceId: string,
+    expected: {active: boolean} | undefined,
+  ): void {
+    const current = this.#restoreAttempts.get(workspaceId);
+    // Reject instead of waiting: a caller may already hold the database workspace lock.
+    if (current?.active === true || current !== expected) throw unavailable();
+  }
+
+  #savePreferencesUnlocked(
+    workspaceId: string,
+    preferences: Readonly<ReviewPreferences>,
+  ): Promise<Readonly<ReviewPreferences>> {
+    return this.#saveUnlocked(
+      workspaceId,
+      preferences.quickTags,
+      preferences.automaticKeywords ??
+        DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
+      preferences.vocabulary ?? DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+      preferences.associationPolicy,
+      preferences.explorationPolicy,
+      preferences.sourceSubscriptions ??
+        DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
+      preferences.entryPreferenceProfile ?? DEFAULT_ENTRY_PREFERENCE_PROFILE,
+      preferences.entryAutomationPolicy ?? DEFAULT_ENTRY_AUTOMATION_POLICY,
+      preferences.entrySplitRuleProfile ?? DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
+      preferences.entryClassificationProfile ??
+        DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+      preferences.entrySavedQueries ?? DEFAULT_ENTRY_SAVED_QUERIES,
+    );
   }
 
   async #saveUnlocked(
@@ -163,7 +238,10 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     entryPreferenceProfile: Readonly<EntryPreferenceProfile>,
     entryAutomationPolicy: Readonly<EntryAutomationPolicy>,
     entrySplitRuleProfile: Readonly<EntrySplitRuleProfile>,
+    entryClassificationProfile: Readonly<EntryClassificationProfile>,
+    entrySavedQueries: Readonly<EntrySavedQueries>,
   ): Promise<Readonly<ReviewPreferences>> {
+    const savedQueries = decodeEntrySavedQueries(entrySavedQueries);
     const decoded = decodeReviewQuickTags(quickTags);
     const decodedAutomaticKeywords =
       decodeReviewAutomaticKeywordPreferences(automaticKeywords);
@@ -187,7 +265,11 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     const decodedEntrySplitRuleProfile = decodeEntrySplitRuleProfile(
       entrySplitRuleProfile,
     );
+    const decodedEntryClassificationProfile = decodeEntryClassificationProfile(
+      entryClassificationProfile,
+    );
     if (
+      savedQueries === undefined ||
       decoded === undefined ||
       decodedAutomaticKeywords === undefined ||
       decodedVocabulary === undefined ||
@@ -198,7 +280,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       decodedSourceSubscriptions === undefined ||
       decodedEntryPreferenceProfile === undefined ||
       decodedEntryAutomationPolicy === undefined ||
-      decodedEntrySplitRuleProfile === undefined
+      decodedEntrySplitRuleProfile === undefined ||
+      decodedEntryClassificationProfile === undefined
     ) {
       throw invalid();
     }
@@ -213,6 +296,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       decodedEntryPreferenceProfile,
       decodedEntryAutomationPolicy,
       decodedEntrySplitRuleProfile,
+      decodedEntryClassificationProfile,
+      savedQueries,
     );
     const bytes = new TextEncoder().encode(
       `${JSON.stringify(preferences, undefined, 2)}\n`,
@@ -275,6 +360,11 @@ function decodePreferences(
   ) {
     throw invalid();
   }
+  const savedQueries =
+    value.entrySavedQueries === undefined
+      ? DEFAULT_ENTRY_SAVED_QUERIES
+      : decodeEntrySavedQueries(value.entrySavedQueries);
+  if (savedQueries === undefined) throw invalid();
   const quickTags = decodeReviewQuickTags(value.quickTags);
   if (quickTags === undefined) throw invalid();
   const automaticKeywords =
@@ -311,6 +401,10 @@ function decodePreferences(
     value.entrySplitRuleProfile === undefined
       ? DEFAULT_ENTRY_SPLIT_RULE_PROFILE
       : decodeEntrySplitRuleProfile(value.entrySplitRuleProfile);
+  const entryClassificationProfile =
+    value.entryClassificationProfile === undefined
+      ? DEFAULT_ENTRY_CLASSIFICATION_PROFILE
+      : decodeEntryClassificationProfile(value.entryClassificationProfile);
   if (
     value.associationPolicy !== undefined &&
     associationPolicy === undefined
@@ -322,7 +416,8 @@ function decodePreferences(
     sourceSubscriptions === undefined ||
     entryPreferenceProfile === undefined ||
     entryAutomationPolicy === undefined ||
-    entrySplitRuleProfile === undefined
+    entrySplitRuleProfile === undefined ||
+    entryClassificationProfile === undefined
   )
     throw invalid();
   return createReviewPreferences(
@@ -336,6 +431,8 @@ function decodePreferences(
     entryPreferenceProfile,
     entryAutomationPolicy,
     entrySplitRuleProfile,
+    entryClassificationProfile,
+    savedQueries,
   );
 }
 

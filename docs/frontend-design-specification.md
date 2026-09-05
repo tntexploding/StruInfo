@@ -1,8 +1,8 @@
 # StruInfo Frontend Design Specification
 
 - Status: Project frontend baseline
-- Version: 1.9
-- Effective date: 2026-08-25
+- Version: 1.12
+- Effective date: 2026-09-05
 - Scope: StruInfo web application design, implementation, and review
 
 ## 1. Purpose and Authority
@@ -150,7 +150,7 @@ The same number SHOULD NOT be repeated in both places merely to fill space.
 
 ## 4. Phase-aware Information Architecture
 
-Current working navigation is `总览 / 导入 / 拆分 / 标签 / 联系 / 查询 / 正式知识`. The seventh destination follows Query and implements the bounded Entry-centred shape and automatic/user edge rules accepted by ADR 0010/0011. It is a distinct graph workspace, not the retired KnowledgeItem editor. Only implemented routes MAY expose controls or live metrics.
+Current working navigation is `总览 / 导入 / 拆分 / 标签 / 联系 / 查询 / 知识`. The owner-facing `知识` label retains the existing Formal Knowledge domain boundary. The seventh destination follows Query and implements the bounded Entry-centred shape and automatic/user edge rules accepted by ADR 0010/0011. It is a distinct graph workspace, not the retired KnowledgeItem editor. Only implemented routes MAY expose controls or live metrics.
 
 The active non-AI task path is:
 
@@ -299,7 +299,7 @@ background execution as supported rule types.
 Manual Curation, the old formal Knowledge writer/current-item reader and the old
 Knowledge search are not current product capabilities. Their pages, client
 contracts and server routes MUST NOT be restored as secondary or hidden tools.
-The `正式知识` page implements the graph, edge-origin and retrieval semantics accepted in ADR 0010/0011 and the relation-maintenance boundary in ADR 0042. It uses the existing Association override with six graph metadata columns: origin, label, direction, semantic kind, source-review status and note. It does not add a parallel graph store. Automatic similarity MUST be labelled calculated rather than source-checked; the edge inspector MUST expose both endpoint evidence actions before the user records a source-review state.
+The `知识` page implements the graph, edge-origin and retrieval semantics accepted in ADR 0010/0011 and the relation-maintenance boundary in ADR 0042. It uses the existing Association override with six graph metadata columns: origin, label, direction, semantic kind, source-review status and note. It does not add a parallel graph store. Automatic similarity MUST be labelled calculated rather than source-checked; the edge inspector MUST expose both endpoint evidence actions before the user records a source-review state.
 
 Privacy is explicit and local to the action being taken:
 
@@ -354,7 +354,7 @@ remain reachable through normal document scrolling and keyboard order.
 
 ### 5.6 Current owner workflow shell
 
-The primary browser information architecture MUST use seven currently working destinations in this order: `总览`, `导入`, `拆分`, `标签`, `联系`, `查询`, and `正式知识`.
+The primary browser information architecture MUST use seven currently working destinations in this order: `总览`, `导入`, `拆分`, `标签`, `联系`, `查询`, and `知识`.
 The five processing workspaces form one continuous timeline; `总览` is its home
 and status surface. Retired review and Knowledge tools MUST NOT appear as
 secondary maintenance routes.
@@ -462,14 +462,60 @@ truth, confidence or source-quality score.
 
 A secondary index panel reports the real public Entry, current projection,
 embedded projection, stale projection and term counts, tokenizer/model identity,
-and ready/not-ready state. Rebuild is an explicit button with progress, success
-and retry feedback. It MUST NOT fabricate background indexing. If no embedding
+and ready/not-ready state. ADR 0066 makes explicit incremental refresh the routine
+action: each request processes at most 32 changed or obsolete items, with actual
+remaining counts, pause-after-current-batch, continuation and retry feedback.
+Committed work survives page closure; leaving MUST stop subsequent requests and
+late responses MUST NOT replace a newer view. Provider failure preserves local
+terms and explains how to retry or continue lexical Query. Full rebuild stays
+inside a secondary repair disclosure with tokenizer/index identity, term count
+and the cost of regenerating all configured vectors. It MUST NOT fabricate
+background indexing or ProcessingRun progress. If no embedding
 model is configured, local term rebuilding and lexical Query remain available
 while semantic controls explain why they are unavailable. RAG synthesis labels
 semantic/hybrid use as local evidence retrieval followed by AI synthesis; it
 does not present a chat, autonomous Web search or private-content permission.
 At narrow widths the mode group and index facts wrap or stack in normal reading
 order and do not hide the search input or results.
+
+ADR 0068 adds a secondary “来源复核” action in Knowledge. It opens a bounded
+relationship queue with explicit verification and privacy filters, both Entry
+sources, a review note and “保存并继续”. The ordinary batch is 20 pairs; next/previous
+batch actions preserve a scope-bound cursor. The list has a bounded scroll area
+so narrow screens can reach the selected review without crossing the whole queue.
+Stored checks without version bindings and checks of changed Entries are labelled
+as needing review. Show current and previously reviewed versions separately,
+preserve calculated/user/AI origin and direction, and never imply factual proof.
+Saving binds the displayed Entry and override revisions. Conflicts provide a
+fresh-read action; privacy/filter changes clear evidence and invalidate late
+responses. Returning to the graph starts from public scope. Both source headings
+have unique accessible identities, native controls remain keyboard reachable,
+and the two source columns stack on narrow screens.
+
+ADR 0067 adds a secondary saved-query disclosure in the Query settings rail.
+The owner can save, update, rename, delete and explicitly reopen at most 20
+queries. Names and conditions remain external personal preferences; result
+bodies, cursors, comparisons and AI answers are never stored there. Reopening
+reruns the query and reads the selected Entry's current version. A selection
+outside the current result page is labelled separately and does not change
+matching, ordering or counts. Missing entries and unavailable Association or
+semantic modes provide an actionable recovery route.
+Every reopened private view requires a fresh scope choice before private
+results or reading positions are fetched. Query-to-source and Query-to-graph
+actions preserve the current request's evidence scope; returning from the graph
+restores conditions and selection. Navigation context is memory-only.
+Saved-query controls wrap in their own layout flow, remain keyboard reachable
+and show loading, empty, conflict and retry states.
+
+ADR 0069 adds a secondary Query disclosure for a cited Markdown list. The owner
+explicitly selects up to 20 current results across cursor pages, previews versions,
+privacy and sources, then generates and downloads the file. Selection order is
+export order. Scope changes and navigation clear selection, preview and download;
+late responses cannot reintroduce private content. Title or selection changes
+invalidate preview. Source text is literal, scrollable and keyboard accessible;
+current Entry excerpts, original evidence and existing relationship origins remain
+distinct. Generation has an explicit private-scope label and visible error/retry
+states. No automatic file creation occurs during search, paging or selection.
 
 ADR 0023 adds one separate local exploration panel after the ordinary Query
 results. It MUST remain visually and behaviorally independent from search
