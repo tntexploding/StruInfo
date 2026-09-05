@@ -33,7 +33,6 @@ export function InformationEntryBatchMaterializer({
     >
       <header className="console-heading">
         <div>
-          <p className="section-index">EXPLICIT BATCH</p>
           <h2 id="entry-batch-panel-title">批量构建文档条目</h2>
         </div>
         <span className="record-count">
@@ -130,7 +129,6 @@ export function InformationDocumentNavigator({
     >
       <header className="console-heading">
         <div>
-          <p className="section-index">DOCUMENT / ENTRY MAP</p>
           <h2 id="entry-document-navigator-title">来源文档导航</h2>
         </div>
         <span className="record-count">
@@ -148,7 +146,7 @@ export function InformationDocumentNavigator({
         </div>
       ) : state.status === 'loading' ? (
         <p className="entry-document-navigator__loading" role="status">
-          正在汇总 Document 与 Entry…
+          正在汇总文档与条目…
         </p>
       ) : (
         <div className="entry-document-navigator__rail">
@@ -165,7 +163,7 @@ export function InformationDocumentNavigator({
               {state.response.documents
                 .reduce((sum, document) => sum + document.entryCount, 0)
                 .toString()}{' '}
-              Entries
+              条目
             </small>
           </button>
           {state.response.documents.map((document) => (
@@ -180,16 +178,16 @@ export function InformationDocumentNavigator({
             >
               <strong>{document.sourceKey}</strong>
               <small>
-                {document.entryCount.toString()} Entries ·{' '}
+                {document.entryCount.toString()} 条目 ·{' '}
                 {(document.currentTags?.value.tags.length ?? 0).toString()} 标签
                 {document.isPrivate === true ? ' · 私密' : ''}
                 {document.workingCopy?.state === 'editing' ? ' · 全文草稿' : ''}
                 {document.workingCopy?.state === 'committed'
-                  ? ' · 已生成派生文档'
+                  ? ' · 已生成新文档'
                   : ''}
                 {document.derivedFromSnapshotId === undefined
                   ? ''
-                  : ' · 派生版本'}
+                  : ' · 新版本'}
               </small>
             </button>
           ))}

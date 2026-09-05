@@ -1,4 +1,4 @@
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 
 import {
   buildInformationEntryAssociationProjection,
@@ -17,6 +17,96 @@ const ENTRY_B = '20000000-0000-4000-8000-000000000002';
 const ENTRY_PRIVATE = '20000000-0000-4000-8000-000000000003';
 
 describe('M1E Knowledge graph local API', () => {
+  it('loads only bounded candidates and the selected center neighborhood', async () => {
+    const entries = [entry(ENTRY_A, false), entry(ENTRY_B, false)];
+    const centerEntry = entries[0];
+    const projection = buildInformationEntryAssociationProjection(entries)[0];
+    if (centerEntry === undefined || projection === undefined) {
+      throw new Error('Expected graph fixture.');
+    }
+    const loadAllEntries = vi.fn(() =>
+      Promise.reject(new Error('unbounded Entry read')),
+    );
+    const loadAllAssociations = vi.fn(() =>
+      Promise.reject(new Error('unbounded association read')),
+    );
+    const loadByIds = vi.fn(
+      (
+        _workspaceId: string,
+        _includePrivate: boolean,
+        entryIds: readonly string[],
+      ) =>
+        Promise.resolve(
+          entries.filter((candidate) => entryIds.includes(candidate.entryId)),
+        ),
+    );
+    const loadNeighborhood = vi.fn(() =>
+      Promise.resolve({projections: [projection], overrides: []}),
+    );
+    const search = vi.fn(() =>
+      Promise.resolve({
+        querySha256: 'a'.repeat(64),
+        totalCount: 14_910,
+        items: [
+          {
+            entry: centerEntry,
+            matchReasons: [],
+            filterReasons: [],
+          },
+        ],
+      }),
+    );
+    const service = new M1cApiService(
+      dependencies({
+        informationEntryRepository: {
+          materializeEntries: () =>
+            Promise.resolve({outcome: 'existing', createdCount: 0}),
+          materializeEntriesIfSnapshotEmpty: () =>
+            Promise.resolve({outcome: 'existing', createdCount: 0}),
+          reviseEntry: () => Promise.resolve('not_found'),
+          loadCurrentEntries: loadAllEntries,
+          loadCurrentEntriesByIds: loadByIds,
+        },
+        informationEntryAssociationRepository: {
+          replaceAssociationProjections: () => Promise.resolve(0),
+          loadAssociationSnapshot: loadAllAssociations,
+          loadAssociationSnapshotForEntries: loadNeighborhood,
+          writeAssociationOverride: () => Promise.resolve('not_found'),
+        },
+        informationEntryRetrieval: {
+          semanticSearchAvailable: false,
+          search,
+          status: () => Promise.reject(new Error('unexpected status')),
+          refresh: () => Promise.reject(new Error('unexpected refresh')),
+          rebuild: () => Promise.reject(new Error('unexpected rebuild')),
+          evaluate: () => Promise.reject(new Error('unexpected evaluation')),
+        },
+      }),
+    );
+
+    await expect(
+      service.readInformationEntryKnowledgeGraph({
+        centerEntryId: ENTRY_A,
+        includePrivate: false,
+      }),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        candidateTotalCount: 14_910,
+        graph: {center: {entryId: ENTRY_A}},
+      },
+    });
+    expect(loadNeighborhood).toHaveBeenCalledWith(WORKSPACE_ID, false, [
+      ENTRY_A,
+    ]);
+    expect(loadByIds).toHaveBeenCalledWith(WORKSPACE_ID, false, [
+      ENTRY_A,
+      ENTRY_B,
+    ]);
+    expect(loadAllEntries).not.toHaveBeenCalled();
+    expect(loadAllAssociations).not.toHaveBeenCalled();
+  });
+
   it('reads automatic edges, persists user edits, and preserves privacy before traversal', async () => {
     const publicEntries = [entry(ENTRY_A, false), entry(ENTRY_B, false)];
     const privateEntry = entry(ENTRY_PRIVATE, true);

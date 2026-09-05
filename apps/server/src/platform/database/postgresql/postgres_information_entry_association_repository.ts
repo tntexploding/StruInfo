@@ -78,6 +78,57 @@ export const READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL = sql(
   'ORDER BY override.entry_low_id, override.entry_high_id',
 );
 
+export const READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_FOR_ENTRIES_SQL =
+  sql(
+    'SELECT projection.workspace_id::text, projection.entry_low_id::text,',
+    '  projection.entry_high_id::text, projection.entry_low_revision,',
+    '  projection.entry_low_revision_id::text, projection.entry_high_revision,',
+    '  projection.entry_high_revision_id::text, projection.content_similarity,',
+    '  projection.type_similarity, projection.domain_similarity,',
+    '  projection.base_score, projection.algorithm_version,',
+    '  projection.candidate_basis, projection.candidate_rank',
+    'FROM struinfo.information_entry_association_projection AS projection',
+    'JOIN struinfo.information_entry AS low_entry',
+    '  ON low_entry.workspace_id = projection.workspace_id',
+    ' AND low_entry.entry_id = projection.entry_low_id',
+    ' AND low_entry.current_revision = projection.entry_low_revision',
+    ' AND low_entry.current_revision_id = projection.entry_low_revision_id',
+    'JOIN struinfo.information_entry AS high_entry',
+    '  ON high_entry.workspace_id = projection.workspace_id',
+    ' AND high_entry.entry_id = projection.entry_high_id',
+    ' AND high_entry.current_revision = projection.entry_high_revision',
+    ' AND high_entry.current_revision_id = projection.entry_high_revision_id',
+    'WHERE projection.workspace_id = $1',
+    '  AND low_entry.is_current_structure AND high_entry.is_current_structure',
+    '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
+    '  AND (projection.entry_low_id = ANY($3::uuid[])',
+    '    OR projection.entry_high_id = ANY($3::uuid[]))',
+    'ORDER BY projection.entry_low_id, projection.entry_high_id',
+  );
+
+export const READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_FOR_ENTRIES_SQL = sql(
+  'SELECT override.workspace_id::text, override.entry_low_id::text,',
+  '  override.entry_high_id::text, override.current_revision,',
+  '  override.current_revision_id::text, override.action,',
+  '  override.manual_adjustment, override.is_blocked,',
+  '  override.graph_origin, override.graph_label, override.graph_direction,',
+  '  override.graph_semantic_kind, override.graph_verification_status,',
+  '  override.graph_note',
+  'FROM struinfo.information_entry_association_override AS override',
+  'JOIN struinfo.information_entry AS low_entry',
+  '  ON low_entry.workspace_id = override.workspace_id',
+  ' AND low_entry.entry_id = override.entry_low_id',
+  'JOIN struinfo.information_entry AS high_entry',
+  '  ON high_entry.workspace_id = override.workspace_id',
+  ' AND high_entry.entry_id = override.entry_high_id',
+  'WHERE override.workspace_id = $1',
+  '  AND low_entry.is_current_structure AND high_entry.is_current_structure',
+  '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
+  '  AND (override.entry_low_id = ANY($3::uuid[])',
+  '    OR override.entry_high_id = ANY($3::uuid[]))',
+  'ORDER BY override.entry_low_id, override.entry_high_id',
+);
+
 export const DELETE_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL = sql(
   'DELETE FROM struinfo.information_entry_association_projection AS projection',
   'USING struinfo.information_entry AS low_entry,',
@@ -258,6 +309,45 @@ export class PostgresInformationEntryAssociationRepository
         const overrides = await client.query<Row>(
           READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL,
           [workspaceId, includePrivate],
+        );
+        return Object.freeze({
+          projections: Object.freeze(projections.rows.map(mapProjection)),
+          overrides: Object.freeze(overrides.rows.map(mapOverride)),
+        });
+      },
+    );
+  }
+
+  public loadAssociationSnapshotForEntries(
+    workspaceIdInput: string,
+    includePrivate: boolean,
+    entryIdsInput: readonly string[],
+  ): Promise<Readonly<InformationEntryAssociationRepositorySnapshot>> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    const entryIds = Object.freeze([
+      ...new Set(entryIdsInput.map((entryId) => canonicalUuid(entryId))),
+    ]);
+    if (entryIds.length === 0) {
+      return Promise.resolve(
+        Object.freeze({
+          projections: Object.freeze([]),
+          overrides: Object.freeze([]),
+        }),
+      );
+    }
+    if (entryIds.length > 100) throw new PostgresAdapterError();
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const parameters = [workspaceId, includePrivate, entryIds] as const;
+        const projections = await client.query<Row>(
+          READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_FOR_ENTRIES_SQL,
+          parameters,
+        );
+        const overrides = await client.query<Row>(
+          READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_FOR_ENTRIES_SQL,
+          parameters,
         );
         return Object.freeze({
           projections: Object.freeze(projections.rows.map(mapProjection)),

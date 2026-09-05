@@ -37,15 +37,74 @@ export interface InformationEntrySearchIndexSnapshot {
   readonly postings: readonly Readonly<InformationEntryTermPosting>[];
 }
 
+export interface InformationEntrySearchIndexMetrics {
+  readonly publicEntryCount: number;
+  readonly currentProjectionCount: number;
+  readonly embeddedProjectionCount: number;
+  readonly staleProjectionCount: number;
+  readonly postingCount: number;
+}
+
 export interface InformationEntryLexicalCandidateRequest {
   readonly fields: readonly InformationEntrySearchIndexField[];
   readonly terms: readonly string[];
 }
 
+export interface InformationEntrySearchIndexRefreshRequest {
+  readonly limit: number;
+  readonly embeddingProvider?: string;
+  readonly embeddingModel?: string;
+}
+
+export interface InformationEntrySearchIndexRefreshBatch {
+  readonly entryIds: readonly string[];
+  readonly obsoleteEntryIds: readonly string[];
+  readonly previousProjections: readonly Readonly<InformationEntrySearchProjection>[];
+  readonly remainingEntryCount: number;
+  readonly remainingObsoleteCount: number;
+}
+
+export interface InformationEntrySearchIndexRefreshCommit {
+  readonly updatedEntryIds: readonly string[];
+  readonly removedCount: number;
+}
+
+export interface InformationEntrySearchIndexRefreshProgress {
+  readonly outcome: 'complete' | 'more' | 'provider_failed';
+  readonly loadedEntryCount: number;
+  readonly updatedEntryCount: number;
+  readonly staleEntryCount: number;
+  readonly removedProjectionCount: number;
+  readonly reusedEmbeddingCount: number;
+  readonly embeddingInputCount: number;
+  readonly remainingEntryCount: number;
+  readonly remainingObsoleteCount: number;
+}
+
+export interface InformationEntrySearchIndexRefreshResult {
+  readonly index: Readonly<InformationEntrySearchIndexStatus>;
+  readonly progress: Readonly<InformationEntrySearchIndexRefreshProgress>;
+}
+
 export interface InformationEntrySearchIndexRepositoryPort {
+  loadRefreshBatch?(
+    workspaceId: string,
+    request: Readonly<InformationEntrySearchIndexRefreshRequest>,
+  ): Promise<Readonly<InformationEntrySearchIndexRefreshBatch>>;
+  applyRefreshBatch?(
+    workspaceId: string,
+    snapshot: Readonly<InformationEntrySearchIndexSnapshot>,
+    obsoleteEntryIds: readonly string[],
+  ): Promise<Readonly<InformationEntrySearchIndexRefreshCommit>>;
   loadSearchIndex(
     workspaceId: string,
   ): Promise<Readonly<InformationEntrySearchIndexSnapshot>>;
+  /** Returns aggregate status without materializing the complete index. */
+  loadSearchIndexMetrics?(
+    workspaceId: string,
+    embeddingProvider?: string,
+    embeddingModel?: string,
+  ): Promise<Readonly<InformationEntrySearchIndexMetrics>>;
   replaceSearchIndex(
     workspaceId: string,
     snapshot: Readonly<InformationEntrySearchIndexSnapshot>,
@@ -110,6 +169,10 @@ export interface InformationEntryRetrievalServicePort {
     request: Readonly<InformationEntrySearchRequest>,
   ): Promise<Readonly<InformationEntrySearchResult>>;
   status(): Promise<Readonly<InformationEntrySearchIndexStatus>>;
+  readonly incrementalRefreshAvailable?: boolean;
+  refresh(
+    limit: number,
+  ): Promise<Readonly<InformationEntrySearchIndexRefreshResult>>;
   rebuild(): Promise<Readonly<InformationEntrySearchIndexStatus>>;
   evaluate(
     retrievalMode: 'semantic' | 'hybrid',
@@ -130,7 +193,10 @@ export type InformationEntryRetrievalServiceErrorCode =
   | 'semantic_search_private_scope_forbidden'
   | 'semantic_search_text_required'
   | 'semantic_search_index_not_ready'
-  | 'semantic_search_provider_failure';
+  | 'semantic_search_provider_failure'
+  | 'search_index_refresh_unavailable'
+  | 'search_index_invalid_refresh_limit'
+  | 'search_index_maintenance_busy';
 
 export class InformationEntryRetrievalServiceError extends Error {
   public readonly code: InformationEntryRetrievalServiceErrorCode;

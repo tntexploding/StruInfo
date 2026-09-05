@@ -20,6 +20,7 @@ import type {
   InformationEntrySearchCursor,
 } from '../modules/entries/index.js';
 import {
+  InformationEntryRetrievalServiceError,
   DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
   DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
 } from '../modules/entries/index.js';
@@ -2233,6 +2234,7 @@ describe('M1cApiService', () => {
         semanticSearchAvailable: true,
         search: retrievalSearch,
         status: () => Promise.reject(new Error('Unexpected status read.')),
+        refresh: () => Promise.reject(new Error('Unexpected index refresh.')),
         rebuild: () => Promise.reject(new Error('Unexpected index rebuild.')),
         evaluate: () =>
           Promise.reject(new Error('Unexpected retrieval evaluation.')),
@@ -2270,6 +2272,82 @@ describe('M1cApiService', () => {
     });
     expect(retrievalSearch).toHaveBeenCalledTimes(2);
     expect(loadCurrentEntries).not.toHaveBeenCalled();
+  });
+
+  it('accepts only bounded incremental index requests and reports busy maintenance', async () => {
+    const index = {
+      indexVersion: 'struinfo.entry-search-index.v1' as const,
+      tokenizerVersion: 'struinfo.entry-terms.unicode-v1' as const,
+      publicEntryCount: 3,
+      currentProjectionCount: 3,
+      embeddedProjectionCount: 0,
+      staleProjectionCount: 0,
+      postingCount: 12,
+      semanticSearchAvailable: false,
+      semanticSearchReady: false,
+    };
+    const progress = {
+      outcome: 'complete' as const,
+      loadedEntryCount: 1,
+      updatedEntryCount: 1,
+      staleEntryCount: 0,
+      removedProjectionCount: 0,
+      reusedEmbeddingCount: 0,
+      embeddingInputCount: 0,
+      remainingEntryCount: 0,
+      remainingObsoleteCount: 0,
+    };
+    const refresh = vi.fn<
+      (
+        limit: number,
+      ) => Promise<{index: typeof index; progress: typeof progress}>
+    >(() => Promise.resolve({index, progress}));
+    const service = createService({
+      informationEntryRetrieval: {
+        semanticSearchAvailable: false,
+        incrementalRefreshAvailable: true,
+        refresh,
+        status: () => Promise.resolve(index),
+        rebuild: () => Promise.reject(new Error('Unexpected complete rebuild')),
+        search: () => Promise.reject(new Error('Unexpected search')),
+        evaluate: () => Promise.reject(new Error('Unexpected evaluation')),
+      },
+    });
+    for (const body of [
+      null,
+      [],
+      {limit: 0},
+      {limit: 33},
+      {limit: 1.5},
+      {limit: null},
+      {includePrivate: true},
+      {limit: 1, model: 'injected'},
+    ]) {
+      await expect(
+        service.refreshInformationEntrySearchIndex(body),
+      ).resolves.toMatchObject({statusCode: 422});
+    }
+    expect(refresh).not.toHaveBeenCalled();
+    await expect(
+      service.refreshInformationEntrySearchIndex({}),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {status: 'ok', index, progress},
+    });
+    expect(refresh).toHaveBeenLastCalledWith(32);
+    await service.refreshInformationEntrySearchIndex({limit: 7});
+    expect(refresh).toHaveBeenLastCalledWith(7);
+    refresh.mockRejectedValueOnce(
+      new InformationEntryRetrievalServiceError(
+        'search_index_maintenance_busy',
+      ),
+    );
+    await expect(
+      service.refreshInformationEntrySearchIndex({limit: 7}),
+    ).resolves.toMatchObject({
+      statusCode: 409,
+      body: {issue: {code: 'search_index_maintenance_busy'}},
+    });
   });
 
   it('closes text mode and field scope at the HTTP boundary', async () => {

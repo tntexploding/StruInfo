@@ -15,8 +15,8 @@ describe('InformationEntryAutomationPolicyPanel', () => {
       <InformationEntryAutomationPolicyPanel enabled={false} {...services} />,
     );
 
-    expect(markup).toContain('可恢复自动分流');
-    expect(markup).toContain('当前运行时未提供可恢复自动分流边界');
+    expect(markup).toContain('自动分流');
+    expect(markup).toContain('当前服务未启用自动分流');
     expect(markup).not.toContain('确认并记录本次分流');
     expect(
       Object.values(services).every(
@@ -69,12 +69,12 @@ describe('InformationEntryAutomationPolicyPanel', () => {
       />,
     );
 
-    expect(markup).toContain('完整运行审计');
-    expect(markup).toContain('仍有 1 条分流事实没有结算');
-    expect(markup).toContain('Entry、标签、联系和知识图谱均未被本运行改写');
+    expect(markup).toContain('运行详情');
+    expect(markup).toContain('仍有 1 条分流记录没有完成');
+    expect(markup).toContain('条目、标签、联系和知识图谱均未改变');
     expect(markup).toContain('automation_execution_failed');
     expect(markup).toContain('synthetic_claim_pending');
-    expect(markup).toContain('待结算');
+    expect(markup).toContain('待完成');
   });
 
   it('keeps an exact-run read failure retryable and separate from recent summaries', () => {
@@ -83,15 +83,15 @@ describe('InformationEntryAutomationPolicyPanel', () => {
         state={{
           status: 'error',
           runId: '33333333-3333-4333-8333-333333333333',
-          message: '无法读取该运行的完整审计记录。',
+          message: '无法读取这次运行的详细记录。',
         }}
         onRetry={vi.fn()}
       />,
     );
 
     expect(markup).toContain('role="alert"');
-    expect(markup).toContain('无法读取该运行的完整审计记录');
-    expect(markup).toContain('重试完整审计');
+    expect(markup).toContain('无法读取这次运行的详细记录');
+    expect(markup).toContain('重试');
   });
 });
 

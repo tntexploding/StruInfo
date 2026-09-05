@@ -1,8 +1,8 @@
 # StruInfo Frontend Design Specification
 
 - Status: Project frontend baseline
-- Version: 1.9
-- Effective date: 2026-08-25
+- Version: 1.11
+- Effective date: 2026-09-05
 - Scope: StruInfo web application design, implementation, and review
 
 ## 1. Purpose and Authority
@@ -150,7 +150,7 @@ The same number SHOULD NOT be repeated in both places merely to fill space.
 
 ## 4. Phase-aware Information Architecture
 
-Current working navigation is `总览 / 导入 / 拆分 / 标签 / 联系 / 查询 / 正式知识`. The seventh destination follows Query and implements the bounded Entry-centred shape and automatic/user edge rules accepted by ADR 0010/0011. It is a distinct graph workspace, not the retired KnowledgeItem editor. Only implemented routes MAY expose controls or live metrics.
+Current working navigation is `总览 / 导入 / 拆分 / 标签 / 联系 / 查询 / 知识`. The owner-facing `知识` label retains the existing Formal Knowledge domain boundary. The seventh destination follows Query and implements the bounded Entry-centred shape and automatic/user edge rules accepted by ADR 0010/0011. It is a distinct graph workspace, not the retired KnowledgeItem editor. Only implemented routes MAY expose controls or live metrics.
 
 The active non-AI task path is:
 
@@ -299,7 +299,7 @@ background execution as supported rule types.
 Manual Curation, the old formal Knowledge writer/current-item reader and the old
 Knowledge search are not current product capabilities. Their pages, client
 contracts and server routes MUST NOT be restored as secondary or hidden tools.
-The `正式知识` page implements the graph, edge-origin and retrieval semantics accepted in ADR 0010/0011 and the relation-maintenance boundary in ADR 0042. It uses the existing Association override with six graph metadata columns: origin, label, direction, semantic kind, source-review status and note. It does not add a parallel graph store. Automatic similarity MUST be labelled calculated rather than source-checked; the edge inspector MUST expose both endpoint evidence actions before the user records a source-review state.
+The `知识` page implements the graph, edge-origin and retrieval semantics accepted in ADR 0010/0011 and the relation-maintenance boundary in ADR 0042. It uses the existing Association override with six graph metadata columns: origin, label, direction, semantic kind, source-review status and note. It does not add a parallel graph store. Automatic similarity MUST be labelled calculated rather than source-checked; the edge inspector MUST expose both endpoint evidence actions before the user records a source-review state.
 
 Privacy is explicit and local to the action being taken:
 
@@ -354,7 +354,7 @@ remain reachable through normal document scrolling and keyboard order.
 
 ### 5.6 Current owner workflow shell
 
-The primary browser information architecture MUST use seven currently working destinations in this order: `总览`, `导入`, `拆分`, `标签`, `联系`, `查询`, and `正式知识`.
+The primary browser information architecture MUST use seven currently working destinations in this order: `总览`, `导入`, `拆分`, `标签`, `联系`, `查询`, and `知识`.
 The five processing workspaces form one continuous timeline; `总览` is its home
 and status surface. Retired review and Knowledge tools MUST NOT appear as
 secondary maintenance routes.
@@ -462,8 +462,15 @@ truth, confidence or source-quality score.
 
 A secondary index panel reports the real public Entry, current projection,
 embedded projection, stale projection and term counts, tokenizer/model identity,
-and ready/not-ready state. Rebuild is an explicit button with progress, success
-and retry feedback. It MUST NOT fabricate background indexing. If no embedding
+and ready/not-ready state. ADR 0066 makes explicit incremental refresh the routine
+action: each request processes at most 32 changed or obsolete items, with actual
+remaining counts, pause-after-current-batch, continuation and retry feedback.
+Committed work survives page closure; leaving MUST stop subsequent requests and
+late responses MUST NOT replace a newer view. Provider failure preserves local
+terms and explains how to retry or continue lexical Query. Full rebuild stays
+inside a secondary repair disclosure with tokenizer/index identity, term count
+and the cost of regenerating all configured vectors. It MUST NOT fabricate
+background indexing or ProcessingRun progress. If no embedding
 model is configured, local term rebuilding and lexical Query remain available
 while semantic controls explain why they are unavailable. RAG synthesis labels
 semantic/hybrid use as local evidence retrieval followed by AI synthesis; it

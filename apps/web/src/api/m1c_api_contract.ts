@@ -1225,6 +1225,26 @@ export interface InformationEntrySearchIndexStatus {
   readonly embeddingModel?: string;
 }
 
+export interface InformationEntrySearchIndexRefreshProgress {
+  readonly outcome: 'complete' | 'more' | 'provider_failed';
+  readonly loadedEntryCount: number;
+  readonly updatedEntryCount: number;
+  readonly staleEntryCount: number;
+  readonly removedProjectionCount: number;
+  readonly reusedEmbeddingCount: number;
+  readonly embeddingInputCount: number;
+  readonly remainingEntryCount: number;
+  readonly remainingObsoleteCount: number;
+}
+
+export type InformationEntrySearchIndexRefreshResponse =
+  | Readonly<{
+      status: 'ok';
+      index: Readonly<InformationEntrySearchIndexStatus>;
+      progress: Readonly<InformationEntrySearchIndexRefreshProgress>;
+    }>
+  | DomainFailure;
+
 export type InformationEntrySearchIndexResponse =
   | Readonly<{
       status: 'ok';

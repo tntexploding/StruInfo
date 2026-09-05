@@ -74,7 +74,7 @@ export function InformationEntryAssociationPanel({
       if (!listRequests.current.isCurrent(requestId)) return;
       setView({
         status: 'error',
-        message: '无法读取相关内容；Entry 与人工决定没有被修改。',
+        message: '无法读取相关内容；条目和人工设置没有被修改。',
       });
     }
   }, [entry.entryId, includePrivate, onList]);
@@ -107,15 +107,15 @@ export function InformationEntryAssociationPanel({
       }
       setFeedback({
         kind: 'success',
-        title: '当前范围关联已重建',
-        detail: `${response.body.entryCount.toString()} 个 Entry 生成 ${response.body.projectedCount.toString()} 条选择性关联；人工决定保持不变。`,
+        title: '推荐联系已更新',
+        detail: `${response.body.entryCount.toString()} 个条目生成 ${response.body.projectedCount.toString()} 条推荐联系；人工设置保持不变。`,
       });
       await refresh();
     } catch {
       setFeedback({
         kind: 'error',
         title: '本地接口不可达',
-        detail: '没有替换派生关联；人工决定保持不变。',
+        detail: '自动联系没有变化；人工设置保持不变。',
       });
     } finally {
       setRebuilding(false);
@@ -137,7 +137,7 @@ export function InformationEntryAssociationPanel({
       ) {
         setFeedback({
           kind: 'error',
-          title: '联系策略没有保存',
+          title: '联系设置没有保存',
           detail: describeInformationEntryFailure(saved.body),
         });
         return;
@@ -145,8 +145,8 @@ export function InformationEntryAssociationPanel({
       if (saved.body.status === 'unchanged') {
         setFeedback({
           kind: 'success',
-          title: '联系策略没有变化',
-          detail: '当前自动候选继续使用现有权重；人工决定保持不变。',
+          title: '联系设置没有变化',
+          detail: '自动推荐继续使用现有权重；人工设置保持不变。',
         });
         return;
       }
@@ -154,25 +154,25 @@ export function InformationEntryAssociationPanel({
       if (rebuilt.body.status !== 'rebuilt') {
         setFeedback({
           kind: 'error',
-          title: '策略已保存，但自动联系尚未重建',
+          title: '设置已保存，但推荐联系尚未更新',
           detail:
-            '外部权重配置已经更新；请在接口恢复后使用“重建当前范围关联”，人工决定未受影响。',
+            '联系权重已经保存；服务恢复后请再次更新推荐联系。人工设置不受影响。',
         });
         await refresh();
         return;
       }
       setFeedback({
         kind: 'success',
-        title: '联系策略已保存并生效',
-        detail: `${rebuilt.body.entryCount.toString()} 个 Entry 已按新权重重建为 ${rebuilt.body.projectedCount.toString()} 条自动联系；人工决定保持不变。`,
+        title: '联系设置已保存并生效',
+        detail: `${rebuilt.body.entryCount.toString()} 个条目已按新权重生成 ${rebuilt.body.projectedCount.toString()} 条推荐联系；人工设置保持不变。`,
       });
       await refresh();
     } catch {
       setFeedback({
         kind: 'error',
-        title: '联系策略没有完整应用',
+        title: '联系设置没有完整应用',
         detail:
-          '本地接口当前不可达。若策略已经落盘，页面会在重试后显示其修订；人工决定保持不变。',
+          '本地服务当前不可达。重试后可确认设置是否保存；人工联系保持不变。',
       });
     } finally {
       setSavingPolicy(false);
@@ -232,11 +232,8 @@ export function InformationEntryAssociationPanel({
     <section className="entry-association-panel" aria-labelledby={headingId}>
       <header className="console-heading">
         <div>
-          <p className="section-index">SELECTIVE ASSOCIATION</p>
           <h2 id={headingId}>可能相关</h2>
-          <p>
-            本地索引先缩小候选，再分别计算内容、类型与领域相似度；它可成为自动相似图谱边，但不等于事实性语义断言。
-          </p>
+          <p>根据内容、类型和领域推荐相似条目。结果只表示相似，不代表事实。</p>
         </div>
         <span className="record-count">
           {view.status === 'ready'
@@ -309,8 +306,8 @@ export function InformationEntryAssociationPanel({
       <div className="entry-association-toolbar">
         <p>
           {includePrivate
-            ? '当前明确包含隐私 Entry；任一私密端点都只在本次范围内显示。'
-            : '当前为普通范围，隐私 Entry 及涉及它们的关联均已排除。'}
+            ? '当前会显示隐私条目及其联系。'
+            : '当前不显示隐私条目及其联系。'}
         </p>
         <div className="entry-association-toolbar__actions">
           <button
@@ -326,7 +323,7 @@ export function InformationEntryAssociationPanel({
             disabled={rebuilding}
             onClick={() => void rebuild()}
           >
-            {rebuilding ? '正在重建…' : '重建当前范围关联'}
+            {rebuilding ? '正在更新…' : '更新推荐联系'}
           </button>
         </div>
       </div>
@@ -348,11 +345,8 @@ export function InformationEntryAssociationPanel({
           </div>
         ) : view.response.associations.length === 0 ? (
           <div className="entry-association-message">
-            <p>当前还没有超过阈值的选择性关联。</p>
-            <small>
-              先为多个 Entry
-              设置内容、类型和领域关键词，再执行“重建当前范围关联”。
-            </small>
+            <p>当前还没有达到最低分的推荐联系。</p>
+            <small>先为多个条目设置内容、类型和领域标签，再重建联系。</small>
           </div>
         ) : (
           <ul className="entry-association-list">
@@ -422,7 +416,7 @@ export function InformationEntryAssociationPanel({
                         </dd>
                       </div>
                       <div>
-                        <dt>基础分</dt>
+                        <dt>自动匹配分</dt>
                         <dd>
                           {scorePercentage(
                             association.projection?.baseScore ?? 0,
@@ -433,7 +427,7 @@ export function InformationEntryAssociationPanel({
                     </dl>
                     <div
                       className="entry-association-basis"
-                      aria-label="候选依据"
+                      aria-label="推荐原因"
                     >
                       {(association.projection?.candidateBasis ?? []).map(
                         (basis) => (

@@ -4,6 +4,7 @@ import type {
   InformationEntryTypeReviewResult,
   InformationEntryMaterializeRow,
   InformationEntryRevisionWrite,
+  InformationEntrySearchCursor,
 } from './information_entry_contract.js';
 import type {
   InformationEntryRestructureLineage,
@@ -29,6 +30,13 @@ export interface InformationEntryBulkRevisionResult {
 export interface InformationEntryMaterializeResult {
   readonly outcome: InformationEntryMaterializeOutcome;
   readonly createdCount: number;
+}
+
+export type InformationEntryBrowsePrivacyScope = 'public' | 'all' | 'private';
+
+export interface InformationEntryBrowsePage {
+  readonly totalCount: number;
+  readonly entries: readonly Readonly<CurrentInformationEntry>[];
 }
 
 export interface InformationEntryEmptySnapshotMaterializeResult {
@@ -59,6 +67,20 @@ export interface InformationEntryRepositoryPort {
     includePrivate: boolean,
     entryIds: readonly string[],
   ): Promise<readonly Readonly<CurrentInformationEntry>[]>;
+
+  /**
+   * Optional scale-aware page for an unfiltered chronological browse. The
+   * cursor fields are the stable suffix used by the ordinary Entry search.
+   */
+  loadCurrentEntryBrowsePage?(
+    workspaceId: string,
+    privacyScope: InformationEntryBrowsePrivacyScope,
+    limit: number,
+    after?: Pick<
+      InformationEntrySearchCursor,
+      'capturedAt' | 'documentOrder' | 'entryId'
+    >,
+  ): Promise<Readonly<InformationEntryBrowsePage>>;
 
   /**
    * Optional scale-aware read used by the owner-facing type correction queue.

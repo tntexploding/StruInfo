@@ -46,6 +46,7 @@ export interface InformationEntryQueryWorkspaceProps extends Pick<
   readonly aiQuerySynthesisEnabled: boolean;
   readonly semanticSearchEnabled?: boolean;
   readonly onLoadSearchIndex?: InformationEntryServices['onLoadSearchIndex'];
+  readonly onRefreshSearchIndex?: InformationEntryServices['onRefreshSearchIndex'];
   readonly onRebuildSearchIndex?: InformationEntryServices['onRebuildSearchIndex'];
   readonly onSynthesize: InformationEntryQuerySynthesisAction;
   readonly reviewPreferences: Loadable<Readonly<ReviewPreferencesResponse>>;
@@ -60,6 +61,7 @@ export function InformationEntryQueryWorkspace({
   onOpenEvidence,
   onReviseExplorationPolicy,
   onSearch,
+  onRefreshSearchIndex,
   onRebuildSearchIndex,
   onSynthesize,
   reviewPreferences,
@@ -122,15 +124,8 @@ export function InformationEntryQueryWorkspace({
     >
       <header className="workflow-page-heading">
         <div>
-          <p className="section-index">05 / RETRIEVAL</p>
           <h1>查询</h1>
-          <p>按正文、标签、来源、时间与有限邻域检索，并返回精确来源。</p>
         </div>
-        <span className="origin-label origin-label--deterministic">
-          {semanticSearchEnabled
-            ? '本地词法 · 可选语义召回'
-            : '本地词法搜索 · 可离线使用'}
-        </span>
       </header>
 
       <aside className="workflow-mode-summary" aria-label="查询页操作指南">
@@ -155,7 +150,7 @@ export function InformationEntryQueryWorkspace({
                 onChange={(event) => {
                   controller.setQuery(event.currentTarget.value);
                 }}
-                placeholder="输入标题、正文或标签；留空浏览当前 Entry"
+                placeholder="输入标题、正文或标签；留空浏览全部条目"
               />
             </label>
             <span className="record-count" role="status" aria-live="polite">
@@ -163,7 +158,7 @@ export function InformationEntryQueryWorkspace({
                 ? '条件已更改'
                 : controller.view.status === 'ready'
                   ? controller.includePrivate
-                    ? `${controller.view.response.totalCount.toString()} Entry · ${controller.view.response.privateDocuments.totalCount.toString()} 完整隐私文档`
+                    ? `${controller.view.response.totalCount.toString()} 条 · ${controller.view.response.privateDocuments.totalCount.toString()} 份完整隐私文档`
                     : `${controller.view.response.totalCount.toString()} 条`
                   : controller.view.status === 'loading'
                     ? '正在搜索…'
@@ -175,7 +170,6 @@ export function InformationEntryQueryWorkspace({
           </section>
           <aside className="query-studio-settings" aria-label="搜索与显示设置">
             <header>
-              <p className="section-index">SEARCH / DISPLAY</p>
               <h2>搜索与显示设置</h2>
             </header>
             <InformationEntryTextSearchOptions
@@ -202,7 +196,7 @@ export function InformationEntryQueryWorkspace({
                   controller.setSnapshotId(event.currentTarget.value);
                 }}
               >
-                <option value="">全部 Snapshot</option>
+                <option value="">全部来源文档</option>
                 {snapshots.map((snapshot) => (
                   <option key={snapshot.snapshotId} value={snapshot.snapshotId}>
                     {snapshot.sourceKey}
@@ -274,6 +268,9 @@ export function InformationEntryQueryWorkspace({
                 semanticEnabled={semanticSearchEnabled}
                 onLoad={onLoadSearchIndex}
                 onReadyChange={setSemanticIndexReady}
+                {...(onRefreshSearchIndex === undefined
+                  ? {}
+                  : {onRefresh: onRefreshSearchIndex})}
                 onRebuild={onRebuildSearchIndex}
               />
             )}
@@ -364,7 +361,7 @@ function InformationEntryQueryResults({
   return (
     <>
       <InformationEntryResults
-        ariaLabel="Entry 查询结果"
+        ariaLabel="条目查询结果"
         emptyDescription="当前查询没有匹配条目；可清除部分筛选后重试。"
         state={controller.view}
         selectedEntryId={controller.selectedEntryId}

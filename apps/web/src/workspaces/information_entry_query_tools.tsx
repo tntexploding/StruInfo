@@ -39,7 +39,6 @@ export function InformationEntryQueryTools({
     >
       <header>
         <div>
-          <p className="section-index">RESULT TOOLS</p>
           <h2 id="entry-query-tools-title">结果操作</h2>
         </div>
         <span className="record-count">
@@ -50,9 +49,7 @@ export function InformationEntryQueryTools({
       <div className="entry-query-tool">
         <div>
           <strong>关联联想</strong>
-          <p>
-            只沿本地已计算或用户保留的联系展开，不调用 AI，也不代表语义等价。
-          </p>
+          <p>只显示已有联系，不调用 AI，也不表示两个条目含义相同。</p>
         </div>
         <label className="entry-query-association-switch">
           <input
@@ -119,7 +116,7 @@ export function InformationEntryQueryTools({
           {comparisonFull && !selectedIsCompared
             ? '比较栏已满；先移除一条，再加入当前条目。'
             : selectedEntry === undefined
-              ? '当前没有可比较的 Entry。'
+              ? '当前没有可比较的条目。'
               : '当前选中：' + entryTitle(selectedEntry.value.titlePath)}
         </p>
       </div>

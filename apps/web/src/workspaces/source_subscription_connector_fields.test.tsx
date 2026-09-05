@@ -55,7 +55,7 @@ describe('source subscription connector fields', () => {
       <SourceConnectorCapabilityList connectors={connectors} />,
     );
     expect(capabilityMarkup).toContain('已安装插件 1 个');
-    expect(capabilityMarkup).toContain('plugin.synthetic.v1');
+    expect(capabilityMarkup).not.toContain('plugin.synthetic.v1');
 
     const fieldsMarkup = renderToStaticMarkup(
       <PluginSourceSubscriptionFields
@@ -69,10 +69,10 @@ describe('source subscription connector fields', () => {
         onChange={vi.fn()}
       />,
     );
-    expect(fieldsMarkup).toContain('已安装连接器');
-    expect(fieldsMarkup).toContain('外部配置引用');
+    expect(fieldsMarkup).toContain('选择插件');
+    expect(fieldsMarkup).toContain('插件配置名称');
     expect(fieldsMarkup).toContain('profile.default');
-    expect(fieldsMarkup).not.toContain('当前连接器未安装');
+    expect(fieldsMarkup).not.toContain('当前插件不可用');
   });
 
   it('keeps a portable missing-plugin configuration visibly unavailable', () => {
@@ -88,7 +88,7 @@ describe('source subscription connector fields', () => {
         onChange={vi.fn()}
       />,
     );
-    expect(markup).toContain('plugin.missing.v1（当前不可用）');
-    expect(markup).toContain('当前连接器未安装');
+    expect(markup).toContain('已保存的插件（当前不可用）');
+    expect(markup).toContain('当前插件不可用');
   });
 });

@@ -163,7 +163,7 @@ export function InformationDocumentWorkingCopy({
             : '当前全文修改已保存',
         detail:
           response.body.workingCopy.state === 'original'
-            ? '草稿已删除，原始 Snapshot 与 Fragment 从未被改写。'
+            ? '草稿已删除，已导入的原文没有改变。'
             : '这里只保留一份当前草稿；尚未生成新的可拆分文档。',
       });
     } catch {
@@ -203,7 +203,7 @@ export function InformationDocumentWorkingCopy({
       setFeedback({
         kind: 'success',
         title: '已恢复原始全文',
-        detail: '工作草稿已删除，原始 Evidence 保持不变。',
+        detail: '工作草稿已删除，已导入的原文没有改变。',
       });
     } catch {
       if (!mounted.current) return;
@@ -233,22 +233,22 @@ export function InformationDocumentWorkingCopy({
       ) {
         setFeedback({
           kind: 'error',
-          title: '派生文档没有生成',
+          title: '新文档没有生成',
           detail: describeWorkingCopyFailure(response.body),
         });
         return;
       }
       setFeedback({
         kind: 'success',
-        title: '已生成可拆分的派生文档',
-        detail: '正在切换到新 Snapshot；原始版本仍可独立查看和导出。',
+        title: '已生成可拆分的新文档',
+        detail: '正在切换到新文档版本；原始版本仍可查看和导出。',
       });
       await onCommitted(response.body.derivedSnapshotId);
     } catch {
       if (!mounted.current) return;
       setFeedback({
         kind: 'error',
-        title: '派生文档没有生成',
+        title: '新文档没有生成',
         detail: '本地接口不可达；尚未进入拆分阶段。',
       });
     } finally {
@@ -265,20 +265,17 @@ export function InformationDocumentWorkingCopy({
     >
       <header className="console-heading">
         <div>
-          <p className="section-index">SOURCE / EDIT BEFORE SPLIT</p>
           <h2 id="document-working-copy-title">拆分前全文修改</h2>
         </div>
-        <span className="origin-label origin-label--manual">本地人工操作</span>
       </header>
 
       <p className="information-document-working-copy__boundary">
-        原始 Snapshot 与 Fragment
-        永不改写。这里只保存一份当前草稿；确认后生成新的派生文档，再进入拆分。
+        这里修改的是拆分前草稿，不会改动已导入的原文。确认后会另存为新文档。
       </p>
 
       {alreadyMaterialized ? (
         <p className="information-document-working-copy__state">
-          当前文档已经形成 Entry；如需改变既有结构，请使用下方“重整现有条目”。
+          当前文档已经生成条目；如需改变结构，请使用下方“重整现有条目”。
         </p>
       ) : isPrivate && !includePrivate ? (
         <p className="information-document-working-copy__state">
@@ -299,11 +296,11 @@ export function InformationDocumentWorkingCopy({
               {view.value.state === 'original'
                 ? '原始版本'
                 : view.value.state === 'editing'
-                  ? `当前草稿 · 修订 ${view.value.revision.toString()}`
-                  : '已确认派生版本'}
+                  ? `当前草稿 · 版本 ${view.value.revision.toString()}`
+                  : '已确认的新版本'}
             </span>
             <span>{Array.from(text).length.toLocaleString('zh-CN')} 字符</span>
-            <span>{byteLength.toLocaleString('zh-CN')} / 1,048,576 bytes</span>
+            <span>{byteLength.toLocaleString('zh-CN')} / 1,048,576 字节</span>
           </div>
           <label className="information-document-working-copy__editor">
             <span>当前全文</span>
@@ -326,9 +323,9 @@ export function InformationDocumentWorkingCopy({
               {dirty
                 ? '当前输入尚未保存。'
                 : view.value.state === 'editing'
-                  ? '草稿已保存；确认后才会生成派生 Snapshot。'
+                  ? '草稿已保存；确认后才会生成新文档版本。'
                   : view.value.state === 'committed'
-                    ? '该草稿已经确认，后续修改请在派生文档上进行。'
+                    ? '该草稿已经确认，后续修改请在新文档上进行。'
                     : '没有保存中的修改。'}
             </span>
             <div>
@@ -354,7 +351,7 @@ export function InformationDocumentWorkingCopy({
                 disabled={!canCommit}
                 onClick={() => void commit()}
               >
-                确认并生成派生文档
+                确认并生成新文档
               </button>
             </div>
           </div>
@@ -379,14 +376,14 @@ function describeWorkingCopyFailure(value: unknown): string {
       case 'stale_information_document_working_copy':
         return '草稿已经在其他操作中更新，请重新选择文档后再试。';
       case 'split_structure_already_materialized':
-        return '该文档已经形成 Entry，不能再改写拆分前全文。';
+        return '该文档已经生成条目，不能再修改拆分前全文。';
       case 'information_document_working_copy_committed':
-        return '这份草稿已经确认，请切换到派生文档继续。';
+        return '这份草稿已经确认，请切换到新文档继续。';
       case 'private_content_requires_opt_in':
         return '本次请求没有明确允许读取隐私文档。';
       default:
         break;
     }
   }
-  return '请求没有完成；原始文档与已有 Entry 均未被覆盖。';
+  return '请求没有完成；原始文档与已有条目均未被覆盖。';
 }

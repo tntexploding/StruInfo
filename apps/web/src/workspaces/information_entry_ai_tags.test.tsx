@@ -15,9 +15,9 @@ describe('InformationEntryAiTags', () => {
       />,
     );
 
-    expect(markup).toContain('未配置 OpenAI Provider');
-    expect(markup).toContain('人工审核与确定性标签功能保持完整可用');
-    expect(markup).not.toContain('生成标签提案</button>');
+    expect(markup).toContain('OpenAI 未启用');
+    expect(markup).toContain('仍可使用人工评分和自动标签建议');
+    expect(markup).not.toContain('生成 AI 标签建议</button>');
   });
 
   it('never offers Provider submission for a private Entry', () => {
@@ -30,8 +30,8 @@ describe('InformationEntryAiTags', () => {
       />,
     );
 
-    expect(markup).toContain('隐私条目不会发送给外部 Provider');
-    expect(markup).not.toContain('生成标签提案</button>');
+    expect(markup).toContain('隐私条目不会发送给 OpenAI');
+    expect(markup).not.toContain('生成 AI 标签建议</button>');
   });
 
   it('explains the external disclosure and manual acceptance boundary', () => {
@@ -44,10 +44,10 @@ describe('InformationEntryAiTags', () => {
       />,
     );
 
-    expect(markup).toContain('标题、正文和已有标签发送给 OpenAI');
-    expect(markup).toContain('不会自动接受结果');
-    expect(markup).toContain('生成标签提案');
-    expect(markup).toContain('提案 · 不自动写入');
+    expect(markup).toContain('当前条目的标题、正文和标签会发送给 OpenAI');
+    expect(markup).toContain('结果需要你确认后才会保存');
+    expect(markup).toContain('生成 AI 标签建议');
+    expect(markup).not.toContain('origin-label');
   });
 });
 

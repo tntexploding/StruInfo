@@ -296,8 +296,11 @@
 
 .project-metrics strong {
   font-family: var(--si-font-display);
-  font-size: clamp(1.75rem, 3vw, 2.75rem);
+  min-inline-size: 0;
+  font-size: clamp(1.5rem, 2vw, 2.75rem);
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
 }
 
 .project-metrics small {
@@ -1125,7 +1128,7 @@
 
 .entry-search-index-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: var(--si-space-5);
   margin-block-start: var(--si-space-5);
@@ -5072,4 +5075,23 @@
   .entry-manual-split__piece-actions .secondary-action {
     inline-size: 100%;
   }
+}
+
+.entry-search-index-panel .entry-search-index-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--si-space-3);
+}
+
+.entry-search-index-panel__feedback,
+.entry-search-index-panel__repair {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+}
+
+.entry-search-index-panel__repair > p {
+  overflow-wrap: anywhere;
+  margin-block: var(--si-space-3);
+  color: var(--si-color-text-secondary);
 }

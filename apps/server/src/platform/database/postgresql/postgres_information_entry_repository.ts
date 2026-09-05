@@ -9,6 +9,8 @@ import {
   type EntryDomainAssignment,
   type InformationEntryEmptySnapshotMaterializeResult,
   type InformationEntryBulkRevisionResult,
+  type InformationEntryBrowsePage,
+  type InformationEntryBrowsePrivacyScope,
   type InformationEntryMaterializeResult,
   type InformationEntryMaterializeRow,
   type InformationEntryRepositoryPort,
@@ -73,6 +75,38 @@ export const READ_CURRENT_INFORMATION_ENTRIES_BY_ID_SQL = sql(
   '  AND ($2::boolean OR NOT e.is_private)',
   '  AND e.entry_id = ANY($3::uuid[])',
   'ORDER BY snapshot.captured_at DESC, e.snapshot_id, e.document_order, e.entry_id',
+);
+
+export const COUNT_CURRENT_INFORMATION_ENTRY_BROWSE_SQL = sql(
+  'SELECT count(*)::integer AS total_count',
+  'FROM struinfo.information_entry AS e',
+  'WHERE e.workspace_id = $1 AND e.is_current_structure',
+  "  AND ($2::text = 'all'",
+  "    OR ($2::text = 'private' AND e.is_private)",
+  "    OR ($2::text = 'public' AND NOT e.is_private))",
+);
+
+export const READ_CURRENT_INFORMATION_ENTRY_BROWSE_PAGE_SQL = sql(
+  'SELECT e.entry_id::text',
+  'FROM struinfo.information_entry AS e',
+  'JOIN struinfo.snapshot AS snapshot',
+  '  ON snapshot.workspace_id = e.workspace_id',
+  ' AND snapshot.resource_id = e.resource_id',
+  ' AND snapshot.snapshot_id = e.snapshot_id',
+  'WHERE e.workspace_id = $1 AND e.is_current_structure',
+  "  AND ($2::text = 'all'",
+  "    OR ($2::text = 'private' AND e.is_private)",
+  "    OR ($2::text = 'public' AND NOT e.is_private))",
+  '  AND (',
+  '    $3::timestamptz IS NULL',
+  '    OR snapshot.captured_at < $3::timestamptz',
+  '    OR (snapshot.captured_at = $3::timestamptz AND (',
+  '      e.document_order > $4::integer',
+  '      OR (e.document_order = $4::integer AND e.entry_id > $5::uuid)',
+  '    ))',
+  '  )',
+  'ORDER BY snapshot.captured_at DESC, e.document_order, e.entry_id',
+  'LIMIT $6',
 );
 
 export const READ_INFORMATION_ENTRY_TYPE_COVERAGE_SQL = sql(
@@ -559,10 +593,11 @@ export class PostgresInformationEntryRepository
           READ_CURRENT_INFORMATION_ENTRY_DOMAINS_SQL,
           [workspaceId, includePrivate],
         );
-        return Object.freeze(
-          core.rows.map((row) =>
-            mapCurrentEntry(row, inputs.rows, keywords.rows, domains.rows),
-          ),
+        return mapCurrentEntries(
+          core.rows,
+          inputs.rows,
+          keywords.rows,
+          domains.rows,
         );
       },
     );
@@ -599,11 +634,101 @@ export class PostgresInformationEntryRepository
           READ_CURRENT_INFORMATION_ENTRY_DOMAINS_BY_ID_SQL,
           parameters,
         );
-        return Object.freeze(
-          core.rows.map((row) =>
-            mapCurrentEntry(row, inputs.rows, keywords.rows, domains.rows),
-          ),
+        return mapCurrentEntries(
+          core.rows,
+          inputs.rows,
+          keywords.rows,
+          domains.rows,
         );
+      },
+    );
+  }
+
+  public loadCurrentEntryBrowsePage(
+    workspaceIdInput: string,
+    privacyScopeInput: InformationEntryBrowsePrivacyScope,
+    limitInput: number,
+    afterInput?: Readonly<{
+      capturedAt: string;
+      documentOrder: number;
+      entryId: string;
+    }>,
+  ): Promise<Readonly<InformationEntryBrowsePage>> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    const privacyScope = browsePrivacyScope(privacyScopeInput);
+    const limit = integer(limitInput, 1);
+    if (limit > 101) throw new PostgresAdapterError();
+    const after =
+      afterInput === undefined
+        ? undefined
+        : Object.freeze({
+            capturedAt: timestamp(afterInput.capturedAt),
+            documentOrder: integer(afterInput.documentOrder),
+            entryId: canonicalUuid(afterInput.entryId),
+          });
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const count = await client.query<Row>(
+          COUNT_CURRENT_INFORMATION_ENTRY_BROWSE_SQL,
+          [workspaceId, privacyScope],
+        );
+        if (count.rows.length !== 1) throw new PostgresAdapterError();
+        const totalCount = integer(count.rows[0]?.total_count);
+        const page = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_BROWSE_PAGE_SQL,
+          [
+            workspaceId,
+            privacyScope,
+            after?.capturedAt ?? null,
+            after?.documentOrder ?? null,
+            after?.entryId ?? null,
+            limit,
+          ],
+        );
+        const entryIds = page.rows.map((row) => canonicalUuid(row.entry_id));
+        if (entryIds.length === 0) {
+          return Object.freeze({
+            totalCount,
+            entries: Object.freeze([]),
+          });
+        }
+        const includePrivate = privacyScope !== 'public';
+        const parameters = [workspaceId, includePrivate, entryIds] as const;
+        const core = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRIES_BY_ID_SQL,
+          parameters,
+        );
+        const inputs = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_INPUTS_BY_ID_SQL,
+          parameters,
+        );
+        const keywords = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_BY_ID_SQL,
+          parameters,
+        );
+        const domains = await client.query<Row>(
+          READ_CURRENT_INFORMATION_ENTRY_DOMAINS_BY_ID_SQL,
+          parameters,
+        );
+        const entriesById = new Map(
+          mapCurrentEntries(
+            core.rows,
+            inputs.rows,
+            keywords.rows,
+            domains.rows,
+          ).map((entry) => [entry.entryId, entry] as const),
+        );
+        const entries = entryIds.map((entryId) => {
+          const entry = entriesById.get(entryId);
+          if (entry === undefined) throw new PostgresAdapterError();
+          return entry;
+        });
+        return Object.freeze({
+          totalCount,
+          entries: Object.freeze(entries),
+        });
       },
     );
   }
@@ -683,10 +808,11 @@ export class PostgresInformationEntryRepository
                 READ_CURRENT_INFORMATION_ENTRY_DOMAINS_BY_ID_SQL,
                 parameters,
               );
-        const items = Object.freeze(
-          core.rows.map((row) =>
-            mapCurrentEntry(row, inputs.rows, keywords.rows, domains.rows),
-          ),
+        const items = mapCurrentEntries(
+          core.rows,
+          inputs.rows,
+          keywords.rows,
+          domains.rows,
         );
         const last = pageRows.at(-1);
         return Object.freeze({
@@ -887,13 +1013,41 @@ function mapCurrentEntry(
     ...(canonicalUri === undefined ? {} : {canonicalUri}),
     capturedAt: timestamp(row.captured_at),
     ...(publishedAt === undefined ? {} : {publishedAt}),
-    value: mapRevisionValue(
-      row,
-      inputRows.filter((candidate) => candidate.entry_id === entryId),
-      keywordRows.filter((candidate) => candidate.entry_id === entryId),
-      domainRows.filter((candidate) => candidate.entry_id === entryId),
-    ),
+    value: mapRevisionValue(row, inputRows, keywordRows, domainRows),
   });
+}
+
+function mapCurrentEntries(
+  coreRows: readonly Row[],
+  inputRows: readonly Row[],
+  keywordRows: readonly Row[],
+  domainRows: readonly Row[],
+): readonly Readonly<CurrentInformationEntry>[] {
+  const inputsByEntry = groupRowsByEntryId(inputRows);
+  const keywordsByEntry = groupRowsByEntryId(keywordRows);
+  const domainsByEntry = groupRowsByEntryId(domainRows);
+  return Object.freeze(
+    coreRows.map((row) => {
+      const entryId = canonicalUuid(row.entry_id);
+      return mapCurrentEntry(
+        row,
+        inputsByEntry.get(entryId) ?? [],
+        keywordsByEntry.get(entryId) ?? [],
+        domainsByEntry.get(entryId) ?? [],
+      );
+    }),
+  );
+}
+
+function groupRowsByEntryId(rows: readonly Row[]): ReadonlyMap<string, Row[]> {
+  const grouped = new Map<string, Row[]>();
+  for (const row of rows) {
+    const entryId = canonicalUuid(row.entry_id);
+    const existing = grouped.get(entryId);
+    if (existing === undefined) grouped.set(entryId, [row]);
+    else existing.push(row);
+  }
+  return grouped;
 }
 
 function mapRevisionValue(
@@ -1046,6 +1200,15 @@ function sameRevisionValue(
 
 function optionalTimestamp(value: unknown): string | undefined {
   return value === null ? undefined : timestamp(value);
+}
+
+function browsePrivacyScope(
+  value: unknown,
+): InformationEntryBrowsePrivacyScope {
+  if (value !== 'public' && value !== 'all' && value !== 'private') {
+    throw new PostgresAdapterError();
+  }
+  return value;
 }
 
 function timestamp(value: unknown): string {

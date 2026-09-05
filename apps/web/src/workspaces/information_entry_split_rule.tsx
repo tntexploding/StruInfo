@@ -98,7 +98,7 @@ export function InformationEntrySplitRule({
             feedback: {
               kind: 'error' as const,
               title: '拆分规则未读取',
-              detail: '外部个人配置当前不可用；文档与 Entry 没有变化。',
+              detail: '个人配置当前不可用；文档和条目没有变化。',
             },
           }),
         );
@@ -179,7 +179,7 @@ export function InformationEntrySplitRule({
           response.body.status === 'applied'
             ? '拆分规则已保存'
             : '规则没有变化',
-        detail: '规则保存在当前外部个人配置中，不进入 Git 或数据库正文。',
+        detail: '规则已保存到个人设置，不会写入文档正文。',
       });
     } catch {
       if (generation === requestGeneration.current) {
@@ -218,7 +218,7 @@ export function InformationEntrySplitRule({
         {
           kind: 'success',
           title: '规则预览已生成',
-          detail: `将 ${response.body.trial.sourceFragmentCount.toString()} 个结构段整理为 ${response.body.trial.groups.length.toString()} 个 Entry。`,
+          detail: `将 ${response.body.trial.sourceFragmentCount.toString()} 个原文片段整理为 ${response.body.trial.groups.length.toString()} 个条目。`,
         },
         scopeKey,
       );
@@ -273,7 +273,7 @@ export function InformationEntrySplitRule({
             response.body.status === 'created'
               ? '规则拆分已完成'
               : '相同结果已经存在',
-          detail: `当前文档包含 ${response.body.entries.length.toString()} 个 Entry。`,
+          detail: `当前文档包含 ${response.body.entries.length.toString()} 个条目。`,
         },
         scopeKey,
       );
@@ -301,19 +301,13 @@ export function InformationEntrySplitRule({
     >
       <header className="console-heading">
         <div>
-          <p className="section-index">LOCAL RULE PROFILE</p>
-          <h2 id="split-rule-title">可替换的本地拆分规则</h2>
-          <p>先保存工作区规则，再用精确 Fragment 预览并一次性生成 Entry。</p>
+          <h2 id="split-rule-title">结构规则</h2>
+          <p>设置规则后，可以先预览再生成条目。</p>
         </div>
-        <span className="origin-label origin-label--deterministic">
-          {saved === undefined
-            ? '读取中'
-            : `个人配置 · r${saved.revision.toString()}`}
-        </span>
       </header>
 
       {draft === undefined ? (
-        <p className="empty-copy">正在读取外部个人配置中的拆分规则…</p>
+        <p className="empty-copy">正在读取拆分规则…</p>
       ) : (
         <div className="split-rule-layout">
           <div className="split-rule-controls">
@@ -344,7 +338,7 @@ export function InformationEntrySplitRule({
                 />
                 <span>
                   <strong>合并相邻短段</strong>
-                  <small>只按原顺序合并，不改写、不重排原始证据。</small>
+                  <small>只合并相邻短段，不修改或打乱原文。</small>
                 </span>
               </label>
             </fieldset>
@@ -438,7 +432,7 @@ export function InformationEntrySplitRule({
             </div>
             {alreadyMaterialized ? (
               <p className="empty-copy">
-                当前文档已有 Entry；本规则只处理尚未物化的文档。
+                当前文档已有条目；本规则只处理尚未拆分的文档。
               </p>
             ) : null}
             {isPrivate && !includePrivate ? (
@@ -473,7 +467,7 @@ export function InformationEntrySplitRule({
                     </p>
                     {group.exceedsMaximum ? (
                       <small>
-                        源 Fragment 本身超过当前上限；规则不会切断证据。
+                        原文片段本身超过当前上限；规则不会从中间截断。
                       </small>
                     ) : null}
                   </li>
@@ -532,9 +526,9 @@ function failure(title: string, body: unknown): ActionFeedback {
     code === 'stale_entry_split_rule_profile_revision'
       ? '个人配置已在另一请求中更新，请重新加载后再操作。'
       : code === 'split_structure_already_materialized'
-        ? '当前文档已经存在 Entry，不能再次创建另一套结构。'
+        ? '当前文档已经存在条目，不能再次创建另一套结构。'
         : code === 'snapshot_not_found'
-          ? '当前 Snapshot 不存在，或隐私查看尚未开启。'
-          : '请求未完成；文档、Fragment 与 Entry 保持不变。';
+          ? '当前文档不存在，或隐私查看尚未开启。'
+          : '请求未完成；文档、原文片段和条目保持不变。';
   return {kind: 'error', title, detail};
 }

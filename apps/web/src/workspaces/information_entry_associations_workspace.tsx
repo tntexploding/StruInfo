@@ -20,7 +20,6 @@ export interface InformationEntryAssociationsWorkspaceProps extends Pick<
 }
 
 export function InformationEntryAssociationsWorkspace({
-  aiEnabled,
   onListAssociations,
   onOpenEvidence,
   onRebuildAssociations,
@@ -44,15 +43,8 @@ export function InformationEntryAssociationsWorkspace({
     >
       <header className="workflow-page-heading">
         <div>
-          <p className="section-index">04 / ENTRY ASSOCIATION</p>
           <h1>联系</h1>
-          <p>选择一个条目，检查可解释候选，并单独增强、削弱或屏蔽联系。</p>
         </div>
-        <span className="origin-label origin-label--deterministic">
-          {aiEnabled
-            ? '确定性相似度 · AI 建议未接入'
-            : '确定性相似度 · 人工覆盖'}
-        </span>
       </header>
 
       <aside className="workflow-mode-summary" aria-label="联系页操作指南">

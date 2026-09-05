@@ -26,13 +26,13 @@ export function InformationEntryRetrievalOptions({
     semanticAvailable && semanticReady && publicScope && queryPresent;
   return (
     <fieldset className="entry-text-search-options entry-retrieval-options">
-      <legend>召回方式</legend>
+      <legend>搜索方式</legend>
       <div className="entry-text-search-options__choices">
         {(
           [
-            ['lexical', '本地词法'],
-            ['semantic', '语义向量'],
-            ['hybrid', '混合召回'],
+            ['lexical', '文字搜索'],
+            ['semantic', '内容相似'],
+            ['hybrid', '综合搜索'],
           ] as const
         ).map(([value, label]) => (
           <label key={value}>
@@ -52,14 +52,14 @@ export function InformationEntryRetrievalOptions({
       </div>
       <p>
         {!semanticAvailable
-          ? '未配置 Embedding 模型；确定性本地词法查询保持完整可用。'
+          ? '未配置语义搜索模型，目前使用文字搜索。'
           : !semanticReady
-            ? 'Embedding 模型已配置，但当前向量索引尚未就绪；请先重建检索索引。'
+            ? '内容相似索引尚未就绪，请先刷新索引。'
             : !publicScope
-              ? '隐私范围仅使用本地词法查询，内容不会发送给外部 Embedding Provider。'
+              ? '隐私内容只在本机进行文字搜索，不会发送给外部 AI 服务。'
               : queryPresent
-                ? '语义与混合模式使用当前可重建向量索引；结果分数表示召回相似度，不代表事实正确性。'
-                : '输入搜索文字后可使用语义或混合召回。'}
+                ? '内容相似和综合搜索会按相似度排序，不代表事实正确性。'
+                : '输入搜索文字后可使用内容相似或综合搜索。'}
       </p>
     </fieldset>
   );
@@ -144,10 +144,7 @@ export function InformationEntryTextSearchOptions({
           })}
         </div>
       </div>
-      <p>
-        近似匹配只比较本地规范化字符片段并显示分数，不调用
-        AI，也不表示语义相同。
-      </p>
+      <p>近似匹配会寻找拼写相近的文字，不调用 AI，也不表示含义相同。</p>
     </fieldset>
   );
 }
@@ -317,7 +314,7 @@ export function InformationEntryAdvancedSearchFields({
         </label>
         {association === undefined ? (
           <p className="entry-search-association-hint">
-            先在结果中选择 Entry，再于“结果操作”开启关联联想。
+            先在结果中选择一个条目，再于“结果操作”开启关联联想。
           </p>
         ) : (
           <div className="entry-search-association-filter">

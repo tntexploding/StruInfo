@@ -19,16 +19,15 @@ export function InformationEntryQueryComparison({
     >
       <header className="console-heading">
         <div>
-          <p className="section-index">COMPARE / CURRENT QUERY</p>
           <h2 id="entry-query-comparison-title">结果比较</h2>
-          <p>并列查看已返回事实；不会生成综合评分、胜负或新联系。</p>
+          <p>最多选择两个结果并排查看。</p>
         </div>
         <span className="record-count">{items.length.toString()} / 2</span>
       </header>
       {items.length === 0 ? (
         <div className="entry-query-comparison__empty">
           <strong>尚未选择比较条目</strong>
-          <p>在结果列表中选中 Entry，再使用“加入比较”。</p>
+          <p>在结果列表中选中条目，再使用“加入比较”。</p>
         </div>
       ) : (
         <div className="entry-query-comparison__grid">
@@ -64,9 +63,7 @@ function ComparisonCard({
     <article className="entry-query-comparison-card" aria-labelledby={titleId}>
       <header>
         <div>
-          <span className="section-index">
-            ITEM {(index + 1).toString().padStart(2, '0')}
-          </span>
+          <span>条目 {(index + 1).toString()}</span>
           <h3 id={titleId}>{entryTitle(entry)}</h3>
           <p>
             {entry.sourceKey} · v{entry.revision.toString()}
@@ -143,7 +140,7 @@ function ComparisonCard({
             );
           }}
         >
-          查看精确来源
+          查看原文
         </button>
       </footer>
     </article>
@@ -173,7 +170,7 @@ function textMatchLabel(item: Readonly<InformationEntrySearchItem>): string {
   if (item.textMatch === undefined) return '无文字筛选';
   return (
     textModeLabel(item.textMatch.mode) +
-    ' · 词法分 ' +
+    ' · 匹配度 ' +
     percentage(item.textMatch.score) +
     '/100'
   );
