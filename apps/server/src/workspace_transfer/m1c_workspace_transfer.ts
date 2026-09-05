@@ -1,9 +1,10 @@
 import {createHash} from 'node:crypto';
 
 import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
-import type {
-  ReviewPreferences,
-  ReviewPreferencesStore,
+import {
+  ReviewPreferencesStoreError,
+  type ReviewPreferences,
+  type ReviewPreferencesStore,
 } from '../storage/review_preferences_store.js';
 import {
   assertM1cDomainWorkspace,
@@ -26,6 +27,7 @@ import {
   M1D_ASSOCIATION_LEGACY_BUNDLE_CODEC,
   M1D_ASSOCIATION_VERSION_TWO_BUNDLE_CODEC,
   M1D_ASSOCIATION_VERSION_THREE_BUNDLE_CODEC,
+  M1D_ASSOCIATION_VERSION_FOUR_BUNDLE_CODEC,
   m1dAssociationTableCounts,
   normalizeM1dAssociationSnapshot,
   type M1dAssociationSnapshot,
@@ -175,6 +177,7 @@ const BUNDLE_CODECS = Object.freeze([
   M1D_ASSOCIATION_LEGACY_BUNDLE_CODEC,
   M1D_ASSOCIATION_VERSION_TWO_BUNDLE_CODEC,
   M1D_ASSOCIATION_VERSION_THREE_BUNDLE_CODEC,
+  M1D_ASSOCIATION_VERSION_FOUR_BUNDLE_CODEC,
   M1D_ASSOCIATION_BUNDLE_CODEC,
   M1E_PROCESSING_LEGACY_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_TWO_BUNDLE_CODEC,
@@ -345,38 +348,16 @@ export class M1cWorkspaceTransfer implements M1cWorkspaceTransferPort {
       await restorePortableBlobs(this.#dependencies.blobStore, personalData);
     }
 
-    let previousPreferences: Readonly<ReviewPreferences> | undefined;
-    if (personalData !== undefined) {
-      try {
-        previousPreferences =
-          await this.#dependencies.reviewPreferences.load(workspaceId);
-        await saveReviewPreferences(
-          this.#dependencies.reviewPreferences,
-          personalData.reviewPreferences,
-        );
-      } catch {
-        throw new M1cWorkspaceTransferError('preferences_failed');
-      }
-    }
-
-    try {
-      await this.#dependencies.repository.restoreEmptyWorkspace(
-        workspaceId,
-        snapshot,
-      );
-    } catch (error) {
-      if (previousPreferences !== undefined) {
-        try {
-          await saveReviewPreferences(
-            this.#dependencies.reviewPreferences,
-            previousPreferences,
-          );
-        } catch {
-          throw new M1cWorkspaceTransferError('preferences_failed');
-        }
-      }
-      throw mapRepositoryError(error);
-    }
+    await restoreWithPreferences(
+      this.#dependencies.reviewPreferences,
+      workspaceId,
+      personalData?.reviewPreferences,
+      () =>
+        this.#dependencies.repository.restoreEmptyWorkspace(
+          workspaceId,
+          snapshot,
+        ),
+    );
 
     return Object.freeze({
       fileName,
@@ -546,6 +527,47 @@ function sameBlobReferences(
   );
 }
 
+async function restoreWithPreferences(
+  store: ReviewPreferencesStore,
+  workspaceId: string,
+  preferences: Readonly<ReviewPreferences> | undefined,
+  restore: () => Promise<void>,
+): Promise<void> {
+  if (preferences !== undefined && store.replaceForRestore !== undefined) {
+    try {
+      await store.replaceForRestore(workspaceId, preferences, restore);
+    } catch (error) {
+      if (error instanceof ReviewPreferencesStoreError)
+        throw new M1cWorkspaceTransferError('preferences_failed');
+      throw mapRepositoryError(error);
+    }
+    return;
+  }
+  // Legacy in-memory ports retain the same rollback behavior.
+  let previousPreferences: Readonly<ReviewPreferences> | undefined;
+  if (preferences !== undefined) {
+    try {
+      previousPreferences = await store.load(workspaceId);
+      await saveReviewPreferences(store, preferences);
+    } catch {
+      throw new M1cWorkspaceTransferError('preferences_failed');
+    }
+  }
+
+  try {
+    await restore();
+  } catch (error) {
+    if (previousPreferences !== undefined) {
+      try {
+        await saveReviewPreferences(store, previousPreferences);
+      } catch {
+        throw new M1cWorkspaceTransferError('preferences_failed');
+      }
+    }
+    throw mapRepositoryError(error);
+  }
+}
+
 async function saveReviewPreferences(
   store: ReviewPreferencesStore,
   preferences: Readonly<ReviewPreferences>,
@@ -562,6 +584,7 @@ async function saveReviewPreferences(
     preferences.entryAutomationPolicy,
     preferences.entrySplitRuleProfile,
     preferences.entryClassificationProfile,
+    preferences.entrySavedQueries,
   );
 }
 async function restorePortableBlobs(

@@ -217,6 +217,9 @@ function createStorageServices(): Readonly<StorageServices> {
       load: () => Promise.reject(new Error('unexpected preferences read')),
       save: () => Promise.reject(new Error('unexpected preferences write')),
     },
+    entryMarkdownFiles: {
+      write: () => Promise.reject(new Error('unexpected Markdown write')),
+    },
     workspaceBundleFiles: {
       write: () => Promise.reject(new Error('unexpected Bundle write')),
       read: () => Promise.reject(new Error('unexpected Bundle read')),

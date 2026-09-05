@@ -1,6 +1,17 @@
-import {useState, type SyntheticEvent} from 'react';
+import {
+  InformationEntrySavedQueries,
+  type EntrySavedQueryServices,
+} from './information_entry_saved_queries.js';
+import {
+  InformationEntryMarkdownExport,
+  type EntryMarkdownExportServices,
+} from './information_entry_markdown_export.js';
+import {InformationEntryRestoredSelection} from './information_entry_restored_selection.js';
+import {useEffect, useState, type SyntheticEvent} from 'react';
 
 import {
+  type EntryQueryContext,
+  type InformationEntry,
   ENTRY_DOMAIN_KEYWORDS,
   ENTRY_TYPE_KEYWORDS,
   type EntryDomainKeyword,
@@ -39,10 +50,17 @@ import {InformationEntryQueryTools} from './information_entry_query_tools.js';
 import {useInformationEntryController} from './use_information_entry_controller.js';
 import {PrivateDocumentResults} from './private_document_results.js';
 
-export interface InformationEntryQueryWorkspaceProps extends Pick<
-  InformationEntryServices,
-  'onExplore' | 'onOpenEvidence' | 'onReviseExplorationPolicy' | 'onSearch'
-> {
+export interface InformationEntryQueryWorkspaceProps
+  extends
+    Pick<
+      InformationEntryServices,
+      'onExplore' | 'onOpenEvidence' | 'onReviseExplorationPolicy' | 'onSearch'
+    >,
+    Partial<EntrySavedQueryServices>,
+    Partial<EntryMarkdownExportServices> {
+  readonly initialContext?: Readonly<EntryQueryContext> | undefined;
+  readonly onContextChange?: (context: Readonly<EntryQueryContext>) => void;
+  readonly onOpenGraph?: (entry: Readonly<InformationEntry>) => void;
   readonly aiQuerySynthesisEnabled: boolean;
   readonly semanticSearchEnabled?: boolean;
   readonly onLoadSearchIndex?: InformationEntryServices['onLoadSearchIndex'];
@@ -54,6 +72,14 @@ export interface InformationEntryQueryWorkspaceProps extends Pick<
 }
 
 export function InformationEntryQueryWorkspace({
+  onPreviewMarkdownExport,
+  onGenerateMarkdownExport,
+  initialContext,
+  onContextChange,
+  onOpenGraph,
+  onLoadSavedQueries,
+  onWriteSavedQuery,
+  onReadQueryContext,
   aiQuerySynthesisEnabled,
   semanticSearchEnabled = false,
   onExplore,
@@ -68,10 +94,50 @@ export function InformationEntryQueryWorkspace({
   snapshots,
 }: InformationEntryQueryWorkspaceProps) {
   const controller = useInformationEntryController({
+    ...(initialContext === undefined
+      ? {}
+      : {initialQueryContext: initialContext}),
     autoSearchDelayMs: 300,
     onSearch,
   });
   const [semanticIndexReady, setSemanticIndexReady] = useState(false);
+  const [pendingContext, setPendingContext] = useState<
+    Readonly<EntryQueryContext> | undefined
+  >(initialContext?.query.includePrivate ? initialContext : undefined);
+  const [resumeEntryId, setResumeEntryId] = useState(
+    initialContext?.query.includePrivate
+      ? undefined
+      : initialContext?.selectedEntryId,
+  );
+  const currentQuery = controller.searchRequest;
+  const currentSelection =
+    controller.searchDirty || controller.view.status !== 'ready'
+      ? undefined
+      : controller.selectedEntryId;
+  useEffect(() => {
+    onContextChange?.(
+      pendingContext ?? {
+        query: currentQuery,
+        ...(currentSelection === undefined
+          ? {}
+          : {selectedEntryId: currentSelection}),
+      },
+    );
+  }, [currentQuery, currentSelection, onContextChange, pendingContext]);
+  function applyContext(context: Readonly<EntryQueryContext>) {
+    setPendingContext(undefined);
+    setResumeEntryId(context.selectedEntryId);
+    controller.restoreQueryContext(context);
+  }
+  function openContext(context: Readonly<EntryQueryContext>) {
+    if (context.query.includePrivate) {
+      setPendingContext(context);
+      setResumeEntryId(undefined);
+      controller.restoreQueryContext({query: {includePrivate: false}});
+    } else {
+      applyContext(context);
+    }
+  }
   const comparisonScopeKey = informationEntryQueryScopeKey({
     query: controller.query,
     retrievalMode: controller.retrievalMode,
@@ -135,6 +201,74 @@ export function InformationEntryQueryWorkspace({
         <span>3. 在中间查看正文与来源</span>
       </aside>
 
+      {pendingContext === undefined ? null : (
+        <section className="query-context-notice" aria-label="重新选择隐私范围">
+          <strong>此查询包含隐私范围</strong>
+          <p>打开前请选择本次可见范围。保存查询不会自动显示隐私内容。</p>
+          <div className="entry-command-actions">
+            <button
+              type="button"
+              className="primary-action"
+              onClick={() => {
+                applyContext(pendingContext);
+              }}
+            >
+              按保存的隐私范围打开
+            </button>
+            <button
+              type="button"
+              className="secondary-action"
+              onClick={() => {
+                applyContext({
+                  ...pendingContext,
+                  query: {
+                    ...pendingContext.query,
+                    includePrivate: false,
+                    onlyPrivate: false,
+                  },
+                });
+              }}
+            >
+              仅公开范围打开
+            </button>
+            <button
+              type="button"
+              className="secondary-action"
+              onClick={() => {
+                setPendingContext(undefined);
+              }}
+            >
+              取消打开
+            </button>
+          </div>
+        </section>
+      )}
+      {controller.view.status !== 'error' ? null : (
+        <div className="query-context-notice">
+          <div className="entry-command-actions">
+            {controller.retrievalMode === 'lexical' ? null : (
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={() => {
+                  controller.setRetrievalMode('lexical');
+                }}
+              >
+                改用文字查询
+              </button>
+            )}
+            {controller.advancedFilters.association === undefined ? null : (
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={clearAssociationAnchor}
+              >
+                清除关联中心后查询
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       <div className="query-studio-grid">
         <form
           className="query-studio-form"
@@ -172,6 +306,20 @@ export function InformationEntryQueryWorkspace({
             <header>
               <h2>搜索与显示设置</h2>
             </header>
+            {onLoadSavedQueries === undefined ||
+            onWriteSavedQuery === undefined ? null : (
+              <InformationEntrySavedQueries
+                context={{
+                  query: currentQuery,
+                  ...(currentSelection === undefined
+                    ? {}
+                    : {selectedEntryId: currentSelection}),
+                }}
+                onLoad={onLoadSavedQueries}
+                onWrite={onWriteSavedQuery}
+                onOpen={openContext}
+              />
+            )}
             <InformationEntryTextSearchOptions
               mode={controller.textMode}
               fields={controller.textFields}
@@ -286,9 +434,49 @@ export function InformationEntryQueryWorkspace({
             />
           ) : null}
 
+          {controller.view.status !== 'ready' ||
+          controller.searchDirty ||
+          resumeEntryId === undefined ||
+          controller.selectedEntryId !== resumeEntryId ||
+          controller.selectedEntry !== undefined ||
+          onReadQueryContext === undefined ? null : (
+            <InformationEntryRestoredSelection
+              key={comparisonScopeKey + resumeEntryId}
+              entryId={resumeEntryId}
+              includePrivate={controller.includePrivate}
+              onlyPrivate={controller.onlyPrivate}
+              onRead={onReadQueryContext}
+              onOpenEvidence={onOpenEvidence}
+              {...(onOpenGraph === undefined ? {} : {onOpenGraph})}
+            />
+          )}
+          {controller.selectedEntry === undefined ||
+          controller.searchDirty ||
+          onOpenGraph === undefined ? null : (
+            <div className="entry-command-actions">
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={() => {
+                  if (controller.selectedEntry !== undefined)
+                    onOpenGraph(controller.selectedEntry);
+                }}
+              >
+                {controller.selectedEntry.value.isPrivate
+                  ? '含隐私在图谱中查看'
+                  : '在图谱中查看'}
+              </button>
+            </div>
+          )}
           <InformationEntryQueryResults
             key={comparisonScopeKey}
             comparisonScopeKey={comparisonScopeKey}
+            {...(onPreviewMarkdownExport === undefined
+              ? {}
+              : {onPreviewMarkdownExport})}
+            {...(onGenerateMarkdownExport === undefined
+              ? {}
+              : {onGenerateMarkdownExport})}
             controller={controller}
             selectedItem={selectedItem}
             onAssociationToggle={(enabled) => {
@@ -313,6 +501,8 @@ export function InformationEntryQueryWorkspace({
 }
 
 function InformationEntryQueryResults({
+  onPreviewMarkdownExport,
+  onGenerateMarkdownExport,
   comparisonScopeKey,
   controller,
   selectedItem,
@@ -325,6 +515,8 @@ function InformationEntryQueryResults({
   aiQuerySynthesisEnabled,
   onSynthesize,
 }: {
+  readonly onPreviewMarkdownExport?: EntryMarkdownExportServices['onPreviewMarkdownExport'];
+  readonly onGenerateMarkdownExport?: EntryMarkdownExportServices['onGenerateMarkdownExport'];
   readonly comparisonScopeKey: string;
   readonly controller: ReturnType<typeof useInformationEntryController>;
   readonly selectedItem: Readonly<InformationEntrySearchItem> | undefined;
@@ -383,6 +575,22 @@ function InformationEntryQueryResults({
           />
         )}
       </InformationEntryResults>
+
+      {onPreviewMarkdownExport === undefined ||
+      onGenerateMarkdownExport === undefined ? null : (
+        <InformationEntryMarkdownExport
+          selectedEntry={selectedItem?.entry}
+          privacyScope={
+            controller.onlyPrivate
+              ? 'private_only'
+              : controller.includePrivate
+                ? 'include_private'
+                : 'public'
+          }
+          onPreviewMarkdownExport={onPreviewMarkdownExport}
+          onGenerateMarkdownExport={onGenerateMarkdownExport}
+        />
+      )}
 
       <details className="workflow-tool-drawer query-result-tools-drawer">
         <summary>更多结果工具</summary>

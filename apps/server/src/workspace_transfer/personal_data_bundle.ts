@@ -1,3 +1,7 @@
+import {
+  DEFAULT_ENTRY_SAVED_QUERIES,
+  decodeEntrySavedQueries,
+} from '../modules/entries/information_entry_saved_queries.js';
 import {Buffer} from 'node:buffer';
 import {createHash} from 'node:crypto';
 
@@ -169,6 +173,11 @@ function decodeIdentity(
 
 function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
   if (!isRecord(value)) fail();
+  const savedQueries =
+    value.entrySavedQueries === undefined
+      ? DEFAULT_ENTRY_SAVED_QUERIES
+      : decodeEntrySavedQueries(value.entrySavedQueries);
+  if (savedQueries === undefined) fail();
   const quickTags = decodeReviewQuickTags(value.quickTags);
   const automaticKeywords = decodeReviewAutomaticKeywordPreferences(
     value.automaticKeywords,
@@ -239,6 +248,7 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     entryAutomationPolicy,
     entrySplitRuleProfile,
     entryClassificationProfile,
+    savedQueries,
   );
 }
 

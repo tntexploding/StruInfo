@@ -200,6 +200,7 @@ describe('M1E Knowledge graph local API', () => {
         semanticKind: 'supports',
         verificationStatus: 'source_checked',
         note: '已核对两端原始来源',
+        expectedEntryRevisions: {entryLowRevision: 1, entryHighRevision: 1},
       }),
     ).resolves.toMatchObject({
       statusCode: 200,
@@ -272,6 +273,253 @@ describe('M1E Knowledge graph local API', () => {
     ).resolves.toMatchObject({statusCode: 404});
   });
 });
+
+describe('relationship source review API', () => {
+  const review = {
+    expectedRevision: 2,
+    includePrivate: false,
+    expectedEntryRevisions: {entryLowRevision: 1, entryHighRevision: 1},
+    verificationStatus: 'source_checked',
+    note: '  Synthetic review note  ',
+  };
+  it('uses the paged production read and rejects a scope-mismatched cursor before I/O', async () => {
+    const harness = sourceReviewHarness();
+    const loadSourceReviewPage = vi.fn(() =>
+      Promise.resolve({totalCount: 7, items: []}),
+    );
+    const deps = harness.deps;
+    const service = new M1cApiService({
+      ...deps,
+      informationEntryAssociationRepository: {
+        ...deps.informationEntryAssociationRepository,
+        loadSourceReviewPage,
+      },
+    });
+    await expect(
+      service.listInformationEntrySourceReviews({
+        filter: 'needs_review',
+        privacyScope: 'private_only',
+        limit: 3,
+      }),
+    ).resolves.toMatchObject({statusCode: 200, body: {totalCount: 7}});
+    expect(loadSourceReviewPage).toHaveBeenCalledWith(WORKSPACE_ID, {
+      filter: 'needs_review',
+      privacyScope: 'private_only',
+      limit: 3,
+    });
+    await expect(
+      service.listInformationEntrySourceReviews({
+        filter: 'all',
+        after: {
+          version: 1,
+          filter: 'pending',
+          privacyScope: 'public',
+          entryLowId: ENTRY_A,
+          entryHighId: ENTRY_B,
+        },
+      }),
+    ).resolves.toMatchObject({statusCode: 422});
+    expect(loadSourceReviewPage).toHaveBeenCalledTimes(1);
+    expect(harness.loadByIds).not.toHaveBeenCalled();
+  });
+  it('saves only the note/status with both Entry revisions and preserves relationship meaning and origin', async () => {
+    const harness = sourceReviewHarness();
+    await expect(
+      harness.service.reviewInformationEntryGraphSources(
+        ENTRY_B,
+        ENTRY_A,
+        review,
+      ),
+    ).resolves.toMatchObject({statusCode: 200, body: {status: 'applied'}});
+    expect(harness.loadByIds).toHaveBeenCalledWith(WORKSPACE_ID, false, [
+      ENTRY_A,
+      ENTRY_B,
+    ]);
+    expect(harness.write).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entryLowId: ENTRY_A,
+        entryHighId: ENTRY_B,
+        expectedRevision: 2,
+        requireVisibleGraphEdge: true,
+        expectedEntryRevisions: review.expectedEntryRevisions,
+        value: {
+          action: 'weaken',
+          manualAdjustment: -1500,
+          isBlocked: false,
+          graph: {
+            origin: 'ai',
+            label: 'Synthetic relation',
+            direction: 'high_to_low',
+            semanticKind: 'contradicts',
+            verificationStatus: 'source_checked',
+            note: 'Synthetic review note',
+            reviewedRevisions: review.expectedEntryRevisions,
+          },
+        },
+      }),
+    );
+    await expect(
+      harness.service.reviewInformationEntryGraphSources(ENTRY_A, ENTRY_B, {
+        ...review,
+        label: 'do not edit',
+      }),
+    ).resolves.toMatchObject({statusCode: 422});
+    expect(harness.write).toHaveBeenCalledTimes(1);
+  });
+  it('rejects stale displayed Entry or override versions before writing and propagates a race detected inside the lock', async () => {
+    const harness = sourceReviewHarness();
+    for (const request of [
+      {...review, expectedRevision: 1},
+      {
+        ...review,
+        expectedEntryRevisions: {entryLowRevision: 2, entryHighRevision: 1},
+      },
+      {
+        ...review,
+        expectedEntryRevisions: {entryLowRevision: 1, entryHighRevision: 2},
+      },
+    ]) {
+      await expect(
+        harness.service.reviewInformationEntryGraphSources(
+          ENTRY_A,
+          ENTRY_B,
+          request,
+        ),
+      ).resolves.toMatchObject({
+        statusCode: 409,
+        body: {issue: {code: 'stale_source_review'}},
+      });
+    }
+    expect(harness.write).not.toHaveBeenCalled();
+    harness.write.mockResolvedValueOnce('stale');
+    await expect(
+      harness.service.reviewInformationEntryGraphSources(
+        ENTRY_A,
+        ENTRY_B,
+        review,
+      ),
+    ).resolves.toMatchObject({
+      statusCode: 409,
+      body: {issue: {code: 'stale_source_review'}},
+    });
+  });
+  it('does not review blocked, retired or privacy-invisible edges, and requires explicit private scope', async () => {
+    for (const options of [
+      {blocked: true},
+      {retired: true},
+      {isPrivate: true},
+    ]) {
+      const harness = sourceReviewHarness(options);
+      await expect(
+        harness.service.reviewInformationEntryGraphSources(
+          ENTRY_A,
+          ENTRY_B,
+          review,
+        ),
+      ).resolves.toMatchObject({statusCode: 404});
+      expect(harness.write).not.toHaveBeenCalled();
+    }
+    const privateHarness = sourceReviewHarness({isPrivate: true});
+    await expect(
+      privateHarness.service.reviewInformationEntryGraphSources(
+        ENTRY_A,
+        ENTRY_B,
+        {...review, includePrivate: true},
+      ),
+    ).resolves.toMatchObject({statusCode: 200});
+    expect(privateHarness.write).toHaveBeenCalledWith(
+      expect.objectContaining({includePrivate: true}),
+    );
+  });
+  it('rejects source-checked graph edits without a displayed pair revision', async () => {
+    const harness = sourceReviewHarness();
+    await expect(
+      harness.service.reviseInformationEntryKnowledgeGraphEdge(
+        ENTRY_A,
+        ENTRY_B,
+        {
+          operation: 'edit',
+          expectedRevision: 2,
+          includePrivate: false,
+          label: 'Synthetic relation',
+          direction: 'symmetric',
+          verificationStatus: 'source_checked',
+        },
+      ),
+    ).resolves.toMatchObject({statusCode: 422});
+    expect(harness.write).not.toHaveBeenCalled();
+  });
+});
+
+function sourceReviewHarness(
+  options: {blocked?: boolean; retired?: boolean; isPrivate?: boolean} = {},
+) {
+  const all = [
+    entry(ENTRY_A, false),
+    entry(ENTRY_B, options.isPrivate ?? false),
+  ];
+  const loadByIds = vi.fn(
+    (_workspaceId: string, includePrivate: boolean, ids: readonly string[]) =>
+      Promise.resolve(
+        all.filter(
+          (row) =>
+            ids.includes(row.entryId) &&
+            (includePrivate || !row.value.isPrivate) &&
+            !(options.retired === true && row.entryId === ENTRY_B),
+        ),
+      ),
+  );
+  const write = vi
+    .fn<
+      (
+        write: Readonly<InformationEntryAssociationOverrideWrite>,
+      ) => Promise<'applied' | 'stale' | 'not_found' | 'unchanged'>
+    >()
+    .mockResolvedValue('applied');
+  const base = dependencies({});
+  const deps: M1cApiServiceDependencies = {
+    ...base,
+    informationEntryRepository: {
+      ...base.informationEntryRepository,
+      loadCurrentEntries: () =>
+        Promise.reject(new Error('Unbounded Entry read')),
+      loadCurrentEntriesByIds: loadByIds,
+    },
+    informationEntryAssociationRepository: {
+      ...base.informationEntryAssociationRepository,
+      loadAssociationSnapshot: () =>
+        Promise.reject(new Error('Unbounded association read')),
+      loadAssociationSnapshotForEntries: () =>
+        Promise.resolve({
+          projections: [],
+          overrides: [
+            {
+              workspaceId: WORKSPACE_ID,
+              entryLowId: ENTRY_A,
+              entryHighId: ENTRY_B,
+              revision: 2,
+              revisionId: '30000000-0000-4000-8000-000000000001',
+              value: {
+                action: 'weaken',
+                manualAdjustment: -1500,
+                isBlocked: options.blocked ?? false,
+                graph: {
+                  origin: 'ai',
+                  label: 'Synthetic relation',
+                  direction: 'high_to_low',
+                  semanticKind: 'contradicts',
+                  verificationStatus: 'needs_review',
+                  note: 'Synthetic original note',
+                },
+              },
+            },
+          ],
+        }),
+      writeAssociationOverride: write,
+    },
+  };
+  return {deps, loadByIds, write, service: new M1cApiService(deps)};
+}
 
 function dependencies(
   overrides: Partial<M1cApiServiceDependencies>,

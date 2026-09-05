@@ -1,6 +1,8 @@
+import {verifyMarkdownExportCandidate} from './markdown_export_candidate.js';
 import {spawn} from 'node:child_process';
 import {verifyCurrentReadCandidate} from './current_read_candidate.js';
 import {verifyIncrementalIndexCandidate} from './incremental_index_candidate.js';
+import {verifySourceReviewCandidate} from './source_review_candidate.js';
 import {createHash, randomBytes, randomUUID} from 'node:crypto';
 import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import {arch, platform, tmpdir} from 'node:os';
@@ -166,6 +168,12 @@ export interface M2P0dReport {
   readonly incrementalIndex: Awaited<
     ReturnType<typeof verifyIncrementalIndexCandidate>
   >;
+  readonly markdownExport: Awaited<
+    ReturnType<typeof verifyMarkdownExportCandidate>
+  >;
+  readonly sourceReview: Awaited<
+    ReturnType<typeof verifySourceReviewCandidate>
+  >;
   readonly productFlow: Readonly<{
     indexedEntries: number;
     lexicalMatchCount: number;
@@ -330,6 +338,7 @@ export async function runM2P0dPostgresWorkload(
 
     stage = 'migration_failed';
     const migrationStarted = performance.now();
+    activeBoundary = 'createSyntheticRuntimeRole';
     await createRuntimeRole(containerName, password);
     const migratorUrl = connectionUrl(MIGRATOR_ROLE, password, port);
     const runtimeUrl = connectionUrl(RUNTIME_ROLE, password, port);
@@ -344,6 +353,7 @@ export async function runM2P0dPostgresWorkload(
       connector: new PgMigrationConnector(),
       logger: SILENT_MIGRATION_LOGGER,
     };
+    activeBoundary = 'applySyntheticMigrations';
     const migrated = await executeMigrations(migrationOptions);
     const migrationReplay = await executeMigrations(migrationOptions);
     if (migrated.outcome !== 'applied' || migrationReplay.outcome !== 'noop') {
@@ -699,6 +709,18 @@ export async function runM2P0dPostgresWorkload(
       WORKSPACE_ID,
     );
     timings.incrementalIndexMilliseconds = elapsed(incrementalStarted);
+    activeBoundary = 'verifySourceReviewCandidate';
+    const sourceReview = await verifySourceReviewCandidate(
+      runtimePool,
+      WORKSPACE_ID,
+    );
+    activeBoundary = 'verifyMarkdownExportCandidate';
+    const markdownExport = await verifyMarkdownExportCandidate(
+      runtimePool,
+      WORKSPACE_ID,
+      blobStore,
+      layout.areaRoots.exports,
+    );
     const totalMilliseconds = elapsed(started);
     result = Object.freeze({
       schemaVersion: M2_P0D_REPORT_SCHEMA,
@@ -735,6 +757,8 @@ export async function runM2P0dPostgresWorkload(
       productFlow,
       readCandidate,
       incrementalIndex,
+      sourceReview,
+      markdownExport,
       measurements: Object.freeze({
         ...roundedTimings(timings),
         totalMilliseconds: round(totalMilliseconds),

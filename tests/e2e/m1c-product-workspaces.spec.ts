@@ -1,8 +1,17 @@
+import {createHash} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import {EntryMarkdownExportService} from '../../apps/server/src/modules/entries/information_entry_markdown_export_service.js';
+import type {CurrentInformationEntry} from '../../apps/server/src/modules/entries/information_entry_contract.js';
+import type {EntryMarkdownExportRepositoryPort} from '../../apps/server/src/modules/entries/information_entry_markdown_export.js';
 import {Buffer} from 'node:buffer';
 
 import {expect, test, type Locator, type Page} from '@playwright/test';
 
 import type {
+  InformationEntrySourceReviewItem,
+  InformationEntrySourceReview,
+  EntrySavedQuery,
+  EntrySavedQueries,
   InformationEntrySearchIndexStatus,
   InformationEntrySearchIndexRefreshResponse,
 } from '../../apps/web/src/api/m1c_api_contract.js';
@@ -494,6 +503,15 @@ async function installCurrentProductApi(
           entries: [],
         },
         status: 200,
+      });
+      return;
+    }
+    if (path === '/api/v1/entries/saved-queries') {
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          savedQueries: {version: 1, revision: 0, views: []},
+        },
       });
       return;
     }
@@ -2609,4 +2627,1324 @@ test('refreshes an accepted AI relation after a manual graph save is rejected', 
   await expect(edge).toHaveAttribute('aria-label', /合成接受关系/);
   await expect(edge).toHaveAttribute('data-origin', 'ai_assisted');
   expect(accepted).toBe(true);
+});
+
+async function installSavedQueryApi(
+  page: Page,
+  initial: readonly Readonly<EntrySavedQuery>[] = [],
+) {
+  await installCurrentProductApi(page);
+  await page.route('**/api/v1/entries/search/index', (route) =>
+    route.fulfill({
+      json: {
+        status: 'ok',
+        index: {...syntheticIndexStatus(1, 0, false), publicEntryCount: 1},
+      },
+    }),
+  );
+  let savedQueries: EntrySavedQueries = {
+    version: 1,
+    revision: 0,
+    views: [...initial],
+  };
+  const writes: Record<string, unknown>[] = [];
+  const reads: Record<string, unknown>[] = [];
+  await page.route('**/api/v1/entries/saved-queries', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({json: {status: 'ok', savedQueries}});
+      return;
+    }
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    writes.push(body);
+    if (body.expectedRevision !== savedQueries.revision) {
+      await route.fulfill({
+        status: 409,
+        json: {
+          status: 'rejected',
+          issue: {code: 'saved_queries_revision_conflict'},
+        },
+      });
+      return;
+    }
+    const prior = savedQueries.views.find(
+      (view) => view.viewId === body.viewId,
+    );
+    const views = savedQueries.views.filter(
+      (view) => view.viewId !== body.viewId,
+    );
+    if (body.operation === 'save')
+      views.push({
+        viewId: body.viewId as string,
+        name: body.name as string,
+        query: body.query as EntrySavedQuery['query'],
+        ...(body.selectedEntryId === undefined
+          ? {}
+          : {selectedEntryId: body.selectedEntryId as string}),
+      });
+    if (body.operation === 'rename' && prior !== undefined)
+      views.push({...prior, name: body.name as string});
+    savedQueries = {
+      ...savedQueries,
+      revision: savedQueries.revision + 1,
+      views,
+    };
+    await route.fulfill({json: {status: 'applied', savedQueries}});
+  });
+  await page.route('**/api/v1/entries/query-context', async (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    reads.push(body);
+    await route.fulfill({
+      json: {
+        status: 'ok',
+        entry: {
+          ...SYNTHETIC_ENTRY,
+          entryId: body.entryId,
+          value: {
+            ...SYNTHETIC_ENTRY.value,
+            titlePath: '合成上次条目',
+            body: '合成当前版本正文',
+            isPrivate: body.includePrivate === true,
+          },
+        },
+      },
+    });
+  });
+  return {writes, reads, state: () => savedQueries};
+}
+
+async function openSavedQueryPanel(page: Page) {
+  const panel = page.locator('.saved-query-panel');
+  if ((await panel.getAttribute('open')) === null)
+    await panel.locator('summary').click();
+  return panel;
+}
+
+test('saves and reopens named queries with current source and graph return', async ({
+  page,
+}) => {
+  const fixture = await installSavedQueryApi(page);
+  const sourceReads: string[] = [];
+  await page.route('**/api/v1/evidence/snapshots/*', async (route) => {
+    sourceReads.push(route.request().url());
+    await route.fulfill({json: {status: 'ok', snapshot: SYNTHETIC_SNAPSHOT}});
+  });
+  const graphReads: Record<string, unknown>[] = [];
+  await page.route('**/api/v1/knowledge-graph/view', async (route) => {
+    graphReads.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      json: {
+        status: 'ok',
+        querySha256: '0'.repeat(64),
+        candidateTotalCount: 1,
+        candidates: [],
+        graph: {
+          center: SYNTHETIC_ENTRY,
+          nodes: [SYNTHETIC_ENTRY],
+          edges: [],
+          hiddenEdges: [],
+        },
+      },
+    });
+  });
+  await page.goto('/');
+  const nav = page.getByRole('navigation', {name: '产品工作区'});
+  await nav.getByRole('button', {name: '查询', exact: true}).click();
+  await page
+    .getByRole('searchbox', {name: '搜索信息条目'})
+    .fill('合成检索条件');
+  await expect(page.getByText('条件已更改', {exact: true})).toHaveCount(0);
+  await expect(page.getByRole('region', {name: '条目查询结果'})).toBeVisible();
+  const panel = await openSavedQueryPanel(page);
+  await panel.getByRole('textbox', {name: '查询名称'}).fill('合成常用查询');
+  await panel.getByRole('button', {name: '另存当前查询'}).click();
+  await expect(panel.getByText('查询条件与当前位置已保存。')).toBeVisible();
+  expect(fixture.writes[0]).toMatchObject({
+    query: {text: '合成检索条件'},
+    selectedEntryId: ENTRY_ID,
+  });
+  expect(fixture.writes[0]?.query).not.toHaveProperty('after');
+  await page.reload();
+  await nav.getByRole('button', {name: '查询', exact: true}).click();
+  await openSavedQueryPanel(page);
+  await panel
+    .getByRole('combobox', {name: '已保存查询'})
+    .selectOption({label: '合成常用查询'});
+  await panel.getByRole('button', {name: '打开查询', exact: true}).click();
+  await expect(page.getByRole('searchbox', {name: '搜索信息条目'})).toHaveValue(
+    '合成检索条件',
+  );
+  await page.getByRole('button', {name: '查看原文', exact: true}).click();
+  await expect(
+    page.getByText(SYNTHETIC_FRAGMENT_TEXT, {exact: true}).first(),
+  ).toBeVisible();
+  expect(sourceReads.at(-1)).toContain(SNAPSHOT_ID);
+  expect(sourceReads.at(-1)).not.toContain('includePrivate=true');
+  await page.getByRole('button', {name: '关闭来源原文'}).click();
+  await expect(page.getByRole('searchbox', {name: '搜索信息条目'})).toHaveValue(
+    '合成检索条件',
+  );
+  await page.getByRole('button', {name: '在图谱中查看', exact: true}).click();
+  await expect(
+    page.getByRole('heading', {name: '知识', exact: true}),
+  ).toBeVisible();
+  expect(graphReads.at(-1)).toMatchObject({
+    centerEntryId: ENTRY_ID,
+    includePrivate: false,
+  });
+  await page.getByRole('button', {name: '返回查询', exact: true}).click();
+  await expect(page.getByRole('searchbox', {name: '搜索信息条目'})).toHaveValue(
+    '合成检索条件',
+  );
+  await expect(
+    page.locator('.entry-result-list button[data-active="true"]'),
+  ).toContainText('合成公开 Entry');
+  await openSavedQueryPanel(page);
+  await panel
+    .getByRole('combobox', {name: '已保存查询'})
+    .selectOption({label: '合成常用查询'});
+  await panel.getByRole('textbox', {name: '查询名称'}).fill('合成新名称');
+  await panel.getByRole('button', {name: '重命名', exact: true}).click();
+  await expect(panel.getByText('查询已重命名。')).toBeVisible();
+  await page
+    .getByRole('searchbox', {name: '搜索信息条目'})
+    .fill('合成更新条件');
+  await expect(page.getByText('条件已更改', {exact: true})).toHaveCount(0);
+  await panel.getByRole('button', {name: '更新条件与位置'}).click();
+  await expect(panel.getByText('查询条件与当前位置已保存。')).toBeVisible();
+  expect(fixture.state().views[0]?.query.text).toBe('合成更新条件');
+  await panel.getByRole('button', {name: '删除查询'}).click();
+  await expect(panel.getByText('查询已删除，条目和来源保留。')).toBeVisible();
+  expect(fixture.state().views).toEqual([]);
+});
+
+test('restores an off-page selection and requires fresh private scope after navigation', async ({
+  page,
+}) => {
+  const publicView = {
+    viewId: WORKSPACE_ID,
+    name: '合成公开位置',
+    query: {includePrivate: false},
+    selectedEntryId: EXPLORATION_ENTRY_ID,
+  };
+  const privateView = {
+    viewId: RESOURCE_ID,
+    name: '合成隐私位置',
+    query: {includePrivate: true, onlyPrivate: true},
+    selectedEntryId: EXPLORATION_ENTRY_ID,
+  };
+  const fixture = await installSavedQueryApi(page, [publicView, privateView]);
+  const searches: Record<string, unknown>[] = [];
+  await page.route('**/api/v1/entries/search', async (route) => {
+    searches.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      json: {
+        status: 'ok',
+        totalCount: 1,
+        items: [{entry: SYNTHETIC_ENTRY, matchReasons: [], filterReasons: []}],
+        privateDocuments: {totalCount: 0, items: []},
+      },
+    });
+  });
+  await page.goto('/');
+  const nav = page.getByRole('navigation', {name: '产品工作区'});
+  await nav.getByRole('button', {name: '查询', exact: true}).click();
+  const panel = await openSavedQueryPanel(page);
+  await panel
+    .getByRole('combobox', {name: '已保存查询'})
+    .selectOption(WORKSPACE_ID);
+  await panel.getByRole('button', {name: '打开查询', exact: true}).click();
+  await expect(
+    page.getByRole('region', {name: '上次查看的位置'}),
+  ).toContainText('合成当前版本正文');
+  expect(fixture.reads.at(-1)).toEqual({
+    entryId: EXPLORATION_ENTRY_ID,
+    includePrivate: false,
+    onlyPrivate: false,
+  });
+  await panel
+    .getByRole('combobox', {name: '已保存查询'})
+    .selectOption(RESOURCE_ID);
+  await panel.getByRole('button', {name: '打开查询', exact: true}).click();
+  await expect(
+    page.getByRole('region', {name: '重新选择隐私范围'}),
+  ).toBeVisible();
+  expect(searches.every((query) => query.includePrivate === false)).toBe(true);
+  expect(fixture.reads.every((query) => query.includePrivate === false)).toBe(
+    true,
+  );
+  await page.getByRole('button', {name: '按保存的隐私范围打开'}).click();
+  await expect.poll(() => searches.at(-1)?.onlyPrivate).toBe(true);
+  await expect.poll(() => fixture.reads.at(-1)?.includePrivate).toBe(true);
+  await nav.getByRole('button', {name: '总览', exact: true}).click();
+  const previousPrivateCalls = searches.filter(
+    (query) => query.includePrivate === true,
+  ).length;
+  await nav.getByRole('button', {name: '查询', exact: true}).click();
+  await expect(
+    page.getByRole('region', {name: '重新选择隐私范围'}),
+  ).toBeVisible();
+  expect(
+    searches.filter((query) => query.includePrivate === true),
+  ).toHaveLength(previousPrivateCalls);
+  await page.getByRole('button', {name: '仅公开范围打开'}).click();
+  await expect.poll(() => searches.at(-1)?.includePrivate).toBe(false);
+  await expect(
+    page.getByRole('region', {name: '重新选择隐私范围'}),
+  ).toHaveCount(0);
+});
+
+test('keeps saved-query controls responsive and offers recovery for unavailable context', async ({
+  page,
+}) => {
+  const fixture = await installSavedQueryApi(page, [
+    {
+      viewId: WORKSPACE_ID,
+      name: '合成查询名称用于较窄显示与键盘操作检查',
+      query: {
+        includePrivate: false,
+        text: 'Synthetic',
+        retrievalMode: 'semantic',
+        association: {entryId: ENTRY_ID, maximumDepth: 2, minimumScore: 0},
+      },
+      selectedEntryId: EXPLORATION_ENTRY_ID,
+    },
+  ]);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.route('**/api/v1/entries/search', async (route) => {
+    const query = route.request().postDataJSON() as Record<string, unknown>;
+    if (query.retrievalMode === 'semantic' || query.association !== undefined) {
+      await route.fulfill({
+        status: 422,
+        json: {
+          status: 'rejected',
+          issue: {
+            code:
+              query.retrievalMode === 'semantic'
+                ? 'semantic_search_not_configured'
+                : 'association_anchor_not_found',
+          },
+        },
+      });
+    } else {
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          totalCount: 0,
+          items: [],
+          privateDocuments: {totalCount: 0, items: []},
+        },
+      });
+    }
+  });
+  await page.route('**/api/v1/entries/query-context', (route) =>
+    route.fulfill({
+      status: 404,
+      json: {status: 'not_found', issue: {code: 'entry_not_found'}},
+    }),
+  );
+  await page.goto('/');
+  await page
+    .getByRole('navigation', {name: '产品工作区'})
+    .getByRole('button', {name: '查询', exact: true})
+    .click();
+  const panel = await openSavedQueryPanel(page);
+  await panel
+    .getByRole('combobox', {name: '已保存查询'})
+    .selectOption(WORKSPACE_ID);
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({width, height: 1000});
+    await panel.scrollIntoViewIfNeeded();
+    await expect(panel).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 1,
+    );
+    expect(overflow).toBe(false);
+    for (const control of await panel.locator('input, select, button').all()) {
+      const box = await control.boundingBox();
+      if (box === null) throw new Error('Saved query control is not laid out.');
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
+    }
+    if (width === 1440) {
+      const search = await page.locator('.query-studio-search').boundingBox();
+      const results = await page.locator('.query-studio-results').boundingBox();
+      if (search === null || results === null)
+        throw new Error('Query layout is missing.');
+      expect(results.y - search.y - search.height).toBeLessThanOrEqual(32);
+    }
+    await page.screenshot({
+      path: 'test-results/playwright/saved-query-' + width.toString() + '.png',
+      fullPage: true,
+    });
+  }
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const open = panel.getByRole('button', {name: '打开查询', exact: true});
+  await open.focus();
+  await open.press('Enter');
+  await page.getByRole('button', {name: '改用文字查询'}).click();
+  await page.getByRole('button', {name: '清除关联中心后查询'}).click();
+  await expect(
+    page.getByRole('heading', {name: '当前范围还没有条目'}),
+  ).toBeVisible();
+  // Reopen without unavailable filters so the missing selected position is read independently.
+  await page.route('**/api/v1/entries/saved-queries', (route) =>
+    route.fulfill({
+      json: {
+        status: 'ok',
+        savedQueries: {
+          version: 1,
+          revision: 1,
+          views: [
+            {...fixture.state().views[0], query: {includePrivate: false}},
+          ],
+        },
+      },
+    }),
+  );
+  await panel.getByRole('button', {name: '重新读取', exact: true}).click();
+  await panel.getByRole('button', {name: '打开查询', exact: true}).click();
+  await expect(
+    page.getByRole('region', {name: '上次查看的位置'}),
+  ).toContainText('上次查看的条目已不存在');
+  expect(errors).toEqual([]);
+});
+
+test('discards a late private reading position and recovers from saved-view conflicts', async ({
+  page,
+}) => {
+  const view = {
+    viewId: WORKSPACE_ID,
+    name: '合成隐私回归',
+    query: {includePrivate: true},
+    selectedEntryId: EXPLORATION_ENTRY_ID,
+  };
+  await installSavedQueryApi(page, [view]);
+  const gate = controlledGate();
+  let contextStarted = false;
+  await page.route('**/api/v1/entries/query-context', async (route) => {
+    contextStarted = true;
+    await gate.promise;
+    await route.fulfill({
+      json: {
+        status: 'ok',
+        entry: {
+          ...SYNTHETIC_ENTRY,
+          entryId: EXPLORATION_ENTRY_ID,
+          value: {
+            ...SYNTHETIC_ENTRY.value,
+            body: '合成迟到隐私正文',
+            isPrivate: true,
+          },
+        },
+      },
+    });
+  });
+  await page.goto('/');
+  await page
+    .getByRole('navigation', {name: '产品工作区'})
+    .getByRole('button', {name: '查询', exact: true})
+    .click();
+  const panel = await openSavedQueryPanel(page);
+  await panel
+    .getByRole('combobox', {name: '已保存查询'})
+    .selectOption(WORKSPACE_ID);
+  await panel.getByRole('button', {name: '打开查询', exact: true}).click();
+  await page.getByRole('button', {name: '按保存的隐私范围打开'}).click();
+  await expect.poll(() => contextStarted).toBe(true);
+  await page.getByRole('combobox', {name: '隐私结果'}).selectOption('public');
+  const response = page.waitForResponse('**/api/v1/entries/query-context');
+  gate.release();
+  await response;
+  await expect(page.getByText('合成迟到隐私正文', {exact: true})).toHaveCount(
+    0,
+  );
+  const clearedSearch = controlledGate();
+  await page.route('**/api/v1/entries/search', async (route) => {
+    const request = route.request().postDataJSON() as Record<string, unknown>;
+    const privateScope = request.includePrivate === true;
+    if (!privateScope) await clearedSearch.promise;
+    await route.fulfill({
+      json: {
+        status: 'ok',
+        querySha256: '0'.repeat(64),
+        totalCount: privateScope ? 1 : 0,
+        items: privateScope
+          ? [
+              {
+                entry: {
+                  ...SYNTHETIC_ENTRY,
+                  value: {
+                    ...SYNTHETIC_ENTRY.value,
+                    body: '合成当前隐私条目正文',
+                    isPrivate: true,
+                  },
+                },
+                matchReasons: [],
+                filterReasons: [],
+              },
+            ]
+          : [],
+        privateDocuments: {totalCount: 0, items: []},
+      },
+    });
+  });
+  await page.getByRole('combobox', {name: '隐私结果'}).selectOption('all');
+  await expect(
+    page.getByText('合成当前隐私条目正文', {exact: true}),
+  ).toBeVisible();
+  await page.getByRole('button', {name: '清除筛选', exact: true}).click();
+  expect(
+    await page.getByText('合成当前隐私条目正文', {exact: true}).count(),
+  ).toBe(0);
+  clearedSearch.release();
+  await page.route('**/api/v1/entries/saved-queries', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({
+        status: 409,
+        json: {
+          status: 'rejected',
+          issue: {code: 'saved_queries_revision_conflict'},
+        },
+      });
+    } else {
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          savedQueries: {
+            version: 1,
+            revision: 2,
+            views: [{...view, name: '合成另一处更改'}],
+          },
+        },
+      });
+    }
+  });
+  await panel.getByRole('textbox', {name: '查询名称'}).fill('合成重命名草稿');
+  await panel.getByRole('button', {name: '重命名', exact: true}).click();
+  await expect(
+    panel.getByText('保存的查询已在另一处更改，请重新读取后再操作。'),
+  ).toBeVisible();
+  await panel.getByRole('button', {name: '重新读取', exact: true}).click();
+  await expect(panel.getByRole('combobox', {name: '已保存查询'})).toContainText(
+    '合成另一处更改',
+  );
+});
+
+async function installSourceReviewFixture(page: Page, count = 22) {
+  await installGraphReadCandidate(page);
+  const rows: InformationEntrySourceReviewItem[] = Array.from(
+    {length: count},
+    (_, i) => {
+      const right = {
+        ...SYNTHETIC_ENTRY,
+        entryId:
+          '44444444-4444-4444-8444-' + (i + 100).toString().padStart(12, '0'),
+        snapshotId: '33333333-3333-4333-8333-333333333334',
+        value: {
+          ...SYNTHETIC_ENTRY.value,
+          titlePath: '合成右端条目 ' + (i + 1).toString(),
+          body: '合成右端来源正文。',
+        },
+      };
+      // Use canonical pair order for the displayed revision binding.
+      const left = {
+        ...SYNTHETIC_ENTRY,
+        entryId: '44444444-4444-4444-8444-000000000001',
+      };
+      return {
+        entryLow: left,
+        entryHigh: right,
+        edge: {
+          entryLowId: left.entryId,
+          entryHighId: right.entryId,
+          label: '合成复核关系 ' + (i + 1).toString(),
+          direction: 'high_to_low',
+          origin: 'ai_assisted',
+          semanticKind: 'contradicts',
+          verificationStatus: 'needs_review',
+          note: '合成旧说明',
+          isBlocked: false,
+          overrideRevision: 2,
+          effectiveScore: 5000,
+        },
+        review: {
+          status: 'needs_review',
+          storedStatus: 'source_checked',
+          reason: 'unbound',
+        },
+      };
+    },
+  );
+  const first = rows[0];
+  if (first === undefined) throw new Error('Expected review fixture.');
+  const privateRow = {
+    ...first,
+    entryLow: {
+      ...SYNTHETIC_ENTRY,
+      entryId: '44444444-4444-4444-8444-000000000002',
+      value: {
+        ...SYNTHETIC_ENTRY.value,
+        isPrivate: true,
+        titlePath: '合成隐私左端',
+      },
+    },
+    entryHigh: {
+      ...SYNTHETIC_ENTRY,
+      entryId: '44444444-4444-4444-8444-000000000999',
+      value: {
+        ...SYNTHETIC_ENTRY.value,
+        isPrivate: true,
+        titlePath: '合成隐私右端',
+      },
+    },
+  };
+  const privateItem: InformationEntrySourceReviewItem = {
+    ...privateRow,
+    edge: {
+      ...privateRow.edge,
+      entryLowId: privateRow.entryLow.entryId,
+      entryHighId: privateRow.entryHigh.entryId,
+      label: '合成隐私复核关系',
+    },
+  };
+  rows.push(privateItem);
+  const reads: Record<string, unknown>[] = [];
+  const writes: Record<string, unknown>[] = [];
+  const evidence: string[] = [];
+  let readGate: Promise<void> | undefined,
+    writeGate: Promise<void> | undefined,
+    evidenceGate: Promise<void> | undefined;
+  let failWrite = false;
+  await page.route(
+    '**/api/v1/knowledge-graph/source-reviews',
+    async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      reads.push(body);
+      const wait = readGate;
+      readGate = undefined;
+      const visible = rows
+        .filter((row) =>
+          body.privacyScope === 'private_only'
+            ? row.entryLow.value.isPrivate && row.entryHigh.value.isPrivate
+            : body.privacyScope === 'include_private' ||
+              (!row.entryLow.value.isPrivate && !row.entryHigh.value.isPrivate),
+        )
+        .filter(
+          (row) =>
+            body.filter === 'all' ||
+            (body.filter === 'pending'
+              ? row.review.status !== 'source_checked'
+              : row.review.status === body.filter),
+        );
+      const after = body.after as {entryHighId: string} | undefined;
+      const start =
+        after === undefined
+          ? 0
+          : visible.findIndex(
+              (row) => row.edge.entryHighId === after.entryHighId,
+            ) + 1;
+      const items = visible.slice(start, start + 20);
+      const last = items.at(-1);
+      const response = {
+        status: 'ok',
+        totalCount: visible.length,
+        items,
+        ...(last !== undefined && start + 20 < visible.length
+          ? {
+              nextCursor: {
+                version: 1,
+                filter: body.filter,
+                privacyScope: body.privacyScope,
+                entryLowId: last.edge.entryLowId,
+                entryHighId: last.edge.entryHighId,
+              },
+            }
+          : {}),
+      };
+      if (wait !== undefined) await wait;
+      await route.fulfill({json: response});
+    },
+  );
+  await page.route(
+    '**/api/v1/knowledge-graph/edges/*/*/source-review',
+    async (route) => {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      writes.push(body);
+      const row = rows.find((item) =>
+        route
+          .request()
+          .url()
+          .includes(item.edge.entryLowId + '/' + item.edge.entryHighId),
+      );
+      const wait = writeGate;
+      writeGate = undefined;
+      if (wait !== undefined) await wait;
+      if (failWrite) {
+        failWrite = false;
+        if (row !== undefined)
+          rows[rows.indexOf(row)] = {
+            ...row,
+            entryHigh: {...row.entryHigh, revision: row.entryHigh.revision + 1},
+            review: {
+              ...row.review,
+              reason: 'entry_changed',
+              reviewedRevisions: {entryLowRevision: 1, entryHighRevision: 1},
+            },
+          };
+        await route.fulfill({
+          status: 409,
+          json: {status: 'rejected', issue: {code: 'stale_source_review'}},
+        });
+        return;
+      }
+      if (row !== undefined) {
+        const status =
+          body.verificationStatus as InformationEntrySourceReview['status'];
+        const revisions = body.expectedEntryRevisions as {
+          entryLowRevision: number;
+          entryHighRevision: number;
+        };
+        const index = rows.indexOf(row);
+        rows[index] = {
+          ...row,
+          edge: {
+            ...row.edge,
+            overrideRevision: row.edge.overrideRevision + 1,
+            note: String(body.note),
+            verificationStatus: status,
+          },
+          review: {
+            status,
+            storedStatus: status,
+            reason:
+              status === 'source_checked'
+                ? 'current'
+                : status === 'needs_review'
+                  ? 'owner_requested'
+                  : 'not_reviewed',
+            reviewedRevisions: revisions,
+          },
+        };
+      }
+      await route.fulfill({json: {status: 'applied'}});
+    },
+  );
+  await page.route('**/api/v1/evidence/snapshots/*', async (route) => {
+    evidence.push(route.request().url());
+    const wait = evidenceGate;
+    evidenceGate = undefined;
+    if (wait !== undefined) await wait;
+    const right = route.request().url().includes('333333333334');
+    const text = right ? '合成右端原文' : SYNTHETIC_FRAGMENT_TEXT;
+    await route.fulfill({
+      json: {
+        status: 'ok',
+        snapshot: {
+          ...SYNTHETIC_SNAPSHOT,
+          structures: [
+            {
+              ...SYNTHETIC_SNAPSHOT.structures[0],
+              normalizedText: text,
+              fragments: [
+                {
+                  ...SYNTHETIC_SNAPSHOT.structures[0]?.fragments[0],
+                  selectedText: text,
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+  });
+  return {
+    reads,
+    writes,
+    evidence,
+    failNextWrite() {
+      failWrite = true;
+    },
+    holdRead(gate: Promise<void>) {
+      readGate = gate;
+    },
+    holdWrite(gate: Promise<void>) {
+      writeGate = gate;
+    },
+    holdEvidence(gate: Promise<void>) {
+      evidenceGate = gate;
+    },
+  };
+}
+async function openSourceReview(page: Page) {
+  await page.goto('/');
+  await page
+    .getByRole('navigation', {name: '产品工作区'})
+    .getByRole('button', {name: '知识', exact: true})
+    .click();
+  const action = page.getByRole('button', {name: '来源复核', exact: true});
+  await action.focus();
+  await action.press('Enter');
+  await expect(
+    page.getByRole('heading', {name: '来源复核', exact: true}),
+  ).toBeVisible();
+}
+test('reviews both exact sources, binds displayed revisions, handles conflicts and continues through pages', async ({
+  page,
+}) => {
+  const fixture = await installSourceReviewFixture(page);
+  await openSourceReview(page);
+  const editor = page.getByRole('region', {name: '关系来源复核', exact: true});
+  await expect(editor).toContainText('已有来源核验记录尚未绑定条目版本');
+  await expect(editor).toContainText('右端指向左端');
+  for (const [region, text] of [
+    ['左端条目', SYNTHETIC_FRAGMENT_TEXT],
+    ['右端条目', '合成右端原文'],
+  ] as const) {
+    const source = page
+      .getByRole('region', {name: region, exact: true})
+      .getByRole('button', {name: '查看原文'});
+    await source.click();
+    await expect(page.locator('.excerpt-panel blockquote')).toHaveText(text);
+    await page.getByRole('button', {name: '关闭来源原文'}).click();
+    await expect(source).toBeFocused();
+  }
+  expect(fixture.evidence.some((url) => url.includes('333333333334'))).toBe(
+    true,
+  );
+  await editor
+    .getByRole('combobox', {name: '本次核验状态', exact: true})
+    .selectOption('source_checked');
+  await editor
+    .getByRole('textbox', {name: '维护说明', exact: true})
+    .fill('合成核验说明');
+  await editor.getByRole('button', {name: '保存并继续'}).click();
+  await expect(editor.getByRole('heading', {level: 2})).toHaveText(
+    '合成复核关系 2',
+  );
+  expect(fixture.writes[0]).toEqual({
+    expectedRevision: 2,
+    expectedEntryRevisions: {entryLowRevision: 1, entryHighRevision: 1},
+    includePrivate: false,
+    verificationStatus: 'source_checked',
+    note: '合成核验说明',
+  });
+  fixture.failNextWrite();
+  await editor.getByRole('button', {name: '保存并继续'}).click();
+  await expect(
+    page.getByText('关系或条目可能已变化，复核没有保存。请重新读取后核对。'),
+  ).toBeVisible();
+  await page.getByRole('button', {name: '重新读取', exact: true}).click();
+  await expect(editor).toContainText('条目版本已变化');
+  await expect(editor).toContainText('当前条目版本：左 1 / 右 2');
+  await page
+    .getByRole('combobox', {name: '核验状态', exact: true})
+    .selectOption('source_checked');
+  await expect(
+    editor.getByRole('textbox', {name: '维护说明', exact: true}),
+  ).toHaveValue('合成核验说明');
+  await page
+    .getByRole('combobox', {name: '核验状态', exact: true})
+    .selectOption('all');
+  await expect(
+    page.getByRole('navigation', {name: '待复核关系'}).getByRole('button'),
+  ).toHaveCount(20);
+  const last = page
+    .getByRole('navigation', {name: '待复核关系'})
+    .getByRole('button')
+    .last();
+  await last.click();
+  await editor.getByRole('button', {name: '保存并继续'}).click();
+  await expect(editor.getByRole('heading', {level: 2})).toHaveText(
+    '合成复核关系 21',
+  );
+  await expect(
+    page.getByText('22 条关系 · 第 2 批', {exact: true}),
+  ).toBeVisible();
+  await page.getByRole('button', {name: '上一批'}).click();
+  await expect(
+    page.getByRole('navigation', {name: '待复核关系'}).getByRole('button'),
+  ).toHaveCount(20);
+  await page.getByRole('button', {name: '返回图谱'}).click();
+  await expect(
+    page.getByRole('heading', {name: '知识', exact: true}),
+  ).toBeVisible();
+});
+
+test('clears private source reviews and rejects late list, evidence and save responses after scope changes', async ({
+  page,
+}) => {
+  const fixture = await installSourceReviewFixture(page, 1);
+  await openSourceReview(page);
+  const scope = page.getByRole('combobox', {name: '复核隐私范围', exact: true});
+  const editor = page.getByRole('region', {name: '关系来源复核', exact: true});
+  const pendingList = controlledGate();
+  fixture.holdRead(pendingList.promise);
+  await scope.selectOption('private_only');
+  await expect
+    .poll(() => fixture.reads.at(-1)?.privacyScope)
+    .toBe('private_only');
+  await scope.selectOption('public');
+  pendingList.release();
+  await expect(editor).toContainText('合成公开 Entry');
+  await expect(page.getByText('合成隐私左端', {exact: true})).toHaveCount(0);
+  await scope.selectOption('private_only');
+  await expect(editor).toContainText('合成隐私左端');
+  const pendingEvidence = controlledGate();
+  fixture.holdEvidence(pendingEvidence.promise);
+  await page
+    .getByRole('region', {name: '左端条目', exact: true})
+    .getByRole('button', {name: '查看原文'})
+    .click();
+  await expect
+    .poll(() => fixture.evidence.at(-1)?.includes('includePrivate=true'))
+    .toBe(true);
+  await scope.selectOption('public');
+  pendingEvidence.release();
+  await expect(page.locator('.excerpt-panel')).toHaveCount(0);
+  await scope.selectOption('private_only');
+  await expect(editor).toContainText('合成隐私左端');
+  const pendingWrite = controlledGate();
+  fixture.holdWrite(pendingWrite.promise);
+  await editor
+    .getByRole('combobox', {name: '本次核验状态', exact: true})
+    .selectOption('source_checked');
+  await editor.getByRole('button', {name: '保存并继续'}).click();
+  await expect.poll(() => fixture.writes.length).toBe(1);
+  await scope.selectOption('public');
+  pendingWrite.release();
+  await expect(editor).toContainText('合成公开 Entry');
+  await expect(page.getByText('复核已保存，可继续下一项。')).toHaveCount(0);
+  await expect(page.getByText('合成隐私左端', {exact: true})).toHaveCount(0);
+  expect(fixture.writes[0]?.includePrivate).toBe(true);
+  await scope.selectOption('private_only');
+  await expect(
+    page.getByRole('heading', {name: '当前范围没有符合条件的关系'}),
+  ).toBeVisible();
+});
+test('keeps the source review workbench usable at desktop and narrow widths', async ({
+  page,
+}, testInfo) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await installSourceReviewFixture(page, 2);
+  await openSourceReview(page);
+  const sourceTitles = await page
+    .locator('.source-review-evidence h4')
+    .evaluateAll((nodes) => nodes.map((node) => node.id));
+  expect(sourceTitles).toHaveLength(2);
+  expect(new Set(sourceTitles).size).toBe(2);
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({width, height: 1000});
+    await expect(
+      page.getByRole('region', {name: '关系来源复核', exact: true}),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      ),
+    ).toBeLessThanOrEqual(1);
+    const save = page.getByRole('button', {name: '保存并继续'});
+    await save.focus();
+    await expect(save).toBeFocused();
+    await page.screenshot({
+      path: testInfo.outputPath('source-review-' + width.toString() + '.png'),
+      fullPage: true,
+      animations: 'disabled',
+    });
+  }
+  await page.emulateMedia({reducedMotion: 'reduce', forcedColors: 'active'});
+  await page
+    .getByRole('combobox', {name: '本次核验状态', exact: true})
+    .selectOption('needs_review');
+  await page
+    .getByRole('textbox', {name: '维护说明', exact: true})
+    .fill('x'.repeat(501));
+  await expect(page.getByRole('button', {name: '保存并继续'})).toBeDisabled();
+  await expect(
+    page.getByText('501 / 500 字符，请缩短说明后保存。'),
+  ).toBeVisible();
+  await page
+    .getByRole('textbox', {name: '维护说明', exact: true})
+    .fill('合成键盘维护说明');
+  await page.getByRole('button', {name: '保存并继续'}).focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    page
+      .getByRole('region', {name: '关系来源复核', exact: true})
+      .getByRole('heading', {level: 2}),
+  ).toHaveText('合成复核关系 2');
+  expect(errors).toEqual([]);
+});
+
+async function installMarkdownExportFixture(page: Page) {
+  await installSavedQueryApi(page);
+  const digest = (value: string) =>
+    createHash('sha256').update(value).digest('hex');
+  let entries: CurrentInformationEntry[] = [0, 1, 2].map((ordinal) => ({
+    ...SYNTHETIC_ENTRY,
+    entryId:
+      '44444444-4444-4444-8444-' + (ordinal + 101).toString().padStart(12, '0'),
+    value: {
+      ...SYNTHETIC_ENTRY.value,
+      titlePath:
+        ordinal === 2
+          ? '合成隐私清单资料'
+          : '合成导出条目 ' + (ordinal + 1).toString(),
+      isPrivate: ordinal === 2,
+      bodySha256: digest(SYNTHETIC_ENTRY.value.body),
+      fragmentRanges: [{startCodePoint: 1, endCodePoint: 2}],
+    },
+  }));
+  const snapshot = {
+    ...SYNTHETIC_SNAPSHOT,
+    rawSha256: digest(SYNTHETIC_FRAGMENT_TEXT),
+    structures: SYNTHETIC_SNAPSHOT.structures.map((structure) => ({
+      ...structure,
+      textBlob: {
+        ...structure.textBlob,
+        digest: digest(SYNTHETIC_FRAGMENT_TEXT),
+      },
+      fragments: structure.fragments.map((fragment) => ({
+        ...fragment,
+        selectedTextSha256: digest(SYNTHETIC_FRAGMENT_TEXT),
+      })),
+    })),
+  };
+  const writes: string[] = [];
+  const requests: Record<string, unknown>[] = [];
+  let hold: Promise<void> | undefined;
+  let failure: string | undefined;
+  const repository: EntryMarkdownExportRepositoryPort = {
+    withSelection: (_workspace, _request, work) =>
+      work({
+        entries,
+        snapshots: [snapshot],
+        associations: {projections: [], overrides: []},
+      }),
+  };
+  const service = new EntryMarkdownExportService({
+    workspaceId: WORKSPACE_ID,
+    repository,
+    blobStore: {
+      read: () =>
+        Promise.resolve(new TextEncoder().encode(SYNTHETIC_FRAGMENT_TEXT)),
+      put: () => Promise.reject(new Error('No Blob writes')),
+    },
+    files: {
+      write: (_workspace, bytes) => {
+        writes.push(new TextDecoder().decode(bytes));
+        return Promise.resolve({
+          fileName: 'synthetic.entries.md',
+          byteLength: bytes.byteLength,
+        });
+      },
+    },
+  });
+  await page.route('**/api/v1/entries/search', async (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    const privateScope = body.includePrivate === true;
+    const index = privateScope ? 2 : body.after === undefined ? 0 : 1;
+    const current = entries[index];
+    await route.fulfill({
+      json: {
+        status: 'ok',
+        totalCount: privateScope ? 1 : 2,
+        items: [{entry: current, matchReasons: [], filterReasons: []}],
+        ...(!privateScope && index === 0
+          ? {
+              nextCursor: {
+                version: 2,
+                querySha256: 'a'.repeat(64),
+                entryId: current?.entryId,
+                capturedAt: SYNTHETIC_ENTRY.capturedAt,
+                documentOrder: 0,
+              },
+            }
+          : {}),
+        privateDocuments: {totalCount: 0, items: []},
+      },
+    });
+  });
+  await page.route('**/api/v1/entries/markdown-export**', async (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>;
+    requests.push(body);
+    const pending = hold;
+    hold = undefined;
+    if (pending !== undefined) await pending;
+    if (failure !== undefined) {
+      const code = failure;
+      failure = undefined;
+      await route.fulfill({
+        status: 503,
+        json: {status: 'rejected', issue: {code}},
+      });
+      return;
+    }
+    const generating = !route.request().url().endsWith('/preview');
+    const result = await (generating
+      ? service.generate(body)
+      : service.preview(body));
+    await route.fulfill({
+      status: result.status === 'rejected' ? 409 : generating ? 201 : 200,
+      json: result,
+    });
+  });
+  return {
+    writes,
+    requests,
+    hold: (promise: Promise<void>) => {
+      hold = promise;
+    },
+    fail: (code: string) => {
+      failure = code;
+    },
+    reviseFirst: () => {
+      entries = entries.map((entry, index) =>
+        index === 0 ? {...entry, revision: entry.revision + 1} : entry,
+      );
+    },
+  };
+}
+async function openMarkdownExportPanel(page: Page) {
+  const panel = page.locator('.entry-markdown-export');
+  if ((await panel.getAttribute('open')) === null)
+    await panel.locator('summary').click();
+  return panel;
+}
+async function openQueryForExport(page: Page) {
+  await page.goto('/');
+  await page
+    .getByRole('navigation', {name: '产品工作区'})
+    .getByRole('button', {name: '查询', exact: true})
+    .click();
+  await expect(page.getByRole('region', {name: '条目查询结果'})).toContainText(
+    '合成导出条目 1',
+  );
+  return openMarkdownExportPanel(page);
+}
+
+test('exports a cited Markdown list from an explicit cross-page selection and clears changed query scope', async ({
+  page,
+}) => {
+  const fixture = await installMarkdownExportFixture(page);
+  const panel = await openQueryForExport(page);
+  await expect(
+    panel.getByRole('button', {name: '生成 Markdown 文件', exact: true}),
+  ).toBeDisabled();
+  await panel.getByRole('button', {name: '加入资料清单'}).focus();
+  await page.keyboard.press('Enter');
+  expect(fixture.requests).toHaveLength(0);
+  await page.getByRole('button', {name: '下一页', exact: true}).click();
+  await expect(page.getByRole('region', {name: '条目查询结果'})).toContainText(
+    '合成导出条目 2',
+  );
+  await panel.getByRole('button', {name: '加入资料清单'}).click();
+  await expect(
+    panel.locator('.entry-markdown-export__selection li'),
+  ).toHaveCount(2);
+  await panel.getByRole('textbox', {name: '清单标题'}).fill('合成两页资料');
+  await panel.getByRole('button', {name: '预览资料清单'}).click();
+  const preview = panel.getByRole('region', {name: '资料清单预览'});
+  await expect(preview).toContainText('Fragment 内 Unicode 范围：[1, 2)');
+  await expect(preview).toContainText('😀');
+  await expect(preview).toContainText('未包含会话内 AI 综合');
+  expect(fixture.writes).toHaveLength(0);
+  await panel
+    .getByRole('button', {name: '生成 Markdown 文件', exact: true})
+    .click();
+  await expect(panel.getByRole('link', {name: '下载 Markdown'})).toBeVisible();
+  const downloadEvent = page.waitForEvent('download');
+  await panel.getByRole('link', {name: '下载 Markdown'}).click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe('synthetic.entries.md');
+  const path = await download.path();
+  expect(await readFile(path, 'utf8')).toBe(fixture.writes[0]);
+  expect(fixture.writes[0]).toContain('# 合成两页资料');
+  const submitted = fixture.requests.at(-1);
+  expect(submitted?.entries).toHaveLength(2);
+  expect(submitted).not.toHaveProperty('markdown');
+  expect(submitted).not.toHaveProperty('path');
+  await page
+    .getByRole('searchbox', {name: '搜索信息条目'})
+    .fill('合成其他查询');
+  await expect(panel.locator('summary')).toHaveText('资料清单与导出 · 0 条');
+  expect(fixture.writes).toHaveLength(1);
+  await expect(page.getByRole('link', {name: '下载 Markdown'})).toHaveCount(0);
+});
+
+test('rejects stale Markdown selection and discards private preview and generation responses after scope changes', async ({
+  page,
+}) => {
+  const fixture = await installMarkdownExportFixture(page);
+  const panel = await openQueryForExport(page);
+  await panel.getByRole('button', {name: '加入资料清单'}).click();
+  fixture.reviseFirst();
+  await panel.getByRole('button', {name: '预览资料清单'}).click();
+  await expect(panel.getByRole('alert')).toContainText('所选条目已更新');
+  await expect(
+    panel.getByRole('button', {name: '生成 Markdown 文件', exact: true}),
+  ).toBeDisabled();
+  expect(fixture.writes).toHaveLength(0);
+  const scope = page.getByRole('combobox', {name: '隐私结果'});
+  await scope.selectOption('private');
+  await openMarkdownExportPanel(page);
+  await expect(panel).toContainText('合成隐私清单资料');
+  await panel.getByRole('button', {name: '加入资料清单'}).click();
+  const gate = controlledGate();
+  fixture.hold(gate.promise);
+  await panel.getByRole('button', {name: '预览资料清单'}).click();
+  await expect
+    .poll(() => fixture.requests.at(-1)?.privacyScope)
+    .toBe('private_only');
+  await scope.selectOption('public');
+  gate.release();
+  await openMarkdownExportPanel(page);
+  await expect(panel).not.toContainText('合成隐私清单资料');
+  await expect(panel.getByRole('region', {name: '资料清单预览'})).toHaveCount(
+    0,
+  );
+  await scope.selectOption('private');
+  await openMarkdownExportPanel(page);
+  await panel.getByRole('button', {name: '加入资料清单'}).click();
+  await panel.getByRole('button', {name: '预览资料清单'}).click();
+  await expect(panel.getByRole('region', {name: '资料清单预览'})).toContainText(
+    '仅隐私',
+  );
+  const writing = controlledGate();
+  fixture.hold(writing.promise);
+  await panel.getByRole('button', {name: '含隐私生成 Markdown 文件'}).click();
+  await expect(panel.getByRole('button', {name: '正在生成…'})).toBeVisible();
+  await scope.selectOption('public');
+  writing.release();
+  await expect.poll(() => fixture.writes.length).toBe(1);
+  await openMarkdownExportPanel(page);
+  await expect(panel.getByRole('link', {name: '下载 Markdown'})).toHaveCount(0);
+  await expect(panel).not.toContainText('合成隐私清单资料');
+});
+
+test('keeps cited Markdown controls readable across five widths and recovers from file errors', async ({
+  page,
+}, testInfo) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  const fixture = await installMarkdownExportFixture(page);
+  const panel = await openQueryForExport(page);
+  await panel.getByRole('button', {name: '加入资料清单'}).click();
+  await panel
+    .getByRole('textbox', {name: '清单标题'})
+    .fill('合成资料复用清单与精确出处，检查较窄屏幕上的长标题');
+  await panel.getByRole('button', {name: '预览资料清单'}).click();
+  await expect(panel.getByRole('region', {name: '资料清单预览'})).toBeVisible();
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({width, height: 1000});
+    await panel
+      .getByRole('button', {name: '生成 Markdown 文件', exact: true})
+      .focus();
+    await expect(
+      panel.getByRole('button', {name: '生成 Markdown 文件', exact: true}),
+    ).toBeFocused();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - innerWidth,
+      ),
+    ).toBeLessThanOrEqual(1);
+    await panel.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: testInfo.outputPath('markdown-export-' + width.toString() + '.png'),
+      fullPage: true,
+      animations: 'disabled',
+    });
+  }
+  await page.emulateMedia({reducedMotion: 'reduce', forcedColors: 'active'});
+  await panel.getByRole('textbox', {name: '清单标题'}).fill('字'.repeat(121));
+  await expect(
+    panel.getByRole('button', {name: '预览资料清单'}),
+  ).toBeDisabled();
+  await expect(panel.getByRole('region', {name: '资料清单预览'})).toHaveCount(
+    0,
+  );
+  await panel.getByRole('textbox', {name: '清单标题'}).fill('合成错误恢复');
+  await panel.getByRole('button', {name: '预览资料清单'}).click();
+  await expect(panel.getByRole('region', {name: '资料清单预览'})).toBeVisible();
+  fixture.fail('export_storage_unavailable');
+  await panel
+    .getByRole('button', {name: '生成 Markdown 文件', exact: true})
+    .focus();
+  await page.keyboard.press('Enter');
+  await expect(panel.getByRole('alert')).toContainText('文件保存失败');
+  expect(fixture.writes).toHaveLength(0);
+  await panel.getByRole('button', {name: '预览资料清单'}).click();
+  await expect(
+    panel.getByRole('button', {name: '生成 Markdown 文件', exact: true}),
+  ).toBeEnabled();
+  await panel
+    .getByRole('button', {name: '生成 Markdown 文件', exact: true})
+    .click();
+  await expect(panel.getByRole('link', {name: '下载 Markdown'})).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('waits for current query results before collecting or comparing after a filter change', async ({
+  page,
+}) => {
+  await installMarkdownExportFixture(page);
+  const panel = await openQueryForExport(page);
+  await page.clock.install({time: new Date('2026-09-05T12:00:00Z')});
+  await page.clock.pauseAt(new Date('2026-09-05T12:00:01Z'));
+  await page
+    .getByRole('searchbox', {name: '搜索信息条目'})
+    .fill('合成新的查询条件');
+  await openMarkdownExportPanel(page);
+  await expect(
+    panel.getByRole('button', {name: '加入资料清单'}),
+  ).toBeDisabled();
+  await page.locator('.query-result-tools-drawer > summary').click();
+  await expect(
+    page.getByRole('button', {name: '加入比较', exact: true}),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole('checkbox', {name: '开启或关闭关联联想'}),
+  ).toBeDisabled();
+  await expect(page.getByRole('region', {name: '条目查询结果'})).toHaveCount(0);
+  await page.clock.fastForward(301);
+  await expect(panel.getByRole('button', {name: '加入资料清单'})).toBeEnabled();
+  await expect(
+    page.getByRole('button', {name: '加入比较', exact: true}),
+  ).toBeEnabled();
+  await expect(page.getByRole('region', {name: '条目查询结果'})).toContainText(
+    '合成导出条目 1',
+  );
+});
+
+test('keeps query pagination aligned after resubmitting and repeatedly clearing filters', async ({
+  page,
+}) => {
+  await installMarkdownExportFixture(page);
+  await openQueryForExport(page);
+  await page.getByRole('button', {name: '下一页', exact: true}).click();
+  await expect(page.getByRole('region', {name: '条目查询结果'})).toContainText(
+    '合成导出条目 2',
+  );
+  await expect(page.locator('.entry-pagination')).toContainText('第 2 页');
+  await page.getByRole('searchbox', {name: '搜索信息条目'}).press('Enter');
+  await expect(page.getByRole('region', {name: '条目查询结果'})).toContainText(
+    '合成导出条目 1',
+  );
+  await expect(page.locator('.entry-pagination')).toContainText('第 1 页');
+  await expect(
+    page.getByRole('button', {name: '上一页', exact: true}),
+  ).toBeDisabled();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.getByRole('button', {name: '清除筛选', exact: true}).click();
+    await expect(
+      page.getByRole('region', {name: '条目查询结果'}),
+    ).toContainText('合成导出条目 1');
+    await expect(page.locator('.entry-pagination')).toContainText('第 1 页');
+  }
+  await page.getByRole('button', {name: '下一页', exact: true}).click();
+  await expect(page.getByRole('region', {name: '条目查询结果'})).toContainText(
+    '合成导出条目 2',
+  );
+  await expect(page.locator('.entry-pagination')).toContainText('第 2 页');
 });

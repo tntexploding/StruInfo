@@ -571,6 +571,16 @@ describe('M1D product workspaces', () => {
     );
     const formal = renderToStaticMarkup(
       <FormalKnowledgeWorkspace
+        onListSourceReviews={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {status: 'ok', totalCount: 0, items: []},
+          })
+        }
+        onReviewSources={() =>
+          Promise.resolve({statusCode: 200, body: {status: 'applied'}})
+        }
+        onCloseEvidence={() => undefined}
         aiAssociationEnabled={false}
         onAcceptAiAssociationProposal={() =>
           Promise.resolve({

@@ -36,7 +36,29 @@ describe('M1C local HTTP transport', () => {
     const querySyntheses: unknown[] = [];
     const policyWrites: unknown[] = [];
     const indexRefreshes: unknown[] = [];
+    const savedWrites: unknown[] = [];
+    const contextReads: unknown[] = [];
+    const sourceReviewLists: unknown[] = [];
+    const sourceReviewWrites: unknown[] = [];
     const api = stubApi({
+      listInformationEntrySourceReviews(body) {
+        sourceReviewLists.push(body);
+        return Promise.resolve(
+          result(200, {status: 'ok', totalCount: 0, items: []}),
+        );
+      },
+      reviewInformationEntryGraphSources(entryId, relatedEntryId, body) {
+        sourceReviewWrites.push({entryId, relatedEntryId, body});
+        return Promise.resolve(result(200, {status: 'applied'}));
+      },
+      writeEntrySavedQuery(body) {
+        savedWrites.push(body);
+        return Promise.resolve(result(200, {status: 'applied'}));
+      },
+      readEntryQueryContext(body) {
+        contextReads.push(body);
+        return Promise.resolve(result(404, {status: 'not_found'}));
+      },
       importMarkdown(body) {
         importedBodies.push(body);
         return Promise.resolve(result(201, {status: 'created'}));
@@ -98,6 +120,49 @@ describe('M1C local HTTP transport', () => {
       workspaceId: 'synthetic-workspace',
     });
 
+    for (const [path, status] of [
+      ['entries/markdown-export/preview', 200],
+      ['entries/markdown-export', 201],
+    ] as const) {
+      const exported = await fetch(`${base}/api/v1/${path}`, {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({title: 'Synthetic list'}),
+      });
+      expect(exported.status).toBe(status);
+      expectPrivateHttpSecurityHeaders(exported);
+      expect(exported.headers.get('cache-control')).toBe('no-store');
+    }
+
+    const sourceReviewResponse = await fetch(
+      `${base}/api/v1/knowledge-graph/source-reviews`,
+      {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({privacyScope: 'public'}),
+      },
+    );
+    expect(sourceReviewResponse.status).toBe(200);
+    expectPrivateHttpSecurityHeaders(sourceReviewResponse);
+    expect(sourceReviewLists).toEqual([{privacyScope: 'public'}]);
+    const sourceReviewWrite = await fetch(
+      `${base}/api/v1/knowledge-graph/edges/entry-a/entry-b/source-review`,
+      {
+        method: 'PUT',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({note: 'Synthetic note'}),
+      },
+    );
+    expect(sourceReviewWrite.status).toBe(200);
+    expectPrivateHttpSecurityHeaders(sourceReviewWrite);
+    expect(sourceReviewWrites).toEqual([
+      {
+        entryId: 'entry-a',
+        relatedEntryId: 'entry-b',
+        body: {note: 'Synthetic note'},
+      },
+    ]);
+
     const sourceText = `# Synthetic\n\n${'x'.repeat(150_000)}`;
     const importResponse = await fetch(`${base}/api/v1/imports/markdown`, {
       method: 'POST',
@@ -157,6 +222,40 @@ describe('M1C local HTTP transport', () => {
       items: [],
     });
     expect(entrySearches).toEqual([{text: 'synthetic', includePrivate: true}]);
+
+    const savedQueryResponse = await fetch(
+      base + '/api/v1/entries/saved-queries',
+    );
+    expect(savedQueryResponse.status).toBe(200);
+    expectPrivateHttpSecurityHeaders(savedQueryResponse);
+    expect(savedQueryResponse.headers.get('cache-control')).toBe('no-store');
+    const savedBody = {
+      operation: 'save',
+      expectedRevision: 0,
+      viewId: '11111111-1111-4111-8111-111111111111',
+      name: 'Synthetic query',
+      query: {includePrivate: false},
+    };
+    const savedWrite = await fetch(base + '/api/v1/entries/saved-queries', {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify(savedBody),
+    });
+    expect(savedWrite.status).toBe(200);
+    expect(savedWrites).toEqual([savedBody]);
+    const contextBody = {
+      entryId: savedBody.viewId,
+      includePrivate: false,
+      onlyPrivate: false,
+    };
+    const contextRead = await fetch(base + '/api/v1/entries/query-context', {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify(contextBody),
+    });
+    expect(contextRead.status).toBe(404);
+    expectPrivateHttpSecurityHeaders(contextRead);
+    expect(contextReads).toEqual([contextBody]);
 
     const refreshResponse = await fetch(
       base + '/api/v1/entries/search/index/refresh',
@@ -293,6 +392,25 @@ function stubApi(
       Promise.resolve(result(200, {status: 'restored'})),
     commitInformationDocumentWorkingCopy: () =>
       Promise.resolve(result(201, {status: 'created'})),
+    loadEntrySavedQueries: () =>
+      Promise.resolve(
+        result(200, {
+          status: 'ok',
+          savedQueries: {version: 1, revision: 0, views: []},
+        }),
+      ),
+    writeEntrySavedQuery: () =>
+      Promise.resolve(result(200, {status: 'applied'})),
+    previewEntryMarkdownExport: () =>
+      Promise.resolve(result(200, {status: 'ready'})),
+    generateEntryMarkdownExport: () =>
+      Promise.resolve(result(201, {status: 'exported'})),
+    listInformationEntrySourceReviews: () =>
+      Promise.resolve(result(200, {status: 'ok', totalCount: 0, items: []})),
+    reviewInformationEntryGraphSources: () =>
+      Promise.resolve(result(200, {status: 'applied'})),
+    readEntryQueryContext: () =>
+      Promise.resolve(result(404, {status: 'not_found'})),
     loadReviewPreferences: () =>
       Promise.resolve(result(200, {status: 'ok', quickTags: []})),
     saveReviewPreferences: () =>

@@ -1,4 +1,4 @@
-import type {ReactNode} from 'react';
+import {useId, type ReactNode} from 'react';
 
 import type {
   AiTagProposalDecisionResponse,
@@ -421,22 +421,23 @@ export function InformationEntryResults({
 export function InformationEntryReadOnlyDetail({
   entry,
   variant,
+  headingLevel = 2,
   onOpenEvidence,
 }: {
   readonly entry: Readonly<InformationEntry>;
   readonly variant: 'query' | 'split';
+  readonly headingLevel?: 2 | 4;
   readonly onOpenEvidence: InformationEntryServices['onOpenEvidence'];
 }) {
+  const titleId = useId();
+  const Heading = headingLevel === 4 ? 'h4' : 'h2';
   return (
-    <article
-      className="entry-readonly-detail"
-      aria-labelledby="entry-readonly-title"
-    >
+    <article className="entry-readonly-detail" aria-labelledby={titleId}>
       <header className="console-heading">
         <div>
-          <h2 id="entry-readonly-title">
+          <Heading id={titleId}>
             {entry.value.titlePath || '未命名条目'}
-          </h2>
+          </Heading>
           <p>
             {entry.sourceKey} · 第 {(entry.value.documentOrder + 1).toString()}{' '}
             条{entry.value.isPrivate ? ' · 隐私内容' : ''}

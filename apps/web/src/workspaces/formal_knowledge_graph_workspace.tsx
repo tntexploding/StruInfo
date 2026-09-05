@@ -60,6 +60,9 @@ const SEMANTIC_KIND_OPTIONS: readonly Readonly<{
 ]);
 
 export interface FormalKnowledgeGraphWorkspaceProps {
+  readonly initialCenter?: Readonly<{entryId: string; includePrivate: boolean}>;
+  readonly onReturnToQuery?: () => void;
+  readonly onOpenSourceReview?: () => void;
   readonly aiAssociationEnabled: boolean;
   readonly onAcceptAiAssociationProposal: (
     entryId: string,
@@ -98,6 +101,9 @@ export interface FormalKnowledgeGraphWorkspaceProps {
 }
 
 export function FormalKnowledgeGraphWorkspace({
+  initialCenter,
+  onReturnToQuery,
+  onOpenSourceReview,
   aiAssociationEnabled,
   onAcceptAiAssociationProposal,
   onListAiAssociationProposals,
@@ -109,7 +115,9 @@ export function FormalKnowledgeGraphWorkspace({
 }: FormalKnowledgeGraphWorkspaceProps) {
   const [queryDraft, setQueryDraft] = useState('');
   const [activeQuery, setActiveQuery] = useState('');
-  const [privacyScope, setPrivacyScope] = useState<PrivacyScope>('public');
+  const [privacyScope, setPrivacyScope] = useState<PrivacyScope>(
+    initialCenter?.includePrivate === true ? 'include_private' : 'public',
+  );
   const [viewMode, setViewMode] = useState<ViewMode>('graph');
   const [state, setState] = useState<GraphState>({status: 'loading'});
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
@@ -127,6 +135,7 @@ export function FormalKnowledgeGraphWorkspace({
   const [newNote, setNewNote] = useState('');
   const [newDirection, setNewDirection] =
     useState<NewRelationDirection>('symmetric');
+  const initialCenterId = useRef(initialCenter?.entryId);
   const graphRequests = useRef(createLatestRequestTracker());
   const targetRequests = useRef(createLatestRequestTracker());
 
@@ -181,7 +190,11 @@ export function FormalKnowledgeGraphWorkspace({
     const targetTracker = targetRequests.current;
     let cancelled = false;
     globalThis.queueMicrotask(() => {
-      if (!cancelled) void readGraph();
+      if (!cancelled) {
+        const center = initialCenterId.current;
+        initialCenterId.current = undefined;
+        void readGraph(center);
+      }
     });
     return () => {
       cancelled = true;
@@ -233,6 +246,10 @@ export function FormalKnowledgeGraphWorkspace({
           operation,
           ...(operation === 'edit'
             ? {
+                expectedEntryRevisions: {
+                  entryLowRevision: nodesById.get(edge.entryLowId)?.revision,
+                  entryHighRevision: nodesById.get(edge.entryHighId)?.revision,
+                },
                 label: draft?.label ?? edge.label,
                 direction: draft?.direction ?? edge.direction,
                 semanticKind: draft?.semanticKind ?? edge.semanticKind,
@@ -391,6 +408,24 @@ export function FormalKnowledgeGraphWorkspace({
       <header className="workflow-page-heading">
         <div>
           <h1>知识</h1>
+          {onOpenSourceReview === undefined ? null : (
+            <button
+              type="button"
+              className="secondary-action"
+              onClick={onOpenSourceReview}
+            >
+              来源复核
+            </button>
+          )}
+          {onReturnToQuery === undefined ? null : (
+            <button
+              type="button"
+              className="secondary-action"
+              onClick={onReturnToQuery}
+            >
+              返回查询
+            </button>
+          )}
         </div>
       </header>
 
@@ -1065,6 +1100,11 @@ function EdgeInspector({
           {verificationLabel(edge.verificationStatus)}
         </span>
       </div>
+      {edge.sourceReview?.reason === 'entry_changed' ? (
+        <p role="status">条目版本已变化，请重新核对两端来源。</p>
+      ) : edge.sourceReview?.reason === 'unbound' ? (
+        <p role="status">这次来源核验未绑定条目版本，需要重新复核。</p>
+      ) : null}
       {edge.projection === undefined ? null : (
         <dl className="knowledge-edge-metrics">
           <div>

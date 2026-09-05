@@ -135,6 +135,8 @@ describe('Postgres Information Entry knowledge graph persistence', () => {
       'related',
       'unreviewed',
       '待核对',
+      null,
+      null,
     ]);
   });
 

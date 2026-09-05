@@ -1,3 +1,5 @@
+import type {InformationEntrySourceReviewPage} from './information_entry_source_review_list.js';
+import type {InformationEntrySourceReviewRequest} from './information_entry_source_review.js';
 import type {
   InformationEntryAssociationOverrideWrite,
   InformationEntryAssociationProjection,
@@ -8,6 +10,11 @@ export type InformationEntryAssociationOverrideOutcome =
   'applied' | 'unchanged' | 'not_found' | 'stale';
 
 export interface InformationEntryAssociationRepositoryPort {
+  loadSourceReviewPage?(
+    workspaceId: string,
+    request: Readonly<InformationEntrySourceReviewRequest>,
+  ): Promise<Readonly<InformationEntrySourceReviewPage>>;
+
   replaceAssociationProjections(
     workspaceId: string,
     projections: readonly Readonly<InformationEntryAssociationProjection>[],

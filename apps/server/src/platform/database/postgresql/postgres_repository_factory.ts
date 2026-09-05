@@ -44,7 +44,11 @@ import {PostgresEntryAutomationExecutionRepository} from './postgres_entry_autom
 import type {PostgresPoolBoundary} from './postgres_pool.js';
 import {PostgresM1cDomainTransferRepository} from './postgres_workspace_transfer_repository.js';
 
+import type {EntryMarkdownExportRepositoryPort} from '../../../modules/entries/information_entry_markdown_export.js';
+import {PostgresEntryMarkdownExportRepository} from './postgres_entry_markdown_export_repository.js';
+
 export interface PostgresRepositorySet {
+  readonly entryMarkdownExports: EntryMarkdownExportRepositoryPort;
   readonly evidence: EvidenceRepositoryPort;
   readonly evidenceRead: EvidenceReadRepositoryPort;
   readonly informationEntries: InformationEntryRepositoryPort &
@@ -74,6 +78,7 @@ export function createPostgresRepositories(
 ): Readonly<PostgresRepositorySet> {
   const entryAutomation = new PostgresEntryAutomationExecutionRepository(pool);
   return Object.freeze({
+    entryMarkdownExports: new PostgresEntryMarkdownExportRepository(pool),
     evidence: new PostgresEvidenceRepository(pool),
     evidenceRead: new PostgresEvidenceReadRepository(pool),
     informationEntries: new PostgresInformationEntryRepository(pool),
