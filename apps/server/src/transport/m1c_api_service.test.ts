@@ -1,3 +1,4 @@
+import {DEFAULT_ENTRY_SAVED_QUERIES} from '../modules/entries/information_entry_saved_queries.js';
 import {createHash} from 'node:crypto';
 
 import type {Response} from 'express';
@@ -95,6 +96,190 @@ class MemoryBlobStore implements BlobStore {
 }
 
 describe('M1cApiService', () => {
+  it('exposes explicit Markdown export status codes and forwards only the submitted request to its narrow service', async () => {
+    const body = {title: 'Synthetic export', entries: []};
+    const preview = vi.fn(() =>
+      Promise.resolve({
+        status: 'rejected' as const,
+        issue: {code: 'input_invalid' as const},
+      }),
+    );
+    const generate = vi.fn(() =>
+      Promise.resolve({
+        status: 'rejected' as const,
+        issue: {code: 'preview_stale' as const},
+      }),
+    );
+    const service = createService({entryMarkdownExports: {preview, generate}});
+    expect(
+      (service.workspace().body as {capabilities: readonly string[]})
+        .capabilities,
+    ).toContain('entry_markdown_export');
+    expect(await service.previewEntryMarkdownExport(body)).toMatchObject({
+      statusCode: 400,
+      body: {issue: {code: 'input_invalid'}},
+    });
+    expect(await service.generateEntryMarkdownExport(body)).toMatchObject({
+      statusCode: 409,
+      body: {issue: {code: 'preview_stale'}},
+    });
+    expect(preview).toHaveBeenCalledExactlyOnceWith(body);
+    expect(generate).toHaveBeenCalledExactlyOnceWith(body);
+    expect(
+      await createService().generateEntryMarkdownExport(body),
+    ).toMatchObject({statusCode: 503});
+  });
+
+  it('manages saved queries by expected revision without writing Entry state', async () => {
+    let preferences = createReviewPreferences(WORKSPACE_ID, [
+      'Synthetic sibling',
+    ]);
+    const store: ReviewPreferencesStore = {
+      load: () => Promise.resolve(preferences),
+      save: () => Promise.reject(new Error('Unexpected positional save.')),
+      update: <T>(_workspace: string, updater: ReviewPreferencesUpdater<T>) => {
+        const result = updater(preferences);
+        preferences = result.next;
+        return Promise.resolve({preferences, result: result.result});
+      },
+    };
+    const service = createService({reviewPreferences: store});
+    expect((await service.loadEntrySavedQueries()).body).toMatchObject({
+      savedQueries: {revision: 0, views: []},
+    });
+    const query = {includePrivate: true, onlyPrivate: true, text: 'Synthetic'};
+    const write = {
+      operation: 'save',
+      expectedRevision: 0,
+      viewId: RESOURCE_ID,
+      name: 'Synthetic query',
+      query,
+      selectedEntryId: NODE_ID,
+    };
+    expect(await service.writeEntrySavedQuery(write)).toMatchObject({
+      statusCode: 200,
+      body: {status: 'applied', savedQueries: {revision: 1}},
+    });
+    expect(
+      await service.writeEntrySavedQuery({...write, name: 'Stale'}),
+    ).toMatchObject({statusCode: 409});
+    expect(
+      await service.saveReviewPreferences({
+        quickTags: ['Synthetic changed sibling'],
+      }),
+    ).toMatchObject({statusCode: 200});
+    expect((await service.loadEntrySavedQueries()).body).toMatchObject({
+      savedQueries: {revision: 1, views: [{name: write.name, query}]},
+    });
+    expect(
+      await service.writeEntrySavedQuery({
+        operation: 'rename',
+        expectedRevision: 1,
+        viewId: RESOURCE_ID,
+        name: 'Synthetic renamed',
+      }),
+    ).toMatchObject({statusCode: 200});
+    expect(
+      await service.writeEntrySavedQuery({
+        operation: 'delete',
+        expectedRevision: 2,
+        viewId: RESOURCE_ID,
+      }),
+    ).toMatchObject({statusCode: 200, body: {savedQueries: {views: []}}});
+    expect(
+      await service.writeEntrySavedQuery({
+        ...write,
+        query: {...query, after: {}},
+      }),
+    ).toMatchObject({statusCode: 422});
+  });
+
+  it('restores only a current Entry in the explicit workspace and privacy scope', async () => {
+    const base = currentRestructureEntry(
+      NODE_ID,
+      STRUCTURE_ID,
+      0,
+      'Synthetic selection',
+      'Synthetic current body',
+      FRAGMENT_ID,
+    );
+    let rows: readonly Readonly<CurrentInformationEntry>[] = [
+      base,
+      {...base, entryId: RESOURCE_ID, value: {...base.value, isPrivate: true}},
+    ];
+    const bounded = vi.fn(
+      (_workspace: string, _include: boolean, ids: readonly string[]) =>
+        Promise.resolve(rows.filter((row) => ids.includes(row.entryId))),
+    );
+    const full = vi.fn(() =>
+      Promise.reject(new Error('Unexpected full read.')),
+    );
+    const service = createService({
+      informationEntryRepository: {
+        materializeEntries: () =>
+          Promise.reject(new Error('Unexpected write.')),
+        materializeEntriesIfSnapshotEmpty: () =>
+          Promise.reject(new Error('Unexpected write.')),
+        reviseEntry: () => Promise.reject(new Error('Unexpected write.')),
+        loadCurrentEntries: full,
+        loadCurrentEntriesByIds: bounded,
+      },
+    });
+    expect(
+      await service.readEntryQueryContext({
+        entryId: NODE_ID,
+        includePrivate: false,
+      }),
+    ).toMatchObject({
+      statusCode: 200,
+      body: {entry: {revision: 1, value: {body: base.value.body}}},
+    });
+    expect(bounded).toHaveBeenLastCalledWith(WORKSPACE_ID, false, [NODE_ID]);
+    expect(
+      await service.readEntryQueryContext({
+        entryId: RESOURCE_ID,
+        includePrivate: false,
+      }),
+    ).toMatchObject({statusCode: 404});
+    expect(
+      await service.readEntryQueryContext({
+        entryId: RESOURCE_ID,
+        includePrivate: true,
+        onlyPrivate: true,
+      }),
+    ).toMatchObject({statusCode: 200});
+    expect(
+      await service.readEntryQueryContext({
+        entryId: NODE_ID,
+        includePrivate: true,
+        onlyPrivate: true,
+      }),
+    ).toMatchObject({statusCode: 404});
+    rows = [{...base, workspaceId: RESOURCE_ID}];
+    expect(
+      await service.readEntryQueryContext({
+        entryId: NODE_ID,
+        includePrivate: false,
+      }),
+    ).toMatchObject({statusCode: 404});
+    rows = [];
+    expect(
+      await service.readEntryQueryContext({
+        entryId: NODE_ID,
+        includePrivate: false,
+      }),
+    ).toMatchObject({statusCode: 404});
+    const calls = bounded.mock.calls.length;
+    expect(
+      await service.readEntryQueryContext({
+        entryId: NODE_ID,
+        includePrivate: false,
+        onlyPrivate: true,
+      }),
+    ).toMatchObject({statusCode: 422});
+    expect(bounded).toHaveBeenCalledTimes(calls);
+  });
+
   it('keeps the selected external workspace authoritative for reads', async () => {
     const listSnapshots = vi.fn(() => Promise.resolve([]));
     const service = createService({
@@ -248,6 +433,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+      DEFAULT_ENTRY_SAVED_QUERIES,
     );
   });
 
@@ -381,6 +567,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+      DEFAULT_ENTRY_SAVED_QUERIES,
     );
     await expect(
       service.saveInformationEntryPreferenceProfile({
@@ -748,6 +935,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+      DEFAULT_ENTRY_SAVED_QUERIES,
     );
     await expect(
       service.reviseInformationEntryAssociationPolicy({
@@ -868,6 +1056,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+      DEFAULT_ENTRY_SAVED_QUERIES,
     );
 
     await expect(
@@ -930,6 +1119,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+      DEFAULT_ENTRY_SAVED_QUERIES,
     );
   });
 

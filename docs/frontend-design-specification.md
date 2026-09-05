@@ -1,7 +1,7 @@
 # StruInfo Frontend Design Specification
 
 - Status: Project frontend baseline
-- Version: 1.11
+- Version: 1.12
 - Effective date: 2026-09-05
 - Scope: StruInfo web application design, implementation, and review
 
@@ -477,6 +477,45 @@ semantic/hybrid use as local evidence retrieval followed by AI synthesis; it
 does not present a chat, autonomous Web search or private-content permission.
 At narrow widths the mode group and index facts wrap or stack in normal reading
 order and do not hide the search input or results.
+
+ADR 0068 adds a secondary “来源复核” action in Knowledge. It opens a bounded
+relationship queue with explicit verification and privacy filters, both Entry
+sources, a review note and “保存并继续”. The ordinary batch is 20 pairs; next/previous
+batch actions preserve a scope-bound cursor. The list has a bounded scroll area
+so narrow screens can reach the selected review without crossing the whole queue.
+Stored checks without version bindings and checks of changed Entries are labelled
+as needing review. Show current and previously reviewed versions separately,
+preserve calculated/user/AI origin and direction, and never imply factual proof.
+Saving binds the displayed Entry and override revisions. Conflicts provide a
+fresh-read action; privacy/filter changes clear evidence and invalidate late
+responses. Returning to the graph starts from public scope. Both source headings
+have unique accessible identities, native controls remain keyboard reachable,
+and the two source columns stack on narrow screens.
+
+ADR 0067 adds a secondary saved-query disclosure in the Query settings rail.
+The owner can save, update, rename, delete and explicitly reopen at most 20
+queries. Names and conditions remain external personal preferences; result
+bodies, cursors, comparisons and AI answers are never stored there. Reopening
+reruns the query and reads the selected Entry's current version. A selection
+outside the current result page is labelled separately and does not change
+matching, ordering or counts. Missing entries and unavailable Association or
+semantic modes provide an actionable recovery route.
+Every reopened private view requires a fresh scope choice before private
+results or reading positions are fetched. Query-to-source and Query-to-graph
+actions preserve the current request's evidence scope; returning from the graph
+restores conditions and selection. Navigation context is memory-only.
+Saved-query controls wrap in their own layout flow, remain keyboard reachable
+and show loading, empty, conflict and retry states.
+
+ADR 0069 adds a secondary Query disclosure for a cited Markdown list. The owner
+explicitly selects up to 20 current results across cursor pages, previews versions,
+privacy and sources, then generates and downloads the file. Selection order is
+export order. Scope changes and navigation clear selection, preview and download;
+late responses cannot reintroduce private content. Title or selection changes
+invalidate preview. Source text is literal, scrollable and keyboard accessible;
+current Entry excerpts, original evidence and existing relationship origins remain
+distinct. Generation has an explicit private-scope label and visible error/retry
+states. No automatic file creation occurs during search, paging or selection.
 
 ADR 0023 adds one separate local exploration panel after the ordinary Query
 results. It MUST remain visually and behaviorally independent from search

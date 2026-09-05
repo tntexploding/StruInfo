@@ -3942,7 +3942,7 @@
   grid-template-areas:
     'search settings'
     'results settings';
-  grid-template-rows: max-content auto;
+  grid-template-rows: max-content minmax(0, 1fr);
   align-items: start;
   gap: var(--si-space-4);
 }
@@ -5094,4 +5094,247 @@
   overflow-wrap: anywhere;
   margin-block: var(--si-space-3);
   color: var(--si-color-text-secondary);
+}
+
+.saved-query-panel__body {
+  display: grid;
+  gap: var(--si-space-3);
+  min-width: 0;
+  padding: var(--si-space-3);
+}
+.saved-query-panel .entry-command-actions {
+  flex-wrap: wrap;
+}
+.saved-query-panel select,
+.saved-query-panel input {
+  min-width: 0;
+  width: 100%;
+}
+.query-context-notice,
+.saved-query-selection {
+  display: grid;
+  gap: var(--si-space-3);
+  padding: var(--si-space-4);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-surface-1);
+}
+.saved-query-selection > p,
+.saved-query-panel__body > p {
+  margin: 0;
+}
+
+.workflow-stage-workspace[data-workflow-page='query']
+  .saved-query-panel__body
+  > *,
+.workflow-stage-workspace[data-workflow-page='query'] .query-context-notice > *,
+.workflow-stage-workspace[data-workflow-page='query']
+  .query-studio-results
+  > .entry-command-actions {
+  grid-column: 1;
+  grid-row: auto;
+}
+
+.source-review-workspace {
+  display: grid;
+  gap: var(--si-space-5);
+  min-inline-size: 0;
+}
+.source-review-toolbar {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: var(--si-space-4);
+}
+.source-review-toolbar .field {
+  min-inline-size: 0;
+  flex: 1 1 12rem;
+}
+.source-review-layout {
+  display: grid;
+  grid-template-columns: minmax(14rem, 0.35fr) minmax(0, 1fr);
+  gap: var(--si-space-4);
+  align-items: start;
+}
+.source-review-list {
+  max-block-size: 30rem;
+  overflow-y: auto;
+  display: grid;
+  gap: var(--si-space-2);
+  min-inline-size: 0;
+}
+.source-review-list button {
+  display: grid;
+  gap: var(--si-space-2);
+  text-align: start;
+  padding: var(--si-space-4);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-surface-1);
+  color: var(--si-color-text-primary);
+}
+.source-review-list button[aria-current='true'] {
+  border-inline-start: var(--si-space-1) solid var(--si-color-signal);
+  background: var(--si-color-surface-2);
+}
+.source-review-editor {
+  min-inline-size: 0;
+  display: grid;
+  gap: var(--si-space-4);
+}
+.source-review-editor > header,
+.source-review-editor > form {
+  display: grid;
+  gap: var(--si-space-3);
+  padding: var(--si-space-4);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-surface-1);
+}
+.source-review-editor > header p,
+.source-review-editor > form p {
+  margin: 0;
+  color: var(--si-color-text-secondary);
+}
+.source-review-editor .field,
+.source-review-editor textarea,
+.source-review-editor select {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+.source-review-editor h2:focus-visible {
+  outline: var(--si-focus-width) solid var(--si-color-signal);
+  outline-offset: var(--si-space-1);
+}
+.source-review-evidence {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--si-space-4);
+}
+.source-review-evidence > section {
+  min-inline-size: 0;
+}
+.source-review-evidence .entry-readonly-detail {
+  min-inline-size: 0;
+  padding: var(--si-space-4);
+}
+.source-review-evidence .entry-readonly-detail :is(h2, h4) {
+  font-size: var(--si-text-subheading);
+}
+.source-review-evidence .entry-readonly-detail header button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.source-review-evidence .entry-readonly-detail > header {
+  flex-wrap: wrap;
+}
+.source-review-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--si-space-3);
+}
+.source-review-feedback {
+  padding: var(--si-space-3);
+  border-inline-start: var(--si-focus-width) solid var(--si-color-signal);
+}
+@media (max-width: 74.9375rem) {
+  .source-review-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .source-review-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 47.9375rem) {
+  .source-review-list {
+    max-block-size: 16rem;
+  }
+  .source-review-evidence,
+  .source-review-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .source-review-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .source-review-toolbar .field {
+    flex-basis: auto;
+  }
+  .source-review-pagination button {
+    flex: 1;
+  }
+}
+
+.entry-markdown-export__body,
+.entry-markdown-export__preview {
+  display: grid;
+  gap: var(--si-space-3);
+  min-inline-size: 0;
+}
+.entry-markdown-export__body {
+  padding: var(--si-space-4);
+}
+.entry-markdown-export__body > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--si-space-3);
+}
+.entry-markdown-export :is(p, h2, h3) {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.entry-markdown-export :is(h2, h3) {
+  font-size: var(--si-text-subheading);
+}
+.entry-markdown-export .entry-command-actions {
+  flex-wrap: wrap;
+}
+.entry-markdown-export input {
+  width: 100%;
+  min-inline-size: 0;
+}
+.entry-markdown-export__selection {
+  display: grid;
+  gap: var(--si-space-2);
+  max-block-size: 20rem;
+  overflow-y: auto;
+  margin: 0;
+  padding-inline-start: var(--si-space-6);
+}
+.entry-markdown-export__selection li {
+  padding: var(--si-space-2);
+  border-block-end: var(--si-rule-thin) solid var(--si-color-border-default);
+  overflow-wrap: anywhere;
+}
+.entry-markdown-export__selection li > div {
+  display: inline-grid;
+  gap: var(--si-space-1);
+  margin-inline-end: var(--si-space-3);
+}
+.entry-markdown-export__selection span {
+  color: var(--si-color-text-secondary);
+}
+.entry-markdown-export__preview pre {
+  min-inline-size: 0;
+  max-block-size: 28rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding: var(--si-space-4);
+  border: var(--si-rule-thin) solid var(--si-color-border-default);
+  background: var(--si-color-surface-1);
+  color: var(--si-color-text-primary);
+  font: inherit;
+}
+.workflow-stage-workspace[data-workflow-page='query']
+  .entry-markdown-export__body
+  > *,
+.workflow-stage-workspace[data-workflow-page='query']
+  .entry-markdown-export__preview
+  > * {
+  grid-column: 1;
+  grid-row: auto;
 }

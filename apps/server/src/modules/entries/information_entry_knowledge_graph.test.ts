@@ -61,7 +61,10 @@ describe('Information Entry knowledge graph', () => {
       },
     );
     if (relation === undefined) throw new Error('Expected relation.');
-    const edited = prepareInformationEntryGraphEdit(undefined, true, relation);
+    const edited = prepareInformationEntryGraphEdit(undefined, true, {
+      ...relation,
+      reviewedRevisions: {entryLowRevision: 1, entryHighRevision: 1},
+    });
     const blocked = prepareInformationEntryGraphVisibility(edited, true, true);
 
     const graph = buildInformationEntryKnowledgeGraph(ENTRY_A, entries, {

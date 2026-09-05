@@ -13,7 +13,10 @@ import {
   type PublicationInput,
 } from '../../../modules/evidence/index.js';
 
-import type {PostgresPoolBoundary} from './postgres_pool.js';
+import type {
+  PostgresClientBoundary,
+  PostgresPoolBoundary,
+} from './postgres_pool.js';
 import {runPostgresTransaction} from './postgres_transaction.js';
 import {
   canonicalUuid,
@@ -199,49 +202,7 @@ export class PostgresEvidenceReadRepository implements EvidenceReadRepositoryPor
     return runPostgresTransaction(
       this.#pool,
       'repeatable_read_only',
-      async (client) => {
-        const snapshotResult = await client.query<Row>(
-          READ_EVIDENCE_SNAPSHOT_SQL,
-          [workspaceId, snapshotId],
-        );
-        if (snapshotResult.rows.length === 0) return undefined;
-        if (snapshotResult.rows.length !== 1) throw new PostgresAdapterError();
-        const snapshotRow = snapshotResult.rows[0];
-        if (snapshotRow === undefined) throw new PostgresAdapterError();
-
-        const structuresResult = await client.query<Row>(
-          READ_EVIDENCE_STRUCTURES_SQL,
-          [workspaceId, snapshotId],
-        );
-        const fragmentsResult = await client.query<Row>(
-          READ_EVIDENCE_FRAGMENTS_SQL,
-          [workspaceId, snapshotId],
-        );
-        const fragments = fragmentsResult.rows.map(mapFragment);
-        const structures = structuresResult.rows.map((row) =>
-          mapStructure(row, fragments),
-        );
-        if (
-          fragments.some(
-            (fragment) =>
-              !structures.some(
-                (structure) => structure.structureId === fragment.structureId,
-              ),
-          )
-        ) {
-          throw new PostgresAdapterError();
-        }
-        const summary = mapSnapshotSummary(snapshotRow);
-        const mediaType = optionalText(snapshotRow.media_type);
-        return Object.freeze({
-          ...summary,
-          rawSha256: sha256(snapshotRow.raw_sha256),
-          canonicalContentSha256: sha256(snapshotRow.canonical_content_sha256),
-          canonicalizationVersion: text(snapshotRow.canonicalization_version),
-          ...(mediaType === undefined ? {} : {mediaType}),
-          structures: Object.freeze(structures),
-        });
-      },
+      (client) => loadEvidenceSnapshot(client, workspaceId, snapshotId),
     );
   }
 }
@@ -380,4 +341,53 @@ function optionalPostgresInteger(
   minimum: number,
 ): number | undefined {
   return value === null ? undefined : postgresSafeInteger(value, minimum);
+}
+
+/** Shared immutable evidence read inside an existing workspace transaction. */
+export async function loadEvidenceSnapshot(
+  client: PostgresClientBoundary,
+  workspaceId: string,
+  snapshotId: string,
+): Promise<Readonly<EvidenceSnapshotReadState> | undefined> {
+  const snapshotResult = await client.query<Row>(READ_EVIDENCE_SNAPSHOT_SQL, [
+    workspaceId,
+    snapshotId,
+  ]);
+  if (snapshotResult.rows.length === 0) return undefined;
+  if (snapshotResult.rows.length !== 1) throw new PostgresAdapterError();
+  const snapshotRow = snapshotResult.rows[0];
+  if (snapshotRow === undefined) throw new PostgresAdapterError();
+
+  const structuresResult = await client.query<Row>(
+    READ_EVIDENCE_STRUCTURES_SQL,
+    [workspaceId, snapshotId],
+  );
+  const fragmentsResult = await client.query<Row>(READ_EVIDENCE_FRAGMENTS_SQL, [
+    workspaceId,
+    snapshotId,
+  ]);
+  const fragments = fragmentsResult.rows.map(mapFragment);
+  const structures = structuresResult.rows.map((row) =>
+    mapStructure(row, fragments),
+  );
+  if (
+    fragments.some(
+      (fragment) =>
+        !structures.some(
+          (structure) => structure.structureId === fragment.structureId,
+        ),
+    )
+  ) {
+    throw new PostgresAdapterError();
+  }
+  const summary = mapSnapshotSummary(snapshotRow);
+  const mediaType = optionalText(snapshotRow.media_type);
+  return Object.freeze({
+    ...summary,
+    rawSha256: sha256(snapshotRow.raw_sha256),
+    canonicalContentSha256: sha256(snapshotRow.canonical_content_sha256),
+    canonicalizationVersion: text(snapshotRow.canonicalization_version),
+    ...(mediaType === undefined ? {} : {mediaType}),
+    structures: Object.freeze(structures),
+  });
 }

@@ -1,4 +1,9 @@
 import type {
+  EntryMarkdownExportResponse,
+  EntrySavedQueriesResponse,
+  EntryQueryContextResponse,
+} from './m1c_api_contract.js';
+import type {
   AiAssociationProposalDecisionResponse,
   AiAssociationProposalListResponse,
   AiAssociationProposalStartResponse,
@@ -39,6 +44,7 @@ import type {
   InformationEntryAssociationRebuildResponse,
   InformationEntryDocumentListResponse,
   InformationEntryKnowledgeGraphEdgeWriteResponse,
+  InformationEntrySourceReviewListResponse,
   InformationEntryKnowledgeGraphResponse,
   InformationEntryMaterializeResponse,
   InformationEntryRevisionResponse,
@@ -80,6 +86,25 @@ export type M1cApiFetch = (
 ) => Promise<Response>;
 
 export interface M1cApiClient {
+  previewEntryMarkdownExport(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntryMarkdownExportResponse>>;
+  generateEntryMarkdownExport(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntryMarkdownExportResponse>>;
+  loadEntrySavedQueries(
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntrySavedQueriesResponse>>;
+  writeEntrySavedQuery(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntrySavedQueriesResponse>>;
+  readEntryQueryContext(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntryQueryContextResponse>>;
   workspace(
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<WorkspaceResponse>>;
@@ -311,6 +336,16 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryKnowledgeGraphResponse>>;
+  listInformationEntrySourceReviews(
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntrySourceReviewListResponse>>;
+  reviewInformationEntryGraphSources(
+    entryId: string,
+    relatedEntryId: string,
+    body: unknown,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<InformationEntryKnowledgeGraphEdgeWriteResponse>>;
   reviseInformationEntryKnowledgeGraphEdge(
     entryId: string,
     relatedEntryId: string,
@@ -466,6 +501,11 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     saveInformationDocumentWorkingCopy: reject,
     restoreInformationDocumentWorkingCopy: reject,
     commitInformationDocumentWorkingCopy: reject,
+    loadEntrySavedQueries: reject,
+    writeEntrySavedQuery: reject,
+    readEntryQueryContext: reject,
+    previewEntryMarkdownExport: reject,
+    generateEntryMarkdownExport: reject,
     loadReviewPreferences: reject,
     saveReviewPreferences: reject,
     loadInformationEntryPreferenceProfile: reject,
@@ -502,6 +542,8 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     synthesizeInformationEntryQuery: reject,
     readInformationEntryKnowledgeGraph: reject,
     reviseInformationEntryKnowledgeGraphEdge: reject,
+    listInformationEntrySourceReviews: reject,
+    reviewInformationEntryGraphSources: reject,
     rebuildInformationEntryAssociations: reject,
     reviseInformationEntryAssociationPolicy: reject,
     reviseInformationEntryExplorationPolicy: reject,
@@ -639,6 +681,32 @@ export function createM1cApiClient(
     commitInformationDocumentWorkingCopy: (snapshotId, body, options) =>
       post<InformationDocumentWorkingCopyCommitResponse>(
         `api/v1/evidence/snapshots/${encodeURIComponent(snapshotId)}/working-copy/commit`,
+        body,
+        options,
+      ),
+    previewEntryMarkdownExport: (body, options) =>
+      post<EntryMarkdownExportResponse>(
+        'api/v1/entries/markdown-export/preview',
+        body,
+        options,
+      ),
+    generateEntryMarkdownExport: (body, options) =>
+      post<EntryMarkdownExportResponse>(
+        'api/v1/entries/markdown-export',
+        body,
+        options,
+      ),
+    loadEntrySavedQueries: (options) =>
+      get<EntrySavedQueriesResponse>('api/v1/entries/saved-queries', options),
+    writeEntrySavedQuery: (body, options) =>
+      post<EntrySavedQueriesResponse>(
+        'api/v1/entries/saved-queries',
+        body,
+        options,
+      ),
+    readEntryQueryContext: (body, options) =>
+      post<EntryQueryContextResponse>(
+        'api/v1/entries/query-context',
         body,
         options,
       ),
@@ -840,6 +908,27 @@ export function createM1cApiClient(
     readInformationEntryKnowledgeGraph: (body, options) =>
       post<InformationEntryKnowledgeGraphResponse>(
         'api/v1/knowledge-graph/view',
+        body,
+        options,
+      ),
+    listInformationEntrySourceReviews: (body, options) =>
+      post<InformationEntrySourceReviewListResponse>(
+        'api/v1/knowledge-graph/source-reviews',
+        body,
+        options,
+      ),
+    reviewInformationEntryGraphSources: (
+      entryId,
+      relatedEntryId,
+      body,
+      options,
+    ) =>
+      put<InformationEntryKnowledgeGraphEdgeWriteResponse>(
+        'api/v1/knowledge-graph/edges/' +
+          encodeURIComponent(entryId) +
+          '/' +
+          encodeURIComponent(relatedEntryId) +
+          '/source-review',
         body,
         options,
       ),

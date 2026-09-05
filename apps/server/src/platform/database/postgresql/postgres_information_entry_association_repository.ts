@@ -1,4 +1,10 @@
 import {
+  decodeSourceReviewRequest,
+  decodeSourceReviewRevisions,
+  listInformationEntrySourceReviewItems,
+  paginateInformationEntrySourceReviews,
+  type InformationEntrySourceReviewRequest,
+  type InformationEntrySourceReviewPage,
   INFORMATION_ENTRY_ASSOCIATION_ACTIONS,
   INFORMATION_ENTRY_ASSOCIATION_BASES,
   INFORMATION_ENTRY_GRAPH_DIRECTIONS,
@@ -16,6 +22,11 @@ import {
   type InformationEntryGraphRelationValue,
 } from '../../../modules/entries/index.js';
 
+import {loadCurrentInformationEntriesByIds} from './postgres_information_entry_repository.js';
+import {
+  COUNT_INFORMATION_ENTRY_SOURCE_REVIEWS_SQL,
+  READ_INFORMATION_ENTRY_SOURCE_REVIEW_PAGE_SQL,
+} from './postgres_information_entry_source_review_sql.js';
 import type {PostgresPoolBoundary} from './postgres_pool.js';
 import {runPostgresTransaction} from './postgres_transaction.js';
 import {
@@ -64,7 +75,8 @@ export const READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL = sql(
   '  override.manual_adjustment, override.is_blocked,',
   '  override.graph_origin, override.graph_label, override.graph_direction,',
   '  override.graph_semantic_kind, override.graph_verification_status,',
-  '  override.graph_note',
+  '  override.graph_note, override.graph_reviewed_entry_low_revision,',
+  '  override.graph_reviewed_entry_high_revision',
   'FROM struinfo.information_entry_association_override AS override',
   'JOIN struinfo.information_entry AS low_entry',
   '  ON low_entry.workspace_id = override.workspace_id',
@@ -113,7 +125,8 @@ export const READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_FOR_ENTRIES_SQL = sql(
   '  override.manual_adjustment, override.is_blocked,',
   '  override.graph_origin, override.graph_label, override.graph_direction,',
   '  override.graph_semantic_kind, override.graph_verification_status,',
-  '  override.graph_note',
+  '  override.graph_note, override.graph_reviewed_entry_low_revision,',
+  '  override.graph_reviewed_entry_high_revision',
   'FROM struinfo.information_entry_association_override AS override',
   'JOIN struinfo.information_entry AS low_entry',
   '  ON low_entry.workspace_id = override.workspace_id',
@@ -169,7 +182,7 @@ export const INSERT_INFORMATION_ENTRY_ASSOCIATION_PROJECTION_SQL = sql(
 );
 
 const READ_ASSOCIATION_ENDPOINTS_SQL = sql(
-  'SELECT entry_id::text, is_private',
+  'SELECT entry_id::text, is_private, current_revision',
   'FROM struinfo.information_entry',
   'WHERE workspace_id = $1 AND entry_id IN ($2, $3)',
   '  AND is_current_structure',
@@ -179,7 +192,8 @@ const READ_ASSOCIATION_ENDPOINTS_SQL = sql(
 const LOCK_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
   'SELECT current_revision, current_revision_id::text, action,',
   '  manual_adjustment, is_blocked, graph_origin, graph_label, graph_direction,',
-  '  graph_semantic_kind, graph_verification_status, graph_note',
+  '  graph_semantic_kind, graph_verification_status, graph_note,',
+  '  graph_reviewed_entry_low_revision, graph_reviewed_entry_high_revision',
   'FROM struinfo.information_entry_association_override',
   'WHERE workspace_id = $1 AND entry_low_id = $2 AND entry_high_id = $3',
   'FOR UPDATE',
@@ -190,8 +204,9 @@ const INSERT_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
   '  workspace_id, entry_low_id, entry_high_id, current_revision,',
   '  current_revision_id, action, manual_adjustment, is_blocked,',
   '  graph_origin, graph_label, graph_direction, graph_semantic_kind,',
-  '  graph_verification_status, graph_note',
-  ') VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
+  '  graph_verification_status, graph_note,',
+  '  graph_reviewed_entry_low_revision, graph_reviewed_entry_high_revision',
+  ') VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)',
 );
 
 const UPDATE_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
@@ -200,6 +215,7 @@ const UPDATE_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
   '  manual_adjustment = $7, is_blocked = $8, graph_origin = $9,',
   '  graph_label = $10, graph_direction = $11, graph_semantic_kind = $12,',
   '  graph_verification_status = $13, graph_note = $14,',
+  '  graph_reviewed_entry_low_revision = $16, graph_reviewed_entry_high_revision = $17,',
   '  updated_at = CURRENT_TIMESTAMP',
   'WHERE workspace_id = $1 AND entry_low_id = $2 AND entry_high_id = $3',
   '  AND current_revision = $15',
@@ -357,6 +373,86 @@ export class PostgresInformationEntryAssociationRepository
     );
   }
 
+  public loadSourceReviewPage(
+    workspaceIdInput: string,
+    requestInput: Readonly<InformationEntrySourceReviewRequest>,
+  ): Promise<Readonly<InformationEntrySourceReviewPage>> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    const request = decodeSourceReviewRequest(requestInput);
+    if (request === undefined) throw new PostgresAdapterError();
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const parameters = [workspaceId, request.privacyScope, request.filter];
+        const count = await client.query<Row>(
+          COUNT_INFORMATION_ENTRY_SOURCE_REVIEWS_SQL,
+          parameters,
+        );
+        if (count.rows.length !== 1) throw new PostgresAdapterError();
+        const totalCount = integer(count.rows[0]?.total_count);
+        const page = await client.query<Row>(
+          READ_INFORMATION_ENTRY_SOURCE_REVIEW_PAGE_SQL,
+          [
+            ...parameters,
+            request.after?.entryLowId ?? null,
+            request.after?.entryHighId ?? null,
+            request.limit + 1,
+          ],
+        );
+        if (page.rows.length === 0)
+          return Object.freeze({totalCount, items: Object.freeze([])});
+        const lows = page.rows.map((row) => canonicalUuid(row.entry_low_id));
+        const highs = page.rows.map((row) => canonicalUuid(row.entry_high_id));
+        const includePrivate = request.privacyScope !== 'public';
+        const pairParameters = [workspaceId, includePrivate, lows, highs];
+        const restrict = (query: string, alias: string) =>
+          query.replace(
+            'ORDER BY',
+            'AND (' +
+              alias +
+              '.entry_low_id, ' +
+              alias +
+              '.entry_high_id) IN (SELECT * FROM unnest($3::uuid[], $4::uuid[])) ORDER BY',
+          );
+        const projections = await client.query<Row>(
+          restrict(
+            READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL,
+            'projection',
+          ),
+          pairParameters,
+        );
+        const overrides = await client.query<Row>(
+          restrict(
+            READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL,
+            'override',
+          ),
+          pairParameters,
+        );
+        const entries = await loadCurrentInformationEntriesByIds(
+          client,
+          workspaceId,
+          includePrivate,
+          [...new Set([...lows, ...highs])],
+        );
+        const items = listInformationEntrySourceReviewItems(
+          workspaceId,
+          entries,
+          {
+            projections: projections.rows.map(mapProjection),
+            overrides: overrides.rows.map(mapOverride),
+          },
+          request,
+        );
+        return paginateInformationEntrySourceReviews(
+          items,
+          request,
+          totalCount,
+        );
+      },
+    );
+  }
+
   public writeAssociationOverride(
     write: Readonly<InformationEntryAssociationOverrideWrite>,
   ): Promise<InformationEntryAssociationOverrideOutcome> {
@@ -371,6 +467,11 @@ export class PostgresInformationEntryAssociationRepository
     ) {
       throw new PostgresAdapterError();
     }
+    if (
+      write.expectedEntryRevisions !== undefined &&
+      decodeSourceReviewRevisions(write.expectedEntryRevisions) === undefined
+    )
+      throw new PostgresAdapterError();
     assertOverrideValue(write.value);
     return runPostgresTransaction(
       this.#pool,
@@ -391,12 +492,38 @@ export class PostgresInformationEntryAssociationRepository
         if (endpoints.rows.some((row) => typeof row.is_private !== 'boolean')) {
           throw new PostgresAdapterError();
         }
+        if (
+          write.expectedEntryRevisions !== undefined &&
+          (endpoints.rows.find((row) => row.entry_id === entryLowId)
+            ?.current_revision !==
+            write.expectedEntryRevisions.entryLowRevision ||
+            endpoints.rows.find((row) => row.entry_id === entryHighId)
+              ?.current_revision !==
+              write.expectedEntryRevisions.entryHighRevision)
+        )
+          return 'stale';
         const locked = await client.query<Row>(
           LOCK_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL,
           [workspaceId, entryLowId, entryHighId],
         );
         if (locked.rows.length > 1) throw new PostgresAdapterError();
         const current = locked.rows[0];
+        if (write.requireVisibleGraphEdge === true) {
+          if (current?.is_blocked === true) return 'not_found';
+          if (typeof current?.graph_origin !== 'string') {
+            const projection = await client.query<Row>(
+              'SELECT 1 FROM struinfo.information_entry_association_projection WHERE workspace_id = $1 AND entry_low_id = $2 AND entry_high_id = $3 AND entry_low_revision = $4 AND entry_high_revision = $5',
+              [
+                workspaceId,
+                entryLowId,
+                entryHighId,
+                endpoints.rows[0]?.current_revision,
+                endpoints.rows[1]?.current_revision,
+              ],
+            );
+            if (projection.rows.length !== 1) return 'not_found';
+          }
+        }
         if (current === undefined) {
           if (write.expectedRevision !== 0) return 'stale';
           const inserted = await client.query<Row>(
@@ -415,6 +542,8 @@ export class PostgresInformationEntryAssociationRepository
               write.value.graph?.semanticKind ?? null,
               write.value.graph?.verificationStatus ?? null,
               write.value.graph?.note ?? null,
+              write.value.graph?.reviewedRevisions?.entryLowRevision ?? null,
+              write.value.graph?.reviewedRevisions?.entryHighRevision ?? null,
             ],
           );
           expectOneAffected(inserted.rowCount);
@@ -445,6 +574,8 @@ export class PostgresInformationEntryAssociationRepository
             write.value.graph?.verificationStatus ?? null,
             write.value.graph?.note ?? null,
             currentRevision,
+            write.value.graph?.reviewedRevisions?.entryLowRevision ?? null,
+            write.value.graph?.reviewedRevisions?.entryHighRevision ?? null,
           ],
         );
         expectOneAffected(updated.rowCount);
@@ -479,7 +610,7 @@ export function informationEntryAssociationProjectionParameters(
   ];
 }
 
-function mapProjection(row: Row): InformationEntryAssociationProjection {
+export function mapProjection(row: Row): InformationEntryAssociationProjection {
   const candidateBasis = text(row.candidate_basis)
     .split('+')
     .map((value) => enumValue(value, INFORMATION_ENTRY_ASSOCIATION_BASES));
@@ -502,7 +633,9 @@ function mapProjection(row: Row): InformationEntryAssociationProjection {
   });
 }
 
-function mapOverride(row: Row): CurrentInformationEntryAssociationOverride {
+export function mapOverride(
+  row: Row,
+): CurrentInformationEntryAssociationOverride {
   return Object.freeze({
     workspaceId: canonicalUuid(row.workspace_id),
     entryLowId: canonicalUuid(row.entry_low_id),
@@ -572,6 +705,23 @@ function mapGraphRelationValue(
       INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES,
     ),
     note,
+    ...(row.graph_reviewed_entry_low_revision == null &&
+    row.graph_reviewed_entry_high_revision == null
+      ? {}
+      : {
+          reviewedRevisions: {
+            entryLowRevision: boundedScore(
+              row.graph_reviewed_entry_low_revision,
+              1,
+              2_147_483_647,
+            ),
+            entryHighRevision: boundedScore(
+              row.graph_reviewed_entry_high_revision,
+              1,
+              2_147_483_647,
+            ),
+          },
+        }),
   });
 }
 
@@ -581,6 +731,11 @@ function assertOverrideValue(
   enumValue(value.action, INFORMATION_ENTRY_ASSOCIATION_ACTIONS);
   boundedScore(value.manualAdjustment, -10_000, 10_000);
   if (value.graph !== undefined) {
+    if (
+      value.graph.reviewedRevisions !== undefined &&
+      decodeSourceReviewRevisions(value.graph.reviewedRevisions) === undefined
+    )
+      throw new PostgresAdapterError();
     enumValue(value.graph.origin, INFORMATION_ENTRY_GRAPH_ORIGINS);
     enumValue(value.graph.direction, INFORMATION_ENTRY_GRAPH_DIRECTIONS);
     enumValue(value.graph.semanticKind, INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS);

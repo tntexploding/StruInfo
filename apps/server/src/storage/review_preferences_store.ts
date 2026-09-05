@@ -1,4 +1,8 @@
 import {
+  DEFAULT_ENTRY_SAVED_QUERIES,
+  type EntrySavedQueries,
+} from '../modules/entries/information_entry_saved_queries.js';
+import {
   DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
   type EntrySplitRuleProfile,
 } from '../modules/entries/information_entry_split_rule.js';
@@ -320,9 +324,16 @@ export interface ReviewPreferences {
   readonly entryAutomationPolicy?: Readonly<EntryAutomationPolicy>;
   readonly entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>;
   readonly entryClassificationProfile?: Readonly<EntryClassificationProfile>;
+  readonly entrySavedQueries?: Readonly<EntrySavedQueries>;
 }
 
 export interface ReviewPreferencesStore {
+  /** Isolates a temporary preference replacement through restore success or rollback. */
+  replaceForRestore?<T>(
+    workspaceId: string,
+    preferences: Readonly<ReviewPreferences>,
+    restore: () => Promise<T>,
+  ): Promise<T>;
   load(workspaceId: string): Promise<Readonly<ReviewPreferences>>;
   save(
     workspaceId: string,
@@ -336,6 +347,7 @@ export interface ReviewPreferencesStore {
     entryAutomationPolicy?: Readonly<EntryAutomationPolicy>,
     entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>,
     entryClassificationProfile?: Readonly<EntryClassificationProfile>,
+    entrySavedQueries?: Readonly<EntrySavedQueries>,
   ): Promise<Readonly<ReviewPreferences>>;
   update?<T>(
     workspaceId: string,
@@ -368,6 +380,7 @@ export interface ReviewPreferencesPatch {
   readonly entryAutomationPolicy?: Readonly<EntryAutomationPolicy>;
   readonly entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>;
   readonly entryClassificationProfile?: Readonly<EntryClassificationProfile>;
+  readonly entrySavedQueries?: Readonly<EntrySavedQueries>;
 }
 
 export function patchReviewPreferences(
@@ -404,6 +417,9 @@ export function patchReviewPreferences(
     patch.entryClassificationProfile ??
       current.entryClassificationProfile ??
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+    patch.entrySavedQueries ??
+      current.entrySavedQueries ??
+      DEFAULT_ENTRY_SAVED_QUERIES,
   );
 }
 
@@ -438,6 +454,7 @@ export async function updateReviewPreferences<T>(
           update.next.entryAutomationPolicy,
           update.next.entrySplitRuleProfile,
           update.next.entryClassificationProfile,
+          update.next.entrySavedQueries,
         );
   return Object.freeze({preferences, result: update.result});
 }
@@ -738,6 +755,7 @@ export function createReviewPreferences(
   entryAutomationPolicy: Readonly<EntryAutomationPolicy> = DEFAULT_ENTRY_AUTOMATION_POLICY,
   entrySplitRuleProfile: Readonly<EntrySplitRuleProfile> = DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
   entryClassificationProfile: Readonly<EntryClassificationProfile> = DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+  entrySavedQueries: Readonly<EntrySavedQueries> = DEFAULT_ENTRY_SAVED_QUERIES,
 ): Readonly<ReviewPreferences> {
   const advanceActions =
     entryAutomationPolicy.advanceActions ??
@@ -750,6 +768,7 @@ export function createReviewPreferences(
     version: REVIEW_PREFERENCES_VERSION,
     workspaceId,
     quickTags: Object.freeze([...quickTags]),
+    entrySavedQueries,
     automaticKeywords: Object.freeze({
       enabled: automaticKeywords.enabled,
       includeLinkDomains: automaticKeywords.includeLinkDomains,

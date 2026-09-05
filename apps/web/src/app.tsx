@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 import type {
+  EntryQueryContext,
   AiAssociationProposalDecisionResponse,
   AiAssociationProposalListResponse,
   AiAssociationProposalStartResponse,
@@ -81,6 +82,30 @@ export interface AppProps {
 
 export function App({apiClient, healthClient, transportMode}: AppProps) {
   const health = useOperationalHealth(healthClient);
+  const loadSavedQueries = useCallback(
+    () => apiClient.loadEntrySavedQueries(),
+    [apiClient],
+  );
+  const writeSavedQuery = useCallback(
+    (body: unknown) => apiClient.writeEntrySavedQuery(body),
+    [apiClient],
+  );
+  const readQueryContext = useCallback(
+    (body: unknown) => apiClient.readEntryQueryContext(body),
+    [apiClient],
+  );
+  const previewMarkdownExport = useCallback(
+    (body: unknown) => apiClient.previewEntryMarkdownExport(body),
+    [apiClient],
+  );
+  const generateMarkdownExport = useCallback(
+    (body: unknown) => apiClient.generateEntryMarkdownExport(body),
+    [apiClient],
+  );
+  const [queryContext, setQueryContext] =
+    useState<Readonly<EntryQueryContext>>();
+  const [queryGraphCenter, setQueryGraphCenter] =
+    useState<Readonly<{entryId: string; includePrivate: boolean}>>();
   const [activeSection, setActiveSection] =
     useState<ProductSection>('overview');
   const [workspace, setWorkspace] = useState<
@@ -582,6 +607,19 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const listSourceReviews = useCallback(
+    (body: unknown) => apiClient.listInformationEntrySourceReviews(body),
+    [apiClient],
+  );
+  const reviewGraphSources = useCallback(
+    (entryId: string, relatedEntryId: string, body: unknown) =>
+      apiClient.reviewInformationEntryGraphSources(
+        entryId,
+        relatedEntryId,
+        body,
+      ),
+    [apiClient],
+  );
   const reviseInformationEntryKnowledgeGraphEdge = useCallback(
     (
       entryId: string,
@@ -936,7 +974,11 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       health={health.state}
       transportMode={transportMode}
       workspace={workspace.status === 'ready' ? workspace.value : undefined}
-      onNavigate={setActiveSection}
+      onNavigate={(section) => {
+        setQueryGraphCenter(undefined);
+        closeEvidence();
+        setActiveSection(section);
+      }}
       evidencePanel={
         <EvidenceRail
           state={evidencePanel}
@@ -978,7 +1020,11 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           onListDocuments={listInformationEntryDocuments}
           onListProcessingRuns={listProcessingRuns}
           onCancelProcessingRun={cancelProcessingRun}
-          onNavigate={setActiveSection}
+          onNavigate={(section) => {
+            setQueryGraphCenter(undefined);
+            closeEvidence();
+            setActiveSection(section);
+          }}
         />
       ) : null}
       {activeSection === 'import' ? (
@@ -1103,6 +1149,21 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       ) : null}
       {activeSection === 'query' ? (
         <InformationEntryQueryWorkspace
+          onPreviewMarkdownExport={previewMarkdownExport}
+          onGenerateMarkdownExport={generateMarkdownExport}
+          initialContext={queryContext}
+          onContextChange={setQueryContext}
+          onLoadSavedQueries={loadSavedQueries}
+          onWriteSavedQuery={writeSavedQuery}
+          onReadQueryContext={readQueryContext}
+          onOpenGraph={(entry) => {
+            closeEvidence();
+            setQueryGraphCenter({
+              entryId: entry.entryId,
+              includePrivate: entry.value.isPrivate,
+            });
+            setActiveSection('knowledge');
+          }}
           aiQuerySynthesisEnabled={
             workspace.status === 'ready' &&
             workspace.value.capabilities.includes('ai_query_synthesis')
@@ -1127,6 +1188,19 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       ) : null}
       {activeSection === 'knowledge' ? (
         <FormalKnowledgeWorkspace
+          onListSourceReviews={listSourceReviews}
+          onReviewSources={reviewGraphSources}
+          onCloseEvidence={closeEvidence}
+          {...(queryGraphCenter === undefined
+            ? {}
+            : {
+                initialCenter: queryGraphCenter,
+                onReturnToQuery: () => {
+                  closeEvidence();
+                  setQueryGraphCenter(undefined);
+                  setActiveSection('query');
+                },
+              })}
           aiAssociationEnabled={
             workspace.status === 'ready' &&
             workspace.value.capabilities.includes('ai_associations')

@@ -1,11 +1,14 @@
+import {
+  DEFAULT_ENTRY_SAVED_QUERIES,
+  decodeEntrySavedQueryWrite,
+  reviseEntrySavedQueries,
+} from '../modules/entries/information_entry_saved_queries.js';
+import {decodeEntrySearchBody} from '../modules/entries/information_entry_search_request.js';
 import {Buffer} from 'node:buffer';
 
 import {
-  ENTRY_CHUNK_MODES,
   ENTRY_DOMAIN_KEYWORDS,
   ENTRY_TEXT_SEARCH_FIELDS,
-  ENTRY_TEXT_SEARCH_MODES,
-  ENTRY_RETRIEVAL_MODES,
   ENTRY_TYPE_KEYWORDS,
   INFORMATION_ENTRY_ASSOCIATION_ACTIONS,
   INFORMATION_ENTRY_ASSOCIATION_POLICY,
@@ -32,6 +35,13 @@ import {
   prepareAggregatedInformationDocumentTags,
   prepareInformationEntryAssociationOverride,
   prepareInformationEntryGraphEdit,
+  decodeSourceReviewRequest,
+  decodeSourceReviewRevisions,
+  decodeSourceReviewWrite,
+  isSourceReviewUuid,
+  listInformationEntrySourceReviewItems,
+  paginateInformationEntrySourceReviews,
+  type InformationEntrySourceReviewRevisions,
   prepareInformationEntryGraphRelation,
   prepareInformationEntryGraphVisibility,
   prepareManualInformationDocumentTags,
@@ -52,8 +62,6 @@ import {
   validateInformationDocumentWorkingCopyText,
   type CurrentInformationEntry,
   type EntryDomainKeyword,
-  type EntryTextSearchField,
-  type EntryTextSearchMode,
   type EntryTypeKeyword,
   type ManualEntryFragmentGroupInput,
   type InformationEntryAssociationAction,
@@ -153,7 +161,11 @@ import {
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
+import type {EntryMarkdownExportServicePort} from '../modules/entries/information_entry_markdown_export_service.js';
+import type {EntryMarkdownExportResult} from '../modules/entries/information_entry_markdown_export.js';
+
 export interface M1cApiServiceDependencies {
+  readonly entryMarkdownExports?: EntryMarkdownExportServicePort;
   readonly workspaceId: string;
   readonly blobStore: BlobStore;
   readonly reviewPreferences: ReviewPreferencesStore;
@@ -202,6 +214,8 @@ type LoadedInformationEntryRestructure =
     }>;
 
 export interface M1cApiServicePort {
+  previewEntryMarkdownExport(body: unknown): Promise<M1cHttpResult>;
+  generateEntryMarkdownExport(body: unknown): Promise<M1cHttpResult>;
   workspace(): M1cHttpResult;
   listEvidence(
     limit?: unknown,
@@ -228,6 +242,9 @@ export interface M1cApiServicePort {
     snapshotId: string,
     body: unknown,
   ): Promise<M1cHttpResult>;
+  loadEntrySavedQueries(): Promise<M1cHttpResult>;
+  writeEntrySavedQuery(body: unknown): Promise<M1cHttpResult>;
+  readEntryQueryContext(body: unknown): Promise<M1cHttpResult>;
   loadReviewPreferences(): Promise<M1cHttpResult>;
   saveReviewPreferences(body: unknown): Promise<M1cHttpResult>;
   loadInformationEntryPreferenceProfile(): Promise<M1cHttpResult>;
@@ -282,6 +299,12 @@ export interface M1cApiServicePort {
   exploreInformationEntries(body: unknown): Promise<M1cHttpResult>;
   synthesizeInformationEntryQuery(body: unknown): Promise<M1cHttpResult>;
   readInformationEntryKnowledgeGraph(body: unknown): Promise<M1cHttpResult>;
+  listInformationEntrySourceReviews(body: unknown): Promise<M1cHttpResult>;
+  reviewInformationEntryGraphSources(
+    entryId: string,
+    relatedEntryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult>;
   reviseInformationEntryKnowledgeGraphEdge(
     entryId: string,
     relatedEntryId: string,
@@ -685,6 +708,9 @@ export class M1cApiService implements M1cApiServicePort {
         'private_documents',
         'processing_runs',
         'review_preferences',
+        ...(this.#dependencies.entryMarkdownExports === undefined
+          ? []
+          : ['entry_markdown_export']),
         'workspace_bundle_export',
         'workspace_bundle_restore',
         ...(this.#dependencies.sourceSubscriptions === undefined
@@ -1154,6 +1180,123 @@ export class M1cApiService implements M1cApiServicePort {
       snapshot,
       originalText: informationDocumentText(materialized),
     });
+  }
+
+  public async previewEntryMarkdownExport(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const service = this.#dependencies.entryMarkdownExports;
+    if (service === undefined)
+      return httpResult(503, {
+        status: 'rejected',
+        issue: {code: 'export_read_unavailable'},
+      });
+    return entryMarkdownHttpResult(await service.preview(body));
+  }
+
+  public async generateEntryMarkdownExport(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const service = this.#dependencies.entryMarkdownExports;
+    if (service === undefined)
+      return httpResult(503, {
+        status: 'rejected',
+        issue: {code: 'export_read_unavailable'},
+      });
+    return entryMarkdownHttpResult(await service.generate(body));
+  }
+
+  public async loadEntrySavedQueries(): Promise<M1cHttpResult> {
+    try {
+      const preferences = await this.#dependencies.reviewPreferences.load(
+        this.#dependencies.workspaceId,
+      );
+      return httpResult(200, {
+        status: 'ok',
+        savedQueries:
+          preferences.entrySavedQueries ?? DEFAULT_ENTRY_SAVED_QUERIES,
+      });
+    } catch {
+      return reviewPreferencesFailure();
+    }
+  }
+
+  public async writeEntrySavedQuery(body: unknown): Promise<M1cHttpResult> {
+    const write = decodeEntrySavedQueryWrite(body);
+    if (write === undefined) return inputFailure('body');
+    try {
+      const updated = await updateReviewPreferences(
+        this.#dependencies.reviewPreferences,
+        this.#dependencies.workspaceId,
+        (preferences) => {
+          const result = reviseEntrySavedQueries(
+            preferences.entrySavedQueries ?? DEFAULT_ENTRY_SAVED_QUERIES,
+            write,
+          );
+          return {
+            next:
+              result.status === 'applied'
+                ? patchReviewPreferences(preferences, {
+                    entrySavedQueries: result.state,
+                  })
+                : preferences,
+            result,
+          };
+        },
+      );
+      const result = updated.result;
+      return result.status === 'rejected'
+        ? httpResult(409, {status: 'rejected', issue: {code: result.code}})
+        : httpResult(200, {status: result.status, savedQueries: result.state});
+    } catch {
+      return reviewPreferencesFailure();
+    }
+  }
+
+  public async readEntryQueryContext(body: unknown): Promise<M1cHttpResult> {
+    if (
+      !isRecord(body) ||
+      Object.keys(body).some(
+        (key) => !['entryId', 'includePrivate', 'onlyPrivate'].includes(key),
+      ) ||
+      typeof body.entryId !== 'string' ||
+      !CANONICAL_UUID.test(body.entryId) ||
+      typeof body.includePrivate !== 'boolean' ||
+      (body.onlyPrivate !== undefined &&
+        typeof body.onlyPrivate !== 'boolean') ||
+      (body.onlyPrivate === true && !body.includePrivate)
+    )
+      return inputFailure('body');
+    try {
+      const {workspaceId, informationEntryRepository: repository} =
+        this.#dependencies;
+      const rows =
+        repository.loadCurrentEntriesByIds === undefined
+          ? await repository.loadCurrentEntries(
+              workspaceId,
+              body.includePrivate,
+            )
+          : await repository.loadCurrentEntriesByIds(
+              workspaceId,
+              body.includePrivate,
+              [body.entryId],
+            );
+      const entry = rows.find(
+        (row) =>
+          row.workspaceId === workspaceId &&
+          row.entryId === body.entryId &&
+          (body.includePrivate === true || !row.value.isPrivate) &&
+          (body.onlyPrivate !== true || row.value.isPrivate),
+      );
+      return entry === undefined
+        ? httpResult(404, {
+            status: 'not_found',
+            issue: {code: 'entry_not_found'},
+          })
+        : httpResult(200, {status: 'ok', entry});
+    } catch {
+      return repositoryFailure();
+    }
   }
 
   public async loadReviewPreferences(): Promise<M1cHttpResult> {
@@ -3021,6 +3164,162 @@ export class M1cApiService implements M1cApiServicePort {
     }
   }
 
+  public async listInformationEntrySourceReviews(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const request = decodeSourceReviewRequest(body);
+    if (request === undefined) return inputFailure('body');
+    try {
+      const {
+        workspaceId,
+        informationEntryRepository: entries,
+        informationEntryAssociationRepository: associations,
+      } = this.#dependencies;
+      if (associations.loadSourceReviewPage !== undefined) {
+        return httpResult(200, {
+          status: 'ok',
+          ...(await associations.loadSourceReviewPage(workspaceId, request)),
+        });
+      }
+      const includePrivate = request.privacyScope !== 'public';
+      const [current, snapshot] = await Promise.all([
+        entries.loadCurrentEntries(workspaceId, includePrivate),
+        associations.loadAssociationSnapshot(workspaceId, includePrivate),
+      ]);
+      return httpResult(200, {
+        status: 'ok',
+        ...paginateInformationEntrySourceReviews(
+          listInformationEntrySourceReviewItems(
+            workspaceId,
+            current,
+            snapshot,
+            request,
+          ),
+          request,
+        ),
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
+  public async reviewInformationEntryGraphSources(
+    entryId: string,
+    relatedEntryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const input = decodeSourceReviewWrite(body);
+    const pair =
+      isSourceReviewUuid(entryId) && isSourceReviewUuid(relatedEntryId)
+        ? orderedInformationEntryAssociationPair(entryId, relatedEntryId)
+        : undefined;
+    if (input === undefined || pair === undefined) return inputFailure('body');
+    try {
+      const {
+        workspaceId,
+        informationEntryRepository: repository,
+        informationEntryAssociationRepository: associations,
+      } = this.#dependencies;
+      const ids = [pair.entryLowId, pair.entryHighId];
+      const [entries, snapshot] = await Promise.all([
+        repository.loadCurrentEntriesByIds === undefined
+          ? repository.loadCurrentEntries(workspaceId, input.includePrivate)
+          : repository.loadCurrentEntriesByIds(
+              workspaceId,
+              input.includePrivate,
+              ids,
+            ),
+        associations.loadAssociationSnapshotForEntries === undefined
+          ? associations.loadAssociationSnapshot(
+              workspaceId,
+              input.includePrivate,
+            )
+          : associations.loadAssociationSnapshotForEntries(
+              workspaceId,
+              input.includePrivate,
+              ids,
+            ),
+      ]);
+      const item = listInformationEntrySourceReviewItems(
+        workspaceId,
+        entries.filter((entry) => ids.includes(entry.entryId)),
+        snapshot,
+        {
+          filter: 'all',
+          privacyScope: input.includePrivate ? 'include_private' : 'public',
+          limit: 1,
+        },
+      )[0];
+      if (item === undefined)
+        return httpResult(404, {
+          status: 'not_found',
+          issue: {code: 'information_entry_graph_edge_not_found'},
+        });
+      if (
+        item.entryLow.revision !==
+          input.expectedEntryRevisions.entryLowRevision ||
+        item.entryHigh.revision !==
+          input.expectedEntryRevisions.entryHighRevision ||
+        item.edge.overrideRevision !== input.expectedRevision
+      ) {
+        return httpResult(409, {
+          status: 'rejected',
+          issue: {code: 'stale_source_review'},
+        });
+      }
+      const current = snapshot.overrides.find(
+        (row) =>
+          row.entryLowId === pair.entryLowId &&
+          row.entryHighId === pair.entryHighId,
+      );
+      const graph = prepareInformationEntryGraphRelation(
+        item.edge.label,
+        item.edge.direction,
+        current?.value.graph?.origin ?? 'association',
+        {
+          semanticKind: item.edge.semanticKind,
+          verificationStatus: input.verificationStatus,
+          note: input.note,
+        },
+      );
+      if (graph === undefined) return inputFailure('body.note');
+      const outcome = await associations.writeAssociationOverride({
+        workspaceId,
+        ...pair,
+        expectedRevision: input.expectedRevision,
+        revisionId: deriveInformationEntryAssociationOverrideRevisionId(
+          pair.entryLowId,
+          pair.entryHighId,
+          input.expectedRevision + 1,
+        ),
+        includePrivate: input.includePrivate,
+        expectedEntryRevisions: input.expectedEntryRevisions,
+        requireVisibleGraphEdge: true,
+        value: {
+          ...(current?.value ?? {
+            action: 'restore' as const,
+            manualAdjustment: 0,
+            isBlocked: false,
+          }),
+          graph: {...graph, reviewedRevisions: input.expectedEntryRevisions},
+        },
+      });
+      return outcome === 'not_found'
+        ? httpResult(404, {
+            status: 'not_found',
+            issue: {code: 'information_entry_graph_edge_not_found'},
+          })
+        : outcome === 'stale'
+          ? httpResult(409, {
+              status: 'rejected',
+              issue: {code: 'stale_source_review'},
+            })
+          : httpResult(200, {status: outcome});
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
   public async reviseInformationEntryKnowledgeGraphEdge(
     entryId: string,
     relatedEntryId: string,
@@ -3101,7 +3400,12 @@ export class M1cApiService implements M1cApiServicePort {
         value = prepareInformationEntryGraphEdit(
           current?.value,
           projection !== undefined,
-          graph,
+          input.expectedEntryRevisions === undefined
+            ? graph
+            : Object.freeze({
+                ...graph,
+                reviewedRevisions: input.expectedEntryRevisions,
+              }),
         );
       } else {
         value = prepareInformationEntryGraphVisibility(
@@ -3122,6 +3426,10 @@ export class M1cApiService implements M1cApiServicePort {
               input.expectedRevision + 1,
             ),
             includePrivate: input.includePrivate,
+            ...(input.operation === 'edit' &&
+            input.expectedEntryRevisions !== undefined
+              ? {expectedEntryRevisions: input.expectedEntryRevisions}
+              : {}),
             value,
           },
         );
@@ -4625,113 +4933,6 @@ function decodeEntryRevisionBody(body: unknown):
   });
 }
 
-function decodeEntrySearchBody(
-  body: unknown,
-): Readonly<InformationEntrySearchRequest> | undefined {
-  if (!isRecord(body)) return undefined;
-  const textValue = optionalBoundedText(body.text, 300);
-  const retrievalMode = body.retrievalMode ?? 'lexical';
-  const textMode = body.textMode ?? 'substring';
-  const textFields = decodeEntrySearchTextFields(body.textFields);
-  const contentKeyword = optionalBoundedText(body.contentKeyword, 80);
-  const sourceKey = optionalBoundedText(body.sourceKey, 2_048);
-  const snapshotId = body.snapshotId ?? undefined;
-  const typeKeyword = body.typeKeyword ?? undefined;
-  const typeCustomName = optionalBoundedText(body.typeCustomName, 80);
-  const domainKeyword = body.domainKeyword ?? undefined;
-  const domainCustomName = optionalBoundedText(body.domainCustomName, 80);
-  const domainScope = body.domainScope ?? 'any';
-  const chunkMode = body.chunkMode ?? undefined;
-  const includePrivate = body.includePrivate ?? false;
-  const onlyPrivate = body.onlyPrivate ?? false;
-  const limit = body.limit ?? 25;
-  const time = decodeEntrySearchTime(body.time);
-  const association = decodeEntrySearchAssociation(body.association);
-  const after = decodeEntrySearchCursor(body.after);
-  if (
-    textValue === null ||
-    typeof retrievalMode !== 'string' ||
-    !ENTRY_RETRIEVAL_MODES.includes(
-      retrievalMode as (typeof ENTRY_RETRIEVAL_MODES)[number],
-    ) ||
-    (retrievalMode !== 'lexical' &&
-      (textValue === undefined || textValue.trim() === '')) ||
-    typeof textMode !== 'string' ||
-    !ENTRY_TEXT_SEARCH_MODES.includes(textMode as EntryTextSearchMode) ||
-    textFields === undefined ||
-    (textValue === undefined &&
-      (body.textMode !== undefined || body.textFields !== undefined)) ||
-    contentKeyword === null ||
-    sourceKey === null ||
-    typeCustomName === null ||
-    domainCustomName === null ||
-    (snapshotId !== undefined &&
-      (typeof snapshotId !== 'string' || !CANONICAL_UUID.test(snapshotId))) ||
-    (typeKeyword !== undefined &&
-      (typeof typeKeyword !== 'string' ||
-        !ENTRY_TYPE_KEYWORDS.includes(typeKeyword as EntryTypeKeyword))) ||
-    (typeCustomName !== undefined && typeKeyword !== 'other') ||
-    (typeKeyword === 'other' && typeCustomName === undefined) ||
-    (domainKeyword !== undefined &&
-      (typeof domainKeyword !== 'string' ||
-        !ENTRY_DOMAIN_KEYWORDS.includes(
-          domainKeyword as EntryDomainKeyword,
-        ))) ||
-    (domainScope !== 'any' &&
-      domainScope !== 'primary' &&
-      domainScope !== 'secondary') ||
-    (domainCustomName !== undefined && domainKeyword !== 'other') ||
-    (domainKeyword === 'other' && domainCustomName === undefined) ||
-    (domainKeyword === undefined && domainScope !== 'any') ||
-    (chunkMode !== undefined &&
-      (typeof chunkMode !== 'string' ||
-        !ENTRY_CHUNK_MODES.includes(chunkMode as 'split' | 'whole'))) ||
-    (body.time !== undefined && time === undefined) ||
-    (body.association !== undefined && association === undefined) ||
-    (body.after !== undefined && after === undefined) ||
-    typeof includePrivate !== 'boolean' ||
-    typeof onlyPrivate !== 'boolean' ||
-    (onlyPrivate && !includePrivate) ||
-    typeof limit !== 'number' ||
-    !Number.isSafeInteger(limit) ||
-    limit < 1 ||
-    limit > 100
-  ) {
-    return undefined;
-  }
-  return Object.freeze({
-    ...(textValue === undefined
-      ? {}
-      : {
-          text: textValue,
-          textMode: textMode as EntryTextSearchMode,
-          textFields,
-        }),
-    retrievalMode: retrievalMode as (typeof ENTRY_RETRIEVAL_MODES)[number],
-    ...(contentKeyword === undefined ? {} : {contentKeyword}),
-    ...(sourceKey === undefined ? {} : {sourceKey}),
-    ...(snapshotId === undefined ? {} : {snapshotId}),
-    ...(typeKeyword === undefined
-      ? {}
-      : {typeKeyword: typeKeyword as EntryTypeKeyword}),
-    ...(typeCustomName === undefined ? {} : {typeCustomName}),
-    ...(domainKeyword === undefined
-      ? {}
-      : {domainKeyword: domainKeyword as EntryDomainKeyword}),
-    ...(domainCustomName === undefined ? {} : {domainCustomName}),
-    domainScope,
-    ...(chunkMode === undefined
-      ? {}
-      : {chunkMode: chunkMode as 'split' | 'whole'}),
-    ...(time === undefined ? {} : {time}),
-    ...(association === undefined ? {} : {association}),
-    includePrivate,
-    onlyPrivate,
-    limit,
-    ...(after === undefined ? {} : {after}),
-  });
-}
-
 function decodeInformationEntryTypeReviewBody(body: unknown):
   | Readonly<{
       includePrivate: boolean;
@@ -4893,27 +5094,6 @@ function querySynthesisRequestsPrivateScope(body: unknown): boolean {
   );
 }
 
-function decodeEntrySearchTextFields(
-  value: unknown,
-): readonly EntryTextSearchField[] | undefined {
-  const fields = value ?? ENTRY_TEXT_SEARCH_FIELDS;
-  if (
-    !Array.isArray(fields) ||
-    fields.length < 1 ||
-    fields.length > ENTRY_TEXT_SEARCH_FIELDS.length ||
-    !fields.every(
-      (field) =>
-        typeof field === 'string' &&
-        ENTRY_TEXT_SEARCH_FIELDS.includes(field as EntryTextSearchField),
-    ) ||
-    new Set(fields).size !== fields.length
-  ) {
-    return undefined;
-  }
-  return Object.freeze(
-    ENTRY_TEXT_SEARCH_FIELDS.filter((field) => fields.includes(field)),
-  );
-}
 function isOptionalAssessmentScore(
   value: unknown,
 ): value is 1 | 2 | 3 | 4 | 5 | undefined {
@@ -4937,115 +5117,6 @@ function optionalBoundedText(
   return Array.from(normalized).length <= maximumCodePoints ? normalized : null;
 }
 
-function decodeEntrySearchTime(body: unknown):
-  | Readonly<{
-      field: 'published' | 'captured';
-      from?: string;
-      to?: string;
-    }>
-  | undefined {
-  if (body === undefined) return undefined;
-  if (!isRecord(body)) return undefined;
-  const from = body.from ?? undefined;
-  const to = body.to ?? undefined;
-  if (
-    (body.field !== 'published' && body.field !== 'captured') ||
-    (from !== undefined && (typeof from !== 'string' || !isIsoDate(from))) ||
-    (to !== undefined && (typeof to !== 'string' || !isIsoDate(to))) ||
-    (from === undefined && to === undefined) ||
-    (typeof from === 'string' && typeof to === 'string' && from > to)
-  ) {
-    return undefined;
-  }
-  return Object.freeze({
-    field: body.field,
-    ...(typeof from === 'string' ? {from} : {}),
-    ...(typeof to === 'string' ? {to} : {}),
-  });
-}
-
-function decodeEntrySearchAssociation(body: unknown):
-  | Readonly<{
-      entryId: string;
-      maximumDepth: 1 | 2;
-      minimumScore: number;
-    }>
-  | undefined {
-  if (body === undefined) return undefined;
-  if (
-    !isRecord(body) ||
-    typeof body.entryId !== 'string' ||
-    !CANONICAL_UUID.test(body.entryId) ||
-    (body.maximumDepth !== 1 && body.maximumDepth !== 2) ||
-    typeof body.minimumScore !== 'number' ||
-    !Number.isSafeInteger(body.minimumScore) ||
-    body.minimumScore < 0 ||
-    body.minimumScore > 10_000
-  ) {
-    return undefined;
-  }
-  return Object.freeze({
-    entryId: body.entryId,
-    maximumDepth: body.maximumDepth,
-    minimumScore: body.minimumScore,
-  });
-}
-
-function decodeEntrySearchCursor(
-  body: unknown,
-): Readonly<NonNullable<InformationEntrySearchRequest['after']>> | undefined {
-  if (body === undefined) return undefined;
-  if (
-    !isRecord(body) ||
-    body.schemaVersion !== 2 ||
-    typeof body.querySha256 !== 'string' ||
-    !/^[0-9a-f]{64}$/u.test(body.querySha256) ||
-    typeof body.associationDepth !== 'number' ||
-    !Number.isSafeInteger(body.associationDepth) ||
-    body.associationDepth < 0 ||
-    body.associationDepth > 2 ||
-    typeof body.textScore !== 'number' ||
-    !Number.isSafeInteger(body.textScore) ||
-    body.textScore < 0 ||
-    body.textScore > 10_000 ||
-    typeof body.matchReasonCount !== 'number' ||
-    !Number.isSafeInteger(body.matchReasonCount) ||
-    body.matchReasonCount < 0 ||
-    body.matchReasonCount > 5 ||
-    typeof body.associationScore !== 'number' ||
-    !Number.isSafeInteger(body.associationScore) ||
-    body.associationScore < 0 ||
-    body.associationScore > 10_000 ||
-    typeof body.capturedAt !== 'string' ||
-    Number.isNaN(Date.parse(body.capturedAt)) ||
-    typeof body.documentOrder !== 'number' ||
-    !Number.isSafeInteger(body.documentOrder) ||
-    body.documentOrder < 0 ||
-    typeof body.entryId !== 'string' ||
-    !CANONICAL_UUID.test(body.entryId)
-  ) {
-    return undefined;
-  }
-  return Object.freeze({
-    schemaVersion: 2 as const,
-    querySha256: body.querySha256,
-    associationDepth: body.associationDepth,
-    textScore: body.textScore,
-    matchReasonCount: body.matchReasonCount,
-    associationScore: body.associationScore,
-    capturedAt: new Date(body.capturedAt).toISOString(),
-    documentOrder: body.documentOrder,
-    entryId: body.entryId,
-  });
-}
-
-function isIsoDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) return false;
-  const date = new Date(value + 'T00:00:00.000Z');
-  return (
-    !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
-  );
-}
 function decodeInformationEntryKnowledgeGraphRequest(body: unknown):
   | Readonly<{
       query?: string;
@@ -5098,6 +5169,7 @@ function decodeInformationEntryKnowledgeGraphEdgeWrite(body: unknown):
           expectedRevision: number;
           includePrivate: boolean;
           operation: 'edit';
+          expectedEntryRevisions?: Readonly<InformationEntrySourceReviewRevisions>;
           label: string;
           direction: InformationEntryGraphDirection;
           semanticKind: InformationEntryGraphSemanticKind;
@@ -5125,6 +5197,15 @@ function decodeInformationEntryKnowledgeGraphEdgeWrite(body: unknown):
   if (body.operation === 'edit') {
     const semanticKind = body.semanticKind ?? 'related';
     const verificationStatus = body.verificationStatus ?? 'unreviewed';
+    const expectedEntryRevisions = decodeSourceReviewRevisions(
+      body.expectedEntryRevisions,
+    );
+    if (
+      (body.expectedEntryRevisions !== undefined ||
+        verificationStatus === 'source_checked') &&
+      expectedEntryRevisions === undefined
+    )
+      return undefined;
     const note = body.note ?? '';
     if (
       typeof body.label !== 'string' ||
@@ -5148,6 +5229,7 @@ function decodeInformationEntryKnowledgeGraphEdgeWrite(body: unknown):
       expectedRevision: body.expectedRevision,
       includePrivate,
       operation: 'edit' as const,
+      ...(expectedEntryRevisions === undefined ? {} : {expectedEntryRevisions}),
       label: body.label,
       direction: body.direction as InformationEntryGraphDirection,
       semanticKind: semanticKind as InformationEntryGraphSemanticKind,
@@ -6209,5 +6291,25 @@ function isCanonicalUuidArray(value: unknown): value is string[] {
       (entryId: unknown) =>
         typeof entryId === 'string' && CANONICAL_UUID.test(entryId),
     )
+  );
+}
+
+function entryMarkdownHttpResult(
+  result: EntryMarkdownExportResult,
+): M1cHttpResult {
+  if (result.status !== 'rejected')
+    return httpResult(result.status === 'exported' ? 201 : 200, result);
+  const code = result.issue.code;
+  return httpResult(
+    code === 'input_invalid'
+      ? 400
+      : code === 'selection_unavailable'
+        ? 404
+        : ['selection_stale', 'preview_stale'].includes(code)
+          ? 409
+          : code === 'export_too_large'
+            ? 413
+            : 503,
+    result,
   );
 }

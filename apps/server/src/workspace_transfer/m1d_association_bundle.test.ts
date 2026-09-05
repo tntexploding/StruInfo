@@ -103,6 +103,8 @@ function syntheticSnapshot(reverseProjections: boolean) {
                   graph_semantic_kind: null,
                   graph_verification_status: null,
                   graph_note: null,
+                  graph_reviewed_entry_low_revision: null,
+                  graph_reviewed_entry_high_revision: null,
                   created_at: CREATED_AT,
                   updated_at: CREATED_AT,
                 },

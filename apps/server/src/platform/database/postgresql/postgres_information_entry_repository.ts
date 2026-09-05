@@ -616,31 +616,13 @@ export class PostgresInformationEntryRepository
     return runPostgresTransaction(
       this.#pool,
       'repeatable_read_only',
-      async (client) => {
-        const parameters = [workspaceId, includePrivate, entryIds] as const;
-        const core = await client.query<Row>(
-          READ_CURRENT_INFORMATION_ENTRIES_BY_ID_SQL,
-          parameters,
-        );
-        const inputs = await client.query<Row>(
-          READ_CURRENT_INFORMATION_ENTRY_INPUTS_BY_ID_SQL,
-          parameters,
-        );
-        const keywords = await client.query<Row>(
-          READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_BY_ID_SQL,
-          parameters,
-        );
-        const domains = await client.query<Row>(
-          READ_CURRENT_INFORMATION_ENTRY_DOMAINS_BY_ID_SQL,
-          parameters,
-        );
-        return mapCurrentEntries(
-          core.rows,
-          inputs.rows,
-          keywords.rows,
-          domains.rows,
-        );
-      },
+      (client) =>
+        loadCurrentInformationEntriesByIds(
+          client,
+          workspaceId,
+          includePrivate,
+          entryIds,
+        ),
     );
   }
 
@@ -853,6 +835,32 @@ export async function insertNewEntry(
     entry.entryId,
     entry.value,
   );
+}
+
+export async function loadCurrentInformationEntriesByIds(
+  client: PostgresClientBoundary,
+  workspaceId: string,
+  includePrivate: boolean,
+  entryIds: readonly string[],
+): Promise<readonly Readonly<CurrentInformationEntry>[]> {
+  const parameters = [workspaceId, includePrivate, entryIds] as const;
+  const core = await client.query<Row>(
+    READ_CURRENT_INFORMATION_ENTRIES_BY_ID_SQL,
+    parameters,
+  );
+  const inputs = await client.query<Row>(
+    READ_CURRENT_INFORMATION_ENTRY_INPUTS_BY_ID_SQL,
+    parameters,
+  );
+  const keywords = await client.query<Row>(
+    READ_CURRENT_INFORMATION_ENTRY_KEYWORDS_BY_ID_SQL,
+    parameters,
+  );
+  const domains = await client.query<Row>(
+    READ_CURRENT_INFORMATION_ENTRY_DOMAINS_BY_ID_SQL,
+    parameters,
+  );
+  return mapCurrentEntries(core.rows, inputs.rows, keywords.rows, domains.rows);
 }
 
 export function informationEntryValueParameters(

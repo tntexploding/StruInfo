@@ -379,3 +379,15 @@ regression through Evidence import, Entry materialization, deterministic tags,
 incremental Associations, current search projection, exact source return,
 Entry-centred knowledge graph and the P5C database observer. It uses only
 synthetic temporary resources and does not itself create a release.
+
+ADR 0067 adds bounded external named Entry queries and current reading context.
+See [the accepted decision](0067-saved-entry-queries-and-reading-context.md) for
+privacy renewal, preference concurrency and package compatibility.
+
+ADR 0068 adds a bounded relationship source-review queue, checks of the displayed
+Entry versions and Association Bundle v5. See [the decision](0068-version-bound-relation-source-review.md)
+for old unbound checks, concurrent edits, privacy and projection rebuild behavior.
+
+ADR 0069 adds explicit selected-Entry Markdown preview and export under the
+existing workspace lock. See [the decision](0069-cited-entry-markdown-export.md)
+for exact evidence, privacy, current-version checks and external file ownership.

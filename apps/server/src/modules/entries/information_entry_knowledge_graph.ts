@@ -1,3 +1,4 @@
+import {readInformationEntrySourceReview} from './information_entry_source_review.js';
 import type {CurrentInformationEntry} from './information_entry_contract.js';
 import {
   INFORMATION_ENTRY_GRAPH_DIRECTIONS,
@@ -130,8 +131,14 @@ export function buildInformationEntryKnowledgeGraph(
     .sort(compareGraphViews)
     .slice(0, neighborLimit);
   const hidden = views.filter((view) => view.isBlocked);
-  const edges = Object.freeze(visible.map(toGraphEdge));
-  const hiddenEdges = Object.freeze(hidden.map(toGraphEdge));
+  const edgeFor = (view: (typeof views)[number]) =>
+    toInformationEntryGraphEdge(
+      view,
+      center.entryId < view.relatedEntry.entryId ? center : view.relatedEntry,
+      center.entryId < view.relatedEntry.entryId ? view.relatedEntry : center,
+    );
+  const edges = Object.freeze(visible.map(edgeFor));
+  const hiddenEdges = Object.freeze(hidden.map(edgeFor));
   return Object.freeze({
     center,
     nodes: Object.freeze([
@@ -165,8 +172,10 @@ function graphViewPriority(
   return 3;
 }
 
-function toGraphEdge(
+export function toInformationEntryGraphEdge(
   view: ReturnType<typeof listInformationEntryAssociations>[number],
+  lowEntry: Readonly<CurrentInformationEntry>,
+  highEntry: Readonly<CurrentInformationEntry>,
 ): Readonly<InformationEntryGraphEdge> {
   const projection = view.projection;
   const override = view.override;
@@ -176,9 +185,14 @@ function toGraphEdge(
   if (entryLowId === undefined || entryHighId === undefined) {
     throw new Error('Information Entry graph endpoints are unavailable.');
   }
+  const sourceReview = readInformationEntrySourceReview(graph, {
+    entryLowRevision: lowEntry.revision,
+    entryHighRevision: highEntry.revision,
+  });
   return Object.freeze({
     entryLowId,
     entryHighId,
+    sourceReview,
     label: graph?.label ?? INFORMATION_ENTRY_GRAPH_DEFAULT_LABEL,
     direction: graph?.direction ?? 'symmetric',
     origin:
@@ -190,7 +204,8 @@ function toGraphEdge(
             ? 'automatically_calculated'
             : 'user_edited',
     semanticKind: graph?.semanticKind ?? 'similarity',
-    verificationStatus: graph?.verificationStatus ?? 'calculated',
+    verificationStatus:
+      graph === undefined ? 'calculated' : sourceReview.status,
     note: graph?.note ?? '',
     effectiveScore: view.effectiveScore,
     isBlocked: view.isBlocked,

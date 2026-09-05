@@ -457,6 +457,58 @@ export class M1cApiController {
     );
   }
 
+  @Get('entries/saved-queries')
+  public async loadEntrySavedQueries(@Res() response: Response): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.loadEntrySavedQueries(),
+    );
+  }
+
+  @Post('entries/saved-queries')
+  public async writeEntrySavedQuery(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.writeEntrySavedQuery(body),
+    );
+  }
+
+  @Post('entries/markdown-export/preview')
+  public async previewEntryMarkdownExport(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.previewEntryMarkdownExport(body),
+    );
+  }
+
+  @Post('entries/markdown-export')
+  public async generateEntryMarkdownExport(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.generateEntryMarkdownExport(body),
+    );
+  }
+
+  @Post('entries/query-context')
+  public async readEntryQueryContext(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.readEntryQueryContext(body),
+    );
+  }
+
   @Post('entries/search')
   public async searchInformationEntries(
     @Body() body: unknown,
@@ -551,6 +603,34 @@ export class M1cApiController {
     writeLocalApiResponse(
       response,
       await this.#service.readInformationEntryKnowledgeGraph(body),
+    );
+  }
+
+  @Post('knowledge-graph/source-reviews')
+  public async listInformationEntrySourceReviews(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.listInformationEntrySourceReviews(body),
+    );
+  }
+
+  @Put('knowledge-graph/edges/:entryId/:relatedEntryId/source-review')
+  public async reviewInformationEntryGraphSources(
+    @Param('entryId') entryId: string,
+    @Param('relatedEntryId') relatedEntryId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.reviewInformationEntryGraphSources(
+        entryId,
+        relatedEntryId,
+        body,
+      ),
     );
   }
 
