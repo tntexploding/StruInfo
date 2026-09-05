@@ -21,6 +21,19 @@ Before frontend implementation or frontend design review, also read:
 
 ## Current Phase
 
+### Maintenance and Owner Use (2026-09-05)
+
+The owner has completed the five accepted roadmap increments and directed the
+project to pause feature development after the finite maintenance closeout.
+Use `docs/maintenance-handoff.md` as the current handoff. Do not start roadmap
+candidates, frozen M2-P4R, refactors or new integrations autonomously. Continue
+only requested usage support, reproducible product fixes, security and necessary
+compatibility maintenance. The owner has authorized this closeout to inspect,
+back up, upgrade and restore-drill the existing private Docker instance; this
+does not authorize placing any of its content, secrets or configuration in Git,
+fixtures or application artifacts. Future material operations remain scoped to
+the owner-selected external instance and purpose.
+
 ### Data-Free Development Baseline
 
 The active workspace is intentionally empty for continued product development. The

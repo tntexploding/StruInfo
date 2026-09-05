@@ -1,8 +1,12 @@
 # StruInfo 生产运行与维护
 
 - 状态：`v0.1.0` 已发布；所有者确认私人云端 Docker 实例已上线；P5A–D 工程边界已完成，实际生产记录继续外置
-- 最近更新：2026-09-03
+- 最近更新：2026-09-05（维护基线、升级与实际运行交接）
 - 决策：[ADR 0045](adr/0045-operational-production-baseline.md)、[ADR 0046](adr/0046-codex-operated-bulk-ingestion.md)、[ADR 0053](adr/0053-real-scale-capacity-classification-and-query-follow-up.md)、[ADR 0062](adr/0062-production-release-identity-and-live-deployment-baseline.md)、[ADR 0063](adr/0063-backup-recoverability-and-retention-preview.md)、[ADR 0064](adr/0064-operational-health-capacity-and-alerting.md)、[ADR 0065](adr/0065-production-flow-release-regression.md)
+
+本轮维护阶段的执行清单与结果见[维护交接](maintenance-handoff.md)。当前维护版本为 `v0.2.0`；
+后文 `v0.1.0` 数字属于历史发行证据。常规运行保持 `all` 单实例，维护写操作与备份/恢复
+使用停写窗口；不要把角色启动脚本的存在解释为已支持多个独立进程并发修改同一偏好文件。
 
 ## 1. 适用范围
 
@@ -487,10 +491,10 @@ docker compose -f compose.production.yaml --profile maintenance run --rm restore
 ## 8. 云端上线与持续复核
 
 所有者已确认私人云端 Docker 实例投入使用。下面的检查项现在用于持续复核、升级和恢复准备，
-不再表示服务尚未部署。当前仓库没有目标主机访问证据，因此任何未核对项目仍应保留在外部运维
-记录中，不能根据源码或所有者的上线确认自动填写为通过。
+不再表示服务尚未部署。这一历史确认不替代实际主机证据。本次 v0.2.0 收尾已独立核验本机 Docker 私人实例，
+结果见[维护交接](maintenance-handoff.md)；其他主机及未检查项目仍不能据此填写为通过。
 
-- 在目标 Linux/容器宿主拉取固定 `v0.1.0` 源码或镜像，记录不可变 commit、image digest、基础镜像材料和漏洞扫描；
+- 在目标容器宿主使用已核对的维护版本源码或镜像，记录不可变 commit、image digest、基础镜像材料和漏洞扫描；
 - 复用本地已通过的 PostgreSQL 18.6 合成演练顺序，在云端 disposable 空库复核迁移、队列准备、grant、preflight、backup、空库 restore 和重启；
 - 保持应用端口只绑定回环，按第 6 节配置 HTTPS、认证反向代理和宿主防火墙；
 - 确认订阅/抓取/Provider 仅按显式配置出站，并决定备份保留、监控告警和资源预算；
@@ -530,3 +534,14 @@ exact no-op 重放、两次受控故障恢复、15,000 个当前搜索投影、1
 真实域名/IP、镜像 digest、证书、认证、防火墙、secret、数据库、数据根、个人数据、备份文件名和
 告警目标都不得写回本手册或 Git。生产检查结果只记录脱敏状态、时间、版本身份和必要摘要。完成
 上述开发回归不会自动创建发行、升级私人实例或恢复数据；这些动作必须由所有者明确启动。
+
+## 10. v0.2.0 有限维护交接
+
+2026-09-05，所有者授权本机 Docker 实例的真实备份、隔离空库恢复和升级。
+恢复前后 Blob 数与表行数一致；恢复副本又通过命名查询重启、来源复核和引用导出。
+正式实例已应用至迁移 000031，运行 v0.2.0 并通过健康、查询与精确来源只读检查。
+本次未调用 Provider；演练写入只发生在隔离副本，内容与实际身份始终在仓库外。
+
+镜像的基础系统扫描保留失败状态，已核对的不可达项见 [DH-013](deferred-hardening-memo.md#dh-013-base-image-scanner-findings-outside-the-current-runtime-path)。
+不能将历史零告警结果或当前产品回归通过描述为本次镜像扫描通过。
+巡检、备份调度、同机副本与离线限制以维护交接及外部运维记录为准。

@@ -2,8 +2,14 @@
 
 ## Supported version
 
-The current private single-user release line is `0.1.x`. Security fixes are
-applied to the latest release in that line.
+The current private single-user maintenance line is `0.2.x`. Security fixes are
+applied to its latest release. The previous `0.1.0` remains available as a
+historical release.
+
+The weekly and manually runnable `Maintenance security` workflow audits production
+packages and the built runtime image. Failed checks require triage; they do not
+authorize automatic dependency updates or deployment. Operational checks and
+notifications for a private instance remain in its external maintenance setup.
 
 ## Deployment boundary
 
