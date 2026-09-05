@@ -2,7 +2,7 @@
 
 - Foundation task: `M0-S-FOUNDATION-MAINT-001`
 - Dependency increments: `M1A-MD-DEP-MAINT-001`, `M1E-5B-DOCUMENT-IMPORT`, `M1I-2-RSS-ATOM`
-- Tracked lock SHA-256: `9AA55459A0A5EDD2D6AB7BEEB8CD81152297CB2276CB2026E4634F2306D7BD22`
+- Tracked lock SHA-256: `B63038642FACCBC710F2F2F49E86CC554171898788984351658676583B5386CF`
 - M1I-2 pre-increment lock SHA-256: `10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A`
 - M1E-5B pre-increment lock SHA-256: `99F261C35311919380BF6AEF018E0B2A9D076DC7937A5EDE1E0D7F26F56192A0`
 - Foundation pre-M1A lock SHA-256: `A783E1C5B2DADD8B653D8E16446847530473D5569BB08830D7FC03D79400880B`
@@ -308,7 +308,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `prettier@3.9.6` | development | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/prettier@3.9.6/LICENSE`<br>`docs/dependencies/licenses/npm/prettier@3.9.6/THIRD-PARTY-NOTICES.md` |
 | `proxy-addr@2.0.7` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/proxy-addr@2.0.7/LICENSE` |
 | `punycode@2.3.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/punycode@2.3.1/LICENSE-MIT.txt` |
-| `qs@6.15.3` | transitive | `BSD-3-Clause` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/qs@6.15.3/LICENSE.md` |
+| `qs@6.16.0` | transitive | `BSD-3-Clause` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/qs@6.16.0/LICENSE.md` |
 | `range-parser@1.3.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/range-parser@1.3.0/LICENSE` |
 | `raw-body@3.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/raw-body@3.0.2/LICENSE` |
 | `react-dom@19.2.8` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/react-dom@19.2.8/LICENSE` |

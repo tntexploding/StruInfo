@@ -2,10 +2,10 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "StruInfo-M1I-2-rss-atom-9AA55459A0A5EDD2D6AB7BEEB8CD81152297CB2276CB2026E4634F2306D7BD22",
-  "documentNamespace": "https://struinfo.invalid/spdx/m1i/rss-atom/9AA55459A0A5EDD2D6AB7BEEB8CD81152297CB2276CB2026E4634F2306D7BD22",
+  "name": "StruInfo-v0.2.0-npm-closure",
+  "documentNamespace": "https://struinfo.invalid/spdx/releases/v0.2.0/npm-closure",
   "creationInfo": {
-    "created": "2026-08-27T00:00:00Z",
+    "created": "2026-09-05T00:00:00Z",
     "creators": [
       "Tool: StruInfo M0-S Maintenance audit-npm-closure.mjs",
       "Tool: M0-S-FOUNDATION-MAINT-001 exact-closure materialization",
@@ -23,14 +23,14 @@
     {
       "SPDXID": "SPDXRef-RootPackage",
       "name": "struinfo",
-      "versionInfo": "0.1.0",
+      "versionInfo": "0.2.0",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "NOASSERTION",
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
       "copyrightText": "NOASSERTION",
       "primaryPackagePurpose": "APPLICATION",
-      "comment": "Tracked dependency inventory through M1I-2. StruInfo distribution license remains unselected; browser and container artifacts are excluded."
+      "comment": "Dependency inventory for the v0.2.0 maintenance release. Container operating-system packages are reported separately by the runtime image scan."
     },
     {
       "SPDXID": "SPDXRef-Package-2c8152c2f849b2d0",
@@ -8839,8 +8839,8 @@
     {
       "SPDXID": "SPDXRef-Package-18f94a69245b729b",
       "name": "qs",
-      "versionInfo": "6.15.3",
-      "downloadLocation": "https://registry.npmjs.org/qs/-/qs-6.15.3.tgz",
+      "versionInfo": "6.16.0",
+      "downloadLocation": "https://registry.npmjs.org/qs/-/qs-6.16.0.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "BSD-3-Clause",
@@ -8848,24 +8848,24 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "C0278B636E7A016D6E835CD8F194A63C276DFF430620E4A04344A4BA8892C0F9"
+          "checksumValue": "F7A1BFC96C3A0C1172F1F3EF3C280F5CE8054841922E715F0D686DA62D7BEBA4"
         },
         {
           "algorithm": "SHA512",
-          "checksumValue": "3BD825DF30A5E61E5B970D4A194CD02A1039A145D297CAF0508339A344B79C25CC9624AFCB90F3C7BFC325C23E4B08080AFF889DE499C21061D684B210703BD4"
+          "checksumValue": "87A7E1388691AC80F609B118D9FAACFBBB7E517668F8C2C09D4E60448ABCE6E16D76250F09DB00A4C947857A202953381CCD8355B22318D4D3607D8E7263F5BC"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/qs@6.15.3"
+          "referenceLocator": "pkg:npm/qs@6.16.0"
         }
       ],
       "supplier": "Person: ljharb",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "Role=transitive; category=ROUTINE_REVIEW; v0.2.0 security repair for GHSA-x5fp-wj9c-mxmx and GHSA-4mjr-xmp4-gh2g. Exact registry integrity and BSD-3-Clause license verified."
     },
     {
       "SPDXID": "SPDXRef-Package-d8d03a877289186b",
@@ -11414,6 +11414,16 @@
       "spdxElementId": "SPDXRef-RootPackage",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-c364b9175ee3728b"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-18f94a69245b729b",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-c78ef7160e212e79"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-18f94a69245b729b",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-6a37646cc624feb0"
     }
   ]
 }
