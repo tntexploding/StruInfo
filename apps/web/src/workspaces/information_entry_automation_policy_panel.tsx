@@ -107,21 +107,21 @@ export interface InformationEntryAutomationPolicyPanelProps {
 }
 
 const ROUTE_LABELS: Readonly<Record<EntryAutomationRoute, string>> = {
-  advance_candidate: '可推进候选',
+  advance_candidate: '建议继续处理',
   manual_review: '人工审核',
-  defer_candidate: '暂缓候选',
+  defer_candidate: '建议暂缓',
 };
 
 const REASON_LABELS: Readonly<Record<EntryAutomationReason, string>> = {
   advance_threshold_met: '达到推进阈值',
   defer_threshold_met: '达到暂缓阈值',
   threshold_not_met: '未达到阈值',
-  insufficient_profile_evidence: '偏好证据不足',
+  insufficient_profile_evidence: '参考数据不足',
   mixed_signals: '有用与有趣信号冲突',
   manual_takeover: '用户人工接管',
   run_budget_exhausted: '本次条目预算已用完',
-  advance_budget_exhausted: '推进候选预算已用完',
-  defer_budget_exhausted: '暂缓候选预算已用完',
+  advance_budget_exhausted: '继续处理数量已达上限',
+  defer_budget_exhausted: '暂缓数量已达上限',
 };
 
 export function InformationEntryAutomationPolicyPanel({
@@ -185,7 +185,7 @@ export function InformationEntryAutomationPolicyPanel({
           } else {
             setState({
               status: 'error',
-              message: '无法读取自动分流设置；Entry 与标签数据没有被修改。',
+              message: '无法读取自动分流设置；条目和标签没有被修改。',
             });
           }
         }
@@ -270,7 +270,7 @@ export function InformationEntryAutomationPolicyPanel({
                 message:
                   response.body.status === 'not_found'
                     ? '该运行已不存在或不属于当前工作区。'
-                    : '无法读取该运行的完整审计记录。',
+                    : '无法读取这次运行的详细记录。',
               },
         );
       } catch {
@@ -283,7 +283,7 @@ export function InformationEntryAutomationPolicyPanel({
         setRunAudit({
           status: 'error',
           runId,
-          message: '本地服务当前不可用，无法读取完整运行审计。',
+          message: '本地服务当前不可用，无法读取运行详情。',
         });
       }
     },
@@ -397,8 +397,8 @@ export function InformationEntryAutomationPolicyPanel({
         setDraftState(undefined);
         setMessage(
           response.body.status === 'applied'
-            ? '自动分流策略已保存到外部个人配置。'
-            : '自动分流策略没有变化。',
+            ? '自动分流设置已保存。'
+            : '自动分流设置没有变化。',
         );
       } else {
         const issue =
@@ -407,17 +407,17 @@ export function InformationEntryAutomationPolicyPanel({
             : {code: 'entry_automation_policy_failed'};
         setMessage(
           issue.code === 'stale_entry_automation_policy_revision'
-            ? '策略已在其他操作中更新，请重新读取。'
+            ? '自动分流设置已在其他操作中更新，请重新读取。'
             : issue.code === 'stale_entry_preference_profile_revision'
-              ? '偏好规则版本已变化，请重新绑定并保存策略。'
-              : '策略保存失败；现有配置没有被修改。',
+              ? '偏好规则已经更新，请重新选择并保存。'
+              : '设置保存失败；现有配置没有被修改。',
         );
       }
     } catch {
       if (!mounted.current || !saveRequests.current.isCurrent(requestId)) {
         return;
       }
-      setMessage('本地服务当前不可用；策略没有保存。');
+      setMessage('本地服务当前不可用；设置没有保存。');
     } finally {
       if (mounted.current && saveRequests.current.isCurrent(requestId)) {
         setSaving(false);
@@ -456,8 +456,8 @@ export function InformationEntryAutomationPolicyPanel({
           response.body.status === 'stale_policy' ||
           response.body.status === 'stale_profile' ||
           response.body.status === 'stale_entries'
-            ? '策略、偏好或 Entry 已变化，请重新读取后再试算。'
-            : '试算失败；没有创建运行记录或修改 Entry。',
+            ? '设置、偏好或条目已变化，请重新读取后再试算。'
+            : '试算失败；没有创建运行记录或修改条目。',
       });
     } catch {
       if (!mounted.current || !trialRequests.current.isCurrent(requestId)) {
@@ -501,20 +501,20 @@ export function InformationEntryAutomationPolicyPanel({
         setMessage(
           response.body.replayed
             ? '同一请求已执行过，已读取原运行记录。'
-            : '分流记录已完成；Entry、标签、联系和查询均未被改写。',
+            : '分流记录已完成；条目、标签、联系和查询均未改变。',
         );
       } else if (response.body.status === 'failed') {
         setMessage(
           response.body.recoveryPending
-            ? '运行失败且恢复仍待确认；策略已尽力暂停，请查看运行记录。'
-            : '运行失败并已补偿；策略已暂停或被更新。',
+            ? '运行失败且恢复仍待确认；自动分流已尽力暂停，请查看运行记录。'
+            : '运行失败并已恢复；自动分流已暂停或被更新。',
         );
       } else if (response.body.status === 'not_ready') {
         setMessage(
-          '当前策略未处于可执行状态，请重新读取并检查启用、暂停和版本绑定。',
+          '当前设置暂时不能执行，请重新读取并检查启用、暂停和偏好规则。',
         );
       } else {
-        setMessage('本次运行标识发生冲突；没有创建新的分流记录。');
+        setMessage('这次运行与已有记录冲突；没有创建新的分流记录。');
       }
       await loadControlState({preserveMessage: true});
     } catch {
@@ -541,8 +541,6 @@ export function InformationEntryAutomationPolicyPanel({
           >
             {!draft.enabled ? '默认关闭' : draft.paused ? '已暂停' : '已启用'}
           </span>
-          <span>策略修订 {saved.revision.toString()}</span>
-          <span>绑定偏好修订 {draft.profileRevision.toString()}</span>
           <span>{profile.ruleCount.toString()} 条偏好规则</span>
         </div>
         <button
@@ -591,8 +589,7 @@ export function InformationEntryAutomationPolicyPanel({
         <section aria-labelledby="entry-automation-trial-title">
           <header>
             <div>
-              <p className="section-index">PLAN / READ ONLY</p>
-              <h3 id="entry-automation-trial-title">试算与人工接管</h3>
+              <h3 id="entry-automation-trial-title">试算与人工处理</h3>
             </div>
             <button
               className="secondary-action"
@@ -616,10 +613,7 @@ export function InformationEntryAutomationPolicyPanel({
             }}
           />
           <div className="entry-automation-run-action">
-            <p>
-              执行只保存本次分流事实；不会自动修改
-              Entry、标签、联系、知识图谱或查询排序。
-            </p>
+            <p>执行只记录处理去向，不会修改条目、标签、联系或搜索结果。</p>
             <button
               className="primary-action"
               type="button"
@@ -641,7 +635,6 @@ export function InformationEntryAutomationPolicyPanel({
         <section aria-labelledby="entry-automation-runs-title">
           <header>
             <div>
-              <p className="section-index">AUDIT / RECOVERY</p>
               <h3 id="entry-automation-runs-title">最近运行</h3>
             </div>
             <button
@@ -673,16 +666,11 @@ function PanelFrame({children}: {readonly children: ReactNode}) {
     >
       <header className="entry-automation-policy__heading">
         <div>
-          <p className="section-index">SECONDARY / AUTOMATION AUTHORITY</p>
-          <h2 id="entry-automation-policy-title">可恢复自动分流</h2>
+          <h2 id="entry-automation-policy-title">自动分流</h2>
           <p>
-            基于已保存偏好把当前 Entry
-            记录为“可推进、人工审核或暂缓”候选。默认关闭；用户可先试算、逐项人工接管，再显式启动。
+            按已保存的偏好把条目标为继续处理、人工审核或暂缓。可先试算，再确认执行。
           </p>
         </div>
-        <span className="status-chip" data-tone="muted">
-          只记录去向
-        </span>
       </header>
       {children}
     </section>
@@ -703,7 +691,7 @@ function UnavailableState() {
   return (
     <PanelFrame>
       <p className="entry-automation-policy__state">
-        当前运行时未提供可恢复自动分流边界。标签、评分和偏好规则仍可照常使用。
+        当前服务未启用自动分流，仍可逐条编辑标签和评分。
       </p>
     </PanelFrame>
   );
@@ -738,8 +726,7 @@ function PolicyEditor({
     <div className="entry-automation-policy__editor">
       <header>
         <div>
-          <p className="section-index">AUTHORITY / POLICY</p>
-          <h3>分流权限与阈值</h3>
+          <h3>分流设置</h3>
         </div>
         <span>{dirty ? '有未保存修改' : '与外部配置一致'}</span>
       </header>
@@ -762,7 +749,7 @@ function PolicyEditor({
           }}
         />
         <ToggleField
-          label="本次试算与运行包含隐私 Entry"
+          label="本次试算和运行包含隐私条目"
           checked={includePrivate}
           disabled={disabled}
           onChange={onIncludePrivateChange}
@@ -771,10 +758,10 @@ function PolicyEditor({
 
       <div
         className="entry-automation-toggle-row"
-        aria-label="推进候选自动动作"
+        aria-label="继续处理后的自动操作"
       >
         <ToggleField
-          label="推进候选后生成确定性标签"
+          label="继续处理后生成自动标签"
           checked={actionSettings(draft).deterministicTags}
           disabled={disabled}
           onChange={(value) => {
@@ -802,7 +789,7 @@ function PolicyEditor({
           }}
         />
         <p className="entry-automation-policy__action-note">
-          两项默认关闭，仅作用于“建议继续处理”。确定性标签遵守排除词与别名；联系重建不覆盖人工联系和知识图谱边。
+          两项默认关闭，只处理“建议继续处理”的条目。自动标签会遵守排除词与别名；更新联系不会覆盖人工设置和知识图谱关系。
         </p>
       </div>
 
@@ -818,7 +805,7 @@ function PolicyEditor({
           }}
         />
         <IntegerField
-          label="推进 · 有用阈值"
+          label="继续处理：最低有用评分"
           value={draft.advanceThresholds.usefulness}
           min={1}
           max={320}
@@ -834,7 +821,7 @@ function PolicyEditor({
           }}
         />
         <IntegerField
-          label="推进 · 有趣阈值"
+          label="继续处理：最低有趣评分"
           value={draft.advanceThresholds.interest}
           min={1}
           max={320}
@@ -864,7 +851,7 @@ function PolicyEditor({
           }}
         />
         <IntegerField
-          label="暂缓 · 有用阈值"
+          label="暂缓：最高有用评分"
           value={draft.deferThresholds.usefulness}
           min={1}
           max={320}
@@ -880,7 +867,7 @@ function PolicyEditor({
           }}
         />
         <IntegerField
-          label="暂缓 · 有趣阈值"
+          label="暂缓：最高有趣评分"
           value={draft.deferThresholds.interest}
           min={1}
           max={320}
@@ -933,7 +920,7 @@ function PolicyEditor({
           }}
         />
         <IntegerField
-          label="推进候选上限"
+          label="继续处理上限"
           value={draft.budgets.maximumAdvanceCandidatesPerRun}
           min={0}
           max={draft.budgets.maximumEntriesPerRun}
@@ -949,7 +936,7 @@ function PolicyEditor({
           }}
         />
         <IntegerField
-          label="暂缓候选上限"
+          label="暂缓上限"
           value={draft.budgets.maximumDeferCandidatesPerRun}
           min={0}
           max={draft.budgets.maximumEntriesPerRun}
@@ -968,11 +955,8 @@ function PolicyEditor({
 
       <div className="entry-automation-profile-binding">
         <div>
-          <strong>偏好版本绑定</strong>
-          <span>
-            当前偏好修订 {profile.revision.toString()} ·
-            {profile.enabled ? ' 已启用' : ' 未启用'}
-          </span>
+          <strong>使用的偏好规则</strong>
+          <span>当前偏好规则{profile.enabled ? '已启用' : '未启用'}</span>
         </div>
         <button
           className="secondary-action"
@@ -982,7 +966,7 @@ function PolicyEditor({
             onChange({...draft, profileRevision: profile.revision});
           }}
         >
-          绑定当前偏好版本
+          使用当前偏好规则
         </button>
       </div>
 
@@ -1001,7 +985,7 @@ function PolicyEditor({
           disabled={disabled || !dirty}
           onClick={onSave}
         >
-          {saving ? '正在保存…' : '保存分流策略'}
+          {saving ? '正在保存…' : '保存分流设置'}
         </button>
       </div>
     </div>
@@ -1112,12 +1096,12 @@ function TrialResults({
   if (state.status === 'idle') {
     return (
       <p className="entry-automation-policy__empty">
-        尚未试算。草稿可直接试算；正式运行前必须先保存并再次试算。
+        尚未试算。草稿可直接试算；执行前必须先保存并再次试算。
       </p>
     );
   }
   if (state.status === 'loading') {
-    return <p role="status">正在读取当前 Entry 并计算候选去向…</p>;
+    return <p role="status">正在读取当前条目并计算处理去向…</p>;
   }
   if (state.status === 'error') {
     return <p role="alert">{state.message}</p>;
@@ -1141,11 +1125,11 @@ function TrialResults({
           {state.value.counts.defer_candidate.toString()}
         </span>
         {!selectionCurrent ? (
-          <strong>人工接管已变化，需要重新试算</strong>
+          <strong>人工处理选择已变化，需要重新试算</strong>
         ) : null}
       </div>
       {state.value.items.length === 0 ? (
-        <p className="entry-automation-policy__empty">当前范围没有 Entry。</p>
+        <p className="entry-automation-policy__empty">当前范围没有条目。</p>
       ) : (
         <div
           className="entry-automation-table"
@@ -1155,11 +1139,11 @@ function TrialResults({
           <table>
             <thead>
               <tr>
-                <th scope="col">Entry</th>
+                <th scope="col">条目</th>
                 <th scope="col">分流</th>
                 <th scope="col">依据</th>
                 <th scope="col">总分</th>
-                <th scope="col">人工接管</th>
+                <th scope="col">改为人工处理</th>
               </tr>
             </thead>
             <tbody>
@@ -1167,7 +1151,6 @@ function TrialResults({
                 <tr key={item.entryId}>
                   <td>
                     <code>{shortId(item.entryId)}</code>
-                    <span>修订 {item.revision.toString()}</span>
                   </td>
                   <td>{ROUTE_LABELS[item.route]}</td>
                   <td>{REASON_LABELS[item.reason]}</td>
@@ -1242,13 +1225,9 @@ function ExecutionResults({
                   {executionStatusLabel(execution.status)}
                 </span>
                 <code>{shortId(execution.runId)}</code>
-                <span>{execution.claims.length.toString()} 条分流事实</span>
+                <span>{execution.claims.length.toString()} 条分流记录</span>
               </div>
-              <p>
-                策略修订 {execution.policyRevision.toString()} · 偏好修订{' '}
-                {execution.profileRevision.toString()} ·
-                {execution.includePrivate ? ' 包含隐私范围' : ' 仅公开范围'}
-              </p>
+              <p>{execution.includePrivate ? '包含隐私范围' : '仅公开范围'}</p>
               <button
                 className="secondary-action"
                 type="button"
@@ -1257,14 +1236,14 @@ function ExecutionResults({
                   (audit.status === 'loading' &&
                     audit.runId === execution.runId)
                 }
-                aria-label={`读取运行 ${shortId(execution.runId)} 的完整审计`}
+                aria-label={`读取运行 ${shortId(execution.runId)} 的详情`}
                 onClick={() => {
                   onLoadRun(execution.runId);
                 }}
               >
                 {audit.status === 'loading' && audit.runId === execution.runId
                   ? '正在读取…'
-                  : '读取完整审计'}
+                  : '查看详情'}
               </button>
             </div>
           </li>
@@ -1288,14 +1267,14 @@ export function InformationEntryAutomationExecutionAudit({
   if (state.status === 'idle') {
     return (
       <p className="entry-automation-policy__empty">
-        选择一条运行读取完整审计。列表摘要不会代替精确运行读取。
+        选择一条运行查看详细记录。
       </p>
     );
   }
   if (state.status === 'loading') {
     return (
       <p className="entry-automation-policy__empty" role="status">
-        正在读取运行 {shortId(state.runId)} 的完整审计…
+        正在读取运行 {shortId(state.runId)} 的详情…
       </p>
     );
   }
@@ -1313,7 +1292,7 @@ export function InformationEntryAutomationExecutionAudit({
             onRetry(state.runId);
           }}
         >
-          重试完整审计
+          重试
         </button>
       </div>
     );
@@ -1328,8 +1307,7 @@ export function InformationEntryAutomationExecutionAudit({
     >
       <header>
         <div>
-          <p className="section-index">EXACT RUN / OWNER AUDIT</p>
-          <h4 id="entry-automation-run-audit-title">完整运行审计</h4>
+          <h4 id="entry-automation-run-audit-title">运行详情</h4>
         </div>
         <span
           className="status-chip"
@@ -1346,25 +1324,12 @@ export function InformationEntryAutomationExecutionAudit({
       </header>
       <dl className="entry-automation-run-audit__metadata">
         <div>
-          <dt>运行</dt>
-          <dd>
-            <code>{execution.runId}</code>
-          </dd>
-        </div>
-        <div>
-          <dt>运行版本</dt>
-          <dd>{execution.version.toString()}</dd>
-        </div>
-        <div>
-          <dt>策略 / 偏好</dt>
-          <dd>
-            {execution.policyRevision.toString()} /{' '}
-            {execution.profileRevision.toString()}
-          </dd>
+          <dt>运行编号</dt>
+          <dd>{execution.runId}</dd>
         </div>
         <div>
           <dt>隐私范围</dt>
-          <dd>{execution.includePrivate ? '本次包含隐私' : '仅公开 Entry'}</dd>
+          <dd>{execution.includePrivate ? '本次包含隐私' : '仅公开条目'}</dd>
         </div>
       </dl>
       <p className="entry-automation-run-audit__safety">
@@ -1378,12 +1343,12 @@ export function InformationEntryAutomationExecutionAudit({
       <div
         className="entry-automation-run-audit__claims"
         tabIndex={0}
-        aria-label="运行分流事实"
+        aria-label="运行分流记录"
       >
         <table>
           <thead>
             <tr>
-              <th scope="col">序号 / Entry</th>
+              <th scope="col">序号 / 条目</th>
               <th scope="col">去向</th>
               <th scope="col">原因</th>
               <th scope="col">状态</th>
@@ -1396,7 +1361,6 @@ export function InformationEntryAutomationExecutionAudit({
                 <td>
                   <strong>{claim.ordinal.toString()}</strong>
                   <code>{shortId(claim.entryId)}</code>
-                  <span>Entry 修订 {claim.entryRevision.toString()}</span>
                 </td>
                 <td>{ROUTE_LABELS[claim.route]}</td>
                 <td>{REASON_LABELS[claim.reason]}</td>
@@ -1426,18 +1390,18 @@ function executionSafetyLabel(
     (claim) => claim.status === 'claimed',
   ).length;
   if (openClaimCount > 0) {
-    return `仍有 ${openClaimCount.toString()} 条分流事实没有结算；保留审计记录并稍后重新读取。Entry、标签、联系和知识图谱均未被本运行改写。`;
+    return `仍有 ${openClaimCount.toString()} 条分流记录没有完成；请稍后重新读取。条目、标签、联系和知识图谱均未改变。`;
   }
   switch (execution.status) {
     case 'succeeded':
-      return '全部分流事实已经结算；本运行只记录去向，没有改写任何业务内容。';
+      return '全部分流记录均已完成；这次运行只记录处理去向，没有修改条目内容。';
     case 'failed':
-      return '失败已经留痕，开放分流事实已补偿；现有 Entry 与人工编辑保持不变。';
+      return '失败记录已保留；现有条目与人工编辑保持不变。';
     case 'cancelled':
-      return '运行已取消；已保存的审计事实仍可检查，业务内容没有被改写。';
+      return '运行已取消；已保存的分流记录仍可查看，条目内容没有改变。';
     case 'queued':
     case 'running':
-      return '运行尚未结束；当前页面只显示持久化审计状态，不推断未提交结果。';
+      return '运行尚未结束；这里只显示已经保存的状态。';
   }
 }
 
@@ -1453,13 +1417,13 @@ function activationLabel(
     case 'ready':
       return '可执行';
     case 'disabled':
-      return '策略未启用';
+      return '自动分流未启用';
     case 'paused':
-      return '策略已暂停';
+      return '自动分流已暂停';
     case 'profile_disabled':
       return '偏好规则未启用';
     case 'profile_revision_mismatch':
-      return '偏好版本未绑定';
+      return '偏好规则已在别处更新';
   }
 }
 
@@ -1474,7 +1438,7 @@ function executionStatusLabel(
     case 'succeeded':
       return '已完成';
     case 'failed':
-      return '已失败并补偿';
+      return '失败，已恢复';
     case 'cancelled':
       return '已取消';
   }
@@ -1485,11 +1449,11 @@ function claimStatusLabel(
 ): string {
   switch (status) {
     case 'claimed':
-      return '待结算';
+      return '待完成';
     case 'completed':
       return '已记录';
     case 'compensated':
-      return '已补偿';
+      return '已恢复';
   }
 }
 

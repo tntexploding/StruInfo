@@ -220,6 +220,28 @@ record of why that unissued harness never blocked product work.
 - Revisit when: Separate API and scheduler processes are admitted for one shared
   workspace, or a cross-process preference lost update is reproduced.
 
+### DH-013: Base-Image Scanner Findings Outside the Current Runtime Path
+
+- Classification: DEFERRED_HARDENING.
+- Recorded: 2026-09-05, maintenance v0.2.0.
+- Evidence: the pinned Trivy 0.74.0 scan reports 56 HIGH/CRITICAL package findings
+  across 18 CVEs in the unchanged Debian 12 base; none has a Bookworm fixed
+  version in the scan. Node package findings at that severity are zero. The
+  scanner exits 1 and the scheduled image job must continue to report failure.
+- Current boundary: the x64 runtime uses UID 10001, an empty effective capability
+  set, no-new-privileges, read-only root and no privileged mount configuration.
+  Active server source/build has no child-process call; Perl, gzip CLI, infocmp
+  and privileged ACL/mount operations are not document-processing paths.
+  systemd-homed and MiniZip executables are absent. Debian specifically records
+  the zlib MiniZip source finding as not affecting its Bookworm binary packages.
+- Disposition: no supported product trigger was found; keep the scan result and
+  the [grouped assessment](dependencies/evidence/maintenance-security-2026-09-05.md#runtime-image-findings)
+  visible. This is not a zero-vulnerability verdict or scanner suppression.
+- Revisit when a Bookworm/base-image repair becomes available, a new reachable
+  finding appears, or runtime architecture, privileges, executables or parsers
+  change. Do not migrate the OS, delete base packages or add ignore rules merely
+  to produce a green check.
+
 ## Entry Template
 
 ### DH-NNN: Short Title

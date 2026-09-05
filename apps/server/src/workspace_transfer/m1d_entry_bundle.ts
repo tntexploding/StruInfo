@@ -7,7 +7,10 @@ import {
   type JsonPrimitive,
   type JsonValue,
 } from '../serialization/canonical_json.js';
-import type {WorkspaceBundleSectionCodec} from './workspace_bundle.js';
+import {
+  DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES,
+  type WorkspaceBundleSectionCodec,
+} from './workspace_bundle.js';
 
 export const M1D_ENTRY_BUNDLE_SECTION_TYPE = 'struinfo.m1d-entry';
 export const M1D_ENTRY_BUNDLE_SECTION_VERSION = 5;
@@ -21,7 +24,7 @@ export const M1D_ENTRY_VERSION_TWO_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v2';
 export const M1D_ENTRY_LEGACY_BUNDLE_SECTION_VERSION = 1;
 export const M1D_ENTRY_LEGACY_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v1';
 
-const ENTRY_VALUE_LIMIT = 1_000_000;
+const ENTRY_VALUE_LIMIT = DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES;
 const ROW_BYTE_LIMIT = 256 * 1024 * 1024;
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;

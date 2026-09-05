@@ -221,7 +221,7 @@ export function InformationEntryRestructure({
         kind: 'success',
         title: response.body.hasChanges ? '影响预览已更新' : '结构没有变化',
         detail: response.body.hasChanges
-          ? '请检查标签与关系迁移摘要，再明确应用。'
+          ? '请先检查哪些标签和关系会被保留，再应用修改。'
           : '当前分组与已保存结构一致，不需要写入。',
       });
     } catch {
@@ -229,7 +229,7 @@ export function InformationEntryRestructure({
       setFeedback({
         kind: 'error',
         title: '本地接口不可达',
-        detail: '预览没有生成，现有 Entry 与关系均未改变。',
+        detail: '预览没有生成，现有条目和关系均未改变。',
       });
     } finally {
       setBusy(false);
@@ -268,13 +268,13 @@ export function InformationEntryRestructure({
           response.body.status === 'applied'
             ? '条目结构已更新'
             : '结构已经是最新状态',
-        detail: '原始 Snapshot 与 Fragment 未改写；旧 Entry 已保留为沿袭前身。',
+        detail: '已导入的原文没有改变；旧条目仍保留在版本记录中。',
       });
     } catch {
       setFeedback({
         kind: 'error',
         title: '本地接口不可达',
-        detail: '原子重组没有得到确认；请重新载入影响预览后再试。',
+        detail: '重新拆分没有完成；请重新载入预览后再试。',
       });
     } finally {
       setBusy(false);
@@ -290,8 +290,7 @@ export function InformationEntryRestructure({
     >
       <header className="console-heading">
         <div>
-          <p className="section-index">STRUCTURE MIGRATION / PREVIEW FIRST</p>
-          <h2 id="entry-restructure-title">已生成条目重组</h2>
+          <h2 id="entry-restructure-title">重新拆分已有条目</h2>
         </div>
         <span className="record-count">
           {status === 'ready'
@@ -300,7 +299,7 @@ export function InformationEntryRestructure({
         </span>
       </header>
       <p className="entry-manual-split__boundary">
-        先编辑完整分组，再预览标签、沿袭与关系迁移。只有点击“应用重组”才会一次写入；原始证据不会改变。
+        先调整分组并预览影响，确认无误后再应用。已导入的原文不会改变。
       </p>
       {isPrivate && !includePrivate ? (
         <p className="entry-manual-split__state">
@@ -312,7 +311,7 @@ export function InformationEntryRestructure({
         </p>
       ) : status === 'error' ? (
         <div className="entry-manual-split__state" role="alert">
-          <span>无法载入可重组结构；现有数据没有改变。</span>
+          <span>无法载入可重新拆分的内容；现有数据没有改变。</span>
           <button
             className="text-action"
             type="button"
@@ -398,7 +397,7 @@ export function InformationEntryRestructure({
               disabled={busy}
               onClick={() => void preview()}
             >
-              {busy ? '正在计算…' : '预览重组影响'}
+              {busy ? '正在计算…' : '预览修改'}
             </button>
           </div>
           {impact === undefined ? null : (
@@ -450,7 +449,6 @@ function RestructureImpact({
     >
       <header>
         <div>
-          <p className="section-index">IMPACT PREVIEW</p>
           <h3 id="restructure-impact-title">本次将发生什么</h3>
         </div>
         <span className="record-count">
@@ -513,18 +511,18 @@ function RestructureImpact({
               onAcknowledgeRelationships(event.currentTarget.checked);
             }}
           />
-          我已确认关系将按最大证据重叠迁移；合并后指向同一条目的关系将折叠。
+          我已确认：系统会把原有关系移到原文重合最多的新条目；重复关系会合并。
         </label>
       ) : null}
       <div className="entry-manual-split__commit">
-        <span>应用后仍可从 lineage 查到旧 Entry，但当前查询只显示新结构。</span>
+        <span>应用后仍可查看旧条目，但当前查询只显示新结构。</span>
         <button
           className="primary-action"
           type="button"
           disabled={busy || blocked || !impact.hasChanges}
           onClick={onApply}
         >
-          {busy ? '正在应用…' : '应用重组'}
+          {busy ? '正在保存…' : '保存重新拆分'}
         </button>
       </div>
     </section>
@@ -546,7 +544,7 @@ function restructureFailure(body: unknown): string {
     if (code === 'entry_restructure_relationship_conflict')
       return '多个旧关系映射到同一新端点但内容不一致，请调整分组。';
     if (code === 'entry_restructure_private_relationship_scope_required')
-      return '当前结构连接到隐私条目；请明确开启隐私范围后再处理。';
+      return '这些条目包含隐私内容；请先开启隐私内容后再处理。';
   }
-  return '分组必须完整覆盖原始 Fragment，且所有影响都必须先经过有效预览。';
+  return '分组必须完整覆盖原文片段，并且要先完成预览。';
 }

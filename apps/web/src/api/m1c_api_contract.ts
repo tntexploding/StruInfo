@@ -737,6 +737,18 @@ export interface EvidenceSnapshotSummary {
   readonly fragmentCount: number;
 }
 
+export interface EvidenceSnapshotPageCursor {
+  readonly capturedAt: string;
+  readonly snapshotId: string;
+}
+
+export interface EvidenceSnapshotListResponse {
+  readonly status: 'ok';
+  readonly snapshots: readonly Readonly<EvidenceSnapshotSummary>[];
+  readonly totalCount: number;
+  readonly nextCursor?: Readonly<EvidenceSnapshotPageCursor>;
+}
+
 export interface EvidenceFragment {
   readonly fragmentId: string;
   readonly structureId: string;
@@ -863,6 +875,32 @@ export interface InformationEntry {
       endCodePoint: number;
     }>[];
   }>;
+}
+
+export type InformationEntryTypeReviewFilter = 'missing' | EntryTypeKeyword;
+
+export interface InformationEntryTypeReviewCursor {
+  readonly capturedAt: string;
+  readonly snapshotId: string;
+  readonly documentOrder: number;
+  readonly entryId: string;
+}
+
+export interface InformationEntryTypeCoverage {
+  readonly totalCount: number;
+  readonly classifiedCount: number;
+  readonly missingCount: number;
+  readonly byType: readonly Readonly<{
+    typeKeyword: EntryTypeKeyword;
+    count: number;
+  }>[];
+}
+
+export interface InformationEntryTypeReviewResponse {
+  readonly status: 'ok';
+  readonly coverage: Readonly<InformationEntryTypeCoverage>;
+  readonly items: readonly Readonly<InformationEntry>[];
+  readonly nextCursor?: Readonly<InformationEntryTypeReviewCursor>;
 }
 
 export interface InformationDocumentTag {
@@ -1187,6 +1225,26 @@ export interface InformationEntrySearchIndexStatus {
   readonly embeddingModel?: string;
 }
 
+export interface InformationEntrySearchIndexRefreshProgress {
+  readonly outcome: 'complete' | 'more' | 'provider_failed';
+  readonly loadedEntryCount: number;
+  readonly updatedEntryCount: number;
+  readonly staleEntryCount: number;
+  readonly removedProjectionCount: number;
+  readonly reusedEmbeddingCount: number;
+  readonly embeddingInputCount: number;
+  readonly remainingEntryCount: number;
+  readonly remainingObsoleteCount: number;
+}
+
+export type InformationEntrySearchIndexRefreshResponse =
+  | Readonly<{
+      status: 'ok';
+      index: Readonly<InformationEntrySearchIndexStatus>;
+      progress: Readonly<InformationEntrySearchIndexRefreshProgress>;
+    }>
+  | DomainFailure;
+
 export type InformationEntrySearchIndexResponse =
   | Readonly<{
       status: 'ok';
@@ -1374,6 +1432,47 @@ export type InformationEntryGraphEdgeVerificationStatus =
 export type InformationEntryGraphEdgeOrigin =
   'automatically_calculated' | 'user_edited' | 'user_created' | 'ai_assisted';
 
+export interface InformationEntrySourceReviewRevisions {
+  readonly entryLowRevision: number;
+  readonly entryHighRevision: number;
+}
+export interface InformationEntrySourceReview {
+  readonly status: InformationEntryGraphVerificationStatus;
+  readonly storedStatus: InformationEntryGraphEdgeVerificationStatus;
+  readonly reason:
+    | 'not_reviewed'
+    | 'owner_requested'
+    | 'unbound'
+    | 'entry_changed'
+    | 'current';
+  readonly reviewedRevisions?: Readonly<InformationEntrySourceReviewRevisions>;
+}
+export type InformationEntrySourceReviewFilter =
+  'pending' | 'all' | InformationEntryGraphVerificationStatus;
+export type InformationEntrySourceReviewPrivacy =
+  'public' | 'include_private' | 'private_only';
+export interface InformationEntrySourceReviewCursor {
+  readonly version: 1;
+  readonly filter: InformationEntrySourceReviewFilter;
+  readonly privacyScope: InformationEntrySourceReviewPrivacy;
+  readonly entryLowId: string;
+  readonly entryHighId: string;
+}
+export interface InformationEntrySourceReviewItem {
+  readonly entryLow: Readonly<InformationEntry>;
+  readonly entryHigh: Readonly<InformationEntry>;
+  readonly edge: Readonly<InformationEntryGraphEdge>;
+  readonly review: Readonly<InformationEntrySourceReview>;
+}
+export type InformationEntrySourceReviewListResponse =
+  | Readonly<{
+      status: 'ok';
+      totalCount: number;
+      items: readonly Readonly<InformationEntrySourceReviewItem>[];
+      nextCursor?: Readonly<InformationEntrySourceReviewCursor>;
+    }>
+  | DomainFailure;
+
 export interface InformationEntryGraphEdge {
   readonly entryLowId: string;
   readonly entryHighId: string;
@@ -1386,6 +1485,7 @@ export interface InformationEntryGraphEdge {
   readonly effectiveScore: number;
   readonly isBlocked: boolean;
   readonly overrideRevision: number;
+  readonly sourceReview?: Readonly<InformationEntrySourceReview>;
   readonly projection?: Readonly<InformationEntryAssociationProjection>;
 }
 
@@ -1499,3 +1599,78 @@ export interface M1cHttpResponse<T> {
   readonly statusCode: number;
   readonly body: T;
 }
+
+export interface EntrySavedQueryConditions {
+  readonly text?: string;
+  readonly retrievalMode?: EntryRetrievalMode;
+  readonly textMode?: EntryTextSearchMode;
+  readonly textFields?: readonly EntryTextSearchField[];
+  readonly contentKeyword?: string;
+  readonly sourceKey?: string;
+  readonly snapshotId?: string;
+  readonly typeKeyword?: EntryTypeKeyword;
+  readonly typeCustomName?: string;
+  readonly domainKeyword?: EntryDomainKeyword;
+  readonly domainCustomName?: string;
+  readonly domainScope?: 'any' | 'primary' | 'secondary';
+  readonly chunkMode?: 'split' | 'whole';
+  readonly time?: Readonly<{
+    field: 'published' | 'captured';
+    from?: string;
+    to?: string;
+  }>;
+  readonly association?: Readonly<{
+    entryId: string;
+    maximumDepth: 1 | 2;
+    minimumScore: number;
+  }>;
+  readonly includePrivate: boolean;
+  readonly onlyPrivate?: boolean;
+}
+export interface EntryQueryContext {
+  readonly query: Readonly<EntrySavedQueryConditions>;
+  readonly selectedEntryId?: string;
+}
+export interface EntrySavedQuery extends EntryQueryContext {
+  readonly viewId: string;
+  readonly name: string;
+}
+export interface EntrySavedQueries {
+  readonly version: 1;
+  readonly revision: number;
+  readonly views: readonly Readonly<EntrySavedQuery>[];
+}
+export type EntrySavedQueriesResponse =
+  | Readonly<{
+      status: 'ok' | 'applied' | 'unchanged';
+      savedQueries: Readonly<EntrySavedQueries>;
+    }>
+  | DomainFailure;
+export type EntryQueryContextResponse =
+  | Readonly<{status: 'ok'; entry: Readonly<InformationEntry>}>
+  | Readonly<{status: 'not_found'; issue: Readonly<DomainIssue>}>
+  | DomainFailure;
+
+export interface EntryMarkdownPreview {
+  readonly title: string;
+  readonly privacyScope: 'public' | 'include_private' | 'private_only';
+  readonly entries: readonly Readonly<{
+    entryId: string;
+    revision: number;
+    revisionId: string;
+    title: string;
+    isPrivate: boolean;
+  }>[];
+  readonly relationCount: number;
+  readonly markdown: string;
+  readonly sha256: string;
+  readonly byteLength: number;
+}
+export type EntryMarkdownExportResponse =
+  | Readonly<{status: 'ready'; preview: Readonly<EntryMarkdownPreview>}>
+  | Readonly<{
+      status: 'exported';
+      preview: Readonly<EntryMarkdownPreview>;
+      file: Readonly<{fileName: string; byteLength: number}>;
+    }>
+  | Readonly<{status: 'rejected'; issue: Readonly<{code: string}>}>;

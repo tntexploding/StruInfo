@@ -1,9 +1,11 @@
 # StruInfo 知识核心架构
 
-- 状态：M1M 单机生产运行与维护边界已完成
-- 最近更新：2026-08-27
-- 相关决策：[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、[ADR 0007](adr/0007-information-entry-first-document-processing.md)、[ADR 0008](adr/0008-current-entry-state-and-portable-personal-data.md)、[ADR 0009](adr/0009-retire-superseded-m1c-runtime.md)、[ADR 0010](adr/0010-entry-centered-formal-knowledge-graph.md)、[ADR 0011](adr/0011-association-derived-formal-graph-edges.md)、[ADR 0012](adr/0012-provider-neutral-processing-runs-and-proposals.md)、[ADR 0013](adr/0013-openai-entry-tag-proposals.md)、[ADR 0014](adr/0014-openai-entry-association-proposals.md)、[ADR 0015](adr/0015-openai-entry-split-proposals.md)、[ADR 0016](adr/0016-manual-entry-fragment-grouping.md)、[ADR 0017](adr/0017-manual-within-fragment-entry-boundaries.md)、[ADR 0018](adr/0018-local-text-file-import.md)、[ADR 0019](adr/0019-local-html-pdf-import.md)、[ADR 0020](adr/0020-explainable-lexical-entry-search.md)、[ADR 0021](adr/0021-query-association-and-result-comparison.md)、[ADR 0022](adr/0022-evidence-bounded-ai-query-synthesis.md)、[ADR 0023](adr/0023-deterministic-entry-exploration-policy.md)、[ADR 0024](adr/0024-versioned-git-source-subscriptions.md)、[ADR 0025](adr/0025-explainable-entry-preference-profile.md)、[ADR 0026](adr/0026-entry-automation-policy-dry-run.md)、[ADR 0027](adr/0027-recoverable-entry-automation-routing-execution.md)
+- 状态：M1M 单机生产边界与 M2-P5A–D 生产收口已完成
+- 最近更新：2026-09-05（维护阶段，不改变已接受架构）
+- 当前运行约束：维护基线继续采用私人单用户 `all` 单实例；跨进程共享偏好写入仍遵守 DH-012，见[维护交接](maintenance-handoff.md)
+- 相关决策：[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、[ADR 0007](adr/0007-information-entry-first-document-processing.md)、[ADR 0008](adr/0008-current-entry-state-and-portable-personal-data.md)、[ADR 0009](adr/0009-retire-superseded-m1c-runtime.md)、[ADR 0010](adr/0010-entry-centered-formal-knowledge-graph.md)、[ADR 0011](adr/0011-association-derived-formal-graph-edges.md)、[ADR 0012](adr/0012-provider-neutral-processing-runs-and-proposals.md)、[ADR 0013](adr/0013-openai-entry-tag-proposals.md)、[ADR 0014](adr/0014-openai-entry-association-proposals.md)、[ADR 0015](adr/0015-openai-entry-split-proposals.md)、[ADR 0016](adr/0016-manual-entry-fragment-grouping.md)、[ADR 0017](adr/0017-manual-within-fragment-entry-boundaries.md)、[ADR 0018](adr/0018-local-text-file-import.md)、[ADR 0019](adr/0019-local-html-pdf-import.md)、[ADR 0020](adr/0020-explainable-lexical-entry-search.md)、[ADR 0021](adr/0021-query-association-and-result-comparison.md)、[ADR 0022](adr/0022-evidence-bounded-ai-query-synthesis.md)、[ADR 0023](adr/0023-deterministic-entry-exploration-policy.md)、[ADR 0024](adr/0024-versioned-git-source-subscriptions.md)、[ADR 0025](adr/0025-explainable-entry-preference-profile.md)、[ADR 0026](adr/0026-entry-automation-policy-dry-run.md)、[ADR 0027](adr/0027-recoverable-entry-automation-routing-execution.md)、[ADR 0046](adr/0046-codex-operated-bulk-ingestion.md)
 - 当前实现与未完成项：[当前项目状态与实现清单](current-project-state.md)
+- 生产身份、恢复与发行回归决策：[ADR 0062](adr/0062-production-release-identity-and-live-deployment-baseline.md)、[ADR 0063](adr/0063-backup-recoverability-and-retention-preview.md)、[ADR 0064](adr/0064-operational-health-capacity-and-alerting.md)、[ADR 0065](adr/0065-production-flow-release-regression.md)
 - 当前自动路由与订阅串联决策：[ADR 0028](adr/0028-owner-controlled-entry-automation-routing.md)、[ADR 0029](adr/0029-entry-automation-control-integrity.md)、[ADR 0030](adr/0030-entry-automation-owner-work-queue.md)、[ADR 0031](adr/0031-subscription-deterministic-entry-routing-chain.md)
 - 当前确定性推进、拆分编辑与显式批次导入决策：[ADR 0032](adr/0032-deterministic-entry-tag-and-association-actions.md)、[ADR 0033](adr/0033-post-materialization-entry-restructuring.md)、[ADR 0034](adr/0034-pre-split-derived-document-editing.md)、[ADR 0035](adr/0035-versioned-configurable-entry-split-rules.md)、[ADR 0036](adr/0036-explicit-local-multi-file-import-queue.md)
 - 当前外部信源决策：[ADR 0037](adr/0037-plugin-compatible-source-acquisition-foundation.md)、[ADR 0038](adr/0038-public-rss-atom-source-subscriptions.md)、[ADR 0039](adr/0039-declarative-json-api-source-subscriptions.md)、[ADR 0040](adr/0040-constrained-web-source-subscriptions.md)、[ADR 0041](adr/0041-installed-source-connector-product-wiring.md)
@@ -13,7 +15,7 @@
 
 ## 1. 核心结论
 
-当前 StruInfo 是一个 Entry-first 的本机单用户工作台，不是只有向量和聊天接口的 RAG 容器。
+当前 StruInfo 是一个 Entry-first 的私人单用户工作台，支持本机运行及受认证反向代理保护的私人部署。
 活动运行时在 PostgreSQL 中保存来源证据和当前 `InformationEntry`，在外部数据根保存原始
 Blob、个人偏好和导出。普通文档的主线是导入 → 拆分 → 标签 → 联系 → 查询。
 
@@ -22,21 +24,21 @@ M1E-2 正式图谱的节点。当前 Entry 采用一个成品态和并发版本�
 现有 Curation 和旧 `KnowledgeItem`/`KnowledgeRelation` 表及历史行只为既有数据和个人
 数据包兼容保留；ADR 0009 已经删除它们的活动命令、repository adapter、HTTP 和 Web 入口。
 
-当前无 AI 路径已实现：来源/快照/结构证据、精确公开 GitHub Markdown 单文件订阅、确定性 Entry 物化、外部版本化 section/相邻短段合并规则、既有 Fragment 与 Fragment 内 Unicode 标量边界的人工分组、三维标签与两项评分、文档标签、可解释联系、精确/包含/近似词法组合查询、查询页一至两跳联想、同查询双条比较、基于可见直接联系的独立探索候选、从显式评分生成可解释偏好候选和有界只读试运行、精确来源回看、完整个人数据包和 M1E-2 正式图谱。ADR 0012 建立不依赖 Provider 的 ProcessingRun/提案信封、读取/取消和真实总览轨道；M1G-2 复用它记录订阅检查。ADR 0013、0014、0015 分别为用户明确选择的公开 Entry、公开 Entry 对和公开 Snapshot 增加可选 OpenAI tags、association 与 split 提案；三者都必须人工接受并复用现有写边界。ADR 0022 又实现公开查询结果上的显式会话内 AI 综合，但不向模型授予检索或写权限。知识树/集合、复杂事实核验、语义向量/RAG、通用网页抓取或报告仍未实现。
+当前无 AI 路径已实现：来源/快照/结构证据、本地文件和 Git/RSS/Atom/JSON API/受限网页/已安装连接器采集、确定性 Entry 物化、版本化拆分规则、人工分组、三维标签与两项评分、文档标签、可解释联系、词法查询、联想/比较/探索、精确来源回看、完整个人数据包和正式图谱。M1K 另提供可选的公开 Entry 向量与公开证据 RAG；没有 Provider 时仍使用完整词法主线。ADR 0012 建立不依赖 Provider 的 ProcessingRun/提案信封、读取/取消和真实总览轨道；ADR 0013、0014、0015 分别为用户明确选择的公开 Entry、公开 Entry 对和公开 Snapshot 增加可选 OpenAI tags、association 与 split 提案；三者都必须人工接受并复用现有写边界。ADR 0022 又实现公开查询结果上的显式会话内 AI 综合，但不向模型授予检索或写权限。知识树/集合、复杂事实核验、无确认自动接受、无限制开放网络抓取和面向用户的通用报告生成仍未实现。
 
 ## 2. 当前数据类别与目标派生物
 
-| 类别        | 主要内容                                                                                                                                    | 当前状态                                        |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| 证据        | Resource、不可变 Snapshot、Blob、DocumentNode、Fragment 和媒体引用                                                                          | 活动规范数据                                    |
-| 信息条目    | InformationEntry 当前成品态、三维标签、两项评分和 Fragment 输入                                                                             | 活动规范数据                                    |
-| 文档标签    | Snapshot 级当前标签及全文/Entry 覆盖证据                                                                                                    | 活动规范数据                                    |
-| Entry 联系  | 可重建相似度投影和当前人工 override                                                                                                         | 投影活动；人工控制是规范数据                    |
-| 用户偏好    | 快捷标签、提取开关、排除词、URL 规则、确认别名、版本化联系/探索/Entry 偏好规则、Entry 自动处理策略，以及 Git/RSS 信源订阅与成功游标         | 活动；包体外文件；AutomationPolicy 有所有者控制 |
-| 正式知识    | Entry 节点、自动相似边、用户/AI 关系、闭合语义、维护说明、来源核验状态和精确来源；历史 Knowledge 表                                         | M1J 活动；旧表兼容保留                          |
-| 处理任务    | 当前 ProcessingRun、三类提案信封、typed split/tags/association payload，以及自动路由 run header/claims                                      | 活动；提案与可恢复路由均持久化                  |
-| 高级控制    | 自动路由策略/试算/人工接管/运行审计，以及 IntakeDecision、ConflictCase、集合、树、SavedView 和具体下游动作                                  | 自动路由控制活动；其余历史兼容或未实现          |
-| AI/检索派生 | OpenAI split、tags 与 selected-pair association；本地词法/词项、可选公共向量、混合召回、Association 遍历、比较与公开证据 RAG；其他 Provider | 三个窄提案、M1F 与 M1K 已实现；其余未实现       |
+| 类别        | 主要内容                                                                                                                                                      | 当前状态                                        |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| 证据        | Resource、不可变 Snapshot、Blob、DocumentNode、Fragment 和媒体引用                                                                                            | 活动规范数据                                    |
+| 信息条目    | InformationEntry 当前成品态、三维标签、两项评分和 Fragment 输入                                                                                               | 活动规范数据                                    |
+| 文档标签    | Snapshot 级当前标签及全文/Entry 覆盖证据                                                                                                                      | 活动规范数据                                    |
+| Entry 联系  | 可重建相似度投影和当前人工 override                                                                                                                           | 投影活动；人工控制是规范数据                    |
+| 用户偏好    | 快捷标签、提取开关、排除词、URL 规则、确认别名、版本化联系/探索/Entry 偏好规则、Entry 自动处理策略，以及 Git/RSS 信源订阅与成功游标、版本化命名查询与选中身份 | 活动；包体外文件；AutomationPolicy 有所有者控制 |
+| 正式知识    | Entry 节点、自动相似边、用户/AI 关系、闭合语义、维护说明、来源核验状态和精确来源；历史 Knowledge 表                                                           | M1J 活动；旧表兼容保留                          |
+| 处理任务    | 当前 ProcessingRun、三类提案信封、typed split/tags/association payload，以及自动路由 run header/claims                                                        | 活动；提案与可恢复路由均持久化                  |
+| 高级控制    | 自动路由策略/试算/人工接管/运行审计，以及 IntakeDecision、ConflictCase、集合、树、SavedView 和具体下游动作                                                    | 自动路由与命名查询活动；其余历史兼容或未实现    |
+| AI/检索派生 | OpenAI split、tags 与 selected-pair association；本地词法/词项、可选公共向量、混合召回、Association 遍历、比较与公开证据 RAG；其他 Provider                   | 三个窄提案、M1F 与 M1K 已实现；其余未实现       |
 
 证据、Entry、正式知识和用户控制数据不能互相覆盖。删除联系投影不会删除 Entry；修改标签不会
 改写 Snapshot；模型建议一个关系不能立即使其成为正式知识关系；只有人工接受后才调用现有图谱命令。
@@ -216,7 +218,7 @@ Fragment、隐私历史修订或既有隐私修订的知识保持隐私；关系
 
 - `Collection` 保存有序或无序的知识引用；
 - `TreePlacement` 把同一知识放到多个导航位置；
-- `SavedView` 保存查询条件、排序和展示配置；
+- 目标 `SavedView` 保存查询条件、排序和展示配置；当前 ADR 0067 仅实现外部 `entrySavedQueries` v1：最多 20 项既有条件与可选选中 Entry 身份，使用集合 revision，重新打开后当前读取与隐私当次选择。没有新表、结果快照或旧 Knowledge 运行时；
 - `Framework` 类型的知识修订可以通过成员关系组合多个概念、方法和断言；
 - 新的综合文章或说明是一个新修订，并通过 `Derivation` 指向所使用的知识和证据。
 
@@ -268,18 +270,20 @@ override，不复制为第二套相似度表；重建只更新底层分数与解
 
 ## 7. 完全不依赖 AI 的操作模式
 
-| 能力     | 当前无 AI 行为                                                                                                                                                                     | 尚未实现的增强                            |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| 摄取     | 手工 Markdown、固定 Git Markdown、单份或最多 20 份显式批次本地 Markdown/文本/HTML/带文字层 PDF、精确 Git Markdown、公开 RSS/Atom 与声明式 JSON API 定时检查、完整证据与隐私标记    | Office/OCR、目录扫描、网页/插件订阅       |
-| 拆分     | 拆分前唯一全文草稿与派生 Snapshot；CommonMark/周刊 profile；版本化本地 section/相邻短段合并规则；既有 Fragment/标量边界人工分组；物化后人工结构迁移；可选公开 Snapshot OpenAI 提案 | 来源重排、任意脚本/自定义解析器、私密外发 |
-| 标签     | 三维标签、五档有用/有趣、确定性候选、外部快捷标签/排除/别名；可选 OpenAI tags                                                                                                      | 自动语义合并和无确认接受                  |
-| 联系     | 确定性相似边、分项解释、增强/削弱/屏蔽/恢复；正式图谱提供八类关系语义、维护说明、来源核验和用户关系                                                                                | 复杂本体、自动事实核查                    |
-| 查询     | 标题/正文/标签的精确、包含和近似词法匹配；可重建 Unicode 词项、可选公共向量与词法/语义/混合召回；结构、来源、时间、隐私、一至两跳联系、游标、来源和公开证据 RAG                    | 字典分词、私密向量/RAG、在线 Web 混合查询 |
-| 传输     | 61 表、引用 Blob 字节、偏好、Entry v5、Association v4 与 Processing v7；空目标恢复                                                                                                 | 跨工作区克隆、非空合并、灾难恢复          |
-| 正式知识 | 最高匹配 Entry 中心、有界图谱/列表、边来源、闭合语义、维护说明、来源核验、用户编辑、AI 联系提案和双端精确来源                                                                      | 树/集合/时间线、复杂本体与自动事实核查    |
+| 能力     | 当前无 AI 行为                                                                                                                                                                                        | 尚未实现的增强                                        |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| 摄取     | 手工 Markdown、固定 Git Markdown、单份或最多 20 份显式批次本地 Markdown/文本/HTML/带文字层 PDF、精确 Git Markdown、公开 RSS/Atom、声明式 JSON API、受限同源网页与已安装连接器检查、完整证据与隐私标记 | Office/OCR、目录扫描/监视、开放网页发现与插件安装市场 |
+| 拆分     | 拆分前唯一全文草稿与派生 Snapshot；CommonMark/周刊 profile；版本化本地 section/相邻短段合并规则；既有 Fragment/标量边界人工分组；物化后人工结构迁移；可选公开 Snapshot OpenAI 提案                    | 来源重排、任意脚本/自定义解析器、私密外发             |
+| 标签     | 三维标签、五档有用/有趣、确定性候选、外部快捷标签/排除/别名；可选 OpenAI tags                                                                                                                         | 自动语义合并和无确认接受                              |
+| 联系     | 确定性相似边、分项解释、增强/削弱/屏蔽/恢复；正式图谱提供八类关系语义、维护说明、来源核验和用户关系                                                                                                   | 复杂本体、自动事实核查                                |
+| 查询     | 标题/正文/标签的精确、包含和近似词法匹配；可重建 Unicode 词项、可选公共向量与词法/语义/混合召回；结构、来源、时间、隐私、一至两跳联系、游标、来源和公开证据 RAG                                       | 字典分词、私密向量/RAG、在线 Web 混合查询             |
+| 传输     | 66 表、引用 Blob 字节、偏好、Entry v5、Association v5 与 Processing v10；空目标恢复                                                                                                                   | 跨工作区克隆、非空合并、灾难恢复                      |
+| 正式知识 | 最高匹配 Entry 中心、有界图谱/列表、边来源、闭合语义、维护说明、来源核验、用户编辑、AI 联系提案和双端精确来源                                                                                         | 树/集合/时间线、复杂本体与自动事实核查                |
 
 没有配置 AI Provider 时，系统显示“AI 未启用”，导入、确定性/人工拆分、标签、联系和查询仍可使用。当前完整配置 OpenAI 后分别发布 `ai_split`、`ai_tags`、`ai_associations` 与 `ai_query_synthesis`；每个 capability 只开启自己的窄界面。
 `processing_runs` 只证明持久任务读取/取消和提案信封可用；每个 `ai_*` capability 只证明对应窄边界可用，不能被解释为自动维护、语义检索或泛化 AI 已经启用。
+
+可信样本类型学习的 Profile、工作包、影子模型和激活保护属于冻结的实验性边界，不属于当前可用的自动泛化标注能力。其真实泛化质量尚未被所有者接受；在重新排队的 `M2-P4R` 明确恢复前，当前架构不激活该模型，也不让它参与 Entry 正式写入。
 
 工作区 Bundle v1 通过五个闭合分区携带当前数据库状态、Blob 字节和偏好。它不是任意 JSON
 知识存储，也不携带运行配置或秘密。
@@ -297,9 +301,7 @@ override，不复制为第二套相似度表；重建只更新底层分数与解
 7. 只有当次显式包含隐私时，服务端才从外部 Blob 按需匹配完整私密正文，并在 Entry 分页之外返回独立文档结果。
 8. 用户可另行以当前可见 Entry 为锚点，从直接 Association 生成页外探索候选；该结果不进入普通排序、计数、分页或游标。
 
-当前没有 `pg_trgm`、中文词项索引、SQL query pushdown、Embedding 或在线搜索。M1F-1 的近似模式是内存中的可解释词法窗口评分，不是语义检索；M1F-3 只综合既有公开确定性结果，也不是新的召回方式。
-345 Entry 的既有实测没有证明需要这些复杂度。完整隐私文档只在显式隐私范围下进入独立结果
-通道，正文不复制到数据库或普通 Entry 索引。
+当前已有可重建的 Unicode 词项索引和可选公开 Entry Embedding。公开 exact/substring 查询已有 SQL 候选缩小与选择性 Entry 读取，但没有完整查询语义的 SQL 下推、`pg_trgm`、字典型中文分词、独立向量数据库/`pgvector`、私密向量或在线搜索。M1F-1 的近似模式仍是内存中的可解释词法窗口评分；M1F-3 只综合既有公开结果，不是新的召回方式。完整隐私文档只在显式隐私范围下进入独立结果通道，正文不复制到普通 Entry 索引，也不发送给向量 Provider。
 
 M1E-2 知识页复用确定性 Entry 匹配选择最高结果为中心，再读取有界正式邻域；它不替代本节的完整 Query 结果。ADR 0022 的 AI 综合只消费当前公开结果，不改变本节的隐私或证据身份。ADR 0023 的探索也只是一个明确操作后的独立直接邻域读模型；它不学习偏好、不制造新边，也不改变搜索召回。ADR 0043 已加入版本化词项投影、可选公共向量召回和公开证据 RAG；所有派生索引仍必须可从规范 Entry 当前态重建。别名/字典分词、私密向量和在线检索只有在后续产品边界接受后加入。
 
@@ -392,8 +394,8 @@ Windows 本地运行和 Linux 部署都必须使用源码/安装目录之外的�
 6. **联系**：重建分项可解释的候选投影，并保存逐对人工控制；
 7. **查询**：组合文本、结构、来源、时间、隐私和一至两跳联系，稳定分页并返回精确证据；
 8. **探索**：在用户明确选择的当前结果之后，按外部策略从可见直接联系生成有界、可解释的页外候选；
-9. **传输**：五分区个人数据包携带 61 张当前工作区表、引用 Blob 字节、含联系/探索/Entry 偏好和 AutomationPolicy 及信源订阅/游标/串联开关的偏好、Entry v5 当前结构/精确区间/全文工作副本、Association v4 图谱语义/说明/来源核验元数据和 Processing v7 状态；
-10. **处理任务**：Provider-neutral ProcessingRun/提案信封持久化，API 读取/取消；订阅检查写入真实 import 运行；可选 OpenAI split、tags 与 selected-pair association 启动、接受/拒绝；M1G-4B 以 typed claims 持久化自动路由并在失败时补偿，M1G-4C/D 提供显式所有者控制和审计，M1G-5A 将成功 claim 投影为独立所有者工作队列，M1H-1 只对显式授权的推进 claim 执行本地确定性标签和可替换联系投影；总览真实轨道；
+9. **传输**：五分区个人数据包携带 66 张当前工作区表、引用 Blob 字节、含联系/探索/Entry 偏好和 AutomationPolicy 及信源订阅/游标/串联开关的偏好、Entry v5 当前结构/精确区间/全文工作副本、Association v5 图谱语义/说明/来源核验版本元数据和 Processing v10 状态；
+10. **处理任务**：Provider-neutral ProcessingRun/提案信封持久化，API 读取/取消；订阅检查写入真实 import 运行；可选 OpenAI split、tags 与 selected-pair association 启动、接受/拒绝；M1G-4B 以 typed claims 持久化自动路由并在失败时补偿，M1G-4C/D 提供显式所有者控制和审计，M1G-5A 将成功 claim 投影为独立所有者工作队列，M1H-1 只对显式授权的推进 claim 执行本地确定性标签和可替换联系投影；M2-P0A 以 batch/item 控制表和 ProcessingRun 尝试支持 Codex 操作的逐 Snapshot 可恢复物化，M2-P0B 在同一成功批次上执行确定性标签、typed 异常和只触及本批 Entry 的增量联系，M2-P0C 再提供当前/过期异常汇总、稳定抽样与精确数量保护的当前裁决状态，M2-P0E/P0F 通过外部稳定工作包批量阅读并以 closed result 幂等回写疑难项，M2-P0G 按阶段持久状态提供有限窗口统一推进；总览真实轨道；
 11. **产品壳**：总览、导入、拆分、标签、联系、查询、正式知识七个活动页面；
 12. **必要基础**：迁移、健康检查、日志、生命周期、非重叠订阅调度、共享队列基础、测试、构建与制品审计。
 
@@ -406,7 +408,7 @@ Windows 本地运行和 Linux 部署都必须使用源码/安装目录之外的�
 
 ### 11.3 下一实施顺序
 
-M1E-2 与直接使用增量已经完成。ADR 0012 的 M1E-3A 已接通中性任务边界；ADR 0013/0014/0015 的 M1E-3B/C/D 已选择同一 OpenAI Responses API，分别实现公开 Entry 标签、selected-pair 联系和公开 Snapshot 拆分提案，并把接受转换为既有 Entry revision、graph edge command 或 Entry materialization。ADR 0016 的 M1E-4A 补齐既有 Fragment 边界上的本地人工分组，ADR 0017 的 M1E-4B 进一步允许 Fragment 内 Unicode 标量边界，并让确定性、人工和 AI 接受共用唯一空 Snapshot 原子边界。ADR 0018/0019 的 M1E-5A/5B 把单份本地 Markdown、文本、HTML 和 PDF 接入同一 Evidence 与 Split 主线；ADR 0020 的 M1F-1 补齐精确、包含和近似本地词法查询，ADR 0021 的 M1F-2 让同一 Query 直接开启 Association 遍历并比较最多两条结果，ADR 0022 的 M1F-3 接通会话内公开证据综合，ADR 0023 的 M1G-1 接通独立本地探索策略，ADR 0024 的 M1G-2 接通精确公开 GitHub Markdown 单文件订阅，ADR 0025–0029 完成可解释偏好与可恢复路由控制，ADR 0030/0031 又完成所有者工作队列及默认关闭的订阅后确定性物化/分流，ADR 0032–0036 补齐显式推进动作、物化后结构纠错、拆分前派生全文编辑、版本化本地拆分规则和显式多文件导入会话队列。ADR 0037–0041 的 M1I-1A/B 至 M1I-5 已完成连接器/远程文档底座、RSS/Atom、声明式 JSON API、受限同源网页和已安装连接器产品接线。ADR 0042 的 M1J 已在同一 Entry 图谱中补齐闭合关系语义、维护说明、来源核验状态、双端来源动作和 Association v4 兼容传输。ADR 0043 的 M1K 又完成可重建词项/向量索引、三种 Query、召回评估和公开证据 RAG。ADR 0044 的 M1L 已完成可重复合成性能基准、单次关联读取索引和搜索请求重复加载优化。ADR 0045 的 M1M 已完成单机容器、维护和恢复运行边界。下一步是所有者授权后的统一实际审核；未安装的连接器不得在 UI 中伪装为可用。
+M1E-2 与直接使用增量已经完成。ADR 0012 的 M1E-3A 已接通中性任务边界；ADR 0013/0014/0015 的 M1E-3B/C/D 已选择同一 OpenAI Responses API，分别实现公开 Entry 标签、selected-pair 联系和公开 Snapshot 拆分提案，并把接受转换为既有 Entry revision、graph edge command 或 Entry materialization。ADR 0016 的 M1E-4A 补齐既有 Fragment 边界上的本地人工分组，ADR 0017 的 M1E-4B 进一步允许 Fragment 内 Unicode 标量边界，并让确定性、人工和 AI 接受共用唯一空 Snapshot 原子边界。ADR 0018/0019 的 M1E-5A/5B 把单份本地 Markdown、文本、HTML 和 PDF 接入同一 Evidence 与 Split 主线；ADR 0020 的 M1F-1 补齐精确、包含和近似本地词法查询，ADR 0021 的 M1F-2 让同一 Query 直接开启 Association 遍历并比较最多两条结果，ADR 0022 的 M1F-3 接通会话内公开证据综合，ADR 0023 的 M1G-1 接通独立本地探索策略，ADR 0024 的 M1G-2 接通精确公开 GitHub Markdown 单文件订阅，ADR 0025–0029 完成可解释偏好与可恢复路由控制，ADR 0030/0031 又完成所有者工作队列及默认关闭的订阅后确定性物化/分流，ADR 0032–0036 补齐显式推进动作、物化后结构纠错、拆分前派生全文编辑、版本化本地拆分规则和显式多文件导入会话队列。ADR 0037–0041 的 M1I-1A/B 至 M1I-5 已完成连接器/远程文档底座、RSS/Atom、声明式 JSON API、受限同源网页和已安装连接器产品接线。ADR 0042 的 M1J 已在同一 Entry 图谱中补齐闭合关系语义、维护说明、来源核验状态、双端来源操作和 Association v4 兼容传输。ADR 0043 的 M1K 又完成可重建词项/向量索引、三种 Query、召回评估和公开证据 RAG。ADR 0044 的 M1L 已完成可重复合成性能基准、单次关联读取索引和搜索请求重复加载优化。ADR 0045 的 M1M 已完成单机容器、维护和恢复运行边界。ADR 0046–0049 的 M2-P0A–P0D 已完成批量物化、确定性 enrichment、异常复核与 disposable PostgreSQL 15,000 Entry 工程证据；ADR 0050–0058 又完成外部 Codex 批次审阅、closed 幂等回写、有限窗口统一推进、真实规模收口和确定性分类扩展。ADR 0059–0061 的类型学习工程已冻结为实验基线并重新排入 M2-P4R。ADR 0062–0065 完成 M2-P5A–D：固定发行/开发/运行身份，补齐备份盘点与只读校验，增加运行健康/容量/备份年龄告警，并把 disposable PostgreSQL 18 回归贯穿到搜索与知识读取。2026-09-05 的代码盘点和后续开发顺序见[路线图](roadmap.md#下一开发顺序2026-09-05-代码核对)：工作树候选收口和 ADR 0066 增量索引维护已完成，ADR 0067 已完成外部命名查询与阅读位置；ADR 0068 已完成版本绑定的关系来源复核，ADR 0069 已完成所选 Entry 的引用式 Markdown 导出；未安装的连接器不得在 UI 中伪装为可用。
 
 ## 12. 当前验收与未来验收
 
@@ -488,7 +490,7 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 - 人工输入以不可变 Fragment 正文的半开 Unicode 标量区间表示，完整覆盖全部 section Fragment；
 - 区间必须连续、无缺口、无重叠且保持来源顺序；服务端只接收标题、Fragment ID 和区间并重建正文；
 - 前向迁移 `000017` 的可选一对一子表保存精确范围；无范围行继续表示完整 Fragment；
-- Entry Bundle v3 携带第八张范围表，v1/v2 升级为空范围状态；M1H-2 的 Entry v4 在同八张表中加入当前结构事实并把 v1–v3 升级为 current；M1H-3 的 Entry v5 增加第九张全文工作副本表并把 v1–v4 升级为空工作副本；个人数据包现为 61 表（M1G-4B Processing v5 为 58 表，M1G-5A Processing v6 为 59 表，M1H-1 Processing v7 为 60 表，M1H-3 Entry v5 为 61 表）；
+- Entry Bundle v3 携带第八张范围表，v1/v2 升级为空范围状态；M1H-2 的 Entry v4 在同八张表中加入当前结构事实并把 v1–v3 升级为 current；M1H-3 的 Entry v5 增加第九张全文工作副本表并把 v1–v4 升级为空工作副本；历史上 M1H-3 时个人数据包为 61 表，M2-P0A Processing v8 增加两张批量控制表，M2-P0B Processing v9 再增加两张 enrichment 表，M2-P0C Processing v10 增加一张当前裁决表，当前共 66 表；
 - Split 工作台只读显示每个来源片段，支持鼠标或键盘放置光标并显式执行“在光标处分开”；
 - 继续复用空 Snapshot 原子赢家和显式隐私范围，不改证据、不引入 Provider/依赖，也不迁移已有 Entry 结构。
 
@@ -627,7 +629,7 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 - 所有者确认后，现有 Evidence/CommonMark 边界以确定性身份创建不可变派生 Resource/Snapshot，原始 Blob、Snapshot 与 Fragment 保持不变；
 - 派生 Snapshot 继续使用确定性、人工 Fragment/标量范围和 AI 提案拆分入口，不建立独立物化器；
 - 私密来源的读取、保存与确认都要求当前请求 opt-in，派生 Snapshot 继承隐私事实；
-- 迁移 `000022` 增加第九张 Entry 分区表，Entry Bundle v5 向后读取 v1–v4，完整个人数据包覆盖 61 表。
+- 迁移 `000022` 增加第九张 Entry 分区表，Entry Bundle v5 向后读取 v1–v4；M2-P0A/P0B/P0C 的 Processing v8/v9/v10 共加入五张批量控制表后，完整个人数据包当前覆盖 66 表。
 
 ### 12.25 M1H-4A/B 版本化可配置 Entry 拆分规则边界（已实现）
 
@@ -659,6 +661,11 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 
 ### 12.28 M1J 正式知识关系维护（已实现）
 
+ADR 0068 在现有图谱之外提供同一数据的有界维护读取：SQL 先用当前结构、隐私与有效 projection/override 选择关系，再计数和按规范 Entry 对分页；只装载本页及一个前瞻关系的端点正文。游标绑定核验筛选和隐私范围。
+迁移 `000031` 在 override 上增加 `graph_reviewed_entry_low_revision` / `graph_reviewed_entry_high_revision`，无历史回填。纯读取同时返回存储状态、有效状态、变化原因与已核对版本；已核验但端点变化或无绑定时有效状态为 `needs_review`。
+窄复核写入仅改状态和说明，在既有工作区锁内检查两端当前结构/隐私/revision、关系可见性和 override revision。普通图谱核验同样携带显示版本；隐藏/恢复保留绑定，重组的新对不继承绑定，投影重建不改 override。
+Association Bundle v5 承载新增字段，v1–v4 解码为空绑定；工作区仍为 66 张传输表。实现与验证见[来源复核记录](relation-source-review.md)。
+
 - 继续以当前 `InformationEntry` 为节点、Association projection/override 为边，不恢复已退役的 M1C Knowledge runtime，也不创建第二套内容对象；
 - 自动投影读取为 `similarity / calculated`，用户或 AI 经人工接受的持久关系保存八类闭合语义、名称、方向、最多 500 code point 的说明，以及未核验/已核对来源/需复核状态；
 - 知识页关系检查器可分别打开两端精确来源；`source_checked` 只表示用户回看过来源，不表示客观事实已自动证明；
@@ -669,7 +676,8 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 
 - 当前 `InformationEntry` 保持唯一规范查询对象；`000025` 只增加绑定 Entry revision 的可替换 search projection 与 `title/body/tags` term posting；
 - tokenizer 复用 NFC/ASCII-lower 规范，对普通字母数字形成词，对 Han/Hiragana/Katakana/Hangul 形成单字和相邻双字；它不冒充字典型语言学分词；
-- 索引重建在 workspace lock 下整体替换；状态明确报告当前、已嵌入和过期投影，派生索引不进入个人数据包；
+- [ADR 0066](adr/0066-resumable-incremental-search-index-maintenance.md) 的显式增量刷新先按 revision、tokenizer 和模型元数据选择最多 32 项，再读取对应正文；有界输入摘要与模型相同时复用向量。每批在 workspace lock 下重新核对公开范围、当前结构及精确 revision 后原子保存，已提交投影作为恢复检查点；
+- Provider 失败保留本地词项及已完成窗口，下一次刷新重新选择剩余变化项；私密/退役投影按相同预算清理。完整重建保留整体原子替换与当前版本校验，用于任意派生内容损坏修复。状态报告真实数量，索引不进入个人数据包，也不增加后台任务状态；
 - 可选 OpenAI Embeddings adapter 只接收公开 Entry 的有界标题、正文和标签；模型来自外部配置，key 只来自环境，私密内容在任何 Provider 调用前拒绝；
 - Query 支持兼容词法、纯语义和 45/55 混合召回；模式、相似度、最终分及索引身份参与结果解释、query digest 和 cursor；
 - 有界 expected-set 评估返回 Recall@K/MRR；既有综合复用所选检索模式的前八条公开本地证据，保留精确来源且不保存答案或授予写权限；
@@ -692,6 +700,133 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 - `maintenance backup/restore` 复用完整个人数据包与既有同 workspace 空库原子恢复，文件落在外部 `backups/`；
 - M1M 不改变五步领域架构、数据库模型或 Provider。本地 Docker/PostgreSQL 18.6 合成操作演练与 MIT License 已完成；目标云端镜像扫描、私人网络/宿主防火墙、保留策略和监控仍需上线审核。当前没有应用公网入站，订阅、抓取、连接器和显式 Provider 是受控公网出站。
 
-### 12.32 延期审核与环境门
+### 12.32 M2-P0A Codex 操作的批量入库基础（已实现）
 
-实际内容和所有者体验、真实 Provider 质量/费用、正式 TM2、目标云端容器/Linux 等价性、私人网络入口、真实资源限制、保留/告警和发布分发仍需统一审核。本地合成容器、数据库与备份恢复演练已经通过，但不能冒充这些目标环境结论。它们必须如实报告状态，也不能在没有当前产品阻断证据时拖停 Entry 主线开发；活动工作区仍禁止恢复真实资料。单元、集成、构建和合成浏览器验证继续作为开发质量门运行。
+- 计划只选择没有当前 Entry 结构的 Snapshot，按隐私范围、捕获时间和 Snapshot ID 稳定冻结；单批最多 500 个 Snapshot、50,000 个 Entry；
+- 每个 Snapshot 是一个独立事务分片，继续复用既有 Evidence materializer、确定性 section planner 和空 Snapshot 原子赢家，不建立第二套 Entry writer；
+- 每次有限执行窗口创建一个 ProcessingRun；pause 在当前分片后生效，resume 继续 pending，retry 只重置 failed/中断项；成功分片不重复写入；
+- `000026` 的 batch/item 表只保存控制状态，Processing Bundle v8 向后读取 v1–v7；maintenance CLI 只输出身份、计数、状态和稳定错误码；
+- Provider 微批次、批次审核 UI 和 15,000 Entry / 4–6 小时端到端实测属于后续边界；确定性标签和增量联系由 M2-P0B 接续。
+
+### 12.33 M2-P0B 确定性批量标签与增量联系（已实现）
+
+- 只接续状态为 succeeded 的 P0A 批次，并按原 Snapshot 顺序懒创建 enrichment item；每个执行窗口使用 ProcessingRun 和规范规则摘要；
+- 确定性标签复用标签页的本地 extractor、排除词与确认别名；同一 Snapshot 的 Entry revision 原子写入，人工/AI/导入标签不被覆盖；
+- 自动提取关闭、没有候选和关键词容量已满成为只含 Entry revision 身份及代码的 typed exception，不复制来源正文；
+- 联系核心以本窗口 Entry 为 source，只生成和替换至少一个端点属于 source 集合的 projection；pair override、正式知识关系和其他历史 pair 保持不变；
+- `000027` 增加 enrichment item/exception，Processing Bundle v9/18 表向后读取 v1–v8，完整个人数据包为 65 表；maintenance CLI 提供 run/resume/retry/status/report；
+- 15,000 Entry 合成内存核心约 1.24 秒，只是 P0B 规则方向证据；后续 M2-P0D 已补齐 PostgreSQL、Blob、事务、恢复和异常控制的合成完整链测量。
+
+### 12.34 M2-P0C 批量异常汇总、抽样与裁决（已实现）
+
+- 只接续所有 enrichment item 均 succeeded 的 P0B 批次，并为每条 typed exception 懒创建一条当前裁决状态；
+- 汇总按异常代码报告 current/stale revision 以及 pending/accepted/manual-review/deferred 当前数量；review complete 只代表当前 revision 没有 pending；
+- 抽样以 batch/code/Entry identity 的 SHA-256 稳定排序，最多返回 50 个身份记录，不加载标题、正文、来源或 Provider 数据；
+- 批量转换同时要求 closed code、原状态、目标状态和 exact expected count，并在 workspace lock 下只更新仍匹配当前 Entry revision 的行；数量漂移时整组 stale，过期异常不可裁决；
+- `000028` 增加一张当前裁决表，Processing Bundle v10/19 表向后读取 v1–v9，完整个人数据包为 66 表；maintenance CLI 提供 summary/sample/adjudicate；
+- 裁决状态不写 Entry、标签、联系、正式图谱或 AI proposal，也不证明 4–6 小时端到端目标。
+
+### 12.35 M2-P0D disposable PostgreSQL 完整链证据（已实现）
+
+- 固定 `postgres:18.6`、临时数据根和 500 Snapshot / 15,000 Entry 合成工作负载运行当前 28 份迁移、迁移 no-op、queue schema 和 runtime grants；
+- 只复用既有 Evidence、P0A、P0B、P0C 服务与 PostgreSQL adapter，不建立第二套批量 writer、标签器、联系器或裁决器；
+- 基准注入一次 P0A Blob 失败和一次 P0B Association 失败，要求 retry/replay 收敛；P0C 先验证错误 expected count 不写入，再接受精确当前组；
+- 最终独立统计 500 Resource/Snapshot、15,000 section Fragment/Entry、54,000 规则关键词、123,000 projection、1,500 exception/adjudication；容器和临时根必须清理；
+- 记录运行约 15 分 20 秒（16.311 Entry/s），说明当前合成开发链远低于 4–6 小时预算，且主要时间在增量联系。该数字不是生产 SLO，普通质量门不运行 Docker；
+- 实测修正 `000027` 对活动 Entry identity 的外键、PostgreSQL 复用 status 参数 cast，以及同一 client 查询顺序；没有增加迁移编号、依赖、Bundle section 或产品 UI。
+
+### 12.36 M2-P0E 外部 Codex 审阅工作包（已实现）
+
+- 当前 pending typed exception 以 1–20 项稳定 packet 导出；每项冻结 exact Entry revision、裁决 version、正文与当前三维标签；
+- packet 和默认无效的结果模板只落到外部 `exports/codex-work/`，同输入重放不覆盖已编辑结果；终端不回显正文；
+- 默认排除隐私，只有当前命令显式 opt-in 才允许本机导出；没有 Provider、数据库写入、迁移、依赖或浏览器执行器。
+
+### 12.37 M2-P0F 闭合结果与幂等回写（已实现）
+
+- canonical result 只允许 annotate/accept/manual-review/deferred，并精确匹配 packet SHA、Entry revision 和 adjudication version；
+- annotate 先通过既有 Entry revision 边界原子写完整标签，再 exact 转换异常状态并增量重建涉及这些 Entry 的 Association projection；
+- placeholder、缺项、开放字段和 stale 状态 fail-closed；重放识别已经形成的同值 revision，不覆盖人工/AI pair override 或正式知识关系。
+
+### 12.38 M2-P0G 统一有限窗口推进（已实现）
+
+- `pipeline-start/advance/status` 严格组合 P0A 物化、P0B enrichment 与 P0C review，不复制 repository 或批次表；
+- 一次调用只推进 1–500 项，根据 persisted state 选择 run/resume/retry，并返回 advance/wait/export-review/none；
+- 没有进程内无限循环、后台调度、自动接受或 Provider；complete 只表示当前批次状态闭合。
+
+### 12.39 M2-P1A–D 首次真实规模收口（已实现）
+
+- 个人数据包的四个数据库 section 与信封共享 1 GiB / 3200 万 value 上限，保持 closed-schema、canonical JSON、Blob 摘要与跨表引用闭包；
+- Snapshot 目录在 repository/API 层以捕获时间和 Snapshot ID 游标分页；200 是单页上限，不再是工作区文档上限；
+- 确定性分类器只写空的 type/domain 且要求唯一高置信度赢家；人工、AI、导入结果优先，歧义成为可复核异常；
+- enrichment refresh 绑定新规则摘要并只替换旧规则结果/异常/裁决，复用既有 Entry revision 与 Association source replacement，不改变 Evidence 或 pair override；
+- public exact/substring retrieval 以 current term posting 缩小候选并选择性 hydration，最终裁决仍由原搜索核心完成；不能证明索引完整时必须完整加载，不能以优化换取漏检。
+
+### 12.40 M2-P2A–D 分类诊断、主次领域与外部规则（已实现）
+
+- 批处理异常沿用一个 closed code 字段，但新写入区分无信号、单维缺失与平局/低置信度；旧 `classification_incomplete` 继续可读，不重写历史；
+- 分类器分别观察标题、当前内容关键词与正文；规则分数、最低门槛和领先幅度都是纯本地确定值，未通过时输出诊断而不是猜测；
+- Entry 的有序领域关键词继续承载 primary/secondary：第一个是唯一主领域，其后最多两个达到门槛的次领域，不增加平行分类表；
+- 个人 Profile 是外部偏好状态，提供有界别名、类型/领域映射和噪声排除；它进入规则摘要与完整个人数据包，但不进入领域表、Git 或制品；
+- `000030` 只扩展既有 CHECK。已有成功批次必须经显式 refresh 才重算，pair override 与 Evidence 不受影响；P2E/P2F 由真实刷新分布决定。
+
+### 12.41 M2-P2E 残余分类 Codex 复核（已实现）
+
+- 四类分类异常沿用 P0C typed code 分组，并复用 P0E/P0F packet/result schema 和外部文件边界；
+- 分类 packet 可含 1–100 条，其他异常仍为 1–20 条；16 MiB/2 MiB 字节门继续独立生效；
+- 结果模板从 current Entry 投影完整现有 annotation，缺失 type/domain 保留无效 placeholder，避免重复生成已有标签；
+- 导出读取优先使用选中 Entry ID；写回仍是完整 Entry revision、exact adjudication 和局部 Association replacement；
+- 这不是 Provider 自动分类、后台循环或新数据库权限；P2F UI 与检索性能保持独立。
+
+### 12.42 M2-P2G 高置信度确定性类型补全（已实现）
+
+- v4 分类器仍是纯本地函数：强体裁词、明确资料信号、字段权重、负信号、最低分和领先幅度共同决定是否产生类型；普通链接资源卡不再构成类型证据；
+- `other` 不属于确定性候选。类型为空、平局或低置信度时保留诊断，不以默认值消灭不确定性；
+- preview 以 adjudication identity 选中 current pending 缺类型 Entry，并优先分块使用 `loadCurrentEntriesByIds`；返回值是可公开到维护终端的计数、代码、分数和 ID 投影；
+- apply 仅编排现有 BulkIngestionEnrichmentService。Entry revision、Snapshot 原子性、rules SHA、恢复、隐私范围和 Association replacement 都沿用原实现；
+- 已有类型、accepted/manual_review/deferred 决定、pair override、正式知识边和 Evidence 不进入自动覆盖范围；未解决项复用 P2E/P2F。
+
+### 12.43 延期审核与环境门
+
+实际内容和所有者体验、真实 Provider 质量/费用、正式 TM2、目标云端容器/Linux 等价性、私人网络入口、真实资源限制、保留/告警和发布分发仍需按获得的证据逐项复核。所有者已经确认私人云端 Docker 实例投入使用；这不自动证明其具体镜像、网络、备份或监控状态。本地合成容器、数据库与备份恢复演练已经通过，但不能冒充目标环境结论。缺失的生产证据必须如实报告，也不能在没有当前产品阻断证据时拖停 Entry 主线开发。单元、集成、构建和合成浏览器验证继续作为开发质量门运行。
+
+### 12.44 M2-P5A 生产发行身份与上线状态基线（已实现）
+
+- 公开 `v0.1.0`、后续 M2 开发线和实际运行实例是三个独立身份；
+- Git 已核对固定发行 tree 与内部发行等价 tree，当前 M2 输入不继承 `v0.1.0` 版本名；
+- 私人云端实例的“已上线”来自所有者确认，不扩大为当前任务没有检查的环境认证；
+- 域名、镜像摘要、证书、凭据、数据库、数据根、个人资料、备份清单和告警配置继续位于仓库之外；
+- 后续 P5B/P5C/P5D 分别核对恢复、监控/容量和五步主线生产回归，不修改五步领域模型。
+
+### 12.45 M2-P5B 备份可恢复性边界（已实现）
+
+- 外部 backup store 在不扩展通用文件访问的前提下，按 workspace 和当前文件名格式列出直接普通文件；旧包与无关文件不进入保留候选；
+- `M1cWorkspaceTransfer` 的具体维护实现复用同一 Bundle codec、section normalization、workspace closure、Blob reference 与个人偏好检查，形成只读 verify；旧 HTTP transfer port 不因该维护能力扩张；
+- 当前完整个人数据包通过内嵌 Blob 的长度/SHA-256 验证自包含性；旧 Bundle 则要求其外部 Blob 仍能完整读取；
+- keep-latest 仅产生有界 removal candidate 预览，不删除文件、不固定所有者策略，也不建立调度器；
+- 三个读取命令跳过数据库 readiness，但仍使用外部 runtime config 中的 workspace/data root；backup create 与空库 restore 原语义不变；
+- 实际云端恢复演练记录、摘要和保留选择属于外部运维状态。P5B 不改变 Evidence、Entry、Association、Processing、搜索或正式知识模型。
+
+### 12.46 M2-P5C 运行健康、容量与告警（已实现）
+
+- 维护编排通过独立 observer 汇总数据库、外部数据根和当前 workspace 备份；任一来源失败只形成自己的告警；
+- PostgreSQL 读取使用 runtime role、参数化只读可重复读事务，报告数据库/证据字节、领域计数、搜索投影完整性和失败/停滞工作；
+- 文件系统 observer 只返回十进制容量及可用百分比，backup observer 只返回合法最新文件的安全摘要与年龄；
+- 输出为冻结的 privacy-safe report 和稳定 alert code；通知、schedule 与生产阈值由外部部署负责；
+- 该边界不增加数据库状态、迁移、依赖、HTTP API、Web UI 或后台守护进程。
+
+### 12.47 M2-P5D 五步主线发行回归（已实现）
+
+- P0D disposable PostgreSQL 工具继续使用正式迁移、queue、grant、Evidence、P0A/P0B/P0C 和失败恢复边界；
+- 标签/联系完成后，回归以 `InformationEntryRetrievalService` 建立当前搜索投影并执行当前词法查询；
+- 查询结果必须能返回精确 Fragment input；同一当前 Entry/Association snapshot 必须能构建有界正式知识图；
+- P5C PostgreSQL observer 在同一临时库核对当前 Entry 与搜索投影计数，避免只验证写入而遗漏读取面；
+- 测试只使用合成输入和随机一次性资源，不触碰所有者现有 PostgreSQL、Blob、偏好或备份。
+
+### 所选 Entry 的引用式 Markdown 导出
+
+ADR 0069 的独立读取端口仅接收 1–20 个显式 Entry/revision/revisionId 与当次隐私范围。
+它复用现有工作区锁、Entry 定向装载和 Evidence 读取；仅加载两端都在选择内的关系。
+服务在全部隐私检查之后从 Blob 重建精确 Fragment 范围，正文与来源分别限长，并保留全部引用定位。
+生成重新计算预览摘要，拒绝条目版本变化或关系变化；只允许服务器生成的 Markdown 进入外部文件端口。
+文件采用独占临时写与重命名，HTTP 返回安全文件名与相同内容供浏览器下载。
+没有迁移、领域写入、Provider 或 Bundle 增量；现有个人数据包仍承担完整恢复。见[交付记录](cited-entry-export.md)。

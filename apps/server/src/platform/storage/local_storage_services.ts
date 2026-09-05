@@ -1,3 +1,4 @@
+import {LocalEntryMarkdownFileStore} from './local_entry_markdown_file_store.js';
 import type {StorageServices} from '../../storage/storage_services.js';
 import {initializeLocalDataRoot} from './local_data_root.js';
 import {LocalFilesystemBlobStore} from './local_filesystem_blob_store.js';
@@ -15,5 +16,12 @@ export async function createLocalStorageServices(
   const workspaceBundleFiles = new LocalWorkspaceBundleFileStore(
     layout.areaRoots.exports,
   );
-  return Object.freeze({blobStore, reviewPreferences, workspaceBundleFiles});
+  return Object.freeze({
+    blobStore,
+    reviewPreferences,
+    workspaceBundleFiles,
+    entryMarkdownFiles: new LocalEntryMarkdownFileStore(
+      layout.areaRoots.exports,
+    ),
+  });
 }

@@ -1,3 +1,4 @@
+import {EntryMarkdownExportService} from '../modules/entries/information_entry_markdown_export_service.js';
 import type {RuntimeConfig} from '../config/runtime_config.js';
 import {
   InformationEntryQuerySynthesisService,
@@ -229,6 +230,12 @@ export async function startRoleRuntime(
       }),
     );
   }
+  const entryMarkdownExports = new EntryMarkdownExportService({
+    workspaceId: config.workspaceId,
+    repository: repositories.entryMarkdownExports,
+    blobStore: storage.blobStore,
+    files: storage.entryMarkdownFiles,
+  });
   const api =
     config.role === 'api' || config.role === 'all'
       ? new M1cApiService({
@@ -260,6 +267,7 @@ export async function startRoleRuntime(
             ? {}
             : {aiAssociationProposals}),
           ...(aiQuerySynthesis === undefined ? {} : {aiQuerySynthesis}),
+          entryMarkdownExports,
           workspaceTransfer: new M1cWorkspaceTransfer({
             repository: repositories.workspaceTransfer,
             blobStore: storage.blobStore,

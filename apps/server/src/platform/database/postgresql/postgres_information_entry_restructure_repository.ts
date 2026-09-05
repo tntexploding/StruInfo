@@ -84,6 +84,8 @@ const INSERT_LINEAGE_SQL = sql(
   'DO NOTHING',
 );
 
+// A replacement Entry pair has not been reviewed. Keep status/note but leave
+// the reviewed revision columns null instead of transferring source-check authority.
 const INSERT_OVERRIDE_SQL = sql(
   'INSERT INTO struinfo.information_entry_association_override (',
   '  workspace_id, entry_low_id, entry_high_id, current_revision,',

@@ -132,7 +132,7 @@ export function InformationEntrySplitWorkspace({
       setFeedback({
         kind: 'error',
         title: '请选择来源文档',
-        detail: 'Entry 必须从当前工作区中的一个精确 Snapshot 生成。',
+        detail: '条目必须从当前工作区的一份来源文档生成。',
       });
       return;
     }
@@ -163,8 +163,8 @@ export function InformationEntrySplitWorkspace({
             : '相同条目已经存在',
         detail:
           response.body.status === 'created'
-            ? `新增 ${response.body.createdCount.toString()} 个可追溯 Entry。`
-            : '幂等重试没有创建重复条目。',
+            ? `新增 ${response.body.createdCount.toString()} 个可追溯条目。`
+            : '没有重复生成条目。',
       });
       await controller.executeSearch();
       await controller.refreshDocuments();
@@ -172,7 +172,7 @@ export function InformationEntrySplitWorkspace({
       setFeedback({
         kind: 'error',
         title: '本地接口不可达',
-        detail: '条目没有生成；原始证据与知识图谱保持不变。',
+        detail: '条目没有生成；原文和知识图谱保持不变。',
       });
     } finally {
       setMaterializing(false);
@@ -256,13 +256,8 @@ export function InformationEntrySplitWorkspace({
     >
       <header className="workflow-page-heading">
         <div>
-          <p className="section-index">02 / DOCUMENT SPLIT</p>
           <h1>拆分</h1>
-          <p>选择来源文档，检查结构拆分，并生成可编辑的信息条目。</p>
         </div>
-        <span className="origin-label origin-label--deterministic">
-          {aiEnabled ? '结构规则 + AI 人工确认' : '结构规则 · 可离线使用'}
-        </span>
       </header>
 
       <aside className="workflow-mode-summary" aria-label="拆分页操作指南">
@@ -348,7 +343,6 @@ export function InformationEntrySplitWorkspace({
 
           <section className="split-quick-action" aria-label="构建当前文档条目">
             <header>
-              <p className="section-index">BUILD / CURRENT</p>
               <strong>构建当前文档</strong>
             </header>
             <label className="privacy-query-toggle">

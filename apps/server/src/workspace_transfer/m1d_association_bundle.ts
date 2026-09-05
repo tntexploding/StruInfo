@@ -7,11 +7,17 @@ import {
   type JsonPrimitive,
   type JsonValue,
 } from '../serialization/canonical_json.js';
-import type {WorkspaceBundleSectionCodec} from './workspace_bundle.js';
+import {
+  DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES,
+  type WorkspaceBundleSectionCodec,
+} from './workspace_bundle.js';
 
 export const M1D_ASSOCIATION_BUNDLE_SECTION_TYPE = 'struinfo.m1d-association';
-export const M1D_ASSOCIATION_BUNDLE_SECTION_VERSION = 4;
-export const M1D_ASSOCIATION_BUNDLE_SCHEMA = 'struinfo.m1d-association.v4';
+export const M1D_ASSOCIATION_BUNDLE_SECTION_VERSION = 5;
+export const M1D_ASSOCIATION_BUNDLE_SCHEMA = 'struinfo.m1d-association.v5';
+export const M1D_ASSOCIATION_VERSION_FOUR_BUNDLE_SECTION_VERSION = 4;
+export const M1D_ASSOCIATION_VERSION_FOUR_BUNDLE_SCHEMA =
+  'struinfo.m1d-association.v4';
 export const M1D_ASSOCIATION_VERSION_THREE_BUNDLE_SECTION_VERSION = 3;
 export const M1D_ASSOCIATION_VERSION_THREE_BUNDLE_SCHEMA =
   'struinfo.m1d-association.v3';
@@ -22,7 +28,7 @@ export const M1D_ASSOCIATION_LEGACY_BUNDLE_SECTION_VERSION = 1;
 export const M1D_ASSOCIATION_LEGACY_BUNDLE_SCHEMA =
   'struinfo.m1d-association.v1';
 
-const ASSOCIATION_VALUE_LIMIT = 1_000_000;
+const ASSOCIATION_VALUE_LIMIT = DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES;
 const ROW_BYTE_LIMIT = 1024 * 1024;
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -78,10 +84,25 @@ export const M1D_ASSOCIATION_TABLES: readonly Readonly<M1dAssociationTableDescri
       'graph_semantic_kind',
       'graph_verification_status',
       'graph_note',
+      'graph_reviewed_entry_low_revision',
+      'graph_reviewed_entry_high_revision',
       'created_at',
       'updated_at',
     ]),
   ]);
+
+const VERSION_FOUR_ASSOCIATION_TABLES = Object.freeze(
+  M1D_ASSOCIATION_TABLES.map((descriptor) =>
+    table(
+      descriptor.name,
+      descriptor.columns.filter(
+        (column) =>
+          column !== 'graph_reviewed_entry_low_revision' &&
+          column !== 'graph_reviewed_entry_high_revision',
+      ),
+    ),
+  ),
+);
 
 const VERSION_THREE_ASSOCIATION_TABLES: readonly Readonly<M1dAssociationTableDescriptor>[] =
   Object.freeze([
@@ -151,6 +172,39 @@ export const M1D_ASSOCIATION_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     version: M1D_ASSOCIATION_BUNDLE_SECTION_VERSION,
     encode: normalizeM1dAssociationSnapshot,
     decode: normalizeM1dAssociationSnapshot,
+  });
+
+export const M1D_ASSOCIATION_VERSION_FOUR_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1D_ASSOCIATION_BUNDLE_SECTION_TYPE,
+    version: M1D_ASSOCIATION_VERSION_FOUR_BUNDLE_SECTION_VERSION,
+    encode: (value: unknown) =>
+      normalizeSnapshot(
+        value,
+        M1D_ASSOCIATION_VERSION_FOUR_BUNDLE_SCHEMA,
+        VERSION_FOUR_ASSOCIATION_TABLES,
+      ),
+    decode(payload: JsonValue): unknown {
+      const legacy = normalizeSnapshot(
+        payload,
+        M1D_ASSOCIATION_VERSION_FOUR_BUNDLE_SCHEMA,
+        VERSION_FOUR_ASSOCIATION_TABLES,
+      );
+      return normalizeM1dAssociationSnapshot({
+        schemaVersion: M1D_ASSOCIATION_BUNDLE_SCHEMA,
+        tables: legacy.tables.map((section) => ({
+          name: section.name,
+          rows:
+            section.name === 'information_entry_association_override'
+              ? section.rows.map((row) => ({
+                  ...row,
+                  graph_reviewed_entry_low_revision: null,
+                  graph_reviewed_entry_high_revision: null,
+                }))
+              : section.rows,
+        })),
+      });
+    },
   });
 
 export const M1D_ASSOCIATION_VERSION_TWO_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
@@ -275,6 +329,8 @@ function upgradeVersionThreeSnapshot(
               graph_verification_status:
                 row.graph_origin === null ? null : 'unreviewed',
               graph_note: row.graph_origin === null ? null : '',
+              graph_reviewed_entry_low_revision: null,
+              graph_reviewed_entry_high_revision: null,
             }))
           : tableSnapshot.rows,
     })),
@@ -298,6 +354,8 @@ function upgradeVersionTwoSnapshot(
               graph_semantic_kind: null,
               graph_verification_status: null,
               graph_note: null,
+              graph_reviewed_entry_low_revision: null,
+              graph_reviewed_entry_high_revision: null,
             }))
           : tableSnapshot.rows,
     })),
@@ -366,6 +424,8 @@ function upgradeLegacySnapshot(
       graph_semantic_kind: null,
       graph_verification_status: null,
       graph_note: null,
+      graph_reviewed_entry_low_revision: null,
+      graph_reviewed_entry_high_revision: null,
       created_at: requiredPrimitive(override, 'created_at'),
       updated_at: requiredPrimitive(revision, 'created_at'),
     });
@@ -473,6 +533,23 @@ function normalizeRow(
     !CANONICAL_UUID.test(record.workspace_id)
   ) {
     fail();
+  }
+  if (descriptor.columns.includes('graph_reviewed_entry_low_revision')) {
+    const low = record.graph_reviewed_entry_low_revision;
+    const high = record.graph_reviewed_entry_high_revision;
+    if (
+      !(low === null && high === null) &&
+      (record.graph_origin === null ||
+        typeof low !== 'number' ||
+        typeof high !== 'number' ||
+        !Number.isSafeInteger(low) ||
+        !Number.isSafeInteger(high) ||
+        low < 1 ||
+        high < 1 ||
+        low > 2_147_483_647 ||
+        high > 2_147_483_647)
+    )
+      fail();
   }
   const row = Object.create(null) as Record<string, JsonPrimitive>;
   for (const column of descriptor.columns) {

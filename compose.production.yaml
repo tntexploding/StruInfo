@@ -1,7 +1,7 @@
 name: struinfo
 
 x-struinfo-common: &struinfo-common
-  image: ${STRUIINFO_IMAGE:-struinfo:0.1.0}
+  image: ${STRUIINFO_IMAGE:-struinfo:0.2.0}
   build:
     context: .
     dockerfile: Dockerfile
@@ -20,9 +20,11 @@ x-struinfo-common: &struinfo-common
 services:
   app:
     <<: *struinfo-common
+    mem_limit: 3g
     restart: unless-stopped
     stop_grace_period: 30s
     environment:
+      NODE_OPTIONS: --max-old-space-size=2048
       STRUIINFO_CONFIG_PATH: /run/struinfo/runtime.env
       DATABASE_URL_FILE: /run/secrets/runtime_database_url
     volumes:
@@ -69,8 +71,10 @@ services:
   backup:
     <<: *struinfo-common
     profiles: [maintenance]
+    mem_limit: 6g
     command: [node, dist/entrypoints/maintenance.js, backup]
     environment:
+      NODE_OPTIONS: --max-old-space-size=4096
       STRUIINFO_CONFIG_PATH: /run/struinfo/runtime.env
       DATABASE_URL_FILE: /run/secrets/runtime_database_url
     volumes:
@@ -87,6 +91,7 @@ services:
   restore:
     <<: *struinfo-common
     profiles: [maintenance]
+    mem_limit: 6g
     command:
       - node
       - dist/entrypoints/maintenance.js
@@ -94,6 +99,7 @@ services:
       - --file
       - ${STRUIINFO_RESTORE_FILE:-unset.personal-data.json}
     environment:
+      NODE_OPTIONS: --max-old-space-size=4096
       STRUIINFO_CONFIG_PATH: /run/struinfo/runtime.env
       DATABASE_URL_FILE: /run/secrets/runtime_database_url
     volumes:

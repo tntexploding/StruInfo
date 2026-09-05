@@ -150,9 +150,9 @@ describe('M1F-2 query result tools', () => {
     expect(markup).toContain('隐私内容');
     expect(markup).toContain('有用 / 有趣');
     expect(markup).toContain('4 / 5 / 2 / 5');
-    expect(markup).toContain('近似 · 词法分 78/100');
-    expect(markup.match(/查看精确来源/g)).toHaveLength(2);
-    expect(markup).toContain('不会生成综合评分');
+    expect(markup).toContain('近似 · 匹配度 78/100');
+    expect(markup.match(/查看原文/g)).toHaveLength(2);
+    expect(markup).not.toContain('不会生成综合评分');
   });
 
   it('wires the query-owned tools into the ordinary Query workspace', () => {
@@ -235,16 +235,18 @@ describe('M1F-2 query result tools', () => {
     expect(markup).toContain('结果操作');
     expect(markup).toContain('结果比较');
     expect(markup).toContain('先选择一条查询结果');
-    expect(markup).toContain('AI 综合 · 仅基于当前公开查询结果');
+    expect(markup).toContain(
+      '<h2 id="entry-query-synthesis-title">AI 回答</h2>',
+    );
     expect(markup).toContain('AI 未启用');
-    expect(markup).toContain('探索候选');
-    expect(markup).toContain('独立于搜索排序');
+    expect(markup).toContain('探索推荐');
+    expect(markup).toContain('不会改变搜索结果');
     expect(markup).toContain('启用独立探索');
     expect(markup).toContain('当前页探索份额');
     expect(markup).toContain('邻域扩展');
     expect(markup).toContain('跨领域连接');
     expect(markup).toContain('偶然发现');
-    expect(markup).toContain('探索不会自动运行');
+    expect(markup).toContain('选择一个查询结果后，可以生成探索推荐');
   });
 });
 

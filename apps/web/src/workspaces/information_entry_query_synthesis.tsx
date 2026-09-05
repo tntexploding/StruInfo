@@ -55,27 +55,19 @@ export function InformationEntryQuerySynthesis({
     >
       <header className="console-heading">
         <div>
-          <p className="section-index">AI SYNTHESIS / PUBLIC EVIDENCE</p>
-          <h2 id="entry-query-synthesis-title">
-            {ragMode
-              ? 'RAG 综合 · 语义召回与本地证据'
-              : 'AI 综合 · 仅基于当前公开查询结果'}
-          </h2>
+          <h2 id="entry-query-synthesis-title">AI 回答</h2>
         </div>
-        <span className="origin-label origin-label--ai">AI 生成 · 会话内</span>
       </header>
 
       <p className="entry-query-synthesis__disclosure" id="ai-disclosure">
-        只有点击“{ragMode ? 'RAG 综合当前证据' : 'AI 综合当前结果'}
-        ”后，你输入的问题，以及当前公开查询最多 8 条 Entry
-        的标题、受限正文片段和标签才会发送给配置的 OpenAI
-        模型。不会发送隐私文档、来源 URL、数据库身份或个人偏好，也不会保存回答。
+        点击回答后，你的问题和最多 8 条公开结果会发送给
+        OpenAI。隐私内容不会发送，回答也不会保存。
       </p>
 
       {!enabled ? (
         <p className="entry-query-synthesis__notice" aria-live="polite">
-          AI 未启用：请在外部运行配置中同时提供 OpenAI API Key
-          与模型；本地查询保持完整可用。
+          AI 未启用：请先在服务配置中添加 OpenAI API Key
+          和模型；本地查询仍可使用。
         </p>
       ) : privateScope ? (
         <p className="entry-query-synthesis__notice" aria-live="polite">
@@ -89,7 +81,7 @@ export function InformationEntryQuerySynthesis({
 
       <form className="entry-query-synthesis__form" onSubmit={submit}>
         <label className="field">
-          <span>希望 AI 基于这些证据回答什么？</span>
+          <span>希望 AI 根据这些搜索结果回答什么？</span>
           <textarea
             rows={3}
             value={synthesis.question}
@@ -112,15 +104,15 @@ export function InformationEntryQuerySynthesis({
             {synthesis.state.status === 'loading'
               ? '正在综合…'
               : ragMode
-                ? 'RAG 综合当前证据'
-                : 'AI 综合当前结果'}
+                ? '使用知识库回答'
+                : '根据当前结果回答'}
           </button>
         </div>
       </form>
 
       <div className="entry-query-synthesis__status" aria-live="polite">
         {synthesis.state.status === 'loading' ? (
-          <p>OpenAI 正在处理受限公开证据；本地结果仍可继续阅读。</p>
+          <p>OpenAI 正在生成回答；你仍可继续阅读搜索结果。</p>
         ) : synthesis.state.status === 'error' ? (
           <p role="alert">{synthesis.state.message}</p>
         ) : null}
@@ -153,27 +145,16 @@ export function InformationEntryQuerySynthesisAnswer({
     <article className="entry-query-synthesis-answer">
       <header>
         <div>
-          <p className="section-index">GENERATED ANSWER</p>
           <strong>{evidenceStatusLabel(response.evidenceStatus)}</strong>
         </div>
-        <dl>
-          <div>
-            <dt>模型</dt>
-            <dd>{response.model}</dd>
-          </div>
-          <div>
-            <dt>Prompt</dt>
-            <dd>{response.promptVersion}</dd>
-          </div>
-        </dl>
       </header>
       <p className="entry-query-synthesis-answer__text">{response.answer}</p>
 
       <section aria-labelledby="ai-claims-title">
-        <h3 id="ai-claims-title">有证据引用的要点</h3>
+        <h3 id="ai-claims-title">回答依据</h3>
         {response.claims.length === 0 ? (
           <p className="entry-query-synthesis__notice">
-            模型未形成可引用要点；请查看证据不足与局限说明。
+            AI 没有为回答标出可核对的来源，请谨慎使用。
           </p>
         ) : (
           <ol className="entry-query-synthesis-claims">
@@ -200,15 +181,14 @@ export function InformationEntryQuerySynthesisAnswer({
 
       <details className="entry-query-synthesis-evidence">
         <summary>
-          查看本次发送的 {response.evidence.length.toString()} 条公开证据
+          查看发送给 OpenAI 的 {response.evidence.length.toString()} 条公开内容
         </summary>
         <ol>
           {response.evidence.map((item) => (
             <li key={item.handle}>
               <header>
                 <strong>
-                  {item.handle} · {item.titlePath || '未命名条目'} · r
-                  {item.entryRevision.toString()}
+                  来源 {item.handle} · {item.titlePath || '未命名条目'}
                 </strong>
                 <EvidenceAction
                   evidence={item}
@@ -216,7 +196,7 @@ export function InformationEntryQuerySynthesisAnswer({
                 />
               </header>
               <p>{item.excerpt}</p>
-              {item.truncated ? <span>正文已按固定上限截断</span> : null}
+              {item.truncated ? <span>这里只显示部分正文</span> : null}
             </li>
           ))}
         </ol>
@@ -227,7 +207,7 @@ export function InformationEntryQuerySynthesisAnswer({
           className="entry-query-synthesis-limitations"
           aria-labelledby="ai-limitations-title"
         >
-          <h3 id="ai-limitations-title">局限</h3>
+          <h3 id="ai-limitations-title">注意事项</h3>
           <ul>
             {response.limitations.map((item, index) => (
               <li key={`${String(index)}:${item}`}>{item}</li>
@@ -254,7 +234,7 @@ function EvidenceAction({
         onOpenEvidence(evidence.snapshotId, evidence.fragmentIds[0], false);
       }}
     >
-      {evidence.handle} · 查看精确来源
+      查看来源 {evidence.handle}
     </button>
   );
 }
@@ -262,7 +242,7 @@ function EvidenceAction({
 function evidenceStatusLabel(
   status: 'supported' | 'partial' | 'insufficient',
 ): string {
-  if (status === 'supported') return '证据支持';
-  if (status === 'partial') return '部分证据支持';
-  return '证据不足';
+  if (status === 'supported') return '引用完整';
+  if (status === 'partial') return '部分内容没有引用';
+  return '引用不足';
 }

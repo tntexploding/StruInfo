@@ -65,6 +65,26 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 | [0043](0043-rebuildable-entry-search-index-and-rag.md) | Accepted | Rebuildable Entry term/vector index, optional semantic recall and evidence-bounded RAG |
 | [0044](0044-evidence-driven-local-performance.md) | Accepted | Repeatable data-free performance workload and evidence-driven local optimizations |
 | [0045](0045-operational-production-baseline.md) | Accepted | Maintainable single-host production runtime, secrets, backup/restore and upgrade boundary |
+| [0046](0046-codex-operated-bulk-ingestion.md) | Accepted | Provider-free Codex-operated recoverable bulk Snapshot-to-Entry ingestion |
+| [0047](0047-deterministic-bulk-enrichment.md) | Accepted | Deterministic bulk tags, typed exceptions and incremental Association replacement |
+| [0048](0048-bulk-ingestion-exception-adjudication.md) | Accepted | Closed bulk-ingestion exception summary, sampling and guarded adjudication |
+| [0049](0049-disposable-postgresql-bulk-ingestion-benchmark.md) | Accepted | Disposable PostgreSQL 18 end-to-end bulk-ingestion benchmark and recovery evidence |
+| [0050](0050-external-codex-review-work-packages.md) | Accepted | External bounded Codex review work packages for current ingestion exceptions |
+| [0051](0051-closed-codex-review-result-application.md) | Accepted | Closed stale-safe Codex review-result application and incremental rebuild |
+| [0052](0052-unified-bulk-ingestion-pipeline-control.md) | Accepted | Unified bounded P0A–P0F pipeline control over persisted stage state |
+| [0053](0053-real-scale-capacity-classification-and-query-follow-up.md) | Accepted | Real-scale backup capacity, complete document paging, deterministic classification and indexed lexical candidates |
+| [0054](0054-classification-diagnostics-field-weighting-and-external-profile.md) | Accepted | Classification diagnostics, field-weighted rules and external personal classification profiles |
+| [0055](0055-scaled-codex-classification-review.md) | Accepted | Scaled Codex classification review through the existing closed packet/result boundary |
+| [0056](0056-entry-type-coverage-and-correction-workbench.md) | Accepted | Entry type coverage reporting and focused correction workbench |
+| [0057](0057-high-coverage-deterministic-type-completion.md) | Accepted | Conservative high-confidence deterministic type completion |
+| [0058](0058-calibrated-classification-profile-and-neighbor-consensus.md) | Accepted | Per-category classification calibration, larger external profiles and bounded neighbor consensus |
+| [0059](0059-trusted-entry-type-learning-profile.md) | Accepted | Trusted Entry type samples and an inactive explainable local learning profile |
+| [0060](0060-balanced-type-learning-and-projection-gate.md) | Accepted | Balanced type-learning samples, zero-support protection and full-projection activation gates |
+| [0061](0061-cross-validated-type-learning-calibration.md) | Accepted | Cross-Snapshot calibration, bounded body features and misclassification diagnostics |
+| [0062](0062-production-release-identity-and-live-deployment-baseline.md) | Accepted | Separate public release, current development and owner-confirmed live deployment identities |
+| [0063](0063-backup-recoverability-and-retention-preview.md) | Accepted | Read-only backup verification and non-destructive retention preview |
+| [0064](0064-operational-health-capacity-and-alerting.md) | Accepted | Privacy-safe operational health, capacity and backup-age alert boundary |
+| [0065](0065-production-flow-release-regression.md) | Accepted | Disposable PostgreSQL 18 five-step release regression |
 
 The foundational application and persistence decisions were accepted on
 2026-08-08 after the M0-P architecture gate. The non-browser, non-container
@@ -228,3 +248,146 @@ runtime and maintenance manifests, external secret files, explicit migration,
 queue preparation and grant order, and executable personal-data backup/empty-
 workspace restore operations. Target-image, real PostgreSQL 18, public-network
 and distribution certification remain explicit release-time gates.
+
+ADR 0046 starts M2-P0A with a Codex-operated, Provider-free bulk ingestion
+control plane. It freezes bounded Snapshot plans, treats one Snapshot as one
+atomic transaction shard, records every attempt through existing ProcessingRun
+state and adds pause/resume/retry/status/report maintenance commands. Processing
+Bundle v8 carries only typed batch control rows; source bytes remain external.
+
+ADR 0047 completes M2-P0B by continuing a successful P0A batch through the
+existing deterministic tag rules and an incremental Association rebuild. Entry
+updates are atomic per Snapshot, user overrides survive projection replacement,
+typed exceptions expose rule gaps without copying content, and Processing Bundle
+v9 carries the recoverable state. Its 15,000-entry synthetic core benchmark is
+performance direction evidence, not end-to-end acceptance.
+
+ADR 0048 completes M2-P0C with a maintenance-only exception review control
+plane. It separates current and stale Entry revisions, returns deterministic
+content-free samples and applies only exact-count guarded group transitions.
+Processing Bundle v10 carries one current adjudication table; no decision writes
+Entry content, tags, Associations or Provider state.
+
+ADR 0049 completes M2-P0D with a disposable PostgreSQL 18 benchmark over the
+real Evidence, P0A, P0B and P0C boundaries. A fixed synthetic 500-Snapshot /
+15,000-Entry workload proves migration replay, controlled failure recovery,
+persisted counts and cleanup in about 15 minutes on the recorded local machine.
+It is development-cycle engineering evidence, not a real-corpus or production
+SLO, and ordinary verification remains independent of Docker.
+
+ADR 0050 completes M2-P0E with external, deterministic Codex review work
+packages for current pending exceptions. Packets and invalid-by-default result
+templates live only under the external data root, bind exact Entry/adjudication
+revisions and require an explicit current-command opt-in before including private
+content. No Provider, database write or browser executor is introduced.
+
+ADR 0051 completes M2-P0F with a closed review-result decoder and idempotent
+application boundary. Exact packet/result identity gates one atomic set of Entry
+annotation revisions, exact adjudication transitions and an incremental
+Association rebuild while rejecting placeholders, open fields and stale state.
+
+ADR 0052 completes M2-P0G with one thin, bounded bulk-ingestion state machine.
+It advances P0A materialization, P0B enrichment and P0C review in that order,
+returns a closed next action and never hides stage-specific recovery or creates
+a second background workflow engine.
+
+ADR 0053 completes M2-P1A–D from the first real-scale ingestion feedback. It
+raises the still-bounded complete-package capacity, pages the complete Snapshot
+catalog, fills only missing unambiguous type/domain classifications through an
+explicit enrichment refresh, and uses the existing derived term index to narrow
+eligible public lexical queries while retaining a semantics-complete fallback.
+
+ADR 0054 completes M2-P2A–D without touching owner data. It separates missing
+classification causes, replaces flattened v1 matching with field-weighted and
+fail-closed v2 scoring, emits one primary plus at most two qualified secondary
+domains, and carries owner aliases/mappings/exclusions in external preferences
+and the complete personal-data package. Residual Codex review and UI controls
+remain deferred until the refreshed real distribution is measured.
+
+ADR 0055 completes M2-P2E after that real refresh measured 11,794 residual
+classification exceptions. Explicit classification groups may reuse the existing
+P0E/P0F packet and exact-apply protocol in batches of up to 100, with current
+annotations prefilled and only missing dimensions left as invalid placeholders.
+Other exception packets remain capped at 20; privacy, byte limits, stale-state
+rejection and external-file isolation remain unchanged.
+
+ADR 0056 completes M2-P2F for the largest observed residual category: missing
+Entry types. The Tags workspace exposes current coverage, per-type counts and a
+cursor-paged correction queue. PostgreSQL hydrates only the visible page and
+type saves reuse the existing Entry CAS revision while preserving all other
+annotation and evidence fields. Privacy remains explicit; no migration,
+Provider, dependency or automatic rewrite is introduced.
+
+ADR 0057 completes M2-P2G with a high-confidence deterministic type-completion
+lane. Classifier v4 accepts explicit body-level genre signals and only explicit
+dataset/statistics/reference-material signals without guessing generic linked
+resource cards or `other`. A redacted preview reports coverage and
+stable samples; apply reuses the recoverable enrichment refresh and never
+overwrites an existing type. Remaining uncertainty is routed to the existing
+Codex packet and Tags correction paths.
+
+ADR 0058 completes M2-P3A–C with per-category thresholds, a larger external
+Profile v2 and bounded privacy-separated neighbor consensus.
+
+ADR 0059 completes M2-P4A–C with an external trusted-sample registry, diverse
+active sampling, a closed Codex work package, an explainable sparse local type
+model and snapshot-grouped shadow evaluation. Candidate models remain inactive
+until an explicit activation gate passes; later API adapters must reuse the same
+packet/result and Profile boundary.
+
+ADR 0060 completes M2-P4D after the first quarantined real-scale labeling trial
+exposed class imbalance, zero-sample smoothing and projection-blind activation.
+Sampling now fills per-class and per-Snapshot support deficits, unsupported
+classes stay disabled, and activation requires validation coverage plus a stable,
+non-collapsed projection over the current unclassified corpus. Older models stay
+readable but cannot run until retrained under the v2 activation policy.
+
+ADR 0061 completes M2-P4E with bounded body token, phrase and character-trigram
+features, minimum cross-Snapshot support, balanced three-fold Snapshot validation,
+and per-class score/margin calibration directly against 92% precision. Evaluation
+now exports a sparse confusion matrix and bounded misclassification identities;
+the 64-example class cap keeps the hardest rows before adding Snapshot diversity.
+Older feature-v1/activation-v2 models remain readable but cannot run until
+retrained under the v3 activation policy.
+
+The owner subsequently froze M2-P4A–E as an experimental implementation because
+development-time labeling did not establish reliable cross-material
+generalization. The accepted ADRs remain the historical engineering boundary,
+while the unresolved product goal is queued as inactive M2-P4R; no further
+export, apply, activation, or Entry completion is authorized until that item is
+explicitly resumed with an independent representative evaluation set.
+
+ADR 0062 completes M2-P5A by separating the fixed public `v0.1.0` source tree,
+the later M2 development line and the owner-confirmed private cloud deployment.
+Host-specific identities, secrets, data, backup records and monitoring targets
+remain outside Git; production facts not independently inspected stay marked as
+pending production review.
+
+ADR 0063 completes the M2-P5B engineering boundary with workspace-scoped backup
+listing, full read-only package verification and a bounded retention preview.
+It deliberately adds no automatic deletion: actual cloud backup identities and
+restore-drill evidence remain in the owner's external operations record.
+
+ADR 0064 completes M2-P5C with a read-only maintenance status command covering
+database/domain counts, current search-index completeness, failed or stalled
+work, external-data-root capacity and latest-backup age. It returns stable,
+privacy-safe alert codes while keeping schedules, thresholds and notification
+targets in external operations configuration.
+
+ADR 0065 completes M2-P5D by extending the existing disposable PostgreSQL 18
+regression through Evidence import, Entry materialization, deterministic tags,
+incremental Associations, current search projection, exact source return,
+Entry-centred knowledge graph and the P5C database observer. It uses only
+synthetic temporary resources and does not itself create a release.
+
+ADR 0067 adds bounded external named Entry queries and current reading context.
+See [the accepted decision](0067-saved-entry-queries-and-reading-context.md) for
+privacy renewal, preference concurrency and package compatibility.
+
+ADR 0068 adds a bounded relationship source-review queue, checks of the displayed
+Entry versions and Association Bundle v5. See [the decision](0068-version-bound-relation-source-review.md)
+for old unbound checks, concurrent edits, privacy and projection rebuild behavior.
+
+ADR 0069 adds explicit selected-Entry Markdown preview and export under the
+existing workspace lock. See [the decision](0069-cited-entry-markdown-export.md)
+for exact evidence, privacy, current-version checks and external file ownership.

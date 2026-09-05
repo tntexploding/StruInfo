@@ -25,7 +25,7 @@ RUN --network=none pnpm --offline --config.trust-lockfile=true --config.inject-w
 
 FROM node:24-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS runtime
 
-ARG STRUIINFO_VERSION=0.1.0
+ARG STRUIINFO_VERSION=0.2.0
 ENV NODE_ENV=production
 WORKDIR /opt/struinfo/apps/server
 

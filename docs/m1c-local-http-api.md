@@ -1,7 +1,7 @@
 # 当前本地产品 HTTP 接口
 
-- 状态：M1K 活动接口
-- 最近核对：2026-08-27
+- 状态：M2-P2F 活动接口
+- 最近核对：2026-09-01
 - 稳定性：本机产品接口；不是公共或第三方集成 API
 - 实现真值：[当前项目状态与实现清单](current-project-state.md)
 
@@ -47,6 +47,7 @@
 | `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/accept`           | 接受提案并从本地 Fragment 物化 Entry                                                  |
 | `POST` | `/api/v1/evidence/snapshots/:snapshotId/split-proposals/:proposalId/reject`           | 拒绝提案且不创建 Entry                                                                |
 | `PUT`  | `/api/v1/entries/:entryId`                                                            | 以期望版本更新当前 Entry 成品态                                                       |
+| `POST` | `/api/v1/entries/type-review`                                                         | 分页读取类型覆盖率、缺失队列或指定类型抽查队列                                        |
 | `POST` | `/api/v1/entries/search`                                                              | 查询 Entry，并在显式隐私范围下返回独立完整私密文档通道                                |
 | `GET`  | `/api/v1/entries/search/index`                                                        | 读取当前工作区可重建词项/向量索引状态                                                 |
 | `POST` | `/api/v1/entries/search/index/rebuild`                                                | 显式原子重建当前公共 Entry 的词项和可选向量投影                                       |
@@ -135,6 +136,12 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 - 可选的有用程度与有趣程度 1–5 评分；
 - 隐私 Entry 的当次 `includePrivate`。
 
+`POST /entries/type-review` 接受显式 `includePrivate`、`missing` 或十种闭合类型之一、
+1–50 的 `limit`，以及可选的稳定 cursor。响应给出当前隐私范围内的总数、已分类数、
+缺失数、十类分布和当前页完整 Entry；Web 固定每页读取最多 20 条。PostgreSQL 在只读
+可重复读事务内完成统计和页选择，再只加载当前页正文与标签。该读取不写状态；页面保存
+类型仍调用上述 Entry 修订接口并使用 `expectedRevision`。
+
 文档级标签通过 aggregate 接口确定性重算，或通过 tags 接口人工覆盖。快捷标签、排除词、域名策略、已确认别名、联系策略和探索策略由 preferences 边界写入外部偏好文件，不进入数据库迁移、Git 或应用包。旧客户端不传 `associationPolicy` 或 `explorationPolicy` 时分别保留现值。
 
 M1G-4C 的六个 `/entries/automation/*` 操作把外部 AutomationPolicy、M1G-4A 只读试算和 M1G-4B typed execution 接入同一 Tags 次级控制面。策略 PUT 必须提供 `expectedRevision` 并绑定当前 Profile revision；启用/禁用和暂停/恢复都是显式新修订。trial 接受草稿策略、当次隐私范围、可选 Entry 修订账本和人工接管 ID，只返回路由、原因和计数。run start 只接受已保存且 ready 的精确修订、幂等键和同一账本；列表/详情只返回运行、修订、route/reason/status 和时间，不返回正文、来源 Blob、请求摘要或幂等键。M1G-4D 明确规定列表只是摘要导航：Web 必须在用户选择后调用精确详情操作，独立显示未结算/补偿 claim，并用分离的请求代次阻止迟到列表或详情覆盖更新状态。
@@ -199,7 +206,7 @@ M1H action POST 接受 `{expectedVersion, operation: "apply" | "undo", includePr
 
 ## 5. 个人数据包
 
-export 接口生成当前五分区 Bundle，包含 61 张当前工作区表、被引用的 Blob 字节和含版本化联系、探索、Entry 偏好、AutomationPolicy 与信源串联开关的当前偏好文件。Entry v5 section 在可选精确 Fragment 标量区间和 `is_current_structure` 之外携带拆分前工作副本；v1–v4 Entry section 恢复时把既有 Entry 解释为当前结构并补空工作副本。Processing v7 section 携带十张既有任务/提案表、两张 typed 自动路由执行表、一张所有者工作队列表和一张确定性动作表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1–v6 保持可读，缺失的新表和偏好字段恢复为空/关闭状态。
+export 接口生成当前五分区 Bundle，包含 66 张当前工作区表、被引用的 Blob 字节和含版本化联系、探索、Entry 偏好、AutomationPolicy 与信源串联开关的当前偏好文件。Entry v5 section 在可选精确 Fragment 标量区间和 `is_current_structure` 之外携带拆分前工作副本；v1–v4 Entry section 恢复时把既有 Entry 解释为当前结构并补空工作副本。Processing v10 section 携带十张既有任务/提案表、两张 typed 自动路由执行表、一张所有者工作队列表、一张确定性动作表、两张 M2-P0A 批量物化控制表、两张 M2-P0B enrichment/exception 表和一张 M2-P0C 当前裁决表；restore 只接受导出目录中的安全文件名、同一 `workspaceId` 和空目标工作区，并在一个原子操作中完成。旧的一至四分区 Bundle 以及 Processing v1–v9 保持可读，缺失的新表和偏好字段恢复为空/关闭状态。
 
 Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不进入 Git 或应用安装树。
 

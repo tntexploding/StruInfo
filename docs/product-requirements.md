@@ -1,11 +1,13 @@
 # StruInfo 产品需求
 
-- 状态：`v0.1.0` 私人单用户发行已获授权；进入目标云主机部署
-- 最近更新：2026-08-28
+- 状态：v0.2.0 维护基线；五项近期路线图完成，现有私人 Docker 实例已升级；常规功能开发暂停
+- 最近更新：2026-09-05（五项开发完成，转入维护与使用）
+- 当前交付范围：以[当前实现清单](current-project-state.md)和[维护交接](maintenance-handoff.md)为准；长期设想不自动成为新的开发任务
 - 目的：定义“来源可追溯、AI 可增强且无 AI 仍完整可用的个人知识摄取与维护系统”的产品边界和首个验证切片
 - 历史基线：[产品需求 v0.1](archive/product-requirements-v0.1.md)
 - 文档条目处理细则：[文档条目处理准则](document-entry-processing-guidelines.md)
 - 当前实现与未完成项：[当前项目状态与实现清单](current-project-state.md)
+- 后续开发顺序：[按代码缺口与使用价值排序的路线图](roadmap.md#下一开发顺序2026-09-05-代码核对)；规划不等于能力已实现
 
 ## 0. 当前数据隔离与发行约束
 
@@ -148,6 +150,23 @@ StruInfo 的价值不是“收藏更多网页”，而是降低五种成本：
 
 ## 5. 功能需求
 
+ADR 0067 增加命名 Entry 查询与阅读位置：每工作区最多 20 项，名称最多 80 个 Unicode 标量，保存既有查询条件和可选的选中 Entry 身份。
+保存、更新、重命名、删除使用独立集合 revision 和外部偏好原子更新；打开时重新查询当前数据，非首页的上次条目单独显示。
+跨来源/图谱返回保留会话内条件与位置；跨会话只能通过主动保存的查询恢复，不记录隐式历史。
+保存隐私范围不授予后续披露权限，重新打开时必须明确选择当前范围；失效条目、关联中心或语义能力应有可继续的提示。
+新个人数据包携带命名查询，旧包补空；结果正文、cursor、比较和 AI 答案不持久化，删除视图不删除知识或证据。
+
+
+ADR 0068 增加“知识 → 来源复核”维护入口。默认展示公开待处理关系，每页 20 项、API 最多 50 项；支持按三种核验状态筛选、两端精确来源、500 Unicode 标量维护说明和保存后继续。
+新核验绑定显示的两端 Entry revision，并在工作区锁内同时校验端点与 override 版本；任何冲突都不得覆盖新状态。端点变化或历史核验没有版本绑定时显示需要复核，原存储状态与说明仍保留。
+隐藏、退役和不可见端点在计数、选择与分页前排除；隐私仅由当前页面明确选择。复核不修改关系名称、语义、方向、来源和人工调整，也不恢复隐藏关系。
+迁移 `000031` 仅增加两个可空 revision 字段，Association Bundle v5 携带它们，旧 v1–v4 补空。结构替换后的新关系不继承旧端点核验，计算重建不改人工记录；没有自动事实判断、网络核验或旧 Knowledge 写入器。
+
+ADR 0069 增加查询页的引用式 Markdown 导出：会话内手动选择 1–20 条当前 Entry，标题最多 120 个 Unicode 字符，按选择顺序预览和显式生成。
+预览显示范围、版本、隐私数量、当前正文摘录、精确来源与清单内已有关系；来源和 AI 辅助关系保持区分，不生成缺失摘要或事实结论。
+生成在既有工作区锁内核对当前结构、隐私、revision/revisionId 和预览摘要；过期或不可见选择整体失败，任何 Blob 读取之前完成隐私检查。
+文件仅写外部 `exports/` 并提供同字节浏览器下载，不写领域状态或偏好，不增加迁移、Provider 或数据包版本；完整备份继续使用个人数据包。
+
 ### 5.1 信源、采集与快照
 
 系统需要：
@@ -168,7 +187,7 @@ StruInfo 的价值不是“收藏更多网页”，而是降低五种成本：
 | 等级 | 行为 | 产品阶段 |
 | --- | --- | --- |
 | L0 | 用户手工粘贴、上传或提交 URL | 最早支持 |
-| L1 | 定时读取用户明确订阅的 Git、RSS、API 或网页信源 | 精确 GitHub Markdown、公开 RSS/Atom、声明式 JSON API 与通用连接器/远程文档入库底座已实现；网页随后接入 |
+| L1 | 定时读取用户明确订阅的 Git、RSS、API 或网页信源 | 精确 GitHub Markdown、公开 RSS/Atom、声明式 JSON API、受限同源网页与已安装受信任连接器已接通；间隔检查默认关闭 |
 | L2 | 在用户指定主题、站点或查询范围内发现候选信源/内容；新信源默认需确认后订阅 | 信噪比验证后 |
 | L3 | 系统自主扩展来源并探索开放网络 | 远期，不作为默认能力 |
 
@@ -252,7 +271,7 @@ AI 可以参与：
 - 确定性关键词候选、用户快捷标签、排除词、URL 过滤和确认别名；
 - 文档标签聚合、可解释 Entry 联系及人工增强/削弱/屏蔽/恢复；
 - 文本子串、结构、来源、时间、隐私和一至两跳联系查询；
-- 含 61 张工作区表、引用 Blob 字节和偏好的个人数据包导出/空工作区恢复；
+- 含 66 张工作区表、引用 Blob 字节和偏好的个人数据包导出/空工作区恢复；
 - 最高匹配 Entry 中心、有界图谱/列表、边来源、用户关系编辑和三种隐私范围。
 
 尚未实现的是来源重排、任意脚本或自定义解析器规则、集合/树/时间线、第二向量 Provider、私密向量/RAG、
@@ -268,6 +287,8 @@ AssociationProjection 达到可见条件后可直接进入图谱，不需要逐�
 边界；模型、来源适配器和后台任务只能产生提案，不能直接改表。其他自动化仍按人工操作、
 范围授权、自动分流和委托维护逐级开放；合并、重要冲突裁决、大规模重排和扩大外部权限
 保持人工确认。
+
+开发周期另有一条不依赖模型 API 的高吞吐路径：Codex 只能通过公开 maintenance 命令冻结批次、分窗口执行、暂停、恢复、重试和读取脱敏报告。P0A/P0B 让确定性结构、标签和增量联系优先执行，并把规则不能裁决的 Entry 归入 typed 异常；P0E/P0F 再把当前疑难项变成外部有界工作包和闭合幂等回写，P0G 统一报告下一动作，浏览器不再是逐条执行器。只有未来使用周期的低置信度项目才进入 Provider 微批次。固定合成 PostgreSQL 证据已经在约 15 分钟内完成 15,000 Entry，满足 4–6 小时开发周期工程预算；真实语料和生产容量仍必须另行测量，不能由该结果推导。
 
 ### 5.6 可信度与来源说明
 
@@ -845,11 +866,13 @@ M1H-5B 在导入页显示逐文件准备、写入、成功、失败和停止状�
 
 ### 7.1.30 M1K 可重建词项/向量检索与 RAG（已实现）
 
-[ADR 0043](adr/0043-rebuildable-entry-search-index-and-rag.md) 以 `000025` 增加绑定当前 Entry revision 的可替换搜索投影和三字段词项 posting。本地 tokenizer 对普通 Unicode 字母/数字形成规范词，对中日韩连续文字形成单字和相邻双字；它稳定、无字典且可离线重建，不被描述为完整语言学分词。派生表不进入个人数据包，恢复或模型切换后由显式重建重新产生。
+[ADR 0043](adr/0043-rebuildable-entry-search-index-and-rag.md) 以 `000025` 增加绑定当前 Entry revision 的可替换搜索投影和三字段词项 posting。本地 tokenizer 对普通 Unicode 字母/数字形成规范词，对中日韩连续文字形成单字和相邻双字；它稳定、无字典且可离线重建，不被描述为完整语言学分词。派生表不进入个人数据包，恢复或模型切换后由显式增量刷新或完整重建重新产生。
 
-查询保留原 `lexical` 兼容行为，并增加只使用当前模型/当前 revision 向量的 `semantic` 与 45% 词法、55% 向量的 `hybrid`。模式、检索分和索引身份进入 query digest、游标与结果解释。Query 页面显示公共 Entry、有效/已嵌入/过期投影和词项数量并提供显式重建；一个有界评估请求可返回合成 expected-set 的 Recall@K 和 MRR，但不保存查询或判断。
+查询保留原 `lexical` 兼容行为，并增加只使用当前模型/当前 revision 向量的 `semantic` 与 45% 词法、55% 向量的 `hybrid`。模式、检索分和索引身份进入 query digest、游标与结果解释。Query 页面显示公共 Entry、有效/已嵌入/过期投影和词项数量，并提供显式增量刷新及完整修复；一个有界评估请求可返回合成 expected-set 的 Recall@K 和 MRR，但不保存查询或判断。
 
 首个可选 embedding adapter 使用原生 `fetch` 和外部模型配置；API key 仅来自环境。私密 Entry 在投影、Provider 调用、召回、计数与 RAG 之前拒绝。既有公开 Query 综合复用所选检索模式返回的前八条本地证据及精确来源，因此成为证据约束 RAG；模型仍不能自行搜索数据库、访问 Web、写 Entry/图谱或保存答案。无模型时词项索引和全部词法功能保持可用。
+
+[ADR 0066](adr/0066-resumable-incremental-search-index-maintenance.md) 完成可恢复增量维护：每次显式请求最多刷新或清理 32 项，只读取变化项正文；相同模型下有界输入未变时复用原向量。已提交投影是恢复检查点，页面可在本批后暂停、离开后继续或失败后重试；Provider 失败仍保存本地词项和已完成部分。提交在工作区锁内核对当前 revision、公开范围和结构，过期结果不得标成有效。完整重建保留为损坏修复入口；不新增迁移、个人数据包 section、ProcessingRun、后台自动索引或私密外发。
 
 ### 7.1.31 M1L 可重复性能评估与按证据优化（已实现）
 
@@ -863,7 +886,201 @@ M1H-5B 在导入页显示逐文件准备、写入、成功、失败和停止状�
 
 [ADR 0045](adr/0045-operational-production-baseline.md) 提供非 root 多阶段 Dockerfile、普通 runtime 与高权限 maintenance 分离的 Compose、外部单行 secret 文件、独立迁移/pg-boss schema 准备、runtime grant、维护预检、完整个人数据备份和同工作区空库恢复。应用继续复用现有 live/ready、结构化日志和优雅关闭，不增加业务迁移、依赖、个人数据或第二个运行时。
 
-M1M 是可操作的单机生产代码边界。2026-08-27 已在本地 Docker 与 disposable PostgreSQL 18.6 上用合成数据通过迁移、队列准备、runtime grant、健康、备份、同 workspace 空库恢复和重启。`v0.1.0` 在此基础上加入运行镜像瘦身、浏览器安全响应头和宿主认证反向代理示例；目标云端仍需落实域名、证书、防火墙、备份保留和监控。项目代码采用 MIT License。这些门只阻断对应部署/分发，不重新打开已完成的五步产品主线。
+M1M 是可操作的单机生产代码边界。2026-08-27 已在本地 Docker 与 disposable PostgreSQL 18.6 上用合成数据通过迁移、队列准备、runtime grant、健康、备份、同 workspace 空库恢复和重启。`v0.1.0` 在此基础上加入运行镜像瘦身、浏览器安全响应头和宿主认证反向代理示例；所有者随后确认私人云端 Docker 实例已投入使用。实际域名、镜像摘要、证书、防火墙、备份保留和监控继续由外部运维记录及后续生产复核证明。项目代码采用 MIT License。这些门只阻断对应部署/分发，不重新打开已完成的五步产品主线。
+
+### 7.1.33 M2-P0A Codex 操作的批量 Snapshot→Entry 基础（已实现）
+
+[ADR 0046](adr/0046-codex-operated-bulk-ingestion.md) 增加无 Provider 的 maintenance 批次。一次计划按幂等键、隐私范围和稳定 Snapshot 次序冻结最多 500 个尚未拥有当前 Entry 结构的 Snapshot，并限制总计划 Entry 不超过 50,000。执行以 Snapshot 为原子事务分片；每个窗口产生 ProcessingRun，成功项保持不变，失败或中断项可显式重试，暂停在当前分片完成后生效。
+
+批次和逐项记录只保存身份、摘要、计数、状态、尝试次数和稳定错误码。CLI 的 status/report 不返回正文、URL、路径、凭据或 Provider 数据。`000026` 与 Processing Bundle v8 让控制状态可备份恢复。P0A 的成功只表示确定性 Entry 已形成并可进入既有查询；标签、联系、Provider 微批次、批次审核 UI 和 15,000 Entry / 4–6 小时验收属于后续增量。
+
+### 7.1.34 M2-P0B 确定性批量标签与增量联系（已实现）
+
+[ADR 0047](adr/0047-deterministic-bulk-enrichment.md) 只接续成功的 P0A 批次。每次有限窗口绑定当前确定性标签规则、排除词、确认别名和联系权重摘要；一个 Snapshot 的所有 Entry 标签 revision 在同一事务写入。规则标签不覆盖人工/AI/导入标签，重试识别同版本既有结果，不重复追加。
+
+标签关闭、没有可提取标签或关键词容量已满分别形成 closed typed exception，只保存 Entry/revision 身份和代码。标签完成后只计算“本窗口 Entry ↔ 现有候选”与“本窗口 Entry ↔ 同窗口 Entry”，Repository 只替换至少一个端点属于 source 集合的 projection；pair override、正式知识关系和其他历史 pair 保持不变。`ingest enrich/enrich-resume/enrich-retry/enrich-status/enrich-report` 提供可恢复、脱敏控制面。
+
+迁移 `000027` 与 Processing Bundle v9/18 表携带 enrichment item 和 exception，完整个人数据包覆盖 65 张表。15,000 Entry / 500 Snapshot 的合成内存核心基准只证明本地规则计算不是小时级瓶颈；后续 M2-P0D 已用 disposable PostgreSQL 补齐 Blob、事务、恢复和异常控制的合成完整链证据，真实语料与生产 SLO 仍不由该结果推导。
+
+### 7.1.35 M2-P0C 批量异常汇总、抽样与裁决（已实现）
+
+[ADR 0048](adr/0048-bulk-ingestion-exception-adjudication.md) 在成功 P0B 批次上增加 maintenance-only 复核控制面。异常按 closed code 与 `pending / accepted / manual_review / deferred` 当前状态汇总；最多 50 项的稳定抽样只返回 Snapshot/Entry/revision 身份、隐私事实、当前性和状态，不返回正文、来源、Blob 或 Provider 数据。
+
+批量状态转换必须提交刚观察到的 exact `expectedCount`，并只锁定仍匹配当前 Entry revision、异常代码和原状态的行；数量漂移时整组返回 stale，过期异常保持可见但不进入批量裁决。裁决状态可显式再次修改或回到 pending，但不直接写 Entry、标签、Document 标签、联系、正式图谱或 AI 提案。迁移 `000028` 与 Processing Bundle v10/19 表携带当前裁决状态，完整个人数据包覆盖 66 张表；v1–v9 恢复缺失状态为空。
+
+### 7.1.36 M2-P0D disposable PostgreSQL 性能与恢复证据（已实现）
+
+[ADR 0049](adr/0049-disposable-postgresql-bulk-ingestion-benchmark.md) 增加显式、仓库拥有的合成 PostgreSQL 18 基准。标准工作负载为 500 个 Snapshot、每个 30 个 Entry，共 15,000 Entry；它必须从当前 28 份迁移和 Blob/Evidence 开始，依次执行 P0A、P0B、P0C，并以数据库精确计数证明最终 Entry、规则标签、增量联系、typed exception 和裁决状态。
+
+基准必须包含一次 P0A 读取故障、一次 P0B 联系写故障、重试、幂等重放和 P0C expected-count stale guard；成功或失败后删除 disposable 容器与临时数据根。2026-08-30 的固定本地运行约 15 分 20 秒完成 15,000 Entry，低于 4–6 小时工程预算。该结果是无真实资料的开发周期证据，不是所有者真实语料、长期数据库、Provider、云端容量或生产 SLO。普通 `verify` 不得依赖 Docker 基准。
+
+### 7.1.37 M2-P0E 外部 Codex 审阅工作包（已实现）
+
+[ADR 0050](adr/0050-external-codex-review-work-packages.md) 把当前 `pending` typed exception 按
+1–20 项导出为稳定 packet 和默认无效的结果模板。packet 精确绑定 Entry revision、裁决 version、
+正文和当前三维标注，只落在外部数据根 `exports/codex-work/`，不进入 Git、数据库新表、镜像、
+日志或应用制品。公开内容是默认范围；隐私内容必须由当前命令显式 opt-in。相同输入重放不能
+覆盖已编辑结果，终端只输出文件名、摘要和计数。
+
+### 7.1.38 M2-P0F 闭合 Codex 结果回写（已实现）
+
+[ADR 0051](adr/0051-closed-codex-review-result-application.md) 只接受 `annotate / accept /
+manual_review / deferred`。结果必须是 canonical UTF-8 JSON，并逐项匹配 packet、Entry revision、
+异常身份和裁决 version；placeholder、缺项、额外字段或 stale 状态整包失败。`annotate` 使用既有
+Entry revision 边界写完整 content/type/domain 标签，再 exact 关闭原异常并只重建涉及这些 Entry
+的可替换 Association projection；重放相同结果不会追加重复 revision，也不能改 body、隐私、评分、
+来源证据、人工 override 或正式知识关系。
+
+### 7.1.39 M2-P0G 统一批量推进（已实现）
+
+[ADR 0052](adr/0052-unified-bulk-ingestion-pipeline-control.md) 增加 `pipeline-start / pipeline-advance /
+pipeline-status`。状态机严格按 P0A 物化、P0B enrichment、P0C 复核顺序推进；一次调用只执行
+1–500 项的有限窗口，并返回 `advance / wait / export_review_packet / none`。它只组合现有领域服务，
+不创建第二套批次表、后台无限循环、自动接受、Provider 调用或 UI 前置条件。`complete` 仅表示
+当前批次工程状态闭合，不等于真实内容质量或生产 SLO。
+
+### 7.1.40 M2-P1A–D 首次真实规模入库收口（已实现）
+
+[ADR 0053](adr/0053-real-scale-capacity-classification-and-query-follow-up.md) 直接处理首次 Codex
+完整入库暴露出的四项可达问题：个人数据包的默认闭合预算提高到 1 GiB / 3200 万 canonical
+JSON value；Snapshot API 保持每页最多 200 条但提供稳定 cursor、总数和 Web 自动续页；确定性
+enrichment 在不覆盖既有人工/AI/导入分类的前提下补齐唯一高置信度的类型和领域，并把歧义保留为
+`classification_incomplete`；公开 exact/substring 查询使用当前 term posting 先筛候选，再由原查询
+核心完成全部语义。
+
+这四项均保持 fail-safe fallback。备份仍有显式容量上限；文档 SQL 不返回无界单页；分类不猜测
+平局或低置信度内容；索引缺失、不完整、fuzzy、隐私或 Association 查询继续使用完整加载。升级不会
+自动触碰所有者数据：必须由操作方先应用 `000029`，再显式执行 backup、`enrich-refresh` 和索引重建。
+
+### 7.1.41 M2-P2A–D 分类诊断与外部规则（已实现）
+
+[ADR 0054](adr/0054-classification-diagnostics-field-weighting-and-external-profile.md) 强化批量分类，
+但不把分类变成不可纠正的事实真值。新 enrichment 将无信号、仅缺类型、仅缺领域和无法安全确定
+主分类分别记录；标题、已有内容关键词和正文按字段权重参与确定性计分，只有最低分与领先幅度同时
+成立才接受。领域可按现有顺序语义输出一个主领域和最多两个合格次领域。
+
+个人别名、类型/领域映射与噪声排除存入外部版本化分类 Profile，由完整个人数据包携带；Git、数据库、
+日志和制品不得保存所有者词表。迁移 `000030` 只扩展既有异常代码 CHECK。规则和 Profile 改变不会
+自动改写已有 Entry，升级后仍需显式 backup、`enrich-refresh` 和测量。该阶段曾要求 M2-P2E/P2F
+等待真实刷新后的覆盖率、歧义和人工复核规模再决定；后续实测和实现分别记录在 ADR 0055 与 0056。
+
+### 7.1.42 M2-P2E 残余分类批量复核（已实现）
+
+[ADR 0055](adr/0055-scaled-codex-classification-review.md) 在真实 refresh 确认仍有 11,794 个分类
+异常后，复用 P0E/P0F 的外部 Codex 工作包与闭合写回。四个分类异常必须按 code 分组，可用最多
+100 条的微批次；其他异常仍限 20 条。结果模板预填当前内容关键词、已有类型和已有领域，只把缺失
+维度留为无效 placeholder，因此 Codex 不必重复构造完整标签。
+
+模板在 `action` 和缺失维度被补齐前不得应用；成功写回仍绑定 packet digest、Entry revision、
+adjudication version、完整 annotation revision 和增量 Association 重建。默认不导出隐私内容，
+正文和结果只位于外部数据根。该增量不增加 Provider、迁移、UI、自动接受或后台任务。
+
+### 7.1.43 M2-P2F 类型覆盖与快速纠错（已实现）
+
+[ADR 0056](adr/0056-entry-type-coverage-and-correction-workbench.md) 为标签页增加专门的类型工作模式。
+系统必须显示当前隐私范围内的 Entry 总数、已分类数、缺失数和各类型数量；默认队列只列缺失类型，
+同时允许按一个既有类型抽查。队列必须有界分页，数据库不得为了一个页面 hydration 全部 Entry 正文。
+
+用户保存类型时必须复用当前 Entry 的 CAS 修订，并保留正文、内容关键词、领域、评分、Fragment 与
+隐私事实。隐私内容默认不进入统计或队列，只有当次显式勾选才可显示。该工作台不得引入第二套分类
+存储、自动批量接受、Provider、后台改写或新的个人数据位置；P2E 外部微批仍是大规模 Codex 复核路径。
+
+### 7.1.44 M2-P2G 高覆盖确定性类型补全（已实现）
+
+[ADR 0057](adr/0057-high-coverage-deterministic-type-completion.md) 要求在扩大 Codex/人工工作量前先补足
+可解释的本地类型信号。明确体裁词可在正文独立达到门槛；`factual_material` 只接受数据集、统计数据、
+资料汇总和事实记录等强信号。普通工具、项目、软件、网站或仓库介绍即使含链接也不得自动赋型。
+模糊内容不得猜测，`other` 不得由自动规则写入。
+
+系统必须先提供不含正文的批次预览，分别报告可补全、未解决、过期、已有类型和已受人工决定保护的
+数量及稳定样本。实际应用必须复用既有 enrichment 的 run/resume/retry/refresh、每 Snapshot 原子
+revision 与规则摘要，并且只补当前为空的类型。剩余项必须转入 P2E/P2F，不得建立第二套写入、扩大
+隐私范围、自动重开人工裁决或把代码完成冒充真实资料已应用。
+
+### 7.1.45 M2-P3A–C 类别校准、Profile v2 与邻居共识（已实现）
+
+[ADR 0058](adr/0058-calibrated-classification-profile-and-neighbor-consensus.md) 在不降低全部门槛的前提下
+扩展类型/领域覆盖。每个非 `other` 类别必须具有独立最低分与领先幅度；自动规则不得写 `other` 或
+覆盖已有分类。外部 Profile v2 必须向后读取 v1，并支持有界别名、排除词、精确内容关键词映射和少量
+正文映射；个人词表仍只能位于外部偏好与个人数据包。
+
+邻居分类必须先应用隐私范围、关键词 fan-out、相似度、邻居数量和共识比例限制。类型不得从同一
+Snapshot 复制，领域允许利用同文档共识；结果必须显示证据来源、参考数量和共识比例。首次 enrichment
+和补全预览必须共享同一分类上下文，写入继续复用既有 enrichment 原子边界。该增量不得增加 Provider、
+第二套 writer、自动 apply 或把弱监督共识描述为正式知识关系。
+
+### 7.1.46 M2-P4A–E 可信样本类型学习（工程实现冻结，泛化未解决）
+
+[ADR 0059](adr/0059-trusted-entry-type-learning-profile.md) 允许人工或经所有者导入确认的 Codex 判断形成
+小规模可信类型样本。自动规则、邻居和模型预测不得成为训练权威。样本、候选模型和激活模型必须保存在
+外部版本化分类 Profile 中并随个人数据包携带，不得进入 Git、数据库领域表、日志或应用制品。
+
+候选抽样必须优先未分类、模型分歧和低置信条目并保持 Snapshot 多样性。模型必须使用可解释、有界的
+本地特征与权重，训练/验证按 Snapshot 隔离；候选先影子评估，达到全局至少 92% precision 和逐个已赋型
+类别至少 85% precision 后仍须显式激活。运行时先用精确映射和确定性规则，再用激活模型，最后才用邻居
+共识；任何自动来源均不得覆盖已有类型或生成 other。当前 Codex 文件工作包和以后 API 必须共享同一
+封闭结果协议；正式 Entry 写入继续复用 P0B/P2G，不得增加第二套 writer。
+
+[ADR 0060](adr/0060-balanced-type-learning-and-projection-gate.md) 进一步要求抽样先补类别和 Snapshot 支持
+缺口；每个支持类别至少有 8 个可信样本/6 个 Snapshot，候选至少有 4 个支持类别。零或少样本类别必须
+禁用，不得通过平滑产生高权重。除上述 precision 外，验证 coverage 必须至少为 15%，且每个支持类别
+至少实际赋型 2 条。
+
+激活前还必须把候选投射到当前同一隐私范围的全部缺类型 Entry：总体至少 20 条、coverage 至少 15%、
+至少产生 3 类，任何单类不超过模型赋型结果的 50%。激活操作必须重新加载当前 Entry、重训并绑定完整
+投射摘要；数据漂移或模型不是当前 feature-v2/activation-v3 时不得执行。该保护不得自动删除可信样本、修改 Entry、
+恢复弱模型，也不得把候选提示当作训练权威。
+
+[ADR 0061](adr/0061-cross-validated-type-learning-calibration.md) 把模型升级为有界正文词项、相邻短语和
+字符 trigram 特征；任何特征至少需要 2 个样本和 2 个 Snapshot 支持，并按跨 Snapshot 可靠性缩减稀有
+特征。评估必须使用类别均衡的三折 Snapshot 交叉验证，每个可信样本只产生一次 out-of-fold 结果；
+每个支持类别的 `minimumScore` 与 `minimumMargin` 必须直接校准到至少 92% precision，而不是从正样本
+分位数推导。每类 64 条训练上限必须优先保留错误、无信号和低 margin 的困难样本，再补 Snapshot 多样性。
+
+候选评估必须通过现有维护结果输出稀疏混淆矩阵和最多 64 个误判身份，但不得输出正文。feature-v1 /
+activation-v2 及更早模型继续可由外部 Profile 和个人数据包读取，不得进入当前抽样或正式分类；使用原
+可信样本在 feature-v2 / activation-v3 下重训后方可显式激活。
+
+当前实现不得被描述为已经具备可靠泛化标注能力。所有者的开发期实际使用未接受其泛化质量，因此
+M2-P4A–E 保留为冻结的实验性边界，泛化目标重新排入 `M2-P4R`。在所有者明确恢复并冻结独立代表性
+人工评测集与逐类验收口径之前，不继续导出、导入或激活学习结果，也不使用候选模型补写 Entry。
+重新启动时可以替换现有特征、抽样或模型框架，不要求保持当前稀疏模型方案。
+
+### 7.1.47 M2-P5A 生产发行身份与已上线状态基线（已实现）
+
+[ADR 0062](adr/0062-production-release-identity-and-live-deployment-baseline.md) 要求分别记录公开发行、当前开发和实际运行实例。公开 `v0.1.0` 固定到提交 `3100567265b70e32c1d903b165d3d2248815a968` 及 tree `6f02768158a9030b1332ea8dab4c1249dd66a68d`；包含后续 M2 增量的开发线不得继续冒充该版本。所有者确认私人云端 Docker 实例已上线，但当前代码状态不能推导云端实际版本或配置。
+
+域名/IP、镜像 digest、证书、认证、防火墙、secret、数据库、数据根、个人资料、备份和告警必须继续位于 Git 与发行制品之外。只有实际取得的生产证据才能标为独立核验；缺失证据不阻断无关产品开发。后续依次核对备份/恢复、监控/容量和五步主线生产回归，再决定下一发行候选。
+
+### 7.1.48 M2-P5B 备份可恢复性与保留预览（已实现）
+
+[ADR 0063](adr/0063-backup-recoverability-and-retention-preview.md) 要求维护入口能够列出当前 workspace
+的当前格式备份、在不写任何产品状态的情况下完整验证指定个人数据包，并在所有者删除文件之前预览
+`keep-latest` 保留结果。目录结果只包含安全文件名、规范导出时间与字节数；验证结果只包含文件
+SHA-256、导出时间、Blob 数、表行数与是否携带完整个人数据，不返回正文、偏好内容或绝对路径。
+
+只读盘点、验证和保留预览不得依赖活动数据库 ready。正式 backup/restore 继续使用现有数据库准入和
+同 workspace 空库边界。应用不提供自动删除，也不自行选择保留数量、异地副本或恢复时间目标。云端
+真实备份身份、策略值和恢复演练结果只进入外部运维记录；仓库合成回归不得冒充生产恢复通过。
+
+### 7.1.49 M2-P5C 运行健康、容量与告警（已实现）
+
+[ADR 0064](adr/0064-operational-health-capacity-and-alerting.md) 要求一个不写产品状态的维护命令同时报告
+数据库/主要领域计数、当前搜索投影完整性、失败或停滞任务、外部数据根容量和最新备份年龄。报告只能
+使用稳定状态、告警码、计数、字节和年龄，不得包含 URL、secret、绝对路径、正文、标签或偏好内容。
+
+默认阈值可由当次命令在闭合范围内覆盖；ready/attention 必须以不同退出码供外部 scheduler/monitor
+使用。应用不内置通知目标、后台轮询或生产阈值决策，也不增加迁移、HTTP/UI 或领域写入。
+
+### 7.1.50 M2-P5D 五步主线发行回归（已实现）
+
+[ADR 0065](adr/0065-production-flow-release-regression.md) 要求当前发行候选在 disposable PostgreSQL 18
+中贯穿 Evidence 导入、Entry 拆分、确定性标签、增量联系、搜索投影/查询与 Entry 中心知识图，并保留
+runtime grant、故障恢复、stale guard、精确来源返回和资源清理证据。输入必须是合成且无个人含义的
+资料，不能连接现有数据库或把真实资料写入仓库。
+
+开发回归通过不自动创建 commit、镜像、tag、release 或升级云端实例。目标主机身份、备份、网络、
+容量与实际运行结果继续由显式发行操作和 Git 外运维记录证明。
 
 ### 7.2 MVP-1：偏好学习与每周自适应摄取
 
@@ -905,7 +1122,7 @@ MVP-0 证明知识核心可用后，再让系统持续处理该信源并逐步�
 5. **已完成**：结果解释文本/结构/联系路径，并能打开精确证据。
 6. **已完成**：Entry 当前态使用乐观版本，前端请求标识避免迟到响应覆盖新状态。
 7. **已完成**：“正式知识”按 ADR 0010/0011/0042 显示最高匹配 Entry 中心与有界邻域，区分自动/用户编辑/用户创建/AI 边，并支持八类关系语义、名称、方向、维护说明、来源核验状态、双端精确来源、编辑、隐藏、恢复、创建和列表替代；不调用旧 Knowledge API，也不把 `source_checked` 表述为事实证明。
-8. **已完成**：个人数据包携带 61 张当前工作区表、引用 Blob 字节、偏好、Entry v5 当前结构/精确区间/全文工作副本、Association v4 图谱元数据与 Processing v7 section；Association v1–v3 与其他旧 Bundle 可读，恢复限空工作区。
+8. **已完成**：个人数据包携带 66 张当前工作区表、引用 Blob 字节、偏好、Entry v5 当前结构/精确区间/全文工作副本、Association v5 图谱元数据/来源复核版本与 Processing v10 section；Association v1–v4、Processing v1–v9 与其他旧 Bundle 可读，恢复限空工作区。
 9. **已完成（运行边界）**：运行配置和个人数据位于包体外，Git 与应用制品审计通过；非 root 多阶段 Dockerfile、分权 Compose、外部 secret、维护命令和生产操作手册已经实现。目标镜像 digest/扫描与发布许可仍是部署/分发审核，不是产品能力缺失。
 10. **已完成**：隐私导入、完整字节保存、Entry/联系默认隐藏、包含隐私/只看隐私查询、独立完整隐私文档结果通道和材料页全文查看已实现。
 11. **已完成**：Provider-neutral ProcessingRun 可持久化、列出和按期望版本取消；无任务与无 Provider 状态诚实显示，三类提案信封可携带。
@@ -940,7 +1157,11 @@ MVP-0 证明知识核心可用后，再让系统持续处理该信源并逐步�
 32. **已完成**：M1I-4 允许最多八个用户明确列出的同源公开网页以服务端无脚本正文抽取进入同一订阅主线；它不是开放爬虫，不发现链接、不跟随重定向，也不继承浏览器会话。
 33. **已完成**：M1I-5 只把实际安装并由运行时注入的受信任连接器公开为 capability；偏好只保存稳定 connector ID 与 opaque 外部配置引用，插件不得直接写数据库、Entry、标签、联系、图谱或游标。
 34. **已完成**：M1L 提供可重复合成性能报告，覆盖五步主线相关的导入、拆分、索引/查询、正式知识邻域和订阅批次；实测两跳联系热点与 HTTP 重复读取已经优化并由语义/调用次数回归锁定，未引入真实资料、新基础设施或固定耗时门槛。
-35. **已完成**：M1M 提供单机非 root 容器、runtime/migrator 凭据隔离、严格外部 secret 文件、独立迁移与队列准备、runtime grant、健康检查、外部 `backups/` 完整个人数据包备份、同工作区空库恢复和前向升级手册；项目代码采用 MIT License，本地 Docker/PostgreSQL 18.6 合成演练已通过。`v0.1.0` 补齐运行镜像瘦身、安全响应头和认证反向代理示例；目标云主机的域名、证书、防火墙、备份保留和监控继续由上线操作决定。
+35. **已完成**：M1M 提供单机非 root 容器、runtime/migrator 凭据隔离、严格外部 secret 文件、独立迁移与队列准备、runtime grant、健康检查、外部 `backups/` 完整个人数据包备份、同工作区空库恢复和前向升级手册；项目代码采用 MIT License，本地 Docker/PostgreSQL 18.6 合成演练已通过。`v0.1.0` 补齐运行镜像瘦身、安全响应头和认证反向代理示例；所有者确认私人云端实例已上线，实际域名、镜像、证书、防火墙、备份保留和监控仍由外部运维记录及生产复核证明。
+36. **已完成**：M2-P5A 固定公开 `v0.1.0`、后续 M2 开发线和所有者确认已上线实例的不同身份，不把未取得的云端证据或任何真实部署秘密写入仓库。
+37. **已完成**：M2-P5B 为外部完整个人数据包提供 workspace 备份盘点、完整只读校验和无删除的 keep-latest 保留预览；实际云端记录仍留在 Git 外。
+38. **已完成**：M2-P5C 提供可由外部调度的脱敏运行状态，覆盖数据库/领域计数、搜索投影完整性、失败或停滞任务、数据根容量和备份年龄，不内置远程通知或后台写入。
+39. **已完成**：M2-P5D 把 disposable PostgreSQL 18 合成回归贯穿到当前搜索、精确来源、正式知识图与 P5C 数据库观测；发行身份和私人实例升级仍需显式操作。
 
 以上状态只描述清理基线的当前产品能力。历史 M1C smoke 证明过的正式知识或旧检索行为不再
 被计作活动功能；发布、容器和生产等价数据库认证也不会因本机功能通过而自动变成 PASS。

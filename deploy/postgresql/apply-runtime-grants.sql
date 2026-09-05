@@ -19,7 +19,11 @@ GRANT UPDATE ON TABLE
   struinfo.processing_proposal,
   struinfo.processing_entry_automation_claim,
   struinfo.processing_entry_automation_work_item,
-  struinfo.processing_entry_automation_action
+  struinfo.processing_entry_automation_action,
+  struinfo.processing_bulk_ingestion_batch,
+  struinfo.processing_bulk_ingestion_item,
+  struinfo.processing_bulk_ingestion_enrichment_item,
+  struinfo.processing_bulk_ingestion_adjudication
 TO struinfo_tm2_runtime;
 
 GRANT DELETE ON TABLE
@@ -31,7 +35,9 @@ GRANT DELETE ON TABLE
   struinfo.information_entry_fragment_range,
   struinfo.information_document_working_copy,
   struinfo.information_entry_search_projection,
-  struinfo.information_entry_term_posting
+  struinfo.information_entry_term_posting,
+  struinfo.processing_bulk_ingestion_exception,
+  struinfo.processing_bulk_ingestion_adjudication
 TO struinfo_tm2_runtime;
 
 GRANT USAGE ON SCHEMA pgboss TO struinfo_tm2_runtime;

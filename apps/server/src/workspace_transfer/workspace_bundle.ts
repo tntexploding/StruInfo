@@ -15,8 +15,17 @@ import {
 
 export const WORKSPACE_BUNDLE_FORMAT = 'struinfo.workspace-bundle';
 export const WORKSPACE_BUNDLE_VERSION = 1;
-export const DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_BYTES = 256 * 1024 * 1024;
-export const DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES = 1_000_000;
+/**
+ * Personal-data packages intentionally carry the complete workspace, embedded
+ * Blob bytes and preferences. The previous one-million-value ceiling was
+ * smaller than an ordinary five-figure Entry workspace even when the encoded
+ * package remained comfortably bounded by bytes.
+ *
+ * Keep both limits explicit: the value budget prevents pathological object
+ * graphs while the byte budget remains the final on-disk and decode bound.
+ */
+export const DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_BYTES = 1024 * 1024 * 1024;
+export const DEFAULT_MAXIMUM_WORKSPACE_BUNDLE_VALUES = 32_000_000;
 
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const SHA256_DIGEST_PATTERN = /^[a-f0-9]{64}$/u;

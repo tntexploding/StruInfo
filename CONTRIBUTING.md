@@ -38,6 +38,15 @@ Update the canonical document instead of creating a new numbered copy for
 ordinary revisions. Git records small-version history; `docs/archive/` is only
 for major superseded directions.
 
+## Maintenance phase
+
+Since 2026-09-05, the accepted product scope is complete and feature development
+is paused. Prioritize reproducible data, privacy and availability defects,
+security fixes and necessary runtime compatibility updates. New capabilities
+require a concrete use case and an explicit owner decision; the roadmap
+candidate pool and frozen M2-P4R are not an active task queue. Follow
+[the maintenance handoff](docs/maintenance-handoff.md).
+
 ## Workflow
 
 1. Start from `main` and use a short-lived branch for a single purpose.

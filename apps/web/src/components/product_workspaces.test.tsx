@@ -99,7 +99,10 @@ describe('M1D product workspaces', () => {
     expect(markup.indexOf('查询')).toBeLessThan(markup.indexOf('知识'));
     expect(markup).not.toContain('M1D / FLOW');
     expect(markup).toContain('<dd>未启用</dd>');
-    expect(markup).toContain('TRACEABLE CORE · MANUAL AUTHORITY');
+    expect(markup).not.toContain('TRACEABLE CORE · MANUAL AUTHORITY');
+    expect(markup).not.toContain('LOCAL DATA · ONE WORKSPACE');
+    expect(markup).not.toContain('origin-label');
+    expect(markup).not.toContain('section-index');
     expect(markup.match(/<h1/g)).toHaveLength(1);
     expect(markup).toContain('href="#main-workspace"');
     expect(markup).toContain('aria-current="page"');
@@ -199,12 +202,12 @@ describe('M1D product workspaces', () => {
     );
 
     expect(markup).toContain('处理任务进度');
-    expect(markup).toContain('AI 未配置 · 暂无任务');
+    expect(markup).toContain('AI 未启用，当前没有任务');
     expect(markup).toContain('没有处理任务');
     expect(markup).toContain('当前项目数据');
     expect(markup).toContain('来源片段');
     expect(markup).toContain('继续当前工作');
-    expect(markup).toContain('无 AI 也完整可用');
+    expect(markup).toContain('原始文档始终保留');
     expect(markup).not.toContain('<main class="workflow-overview__main"');
   });
 
@@ -382,7 +385,7 @@ describe('M1D product workspaces', () => {
     expect(markup).toContain('split-studio-grid__tools');
     expect(markup).toContain('批量构建文档条目');
     expect(markup).toContain('人工拆分工作台');
-    expect(markup).toContain('可替换的本地拆分规则');
+    expect(markup).toContain('结构规则');
     expect(markup).toContain('按结构直接生成');
     expect(markup.indexOf('entry-manual-split')).toBeLessThan(
       markup.indexOf('split-quick-action'),
@@ -423,9 +426,9 @@ describe('M1D product workspaces', () => {
       />,
     );
 
-    expect(markup).toContain('已生成条目重组');
-    expect(markup).toContain('先编辑完整分组，再预览标签、沿袭与关系迁移');
-    expect(markup).toContain('原始证据不会改变');
+    expect(markup).toContain('重新拆分已有条目');
+    expect(markup).toContain('先调整分组并预览影响');
+    expect(markup).toContain('已导入的原文不会改变');
   });
 
   it('integrates manual scores and deterministic tag preferences into Tags', () => {
@@ -480,7 +483,7 @@ describe('M1D product workspaces', () => {
       },
     };
     expect(materials).toContain('信源订阅');
-    expect(materials).toContain('当前服务未启用信源订阅边界');
+    expect(materials).toContain('当前服务未启用订阅功能');
     const review = renderToStaticMarkup(
       <InformationEntryReviewControls
         entry={entry}
@@ -568,6 +571,16 @@ describe('M1D product workspaces', () => {
     );
     const formal = renderToStaticMarkup(
       <FormalKnowledgeWorkspace
+        onListSourceReviews={() =>
+          Promise.resolve({
+            statusCode: 200,
+            body: {status: 'ok', totalCount: 0, items: []},
+          })
+        }
+        onReviewSources={() =>
+          Promise.resolve({statusCode: 200, body: {status: 'applied'}})
+        }
+        onCloseEvidence={() => undefined}
         aiAssociationEnabled={false}
         onAcceptAiAssociationProposal={() =>
           Promise.resolve({
@@ -612,24 +625,25 @@ describe('M1D product workspaces', () => {
       />,
     );
 
-    expect(materials).toContain('保存来源 Snapshot');
+    expect(materials).toContain('导入文档');
     expect(materials).toContain('作为隐私文档录入');
     expect(materials).toContain('本地文件');
     expect(materials).toContain('全部个人数据导入导出');
     expect(materials).toContain('恢复全部个人数据');
     expect(review).toContain('有用程度');
     expect(review).toContain('有趣程度');
-    expect(review).toContain('自动确定性候选');
+    expect(review).toContain('自动标签建议');
     expect(review).toContain('实用工具');
     expect(review).toContain('标签别名合并');
     expect(review).not.toContain('处理方式');
     expect(review).not.toContain('判断原因');
     expect(review).not.toContain('手工联系');
-    expect(reviewFallback).toContain('会话内设置');
+    expect(reviewFallback).toContain('个人设置当前无法读取');
     expect(reviewFallback).toContain('新增快捷标签');
     expect(reviewFallback).toContain('标签别名合并');
-    expect(reviewFallback).toContain('会话工具');
-    expect(formal).toContain('Entry 正式关系图谱');
+    expect(reviewFallback).toContain('仅在当前页面有效');
+    expect(formal).toContain('<h1>知识</h1>');
+    expect(formal).not.toContain('origin-label');
     expect(formal).toContain('选择知识中心');
     expect(formal).toContain('搜索中心条目');
     expect(formal).toContain('设为知识中心');
@@ -678,12 +692,11 @@ describe('M1D product workspaces', () => {
       />,
     );
 
-    expect(policy).toContain('联系策略权重');
-    expect(policy).toContain('修订 2');
+    expect(policy).toContain('联系权重');
     expect(policy).toContain('内容相似度');
     expect(policy).toContain('保存权重并重建联系');
     expect(privateDocuments).toContain('完整隐私文档');
-    expect(privateDocuments).toContain('独立于 Entry 的全文结果');
+    expect(privateDocuments).not.toContain('独立于 Entry');
     expect(privateDocuments).toContain('查看完整隐私文档');
   });
 
@@ -743,13 +756,13 @@ describe('M1D product workspaces', () => {
       />,
     );
 
-    expect(markup).toContain('可解释偏好规则');
-    expect(markup).toContain('SECONDARY / PREFERENCE PROFILE');
-    expect(markup).toContain('本地确定性 · 默认关闭');
+    expect(markup).toContain('偏好规则');
+    expect(markup).not.toContain('SECONDARY / PREFERENCE PROFILE');
+    expect(markup).not.toContain('origin-label');
     expect(markup).toContain('手动新增规则');
-    expect(markup).toContain('从明确评分生成候选');
-    expect(markup).toContain('只读试运行');
-    expect(markup).toContain('本次候选与试运行包含隐私 Entry');
-    expect(markup).toContain('不会替你修改条目、重排查询或自动接受 AI 结果');
+    expect(markup).toContain('根据评分生成规则建议');
+    expect(markup).toContain('试运行');
+    expect(markup).toContain('本次建议与试运行包含隐私条目');
+    expect(markup).toContain('不会自动修改条目');
   });
 });

@@ -165,8 +165,8 @@ export function InformationEntryAutomationWorkQueue({
           status: 'error',
           message:
             response.body.status === 'stale'
-              ? 'Entry 或自动处理结果已变化；为保护人工修改，本次操作已停止。'
-              : '自动处理没有完成；当前 Entry 与人工联系保持不变。',
+              ? '条目或自动处理结果已变化；为保护人工修改，本次操作已停止。'
+              : '自动处理没有完成；当前条目与人工联系保持不变。',
         });
         return;
       }
@@ -188,17 +188,13 @@ export function InformationEntryAutomationWorkQueue({
     >
       <header className="subsection-heading">
         <div>
-          <p className="section-index">ROUTED WORK / OWNER QUEUE</p>
           <h2 id="entry-automation-work-queue-title">自动分流工作队列</h2>
         </div>
-        <span className="origin-label origin-label--deterministic">
-          路由可追溯 · 自动动作可撤销
-        </span>
       </header>
 
       {!enabled ? (
         <p className="empty-copy" role="status">
-          当前服务未启用自动分流。你仍可在上方逐条编辑 Entry。
+          当前服务未启用自动分流，仍可逐条编辑。
         </p>
       ) : (
         <>
@@ -229,7 +225,7 @@ export function InformationEntryAutomationWorkQueue({
                   setIncludePrivate(event.currentTarget.checked);
                 }}
               />
-              明确显示隐私 Entry 工作项
+              显示隐私条目
             </label>
             <button
               className="secondary-action"
@@ -267,13 +263,13 @@ export function InformationEntryAutomationWorkQueue({
                 return (
                   <li key={key}>
                     <div>
-                      <p className="section-index">
+                      <p>
                         {routeLabel(item.route)} · {reasonLabel(item.reason)}
                       </p>
                       <h3>{item.entry.value.titlePath}</h3>
                       <p>
                         状态：{stateLabel(item.state)}
-                        {item.stale ? ' · Entry 已有新版本' : ''}
+                        {item.stale ? ' · 条目已有新版本' : ''}
                         {item.entry.value.isPrivate ? ' · 隐私' : ''}
                       </p>
                       {item.action === undefined ? null : (
@@ -371,15 +367,15 @@ function reasonLabel(
   reason: EntryAutomationWorkQueueItemView['reason'],
 ): string {
   const labels: Record<EntryAutomationWorkQueueItemView['reason'], string> = {
-    advance_threshold_met: '达到继续阈值',
-    defer_threshold_met: '达到暂缓阈值',
-    threshold_not_met: '未达到阈值',
-    insufficient_profile_evidence: '偏好证据不足',
+    advance_threshold_met: '评分适合继续处理',
+    defer_threshold_met: '评分适合暂缓',
+    threshold_not_met: '评分不足以自动决定',
+    insufficient_profile_evidence: '参考数据不足',
     mixed_signals: '信号不一致',
-    manual_takeover: '人工接管',
-    run_budget_exhausted: '运行预算已满',
-    advance_budget_exhausted: '继续预算已满',
-    defer_budget_exhausted: '暂缓预算已满',
+    manual_takeover: '已改为人工处理',
+    run_budget_exhausted: '本次处理数量已达上限',
+    advance_budget_exhausted: '继续处理数量已达上限',
+    defer_budget_exhausted: '暂缓数量已达上限',
   };
   return labels[reason];
 }

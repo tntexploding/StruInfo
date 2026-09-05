@@ -27,6 +27,17 @@ Embedding 和 RAG 能力。AI 只在明确的功能边界内工作，不会取�
 > StruInfo 当前是私人单用户应用，不是公共多用户 SaaS 或开放 API。应用端口应保持在宿主回环或
 > 私有网络内；远程访问必须经过 HTTPS + 认证反向代理、VPN 或 SSH 隧道。
 
+所有者已确认 `v0.1.0` 的私人云端 Docker 部署投入使用。当前仓库的 M2 开发线包含首版之后的
+增量，并不自动代表云端运行版本；域名、凭据、数据、镜像摘要和备份记录始终保存在 Git 之外。
+
+## 当前维护阶段
+
+当前源码以 **v0.2.0** 为维护基线，五项收口已完成：读取与交互收口、增量索引刷新、
+命名查询与阅读位置、版本绑定的来源复核，以及带精确引用的 Markdown 导出。
+常规功能开发暂停，后续围绕实际使用、缺陷修复、安全与兼容更新展开。
+维护步骤、运行证据和待观察事项见[维护交接](docs/maintenance-handoff.md)，
+版本变化见[v0.2.0 说明](docs/releases/v0.2.0.md)。
+
 ## 为什么使用 StruInfo
 
 - **从原文出发**：原始文件、规范化内容、Snapshot 和 Fragment 形成可追溯证据链。
@@ -92,6 +103,8 @@ Embedding 和 RAG 能力。AI 只在明确的功能边界内工作，不会取�
 - 外部数据根保存 Blob、个人偏好、订阅游标、连接器配置引用、导出和备份；
 - 个人数据包可携带当前工作区数据库分区、引用 Blob 字节和偏好；
 - 备份只能恢复到已经迁移且业务为空的同一 workspace，避免覆盖非空状态；
+- 维护命令可列出并完整只读校验备份，也可预览 keep-latest 保留结果；应用不会自动删除个人备份；
+- 维护状态可报告领域计数、搜索索引缺口、失败/停滞任务、外部数据根容量和备份年龄，供宿主监控调度；
 - Git、npm 包和容器镜像只包含代码、迁移、协议和合成测试资料。
 
 ## 系统结构
@@ -169,6 +182,12 @@ docker compose -f compose.production.yaml --profile maintenance run --rm preflig
 docker compose -f compose.production.yaml up -d app
 ```
 
+运行后可用同一 maintenance profile 执行脱敏状态检查：
+
+```bash
+docker compose -f compose.production.yaml --profile maintenance run --rm preflight node dist/entrypoints/maintenance.js status
+```
+
 Compose 需要四个指向外部绝对路径的变量：
 
 ```text
@@ -211,6 +230,7 @@ STRUIINFO_MIGRATION_DATABASE_URL_SECRET_FILE
 ## v0.1.0 发行状态
 
 首个私人单用户版本已经完成本地 Docker Desktop + PostgreSQL 18 发布演练。
+所有者随后确认私人云端 Docker 实例已经上线；目标主机的实际版本、网络和恢复证据由外部运维记录维护。
 
 | 验证项         | v0.1.0 结果                                                 |
 | -------------- | ----------------------------------------------------------- |

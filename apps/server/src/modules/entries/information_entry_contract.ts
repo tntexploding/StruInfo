@@ -92,6 +92,39 @@ export interface CurrentInformationEntry {
   readonly value: Readonly<InformationEntryRevisionValue>;
 }
 
+export type InformationEntryTypeReviewFilter = 'missing' | EntryTypeKeyword;
+
+export interface InformationEntryTypeReviewCursor {
+  readonly capturedAt: string;
+  readonly snapshotId: string;
+  readonly documentOrder: number;
+  readonly entryId: string;
+}
+
+export interface InformationEntryTypeReviewRequest {
+  readonly workspaceId: string;
+  readonly includePrivate: boolean;
+  readonly filter: InformationEntryTypeReviewFilter;
+  readonly limit: number;
+  readonly after?: Readonly<InformationEntryTypeReviewCursor>;
+}
+
+export interface InformationEntryTypeCoverage {
+  readonly totalCount: number;
+  readonly classifiedCount: number;
+  readonly missingCount: number;
+  readonly byType: readonly Readonly<{
+    typeKeyword: EntryTypeKeyword;
+    count: number;
+  }>[];
+}
+
+export interface InformationEntryTypeReviewResult {
+  readonly coverage: Readonly<InformationEntryTypeCoverage>;
+  readonly items: readonly Readonly<CurrentInformationEntry>[];
+  readonly nextCursor?: Readonly<InformationEntryTypeReviewCursor>;
+}
+
 export interface InformationEntryMaterializeRow {
   readonly workspaceId: string;
   readonly entryId: string;

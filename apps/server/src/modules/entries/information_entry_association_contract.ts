@@ -1,3 +1,7 @@
+import type {
+  InformationEntrySourceReview,
+  InformationEntrySourceReviewRevisions,
+} from './information_entry_source_review.js';
 import type {CurrentInformationEntry} from './information_entry_contract.js';
 
 export const INFORMATION_ENTRY_ASSOCIATION_ACTIONS = [
@@ -65,6 +69,7 @@ export interface InformationEntryGraphRelationValue {
   readonly semanticKind: InformationEntryGraphSemanticKind;
   readonly verificationStatus: InformationEntryGraphVerificationStatus;
   readonly note: string;
+  readonly reviewedRevisions?: Readonly<InformationEntrySourceReviewRevisions>;
 }
 
 export interface InformationEntryAssociationPolicy {
@@ -119,6 +124,8 @@ export interface InformationEntryAssociationOverrideWrite {
   readonly revisionId: string;
   readonly includePrivate: boolean;
   readonly value: Readonly<InformationEntryAssociationOverrideValue>;
+  readonly expectedEntryRevisions?: Readonly<InformationEntrySourceReviewRevisions>;
+  readonly requireVisibleGraphEdge?: boolean;
 }
 
 export interface InformationEntryAssociationRepositorySnapshot {
@@ -149,6 +156,7 @@ export interface InformationEntryGraphEdge {
   readonly effectiveScore: number;
   readonly isBlocked: boolean;
   readonly overrideRevision: number;
+  readonly sourceReview?: Readonly<InformationEntrySourceReview>;
   readonly projection?: Readonly<InformationEntryAssociationProjection>;
 }
 

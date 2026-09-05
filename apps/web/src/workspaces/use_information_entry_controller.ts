@@ -2,6 +2,8 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import type {
   EntryDomainKeyword,
+  EntryQueryContext,
+  EntrySavedQueryConditions,
   EntryRetrievalMode,
   EntryTypeKeyword,
   EntryTextSearchField,
@@ -34,6 +36,7 @@ export const EMPTY_ENTRY_ADVANCED_SEARCH_FILTERS: Readonly<EntryAdvancedSearchFi
 type PageSelection = 'preserve' | 'first' | 'last';
 
 export interface InformationEntryControllerOptions {
+  readonly initialQueryContext?: Readonly<EntryQueryContext>;
   readonly autoSearchDelayMs?: number;
   readonly loadDocuments?: boolean;
   readonly onListDocuments?: InformationEntryServices['onListDocuments'];
@@ -41,34 +44,47 @@ export interface InformationEntryControllerOptions {
 }
 
 export function useInformationEntryController({
+  initialQueryContext,
   autoSearchDelayMs = 0,
   loadDocuments = false,
   onListDocuments,
   onSearch,
 }: InformationEntryControllerOptions) {
-  const [query, setQuery] = useState('');
-  const [retrievalMode, setRetrievalMode] =
-    useState<EntryRetrievalMode>('lexical');
-  const [textMode, setTextMode] = useState<EntryTextSearchMode>('substring');
-  const [textFields, setTextFields] = useState<readonly EntryTextSearchField[]>(
-    Object.freeze(['title', 'body', 'tags']),
+  const initial = initialQueryContext?.query;
+  const restoreSelection = useRef(
+    initial?.includePrivate ? undefined : initialQueryContext?.selectedEntryId,
   );
-  const [snapshotId, setSnapshotId] = useState('');
-  const [typeKeyword, setTypeKeyword] = useState<'' | EntryTypeKeyword>('');
+  const [restoreGeneration, setRestoreGeneration] = useState(0);
+  const [query, setQuery] = useState(initial?.text ?? '');
+  const [retrievalMode, setRetrievalMode] = useState<EntryRetrievalMode>(
+    initial?.retrievalMode ?? 'lexical',
+  );
+  const [textMode, setTextMode] = useState<EntryTextSearchMode>(
+    initial?.textMode ?? 'substring',
+  );
+  const [textFields, setTextFields] = useState<readonly EntryTextSearchField[]>(
+    initial?.textFields ?? Object.freeze(['title', 'body', 'tags']),
+  );
+  const [snapshotId, setSnapshotId] = useState(initial?.snapshotId ?? '');
+  const [typeKeyword, setTypeKeyword] = useState<'' | EntryTypeKeyword>(
+    initial?.typeKeyword ?? '',
+  );
   const [domainKeyword, setDomainKeyword] = useState<'' | EntryDomainKeyword>(
-    '',
+    initial?.domainKeyword ?? '',
   );
   const [advancedFilters, setAdvancedFilters] = useState<
     Readonly<EntryAdvancedSearchFilters>
-  >(EMPTY_ENTRY_ADVANCED_SEARCH_FILTERS);
+  >(filtersFromSavedQuery(initial));
   const [includePrivate, setIncludePrivate] = useState(false);
   const [onlyPrivate, setOnlyPrivate] = useState(false);
-  const [view, setView] = useState<InformationEntryViewState>({
+  const [receivedView, setView] = useState<InformationEntryViewState>({
     status: 'loading',
   });
   const [documentView, setDocumentView] =
     useState<InformationDocumentViewState>({status: 'loading'});
-  const [selectedEntryId, setSelectedEntryId] = useState<string>();
+  const [selectedEntryId, setSelectedEntryId] = useState<string | undefined>(
+    initial?.includePrivate ? undefined : initialQueryContext?.selectedEntryId,
+  );
   const [pageIndex, setPageIndex] = useState(0);
   const [pageCursors, setPageCursors] = useState<
     readonly (Readonly<InformationEntrySearchCursor> | undefined)[]
@@ -154,6 +170,14 @@ export function useInformationEntryController({
     ],
   );
   const [lastRequestedSearch, setLastRequestedSearch] = useState(searchRequest);
+  // A changed scope must never expose results from the preceding request.
+  const view = useMemo<InformationEntryViewState>(
+    () =>
+      lastRequestedSearch === searchRequest
+        ? receivedView
+        : {status: 'loading'},
+    [lastRequestedSearch, receivedView, searchRequest],
+  );
 
   const clearScheduledSearch = useCallback(() => {
     if (scheduledSearchTimer.current === undefined) return;
@@ -188,7 +212,7 @@ export function useInformationEntryController({
       if (!documentRequests.current.isCurrent(requestId)) return;
       setDocumentView({
         status: 'error',
-        message: '无法读取 Document 聚合视图；现有 Entry 没有被修改。',
+        message: '无法读取文档标签；现有条目没有被修改。',
       });
     }
   }, [includePrivate, loadDocuments, onListDocuments]);
@@ -199,6 +223,10 @@ export function useInformationEntryController({
       selection: PageSelection = 'preserve',
     ) => {
       clearScheduledSearch();
+      if (after === undefined) {
+        setPageIndex(0);
+        setPageCursors(Object.freeze([undefined]));
+      }
       setLastRequestedSearch(searchRequest);
       const requestId = searchRequests.current.begin();
       setView({status: 'loading'});
@@ -215,14 +243,18 @@ export function useInformationEntryController({
         }
         const accepted = response.body;
         setView({status: 'ready', response: accepted});
-        setSelectedEntryId((current) =>
-          selectEntryAfterLoad(accepted.items, current, selection),
+        const restoredId = restoreSelection.current;
+        restoreSelection.current = undefined;
+        setSelectedEntryId(
+          (current) =>
+            restoredId ??
+            selectEntryAfterLoad(accepted.items, current, selection),
         );
       } catch {
         if (!searchRequests.current.isCurrent(requestId)) return;
         setView({
           status: 'error',
-          message: '本地 Entry 接口当前不可达；现有条目没有被修改。',
+          message: '本地条目接口当前不可用；现有条目没有被修改。',
         });
       }
     },
@@ -252,7 +284,12 @@ export function useInformationEntryController({
       clearScheduledSearch();
       tracker.invalidate();
     };
-  }, [autoSearchDelayMs, clearScheduledSearch, executeSearch]);
+  }, [
+    autoSearchDelayMs,
+    clearScheduledSearch,
+    executeSearch,
+    restoreGeneration,
+  ]);
 
   useEffect(() => {
     if (!loadDocuments) return;
@@ -312,7 +349,33 @@ export function useInformationEntryController({
     void executeSearch(previousCursor, selection);
   }
 
+  function restoreQueryContext(context: Readonly<EntryQueryContext>) {
+    clearScheduledSearch();
+    searchRequests.current.invalidate();
+    setView({status: 'loading'});
+    restoreSelection.current = context.selectedEntryId;
+    setSelectedEntryId(context.selectedEntryId);
+    setQuery(context.query.text ?? '');
+    setRetrievalMode(context.query.retrievalMode ?? 'lexical');
+    setTextMode(context.query.textMode ?? 'substring');
+    setTextFields(
+      context.query.textFields ?? Object.freeze(['title', 'body', 'tags']),
+    );
+    setSnapshotId(context.query.snapshotId ?? '');
+    setTypeKeyword(context.query.typeKeyword ?? '');
+    setDomainKeyword(context.query.domainKeyword ?? '');
+    setAdvancedFilters(filtersFromSavedQuery(context.query));
+    setIncludePrivate(context.query.includePrivate);
+    setOnlyPrivate(context.query.onlyPrivate ?? false);
+    setPageIndex(0);
+    setPageCursors(Object.freeze([undefined]));
+    setRestoreGeneration((value) => value + 1);
+  }
+
   function clearSearchFilters() {
+    searchRequests.current.invalidate();
+    setView({status: 'loading'});
+    restoreSelection.current = undefined;
     setQuery('');
     setTextMode('substring');
     setTextFields(Object.freeze(['title', 'body', 'tags']));
@@ -326,6 +389,9 @@ export function useInformationEntryController({
   }
 
   function setPrivacyScope(scope: 'public' | 'all' | 'private') {
+    searchRequests.current.invalidate();
+    setView({status: 'loading'});
+    restoreSelection.current = undefined;
     setIncludePrivate(scope !== 'public');
     setOnlyPrivate(scope === 'private');
     if (scope !== 'public') setRetrievalMode('lexical');
@@ -348,6 +414,7 @@ export function useInformationEntryController({
     query,
     retrievalMode: effectiveRetrievalMode,
     refreshDocuments,
+    restoreQueryContext,
     selectedDocument,
     selectedEntry,
     selectedEntryId,
@@ -401,4 +468,24 @@ function describeFailure(value: unknown): string {
     return `请求被拒绝：${value.issue.code}`;
   }
   return '请求没有完成；当前数据保持不变。';
+}
+
+function filtersFromSavedQuery(
+  query: Readonly<EntrySavedQueryConditions> | undefined,
+): Readonly<EntryAdvancedSearchFilters> {
+  return Object.freeze({
+    ...EMPTY_ENTRY_ADVANCED_SEARCH_FILTERS,
+    contentKeyword: query?.contentKeyword ?? '',
+    sourceKey: query?.sourceKey ?? '',
+    typeCustomName: query?.typeCustomName ?? '',
+    domainCustomName: query?.domainCustomName ?? '',
+    domainScope: query?.domainScope ?? 'any',
+    chunkMode: query?.chunkMode ?? '',
+    timeField: query?.time?.field ?? 'published',
+    timeFrom: query?.time?.from ?? '',
+    timeTo: query?.time?.to ?? '',
+    ...(query?.association === undefined
+      ? {}
+      : {association: {...query.association, label: '已保存的关联中心'}}),
+  });
 }

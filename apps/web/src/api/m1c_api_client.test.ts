@@ -11,6 +11,56 @@ import {
 } from './m1c_api_client.js';
 
 describe('M1cApiClient', () => {
+  it('loads every evidence page instead of stopping at the first 200 documents', async () => {
+    const urls: string[] = [];
+    const firstId = '10000000-0000-4000-8000-000000000001';
+    const secondId = '10000000-0000-4000-8000-000000000002';
+    const fetchImplementation: M1cApiFetch = (input) => {
+      const url = requestUrl(input);
+      urls.push(url);
+      const secondPage = url.includes('afterSnapshotId=');
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: 'ok',
+            totalCount: 2,
+            snapshots: [
+              evidenceSummary(
+                secondPage ? secondId : firstId,
+                secondPage
+                  ? '2040-01-01T00:00:00.000Z'
+                  : '2040-01-02T00:00:00.000Z',
+              ),
+            ],
+            ...(secondPage
+              ? {}
+              : {
+                  nextCursor: {
+                    capturedAt: '2040-01-02T00:00:00.000Z',
+                    snapshotId: firstId,
+                  },
+                }),
+          }),
+          {status: 200, headers: {'content-type': 'application/json'}},
+        ),
+      );
+    };
+    const client = createM1cApiClient(
+      'http://127.0.0.1:3000/',
+      fetchImplementation,
+    );
+
+    const response = await client.listEvidence();
+
+    expect(
+      response.body.snapshots.map((snapshot) => snapshot.snapshotId),
+    ).toEqual([firstId, secondId]);
+    expect(response.body.totalCount).toBe(2);
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).toContain('limit=200');
+    expect(urls[1]).toContain('afterSnapshotId=');
+  });
+
   it('uses only same-base product paths and preserves domain responses', async () => {
     const requests: Readonly<{url: string; init?: RequestInit}>[] = [];
     const fetchImplementation: M1cApiFetch = (input, init) => {
@@ -48,6 +98,54 @@ describe('M1cApiClient', () => {
       credentials: 'omit',
       method: 'POST',
       redirect: 'error',
+    });
+  });
+
+  it('posts the type correction scope through its narrow local route', async () => {
+    let request: Readonly<{url: string; init?: RequestInit}> | undefined;
+    const fetchImplementation: M1cApiFetch = (input, init) => {
+      request = {url: requestUrl(input), ...(init === undefined ? {} : {init})};
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: 'ok',
+            coverage: {
+              totalCount: 3,
+              classifiedCount: 2,
+              missingCount: 1,
+              byType: [],
+            },
+            items: [],
+          }),
+          {status: 200, headers: {'content-type': 'application/json'}},
+        ),
+      );
+    };
+    const client = createM1cApiClient(
+      'http://127.0.0.1:3000/',
+      fetchImplementation,
+    );
+
+    const response = await client.reviewInformationEntryTypes({
+      includePrivate: false,
+      filter: 'missing',
+      limit: 20,
+    });
+
+    expect(response.body).toMatchObject({
+      status: 'ok',
+      coverage: {missingCount: 1},
+    });
+    expect(request?.url).toBe(
+      'http://127.0.0.1:3000/api/v1/entries/type-review',
+    );
+    expect(request?.init).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({
+        includePrivate: false,
+        filter: 'missing',
+        limit: 20,
+      }),
     });
   });
 
@@ -1007,4 +1105,16 @@ describe('M1cApiClient', () => {
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === 'string') return input;
   return input instanceof URL ? input.href : input.url;
+}
+
+function evidenceSummary(snapshotId: string, capturedAt: string) {
+  return {
+    workspaceId: '00000000-0000-4000-8000-000000000001',
+    snapshotId,
+    resourceId: '00000000-0000-4000-8000-000000000002',
+    resourceKind: 'git_file',
+    sourceKey: `git:synthetic/${snapshotId}.md`,
+    capturedAt,
+    fragmentCount: 1,
+  };
 }

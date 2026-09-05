@@ -82,6 +82,29 @@ export function buildInformationEntryAssociationProjection(
   entries: readonly Readonly<CurrentInformationEntry>[],
   policy: Readonly<InformationEntryAssociationPolicy> = INFORMATION_ENTRY_ASSOCIATION_POLICY,
 ): readonly Readonly<InformationEntryAssociationProjection>[] {
+  return buildAssociationProjectionForSources(entries, undefined, policy);
+}
+
+export function buildIncrementalInformationEntryAssociationProjection(
+  entries: readonly Readonly<CurrentInformationEntry>[],
+  sourceEntryIds: readonly string[],
+  policy: Readonly<InformationEntryAssociationPolicy> = INFORMATION_ENTRY_ASSOCIATION_POLICY,
+): readonly Readonly<InformationEntryAssociationProjection>[] {
+  const sources = new Set(sourceEntryIds);
+  if (
+    sources.size !== sourceEntryIds.length ||
+    sourceEntryIds.some((entryId) => entryId.trim() === '')
+  ) {
+    throw new Error('Information Entry association sources are invalid.');
+  }
+  return buildAssociationProjectionForSources(entries, sources, policy);
+}
+
+function buildAssociationProjectionForSources(
+  entries: readonly Readonly<CurrentInformationEntry>[],
+  sourceEntryIds: ReadonlySet<string> | undefined,
+  policy: Readonly<InformationEntryAssociationPolicy>,
+): readonly Readonly<InformationEntryAssociationProjection>[] {
   if (entries.length < 2) return Object.freeze([]);
   assertPolicy(policy);
   const workspaceId = entries[0]?.workspaceId;
@@ -97,13 +120,28 @@ export function buildInformationEntryAssociationProjection(
     .sort((left, right) =>
       left.entry.entryId.localeCompare(right.entry.entryId),
     );
+  const featureEntryIds = new Set(
+    features.map((feature) => feature.entry.entryId),
+  );
   const index = buildCandidateIndex(features);
+  if (
+    sourceEntryIds !== undefined &&
+    [...sourceEntryIds].some((entryId) => !featureEntryIds.has(entryId))
+  ) {
+    throw new Error('Information Entry association source was not found.');
+  }
   const selectedPairs = new Map<
     string,
     Readonly<InformationEntryAssociationProjection>
   >();
 
   for (const [sourceIndex, source] of features.entries()) {
+    if (
+      sourceEntryIds !== undefined &&
+      !sourceEntryIds.has(source.entry.entryId)
+    ) {
+      continue;
+    }
     const candidateIndexes = new Set<number>();
     for (const key of source.indexKeys) {
       const bucket = index.get(key);

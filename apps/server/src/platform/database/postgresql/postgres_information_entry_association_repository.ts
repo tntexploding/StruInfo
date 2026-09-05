@@ -1,4 +1,10 @@
 import {
+  decodeSourceReviewRequest,
+  decodeSourceReviewRevisions,
+  listInformationEntrySourceReviewItems,
+  paginateInformationEntrySourceReviews,
+  type InformationEntrySourceReviewRequest,
+  type InformationEntrySourceReviewPage,
   INFORMATION_ENTRY_ASSOCIATION_ACTIONS,
   INFORMATION_ENTRY_ASSOCIATION_BASES,
   INFORMATION_ENTRY_GRAPH_DIRECTIONS,
@@ -11,10 +17,16 @@ import {
   type InformationEntryAssociationOverrideWrite,
   type InformationEntryAssociationProjection,
   type InformationEntryAssociationRepositoryPort,
+  type InformationEntryAssociationIncrementalRepositoryPort,
   type InformationEntryAssociationRepositorySnapshot,
   type InformationEntryGraphRelationValue,
 } from '../../../modules/entries/index.js';
 
+import {loadCurrentInformationEntriesByIds} from './postgres_information_entry_repository.js';
+import {
+  COUNT_INFORMATION_ENTRY_SOURCE_REVIEWS_SQL,
+  READ_INFORMATION_ENTRY_SOURCE_REVIEW_PAGE_SQL,
+} from './postgres_information_entry_source_review_sql.js';
 import type {PostgresPoolBoundary} from './postgres_pool.js';
 import {runPostgresTransaction} from './postgres_transaction.js';
 import {
@@ -63,7 +75,8 @@ export const READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL = sql(
   '  override.manual_adjustment, override.is_blocked,',
   '  override.graph_origin, override.graph_label, override.graph_direction,',
   '  override.graph_semantic_kind, override.graph_verification_status,',
-  '  override.graph_note',
+  '  override.graph_note, override.graph_reviewed_entry_low_revision,',
+  '  override.graph_reviewed_entry_high_revision',
   'FROM struinfo.information_entry_association_override AS override',
   'JOIN struinfo.information_entry AS low_entry',
   '  ON low_entry.workspace_id = override.workspace_id',
@@ -74,6 +87,58 @@ export const READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL = sql(
   'WHERE override.workspace_id = $1',
   '  AND low_entry.is_current_structure AND high_entry.is_current_structure',
   '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
+  'ORDER BY override.entry_low_id, override.entry_high_id',
+);
+
+export const READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_FOR_ENTRIES_SQL =
+  sql(
+    'SELECT projection.workspace_id::text, projection.entry_low_id::text,',
+    '  projection.entry_high_id::text, projection.entry_low_revision,',
+    '  projection.entry_low_revision_id::text, projection.entry_high_revision,',
+    '  projection.entry_high_revision_id::text, projection.content_similarity,',
+    '  projection.type_similarity, projection.domain_similarity,',
+    '  projection.base_score, projection.algorithm_version,',
+    '  projection.candidate_basis, projection.candidate_rank',
+    'FROM struinfo.information_entry_association_projection AS projection',
+    'JOIN struinfo.information_entry AS low_entry',
+    '  ON low_entry.workspace_id = projection.workspace_id',
+    ' AND low_entry.entry_id = projection.entry_low_id',
+    ' AND low_entry.current_revision = projection.entry_low_revision',
+    ' AND low_entry.current_revision_id = projection.entry_low_revision_id',
+    'JOIN struinfo.information_entry AS high_entry',
+    '  ON high_entry.workspace_id = projection.workspace_id',
+    ' AND high_entry.entry_id = projection.entry_high_id',
+    ' AND high_entry.current_revision = projection.entry_high_revision',
+    ' AND high_entry.current_revision_id = projection.entry_high_revision_id',
+    'WHERE projection.workspace_id = $1',
+    '  AND low_entry.is_current_structure AND high_entry.is_current_structure',
+    '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
+    '  AND (projection.entry_low_id = ANY($3::uuid[])',
+    '    OR projection.entry_high_id = ANY($3::uuid[]))',
+    'ORDER BY projection.entry_low_id, projection.entry_high_id',
+  );
+
+export const READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_FOR_ENTRIES_SQL = sql(
+  'SELECT override.workspace_id::text, override.entry_low_id::text,',
+  '  override.entry_high_id::text, override.current_revision,',
+  '  override.current_revision_id::text, override.action,',
+  '  override.manual_adjustment, override.is_blocked,',
+  '  override.graph_origin, override.graph_label, override.graph_direction,',
+  '  override.graph_semantic_kind, override.graph_verification_status,',
+  '  override.graph_note, override.graph_reviewed_entry_low_revision,',
+  '  override.graph_reviewed_entry_high_revision',
+  'FROM struinfo.information_entry_association_override AS override',
+  'JOIN struinfo.information_entry AS low_entry',
+  '  ON low_entry.workspace_id = override.workspace_id',
+  ' AND low_entry.entry_id = override.entry_low_id',
+  'JOIN struinfo.information_entry AS high_entry',
+  '  ON high_entry.workspace_id = override.workspace_id',
+  ' AND high_entry.entry_id = override.entry_high_id',
+  'WHERE override.workspace_id = $1',
+  '  AND low_entry.is_current_structure AND high_entry.is_current_structure',
+  '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
+  '  AND (override.entry_low_id = ANY($3::uuid[])',
+  '    OR override.entry_high_id = ANY($3::uuid[]))',
   'ORDER BY override.entry_low_id, override.entry_high_id',
 );
 
@@ -89,6 +154,21 @@ export const DELETE_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL = sql(
   '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
 );
 
+export const DELETE_INCREMENTAL_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL =
+  sql(
+    'DELETE FROM struinfo.information_entry_association_projection AS projection',
+    'USING struinfo.information_entry AS low_entry,',
+    '      struinfo.information_entry AS high_entry',
+    'WHERE projection.workspace_id = $1',
+    '  AND low_entry.workspace_id = projection.workspace_id',
+    '  AND low_entry.entry_id = projection.entry_low_id',
+    '  AND high_entry.workspace_id = projection.workspace_id',
+    '  AND high_entry.entry_id = projection.entry_high_id',
+    '  AND ($2::boolean OR (NOT low_entry.is_private AND NOT high_entry.is_private))',
+    '  AND (projection.entry_low_id = ANY($3::uuid[])',
+    '    OR projection.entry_high_id = ANY($3::uuid[]))',
+  );
+
 export const INSERT_INFORMATION_ENTRY_ASSOCIATION_PROJECTION_SQL = sql(
   'INSERT INTO struinfo.information_entry_association_projection (',
   '  workspace_id, entry_low_id, entry_high_id,',
@@ -102,7 +182,7 @@ export const INSERT_INFORMATION_ENTRY_ASSOCIATION_PROJECTION_SQL = sql(
 );
 
 const READ_ASSOCIATION_ENDPOINTS_SQL = sql(
-  'SELECT entry_id::text, is_private',
+  'SELECT entry_id::text, is_private, current_revision',
   'FROM struinfo.information_entry',
   'WHERE workspace_id = $1 AND entry_id IN ($2, $3)',
   '  AND is_current_structure',
@@ -112,7 +192,8 @@ const READ_ASSOCIATION_ENDPOINTS_SQL = sql(
 const LOCK_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
   'SELECT current_revision, current_revision_id::text, action,',
   '  manual_adjustment, is_blocked, graph_origin, graph_label, graph_direction,',
-  '  graph_semantic_kind, graph_verification_status, graph_note',
+  '  graph_semantic_kind, graph_verification_status, graph_note,',
+  '  graph_reviewed_entry_low_revision, graph_reviewed_entry_high_revision',
   'FROM struinfo.information_entry_association_override',
   'WHERE workspace_id = $1 AND entry_low_id = $2 AND entry_high_id = $3',
   'FOR UPDATE',
@@ -123,8 +204,9 @@ const INSERT_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
   '  workspace_id, entry_low_id, entry_high_id, current_revision,',
   '  current_revision_id, action, manual_adjustment, is_blocked,',
   '  graph_origin, graph_label, graph_direction, graph_semantic_kind,',
-  '  graph_verification_status, graph_note',
-  ') VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
+  '  graph_verification_status, graph_note,',
+  '  graph_reviewed_entry_low_revision, graph_reviewed_entry_high_revision',
+  ') VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)',
 );
 
 const UPDATE_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
@@ -133,6 +215,7 @@ const UPDATE_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
   '  manual_adjustment = $7, is_blocked = $8, graph_origin = $9,',
   '  graph_label = $10, graph_direction = $11, graph_semantic_kind = $12,',
   '  graph_verification_status = $13, graph_note = $14,',
+  '  graph_reviewed_entry_low_revision = $16, graph_reviewed_entry_high_revision = $17,',
   '  updated_at = CURRENT_TIMESTAMP',
   'WHERE workspace_id = $1 AND entry_low_id = $2 AND entry_high_id = $3',
   '  AND current_revision = $15',
@@ -140,7 +223,11 @@ const UPDATE_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL = sql(
 
 type Row = Readonly<Record<string, unknown>>;
 
-export class PostgresInformationEntryAssociationRepository implements InformationEntryAssociationRepositoryPort {
+export class PostgresInformationEntryAssociationRepository
+  implements
+    InformationEntryAssociationRepositoryPort,
+    InformationEntryAssociationIncrementalRepositoryPort
+{
   readonly #pool: PostgresPoolBoundary;
 
   public constructor(pool: PostgresPoolBoundary) {
@@ -177,6 +264,51 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
     );
   }
 
+  public replaceAssociationProjectionsForEntries(
+    workspaceIdInput: string,
+    sourceEntryIdsInput: readonly string[],
+    projections: readonly Readonly<InformationEntryAssociationProjection>[],
+    includePrivate: boolean,
+  ): Promise<number> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    const sourceEntryIds = sourceEntryIdsInput.map(canonicalUuid);
+    if (
+      sourceEntryIds.length === 0 ||
+      new Set(sourceEntryIds).size !== sourceEntryIds.length
+    ) {
+      throw new PostgresAdapterError();
+    }
+    const sources = new Set(sourceEntryIds);
+    for (const projection of projections) {
+      if (
+        canonicalUuid(projection.workspaceId) !== workspaceId ||
+        (!sources.has(projection.entryLowId) &&
+          !sources.has(projection.entryHighId))
+      ) {
+        throw new PostgresAdapterError();
+      }
+    }
+    return runPostgresTransaction(
+      this.#pool,
+      'read_committed',
+      async (client) => {
+        await acquireWorkspaceWriteLock(client, workspaceId);
+        await client.query<Row>(
+          DELETE_INCREMENTAL_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL,
+          [workspaceId, includePrivate, sourceEntryIds],
+        );
+        for (const projection of projections) {
+          const result = await client.query<Row>(
+            INSERT_INFORMATION_ENTRY_ASSOCIATION_PROJECTION_SQL,
+            informationEntryAssociationProjectionParameters(projection),
+          );
+          expectOneAffected(result.rowCount);
+        }
+        return projections.length;
+      },
+    );
+  }
+
   public loadAssociationSnapshot(
     workspaceIdInput: string,
     includePrivate: boolean,
@@ -202,6 +334,125 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
     );
   }
 
+  public loadAssociationSnapshotForEntries(
+    workspaceIdInput: string,
+    includePrivate: boolean,
+    entryIdsInput: readonly string[],
+  ): Promise<Readonly<InformationEntryAssociationRepositorySnapshot>> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    const entryIds = Object.freeze([
+      ...new Set(entryIdsInput.map((entryId) => canonicalUuid(entryId))),
+    ]);
+    if (entryIds.length === 0) {
+      return Promise.resolve(
+        Object.freeze({
+          projections: Object.freeze([]),
+          overrides: Object.freeze([]),
+        }),
+      );
+    }
+    if (entryIds.length > 100) throw new PostgresAdapterError();
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const parameters = [workspaceId, includePrivate, entryIds] as const;
+        const projections = await client.query<Row>(
+          READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_FOR_ENTRIES_SQL,
+          parameters,
+        );
+        const overrides = await client.query<Row>(
+          READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_FOR_ENTRIES_SQL,
+          parameters,
+        );
+        return Object.freeze({
+          projections: Object.freeze(projections.rows.map(mapProjection)),
+          overrides: Object.freeze(overrides.rows.map(mapOverride)),
+        });
+      },
+    );
+  }
+
+  public loadSourceReviewPage(
+    workspaceIdInput: string,
+    requestInput: Readonly<InformationEntrySourceReviewRequest>,
+  ): Promise<Readonly<InformationEntrySourceReviewPage>> {
+    const workspaceId = canonicalUuid(workspaceIdInput);
+    const request = decodeSourceReviewRequest(requestInput);
+    if (request === undefined) throw new PostgresAdapterError();
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const parameters = [workspaceId, request.privacyScope, request.filter];
+        const count = await client.query<Row>(
+          COUNT_INFORMATION_ENTRY_SOURCE_REVIEWS_SQL,
+          parameters,
+        );
+        if (count.rows.length !== 1) throw new PostgresAdapterError();
+        const totalCount = integer(count.rows[0]?.total_count);
+        const page = await client.query<Row>(
+          READ_INFORMATION_ENTRY_SOURCE_REVIEW_PAGE_SQL,
+          [
+            ...parameters,
+            request.after?.entryLowId ?? null,
+            request.after?.entryHighId ?? null,
+            request.limit + 1,
+          ],
+        );
+        if (page.rows.length === 0)
+          return Object.freeze({totalCount, items: Object.freeze([])});
+        const lows = page.rows.map((row) => canonicalUuid(row.entry_low_id));
+        const highs = page.rows.map((row) => canonicalUuid(row.entry_high_id));
+        const includePrivate = request.privacyScope !== 'public';
+        const pairParameters = [workspaceId, includePrivate, lows, highs];
+        const restrict = (query: string, alias: string) =>
+          query.replace(
+            'ORDER BY',
+            'AND (' +
+              alias +
+              '.entry_low_id, ' +
+              alias +
+              '.entry_high_id) IN (SELECT * FROM unnest($3::uuid[], $4::uuid[])) ORDER BY',
+          );
+        const projections = await client.query<Row>(
+          restrict(
+            READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL,
+            'projection',
+          ),
+          pairParameters,
+        );
+        const overrides = await client.query<Row>(
+          restrict(
+            READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL,
+            'override',
+          ),
+          pairParameters,
+        );
+        const entries = await loadCurrentInformationEntriesByIds(
+          client,
+          workspaceId,
+          includePrivate,
+          [...new Set([...lows, ...highs])],
+        );
+        const items = listInformationEntrySourceReviewItems(
+          workspaceId,
+          entries,
+          {
+            projections: projections.rows.map(mapProjection),
+            overrides: overrides.rows.map(mapOverride),
+          },
+          request,
+        );
+        return paginateInformationEntrySourceReviews(
+          items,
+          request,
+          totalCount,
+        );
+      },
+    );
+  }
+
   public writeAssociationOverride(
     write: Readonly<InformationEntryAssociationOverrideWrite>,
   ): Promise<InformationEntryAssociationOverrideOutcome> {
@@ -216,6 +467,11 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
     ) {
       throw new PostgresAdapterError();
     }
+    if (
+      write.expectedEntryRevisions !== undefined &&
+      decodeSourceReviewRevisions(write.expectedEntryRevisions) === undefined
+    )
+      throw new PostgresAdapterError();
     assertOverrideValue(write.value);
     return runPostgresTransaction(
       this.#pool,
@@ -236,12 +492,38 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
         if (endpoints.rows.some((row) => typeof row.is_private !== 'boolean')) {
           throw new PostgresAdapterError();
         }
+        if (
+          write.expectedEntryRevisions !== undefined &&
+          (endpoints.rows.find((row) => row.entry_id === entryLowId)
+            ?.current_revision !==
+            write.expectedEntryRevisions.entryLowRevision ||
+            endpoints.rows.find((row) => row.entry_id === entryHighId)
+              ?.current_revision !==
+              write.expectedEntryRevisions.entryHighRevision)
+        )
+          return 'stale';
         const locked = await client.query<Row>(
           LOCK_INFORMATION_ENTRY_ASSOCIATION_OVERRIDE_SQL,
           [workspaceId, entryLowId, entryHighId],
         );
         if (locked.rows.length > 1) throw new PostgresAdapterError();
         const current = locked.rows[0];
+        if (write.requireVisibleGraphEdge === true) {
+          if (current?.is_blocked === true) return 'not_found';
+          if (typeof current?.graph_origin !== 'string') {
+            const projection = await client.query<Row>(
+              'SELECT 1 FROM struinfo.information_entry_association_projection WHERE workspace_id = $1 AND entry_low_id = $2 AND entry_high_id = $3 AND entry_low_revision = $4 AND entry_high_revision = $5',
+              [
+                workspaceId,
+                entryLowId,
+                entryHighId,
+                endpoints.rows[0]?.current_revision,
+                endpoints.rows[1]?.current_revision,
+              ],
+            );
+            if (projection.rows.length !== 1) return 'not_found';
+          }
+        }
         if (current === undefined) {
           if (write.expectedRevision !== 0) return 'stale';
           const inserted = await client.query<Row>(
@@ -260,6 +542,8 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
               write.value.graph?.semanticKind ?? null,
               write.value.graph?.verificationStatus ?? null,
               write.value.graph?.note ?? null,
+              write.value.graph?.reviewedRevisions?.entryLowRevision ?? null,
+              write.value.graph?.reviewedRevisions?.entryHighRevision ?? null,
             ],
           );
           expectOneAffected(inserted.rowCount);
@@ -290,6 +574,8 @@ export class PostgresInformationEntryAssociationRepository implements Informatio
             write.value.graph?.verificationStatus ?? null,
             write.value.graph?.note ?? null,
             currentRevision,
+            write.value.graph?.reviewedRevisions?.entryLowRevision ?? null,
+            write.value.graph?.reviewedRevisions?.entryHighRevision ?? null,
           ],
         );
         expectOneAffected(updated.rowCount);
@@ -324,7 +610,7 @@ export function informationEntryAssociationProjectionParameters(
   ];
 }
 
-function mapProjection(row: Row): InformationEntryAssociationProjection {
+export function mapProjection(row: Row): InformationEntryAssociationProjection {
   const candidateBasis = text(row.candidate_basis)
     .split('+')
     .map((value) => enumValue(value, INFORMATION_ENTRY_ASSOCIATION_BASES));
@@ -347,7 +633,9 @@ function mapProjection(row: Row): InformationEntryAssociationProjection {
   });
 }
 
-function mapOverride(row: Row): CurrentInformationEntryAssociationOverride {
+export function mapOverride(
+  row: Row,
+): CurrentInformationEntryAssociationOverride {
   return Object.freeze({
     workspaceId: canonicalUuid(row.workspace_id),
     entryLowId: canonicalUuid(row.entry_low_id),
@@ -417,6 +705,23 @@ function mapGraphRelationValue(
       INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES,
     ),
     note,
+    ...(row.graph_reviewed_entry_low_revision == null &&
+    row.graph_reviewed_entry_high_revision == null
+      ? {}
+      : {
+          reviewedRevisions: {
+            entryLowRevision: boundedScore(
+              row.graph_reviewed_entry_low_revision,
+              1,
+              2_147_483_647,
+            ),
+            entryHighRevision: boundedScore(
+              row.graph_reviewed_entry_high_revision,
+              1,
+              2_147_483_647,
+            ),
+          },
+        }),
   });
 }
 
@@ -426,6 +731,11 @@ function assertOverrideValue(
   enumValue(value.action, INFORMATION_ENTRY_ASSOCIATION_ACTIONS);
   boundedScore(value.manualAdjustment, -10_000, 10_000);
   if (value.graph !== undefined) {
+    if (
+      value.graph.reviewedRevisions !== undefined &&
+      decodeSourceReviewRevisions(value.graph.reviewedRevisions) === undefined
+    )
+      throw new PostgresAdapterError();
     enumValue(value.graph.origin, INFORMATION_ENTRY_GRAPH_ORIGINS);
     enumValue(value.graph.direction, INFORMATION_ENTRY_GRAPH_DIRECTIONS);
     enumValue(value.graph.semanticKind, INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS);

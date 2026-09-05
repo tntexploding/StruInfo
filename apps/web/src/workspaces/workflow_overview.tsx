@@ -45,13 +45,13 @@ const STAGES: readonly Readonly<{
     section: 'import',
     index: '01',
     label: '导入',
-    detail: '保存来源、全文与不可变 Snapshot',
+    detail: '保存来源与原文',
   },
   {
     section: 'split',
     index: '02',
     label: '拆分',
-    detail: '从文档结构生成可编辑 Entry',
+    detail: '把文档整理为可编辑条目',
   },
   {
     section: 'tags',
@@ -63,13 +63,13 @@ const STAGES: readonly Readonly<{
     section: 'associations',
     index: '04',
     label: '联系',
-    detail: '可解释候选与人工覆盖',
+    detail: '推荐并编辑条目之间的联系',
   },
   {
     section: 'query',
     index: '05',
     label: '查询',
-    detail: '确定性检索并返回精确来源',
+    detail: '查找条目并查看原始来源',
   },
 ]);
 
@@ -145,11 +145,7 @@ export function WorkflowOverview({
     <div className="workspace-view workflow-overview">
       <header className="workflow-page-heading">
         <div>
-          <p className="section-index">00 / WORKSPACE OVERVIEW</p>
           <h1>总览</h1>
-          <p>
-            从来源证据到可检索条目的五段处理链。数字只来自当前外部工作区，不包含隐私正文或个人偏好内容。
-          </p>
         </div>
         <button
           className="secondary-action"
@@ -177,13 +173,11 @@ export function WorkflowOverview({
               SI
             </div>
             <div>
-              <p className="section-index">STRUIINFO / LOCAL WORKSPACE</p>
               <h2 id="project-intro-title">
                 把一份文档变成可以查找、修改和追溯的信息
               </h2>
               <p>
-                Snapshot 保留证据，Entry 承担日常拆分、标签与联系；知识页将用
-                Entry 组成由相似联系与用户关系共同维护的可编辑图谱。
+                原始文档始终保留。拆分后的条目可以添加标签和联系，并在知识页组成可编辑的关系图谱。
               </p>
             </div>
           </section>
@@ -209,12 +203,8 @@ export function WorkflowOverview({
           >
             <header>
               <div>
-                <p className="section-index">MAIN FLOW / 05 STAGES</p>
                 <h2 id="stage-board-title">继续当前工作</h2>
               </div>
-              <span className="origin-label origin-label--deterministic">
-                无 AI 也完整可用
-              </span>
             </header>
             <ol>
               {STAGES.map((stage) => (
@@ -282,7 +272,7 @@ function stageStatus(
     case 'split':
       return metrics.entries === undefined
         ? '读取中'
-        : `${metrics.entries.toString()} 条 Entry`;
+        : `${metrics.entries.toString()} 条条目`;
     case 'tags':
       return metrics.annotated === undefined || metrics.entries === undefined
         ? '读取中'
@@ -290,6 +280,6 @@ function stageStatus(
     case 'associations':
       return '按需重建';
     case 'query':
-      return metrics.entries === undefined ? '读取中' : '确定性查询可用';
+      return metrics.entries === undefined ? '读取中' : '可以查询';
   }
 }

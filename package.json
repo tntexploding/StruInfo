@@ -1,6 +1,6 @@
 {
   "name": "struinfo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -36,6 +36,8 @@
     "artifact:verify": "tsx tools/verify_application_artifact.ts",
     "deployment:verify": "tsx tools/verify_m1m_deployment.ts",
     "performance:m1l": "tsx tools/run_m1l_performance.ts",
+    "performance:m2-p0d": "tsx tools/run_m2_p0d_postgres.ts",
+    "classification:m2-p3:evaluate": "tsx tools/evaluate_m2_p3_classification.ts",
     "verify": "corepack pnpm run format:check && corepack pnpm run lint && corepack pnpm run typecheck && corepack pnpm run test && corepack pnpm run test:integration && corepack pnpm run build && corepack pnpm run artifact:verify && corepack pnpm run deployment:verify",
     "start:api": "tsx --tsconfig apps/server/tsconfig.json apps/server/src/entrypoints/api.ts",
     "start:scheduler": "tsx --tsconfig apps/server/tsconfig.json apps/server/src/entrypoints/scheduler.ts",

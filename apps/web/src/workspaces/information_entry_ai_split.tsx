@@ -89,8 +89,8 @@ export function InformationEntryAiSplit({
         setSnapshot(undefined);
         setFeedback({
           kind: 'error',
-          title: '无法读取拆分提案',
-          detail: '本地 Evidence 或提案状态当前不可用；文档没有变化。',
+          title: '无法读取 AI 拆分建议',
+          detail: '原文或建议当前无法读取；文档没有变化。',
         });
       }
     } catch {
@@ -131,8 +131,8 @@ export function InformationEntryAiSplit({
       ) {
         setFeedback({
           kind: 'success',
-          title: 'AI 拆分提案已生成',
-          detail: '请核对每组原文；只有点击接受后才会生成 Entry。',
+          title: 'AI 拆分建议已生成',
+          detail: '请核对每组原文；只有点击接受后才会生成条目。',
         });
         await loadReview();
       } else {
@@ -165,11 +165,12 @@ export function InformationEntryAiSplit({
       if ('proposal' in response.body) {
         setFeedback({
           kind: 'success',
-          title: decision === 'accept' ? '已生成信息条目' : '已拒绝拆分提案',
+          title:
+            decision === 'accept' ? '已生成信息条目' : '已忽略 AI 拆分建议',
           detail:
             decision === 'accept'
-              ? 'Entry 已由原始 Fragment 精确组成；Snapshot 与 Fragment 未被改写。'
-              : '没有生成 Entry，原始材料保持不变。',
+              ? '条目已按原文片段生成，已导入的原文没有改变。'
+              : '没有生成条目，原始材料保持不变。',
         });
         if (decision === 'accept') await onAccepted();
         await loadReview();
@@ -197,33 +198,29 @@ export function InformationEntryAiSplit({
     <section className="entry-ai-split" aria-labelledby="entry-ai-split-title">
       <header className="console-heading">
         <div>
-          <p className="section-index">OPTIONAL AI PROPOSAL</p>
-          <h2 id="entry-ai-split-title">OpenAI 拆分提案</h2>
+          <h2 id="entry-ai-split-title">AI 拆分建议</h2>
         </div>
-        <span className="origin-label origin-label--ai">
-          AI 生成 · 待人工确认
-        </span>
       </header>
 
       {!enabled ? (
         <p className="entry-ai-split__boundary">
-          未配置 OpenAI Provider。上方按结构拆分仍可完整离线使用。
+          OpenAI 未启用，仍可使用人工拆分和结构规则。
         </p>
       ) : snapshotId === '' ? (
         <p className="entry-ai-split__boundary">请先选择一份来源文档。</p>
       ) : isPrivate ? (
         <p className="entry-ai-split__boundary">
-          隐私文档不会发送给外部 Provider；请使用上方本地结构规则。
+          隐私文档不会发送给 OpenAI，请使用人工拆分或结构规则。
         </p>
       ) : alreadyMaterialized ? (
         <p className="entry-ai-split__boundary">
-          当前文档已经生成 Entry。为避免两套拆分互相覆盖，不再创建 AI 拆分提案。
+          当前文档已经生成条目，不能再创建拆分建议。
         </p>
       ) : (
         <>
           <p className="entry-ai-split__boundary">
-            只有点击下方按钮后，当前公开文档的段落原文才会发送给已配置的 OpenAI
-            Provider。文档标识、其他文档和隐私内容不会发送；结果不会自动写入。
+            点击生成后，当前公开文档的段落会发送给
+            OpenAI。其他文档和隐私内容不会发送，结果需要你确认后才会保存。
           </p>
           <div className="entry-ai-split__actions">
             <button
@@ -232,17 +229,17 @@ export function InformationEntryAiSplit({
               disabled={busy || loading}
               onClick={() => void startProposal()}
             >
-              {busy ? '处理中…' : '生成 AI 拆分提案'}
+              {busy ? '处理中…' : '生成 AI 拆分建议'}
             </button>
             <span>
               {loading
-                ? '读取既有提案…'
-                : proposals.length.toString() + ' 个提案'}
+                ? '读取已有建议…'
+                : proposals.length.toString() + ' 条建议'}
             </span>
           </div>
           {selectedProposal === undefined ? (
             <p className="entry-ai-split__empty">
-              尚无提案。你也可以直接使用上方确定性结构规则。
+              尚无建议。你也可以直接使用上方的结构规则。
             </p>
           ) : (
             <SplitProposalCard
@@ -291,8 +288,8 @@ function SplitProposalCard({
           <strong>{proposal.summary}</strong>
           <span>
             {payload === undefined
-              ? '载荷不可用'
-              : payload.entries.length.toString() + ' 个候选条目'}
+              ? '内容不可用'
+              : payload.entries.length.toString() + ' 个建议条目'}
           </span>
         </div>
         <span className="entry-ai-split__status">
@@ -301,12 +298,9 @@ function SplitProposalCard({
       </header>
 
       {payload === undefined ? (
-        <p>该提案缺少可审核的拆分载荷，不能接受。</p>
+        <p>这条建议没有可审核的拆分内容，不能使用。</p>
       ) : (
         <>
-          <p className="entry-ai-split__provider">
-            来源：{payload.providerModel} · {payload.promptVersion}
-          </p>
           <ol className="entry-ai-split__groups">
             {payload.entries.map((entry, index) => (
               <li key={entry.fragmentIds.join(':')}>
@@ -322,7 +316,7 @@ function SplitProposalCard({
                       const fragment = fragmentById.get(fragmentId);
                       return fragment === undefined ? (
                         <p className="entry-ai-split__missing" key={fragmentId}>
-                          原文片段无法读取，不能安全接受本提案。
+                          原文片段无法读取，不能使用这条建议。
                         </p>
                       ) : (
                         <article key={fragmentId}>
@@ -355,7 +349,7 @@ function SplitProposalCard({
             disabled={disabled}
             onClick={onReject}
           >
-            拒绝提案
+            忽略建议
           </button>
         </div>
       ) : null}
@@ -372,19 +366,19 @@ function proposalStatusLabel(status: ProcessingProposalView['status']): string {
 
 function splitFailure(code: string): ActionFeedback {
   const known: Readonly<Record<string, string>> = Object.freeze({
-    ai_private_snapshot_forbidden: '隐私文档不会发送给外部 Provider。',
-    ai_provider_not_configured: '当前服务未配置 OpenAI Provider。',
+    ai_private_snapshot_forbidden: '隐私文档不会发送给 OpenAI。',
+    ai_provider_not_configured: '当前服务未启用 OpenAI。',
     ai_provider_timeout: 'OpenAI 请求超时，文档没有变化。',
     ai_provider_unavailable: 'OpenAI 暂时不可用，文档没有变化。',
     ai_provider_rejected: 'OpenAI 拒绝了本次请求，文档没有变化。',
     ai_provider_invalid_response: 'OpenAI 返回的拆分结构无效，文档没有变化。',
     ai_split_input_unsupported: '当前文档结构不适合本次 AI 拆分。',
-    ai_snapshot_already_materialized: '当前文档已经生成 Entry。',
-    stale_split_materialization: '文档已通过其他方式生成 Entry；请刷新。',
+    ai_snapshot_already_materialized: '当前文档已经生成条目。',
+    stale_split_materialization: '文档已通过其他方式生成条目，请刷新。',
   });
   return {
     kind: 'error',
-    title: '拆分提案操作未完成',
+    title: 'AI 拆分操作未完成',
     detail: known[code] ?? '服务返回：' + code,
   };
 }
@@ -392,7 +386,7 @@ function splitFailure(code: string): ActionFeedback {
 function connectionFailure(): ActionFeedback {
   return {
     kind: 'error',
-    title: '无法连接拆分提案服务',
-    detail: '文档与 Entry 均未改变；服务恢复后可以重试。',
+    title: '无法连接 AI 拆分服务',
+    detail: '文档与条目均未改变；服务恢复后可以重试。',
   };
 }

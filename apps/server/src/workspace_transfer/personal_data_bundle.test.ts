@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {createReviewPreferences} from '../storage/review_preferences_store.js';
+import {DEFAULT_ENTRY_CLASSIFICATION_PROFILE} from '../modules/entries/information_entry_deterministic_classification.js';
 import type {JsonValue} from '../serialization/canonical_json.js';
 import {
   PERSONAL_DATA_BUNDLE_CODEC,
@@ -29,6 +30,11 @@ describe('personal data Bundle preference compatibility', () => {
       },
     }) as Readonly<PersonalDataBundleSection>;
 
+    expect(decoded.reviewPreferences.entrySavedQueries).toEqual({
+      version: 1,
+      revision: 0,
+      views: [],
+    });
     expect(decoded.reviewPreferences.entryPreferenceProfile).toEqual({
       revision: 0,
       enabled: false,
@@ -47,6 +53,59 @@ describe('personal data Bundle preference compatibility', () => {
       maximumGroupCodePoints: 4000,
       maximumFragmentsPerGroup: 8,
     });
+    expect(decoded.reviewPreferences.entryClassificationProfile).toEqual(
+      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
+    );
+  });
+
+  it('round-trips saved query conditions and rejects persisted result/cursor payloads', () => {
+    const preferences = {
+      ...createReviewPreferences(WORKSPACE_ID, []),
+      entrySavedQueries: {
+        version: 1 as const,
+        revision: 2,
+        views: [
+          {
+            viewId: WORKSPACE_ID,
+            name: 'Synthetic saved query',
+            query: {
+              includePrivate: true,
+              onlyPrivate: true,
+              text: 'Synthetic',
+              time: {field: 'captured' as const, from: '2026-01-01'},
+            },
+            selectedEntryId: '22222222-2222-4222-8222-222222222222',
+          },
+        ],
+      },
+    };
+    const section = {
+      schemaVersion: PERSONAL_DATA_BUNDLE_SCHEMA,
+      blobs: [],
+      reviewPreferences: preferences,
+    };
+    const decoded = PERSONAL_DATA_BUNDLE_CODEC.decode(
+      PERSONAL_DATA_BUNDLE_CODEC.encode(section) as JsonValue,
+    ) as Readonly<PersonalDataBundleSection>;
+    expect(decoded.reviewPreferences.entrySavedQueries).toMatchObject(
+      preferences.entrySavedQueries,
+    );
+    const bad = {
+      ...section,
+      reviewPreferences: {
+        ...preferences,
+        entrySavedQueries: {
+          ...preferences.entrySavedQueries,
+          views: [
+            {
+              ...preferences.entrySavedQueries.views[0],
+              query: {includePrivate: false, after: {}},
+            },
+          ],
+        },
+      },
+    };
+    expect(() => PERSONAL_DATA_BUNDLE_CODEC.decode(bad as JsonValue)).toThrow();
   });
 
   it('round-trips a closed preference profile in the existing v1 section', () => {
@@ -106,6 +165,15 @@ describe('personal data Bundle preference compatibility', () => {
           maximumGroupCodePoints: 2500,
           maximumFragmentsPerGroup: 6,
         },
+        {
+          format: 'struinfo.entry-classification-profile',
+          version: 1,
+          revision: 4,
+          aliases: [{source: '容器平台', canonical: 'Docker'}],
+          typeMappings: [{term: '动手实验', keyword: 'operating_guideline'}],
+          domainMappings: [{term: 'Docker', keyword: 'engineering_computing'}],
+          exclusions: ['广告'],
+        },
       ),
     });
 
@@ -122,6 +190,9 @@ describe('personal data Bundle preference compatibility', () => {
     );
     expect(decoded.reviewPreferences.entrySplitRuleProfile).toEqual(
       section.reviewPreferences.entrySplitRuleProfile,
+    );
+    expect(decoded.reviewPreferences.entryClassificationProfile).toEqual(
+      section.reviewPreferences.entryClassificationProfile,
     );
   });
 

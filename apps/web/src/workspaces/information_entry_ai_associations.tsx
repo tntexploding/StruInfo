@@ -127,7 +127,7 @@ export function InformationEntryAiAssociations({
       ) {
         setFeedback({
           kind: 'success',
-          title: '关系提案已生成',
+          title: 'AI 关系建议已生成',
           detail: '请核对关系名称和方向；接受之前不会修改知识图谱。',
         });
         await loadProposals();
@@ -173,7 +173,7 @@ export function InformationEntryAiAssociations({
       ) {
         setFeedback({
           kind: 'success',
-          title: decision === 'accept' ? 'AI 关系已写入' : '关系提案已拒绝',
+          title: decision === 'accept' ? 'AI 关系已保存' : '已忽略 AI 关系建议',
           detail:
             decision === 'accept'
               ? '该边已标记为 AI 辅助，仍可继续人工修改或隐藏。'
@@ -205,25 +205,23 @@ export function InformationEntryAiAssociations({
     >
       <header className="console-heading">
         <div>
-          <p className="section-index">OPTIONAL AI PROPOSAL</p>
-          <h3 id="entry-ai-associations-title">OpenAI 关系提案</h3>
+          <h3 id="entry-ai-associations-title">AI 关系建议</h3>
         </div>
-        <span className="origin-label origin-label--ai">AI 生成 · 待审核</span>
       </header>
 
       {!enabled ? (
         <p className="entry-ai-associations__boundary">
-          未配置 OpenAI Provider。相似度关系和人工关系编辑仍可完整使用。
+          OpenAI 未启用，仍可查看相似条目并人工编辑关系。
         </p>
       ) : isPrivate ? (
         <p className="entry-ai-associations__boundary">
-          隐私条目不会发送给外部 Provider；请继续使用人工关系编辑。
+          隐私条目不会发送给 OpenAI，请使用人工关系编辑。
         </p>
       ) : (
         <>
           <p className="entry-ai-associations__boundary">
-            只会把当前选中的两个公开条目的标题、正文和标签发送给
-            OpenAI；不会扫描其他条目，也不会自动写入图谱。
+            点击生成后，当前两个公开条目的标题、正文和标签会发送给
+            OpenAI。其他条目不会发送，结果需要你确认后才会保存。
           </p>
           <div className="entry-ai-associations__actions">
             <button
@@ -232,12 +230,12 @@ export function InformationEntryAiAssociations({
               disabled={busy || loading}
               onClick={() => void startProposal()}
             >
-              {busy ? '处理中…' : '生成关系提案'}
+              {busy ? '处理中…' : '生成 AI 关系建议'}
             </button>
             <span>
               {loading
-                ? '读取既有提案…'
-                : `${proposals.length.toString()} 个提案`}
+                ? '读取已有建议…'
+                : `${proposals.length.toString()} 条建议`}
             </span>
           </div>
           {latest === undefined ? null : (
@@ -280,7 +278,7 @@ function ProposalCard({
         <span>{proposalStatusLabel(proposal.status)}</span>
       </header>
       {payload === undefined ? (
-        <p>该提案缺少可应用的关系载荷。</p>
+        <p>这条建议没有可用的关系内容。</p>
       ) : (
         <dl>
           <div>
@@ -295,12 +293,6 @@ function ProposalCard({
                 entryId,
                 relatedEntryId,
               )}
-            </dd>
-          </div>
-          <div>
-            <dt>来源</dt>
-            <dd>
-              {payload.providerModel} · {payload.promptVersion}
             </dd>
           </div>
         </dl>
@@ -321,7 +313,7 @@ function ProposalCard({
             disabled={disabled}
             onClick={onReject}
           >
-            拒绝提案
+            忽略建议
           </button>
         </div>
       ) : null}
@@ -351,18 +343,18 @@ function proposalStatusLabel(status: ProcessingProposalView['status']): string {
 function failureFeedback(code: string): ActionFeedback {
   const known: Readonly<Record<string, string>> = Object.freeze({
     ai_association_entry_not_found: '选中的条目已不存在；请刷新图谱。',
-    ai_private_entry_forbidden: '隐私条目不会发送给外部 Provider。',
-    ai_provider_not_configured: '当前服务未配置 OpenAI Provider。',
+    ai_private_entry_forbidden: '隐私条目不会发送给 OpenAI。',
+    ai_provider_not_configured: '当前服务未启用 OpenAI。',
     ai_provider_timeout: 'OpenAI 请求超时，知识图谱没有变化。',
     ai_provider_unavailable: 'OpenAI 暂时不可用，知识图谱没有变化。',
     ai_provider_rejected: 'OpenAI 拒绝了本次请求，知识图谱没有变化。',
     ai_provider_invalid_response: 'OpenAI 返回的关系结构无效。',
-    stale_entry_revision: '条目已被修改；请刷新后重新生成提案。',
-    stale_association_revision: '关系已被修改；请刷新后重新生成提案。',
+    stale_entry_revision: '条目已被修改；请刷新后重新生成建议。',
+    stale_association_revision: '关系已被修改；请刷新后重新生成建议。',
   });
   return {
     kind: 'error',
-    title: '关系提案操作未完成',
+    title: 'AI 关系操作未完成',
     detail: known[code] ?? `服务返回：${code}`,
   };
 }
@@ -370,7 +362,7 @@ function failureFeedback(code: string): ActionFeedback {
 function connectionFailure(): ActionFeedback {
   return {
     kind: 'error',
-    title: '无法连接关系提案服务',
+    title: '无法连接 AI 关系服务',
     detail: '知识图谱没有变化；服务恢复后可以重试。',
   };
 }

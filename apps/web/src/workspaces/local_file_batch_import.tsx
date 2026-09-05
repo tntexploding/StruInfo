@@ -224,7 +224,7 @@ export function LocalFileBatchImport({
           feedback = {
             kind: 'error',
             title: '本地服务没有完成导入',
-            detail: '该文件保留原幂等身份，可在服务恢复后重试。',
+            detail: '服务恢复后可以重试，不会重复导入该文件。',
           };
         }
         const latest = working[index];
@@ -259,12 +259,10 @@ export function LocalFileBatchImport({
     <section className="local-file-batch" aria-labelledby="local-batch-title">
       <header className="local-file-batch__heading">
         <div>
-          <p className="section-index">M1H-5 / EXPLICIT BATCH</p>
           <h4 id="local-batch-title">多文件导入队列</h4>
           <p>
-            最多显式选择 {LOCAL_DOCUMENT_BATCH_MAX_FILES}{' '}
-            份；每份独立校验、写入和重试。
-            队列只保留在当前页面会话，不扫描目录。
+            一次最多选择 {LOCAL_DOCUMENT_BATCH_MAX_FILES}{' '}
+            份文件，可单独重试失败项。
           </p>
         </div>
         <button
@@ -376,7 +374,7 @@ export function LocalFileBatchImport({
       )}
       <footer className="local-file-batch__actions">
         <p>
-          隐私、发布日期、解析规则和前置文字在开始时冻结到各文件请求；失败重试复用原身份。
+          开始导入后，当前选项会分别用于每个文件；失败后重试不会重复创建文档。
         </p>
         <div>
           {running ? (

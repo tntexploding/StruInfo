@@ -8,7 +8,9 @@ import type {
 import {
   PostgresInformationEntryAssociationRepository,
   READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL,
+  READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_FOR_ENTRIES_SQL,
   READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL,
+  READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_FOR_ENTRIES_SQL,
 } from './postgres_information_entry_association_repository.js';
 import {READ_WORKSPACE_SQL} from './workspace_write_lock.js';
 
@@ -133,7 +135,62 @@ describe('Postgres Information Entry knowledge graph persistence', () => {
       'related',
       'unreviewed',
       '待核对',
+      null,
+      null,
     ]);
+  });
+
+  it('loads only association rows touching the requested Entry', async () => {
+    const statements: {sql: string; parameters?: readonly unknown[]}[] = [];
+    const pool = createPool((sql, parameters) => {
+      statements.push({sql, ...(parameters === undefined ? {} : {parameters})});
+      if (
+        sql === READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_FOR_ENTRIES_SQL
+      ) {
+        return rows({
+          workspace_id: WORKSPACE_ID,
+          entry_low_id: ENTRY_A,
+          entry_high_id: ENTRY_B,
+          entry_low_revision: 1,
+          entry_low_revision_id: REVISION_ID,
+          entry_high_revision: 1,
+          entry_high_revision_id: REVISION_ID,
+          content_similarity: 8_000,
+          type_similarity: 0,
+          domain_similarity: 0,
+          base_score: 8_000,
+          algorithm_version: 'synthetic.association.v1',
+          candidate_basis: 'content_keyword',
+          candidate_rank: 1,
+        });
+      }
+      return rows();
+    });
+    const repository = new PostgresInformationEntryAssociationRepository(pool);
+
+    await expect(
+      repository.loadAssociationSnapshotForEntries(WORKSPACE_ID, false, [
+        ENTRY_A,
+      ]),
+    ).resolves.toMatchObject({
+      projections: [{entryLowId: ENTRY_A, entryHighId: ENTRY_B}],
+      overrides: [],
+    });
+    expect(statements).toContainEqual({
+      sql: READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_FOR_ENTRIES_SQL,
+      parameters: [WORKSPACE_ID, false, [ENTRY_A]],
+    });
+    expect(statements).toContainEqual({
+      sql: READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_FOR_ENTRIES_SQL,
+      parameters: [WORKSPACE_ID, false, [ENTRY_A]],
+    });
+    expect(
+      statements.some(
+        ({sql}) =>
+          sql === READ_INFORMATION_ENTRY_ASSOCIATION_PROJECTIONS_SQL ||
+          sql === READ_INFORMATION_ENTRY_ASSOCIATION_OVERRIDES_SQL,
+      ),
+    ).toBe(false);
   });
 });
 

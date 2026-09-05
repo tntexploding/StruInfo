@@ -6,7 +6,25 @@ import type {
   ResourceKind,
 } from './evidence_contract.js';
 
-export const EVIDENCE_SNAPSHOT_LIST_LIMIT = 200;
+export const EVIDENCE_SNAPSHOT_PAGE_LIMIT = 200;
+/** @deprecated Use EVIDENCE_SNAPSHOT_PAGE_LIMIT for bounded public pages. */
+export const EVIDENCE_SNAPSHOT_LIST_LIMIT = EVIDENCE_SNAPSHOT_PAGE_LIMIT;
+
+export interface EvidenceSnapshotPageCursor {
+  readonly capturedAt: string;
+  readonly snapshotId: string;
+}
+
+export interface EvidenceSnapshotPageRequest {
+  readonly limit: number;
+  readonly after?: Readonly<EvidenceSnapshotPageCursor>;
+}
+
+export interface EvidenceSnapshotPage {
+  readonly items: readonly Readonly<EvidenceSnapshotSummary>[];
+  readonly totalCount: number;
+  readonly nextCursor?: Readonly<EvidenceSnapshotPageCursor>;
+}
 
 export interface EvidenceSnapshotSummary {
   readonly workspaceId: string;
@@ -55,9 +73,18 @@ export interface EvidenceSnapshotReadState extends EvidenceSnapshotSummary {
 
 /** Read-only product projection for the evidence browser. */
 export interface EvidenceReadRepositoryPort {
+  /**
+   * Loads the complete workspace projection for internal joins. Public list
+   * endpoints should use listSnapshotPage when the adapter provides it.
+   */
   listSnapshots(
     workspaceId: string,
   ): Promise<readonly Readonly<EvidenceSnapshotSummary>[]>;
+
+  listSnapshotPage?(
+    workspaceId: string,
+    request: Readonly<EvidenceSnapshotPageRequest>,
+  ): Promise<Readonly<EvidenceSnapshotPage>>;
 
   loadSnapshot(
     workspaceId: string,

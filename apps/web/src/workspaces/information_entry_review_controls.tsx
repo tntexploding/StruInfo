@@ -118,9 +118,7 @@ export function InformationEntryReviewControls({
       await onSavePreferences(next);
       setPreferenceMessage(successMessage);
     } catch {
-      setPreferenceMessage(
-        '无法写入外部个人配置；修改已保留在本次页面会话中。',
-      );
+      setPreferenceMessage('无法保存个人设置；修改仅在当前页面有效。');
     } finally {
       setSavingPreferences(false);
     }
@@ -191,14 +189,8 @@ export function InformationEntryReviewControls({
     >
       <header className="entry-review-controls__heading">
         <div>
-          <p className="section-index">MANUAL REVIEW / DETERMINISTIC TAGS</p>
-          <h3 id="entry-review-controls-title">人工评价与标签归并</h3>
+          <h3 id="entry-review-controls-title">人工评分与标签</h3>
         </div>
-        <span className="origin-label origin-label--deterministic">
-          {resolved === undefined
-            ? '会话内设置 · 外部配置暂不可用'
-            : '个人设置保存在外部工作区'}
-        </span>
       </header>
 
       <div className="entry-review-score-grid">
@@ -216,16 +208,16 @@ export function InformationEntryReviewControls({
 
       <div className="entry-deterministic-keywords">
         <div>
-          <strong>自动确定性候选</strong>
+          <strong>自动标签建议</strong>
           <small>
             {automatic.enabled
-              ? '从正文、Markdown 标签和技术词中提取；URL 默认不会成为标签。'
+              ? '从正文和现有标记中提取，默认忽略网址。'
               : '当前工作区已关闭自动标签。'}
           </small>
         </div>
-        <div className="entry-keyword-candidates" aria-label="自动标签候选">
+        <div className="entry-keyword-candidates" aria-label="自动标签建议">
           {candidates.length === 0 ? (
-            <span>没有候选</span>
+            <span>没有建议</span>
           ) : (
             candidates.map((candidate) => (
               <button
@@ -249,19 +241,19 @@ export function InformationEntryReviewControls({
             applyKeywords(candidates);
           }}
         >
-          合并全部候选
+          添加全部建议
         </button>
       </div>
 
       <details className="entry-review-preferences">
-        <summary>个人快捷标签、自动筛选与别名规则</summary>
+        <summary>快捷标签与自动标签设置</summary>
         {preferences.status === 'loading' ? <p>正在读取个人标签设置…</p> : null}
         {preferences.status === 'error' ? (
           <p role="alert">{preferences.message}</p>
         ) : null}
         {resolved === undefined ? (
           <p className="entry-preference-message" role="status">
-            外部个人配置当前不可用；以下修改可在本次页面会话中立即使用，但不会持久化。
+            个人设置当前无法读取；以下修改仅在当前页面有效。
           </p>
         ) : null}
         <div className="entry-review-preferences__body">
@@ -281,7 +273,7 @@ export function InformationEntryReviewControls({
                   void persist(next, '自动标签开关已保存。');
                 }}
               />
-              开启自动确定性标签
+              开启自动标签
             </label>
             <label>
               <input
@@ -298,7 +290,7 @@ export function InformationEntryReviewControls({
                   void persist(next, '链接域名筛选设置已保存。');
                 }}
               />
-              允许把链接域名作为候选
+              允许把链接域名作为标签
             </label>
           </div>
 
