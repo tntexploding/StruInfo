@@ -51,6 +51,30 @@ HTTP：`POST /api/v1/agent/commands`，头部为
 以及上述令牌或令牌文件。远端仅允许 HTTPS；开发可运行 `corepack pnpm run start:mcp`。
 适配器只读取连接和令牌配置，不读取数据库或内部模型密钥。stdout 仅承载 MCP 协议。
 
+## Codex 连接 Docker 实例
+
+应用容器必须已启动，并通过外部配置设置 Agent 身份、授权与令牌文件。
+把下面的 `<应用容器名>` 替换为实际容器名；命令使用发行镜像默认工作目录，
+令牌留在容器挂载的 secret 中，不写入命令行或 Codex 配置：
+
+```text
+codex mcp add struinfo -- docker exec -i <应用容器名> node dist/entrypoints/mcp.js
+```
+
+已有同名连接时先检查配置；Docker 使用非默认 context 时，在 `docker` 后增加
+`--context <context名>`。不要加 `-t`，stdio 必须保留给 MCP 协议。
+Codex 的连接配置、工具白名单和超时字段见[官方 MCP 文档](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)。
+
+只读接入使用服务器 read grant，并在 Codex 的 `enabled_tools` 中只列出读取工具。
+外部模型独立整理需要另外授予 capture、structure、annotate；这与内部模型配置无关。
+注册后在新会话或重新加载 MCP 后调用 `system_status` 检查授权。
+`system_status.model` 仅在已配置 Provider 时返回；需要明确的启用布尔状态时，
+调用 `ingestion_status` 查看 `modelConfigured` 和策略状态，不要从字段缺失猜测运行情况。
+
+2026-09-12 已使用真实 Codex CLI 完成只读实例接入和隔离合成写入验收。
+重复导入、精确原文拆分、标签、对称联系和过期版本拒绝均已实际调用并独立读回验证；
+详情见[当前项目状态](current-project-state.md)。
+
 ## 工具与常用流程
 
 工具发现提供每项完整 JSON Schema，共 19 个命名工具：
