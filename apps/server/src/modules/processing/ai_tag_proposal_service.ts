@@ -53,7 +53,7 @@ export interface AiTagProposalDecisionResult {
 }
 
 export interface AiTagProposalServicePort {
-  readonly providerKey: 'openai-responses-v1';
+  readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
   readonly model: string;
 
   listForEntry(
@@ -81,7 +81,7 @@ export interface AiTagProposalServiceDependencies {
 }
 
 export class AiTagProposalService implements AiTagProposalServicePort {
-  public readonly providerKey: 'openai-responses-v1';
+  public readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
   public readonly model: string;
   readonly #dependencies: Readonly<AiTagProposalServiceDependencies>;
 
@@ -123,7 +123,7 @@ export class AiTagProposalService implements AiTagProposalServicePort {
       targetSnapshotId: entry.snapshotId,
       privacyScope: 'public_only',
       initialStage: 'tags',
-      initialStep: '等待 OpenAI 标签提案',
+      initialStep: '等待 AI 标签提案',
     });
     if (created === 'conflict') {
       throw new AiTagProposalServiceError('ai_run_conflict');
@@ -147,7 +147,7 @@ export class AiTagProposalService implements AiTagProposalServicePort {
       expectedVersion: 1,
       status: 'running',
       currentStage: 'tags',
-      currentStep: 'OpenAI 正在生成关键词、类型和领域建议',
+      currentStep: 'AI 正在生成关键词、类型和领域建议',
       completedUnits: 0,
       totalUnits: 1,
     });
@@ -392,7 +392,11 @@ function isAcceptedTagState(
 function originVersion(
   payload: Readonly<ProcessingTagProposalPayload>,
 ): string {
-  return `openai:${payload.providerModel}:${payload.promptVersion}`;
+  const origin =
+    payload.promptVersion === 'struinfo.agent-tool.v1'
+      ? 'external-agent'
+      : 'openai';
+  return origin + ':' + payload.providerModel + ':' + payload.promptVersion;
 }
 
 function providerErrorCode(error: unknown): AiTagProposalServiceErrorCode {

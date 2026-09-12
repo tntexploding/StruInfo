@@ -34,7 +34,7 @@
 | `PUT`  | `/api/v1/source-subscriptions`                                                        | 以期望修订整体替换订阅配置；运行状态与游标由服务端维护                                |
 | `POST` | `/api/v1/source-subscriptions/:subscriptionId/run`                                    | 使用 `requestKey` 检查订阅；变化时导入，并可按默认关闭开关确定性物化/分流             |
 | `POST` | `/api/v1/imports/markdown`                                                            | 原子导入手动/Git Markdown 或本地 UTF-8 Markdown/文本文件、来源、Blob、结构和 Fragment |
-| `POST` | `/api/v1/entries/materialize`                                                         | 从一个用户选择的空 Snapshot 按 section 规则原子生成 Entry                             |
+| `POST` | `/api/v1/entries/materialize`                                                         | 从一个用户选择的空 Snapshot 按 section 优先规则原子生成 Entry                         |
 | `POST` | `/api/v1/entries/materialize/manual`                                                  | 从标题和完整有序 Fragment 标量区间原子生成人工 Entry 结构                             |
 | `GET`  | `/api/v1/entries/split-rules/profile`                                                 | 读取外部工作区当前版本化本地拆分规则                                                  |
 | `PUT`  | `/api/v1/entries/split-rules/profile`                                                 | 以期望 revision 保存 section/相邻短段合并规则                                         |
@@ -103,13 +103,17 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 三个 `/source-subscriptions` 操作管理闭合的 `github_markdown`、`rss_atom`、`json_api`、`web` 和 `plugin` union。GET 返回 revision、可编辑字段、服务端维护的 last-attempt/last-success/run/cursor，以及当前实际安装连接器 capability；PUT 接受 `{expectedRevision, subscriptions}`，每项必须完整给出稳定 UUID、标签、enabled、类型配置、profile、sourceAlias、isPrivate、默认关闭的 `routeAfterImport` 和 15–10080 分钟间隔，不能伪造运行字段。Web 配置只含一个公开 HTTPS `pageUrl` 和最多七个 root-relative 同源路径；plugin 配置只含 `plugin.*` connector ID 与 opaque `configurationRef`。POST 只接受 `{requestKey}`；即使 enabled 为 false 也可手动运行。
 
-每次运行先建立 import 阶段 ProcessingRun，再由所选 reader 返回 unchanged 或有界 changed documents。变化文档调用同一个 Evidence import；相同内容只推进 connector cursor，不重复生成 Snapshot。`routeAfterImport=false` 时在导入后结束；明确开启后，服务端继续复用确定性 section Entry 物化和现有可恢复自动路由，返回 automation run ID 与各 Snapshot 的 Entry 数。若 AutomationPolicy 另外显式启用 M1H 推进动作，确定性标签和可替换联系投影也必须完成后才能推进成功 cursor；失败保留旧 cursor以便幂等重试。`source_subscriptions` capability 本身不允许开放 URL 抓取、链接发现、仓库目录扫描、代码执行、AI 调用、图谱修改或提案接受；插件也没有数据库或游标写端口。
+每次运行先建立 import 阶段 ProcessingRun，再由所选 reader 返回 unchanged 或有界 changed documents。变化文档调用同一个 Evidence import；相同内容只推进 connector cursor，不重复生成 Snapshot。`routeAfterImport=false` 时在导入后结束；明确开启后，服务端继续复用确定性 Entry 物化和现有可恢复自动路由，返回 automation run ID 与各 Snapshot 的 Entry 数。若 AutomationPolicy 另外显式启用 M1H 推进动作，确定性标签和可替换联系投影也必须完成后才能推进成功 cursor；失败保留旧 cursor以便幂等重试。`source_subscriptions` capability 本身不允许开放 URL 抓取、链接发现、仓库目录扫描、代码执行、AI 调用、图谱修改或提案接受；插件也没有数据库或游标写端口。
 
 ### 3.2 拆分
 
 四个 `/evidence/snapshots/:snapshotId/working-copy` 操作只面向尚未拥有 Entry 的来源 Snapshot。GET 返回原始全文、当前全文、状态和 revision；PUT 接受 `{expectedRevision, includePrivate, text}`，只保存一份当前 UTF-8 草稿；restore 删除未确认草稿；commit 只确认已保存且版本匹配的草稿。确认后服务端用确定性身份和既有 CommonMark Evidence 导入创建新的不可变 `manual_text` Resource/Snapshot，继承来源 privacy/publication/capturedAt，并返回派生 Snapshot ID。原始 Blob/Snapshot/Fragment 不变，页面切换到派生 Snapshot 后继续使用以下既有拆分接口。草稿最大 1 MiB，不保存编辑历史；私密来源每次都要求 `includePrivate=true`。
 
-`POST /entries/materialize` 接受 `snapshotId`、可选的 `chunkMode: "split"` 和 `includePrivate`。服务端读取已经导入的 CommonMark 结构，把 section 节点确定性转换为 Entry，并只在 Snapshot 尚无 Entry 时原子提交。
+`POST /entries/materialize` 接受 `snapshotId`、可选的 `chunkMode: "split"` 和 `includePrivate`。服务端读取已经导入的第一结构，优先把已有 section Fragment 确定性转换为 Entry，并只在 Snapshot 尚无 Entry 时原子提交。
+零 section 时，仅在存在唯一、同结构且精确覆盖完整规范化正文的 document Fragment 时，生成一条 `chunkMode: "whole"`、规则为 `struinfo.entry-split.document-fallback.v1` 的 Entry。
+回退正文必须非空且最多 200,000 个 Unicode 标量，完整引用原 document Fragment，继承 Snapshot 隐私；不改写原始 Evidence，也不重新抓取。
+请求仍使用原来的 `split` 操作，输出的 `whole` 表示实际选取完整文档；已有 section 的身份、正文和顺序保持不变。
+此回退仅覆盖该确定性物化核心及调用它的订阅串联；批量计划、人工/可配置分组和 AI 拆分仍按各自已有 section 边界工作。
 
 `POST /entries/materialize/manual` 接受：
 
@@ -231,3 +235,36 @@ Bundle、Blob、偏好、导入资料和备份始终位于外部数据根，不�
 - 接口仅面向回环单用户产品，没有公开认证或 CSRF 完整边界；
 - 没有 multipart/服务器路径上传、专用批次写接口、Office/OCR、目录扫描/监视、通用抓取/订阅、自动接受、语义/向量搜索或在线检索接口；多文件能力只是 Web 会话内对既有逐文件接口的显式编排；OpenAI 目前只提供用户选中公开 Snapshot 的 split、公开 Entry 的 tags、用户选中公开 Entry 对的 association 提案，以及当前公开 Query 结果的会话内证据综合；
 - 当前正式知识只实现 Entry 中心关系图谱；不恢复 `/curation`、旧 `/knowledge` 写入/读取或旧 `/search` 路由，也不把历史 Knowledge 表当作当前产品入口。
+
+## On-demand Entry translation
+
+`GET /api/v1/entries/:entryId/translation?expectedRevision=1` reads the saved Chinese translation for that exact current public Entry version. It never invokes a Provider. `POST /api/v1/entries/:entryId/translation` accepts exactly `{"expectedRevision":1}` and explicitly generates or reuses that version's translation. Target language is fixed to `zh-CN`; there is no privacy opt-in or arbitrary Provider payload.
+
+Both return `{status:"ok",translation:...}`, with `null` for a missing cached GET. Translation includes Entry/source revision identity, title, body, language, Provider/model/prompt version and generation time. Unavailable/private/retired Entries return 404; stale versions return 409; oversized input 422; missing Provider 503; Provider failure 502. Errors expose only stable codes. Responses use the existing local no-store headers. Workspace capability `ai_entry_translation` appears only with the Provider configured. See [ADR 0070](adr/0070-on-demand-entry-translation.md).
+
+## Cached-translation Entry search
+
+The existing `POST /api/v1/entries/search` includes valid public `zh-CN` cached
+titles/bodies under the selected `title`/`body` lexical fields. No new request
+flag is required. `tags`, structural filters, evidence and returned `entry`
+values keep their original meaning. `matchReasons` additionally admits
+`translation_title` and `translation_body`; original reasons remain unchanged.
+
+Language variants share one logical matched field for ranking and cursor
+`matchReasonCount` (0–5). Query digests now use search semantics v3; the cursor
+envelope remains v2 and previous-semantic cursors are rejected. Saved queries
+store criteria and remain usable. Cached matches work with the Provider off
+and without rebuilding the original term index. Private-only, empty, tag-only
+and purely semantic requests do not read caches. Hybrid includes translated
+lexical matches; embedding and synthesis evidence inputs remain original.
+See [ADR 0071](adr/0071-cached-translation-entry-search.md).
+
+## 外部译文导入
+
+`PUT /api/v1/entries/:entryId/translation`接受且仅接受`{expectedRevision, sourceRevisionId, title, body}`，明确绑定当前公开Entry的版本号与UUID。文本沿用2000/48000标量上限；服务器指定zh-CN、provided-translation-v1和保存时间，model/promptVersion为空。无Provider调用。当前同文重放成功，不同译文返回409/translation_already_exists，过期/隐私/退役来源拒绝；GET和译文检索沿用同一缓存。
+
+## Workspace interface preferences (2026-09-11)
+
+`GET /api/v1/preferences/interface` returns `{status:"ok", preferences:{revision,theme,sidebars}}`. `PUT` accepts exactly that preferences object, using its revision as the expected current version. A successful write returns the next revision; 409 returns `status:"conflict"` and the current preferences without writing; invalid payloads return 422.
+
+Theme is `system | light | dark`. All five sidebars are required; each is an ordered, duplicate-free subset of its fixed action list: inbox (import, subscriptions, activity), documents (source, structure, tags, links), topics (details, relations, sources), query (language, export, tools), settings (appearance, workflow, ai, maintenance). No extra fields, action IDs, privacy settings or executable configuration are admitted. Storage and package compatibility follow ADR 0073.

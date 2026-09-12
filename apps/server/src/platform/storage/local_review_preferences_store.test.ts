@@ -156,6 +156,17 @@ describe('LocalReviewPreferencesStore', () => {
       },
       entryClassificationProfile: DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       entrySavedQueries: {version: 1, revision: 0, views: []},
+      uiPreferences: {
+        revision: 0,
+        theme: 'system',
+        sidebars: {
+          inbox: ['import', 'subscriptions', 'activity'],
+          documents: ['source', 'structure', 'tags', 'links'],
+          topics: ['details', 'relations', 'sources'],
+          query: ['language', 'export', 'tools'],
+          settings: ['appearance', 'workflow', 'ai', 'maintenance'],
+        },
+      },
     });
   });
 
@@ -769,3 +780,34 @@ function createStore(): Readonly<{
   mkdirSync(root);
   return {root, store: new LocalReviewPreferencesStore(root)};
 }
+
+it('preserves page layout through sibling updates and reopen, isolated by workspace', async () => {
+  const {store, root} = createStore();
+  const ui = {
+    revision: 1,
+    theme: 'dark' as const,
+    sidebars: {
+      inbox: ['subscriptions'],
+      documents: ['tags', 'source'],
+      topics: [],
+      query: ['export'],
+      settings: ['workflow'],
+    },
+  };
+  await Promise.all([
+    store.update(WORKSPACE_A, (current) => ({
+      next: patchReviewPreferences(current, {uiPreferences: ui}),
+      result: undefined,
+    })),
+    store.update(WORKSPACE_A, (current) => ({
+      next: patchReviewPreferences(current, {quickTags: ['Synthetic marker']}),
+      result: undefined,
+    })),
+  ]);
+  const reopened = new LocalReviewPreferencesStore(root);
+  expect((await reopened.load(WORKSPACE_A)).uiPreferences).toEqual(ui);
+  expect((await reopened.load(WORKSPACE_A)).quickTags).toEqual([
+    'Synthetic marker',
+  ]);
+  expect((await reopened.load(WORKSPACE_B)).uiPreferences?.revision).toBe(0);
+});

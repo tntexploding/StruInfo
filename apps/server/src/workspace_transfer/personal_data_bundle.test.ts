@@ -267,3 +267,46 @@ describe('personal data Bundle preference compatibility', () => {
     ).toThrow('The personal-data Bundle section is invalid.');
   });
 });
+
+it('round-trips page layout separately from privacy and defaults older packages', () => {
+  const ui = {
+    revision: 3,
+    theme: 'light' as const,
+    sidebars: {
+      inbox: ['subscriptions'],
+      documents: ['source', 'tags'],
+      topics: [],
+      query: ['export'],
+      settings: ['ai'],
+    },
+  };
+  const reviewPreferences = {
+    ...createReviewPreferences(WORKSPACE_ID, []),
+    uiPreferences: ui,
+  };
+  const section = {
+    schemaVersion: PERSONAL_DATA_BUNDLE_SCHEMA,
+    blobs: [],
+    reviewPreferences,
+  };
+  const roundTrip = PERSONAL_DATA_BUNDLE_CODEC.decode(
+    PERSONAL_DATA_BUNDLE_CODEC.encode(section) as JsonValue,
+  ) as Readonly<PersonalDataBundleSection>;
+  expect(roundTrip.reviewPreferences.uiPreferences).toEqual(ui);
+  const {uiPreferences: _removed, ...older} = reviewPreferences;
+  void _removed;
+  const legacy = PERSONAL_DATA_BUNDLE_CODEC.decode({
+    ...section,
+    reviewPreferences: older,
+  }) as Readonly<PersonalDataBundleSection>;
+  expect(legacy.reviewPreferences.uiPreferences?.revision).toBe(0);
+  expect(() =>
+    PERSONAL_DATA_BUNDLE_CODEC.decode({
+      ...section,
+      reviewPreferences: {
+        ...reviewPreferences,
+        uiPreferences: {...ui, includePrivate: true},
+      },
+    }),
+  ).toThrow();
+});

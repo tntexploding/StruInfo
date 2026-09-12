@@ -1,8 +1,8 @@
 # Third-Party Notices
 
 - Foundation task: `M0-S-FOUNDATION-MAINT-001`
-- Dependency increments: `M1A-MD-DEP-MAINT-001`, `M1E-5B-DOCUMENT-IMPORT`, `M1I-2-RSS-ATOM`
-- Tracked lock SHA-256: `B63038642FACCBC710F2F2F49E86CC554171898788984351658676583B5386CF`
+- Dependency increments: `M1A-MD-DEP-MAINT-001`, `M1E-5B-DOCUMENT-IMPORT`, `M1I-2-RSS-ATOM`, `UI-READING-20260908` (existing parser reuse)
+- Tracked lock SHA-256: `E21265FBDB7BA9B4A014EEA24DB36843577CF6439FB9A01BD96B1CC723714603`
 - M1I-2 pre-increment lock SHA-256: `10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A`
 - M1E-5B pre-increment lock SHA-256: `99F261C35311919380BF6AEF018E0B2A9D076DC7937A5EDE1E0D7F26F56192A0`
 - Foundation pre-M1A lock SHA-256: `A783E1C5B2DADD8B653D8E16446847530473D5569BB08830D7FC03D79400880B`
@@ -500,3 +500,27 @@ The bundled `@actions/tool-cache@4.0.0/scripts/externals/7zdec.exe` is a separat
   this foundation and are excluded from its distribution closure.
 - Node and PostgreSQL/pgvector container contents are not admitted by this
   foundation and require separate per-platform image SBOM/notice closure.
+
+## ADR 0075 MCP dependency increment
+
+Official MCP TypeScript SDK 1.30.0 implements the stdio protocol. Zod 4.4.3 is also a direct runtime dependency; its already retained MIT license applies. SDK runtime closure additions are listed below. Registry integrity is recorded in the pnpm lock and SPDX inventory; exact installed license text was reviewed on 2026-09-12.
+
+| Package | Role | SPDX license | Review | Legal material |
+| --- | --- | --- | --- | --- |
+| `@hono/node-server@2.1.1` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/@hono__node-server@2.1.1/LICENSE` |
+| `@modelcontextprotocol/sdk@1.30.0` | direct runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/@modelcontextprotocol__sdk@1.30.0/LICENSE` |
+| `ajv-formats@3.0.1` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ajv-formats@3.0.1/LICENSE` |
+| `ajv@8.20.0` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ajv@8.20.0/LICENSE` |
+| `eventsource-parser@3.1.1` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/eventsource-parser@3.1.1/LICENSE` |
+| `eventsource@3.0.7` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/eventsource@3.0.7/LICENSE` |
+| `express-rate-limit@8.7.0` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/express-rate-limit@8.7.0/license` |
+| `fast-uri@3.1.7` | transitive runtime | `BSD-3-Clause` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fast-uri@3.1.7/LICENSE` |
+| `hono@4.13.7` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/hono@4.13.7/LICENSE` |
+| `ip-address@10.7.0` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ip-address@10.7.0/LICENSE` |
+| `jose@6.2.12` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/jose@6.2.12/LICENSE.md` |
+| `json-schema-traverse@1.0.0` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/json-schema-traverse@1.0.0/LICENSE` |
+| `json-schema-typed@8.0.2` | transitive runtime | `BSD-2-Clause` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/json-schema-typed@8.0.2/LICENSE.md` |
+| `pkce-challenge@5.0.1` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/pkce-challenge@5.0.1/LICENSE` |
+| `require-from-string@2.0.2` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/require-from-string@2.0.2/license` |
+| `zod-to-json-schema@3.25.2` | transitive runtime | `ISC` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/zod-to-json-schema@3.25.2/LICENSE` |
+| `zod@4.1.12` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/zod@4.1.12/LICENSE` |

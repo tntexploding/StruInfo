@@ -26,7 +26,19 @@ export interface EmbeddingProviderConfig {
   readonly timeoutMs: 60_000;
 }
 
+export interface AgentInterfaceConfig {
+  readonly token: string;
+  readonly identity: string;
+  readonly read: boolean;
+  readonly annotate: boolean;
+  readonly processDocuments: boolean;
+  readonly automate: boolean;
+  readonly capture: boolean;
+  readonly structure: boolean;
+}
+
 export interface RuntimeConfig {
+  readonly agentInterface?: AgentInterfaceConfig;
   readonly role: ProcessRole;
   readonly database: Readonly<PostgresConnectionConfig>;
   readonly workspaceId: string;
@@ -111,7 +123,9 @@ export function parseRuntimeConfig(
     environment.STRUIINFO_OPENAI_EMBEDDING_MODEL,
   );
 
+  const agentInterface = parseAgentInterface(environment);
   return Object.freeze({
+    ...(agentInterface ? {agentInterface} : {}),
     role,
     database,
     workspaceId,
@@ -293,4 +307,41 @@ function defaultHealthPort(role: ProcessRole): number {
   return role === 'worker'
     ? DEFAULT_WORKER_HEALTH_PORT
     : DEFAULT_SCHEDULER_HEALTH_PORT;
+}
+
+function parseAgentInterface(
+  environment: Readonly<Record<string, string | undefined>>,
+): AgentInterfaceConfig | undefined {
+  const token = environment.STRUIINFO_AGENT_TOKEN;
+  if (!token) return undefined;
+  const identity = environment.STRUIINFO_AGENT_ID;
+  const grants = (environment.STRUIINFO_AGENT_GRANTS ?? 'read').split(',');
+  if (
+    token.length < 32 ||
+    token.length > 256 ||
+    typeof identity !== 'string' ||
+    !/^[A-Za-z0-9_.-]{1,128}$/u.test(identity) ||
+    grants.some(
+      (g) =>
+        ![
+          'read',
+          'annotate',
+          'process',
+          'automate',
+          'capture',
+          'structure',
+        ].includes(g),
+    )
+  )
+    throw new ConfigurationError('Invalid Agent interface configuration.');
+  return Object.freeze({
+    token,
+    identity,
+    read: grants.includes('read'),
+    annotate: grants.includes('annotate'),
+    processDocuments: grants.includes('process'),
+    automate: grants.includes('automate'),
+    capture: grants.includes('capture'),
+    structure: grants.includes('structure'),
+  });
 }

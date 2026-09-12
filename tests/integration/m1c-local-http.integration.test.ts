@@ -40,7 +40,19 @@ describe('M1C local HTTP transport', () => {
     const contextReads: unknown[] = [];
     const sourceReviewLists: unknown[] = [];
     const sourceReviewWrites: unknown[] = [];
+    const interfaceWrites: unknown[] = [];
     const api = stubApi({
+      loadWorkspaceUiPreferences() {
+        return Promise.resolve(
+          result(200, {status: 'ok', preferences: {revision: 0}}),
+        );
+      },
+      saveWorkspaceUiPreferences(body) {
+        interfaceWrites.push(body);
+        return Promise.resolve(
+          result(409, {status: 'conflict', preferences: {revision: 1}}),
+        );
+      },
       listInformationEntrySourceReviews(body) {
         sourceReviewLists.push(body);
         return Promise.resolve(
@@ -111,6 +123,17 @@ describe('M1C local HTTP transport', () => {
     }
     const base = `http://127.0.0.1:${String(address.port)}`;
 
+    const uiRead = await fetch(`${base}/api/v1/preferences/interface`);
+    expect(uiRead.status).toBe(200);
+    expectPrivateHttpSecurityHeaders(uiRead);
+    expect(uiRead.headers.get('cache-control')).toBe('no-store');
+    const uiWrite = await fetch(`${base}/api/v1/preferences/interface`, {
+      method: 'PUT',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({revision: 0}),
+    });
+    expect(uiWrite.status).toBe(409);
+    expect(interfaceWrites).toEqual([{revision: 0}]);
     const workspaceResponse = await fetch(`${base}/api/v1/workspace`);
     expect(workspaceResponse.status).toBe(200);
     expect(workspaceResponse.headers.get('cache-control')).toBe('no-store');
@@ -379,6 +402,26 @@ function stubApi(
   overrides: Partial<M1cApiServicePort> = {},
 ): M1cApiServicePort {
   return {
+    loadWorkspaceUiPreferences: () =>
+      Promise.resolve(result(200, {status: 'ok'})),
+    saveWorkspaceUiPreferences: () =>
+      Promise.resolve(result(200, {status: 'ok'})),
+    importEntryTranslation: () =>
+      Promise.resolve(
+        result(503, {
+          status: 'rejected',
+          issue: {code: 'translation_import_unavailable'},
+        }),
+      ),
+    readEntryTranslation: () =>
+      Promise.resolve(result(200, {status: 'ok', translation: null})),
+    generateEntryTranslation: () =>
+      Promise.resolve(
+        result(503, {
+          status: 'rejected',
+          issue: {code: 'ai_provider_not_configured'},
+        }),
+      ),
     workspace: () =>
       result(200, {status: 'ok', workspaceId: 'synthetic-workspace'}),
     listEvidence: () => Promise.resolve(result(200, {status: 'ok'})),

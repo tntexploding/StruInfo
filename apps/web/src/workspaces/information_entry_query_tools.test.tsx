@@ -226,9 +226,9 @@ describe('M1F-2 query result tools', () => {
     );
 
     expect(markup).toContain('查询条目');
-    expect(markup).toContain('输入关键词并调整右侧条件');
+    expect(markup).toContain('输入关键词，按需展开筛选');
     expect(markup).toContain('从结果列表选择一个条目');
-    expect(markup).toContain('在中间查看正文与来源');
+    expect(markup).toContain('阅读正文并查看来源');
     expect(markup).toContain('role="status"');
     expect(markup).toContain('正在搜索…');
     expect(markup).toContain('搜索与显示设置');

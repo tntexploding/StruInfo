@@ -21,18 +21,34 @@ Before frontend implementation or frontend design review, also read:
 
 ## Current Phase
 
-### Maintenance and Owner Use (2026-09-05)
+### Completed AI and Agent Workflow, Model Off (2026-09-12)
 
-The owner has completed the five accepted roadmap increments and directed the
-project to pause feature development after the finite maintenance closeout.
-Use `docs/maintenance-handoff.md` as the current handoff. Do not start roadmap
-candidates, frozen M2-P4R, refactors or new integrations autonomously. Continue
-only requested usage support, reproducible product fixes, security and necessary
-compatibility maintenance. The owner has authorized this closeout to inspect,
-back up, upgrade and restore-drill the existing private Docker instance; this
-does not authorize placing any of its content, secrets or configuration in Git,
-fixtures or application artifacts. Future material operations remain scoped to
-the owner-selected external instance and purpose.
+The owner accepted completion of the dual-channel workflow. ADR 0077 adds operator controls, public Agent capture/source management and independent external split tasks. Capture and structure grants are separate; existing grants are not widened. ADR 0074 provides
+shared use cases; ADR 0075 now implements a selected public, empty-Snapshot
+AI task and an independent external Agent API with a stdio MCP adapter.
+See docs/agent-interface.md for configuration and exact commands.
+
+Explicit tasks or the saved ADR 0076 policy authorize bounded automatic acceptance,
+under its fixed workspace, actor, model, Entry limit, relation limit and call
+budget. Existing standalone proposals keep their explicit acceptance behavior.
+Agent grants are server-configured and separate from owner/manual writers.
+External split, tags and relations use typed AI proposals with external-agent provenance;
+they do not call the internal model. Private transfer remains forbidden.
+Task state and authorization are durable and exported in Processing Bundle v12;
+credentials stay external. Standalone task resume remains explicit. The saved
+unattended policy may resume its queue after restart; restored policy is paused.
+
+ADR 0076 connects new public subscription/manual-import Snapshots through a
+default-off policy and a durable queue. See docs/ingestion-automation.md.
+Processing Bundle v12 restores unattended policy paused. Other candidates and frozen M2-P4R remain paused. Continue to
+share application use cases, preserve evidence and manual revisions, and retain
+historical migrations and package compatibility. Development validation uses
+only synthetic data; no live Provider configuration or deployment is implied.
+
+Use `docs/maintenance-handoff.md` for the running private Docker instance.
+Existing instance authorization never permits putting its content, secrets or
+configuration in Git, fixtures or artifacts; material operations remain scoped
+to the owner-selected external instance and purpose.
 
 ### Data-Free Development Baseline
 

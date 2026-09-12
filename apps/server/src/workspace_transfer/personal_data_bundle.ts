@@ -1,4 +1,8 @@
 import {
+  DEFAULT_WORKSPACE_UI_PREFERENCES,
+  decodeWorkspaceUiPreferences,
+} from '../storage/workspace_ui_preferences.js';
+import {
   DEFAULT_ENTRY_SAVED_QUERIES,
   decodeEntrySavedQueries,
 } from '../modules/entries/information_entry_saved_queries.js';
@@ -173,6 +177,11 @@ function decodeIdentity(
 
 function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
   if (!isRecord(value)) fail();
+  const uiPreferences =
+    value.uiPreferences === undefined
+      ? DEFAULT_WORKSPACE_UI_PREFERENCES
+      : decodeWorkspaceUiPreferences(value.uiPreferences);
+  if (uiPreferences === undefined) fail();
   const savedQueries =
     value.entrySavedQueries === undefined
       ? DEFAULT_ENTRY_SAVED_QUERIES
@@ -249,6 +258,7 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     entrySplitRuleProfile,
     entryClassificationProfile,
     savedQueries,
+    uiPreferences,
   );
 }
 

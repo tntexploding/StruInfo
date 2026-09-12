@@ -102,7 +102,7 @@ export function ProcessingRunRail({
   return (
     <aside className="workflow-overview__ai" aria-labelledby="ai-flow-title">
       <header>
-        <h2 id="ai-flow-title">处理任务进度</h2>
+        <h2 id="ai-flow-title">最近处理任务</h2>
         <span
           className="status-chip"
           data-state={latest?.status === 'running' ? 'ready' : 'neutral'}
@@ -119,18 +119,23 @@ export function ProcessingRunRail({
         </span>
       </header>
 
+      <p className="workflow-boundary-note">
+        以下仅表示最近一次任务，不代表全部资料的处理进度。
+      </p>
       <ol className="ai-stage-list">
-        {STAGES.map((stage) => (
-          <li key={stage.key} data-state={stageState(stage.key, latest)}>
-            <span className="ai-stage-list__node" aria-hidden="true" />
-            <div>
-              <strong>
-                {stage.index} / {stage.label}
-              </strong>
-              <small>{stageDescription(stage.key, latest)}</small>
-            </div>
-          </li>
-        ))}
+        {STAGES.filter((stage) => stage.key === latest?.currentStage).map(
+          (stage) => (
+            <li key={stage.key} data-state={stageState(stage.key, latest)}>
+              <span className="ai-stage-list__node" aria-hidden="true" />
+              <div>
+                <strong>
+                  {stage.index} / {stage.label}
+                </strong>
+                <small>{stageDescription(stage.key, latest)}</small>
+              </div>
+            </li>
+          ),
+        )}
       </ol>
 
       <div className="ai-operation-status" aria-live="polite">
@@ -167,7 +172,7 @@ function stageState(
   stage: ProcessingStage,
   run: Readonly<ProcessingRunView> | undefined,
 ): 'waiting' | 'active' | 'complete' | 'failed' {
-  if (run === undefined) return 'waiting';
+  if (run === undefined || run.status === 'cancelled') return 'waiting';
   const order = STAGES.map((candidate) => candidate.key);
   const current = order.indexOf(run.currentStage);
   const candidate = order.indexOf(stage);
@@ -181,6 +186,7 @@ function stageDescription(
   stage: ProcessingStage,
   run: Readonly<ProcessingRunView> | undefined,
 ): string {
+  if (run?.status === 'cancelled') return '已取消';
   const state = stageState(stage, run);
   if (state === 'complete') return '已完成';
   if (state === 'failed') return '失败';
@@ -190,6 +196,7 @@ function stageDescription(
 
 function progressLabel(run: Readonly<ProcessingRunView> | undefined): string {
   if (run === undefined) return '没有运行记录';
+  if (run.totalUnits === 0) return '没有待处理项';
   if (run.totalUnits === undefined) {
     return `已完成 ${run.completedUnits.toString()} 项`;
   }

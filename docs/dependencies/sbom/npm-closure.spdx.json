@@ -12,7 +12,8 @@
       "Tool: StruInfo M1A-MD-DEP-MAINT-001 audit-mdast-closure.mjs",
       "Tool: StruInfo M1A-MD-DEP-MAINT-001 materialize-dependency-increment.mjs",
       "Tool: StruInfo M1E-5B exact document-import dependency materialization",
-      "Tool: StruInfo M1I-2 RSS/Atom exact dependency materialization"
+      "Tool: StruInfo M1I-2 RSS/Atom exact dependency materialization",
+      "Tool: ADR 0075 MCP dependency and installed-license review"
     ],
     "licenseListVersion": "3.27"
   },
@@ -30,7 +31,7 @@
       "licenseDeclared": "MIT",
       "copyrightText": "NOASSERTION",
       "primaryPackagePurpose": "APPLICATION",
-      "comment": "Dependency inventory for the v0.2.0 maintenance release. Container operating-system packages are reported separately by the runtime image scan."
+      "comment": "Dependency inventory for the v0.2.0 maintenance release. UI-READING-20260908 reuses the already included mdast-util-from-markdown 2.0.3 runtime closure in apps/web in addition to apps/server; no package identities or integrity values change. Container operating-system packages are reported separately by the runtime image scan."
     },
     {
       "SPDXID": "SPDXRef-Package-2c8152c2f849b2d0",
@@ -11252,6 +11253,431 @@
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "LIBRARY",
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact lock integrity admitted by M1I-2; exact package legal text retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-4066fb30cdc5308f",
+      "name": "@hono/node-server",
+      "versionInfo": "2.1.1",
+      "downloadLocation": "https://registry.npmjs.org/@hono/node-server/-/node-server-2.1.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2022 - present, Yusuke Wada and Hono contributors | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "10BB9E8648F954205D804C3DCECFA2BE42B0CB3CD409242E13DE989A23EF9F51020686427336C55C92DE106313623A613FA832761E291CCA8460F54C61456042"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40hono%2Fnode-server@2.1.1"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "name": "@modelcontextprotocol/sdk",
+      "versionInfo": "1.30.0",
+      "downloadLocation": "https://registry.npmjs.org/@modelcontextprotocol/sdk/-/sdk-1.30.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2024 Anthropic, PBC | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "C4A77C388CE5A8DCDCA9C36E98601AEA0F8F5B69230F9BEBA5C28E9DF95D0143CFDE3EE59EA30FC254D7426F2017E5301FBDB3D25A9A45B8EBF61A86CF47884C"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40modelcontextprotocol%2Fsdk@1.30.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-3081140538322aaf",
+      "name": "ajv-formats",
+      "versionInfo": "3.0.1",
+      "downloadLocation": "https://registry.npmjs.org/ajv-formats/-/ajv-formats-3.0.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2020 Evgeny Poberezkin | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "F2252A979D04511FAE51C7514371C3A9AE84572A3776870BF20E5627714D7169AEEB621B90652E7BFA44C8B056F1518A2AE7133E0A9E92CE1F214D43038CA8C1"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/ajv-formats@3.0.1"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-9c728cf87aba8556",
+      "name": "ajv",
+      "versionInfo": "8.20.0",
+      "downloadLocation": "https://registry.npmjs.org/ajv/-/ajv-8.20.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2015-2021 Evgeny Poberezkin | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "4E16E58BE3A53A3FA230F60505505F2773A60809DA4B2367E0CD6FCFD4FA1A46B926DF5B6BF1C8479EA3A32EB9B58EA4C7F142179557341F35F58EFF194AC118"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/ajv@8.20.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-20af37513d93868b",
+      "name": "eventsource-parser",
+      "versionInfo": "3.1.1",
+      "downloadLocation": "https://registry.npmjs.org/eventsource-parser/-/eventsource-parser-3.1.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2026 Espen Hovlandsdal <espen@hovlandsdal.com> | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "10A375BCA00C719F0C95832968DBB137A47DC9A9331FAB9A8C7707553A96273BEEE695B0F43CA16CFDF91C7F0C54143E7598C07C3C64F80F0D891F4A59A5E2C9"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/eventsource-parser@3.1.1"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-09407100555afb65",
+      "name": "eventsource",
+      "versionInfo": "3.0.7",
+      "downloadLocation": "https://registry.npmjs.org/eventsource/-/eventsource-3.0.7.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) EventSource GitHub organisation | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "0914F5593CAE4280FBEF5196E7A5C464543F66849F5A27756A52860D832692DDB297C517AD5478A6CA6A58D11CA8ABD523383A3C096D5A3C5C4923EB6E803888"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/eventsource@3.0.7"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-bb2762edfa5081af",
+      "name": "express-rate-limit",
+      "versionInfo": "8.7.0",
+      "downloadLocation": "https://registry.npmjs.org/express-rate-limit/-/express-rate-limit-8.7.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright 2023 Nathan Friedly, Vedant K | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "84EC15ED63B15DF8D1A403350D22566435F1DC68699700FC21FC2EC2FA200FC8B5427920A2CC3F1F8E6CE199C50141C30213E3958F612C1BC984A986332636EA"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/express-rate-limit@8.7.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-f748c22747a9db4b",
+      "name": "fast-uri",
+      "versionInfo": "3.1.7",
+      "downloadLocation": "https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.7.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "copyrightText": "Copyright (c) 2011-2021, Gary Court until https://github.com/garycourt/uri-js/commit/a1acf730b4bba3f1097c9f52e7d9d3aba8cdcaae | Copyright (c) 2021-present The Fastify team <https://github.com/fastify/fastify#team> |     * Redistributions of source code must retain the above copyright",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "74EBD95738DD65DCFBA6177DBFA8C26F0C6B056DDF2BA9FC45CD02B5D98CE1BBA6CCC9F1CB005886EA61E89F35F51470FE4BBEACB6DE9707CCBA792DBB35551E"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/fast-uri@3.1.7"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-0e4de692bbcc1d83",
+      "name": "hono",
+      "versionInfo": "4.13.7",
+      "downloadLocation": "https://registry.npmjs.org/hono/-/hono-4.13.7.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2021 - present, Yusuke Wada and Hono contributors | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "73CFE017D69CF18EFCFDA804C55A1CC8B7AF811F89969341E38E0FCB41525FCA49A0F75851F53345C5ED604606C2DEA5D7DA8895564F37931FB30F6315286641"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/hono@4.13.7"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-35c11e6aabfe847f",
+      "name": "ip-address",
+      "versionInfo": "10.7.0",
+      "downloadLocation": "https://registry.npmjs.org/ip-address/-/ip-address-10.7.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (C) 2011 by Beau Gunderson | The above copyright notice and this permission notice shall be included in | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "04616CC897799A95E9DEB2BA8C87400CB360A4950AD639E3CEF605F252BE5720DA6FD2409AA37460E28374FD7B1E580A6F6F9E84F80373C12D9D12DB18200C84"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/ip-address@10.7.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-012a933eb0430cdf",
+      "name": "jose",
+      "versionInfo": "6.2.12",
+      "downloadLocation": "https://registry.npmjs.org/jose/-/jose-6.2.12.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2018 Filip Skokan | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "F4D88598911EC74B32D83939F23D94181487814B36CA917D7994AEE0BEAF8CE5F70E9F7A4B0D45DEE2FE1FE0F5B31D368D965DCD44F41E0BC2CB9F42BAF5DC5B"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/jose@6.2.12"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-e830fd7d93f6ebaa",
+      "name": "json-schema-traverse",
+      "versionInfo": "1.0.0",
+      "downloadLocation": "https://registry.npmjs.org/json-schema-traverse/-/json-schema-traverse-1.0.0.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2017 Evgeny Poberezkin | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "34CF3F3FD9F75E35E12199F594B86415A0024CE5114178D6855E0103F4673AFF31BE0AADAA9017F483B89914314B1D51968E2DAB37AA6F4B0E96BB9A3B2DDDBA"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/json-schema-traverse@1.0.0"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-eea3575afa9a179d",
+      "name": "json-schema-typed",
+      "versionInfo": "8.0.2",
+      "downloadLocation": "https://registry.npmjs.org/json-schema-typed/-/json-schema-typed-8.0.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "BSD-2-Clause",
+      "licenseDeclared": "BSD-2-Clause",
+      "copyrightText": "Original source code is copyright (c) 2019-2025 Remy Rylan\r | All JSON Schema documentation and descriptions are copyright (c):\r | 1. Redistributions of source code must retain the above copyright notice, this\r",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "7D08685DD72F737576F31EC2EC132CE0FE7E90D96051445EDA39944F54FFFE8051303AEACB540F7A52629B0646A3B1E0F553D5DC4415E419EAE216C5CB6BDEB4"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/json-schema-typed@8.0.2"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-560377ce6df233b2",
+      "name": "pkce-challenge",
+      "versionInfo": "5.0.1",
+      "downloadLocation": "https://registry.npmjs.org/pkce-challenge/-/pkce-challenge-5.0.1.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2019  | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "C10D1BFD6E05AF4D6AB691E5A92AACA5C8F712106F8A6B1D8742A51E11FC1D166732C11AD1E6B67D350B397392F5C710AF7A26F86706464E1EFA2B2B65657CA9"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/pkce-challenge@5.0.1"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-bc20339cbc91aaa3",
+      "name": "require-from-string",
+      "versionInfo": "2.0.2",
+      "downloadLocation": "https://registry.npmjs.org/require-from-string/-/require-from-string-2.0.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) Vsevolod Strukchinsky <floatdrop@gmail.com> (github.com/floatdrop) | The above copyright notice and this permission notice shall be included in | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "5DFD2759EE91B1ECE214CBBE029F5B8A251B9A996AE92F7FA7EEF0ED85CFFC904786B5030D48706BEBC0372B9BBAA7D9593BDE53FFC36151AC0C6ED128BFEF13"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/require-from-string@2.0.2"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-4009fd307a1c4ee1",
+      "name": "zod-to-json-schema",
+      "versionInfo": "3.25.2",
+      "downloadLocation": "https://registry.npmjs.org/zod-to-json-schema/-/zod-to-json-schema-3.25.2.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "ISC",
+      "licenseDeclared": "ISC",
+      "copyrightText": "Copyright (c) 2020, Stefan Terdell | copyright notice and this permission notice appear in all copies.",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "3BF3E07E7A53D712920DE4184827D12391B2DE13DFF7598A543B982D41D924C883169B6F3F8D4C4A75A87E6F1D9C29B4DB9E9935F64833B0D2CEE48C0059E31C"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/zod-to-json-schema@3.25.2"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+    },
+    {
+      "SPDXID": "SPDXRef-Package-9b517e153c02a74f",
+      "name": "zod",
+      "versionInfo": "4.1.12",
+      "downloadLocation": "https://registry.npmjs.org/zod/-/zod-4.1.12.tgz",
+      "filesAnalyzed": false,
+      "licenseConcluded": "MIT",
+      "licenseDeclared": "MIT",
+      "copyrightText": "Copyright (c) 2025 Colin McDonnell | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "2489DA1CE6A61BCA6DE7E132F241A675C01C83738BF6B78AF25B5CCE01D3030361332B3FE938571E2B721F1555DA9DDF930FDCF8C02F0471556071590E68CC09"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/zod@4.1.12"
+        }
+      ],
+      "primaryPackagePurpose": "LIBRARY",
+      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
     }
   ],
   "relationships": [
@@ -11424,6 +11850,156 @@
       "spdxElementId": "SPDXRef-Package-18f94a69245b729b",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-6a37646cc624feb0"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4066fb30cdc5308f",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-0e4de692bbcc1d83"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-4066fb30cdc5308f"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-9c728cf87aba8556"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-3081140538322aaf"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-65e9de41d2cef0ed"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-c7435d8f709189a6"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-50cb51119b3e7a04"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-09407100555afb65"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-20af37513d93868b"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-853506c29d44b710"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-bb2762edfa5081af"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-0e4de692bbcc1d83"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-012a933eb0430cdf"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-eea3575afa9a179d"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-560377ce6df233b2"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-6c791d6d9ec7a011"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-9b517e153c02a74f"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-4009fd307a1c4ee1"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-3081140538322aaf",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-9c728cf87aba8556"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-9c728cf87aba8556",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-60db03f2d9496a0b"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-9c728cf87aba8556",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-f748c22747a9db4b"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-9c728cf87aba8556",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-e830fd7d93f6ebaa"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-9c728cf87aba8556",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-bc20339cbc91aaa3"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-09407100555afb65",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-20af37513d93868b"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-bb2762edfa5081af",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-6390bf853aed627e"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-bb2762edfa5081af",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-35c11e6aabfe847f"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-bb2762edfa5081af",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-853506c29d44b710"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-4009fd307a1c4ee1",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-9b517e153c02a74f"
+    },
+    {
+      "spdxElementId": "SPDXRef-RootPackage",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-e24cd3f58c4b73ad"
+    },
+    {
+      "spdxElementId": "SPDXRef-RootPackage",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-0479f5dfed7fff3d"
     }
   ]
 }

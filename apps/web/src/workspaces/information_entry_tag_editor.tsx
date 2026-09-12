@@ -1,4 +1,5 @@
-import {useState} from 'react';
+import {readingTitle, sourceDisplayName} from '../components/reading_text.js';
+import {useEffect, useId, useMemo, useState} from 'react';
 import type {SyntheticEvent} from 'react';
 
 import {
@@ -40,6 +41,7 @@ export function InformationDocumentPanel({
   readonly onOpenDocument: () => void;
   readonly onRevise: InformationEntryServices['onReviseDocumentTags'];
 }) {
+  const documentTitleId = useId();
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tagsText, setTagsText] = useState(
@@ -136,16 +138,13 @@ export function InformationDocumentPanel({
   }
 
   return (
-    <section
-      className="entry-document-panel"
-      aria-labelledby="entry-document-panel-title"
-    >
+    <section className="entry-document-panel" aria-labelledby={documentTitleId}>
       <header className="console-heading">
         <div>
-          <h2 id="entry-document-panel-title">{document.sourceKey}</h2>
+          <h2 id={documentTitleId}>{sourceDisplayName(document)}</h2>
           <p>
             {document.entryCount.toString()} 个条目 ·{' '}
-            {document.annotatedEntryCount.toString()} 个已标注
+            {document.annotatedEntryCount.toString()} 个已有标签
             {document.currentTags === undefined
               ? ' · 尚无文档标签'
               : ` · 标签状态 v${document.currentTags.revision.toString()}`}
@@ -235,6 +234,19 @@ export function InformationDocumentPanel({
   );
 }
 
+export interface EntryEditorDraft {
+  readonly body: string;
+  readonly usefulnessScore: 1 | 2 | 3 | 4 | 5;
+  readonly interestScore: 1 | 2 | 3 | 4 | 5;
+  readonly contentKeywords: string;
+  readonly typeKeyword: EntryTypeKeyword;
+  readonly typeCustomName: string;
+  readonly primaryDomain: '' | EntryDomainKeyword;
+  readonly secondaryDomain: '' | EntryDomainKeyword;
+  readonly thirdDomain: '' | EntryDomainKeyword;
+  readonly domainCustomNames: readonly string[];
+}
+
 export function InformationEntryEditor({
   entry,
   includePrivate,
@@ -248,6 +260,9 @@ export function InformationEntryEditor({
   onSavePreferences,
   onSaved,
   reviewPreferences,
+  initialDraft,
+  onDraftChange,
+  presentation = 'review',
 }: {
   readonly entry: Readonly<InformationEntry>;
   readonly includePrivate: boolean;
@@ -264,44 +279,97 @@ export function InformationEntryEditor({
     value: Readonly<ReviewPreferencesWrite>,
   ) => Promise<M1cHttpResponse<ReviewPreferencesResponse>>;
   readonly onSaved: (feedback: ActionFeedback) => Promise<void>;
+  readonly initialDraft?: Readonly<EntryEditorDraft> | undefined;
+  readonly onDraftChange?:
+    ((draft: Readonly<EntryEditorDraft> | undefined) => void) | undefined;
+  readonly presentation?: 'review' | 'workbench';
   readonly reviewPreferences: Loadable<Readonly<ReviewPreferencesResponse>>;
 }) {
-  const [body, setBody] = useState(entry.value.body);
+  const editorHeadingId = useId();
+  const [body, setBody] = useState(initialDraft?.body ?? entry.value.body);
   const [usefulnessScore, setUsefulnessScore] = useState<1 | 2 | 3 | 4 | 5>(
-    entry.value.usefulnessScore ?? 3,
+    initialDraft?.usefulnessScore ?? entry.value.usefulnessScore ?? 3,
   );
   const [interestScore, setInterestScore] = useState<1 | 2 | 3 | 4 | 5>(
-    entry.value.interestScore ?? 3,
+    initialDraft?.interestScore ?? entry.value.interestScore ?? 3,
   );
   const [contentKeywords, setContentKeywords] = useState(
-    entry.value.contentKeywords.map((value) => value.displayValue).join('，'),
+    initialDraft?.contentKeywords ??
+      entry.value.contentKeywords.map((value) => value.displayValue).join('，'),
   );
   const [typeKeyword, setTypeKeyword] = useState<EntryTypeKeyword>(
-    entry.value.typeKeyword ?? 'factual_material',
+    initialDraft?.typeKeyword ?? entry.value.typeKeyword ?? 'factual_material',
   );
   const [typeCustomName, setTypeCustomName] = useState(
-    entry.value.typeCustomName ?? '',
+    initialDraft?.typeCustomName ?? entry.value.typeCustomName ?? '',
   );
   const initialDomains = entry.value.domains.map((value) => value.keyword);
   const initialCustomDomains = entry.value.domains.map(
     (value) => value.customName ?? '',
   );
   const [primaryDomain, setPrimaryDomain] = useState<'' | EntryDomainKeyword>(
-    initialDomains[0] ?? '',
+    initialDraft?.primaryDomain ?? initialDomains[0] ?? '',
   );
   const [secondaryDomain, setSecondaryDomain] = useState<
     '' | EntryDomainKeyword
-  >(initialDomains[1] ?? '');
+  >(initialDraft?.secondaryDomain ?? initialDomains[1] ?? '');
   const [thirdDomain, setThirdDomain] = useState<'' | EntryDomainKeyword>(
-    initialDomains[2] ?? '',
+    initialDraft?.thirdDomain ?? initialDomains[2] ?? '',
   );
-  const [domainCustomNames, setDomainCustomNames] = useState([
-    initialCustomDomains[0] ?? '',
-    initialCustomDomains[1] ?? '',
-    initialCustomDomains[2] ?? '',
-  ]);
+  const [domainCustomNames, setDomainCustomNames] = useState<readonly string[]>(
+    initialDraft?.domainCustomNames ?? [
+      initialCustomDomains[0] ?? '',
+      initialCustomDomains[1] ?? '',
+      initialCustomDomains[2] ?? '',
+    ],
+  );
   const [saving, setSaving] = useState(false);
   const [localFeedback, setLocalFeedback] = useState<ActionFeedback>();
+  const draft = useMemo<Readonly<EntryEditorDraft>>(
+    () => ({
+      body,
+      usefulnessScore,
+      interestScore,
+      contentKeywords,
+      typeKeyword,
+      typeCustomName,
+      primaryDomain,
+      secondaryDomain,
+      thirdDomain,
+      domainCustomNames,
+    }),
+    [
+      body,
+      usefulnessScore,
+      interestScore,
+      contentKeywords,
+      typeKeyword,
+      typeCustomName,
+      primaryDomain,
+      secondaryDomain,
+      thirdDomain,
+      domainCustomNames,
+    ],
+  );
+  const dirty =
+    body !== entry.value.body ||
+    usefulnessScore !== (entry.value.usefulnessScore ?? 3) ||
+    interestScore !== (entry.value.interestScore ?? 3) ||
+    contentKeywords !==
+      entry.value.contentKeywords
+        .map((value) => value.displayValue)
+        .join('，') ||
+    typeKeyword !== (entry.value.typeKeyword ?? 'factual_material') ||
+    typeCustomName !== (entry.value.typeCustomName ?? '') ||
+    primaryDomain !== (initialDomains[0] ?? '') ||
+    secondaryDomain !== (initialDomains[1] ?? '') ||
+    thirdDomain !== (initialDomains[2] ?? '') ||
+    domainCustomNames.some(
+      (value, index) => value !== (initialCustomDomains[index] ?? ''),
+    );
+  useEffect(() => {
+    onDraftChange?.(dirty ? draft : undefined);
+  }, [dirty, draft, onDraftChange]);
   const activeVocabulary =
     overridePreferences?.vocabulary ??
     (reviewPreferences.status === 'ready'
@@ -410,14 +478,23 @@ export function InformationEntryEditor({
   }
 
   return (
-    <section className="entry-editor" aria-labelledby="entry-editor-title">
+    <section
+      className="entry-editor"
+      aria-labelledby={editorHeadingId}
+      data-presentation={presentation}
+    >
       <header className="console-heading">
         <div>
-          <h2 id="entry-editor-title">
-            {entry.value.titlePath || '未命名条目'}
+          <h2 id={editorHeadingId}>
+            {presentation === 'workbench'
+              ? '条目标注'
+              : readingTitle(entry.value.titlePath)}
           </h2>
         </div>
-        <div className="entry-editor__document-actions">
+        <div
+          className="entry-editor__document-actions"
+          hidden={presentation === 'workbench'}
+        >
           <button
             className="secondary-action"
             type="button"
@@ -444,17 +521,54 @@ export function InformationEntryEditor({
         className="entry-editor-form"
         onSubmit={(event) => void save(event)}
       >
-        <label className="field field--full">
-          <span>条目正文</span>
-          <textarea
-            rows={12}
-            value={body}
-            onChange={(event) => {
-              setBody(event.currentTarget.value);
-            }}
-          />
-          <small>编辑会更新当前条目，不会修改已导入的原文。</small>
-        </label>
+        <div className="form-commit field--full entry-editor-sticky-actions">
+          <div className="entry-review-navigation">
+            <button
+              className="secondary-action"
+              type="button"
+              disabled={saving || onPrevious === undefined}
+              hidden={presentation === 'workbench'}
+              onClick={onPrevious}
+            >
+              上一条
+            </button>
+            <button className="primary-action" type="submit" disabled={saving}>
+              {saving
+                ? '正在保存…'
+                : presentation === 'workbench'
+                  ? '保存标注'
+                  : '保存并继续'}
+            </button>
+            <button
+              className="secondary-action"
+              type="button"
+              disabled={saving || onNext === undefined}
+              hidden={presentation === 'workbench'}
+              onClick={onNext}
+            >
+              下一条
+            </button>
+          </div>
+        </div>
+        <details
+          className="entry-body-editor field--full"
+          open={presentation === 'review' ? true : undefined}
+        >
+          <summary>
+            {presentation === 'workbench' ? '修改条目正文' : '条目正文'}
+          </summary>
+          <label className="field field--full">
+            <span>条目正文</span>
+            <textarea
+              rows={12}
+              value={body}
+              onChange={(event) => {
+                setBody(event.currentTarget.value);
+              }}
+            />
+            <small>编辑会更新当前条目，不会修改已导入的原文。</small>
+          </label>
+        </details>
         <label className="field field--full">
           <span>内容关键词（逗号或换行分隔）</span>
           <textarea
@@ -549,32 +663,6 @@ export function InformationEntryEditor({
           overridePreferences={overridePreferences}
         />
         <ActionNotice feedback={localFeedback} />
-        <div className="form-commit field--full">
-          <p>
-            只保存当前最终状态；原始来源保持不变，类型、领域和内容关键词彼此独立。
-          </p>
-          <div className="entry-review-navigation">
-            <button
-              className="secondary-action"
-              type="button"
-              disabled={saving || onPrevious === undefined}
-              onClick={onPrevious}
-            >
-              上一条
-            </button>
-            <button className="primary-action" type="submit" disabled={saving}>
-              {saving ? '正在保存…' : '保存并继续'}
-            </button>
-            <button
-              className="secondary-action"
-              type="button"
-              disabled={saving || onNext === undefined}
-              onClick={onNext}
-            >
-              下一条
-            </button>
-          </div>
-        </div>
       </form>
     </section>
   );

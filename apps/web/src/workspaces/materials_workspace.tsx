@@ -1,3 +1,7 @@
+import {WorkspaceActionRail} from '../components/workspace_action_rail.js';
+import {WorkspaceToolPanel} from '../components/workspace_tool_panel.js';
+import type {ReactNode} from 'react';
+import {sourceDisplayName} from '../components/reading_text.js';
 import {useRef, useState} from 'react';
 import type {DragEvent, SyntheticEvent} from 'react';
 
@@ -48,6 +52,10 @@ type LocalFileState =
   | Readonly<{status: 'error'; fileName: string; message: string}>;
 
 export interface MaterialsWorkspaceProps {
+  readonly onOpenDocument?:
+    ((snapshotId: string, includePrivate: boolean) => void) | undefined;
+  readonly presentation?: 'inbox' | 'maintenance';
+  readonly activity?: ReactNode;
   readonly onImport: (body: unknown) => Promise<ActionFeedback>;
   readonly onImportBatchItem?: (body: unknown) => Promise<ActionFeedback>;
   readonly onImportBatchCompleted?: () => Promise<void> | void;
@@ -76,6 +84,9 @@ export interface MaterialsWorkspaceProps {
 }
 
 export function MaterialsWorkspace({
+  presentation,
+  onOpenDocument,
+  activity,
   onImport,
   onImportBatchItem,
   onImportBatchCompleted,
@@ -90,6 +101,25 @@ export function MaterialsWorkspace({
   onReplaceSourceSubscriptions,
   onRunSourceSubscription,
 }: MaterialsWorkspaceProps) {
+  const [inboxTool, setInboxTool] = useState<string>();
+  const [visitedTools, setVisitedTools] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
+  const toolReturn = useRef<HTMLElement | null>(null);
+  const inbox = presentation === 'inbox';
+  const maintenance = presentation === 'maintenance';
+  const openInboxTool = (id: string) => {
+    toolReturn.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    setInboxTool(id);
+    setVisitedTools((current) => new Set([...current, id]));
+  };
+  const closeInboxTool = () => {
+    setInboxTool(undefined);
+    globalThis.requestAnimationFrame(() => toolReturn.current?.focus());
+  };
   const importHeading = useRef<HTMLHeadingElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const localFileReadGeneration = useRef(0);
@@ -348,441 +378,477 @@ export function MaterialsWorkspace({
   }
 
   return (
-    <div className="workspace-view materials-workspace">
+    <div
+      className={`workspace-view materials-workspace${inbox ? ' inbox-workspace' : ''}${maintenance ? ' materials-maintenance' : ''}`}
+    >
       <header className="workflow-page-heading">
         <div>
-          <h1>导入</h1>
+          <h1>{inbox ? '收件箱' : maintenance ? '数据备份与恢复' : '导入'}</h1>
+          {inbox ? (
+            <p>在这里接收新材料。选中文档，进入资料库继续阅读与整理。</p>
+          ) : null}
         </div>
         <button className="secondary-action" type="button" onClick={onRefresh}>
           刷新材料列表
         </button>
       </header>
 
-      <aside className="workflow-mode-summary" aria-label="导入页操作指南">
-        <strong>导入文档</strong>
+      <details className="workflow-mode-summary" aria-label="导入页操作指南">
+        <summary>操作指南 · 导入文档</summary>
         <span>1. 选择文件并填写来源信息</span>
         <span>2. 确认隐私范围后开始导入</span>
         <span>3. 在右侧查看已导入文档</span>
-      </aside>
+      </details>
 
-      <section className="intake-console" aria-labelledby="import-title">
-        <header className="console-heading">
-          <div>
-            <h2 id="import-title" ref={importHeading} tabIndex={-1}>
-              导入来源
-            </h2>
-          </div>
-        </header>
-        <form
-          className="import-form"
-          onSubmit={(event) => {
-            void submitImport(event);
-          }}
+      <div
+        className="inbox-import-tool"
+        hidden={inbox && inboxTool !== 'import'}
+      >
+        <WorkspaceToolPanel
+          title="手动导入"
+          open={!inbox || inboxTool === 'import'}
+          onClose={closeInboxTool}
         >
-          <fieldset className="source-mode-fieldset field--full">
-            <legend>来源类型</legend>
-            <label>
-              <input
-                type="radio"
-                name="source-mode"
-                value="manual_text"
-                checked={sourceMode === 'manual_text'}
-                disabled={localBatchState.hasItems}
-                onChange={() => {
-                  setSourceMode('manual_text');
-                }}
-              />
-              手动文本
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="source-mode"
-                value="git_file"
-                checked={sourceMode === 'git_file'}
-                disabled={localBatchState.hasItems}
-                onChange={() => {
-                  setSourceMode('git_file');
-                }}
-              />
-              固定 Git 文件
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="source-mode"
-                value="uploaded_file"
-                checked={sourceMode === 'uploaded_file'}
-                disabled={localBatchState.hasItems}
-                onChange={() => {
-                  setSourceMode('uploaded_file');
-                }}
-              />
-              本地文件
-            </label>
-          </fieldset>
-          {sourceMode === 'uploaded_file' ? (
-            <section
-              className="local-file-import field--full"
-              aria-labelledby="local-file-import-title"
-            >
-              <div className="local-file-import__heading">
-                <div>
-                  <h3 id="local-file-import-title">选择本地文档</h3>
-                  <p>
-                    .md / .markdown / .txt / .html / .htm / .pdf · 最大 1 MiB
-                  </p>
-                </div>
-                {localCaptureMode === 'single' &&
-                localFile.status === 'ready' ? (
-                  <button
-                    className="text-action"
-                    type="button"
-                    onClick={clearLocalFile}
-                  >
-                    移除文件
-                  </button>
-                ) : null}
+          <section className="intake-console" aria-labelledby="import-title">
+            <header className="console-heading">
+              <div>
+                <h2 id="import-title" ref={importHeading} tabIndex={-1}>
+                  导入来源
+                </h2>
               </div>
-              <fieldset className="local-capture-mode">
-                <legend>选择方式</legend>
+            </header>
+            <form
+              className="import-form"
+              onSubmit={(event) => {
+                void submitImport(event);
+              }}
+            >
+              <fieldset className="source-mode-fieldset field--full">
+                <legend>来源类型</legend>
                 <label>
                   <input
                     type="radio"
-                    name="local-capture-mode"
-                    value="single"
-                    checked={localCaptureMode === 'single'}
+                    name="source-mode"
+                    value="manual_text"
+                    checked={sourceMode === 'manual_text'}
                     disabled={localBatchState.hasItems}
                     onChange={() => {
-                      setLocalCaptureMode('single');
+                      setSourceMode('manual_text');
                     }}
                   />
-                  单份文件
+                  手动文本
                 </label>
                 <label>
                   <input
                     type="radio"
-                    name="local-capture-mode"
-                    value="batch"
-                    checked={localCaptureMode === 'batch'}
+                    name="source-mode"
+                    value="git_file"
+                    checked={sourceMode === 'git_file'}
                     disabled={localBatchState.hasItems}
                     onChange={() => {
-                      clearLocalFile();
-                      setLocalCaptureMode('batch');
+                      setSourceMode('git_file');
                     }}
                   />
-                  多份批次
+                  固定 Git 文件
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="source-mode"
+                    value="uploaded_file"
+                    checked={sourceMode === 'uploaded_file'}
+                    disabled={localBatchState.hasItems}
+                    onChange={() => {
+                      setSourceMode('uploaded_file');
+                    }}
+                  />
+                  本地文件
                 </label>
               </fieldset>
-              {localBatchState.hasItems ? (
-                <p className="local-file-batch__message" role="status">
-                  请先清空当前批次，再切换来源类型或选择方式。
-                </p>
-              ) : null}
-              {localCaptureMode === 'single' ? (
-                <>
-                  <input
-                    ref={fileInput}
-                    className="local-file-input"
-                    id="local-document-file"
-                    type="file"
-                    accept=".md,.markdown,.txt,.html,.htm,.pdf,text/markdown,text/plain,text/html,application/pdf"
-                    onChange={(event) => {
-                      void readLocalFile(
-                        event.currentTarget.files?.item(0) ?? undefined,
-                      );
-                    }}
-                  />
-                  <div
-                    className="local-file-dropzone"
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                      event.dataTransfer.dropEffect = 'copy';
-                    }}
-                    onDrop={(event: DragEvent<HTMLDivElement>) => {
-                      event.preventDefault();
-                      void readLocalFile(
-                        event.dataTransfer.files.item(0) ?? undefined,
-                      );
-                    }}
-                  >
-                    <label
-                      className="secondary-action"
-                      htmlFor="local-document-file"
-                    >
-                      选择文件
-                    </label>
-                    <span>或将一份文件拖到这里</span>
-                  </div>
-                  <div className="local-file-import__status" aria-live="polite">
-                    {localFile.status === 'idle' ? (
-                      <p>浏览器只读取你明确选择的文件，不会读取目录路径。</p>
-                    ) : null}
-                    {localFile.status === 'loading' ? (
-                      <p role="status">正在读取 {localFile.fileName}…</p>
-                    ) : null}
-                    {localFile.status === 'error' ? (
-                      <p role="alert">
-                        <strong>{localFile.fileName}</strong> ·{' '}
-                        {localFile.message}
+              {sourceMode === 'uploaded_file' ? (
+                <section
+                  className="local-file-import field--full"
+                  aria-labelledby="local-file-import-title"
+                >
+                  <div className="local-file-import__heading">
+                    <div>
+                      <h3 id="local-file-import-title">选择本地文档</h3>
+                      <p>
+                        .md / .markdown / .txt / .html / .htm / .pdf · 最大 1
+                        MiB
                       </p>
-                    ) : null}
-                    {localFile.status === 'ready' ? (
-                      <dl className="local-file-facts">
-                        <div>
-                          <dt>文件</dt>
-                          <dd>{localFile.value.fileName}</dd>
-                        </div>
-                        <div>
-                          <dt>类型</dt>
-                          <dd>{localFile.value.mediaType}</dd>
-                        </div>
-                        <div>
-                          <dt>大小</dt>
-                          <dd>
-                            {formatLocalDocumentFileBytes(
-                              localFile.value.byteLength,
-                            )}
-                          </dd>
-                        </div>
-                      </dl>
+                    </div>
+                    {localCaptureMode === 'single' &&
+                    localFile.status === 'ready' ? (
+                      <button
+                        className="text-action"
+                        type="button"
+                        onClick={clearLocalFile}
+                      >
+                        移除文件
+                      </button>
                     ) : null}
                   </div>
-                </>
+                  <fieldset className="local-capture-mode">
+                    <legend>选择方式</legend>
+                    <label>
+                      <input
+                        type="radio"
+                        name="local-capture-mode"
+                        value="single"
+                        checked={localCaptureMode === 'single'}
+                        disabled={localBatchState.hasItems}
+                        onChange={() => {
+                          setLocalCaptureMode('single');
+                        }}
+                      />
+                      单份文件
+                    </label>
+                    <label>
+                      <input
+                        type="radio"
+                        name="local-capture-mode"
+                        value="batch"
+                        checked={localCaptureMode === 'batch'}
+                        disabled={localBatchState.hasItems}
+                        onChange={() => {
+                          clearLocalFile();
+                          setLocalCaptureMode('batch');
+                        }}
+                      />
+                      多份批次
+                    </label>
+                  </fieldset>
+                  {localBatchState.hasItems ? (
+                    <p className="local-file-batch__message" role="status">
+                      请先清空当前批次，再切换来源类型或选择方式。
+                    </p>
+                  ) : null}
+                  {localCaptureMode === 'single' ? (
+                    <>
+                      <input
+                        ref={fileInput}
+                        className="local-file-input"
+                        id="local-document-file"
+                        type="file"
+                        accept=".md,.markdown,.txt,.html,.htm,.pdf,text/markdown,text/plain,text/html,application/pdf"
+                        onChange={(event) => {
+                          void readLocalFile(
+                            event.currentTarget.files?.item(0) ?? undefined,
+                          );
+                        }}
+                      />
+                      <div
+                        className="local-file-dropzone"
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = 'copy';
+                        }}
+                        onDrop={(event: DragEvent<HTMLDivElement>) => {
+                          event.preventDefault();
+                          void readLocalFile(
+                            event.dataTransfer.files.item(0) ?? undefined,
+                          );
+                        }}
+                      >
+                        <label
+                          className="secondary-action"
+                          htmlFor="local-document-file"
+                        >
+                          选择文件
+                        </label>
+                        <span>或将一份文件拖到这里</span>
+                      </div>
+                      <div
+                        className="local-file-import__status"
+                        aria-live="polite"
+                      >
+                        {localFile.status === 'idle' ? (
+                          <p>
+                            浏览器只读取你明确选择的文件，不会读取目录路径。
+                          </p>
+                        ) : null}
+                        {localFile.status === 'loading' ? (
+                          <p role="status">正在读取 {localFile.fileName}…</p>
+                        ) : null}
+                        {localFile.status === 'error' ? (
+                          <p role="alert">
+                            <strong>{localFile.fileName}</strong> ·{' '}
+                            {localFile.message}
+                          </p>
+                        ) : null}
+                        {localFile.status === 'ready' ? (
+                          <dl className="local-file-facts">
+                            <div>
+                              <dt>文件</dt>
+                              <dd>{localFile.value.fileName}</dd>
+                            </div>
+                            <div>
+                              <dt>类型</dt>
+                              <dd>{localFile.value.mediaType}</dd>
+                            </div>
+                            <div>
+                              <dt>大小</dt>
+                              <dd>
+                                {formatLocalDocumentFileBytes(
+                                  localFile.value.byteLength,
+                                )}
+                              </dd>
+                            </div>
+                          </dl>
+                        ) : null}
+                      </div>
+                    </>
+                  ) : (
+                    <LocalFileBatchImport
+                      isPrivate={isPrivate}
+                      publicationDate={publicationDate}
+                      profile={profile}
+                      sourcePreface={sourcePreface}
+                      onImport={onImportBatchItem ?? onImport}
+                      onCompleted={onImportBatchCompleted ?? onRefresh}
+                      onStateChange={setLocalBatchState}
+                    />
+                  )}
+                </section>
+              ) : null}
+              <label className="privacy-choice field--full">
+                <input
+                  type="checkbox"
+                  checked={isPrivate}
+                  disabled={localBatchState.busy}
+                  onChange={(event) => {
+                    setIsPrivate(event.currentTarget.checked);
+                  }}
+                />
+                <span>
+                  <strong>作为隐私文档录入</strong>
+                  <small>
+                    原始文件和可处理正文都会完整保存在个人数据目录；拆出的条目和联系会自动保持隐私。
+                  </small>
+                </span>
+              </label>
+              {sourceMode === 'git_file' ? (
+                <fieldset className="git-source-fields field--full">
+                  <legend>Git 文件信息</legend>
+                  <label className="field field--wide">
+                    <span>仓库地址</span>
+                    <input
+                      required
+                      type="url"
+                      value={repositoryUri}
+                      onChange={(event) => {
+                        setRepositoryUri(event.currentTarget.value);
+                      }}
+                      placeholder="https://github.com/owner/repository"
+                    />
+                  </label>
+                  <label className="field field--wide">
+                    <span>仓库内路径</span>
+                    <input
+                      required
+                      value={repositoryPath}
+                      onChange={(event) => {
+                        setRepositoryPath(event.currentTarget.value);
+                      }}
+                      placeholder="docs/issue.md"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>分支或标签</span>
+                    <input
+                      required
+                      value={repositoryRef}
+                      onChange={(event) => {
+                        setRepositoryRef(event.currentTarget.value);
+                      }}
+                      placeholder="refs/heads/master"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>提交版本号</span>
+                    <input
+                      required
+                      minLength={40}
+                      maxLength={64}
+                      pattern="(?:[0-9a-f]{40}|[0-9a-f]{64})"
+                      value={commitDigest}
+                      onChange={(event) => {
+                        setCommitDigest(event.currentTarget.value);
+                      }}
+                      placeholder="40 或 64 位小写字母和数字"
+                    />
+                  </label>
+                </fieldset>
+              ) : null}
+              <details className="workflow-tool-drawer field--full import-optional-settings">
+                <summary>来源信息与导入选项</summary>
+                <div className="import-optional-settings__body">
+                  {sourceMode !== 'uploaded_file' ||
+                  localCaptureMode === 'single' ? (
+                    <label className="field field--wide">
+                      <span>来源别名（可选）</span>
+                      <input
+                        maxLength={500}
+                        value={sourceKey}
+                        onChange={(event) => {
+                          setSourceKey(event.currentTarget.value);
+                        }}
+                        placeholder={
+                          sourceMode === 'uploaded_file'
+                            ? '留空时按文件名和内容自动生成'
+                            : '留空时自动生成'
+                        }
+                      />
+                    </label>
+                  ) : (
+                    <div className="field field--wide batch-identity-note">
+                      <span>每个文件单独命名</span>
+                      <p>系统会按文件名和内容分别识别每份文件。</p>
+                    </div>
+                  )}
+                  {sourceMode !== 'uploaded_file' ||
+                  localCaptureMode === 'single' ? (
+                    <label className="field field--wide">
+                      <span>来源链接（可选）</span>
+                      <input
+                        type="url"
+                        value={canonicalUri}
+                        onChange={(event) => {
+                          setCanonicalUri(event.currentTarget.value);
+                        }}
+                        placeholder="https://…"
+                      />
+                    </label>
+                  ) : null}
+                  <label className="field">
+                    <span>文档格式与解析规则</span>
+                    <select
+                      value={profile}
+                      disabled={
+                        localBatchState.busy ||
+                        (sourceMode === 'uploaded_file' &&
+                          localFile.status === 'ready' &&
+                          (localFile.value.mediaType === 'text/plain' ||
+                            localFile.value.documentFormat !== 'markdown'))
+                      }
+                      onChange={(event) => {
+                        setProfile(
+                          event.currentTarget.value as
+                            'commonmark-v1' | 'ruanyf-weekly-v1',
+                        );
+                      }}
+                    >
+                      <option value="commonmark-v1">通用 Markdown</option>
+                      <option value="ruanyf-weekly-v1">科技爱好者周刊</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>发布日期（可选）</span>
+                    <input
+                      type="date"
+                      value={publicationDate}
+                      disabled={localBatchState.busy}
+                      onChange={(event) => {
+                        setPublicationDate(event.currentTarget.value);
+                      }}
+                    />
+                  </label>
+                  <label className="field field--full import-preface-field">
+                    <span>正文前置文字（可选）</span>
+                    <textarea
+                      rows={3}
+                      value={sourcePreface}
+                      disabled={localBatchState.busy}
+                      onChange={(event) => {
+                        setSourcePreface(event.currentTarget.value);
+                      }}
+                      placeholder="需要时补充标题、导语或上下文；导入后会放在正文开头。"
+                    />
+                    {sourceMode === 'uploaded_file' ? (
+                      <small>
+                        HTML/PDF 会保留原始文件；前置文字只加入可拆分的正文。
+                        Markdown/TXT 会把前置文字与文件内容合并为一份新文档。
+                      </small>
+                    ) : null}
+                  </label>
+                </div>
+              </details>
+              {sourceMode !== 'uploaded_file' ||
+              localCaptureMode === 'single' ? (
+                <label className="field field--full">
+                  <span>
+                    {sourceMode === 'uploaded_file'
+                      ? localFile.status === 'ready' &&
+                        localFile.value.documentFormat === 'pdf'
+                        ? 'PDF 导入说明'
+                        : '文件正文预览'
+                      : 'Markdown 正文'}
+                  </span>
+                  <textarea
+                    required={sourceMode !== 'uploaded_file'}
+                    readOnly={sourceMode === 'uploaded_file'}
+                    rows={12}
+                    value={
+                      sourceMode === 'uploaded_file' &&
+                      localFile.status === 'ready'
+                        ? localFile.value.sourceText
+                        : sourceMode === 'uploaded_file'
+                          ? ''
+                          : sourceText
+                    }
+                    onChange={(event) => {
+                      if (sourceMode !== 'uploaded_file') {
+                        setSourceText(event.currentTarget.value);
+                      }
+                    }}
+                    placeholder={
+                      sourceMode === 'uploaded_file'
+                        ? localFile.status === 'ready' &&
+                          localFile.value.documentFormat === 'pdf'
+                          ? 'PDF 文字层将在本地服务导入时按页提取；导入后请在“拆分”页检查和修改。扫描件暂不支持 OCR。'
+                          : '选择文件后在这里检查正文；编辑请使用前置文字或后续拆分流程。'
+                        : '粘贴或输入待保存的 Markdown；内容不会写入 Git 或前端包体。'
+                    }
+                  />
+                </label>
+              ) : null}
+              {sourceMode !== 'uploaded_file' ||
+              localCaptureMode === 'single' ? (
+                <div className="form-commit field--full">
+                  <p>
+                    导入会保存原始文件并生成可供拆分的正文；失败后可以重试。
+                  </p>
+                  <button
+                    className="primary-action"
+                    type="submit"
+                    disabled={
+                      submitting ||
+                      (sourceMode === 'uploaded_file'
+                        ? localFile.status !== 'ready'
+                        : sourceText === '') ||
+                      (sourceMode === 'git_file' &&
+                        (repositoryUri.trim() === '' ||
+                          repositoryPath.trim() === '' ||
+                          repositoryRef.trim() === '' ||
+                          !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(
+                            commitDigest,
+                          )))
+                    }
+                  >
+                    {submitting ? '正在导入…' : '导入文档'}
+                  </button>
+                </div>
               ) : (
-                <LocalFileBatchImport
-                  isPrivate={isPrivate}
-                  publicationDate={publicationDate}
-                  profile={profile}
-                  sourcePreface={sourcePreface}
-                  onImport={onImportBatchItem ?? onImport}
-                  onCompleted={onImportBatchCompleted ?? onRefresh}
-                  onStateChange={setLocalBatchState}
-                />
+                <p className="batch-import-boundary field--full">
+                  选择多个文件后，在文件列表中统一开始导入。每个文件会单独保存；拆分、标签和联系需要另行处理。
+                </p>
               )}
-            </section>
-          ) : null}
-          <label className="privacy-choice field--full">
-            <input
-              type="checkbox"
-              checked={isPrivate}
-              disabled={localBatchState.busy}
-              onChange={(event) => {
-                setIsPrivate(event.currentTarget.checked);
-              }}
-            />
-            <span>
-              <strong>作为隐私文档录入</strong>
-              <small>
-                原始文件和可处理正文都会完整保存在个人数据目录；拆出的条目和联系会自动保持隐私。
-              </small>
-            </span>
-          </label>
-          {sourceMode !== 'uploaded_file' || localCaptureMode === 'single' ? (
-            <label className="field field--wide">
-              <span>来源别名（可选）</span>
-              <input
-                maxLength={500}
-                value={sourceKey}
-                onChange={(event) => {
-                  setSourceKey(event.currentTarget.value);
-                }}
-                placeholder={
-                  sourceMode === 'uploaded_file'
-                    ? '留空时按文件名和内容自动生成'
-                    : '留空时自动生成'
-                }
-              />
-            </label>
-          ) : (
-            <div className="field field--wide batch-identity-note">
-              <span>每个文件单独命名</span>
-              <p>系统会按文件名和内容分别识别每份文件。</p>
-            </div>
-          )}
-          {sourceMode === 'git_file' ? (
-            <fieldset className="git-source-fields field--full">
-              <legend>Git 文件信息</legend>
-              <label className="field field--wide">
-                <span>仓库地址</span>
-                <input
-                  required
-                  type="url"
-                  value={repositoryUri}
-                  onChange={(event) => {
-                    setRepositoryUri(event.currentTarget.value);
-                  }}
-                  placeholder="https://github.com/owner/repository"
-                />
-              </label>
-              <label className="field field--wide">
-                <span>仓库内路径</span>
-                <input
-                  required
-                  value={repositoryPath}
-                  onChange={(event) => {
-                    setRepositoryPath(event.currentTarget.value);
-                  }}
-                  placeholder="docs/issue.md"
-                />
-              </label>
-              <label className="field">
-                <span>分支或标签</span>
-                <input
-                  required
-                  value={repositoryRef}
-                  onChange={(event) => {
-                    setRepositoryRef(event.currentTarget.value);
-                  }}
-                  placeholder="refs/heads/master"
-                />
-              </label>
-              <label className="field">
-                <span>提交版本号</span>
-                <input
-                  required
-                  minLength={40}
-                  maxLength={64}
-                  pattern="(?:[0-9a-f]{40}|[0-9a-f]{64})"
-                  value={commitDigest}
-                  onChange={(event) => {
-                    setCommitDigest(event.currentTarget.value);
-                  }}
-                  placeholder="40 或 64 位小写字母和数字"
-                />
-              </label>
-            </fieldset>
-          ) : null}
-          {sourceMode !== 'uploaded_file' || localCaptureMode === 'single' ? (
-            <label className="field field--wide">
-              <span>来源链接（可选）</span>
-              <input
-                type="url"
-                value={canonicalUri}
-                onChange={(event) => {
-                  setCanonicalUri(event.currentTarget.value);
-                }}
-                placeholder="https://…"
-              />
-            </label>
-          ) : null}
-          <label className="field">
-            <span>文档格式与解析规则</span>
-            <select
-              value={profile}
-              disabled={
-                localBatchState.busy ||
-                (sourceMode === 'uploaded_file' &&
-                  localFile.status === 'ready' &&
-                  (localFile.value.mediaType === 'text/plain' ||
-                    localFile.value.documentFormat !== 'markdown'))
-              }
-              onChange={(event) => {
-                setProfile(
-                  event.currentTarget.value as
-                    'commonmark-v1' | 'ruanyf-weekly-v1',
-                );
-              }}
-            >
-              <option value="commonmark-v1">通用 Markdown</option>
-              <option value="ruanyf-weekly-v1">科技爱好者周刊</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>发布日期（可选）</span>
-            <input
-              type="date"
-              value={publicationDate}
-              disabled={localBatchState.busy}
-              onChange={(event) => {
-                setPublicationDate(event.currentTarget.value);
-              }}
-            />
-          </label>
-          <label className="field field--full import-preface-field">
-            <span>正文前置文字（可选）</span>
-            <textarea
-              rows={3}
-              value={sourcePreface}
-              disabled={localBatchState.busy}
-              onChange={(event) => {
-                setSourcePreface(event.currentTarget.value);
-              }}
-              placeholder="需要时补充标题、导语或上下文；导入后会放在正文开头。"
-            />
-            {sourceMode === 'uploaded_file' ? (
-              <small>
-                HTML/PDF 会保留原始文件；前置文字只加入可拆分的正文。
-                Markdown/TXT 会把前置文字与文件内容合并为一份新文档。
-              </small>
-            ) : null}
-          </label>
-          {sourceMode !== 'uploaded_file' || localCaptureMode === 'single' ? (
-            <label className="field field--full">
-              <span>
-                {sourceMode === 'uploaded_file'
-                  ? localFile.status === 'ready' &&
-                    localFile.value.documentFormat === 'pdf'
-                    ? 'PDF 导入说明'
-                    : '文件正文预览'
-                  : 'Markdown 正文'}
-              </span>
-              <textarea
-                required={sourceMode !== 'uploaded_file'}
-                readOnly={sourceMode === 'uploaded_file'}
-                rows={12}
-                value={
-                  sourceMode === 'uploaded_file' && localFile.status === 'ready'
-                    ? localFile.value.sourceText
-                    : sourceMode === 'uploaded_file'
-                      ? ''
-                      : sourceText
-                }
-                onChange={(event) => {
-                  if (sourceMode !== 'uploaded_file') {
-                    setSourceText(event.currentTarget.value);
-                  }
-                }}
-                placeholder={
-                  sourceMode === 'uploaded_file'
-                    ? localFile.status === 'ready' &&
-                      localFile.value.documentFormat === 'pdf'
-                      ? 'PDF 文字层将在本地服务导入时按页提取；导入后请在“拆分”页检查和修改。扫描件暂不支持 OCR。'
-                      : '选择文件后在这里检查正文；编辑请使用前置文字或后续拆分流程。'
-                    : '粘贴或输入待保存的 Markdown；内容不会写入 Git 或前端包体。'
-                }
-              />
-            </label>
-          ) : null}
-          {sourceMode !== 'uploaded_file' || localCaptureMode === 'single' ? (
-            <div className="form-commit field--full">
-              <p>导入会保存原始文件并生成可供拆分的正文；失败后可以重试。</p>
-              <button
-                className="primary-action"
-                type="submit"
-                disabled={
-                  submitting ||
-                  (sourceMode === 'uploaded_file'
-                    ? localFile.status !== 'ready'
-                    : sourceText === '') ||
-                  (sourceMode === 'git_file' &&
-                    (repositoryUri.trim() === '' ||
-                      repositoryPath.trim() === '' ||
-                      repositoryRef.trim() === '' ||
-                      !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u.test(commitDigest)))
-                }
-              >
-                {submitting ? '正在导入…' : '导入文档'}
-              </button>
-            </div>
-          ) : (
-            <p className="batch-import-boundary field--full">
-              选择多个文件后，在文件列表中统一开始导入。每个文件会单独保存；拆分、标签和联系需要另行处理。
-            </p>
-          )}
-        </form>
-        <ActionNotice feedback={feedback} />
-      </section>
+            </form>
+            <ActionNotice feedback={feedback} />
+          </section>
+        </WorkspaceToolPanel>
+      </div>
 
       <section
         className="record-list-section"
@@ -790,7 +856,9 @@ export function MaterialsWorkspace({
       >
         <header className="subsection-heading">
           <div>
-            <h2 id="evidence-list-title">已导入文档</h2>
+            <h2 id="evidence-list-title">
+              {inbox ? '已接收文档' : '已导入文档'}
+            </h2>
           </div>
           {snapshots.status === 'ready' ? (
             <div className="record-list-controls">
@@ -812,29 +880,84 @@ export function MaterialsWorkspace({
           snapshots={snapshots}
           selectedSnapshotId={selectedSnapshotId}
           onOpenEvidence={onOpenEvidence}
+          onOpenDocument={onOpenDocument}
           onStartImport={() => {
+            if (inbox) openInboxTool('import');
             importHeading.current?.focus();
           }}
           showPrivateDocuments={showPrivateDocuments}
         />
       </section>
 
-      <SourceSubscriptionPanel
-        enabled={sourceSubscriptionsEnabled}
-        onList={onListSourceSubscriptions}
-        onReplace={onReplaceSourceSubscriptions}
-        onRun={onRunSourceSubscription}
-      />
+      {inbox ? (
+        <WorkspaceActionRail
+          page="inbox"
+          active={inboxTool}
+          actions={[
+            {
+              id: 'import',
+              label: '手动导入',
+              onClick: () => {
+                openInboxTool('import');
+              },
+            },
+            {
+              id: 'subscriptions',
+              label: '订阅信源',
+              onClick: () => {
+                openInboxTool('subscriptions');
+              },
+            },
+            {
+              id: 'activity',
+              label: '接收记录',
+              onClick: () => {
+                openInboxTool('activity');
+              },
+            },
+          ]}
+        >
+          <p>
+            订阅检查先保存来源原文。是否拆分、标注或建立联系，由你继续决定。
+          </p>
+        </WorkspaceActionRail>
+      ) : null}
+      <div
+        className="inbox-subscription-tool"
+        hidden={inbox && inboxTool !== 'subscriptions'}
+      >
+        <WorkspaceToolPanel
+          title="订阅信源"
+          open={!inbox || inboxTool === 'subscriptions'}
+          onClose={closeInboxTool}
+        >
+          {!inbox || visitedTools.has('subscriptions') ? (
+            <SourceSubscriptionPanel
+              enabled={sourceSubscriptionsEnabled}
+              onList={onListSourceSubscriptions}
+              onReplace={onReplaceSourceSubscriptions}
+              onRun={onRunSourceSubscription}
+            />
+          ) : null}
+        </WorkspaceToolPanel>
+      </div>
+      {inbox ? (
+        <div className="inbox-activity-tool" hidden={inboxTool !== 'activity'}>
+          <WorkspaceToolPanel
+            title="接收记录"
+            open={inboxTool === 'activity'}
+            onClose={closeInboxTool}
+          >
+            {visitedTools.has('activity') ? activity : null}
+          </WorkspaceToolPanel>
+        </div>
+      ) : null}
 
-      <section
-        className="workspace-transfer-section"
+      <details
+        className="workspace-transfer-section workflow-tool-drawer"
         aria-labelledby="workspace-transfer-title"
       >
-        <header className="subsection-heading">
-          <div>
-            <h2 id="workspace-transfer-title">全部个人数据导入导出</h2>
-          </div>
-        </header>
+        <summary id="workspace-transfer-title">全部个人数据导入导出</summary>
         <div className="workspace-transfer-grid">
           <article className="workspace-transfer-card">
             <h3>导出全部个人数据</h3>
@@ -893,18 +1016,21 @@ export function MaterialsWorkspace({
           </p>
         ) : null}
         <ActionNotice feedback={transferFeedback} />
-      </section>
+      </details>
     </div>
   );
 }
 
 function SnapshotList({
+  onOpenDocument,
   onOpenEvidence,
   onStartImport,
   selectedSnapshotId,
   snapshots,
   showPrivateDocuments,
 }: {
+  readonly onOpenDocument?:
+    ((snapshotId: string, includePrivate: boolean) => void) | undefined;
   readonly onOpenEvidence: (
     snapshotId: string,
     returnFocus?: HTMLElement,
@@ -915,6 +1041,21 @@ function SnapshotList({
   readonly snapshots: Loadable<readonly Readonly<EvidenceSnapshotSummary>[]>;
   readonly showPrivateDocuments: boolean;
 }) {
+  const [filter, setFilter] = useState('');
+  const [requestedPage, setRequestedPage] = useState(0);
+  const query = filter.trim().toLowerCase();
+  const filtered =
+    snapshots.status === 'ready'
+      ? snapshots.value.filter((snapshot) =>
+          [
+            sourceDisplayName(snapshot),
+            snapshot.sourceKey,
+            snapshot.canonicalUri ?? '',
+          ].some((value) => value.toLowerCase().includes(query)),
+        )
+      : [];
+  const pageCount = Math.max(1, Math.ceil(filtered.length / 20));
+  const pageIndex = Math.min(requestedPage, pageCount - 1);
   if (snapshots.status === 'loading') {
     return (
       <div className="loading-state" role="status" aria-busy="true">
@@ -947,54 +1088,138 @@ function SnapshotList({
     );
   }
   return (
-    <ol className="record-list">
-      {snapshots.value.map((snapshot, index) => (
-        <li
-          key={snapshot.snapshotId}
-          data-active={snapshot.snapshotId === selectedSnapshotId}
+    <>
+      <label className="field record-list-filter">
+        <span>筛选已导入文档</span>
+        <input
+          type="search"
+          value={filter}
+          placeholder="按来源名称或地址筛选"
+          onChange={(event) => {
+            setFilter(event.currentTarget.value);
+            setRequestedPage(0);
+          }}
+        />
+      </label>
+      <p className="record-list-range" role="status">
+        {filtered.length === 0
+          ? '没有匹配的文档'
+          : `显示 ${String(pageIndex * 20 + 1)}–${String(Math.min((pageIndex + 1) * 20, filtered.length))} / ${String(filtered.length)} 份`}
+      </p>
+      <ol
+        className="record-list"
+        key={`${filter}:${String(pageIndex)}`}
+        aria-label="本页文档"
+        tabIndex={0}
+      >
+        {filtered
+          .slice(pageIndex * 20, (pageIndex + 1) * 20)
+          .map((snapshot, index) => (
+            <li
+              key={snapshot.snapshotId}
+              data-active={snapshot.snapshotId === selectedSnapshotId}
+            >
+              <span className="record-list__index" aria-hidden="true">
+                {String(pageIndex * 20 + index + 1).padStart(3, '0')}
+              </span>
+              <div className="record-list__main">
+                <p className="record-list__title">
+                  {sourceDisplayName(snapshot)}
+                </p>
+                <p className="record-list__meta">
+                  {formatDate(snapshot.capturedAt)} ·{' '}
+                  {resourceKindLabel(snapshot.resourceKind)}
+                  {snapshot.isPrivate === true ? ' · 私密' : ''}
+                </p>
+              </div>
+              <dl className="record-list__facts">
+                <div>
+                  <dt>原文片段</dt>
+                  <dd>{snapshot.fragmentCount}</dd>
+                </div>
+                <div>
+                  <dt>发布日期</dt>
+                  <dd>{snapshot.publication?.sourceText ?? '未填写'}</dd>
+                </div>
+              </dl>
+              <div className="record-list-actions">
+                {onOpenDocument === undefined ? null : (
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    disabled={
+                      snapshot.isPrivate === true && !showPrivateDocuments
+                    }
+                    onClick={() => {
+                      onOpenDocument(
+                        snapshot.snapshotId,
+                        snapshot.isPrivate === true,
+                      );
+                    }}
+                  >
+                    在资料库整理
+                  </button>
+                )}
+                <button
+                  className="row-action"
+                  type="button"
+                  disabled={
+                    snapshot.isPrivate === true && !showPrivateDocuments
+                  }
+                  onClick={(event) => {
+                    onOpenEvidence(
+                      snapshot.snapshotId,
+                      event.currentTarget,
+                      snapshot.isPrivate === true,
+                    );
+                  }}
+                >
+                  {snapshot.isPrivate === true
+                    ? showPrivateDocuments
+                      ? '查看私密全文'
+                      : '先勾选查看隐私'
+                    : '查看原文'}
+                </button>
+              </div>
+            </li>
+          ))}
+      </ol>
+      <div className="record-list-pagination" aria-label="文档列表分页">
+        <button
+          className="secondary-action"
+          type="button"
+          disabled={pageIndex === 0}
+          onClick={() => {
+            setRequestedPage(pageIndex - 1);
+          }}
         >
-          <span className="record-list__index" aria-hidden="true">
-            {String(index + 1).padStart(3, '0')}
-          </span>
-          <div className="record-list__main">
-            <p className="record-list__title">{snapshot.sourceKey}</p>
-            <p className="record-list__meta">
-              {formatDate(snapshot.capturedAt)} ·{' '}
-              {resourceKindLabel(snapshot.resourceKind)}
-              {snapshot.isPrivate === true ? ' · 私密' : ''}
-            </p>
-          </div>
-          <dl className="record-list__facts">
-            <div>
-              <dt>原文片段</dt>
-              <dd>{snapshot.fragmentCount}</dd>
-            </div>
-            <div>
-              <dt>发布日期</dt>
-              <dd>{snapshot.publication?.sourceText ?? '未填写'}</dd>
-            </div>
-          </dl>
-          <button
-            className="row-action"
-            type="button"
-            disabled={snapshot.isPrivate === true && !showPrivateDocuments}
-            onClick={(event) => {
-              onOpenEvidence(
-                snapshot.snapshotId,
-                event.currentTarget,
-                snapshot.isPrivate === true,
-              );
-            }}
-          >
-            {snapshot.isPrivate === true
-              ? showPrivateDocuments
-                ? '查看私密全文'
-                : '先勾选查看隐私'
-              : '查看原文'}
-          </button>
-        </li>
-      ))}
-    </ol>
+          上一页
+        </button>
+        <select
+          aria-label="文档列表页码"
+          value={pageIndex}
+          onChange={(event) => {
+            setRequestedPage(Number(event.currentTarget.value));
+          }}
+        >
+          {Array.from({length: pageCount}, (_, index) => (
+            <option key={index} value={index}>
+              第 {String(index + 1)} / {String(pageCount)} 页
+            </option>
+          ))}
+        </select>
+        <button
+          className="secondary-action"
+          type="button"
+          disabled={pageIndex + 1 >= pageCount}
+          onClick={() => {
+            setRequestedPage(pageIndex + 1);
+          }}
+        >
+          下一页
+        </button>
+      </div>
+    </>
   );
 }
 

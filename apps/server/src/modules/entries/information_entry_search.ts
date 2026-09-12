@@ -1,5 +1,7 @@
 import {createHash} from 'node:crypto';
 
+import type {EntryTranslation} from './information_entry_translation.js';
+
 import type {
   CurrentInformationEntry,
   EntryTextSearchField,
@@ -49,6 +51,7 @@ export function searchCurrentInformationEntries(
       indexVersion: string;
     }>
   > = new Map(),
+  translations: ReadonlyMap<string, Readonly<EntryTranslation>> = new Map(),
 ): Readonly<InformationEntrySearchResult> {
   const querySha256 = informationEntryQuerySha256(request);
   if (
@@ -86,6 +89,7 @@ export function searchCurrentInformationEntries(
       query,
       textMode,
       textFields,
+      translations.get(entry.entryId),
     );
     const semanticMatch = semanticMatches.get(entry.entryId);
     if (
@@ -147,7 +151,7 @@ export function informationEntryQuerySha256(
   request: Readonly<InformationEntrySearchRequest>,
 ): string {
   const projection = {
-    schemaVersion: 'struinfo.information-entry-search.v2',
+    schemaVersion: 'struinfo.information-entry-search.v3',
     ...(request.retrievalMode === undefined ||
     request.retrievalMode === 'lexical'
       ? {}
@@ -272,6 +276,7 @@ function matchInformationEntryText(
   query: string,
   mode: EntryTextSearchMode,
   fields: readonly EntryTextSearchField[],
+  translation: Readonly<EntryTranslation> | undefined,
 ): Readonly<InformationEntryTextMatchEvaluation> | undefined {
   if (query === '') return undefined;
   const selected = new Set(fields);
@@ -287,11 +292,24 @@ function matchInformationEntryText(
     score = Math.max(score, candidateScore);
   };
 
+  const currentTranslation =
+    translation !== undefined &&
+    !entry.value.isPrivate &&
+    translation.entryId === entry.entryId &&
+    translation.sourceRevision === entry.revision &&
+    translation.sourceRevisionId === entry.revisionId
+      ? translation
+      : undefined;
+
   if (selected.has('title')) {
     addReason('title', [entry.value.titlePath]);
+    if (currentTranslation !== undefined)
+      addReason('translation_title', [currentTranslation.title]);
   }
   if (selected.has('body')) {
     addReason('body', [entry.value.body]);
+    if (currentTranslation !== undefined)
+      addReason('translation_body', [currentTranslation.body]);
   }
   if (selected.has('tags')) {
     addReason(
@@ -580,8 +598,10 @@ function compareSearchItems(
   const leftTextScore = left.retrievalScore ?? left.textMatch?.score ?? 0;
   const rightTextScore = right.retrievalScore ?? right.textMatch?.score ?? 0;
   if (leftTextScore !== rightTextScore) return rightTextScore - leftTextScore;
-  if (left.matchReasons.length !== right.matchReasons.length) {
-    return right.matchReasons.length - left.matchReasons.length;
+  const leftReasonCount = matchedFieldCount(left);
+  const rightReasonCount = matchedFieldCount(right);
+  if (leftReasonCount !== rightReasonCount) {
+    return rightReasonCount - leftReasonCount;
   }
   const leftScore = left.association?.effectiveScore ?? 0;
   const rightScore = right.association?.effectiveScore ?? 0;
@@ -604,8 +624,9 @@ function compareSearchItemToCursor(
   if (depth !== cursor.associationDepth) return depth - cursor.associationDepth;
   const textScore = item.retrievalScore ?? item.textMatch?.score ?? 0;
   if (textScore !== cursor.textScore) return cursor.textScore - textScore;
-  if (item.matchReasons.length !== cursor.matchReasonCount) {
-    return cursor.matchReasonCount - item.matchReasons.length;
+  const reasonCount = matchedFieldCount(item);
+  if (reasonCount !== cursor.matchReasonCount) {
+    return cursor.matchReasonCount - reasonCount;
   }
   const score = item.association?.effectiveScore ?? 0;
   if (score !== cursor.associationScore) return cursor.associationScore - score;
@@ -626,12 +647,25 @@ function searchCursorFor(
     querySha256,
     associationDepth: item.association?.depth ?? 0,
     textScore: item.retrievalScore ?? item.textMatch?.score ?? 0,
-    matchReasonCount: item.matchReasons.length,
+    matchReasonCount: matchedFieldCount(item),
     associationScore: item.association?.effectiveScore ?? 0,
     capturedAt: item.entry.capturedAt,
     documentOrder: item.entry.value.documentOrder,
     entryId: item.entry.entryId,
   });
+}
+
+/** A second language explains the same field, without a duplicate ranking boost. */
+function matchedFieldCount(item: Readonly<InformationEntrySearchItem>): number {
+  return new Set(
+    item.matchReasons.map((reason) =>
+      reason === 'translation_title'
+        ? 'title'
+        : reason === 'translation_body'
+          ? 'body'
+          : reason,
+    ),
+  ).size;
 }
 
 function effectiveRetrievalScore(

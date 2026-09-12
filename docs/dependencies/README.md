@@ -2,7 +2,7 @@
 
 - Status: tracked foundation inventory plus the M1A Markdown, M1E-5B document-import and M1I-2 RSS/Atom dependency increments
 - Contracts: `C-M0-S-r2`, `C-SLICE-A-MARKDOWN-r2`
-- Review date: 2026-08-24
+- Review date: 2026-09-08
 - Distribution status: `v0.1.0` source and private-runtime image authorized
 
 This directory makes the admitted dependency decision durable. Package manifests
@@ -27,9 +27,13 @@ non-strict so a local version mismatch produces guidance instead of blocking
 repository commands. The exact pnpm/package graph and lockfile policy remain
 unchanged. No pnpm setup or cache action is admitted.
 
+## ADR 0075: MCP interface
+
+The server additionally declares `@modelcontextprotocol/sdk@1.30.0` and the already admitted `zod@4.4.3` as direct runtime dependencies. The official SDK implements stdio protocol negotiation, discovery and tool calls; Zod validates the closed task requests. This avoids maintaining an ad hoc JSON-RPC protocol. The SDK and Zod are MIT licensed; the 17 new exact runtime closure identities use MIT, ISC, BSD-2-Clause or BSD-3-Clause terms. Installed license texts are retained in `licenses/npm/`, with registry integrity and dependency relationships added to the SPDX inventory and notices. No new Provider SDK or browser runtime dependency is added.
+
 ## Direct package ownership
 
-The unique admitted set is exactly 14 runtime and 18 development packages.
+The admitted set now contains 16 runtime and 18 development packages.
 Workspace-specific packages are declared by the workspace that imports or
 executes them; the root does not provide undeclared application dependencies.
 Some development identities occur in more than one importer when both the root
@@ -39,7 +43,7 @@ tool configuration and a workspace consume the same exact package.
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | root shared tools       | none                                                                                                                                                                                                                                                                                 | `@eslint/js@10.0.1`, `@playwright/test@1.62.1`, `@types/node@24.13.3`, `eslint@10.8.1`, `eslint-plugin-react-hooks@7.1.1`, `eslint-plugin-react-refresh@0.5.3`, `globals@17.9.0`, `prettier@3.9.6`, `tsx@4.23.11`, `typescript@6.0.3`, `typescript-eslint@8.66.0`, `vite@8.2.1`, `vitest@4.1.10` |
 | `apps/server`           | `@nestjs/common@11.1.28`, `@nestjs/core@11.1.28`, `@nestjs/platform-express@11.1.28`, `drizzle-orm@0.45.2`, `fast-xml-parser@5.11.0`, `mdast-util-from-markdown@2.0.3`, `parse5@8.0.1`, `pdfjs-dist@6.2.108`, `pg@8.22.0`, `pg-boss@12.26.3`, `reflect-metadata@0.2.2`, `rxjs@7.8.2` | `@types/express@5.0.6`, `@types/node@24.13.3`, `@types/pg@8.20.3`, `tsx@4.23.11`                                                                                                                                                                                                                 |
-| `apps/web`              | `react@19.2.8`, `react-dom@19.2.8`                                                                                                                                                                                                                                                   | `@types/node@24.13.3`, `@types/react@19.2.18`, `@types/react-dom@19.2.4`, `@vitejs/plugin-react@6.0.5`, `tsx@4.23.11`, `vite@8.2.1`                                                                                                                                                              |
+| `apps/web`              | `mdast-util-from-markdown@2.0.3`, `react@19.2.8`, `react-dom@19.2.8`                                                                                                                                                                                                                 | `@types/node@24.13.3`, `@types/react@19.2.18`, `@types/react-dom@19.2.4`, `@vitejs/plugin-react@6.0.5`, `tsx@4.23.11`, `vite@8.2.1`                                                                                                                                                              |
 | `packages/contracts`    | none                                                                                                                                                                                                                                                                                 | none                                                                                                                                                                                                                                                                                             |
 | `packages/test_support` | none                                                                                                                                                                                                                                                                                 | none                                                                                                                                                                                                                                                                                             |
 
@@ -91,6 +95,20 @@ scripts are not install lifecycle and were not run. Published JavaScript,
 declaration files, and source maps remain ordinary npm package content rather
 than separately bundled third-party binaries.
 
+### Browser reading reuse (2026-09-08)
+
+`UI-READING-20260908` adds the existing exact `mdast-util-from-markdown@2.0.3`
+identity to `apps/web` runtime ownership for safe CommonMark reading. The lock
+change contains only that importer declaration: no package version, tarball,
+transitive snapshot, lifecycle or legal-material change. The unique direct
+package set remains 14 runtime and 18 development identities. This is the same
+34-package MIT parser closure already admitted above, now bundled in the browser.
+React renders a closed element set; raw HTML is escaped, active URL schemes are
+rejected, and images require an explicit link action. This admission does not
+add GFM, active HTML, remote-image loading or a general document renderer.
+The SPDX reuse note and root notices record the additional ownership; retained
+exact license files continue to ship with the application artifact.
+
 ### HTML/PDF parser dependency increment
 
 `M1E-5B-DOCUMENT-IMPORT` admits `parse5@8.0.1` and
@@ -132,7 +150,7 @@ SHA-512 integrity selected by the lockfile for all eight packages.
 ## Lock and lifecycle decision
 
 - Current lock SHA-256:
-  `9AA55459A0A5EDD2D6AB7BEEB8CD81152297CB2276CB2026E4634F2306D7BD22`.
+  `E21265FBDB7BA9B4A014EEA24DB36843577CF6439FB9A01BD96B1CC723714603`.
 - M1I-2 pre-increment lock SHA-256:
   `10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A`.
 - M1E-5B pre-increment lock SHA-256:

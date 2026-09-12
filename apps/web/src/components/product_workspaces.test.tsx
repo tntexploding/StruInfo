@@ -71,7 +71,7 @@ describe('M1D product workspaces', () => {
     expect(markup).toContain('role="alert"');
   });
 
-  it('renders the seven product routes without claiming AI capability', () => {
+  it('renders the five content workspaces without claiming AI capability', () => {
     const markup = renderToStaticMarkup(
       <ProductAppShell
         activeSection="overview"
@@ -90,13 +90,12 @@ describe('M1D product workspaces', () => {
     );
 
     expect(markup).toContain('总览');
-    expect(markup).toContain('导入');
-    expect(markup).toContain('拆分');
-    expect(markup).toContain('标签');
-    expect(markup).toContain('联系');
+    expect(markup).toContain('收件箱');
+    expect(markup).toContain('资料库');
+    expect(markup).toContain('专题');
     expect(markup).toContain('查询');
-    expect(markup).toContain('知识');
-    expect(markup.indexOf('查询')).toBeLessThan(markup.indexOf('知识'));
+    expect(markup).toContain('设置');
+    expect(markup.indexOf('专题')).toBeLessThan(markup.indexOf('查询'));
     expect(markup).not.toContain('M1D / FLOW');
     expect(markup).toContain('<dd>未启用</dd>');
     expect(markup).not.toContain('TRACEABLE CORE · MANUAL AUTHORITY');
@@ -201,7 +200,7 @@ describe('M1D product workspaces', () => {
       />,
     );
 
-    expect(markup).toContain('处理任务进度');
+    expect(markup).toContain('最近处理任务');
     expect(markup).toContain('AI 未启用，当前没有任务');
     expect(markup).toContain('没有处理任务');
     expect(markup).toContain('当前项目数据');
@@ -642,11 +641,11 @@ describe('M1D product workspaces', () => {
     expect(reviewFallback).toContain('新增快捷标签');
     expect(reviewFallback).toContain('标签别名合并');
     expect(reviewFallback).toContain('仅在当前页面有效');
-    expect(formal).toContain('<h1>知识</h1>');
+    expect(formal).toContain('<h1>专题</h1>');
     expect(formal).not.toContain('origin-label');
     expect(formal).toContain('选择知识中心');
     expect(formal).toContain('搜索中心条目');
-    expect(formal).toContain('设为知识中心');
+    expect(formal).toContain('探索这个话题');
     expect(formal).toContain('关系列表');
     expect(formal).not.toContain('当前不会写入数据');
   });

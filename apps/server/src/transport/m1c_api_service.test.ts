@@ -1,3 +1,5 @@
+import {DEFAULT_WORKSPACE_UI_PREFERENCES} from '../storage/workspace_ui_preferences.js';
+import {EntryTranslationError} from '../modules/entries/information_entry_translation.js';
 import {DEFAULT_ENTRY_SAVED_QUERIES} from '../modules/entries/information_entry_saved_queries.js';
 import {createHash} from 'node:crypto';
 
@@ -434,6 +436,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       DEFAULT_ENTRY_SAVED_QUERIES,
+      DEFAULT_WORKSPACE_UI_PREFERENCES,
     );
   });
 
@@ -568,6 +571,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       DEFAULT_ENTRY_SAVED_QUERIES,
+      DEFAULT_WORKSPACE_UI_PREFERENCES,
     );
     await expect(
       service.saveInformationEntryPreferenceProfile({
@@ -936,6 +940,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       DEFAULT_ENTRY_SAVED_QUERIES,
+      DEFAULT_WORKSPACE_UI_PREFERENCES,
     );
     await expect(
       service.reviseInformationEntryAssociationPolicy({
@@ -1057,6 +1062,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       DEFAULT_ENTRY_SAVED_QUERIES,
+      DEFAULT_WORKSPACE_UI_PREFERENCES,
     );
 
     await expect(
@@ -1120,6 +1126,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       DEFAULT_ENTRY_SAVED_QUERIES,
+      DEFAULT_WORKSPACE_UI_PREFERENCES,
     );
   });
 
@@ -4199,3 +4206,257 @@ function responseRecorder(): Readonly<{
   } as unknown as Response;
   return {response, recording};
 }
+
+describe('Entry translation HTTP boundary', () => {
+  it('includes public translation hits in mixed privacy queries without changing private document search', async () => {
+    const publicEntry = syntheticExplorationEntry(1, SNAPSHOT_ID);
+    const second = syntheticExplorationEntry(2, SNAPSHOT_ID);
+    const privateEntry = {
+      ...second,
+      value: {...second.value, isPrivate: true, body: '合成译文'},
+    };
+    const entries = [publicEntry, privateEntry];
+    const loadEntries = vi.fn(() => Promise.resolve(entries));
+    const loadTranslations = vi.fn(() =>
+      Promise.resolve(
+        entries.map((entry) => ({
+          entryId: entry.entryId,
+          sourceRevision: entry.revision,
+          sourceRevisionId: entry.revisionId,
+          targetLanguage: 'zh-CN' as const,
+          title: '合成译文',
+          body: '合成译文',
+          providerKey: 'openai-responses-v1' as const,
+          model: 'synthetic',
+          promptVersion: 'synthetic-v1',
+          translatedAt: '2040-01-01T00:00:00.000Z',
+        })),
+      ),
+    );
+    const generate = vi.fn(() =>
+      Promise.reject(new Error('Unexpected generation')),
+    );
+    const service = createService({
+      informationEntryRepository: {
+        materializeEntries: () => Promise.reject(new Error('Unexpected write')),
+        materializeEntriesIfSnapshotEmpty: () =>
+          Promise.reject(new Error('Unexpected write')),
+        reviseEntry: () => Promise.reject(new Error('Unexpected write')),
+        loadCurrentEntries: loadEntries,
+      },
+      entryTranslationSearch: {loadCurrentTranslations: loadTranslations},
+      entryTranslations: {
+        importProvided: () => Promise.reject(new Error('Unexpected import')),
+        enabled: false,
+        read: () => Promise.resolve(undefined),
+        generate,
+      },
+    });
+    const request = {
+      text: '合成译文',
+      includePrivate: true,
+      onlyPrivate: false,
+      limit: 20,
+    };
+    await expect(
+      service.searchInformationEntries(request),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        totalCount: 2,
+        items: [
+          {
+            entry: {entryId: publicEntry.entryId},
+            matchReasons: ['translation_title', 'translation_body'],
+          },
+          {entry: {entryId: privateEntry.entryId}, matchReasons: ['body']},
+        ],
+        privateDocuments: {totalCount: 0, items: []},
+      },
+    });
+    expect(loadEntries).toHaveBeenCalledTimes(1);
+    expect(loadTranslations).toHaveBeenCalledTimes(1);
+    await expect(
+      service.searchInformationEntries({...request, onlyPrivate: true}),
+    ).resolves.toMatchObject({
+      statusCode: 200,
+      body: {
+        totalCount: 1,
+        items: [
+          {entry: {entryId: privateEntry.entryId}, matchReasons: ['body']},
+        ],
+      },
+    });
+    expect(loadTranslations).toHaveBeenCalledTimes(1);
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  const ENTRY_ID = '22222222-2222-4222-8222-222222222222';
+  it('imports supplied text without a Provider and rejects open or invalid provenance fields', async () => {
+    const sourceRevisionId = '33333333-3333-4333-8333-333333333333';
+    const translation = {
+      entryId: ENTRY_ID,
+      sourceRevision: 1,
+      sourceRevisionId,
+      targetLanguage: 'zh-CN' as const,
+      title: '合成译文',
+      body: '合成正文',
+      providerKey: 'provided-translation-v1' as const,
+      model: '',
+      promptVersion: '',
+      translatedAt: '2026-09-08T00:00:00.000Z',
+    };
+    const importProvided = vi.fn(() => Promise.resolve(translation));
+    const generate = vi.fn(() => Promise.reject(new Error('must not run')));
+    const service = createService({
+      entryTranslations: {
+        enabled: false,
+        importProvided,
+        read: () => Promise.resolve(undefined),
+        generate,
+      },
+    });
+    const body = {
+      expectedRevision: 1,
+      sourceRevisionId,
+      title: translation.title,
+      body: translation.body,
+    };
+    await expect(
+      service.importEntryTranslation(ENTRY_ID, body),
+    ).resolves.toMatchObject({statusCode: 200, body: {translation}});
+    expect(importProvided).toHaveBeenCalledWith(ENTRY_ID, 1, sourceRevisionId, {
+      title: translation.title,
+      body: translation.body,
+    });
+    for (const invalid of [
+      {...body, model: 'untrusted-model'},
+      {...body, includePrivate: true},
+      {...body, sourceRevisionId: 'invalid'},
+      {...body, expectedRevision: 0},
+    ]) {
+      await expect(
+        service.importEntryTranslation(ENTRY_ID, invalid),
+      ).resolves.toMatchObject({statusCode: 422});
+    }
+    expect(importProvided).toHaveBeenCalledTimes(1);
+    expect(generate).not.toHaveBeenCalled();
+    importProvided.mockRejectedValueOnce(
+      new EntryTranslationError('translation_already_exists'),
+    );
+    await expect(
+      service.importEntryTranslation(ENTRY_ID, body),
+    ).resolves.toMatchObject({statusCode: 409});
+    importProvided.mockRejectedValueOnce(
+      new EntryTranslationError('translation_entry_unavailable'),
+    );
+    await expect(
+      service.importEntryTranslation(ENTRY_ID, body),
+    ).resolves.toMatchObject({statusCode: 404});
+  });
+  it('validates the closed request, advertises configured generation and keeps reads separate', async () => {
+    const read = vi.fn(() => Promise.resolve(undefined));
+    const generate = vi.fn(() =>
+      Promise.reject(new EntryTranslationError('translation_source_stale')),
+    );
+    const service = createService({
+      entryTranslations: {
+        importProvided: () => Promise.reject(new Error('Unexpected import')),
+        enabled: true,
+        read,
+        generate,
+      },
+    });
+    const workspace = service.workspace().body as Readonly<{
+      capabilities: readonly string[];
+    }>;
+    expect(workspace.capabilities).toContain('ai_entry_translation');
+    await expect(
+      service.generateEntryTranslation(ENTRY_ID, {
+        expectedRevision: 1,
+        includePrivate: true,
+      }),
+    ).resolves.toMatchObject({statusCode: 422});
+    await expect(
+      service.readEntryTranslation(ENTRY_ID, '0'),
+    ).resolves.toMatchObject({statusCode: 422});
+    expect(read).not.toHaveBeenCalled();
+    expect(generate).not.toHaveBeenCalled();
+    await expect(
+      service.readEntryTranslation(ENTRY_ID, '1'),
+    ).resolves.toMatchObject({statusCode: 200, body: {translation: null}});
+    expect(generate).not.toHaveBeenCalled();
+    await expect(
+      service.generateEntryTranslation(ENTRY_ID, {expectedRevision: 1}),
+    ).resolves.toMatchObject({
+      statusCode: 409,
+      body: {issue: {code: 'translation_source_stale'}},
+    });
+  });
+  it('keeps missing configuration unavailable and maps privacy rejection without payload', async () => {
+    const service = createService();
+    await expect(
+      service.generateEntryTranslation(ENTRY_ID, {expectedRevision: 1}),
+    ).resolves.toMatchObject({statusCode: 503});
+    const blocked = createService({
+      entryTranslations: {
+        importProvided: () => Promise.reject(new Error('Unexpected import')),
+        enabled: false,
+        read: () =>
+          Promise.reject(
+            new EntryTranslationError('translation_entry_unavailable'),
+          ),
+        generate: () => Promise.reject(new Error('must not run')),
+      },
+    });
+    await expect(
+      blocked.readEntryTranslation(ENTRY_ID, '1'),
+    ).resolves.toMatchObject({statusCode: 404});
+  });
+});
+
+it('saves bounded page preferences with CAS and preserves sibling review settings', async () => {
+  let saved = createReviewPreferences(WORKSPACE_ID, ['Synthetic sibling']);
+  const service = createService({
+    reviewPreferences: {
+      load: () => Promise.resolve(saved),
+      save: () => Promise.resolve(saved),
+      update: (_workspaceId, updater) => {
+        const result = updater(saved);
+        saved = result.next;
+        return Promise.resolve({preferences: saved, result: result.result});
+      },
+    },
+  });
+  const initial = await service.loadWorkspaceUiPreferences();
+  expect(initial).toMatchObject({
+    body: {status: 'ok', preferences: {revision: 0}},
+  });
+  const candidate = {
+    revision: 0,
+    theme: 'dark',
+    sidebars: {
+      inbox: ['import'],
+      documents: ['tags', 'source'],
+      topics: [],
+      query: ['language'],
+      settings: ['workflow'],
+    },
+  };
+  expect(await service.saveWorkspaceUiPreferences(candidate)).toMatchObject({
+    statusCode: 200,
+    body: {status: 'ok', preferences: {revision: 1, theme: 'dark'}},
+  });
+  expect(await service.saveWorkspaceUiPreferences(candidate)).toMatchObject({
+    statusCode: 409,
+    body: {status: 'conflict', preferences: {revision: 1}},
+  });
+  expect(saved.quickTags).toEqual(['Synthetic sibling']);
+  expect(
+    await service.saveWorkspaceUiPreferences({
+      ...candidate,
+      revision: 1,
+      includePrivate: true,
+    }),
+  ).toMatchObject({statusCode: 422});
+});

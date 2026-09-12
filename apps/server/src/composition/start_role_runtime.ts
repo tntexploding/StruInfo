@@ -1,3 +1,30 @@
+import {AgentCaptureService} from '../application/agent_capture_service.js';
+import {IngestionService} from '../application/ingestion_service.js';
+import {
+  INGESTION_ACTOR_ID,
+  ingestionTaskKey,
+  type IngestionOrigin,
+} from '../application/ingestion_contract.js';
+import {
+  PostgresIngestionRepository,
+  recordIngestionCapture,
+} from '../platform/database/postgresql/postgres_ingestion_repository.js';
+import {PostgresEvidenceRepository} from '../platform/database/postgresql/postgres_evidence_repository.js';
+import {IngestionScheduler} from '../lifecycle/ingestion_scheduler.js';
+import {AgentTaskActions} from '../application/agent_task_actions.js';
+import {AgentTaskService} from '../application/agent_task_service.js';
+import {AgentCommands} from '../application/agent_commands.js';
+import {DocumentUseCases} from '../application/document_use_cases.js';
+import {EntryUseCases} from '../application/entry_use_cases.js';
+import {RelationUseCases} from '../application/relation_use_cases.js';
+import {
+  ExecutionAuthority,
+  DELEGATED_READ_OPERATIONS,
+  type AgentWriteOperation,
+} from '../application/execution_authority.js';
+import {PostgresAgentTaskRepository} from '../platform/database/postgresql/postgres_agent_task_repository.js';
+import {EntryTranslationService} from '../modules/entries/information_entry_translation.js';
+import {OpenAiEntryTranslationProvider} from '../platform/ai/openai_entry_translation_provider.js';
 import {EntryMarkdownExportService} from '../modules/entries/information_entry_markdown_export_service.js';
 import type {RuntimeConfig} from '../config/runtime_config.js';
 import {
@@ -177,6 +204,7 @@ export async function startRoleRuntime(
     entries: repositories.informationEntries,
     associations: repositories.informationEntryAssociations,
     index: repositories.informationEntrySearchIndex,
+    translations: repositories.entryTranslations,
     ...(config.embeddingProvider === undefined
       ? {}
       : {
@@ -197,6 +225,51 @@ export async function startRoleRuntime(
             config.aiProposalProvider,
           ),
         });
+  const entryTranslations = new EntryTranslationService({
+    workspaceId: config.workspaceId,
+    repository: repositories.entryTranslations,
+    loadPublicEntry: async (entryId) =>
+      (
+        await repositories.informationEntries.loadCurrentEntriesByIds?.(
+          config.workspaceId,
+          false,
+          [entryId],
+        )
+      )?.[0],
+    ...(config.aiProposalProvider === undefined
+      ? {}
+      : {
+          provider: new OpenAiEntryTranslationProvider(
+            config.aiProposalProvider,
+          ),
+        }),
+  });
+  const ingestionRepository = new PostgresIngestionRepository(
+    database.pool,
+    config.workspaceId,
+  );
+  const captureRepository = (origin: IngestionOrigin) =>
+    new PostgresEvidenceRepository(database.pool, (client, capture) =>
+      recordIngestionCapture(client, capture, origin),
+    );
+  const agentTasks = new AgentTaskService(
+    config.workspaceId,
+    new PostgresAgentTaskRepository(database.pool),
+    new AgentTaskActions({
+      workspaceId: config.workspaceId,
+      blobStore: storage.blobStore,
+      splitProcessing: repositories.processingRuns,
+      evidence: repositories.evidenceRead,
+      entries: repositories.informationEntries,
+      associations: repositories.informationEntryAssociations,
+      processing: repositories.processingRuns,
+      associationProcessing: repositories.aiAssociationProposals,
+      ...(aiSplitProposals ? {split: aiSplitProposals} : {}),
+      ...(aiTagProposals ? {tags: aiTagProposals} : {}),
+      ...(aiAssociationProposals ? {relations: aiAssociationProposals} : {}),
+    }),
+    (task) => ingestion.guard(task),
+  );
   const sourceSubscriptions = new SourceSubscriptionService({
     workspaceId: config.workspaceId,
     preferences: storage.reviewPreferences,
@@ -212,6 +285,10 @@ export async function startRoleRuntime(
     ]),
     blobStore: storage.blobStore,
     evidence: repositories.evidence,
+    evidenceForSubscription: (subscriptionId) =>
+      captureRepository({kind: 'subscription', subscriptionId}),
+    ownsAutomaticSnapshot: async (snapshotId) =>
+      Boolean(await ingestionRepository.read(snapshotId)),
     evidenceRead: repositories.evidenceRead,
     entries: repositories.informationEntries,
     automationExecutions: repositories.entryAutomationExecutions,
@@ -219,6 +296,46 @@ export async function startRoleRuntime(
     automationActions: repositories.entryAutomationActions,
     associations: repositories.informationEntryAssociations,
   });
+  const automationAuthority = ExecutionAuthority.automation(
+    config.workspaceId,
+    INGESTION_ACTOR_ID,
+  );
+  const ingestion: IngestionService = new IngestionService(
+    config.workspaceId,
+    ingestionRepository,
+    {
+      start: (snapshotId, policy) =>
+        agentTasks.start(automationAuthority, ingestionTaskKey(snapshotId), {
+          kind: 'document',
+          snapshotId,
+          maxEntries: policy.settings.maxEntries,
+          maxRelations: policy.settings.maxRelations,
+          maxModelCalls: policy.settings.maxModelCalls,
+        }),
+      read: (taskId) => agentTasks.read(automationAuthority, taskId),
+      resume: (task) =>
+        agentTasks.control(
+          automationAuthority,
+          task.taskId,
+          task.version,
+          'resume',
+        ),
+      cancel: (task) =>
+        agentTasks.control(
+          automationAuthority,
+          task.taskId,
+          task.version,
+          'cancel',
+        ),
+    },
+    () => config.aiProposalProvider?.model,
+    async () => (await sourceSubscriptions.list()).subscriptions,
+  );
+  if (config.role === 'worker' || config.role === 'all') {
+    starters.push(() =>
+      Promise.resolve(new IngestionScheduler(() => ingestion.poll(), logger)),
+    );
+  }
   if (config.role === 'scheduler' || config.role === 'all') {
     starters.push(() =>
       (
@@ -243,6 +360,7 @@ export async function startRoleRuntime(
           blobStore: storage.blobStore,
           reviewPreferences: storage.reviewPreferences,
           evidenceRepository: repositories.evidence,
+          manualImportEvidenceRepository: captureRepository({kind: 'upload'}),
           evidenceReadRepository: repositories.evidenceRead,
           informationEntryRepository: repositories.informationEntries,
           informationDocumentWorkingCopyRepository:
@@ -252,6 +370,8 @@ export async function startRoleRuntime(
           informationEntryAssociationRepository:
             repositories.informationEntryAssociations,
           informationEntryRetrieval,
+          entryTranslations,
+          entryTranslationSearch: repositories.entryTranslations,
           informationEntryRestructureRepository:
             repositories.informationEntryRestructures,
           processingRunRepository: repositories.processingRuns,
@@ -276,10 +396,109 @@ export async function startRoleRuntime(
           }),
         })
       : undefined;
+  const commandDependencies = {
+    blobStore: storage.blobStore,
+    evidenceReadRepository: repositories.evidenceRead,
+    informationEntryRepository: repositories.informationEntries,
+    informationDocumentTagRepository: repositories.informationDocumentTags,
+    informationDocumentWorkingCopyRepository:
+      repositories.informationDocumentWorkingCopies,
+    informationEntryAssociationRepository:
+      repositories.informationEntryAssociations,
+    informationEntryRetrieval,
+    reviewPreferences: storage.reviewPreferences,
+    entryTranslationSearch: repositories.entryTranslations,
+  };
+  const capture = new AgentCaptureService(config.workspaceId, {
+    blobStore: storage.blobStore,
+    evidence: captureRepository({kind: 'upload'}),
+    evidenceRead: repositories.evidenceRead,
+    subscriptions: sourceSubscriptions,
+  });
+  const commands = (authority: ExecutionAuthority) =>
+    new AgentCommands(authority, {
+      documents: new DocumentUseCases(authority, commandDependencies),
+      entries: new EntryUseCases(authority, commandDependencies),
+      relations: new RelationUseCases(authority, commandDependencies),
+      tasks: agentTasks,
+      capture,
+      runtimeStatus: {
+        ...(config.aiProposalProvider
+          ? {model: config.aiProposalProvider.model}
+          : {}),
+        role: config.role,
+        agentEnabled: Boolean(config.agentInterface),
+        grants: config.agentInterface
+          ? [
+              ...(config.agentInterface.read ? ['read'] : []),
+              ...(config.agentInterface.annotate ? ['annotate'] : []),
+              ...(config.agentInterface.structure ? ['structure'] : []),
+              ...(config.agentInterface.capture ? ['capture'] : []),
+              ...(config.agentInterface.processDocuments ? ['process'] : []),
+              ...(config.agentInterface.automate ? ['automate'] : []),
+            ]
+          : [],
+      },
+      ingestion,
+      subscriptions: async () =>
+        (await sourceSubscriptions.list()).subscriptions
+          .filter((s) => !s.isPrivate)
+          .map((s) => ({
+            subscriptionId: s.subscriptionId,
+            label: s.label,
+            kind: s.kind ?? 'github_markdown',
+            enabled: s.enabled,
+            lastRunId: s.lastRunId,
+            lastSuccessAt: s.lastSuccessAt,
+          })),
+    });
+  const grants: AgentWriteOperation[] = [];
+  if (config.agentInterface?.annotate)
+    grants.push('tasks.control', 'agent.tags', 'agent.relations');
+  if (config.agentInterface?.processDocuments)
+    grants.push('tasks.control', 'models.use');
+  if (config.agentInterface?.automate) grants.push('ingestion.manage');
+  if (config.agentInterface?.capture) grants.push('sources.capture');
+  if (config.agentInterface?.structure)
+    grants.push('tasks.control', 'agent.split');
+  const agentHttp = {
+    owner: commands(ExecutionAuthority.owner(config.workspaceId)),
+    ...(config.agentInterface
+      ? {
+          agent: {
+            token: config.agentInterface.token,
+            commands: commands(
+              ExecutionAuthority.agent(
+                config.workspaceId,
+                config.agentInterface.identity,
+                [
+                  ...(config.agentInterface.read
+                    ? DELEGATED_READ_OPERATIONS
+                    : ['processing.read' as const]),
+                  ...grants,
+                ],
+              ),
+            ),
+          },
+        }
+      : {}),
+  };
+  starters.push(() =>
+    Promise.resolve({
+      name: 'agent-tasks',
+      stopAccepting: () => {
+        agentTasks.stop();
+      },
+      drain: () => agentTasks.drain(),
+      close: () => {
+        return Promise.resolve();
+      },
+    }),
+  );
   starters.push(() =>
     listenerFactory.start({
       health,
-      ...(api === undefined ? {} : {api}),
+      ...(api === undefined ? {} : {api, agentHttp}),
       host: address.host,
       port: address.port,
     }),

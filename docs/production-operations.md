@@ -81,6 +81,32 @@ docker compose -f compose.production.yaml ps
 升级时先停止应用写入并完成备份，再重复“迁移 → 队列准备 → grant → preflight → 启动”。
 迁移只前进，不自动向后执行 DDL。
 
+### 3.1 Windows 日常启停
+
+已部署的本机实例可安装[独立实例控制入口](windows-instance-control.md)。
+将通用脚本复制到外部目录后，以外部配置指定已有应用容器、专用数据库容器和 Docker context，
+即可使用启动、停止、状态与打开页面操作；不需要从源码工作区执行日常命令。
+停止按应用、数据库顺序进行，启动按数据库、应用顺序验证就绪，不删除容器或数据。
+外部巡检与备份必须接入相同互斥锁和停止意图状态，避免手动停止后被维护任务重新启动。
+该入口不替代首次部署、迁移、升级或恢复流程；真实安装与启停验收单独保存在外部运维记录中。
+
+### 3.2 订阅接入与首轮检查
+
+真实信源清单、订阅配置、游标、抓取字节及派生 Entry 只进入选定的外部实例、数据根和偏好文件。
+先通过导入页显式检查已保存的订阅，核对任务状态、日期、标题与精确来源，再启用需要的间隔检查。
+下游确定性分流和 AI 提案继续遵守各自开关及接受边界；收到材料后再选择后续处理动作。
+
+RSS/Atom 仍只处理 feed 提供的正文或摘要，不跟随条目链接抓取全文，每次最多处理前 20 条。
+合法空 feed 作为没有新增内容处理，并保留此前成功条目的去重 token；畸形 XML 仍失败。
+标题投影按 XML/HTML 类型保留文本并转义 Markdown，响应体读取超时或中断归为来源不可用，可在后续检查重试。
+`all` 的 API 与 scheduler 共享订阅服务：同订阅串行执行，开始执行时重读配置和游标，定时检查同时重新判断是否到期。
+失败会释放该订阅的执行位，不同订阅不共用执行锁；跨进程并发写入仍不在当前运行边界内。
+这些行为由合成测试验证，实际信源的成功率、内容质量与接入结果必须另行外置记录。
+
+已有 CommonMark 捕获若没有 section Fragment，可逐 Snapshot 通过现有确定性物化入口复用唯一完整 document Fragment，生成一条保留精确来源的 whole Entry。
+请求仍是 `chunkMode: "split"`，但返回 Entry 标明 `whole`；不改 Evidence，不重复导入。
+这不表示批量计划、人工重新分组或 AI 拆分已支持该回退，具体限制见[本地 API](m1c-local-http-api.md)。
+
 ## 4. 本机非容器命令
 
 同一边界也可在仓库内运行。先设置 `STRUIINFO_CONFIG_PATH`，再通过直接变量或互斥的文件变量
@@ -545,3 +571,16 @@ exact no-op 重放、两次受控故障恢复、15,000 个当前搜索投影、1
 镜像的基础系统扫描保留失败状态，已核对的不可达项见 [DH-013](deferred-hardening-memo.md#dh-013-base-image-scanner-findings-outside-the-current-runtime-path)。
 不能将历史零告警结果或当前产品回归通过描述为本次镜像扫描通过。
 巡检、备份调度、同机副本与离线限制以维护交接及外部运维记录为准。
+
+## Optional on-demand translation
+
+ADR 0070 requires migration `000032` and reapplying the versioned runtime grants (the new cache table needs SELECT/INSERT/UPDATE). It does not require Provider credentials to start or to restore/read a saved translation. Entry Bundle v6 exports the new table and restores v1–v5 with empty translation state; use the upgraded application to restore a newly exported v6 package.
+
+The owner has requested that translation remain off for now. No runtime configuration is changed by this increment. A later explicit setup can reuse external `STRUIINFO_OPENAI_MODEL` and secret-injected `OPENAI_API_KEY`. Generation has a 120-second deadline and a separate 16,384-token output budget; it never runs from subscriptions or a scheduler. Source text, translations and credentials must remain outside the repository and image. Validation so far uses synthetic Provider responses, not live translation-quality evidence.
+
+## 外部译文来源升级
+
+接入现成译文前，依次应用 `000032`、`000033` 和现有 runtime grants，再运行匹配应用。
+API 密钥和模型配置可继续缺省。
+新个人数据包使用 Entry Bundle v7，恢复需要支持此版本的应用；v1–v6 继续可读。
+升级前备份并校验，真实译文与操作记录只在外部数据根。

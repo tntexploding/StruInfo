@@ -94,8 +94,10 @@ describe('InformationEntryRadialGraph', () => {
     expect(markup.match(/class="knowledge-radial-edge"/gu)).toHaveLength(2);
     expect(markup).toContain('共同内容关键词、相近正文或标题');
     expect(markup).toContain('人工确认：该条目为中心结论提供直接支持');
-    expect(markup).toContain('marker-start="url(#knowledge-arrow)"');
-    expect(markup).toContain('marker-end="url(#knowledge-arrow)"');
+    const markerId = /<marker id="([^"]+)"/u.exec(markup)?.[1];
+    if (markerId === undefined) throw new Error('Graph marker missing.');
+    expect(markup).toContain('marker-start="url(#' + markerId + ')"');
+    expect(markup).toContain('marker-end="url(#' + markerId + ')"');
     expect(markup).toContain('role="button"');
   });
 });

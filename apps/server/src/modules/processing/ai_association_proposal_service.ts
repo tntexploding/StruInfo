@@ -57,7 +57,7 @@ export interface AiAssociationProposalDecisionResult {
 }
 
 export interface AiAssociationProposalServicePort {
-  readonly providerKey: 'openai-responses-v1';
+  readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
   readonly model: string;
 
   listForPair(
@@ -95,7 +95,7 @@ interface PublicPair {
 }
 
 export class AiAssociationProposalService implements AiAssociationProposalServicePort {
-  public readonly providerKey: 'openai-responses-v1';
+  public readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
   public readonly model: string;
   readonly #dependencies: Readonly<AiAssociationProposalServiceDependencies>;
 
@@ -154,7 +154,7 @@ export class AiAssociationProposalService implements AiAssociationProposalServic
       providerKey: this.#dependencies.provider.providerKey,
       privacyScope: 'public_only',
       initialStage: 'associations',
-      initialStep: '等待 OpenAI 关系提案',
+      initialStep: '等待 AI 关系提案',
     });
     if (created === 'conflict') {
       throw new AiAssociationProposalServiceError('ai_run_conflict');
@@ -179,7 +179,7 @@ export class AiAssociationProposalService implements AiAssociationProposalServic
         expectedVersion: 1,
         status: 'running',
         currentStage: 'associations',
-        currentStep: 'OpenAI 正在生成关系名称和方向建议',
+        currentStep: 'AI 正在生成关系名称和方向建议',
         completedUnits: 0,
         totalUnits: 1,
       }),

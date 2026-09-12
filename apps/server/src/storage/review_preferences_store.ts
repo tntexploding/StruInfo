@@ -19,6 +19,11 @@ import {
   DEFAULT_ENTRY_TYPE_LEARNING_STATE,
 } from '../modules/entries/information_entry_type_learning.js';
 
+import {
+  DEFAULT_WORKSPACE_UI_PREFERENCES,
+  type WorkspaceUiPreferences,
+} from './workspace_ui_preferences.js';
+
 export const REVIEW_PREFERENCES_FORMAT = 'struinfo.review-preferences';
 export const REVIEW_PREFERENCES_VERSION = 1;
 export const MAX_REVIEW_QUICK_TAGS = 24;
@@ -325,6 +330,7 @@ export interface ReviewPreferences {
   readonly entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>;
   readonly entryClassificationProfile?: Readonly<EntryClassificationProfile>;
   readonly entrySavedQueries?: Readonly<EntrySavedQueries>;
+  readonly uiPreferences?: Readonly<WorkspaceUiPreferences>;
 }
 
 export interface ReviewPreferencesStore {
@@ -348,6 +354,7 @@ export interface ReviewPreferencesStore {
     entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>,
     entryClassificationProfile?: Readonly<EntryClassificationProfile>,
     entrySavedQueries?: Readonly<EntrySavedQueries>,
+    uiPreferences?: Readonly<WorkspaceUiPreferences>,
   ): Promise<Readonly<ReviewPreferences>>;
   update?<T>(
     workspaceId: string,
@@ -381,6 +388,7 @@ export interface ReviewPreferencesPatch {
   readonly entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>;
   readonly entryClassificationProfile?: Readonly<EntryClassificationProfile>;
   readonly entrySavedQueries?: Readonly<EntrySavedQueries>;
+  readonly uiPreferences?: Readonly<WorkspaceUiPreferences>;
 }
 
 export function patchReviewPreferences(
@@ -420,6 +428,9 @@ export function patchReviewPreferences(
     patch.entrySavedQueries ??
       current.entrySavedQueries ??
       DEFAULT_ENTRY_SAVED_QUERIES,
+    patch.uiPreferences ??
+      current.uiPreferences ??
+      DEFAULT_WORKSPACE_UI_PREFERENCES,
   );
 }
 
@@ -455,6 +466,7 @@ export async function updateReviewPreferences<T>(
           update.next.entrySplitRuleProfile,
           update.next.entryClassificationProfile,
           update.next.entrySavedQueries,
+          update.next.uiPreferences,
         );
   return Object.freeze({preferences, result: update.result});
 }
@@ -756,6 +768,7 @@ export function createReviewPreferences(
   entrySplitRuleProfile: Readonly<EntrySplitRuleProfile> = DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
   entryClassificationProfile: Readonly<EntryClassificationProfile> = DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
   entrySavedQueries: Readonly<EntrySavedQueries> = DEFAULT_ENTRY_SAVED_QUERIES,
+  uiPreferences: Readonly<WorkspaceUiPreferences> = DEFAULT_WORKSPACE_UI_PREFERENCES,
 ): Readonly<ReviewPreferences> {
   const advanceActions =
     entryAutomationPolicy.advanceActions ??
@@ -769,6 +782,7 @@ export function createReviewPreferences(
     workspaceId,
     quickTags: Object.freeze([...quickTags]),
     entrySavedQueries,
+    uiPreferences,
     automaticKeywords: Object.freeze({
       enabled: automaticKeywords.enabled,
       includeLinkDomains: automaticKeywords.includeLinkDomains,

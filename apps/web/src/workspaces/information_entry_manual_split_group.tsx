@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useId, useState} from 'react';
 
 import {
   manualSplitCaretCodePoint,
@@ -29,7 +29,7 @@ export function ManualSplitGroupEditor({
     Readonly<{pieceIndex: number; utf16Offset: number}> | undefined
   >();
   const [guidance, setGuidance] = useState<string>();
-  const titleId = `manual-split-title-${groupIndex.toString()}`;
+  const titleId = useId();
 
   return (
     <li>

@@ -11,6 +11,7 @@ GRANT USAGE ON SCHEMA struinfo TO struinfo_tm2_runtime;
 GRANT SELECT, INSERT ON ALL TABLES IN SCHEMA struinfo TO struinfo_tm2_runtime;
 
 GRANT UPDATE ON TABLE
+  struinfo.information_entry_translation,
   struinfo.information_entry,
   struinfo.information_document_tag_set,
   struinfo.information_entry_association_override,
@@ -25,6 +26,14 @@ GRANT UPDATE ON TABLE
   struinfo.processing_bulk_ingestion_enrichment_item,
   struinfo.processing_bulk_ingestion_adjudication
 TO struinfo_tm2_runtime;
+
+GRANT UPDATE (current_version, settings_text, authorized_by_kind, authorized_by_id, updated_at)
+ON TABLE struinfo.processing_ingestion_policy TO struinfo_tm2_runtime;
+GRANT UPDATE (status, task_id, error_code, current_version, admitted_at, updated_at)
+ON TABLE struinfo.processing_ingestion_item TO struinfo_tm2_runtime;
+
+GRANT UPDATE (state_text, pause_requested, cancel_requested, current_version, updated_at)
+ON TABLE struinfo.processing_agent_task TO struinfo_tm2_runtime;
 
 GRANT DELETE ON TABLE
   struinfo.information_entry_association_projection,

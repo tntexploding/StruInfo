@@ -1,9 +1,11 @@
+import type {AiPolicy} from '../../apps/web/src/api/ai_workflow_client.js';
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
 import {EntryMarkdownExportService} from '../../apps/server/src/modules/entries/information_entry_markdown_export_service.js';
 import type {CurrentInformationEntry} from '../../apps/server/src/modules/entries/information_entry_contract.js';
 import type {EntryMarkdownExportRepositoryPort} from '../../apps/server/src/modules/entries/information_entry_markdown_export.js';
 import {Buffer} from 'node:buffer';
+import {DEFAULT_WORKSPACE_UI_PREFERENCES} from '../../apps/web/src/api/workspace_ui_preferences.js';
 
 import {expect, test, type Locator, type Page} from '@playwright/test';
 
@@ -263,6 +265,38 @@ async function installCurrentProductApi(
       return;
     }
 
+    if (
+      path === '/api/v1/ingestion/commands' ||
+      path === '/api/v1/ai-tasks/commands'
+    ) {
+      const operation = (request.postDataJSON() as {operation: string})
+        .operation;
+      const result =
+        operation === 'system_status'
+          ? {role: 'all', agentEnabled: false, grants: []}
+          : operation === 'ingestion_status'
+            ? {
+                policy: {
+                  revision: 0,
+                  settings: {
+                    enabled: false,
+                    paused: false,
+                    subscriptionIds: [],
+                    manualUploads: false,
+                    model: '',
+                    maxEntries: 12,
+                    maxRelations: 4,
+                    maxModelCalls: 24,
+                    maxDocumentsPerDay: 10,
+                  },
+                },
+                items: [],
+                modelConfigured: false,
+              }
+            : [];
+      await route.fulfill({json: {result}});
+      return;
+    }
     productRequests.push(`${request.method()} ${path}`);
     if (path === '/api/v1/workspace') {
       await route.fulfill({
@@ -512,6 +546,12 @@ async function installCurrentProductApi(
           status: 'ok',
           savedQueries: {version: 1, revision: 0, views: []},
         },
+      });
+      return;
+    }
+    if (path === '/api/v1/preferences/interface') {
+      await route.fulfill({
+        json: {status: 'ok', preferences: DEFAULT_WORKSPACE_UI_PREFERENCES},
       });
       return;
     }
@@ -827,6 +867,10 @@ async function installCurrentProductApi(
       });
       return;
     }
+    if (path.endsWith('/translation') && request.method() === 'GET') {
+      await route.fulfill({json: {status: 'ok', translation: null}});
+      return;
+    }
     if (path === '/api/v1/entries/search') {
       const includePrivate =
         request.postData()?.includes('"includePrivate":true') ?? false;
@@ -953,6 +997,14 @@ async function installCurrentProductApi(
   return productRequests;
 }
 
+async function openQuerySettings(page: Page) {
+  for (const name of ['筛选与匹配方式', '索引维护']) {
+    const summary = page.getByText(name, {exact: true});
+    if ((await summary.locator('..').getAttribute('open')) === null)
+      await summary.click();
+  }
+}
+
 async function clickVisibleUnobscured(locator: Locator): Promise<void> {
   await locator.evaluate((element) => {
     element.scrollIntoView({block: 'center', inline: 'center'});
@@ -975,12 +1027,156 @@ async function clickVisibleUnobscured(locator: Locator): Promise<void> {
   });
 }
 
+test('keeps secondary disclosure widths stable when opened', async ({page}) => {
+  test.setTimeout(90_000);
+  await installCurrentProductApi(page);
+  for (const width of [390, 1440, 2220]) {
+    await page.setViewportSize({width, height: 1000});
+    await page.goto('/');
+    const navigation = page.getByRole('navigation', {name: '产品工作区'});
+    for (const [name, selector, count] of [
+      ['拆分', '.split-studio-grid__tools > details', 4],
+      ['标签', '.tags-studio-grid__rules > details', 3],
+      ['查询', '.query-studio-settings > details', 3],
+    ] as const) {
+      await openWorkspace(page, name, navigation);
+      const drawers = page.locator(selector);
+      await expect(drawers).toHaveCount(count);
+      for (const drawer of await drawers.all()) {
+        const summary = drawer.locator(':scope > summary');
+        await expect(drawer).toHaveJSProperty('open', false);
+        const closedBounds = await drawer.boundingBox();
+        await summary.click();
+        await expect(drawer).toHaveJSProperty('open', true);
+        await expect(
+          drawer.locator(':scope > :not(summary)').first(),
+        ).toBeVisible();
+        const openBounds = await drawer.boundingBox();
+        if (closedBounds === null || openBounds === null)
+          throw new Error('Missing disclosure bounds');
+        expect(
+          Math.abs(openBounds.width - closedBounds.width),
+        ).toBeLessThanOrEqual(1);
+      }
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth - window.innerWidth,
+        ),
+      ).toBeLessThanOrEqual(1);
+      for (const drawer of await drawers.all()) {
+        await drawer.locator(':scope > summary').focus();
+        await page.keyboard.press('Enter');
+        await expect(drawer).toHaveJSProperty('open', false);
+      }
+    }
+  }
+});
+
+test('explains split prerequisites and keeps the working-copy controls usable', async ({
+  page,
+}) => {
+  const productRequests = await installCurrentProductApi(page, {
+    splitRuleRequests: [],
+  });
+  const workingCopyMethods: string[] = [];
+  const draftWrites: unknown[] = [];
+  const originalText = '用于全文草稿回归的合成正文。';
+  const editedText = '用于全文草稿回归的合成修改。';
+  await page.route('**/working-copy**', async (route) => {
+    const request = route.request();
+    workingCopyMethods.push(request.method());
+    const editing = request.method() === 'PUT';
+    if (editing) draftWrites.push(request.postDataJSON());
+    await route.fulfill({
+      json: {
+        status: 'ok',
+        workingCopy: {
+          sourceSnapshotId: SNAPSHOT_ID,
+          revision: editing ? 1 : 0,
+          state: editing ? 'editing' : 'original',
+          originalText,
+          currentText: editing ? editedText : originalText,
+          changed: editing,
+        },
+      },
+    });
+  });
+  await page.setViewportSize({width: 1440, height: 1000});
+  await page.goto('/');
+  await openWorkspace(page, '拆分');
+  for (const name of ['拆分前全文修改', '调整已经拆分的结构']) {
+    await page
+      .locator('.split-studio-grid__tools > details > summary')
+      .filter({hasText: name})
+      .click();
+  }
+  const workingCopy = page.locator('.information-document-working-copy');
+  await expect(workingCopy.getByRole('status')).toHaveText(
+    '请先在来源文档导航中选择一份具体文档，再修改拆分前全文。',
+  );
+  await expect(
+    page.getByText(
+      '请先在来源文档导航中选择一份具体文档，再调整已有条目结构。',
+      {exact: true},
+    ),
+  ).toBeVisible();
+  expect(workingCopyMethods).toEqual([]);
+  expect(
+    productRequests.filter((request) => request.includes('/restructure')),
+  ).toEqual([]);
+  await page
+    .getByRole('combobox', {name: '选择来源文档', exact: true})
+    .selectOption(SNAPSHOT_ID);
+  await expect(
+    page.getByText('当前文档尚未生成条目，完成首次拆分后才能调整已有结构。', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const editor = workingCopy.getByRole('textbox', {
+    name: '当前全文',
+    exact: true,
+  });
+  await expect(editor).toHaveValue(originalText);
+  await editor.fill(editedText);
+  await workingCopy
+    .getByRole('button', {name: '保存当前修改', exact: true})
+    .click();
+  await expect(
+    workingCopy.getByText('当前全文修改已保存', {exact: true}),
+  ).toBeVisible();
+  expect(workingCopyMethods).toEqual(['GET', 'PUT']);
+  expect(draftWrites).toEqual([
+    {
+      expectedRevision: 0,
+      includePrivate: false,
+      text: editedText,
+    },
+  ]);
+  await workingCopy
+    .locator('summary')
+    .filter({hasText: '对照原始全文'})
+    .click();
+  await expect(workingCopy.locator('pre')).toHaveText(originalText);
+  await expect(
+    workingCopy.getByRole('button', {
+      name: '确认并生成新文档',
+      exact: true,
+    }),
+  ).toBeEnabled();
+  await page
+    .getByRole('combobox', {name: '选择来源文档', exact: true})
+    .selectOption('');
+  await expect(editor).toHaveCount(0);
+  await expect(workingCopy.getByRole('status')).toContainText('请先');
+  expect(workingCopyMethods).toEqual(['GET', 'PUT']);
+});
+
 test('exposes only the current document-to-entry workflow', async ({page}) => {
   const productRequests = await installCurrentProductApi(page);
   await page.goto('/');
 
   await expect(
-    page.getByRole('heading', {name: '总览', exact: true}),
+    page.getByRole('heading', {name: '资料库', exact: true}),
   ).toBeVisible();
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
   const sections = [
@@ -992,7 +1188,7 @@ test('exposes only the current document-to-entry workflow', async ({page}) => {
     {
       name: '拆分',
       guide: '拆分页操作指南',
-      instructions: ['从左侧选择来源文档', '从右侧拆分并保存结构'],
+      instructions: ['选择来源文档', '拆分并保存结构'],
     },
     {
       name: '标签',
@@ -1002,29 +1198,42 @@ test('exposes only the current document-to-entry workflow', async ({page}) => {
     {
       name: '联系',
       guide: '联系页操作指南',
-      instructions: ['分别从两侧选择条目', '确认后保存联系与权重'],
+      instructions: ['选择起点与终点', '确认后保存联系与权重'],
     },
     {
       name: '查询',
       guide: '查询页操作指南',
-      instructions: ['输入关键词并调整右侧条件', '在中间查看正文与来源'],
+      instructions: ['输入关键词，按需展开筛选', '阅读正文并查看来源'],
     },
     {
       name: '知识',
       guide: '知识页操作指南',
-      instructions: ['从右侧选择中心条目', '在底部检查并编辑关系'],
+      instructions: ['从上方选择中心条目', '在底部检查并编辑关系'],
     },
   ] as const;
 
   for (const section of sections) {
-    await navigation
-      .getByRole('button', {name: section.name, exact: true})
-      .click();
+    await openWorkspace(page, section.name, navigation);
     await expect(
-      page.getByRole('heading', {name: section.name, exact: true}),
+      page.getByRole('heading', {
+        name:
+          section.name === '导入'
+            ? '收件箱'
+            : section.name === '知识'
+              ? '专题'
+              : section.name,
+        exact: true,
+      }),
     ).toBeVisible();
+    if (section.name === '导入') {
+      await expect(
+        page.getByRole('button', {name: '导入文档', exact: true}),
+      ).toBeVisible();
+      continue;
+    }
     const guide = page.getByLabel(section.guide, {exact: true});
     await expect(guide).toBeVisible();
+    await guide.locator('summary').click();
     for (const instruction of section.instructions) {
       await expect(guide).toContainText(instruction);
     }
@@ -1050,7 +1259,7 @@ test('imports exact local UTF-8 bytes and preserves retry identity', async ({
   await page.goto('/');
 
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
-  await navigation.getByRole('button', {name: '导入', exact: true}).click();
+  await openWorkspace(page, '导入', navigation);
   await page.getByRole('radio', {name: '本地文件', exact: true}).check();
   await page.locator('#local-document-file').setInputFiles({
     name: 'synthetic.txt',
@@ -1098,7 +1307,7 @@ test('imports an explicit local file batch and retries only failed items with th
   await page.goto('/');
 
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
-  await navigation.getByRole('button', {name: '导入', exact: true}).click();
+  await openWorkspace(page, '导入', navigation);
   await page.getByRole('radio', {name: '本地文件', exact: true}).check();
   await page.getByRole('radio', {name: '多份批次', exact: true}).check();
   await page.locator('#local-document-batch-files').setInputFiles([
@@ -1183,7 +1392,7 @@ test('stops a local batch after the in-flight file without starting later files'
   await page.goto('/');
 
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
-  await navigation.getByRole('button', {name: '导入', exact: true}).click();
+  await openWorkspace(page, '导入', navigation);
   await page.getByRole('radio', {name: '本地文件', exact: true}).check();
   await page.getByRole('radio', {name: '多份批次', exact: true}).check();
   await page.locator('#local-document-batch-files').setInputFiles([
@@ -1219,7 +1428,8 @@ test('edits association weights and opens the complete private-document channel'
   await page.goto('/');
 
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
-  await navigation.getByRole('button', {name: '联系', exact: true}).click();
+  await openWorkspace(page, '联系', navigation);
+  await page.getByText('联系权重设置', {exact: true}).click();
   await expect(
     page.getByRole('heading', {name: '联系权重', exact: true}),
   ).toBeVisible();
@@ -1235,6 +1445,7 @@ test('edits association weights and opens the complete private-document channel'
   ).toBeVisible();
 
   await navigation.getByRole('button', {name: '查询', exact: true}).click();
+  await openQuerySettings(page);
   await page.getByLabel('隐私结果').selectOption({label: '公开与隐私结果'});
   await page.getByRole('button', {name: '搜索', exact: true}).click();
 
@@ -1258,14 +1469,23 @@ test('keeps exploration separate, explicit, and responsive across target widths'
   page,
 }) => {
   const productRequests = await installCurrentProductApi(page);
+  let releaseSearch: () => void = () => undefined;
+  const searchGate = new Promise<void>((resolve) => {
+    releaseSearch = resolve;
+  });
+  await page.route('**/api/v1/entries/search', async (route) => {
+    await searchGate;
+    await route.fallback();
+  });
   await page.setViewportSize({width: 390, height: 844});
   await page.goto('/');
 
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
   await navigation.getByRole('button', {name: '查询', exact: true}).click();
+  await openQuerySettings(page);
   await page
-    .locator('.query-result-tools-drawer > summary', {
-      hasText: '更多结果工具',
+    .locator('.query-sidebar-section > details > summary', {
+      hasText: '更多工具',
     })
     .click();
 
@@ -1279,6 +1499,18 @@ test('keeps exploration separate, explicit, and responsive across target widths'
   await expect(generate).toBeDisabled();
   await page.getByRole('checkbox', {name: /启用独立探索/u}).check();
   await page.getByLabel('当前页探索份额').fill('50');
+  // A delayed initial query must not remount the independent policy draft.
+  releaseSearch();
+  await expect(
+    page.getByRole('heading', {
+      name: SYNTHETIC_ENTRY.value.titlePath,
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('checkbox', {name: /启用独立探索/u}),
+  ).toBeChecked();
+  await expect(page.getByLabel('当前页探索份额')).toHaveValue('50');
   await page.getByRole('button', {name: '保存探索设置', exact: true}).click();
   await expect(generate).toBeEnabled();
   await generate.click();
@@ -1321,8 +1553,8 @@ test('keeps exploration separate, explicit, and responsive across target widths'
     }),
   ).toBeHidden();
   await page
-    .locator('.query-result-tools-drawer > summary', {
-      hasText: '更多结果工具',
+    .locator('.query-sidebar-section > details > summary', {
+      hasText: '更多工具',
     })
     .click();
   await expect(
@@ -1353,7 +1585,7 @@ test('keeps the preference panel responsive and ignores superseded local results
   await page.goto('/');
 
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
-  await navigation.getByRole('button', {name: '标签', exact: true}).click();
+  await openWorkspace(page, '标签', navigation);
   const tagsTools = page.locator('.tags-studio-grid__rules');
   await expect(tagsTools.getByText('点击展开', {exact: true})).toHaveCount(3);
   await page
@@ -1417,7 +1649,83 @@ test('keeps the preference panel responsive and ignores superseded local results
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
     expect(overflow).toBeLessThanOrEqual(1);
+    const generateBounds = await generate.boundingBox();
+    const trialBounds = await trial.boundingBox();
+    if (generateBounds === null || trialBounds === null)
+      throw new Error('Missing preference actions');
+    expect(generateBounds.width).toBeLessThan(240);
+    expect(trialBounds.width).toBeLessThan(240);
+    const tools = page.locator('.entry-preference-profile__tools > section');
+    const suggestionPanelBounds = await tools.first().boundingBox();
+    const trialPanelBounds = await tools.last().boundingBox();
+    if (suggestionPanelBounds === null || trialPanelBounds === null)
+      throw new Error('Missing preference tool panels');
+    if (Math.abs(suggestionPanelBounds.x - trialPanelBounds.x) > 1) {
+      expect(
+        Math.abs(suggestionPanelBounds.y - trialPanelBounds.y),
+      ).toBeLessThanOrEqual(1);
+    } else {
+      expect(trialPanelBounds.y).toBeGreaterThanOrEqual(
+        suggestionPanelBounds.y + suggestionPanelBounds.height,
+      );
+    }
   }
+
+  await page.route(
+    '**/api/v1/entries/preferences/profile/suggestions',
+    (route) =>
+      route.fulfill({
+        json: {
+          status: 'ok',
+          includePrivate: false,
+          visibleEntryCount: 64,
+          totalCandidateCount: 64,
+          truncated: false,
+          candidates: Array.from({length: 64}, (_, index) => ({
+            dimension: 'usefulness',
+            featureKind: 'content_keyword',
+            featureIdentity: 'synthetic-' + String(index),
+            displayValue: '合成建议 ' + String(index + 1),
+            effect: 'prefer',
+            suggestedWeight: 4,
+            positiveCount: 3,
+            neutralCount: 0,
+            negativeCount: 0,
+            positiveEntryIds: [ENTRY_ID],
+            neutralEntryIds: [],
+            negativeEntryIds: [],
+          })),
+        },
+      }),
+  );
+  await generate.click();
+  const suggestions = page.getByRole('list', {
+    name: '偏好规则建议',
+    exact: true,
+  });
+  await expect(suggestions.locator(':scope > li')).toHaveCount(64);
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({width, height: 900});
+    expect((await suggestions.boundingBox())?.height).toBeLessThanOrEqual(448);
+    await suggestions.focus();
+    await page.keyboard.press('End');
+    await expect
+      .poll(() => suggestions.evaluate((node) => node.scrollTop))
+      .toBeGreaterThan(0);
+    expect(
+      await generate.evaluate((node) =>
+        node.closest('.entry-preference-suggestion-list'),
+      ),
+    ).toBeNull();
+  }
+  await suggestions
+    .getByRole('button', {name: '把建议加入规则：合成建议 64', exact: true})
+    .click();
+  await expect(
+    page
+      .getByRole('list', {name: '偏好规则草稿', exact: true})
+      .getByRole('textbox', {name: '显示名称', exact: true}),
+  ).toHaveValue('合成建议 64');
 });
 
 test('keeps automation audit exact, responsive, and isolated from late run lists', async ({
@@ -1433,9 +1741,11 @@ test('keeps automation audit exact, responsive, and isolated from late run lists
   await page.goto('/');
 
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
-  await navigation.getByRole('button', {name: '标签', exact: true}).click();
+  await navigation.getByRole('button', {name: '设置', exact: true}).click();
+  await page.getByRole('button', {name: '处理流程', exact: true}).click();
   await page
-    .locator('.tags-studio-grid__rules summary', {hasText: '自动分流'})
+    .locator('.settings-content summary')
+    .filter({hasText: '自动分流'})
     .click();
   const panel = page.locator('.entry-automation-policy');
   await expect(
@@ -1522,11 +1832,10 @@ test('splits one immutable Fragment at an explicit caret and submits exact scala
   await page.goto('/');
 
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
-  await navigation.getByRole('button', {name: '拆分', exact: true}).click();
+  await openWorkspace(page, '拆分', navigation);
   await page
-    .getByRole('button', {name: /synthetic-split-source/u})
-    .first()
-    .click();
+    .getByRole('combobox', {name: '选择来源文档', exact: true})
+    .selectOption(SNAPSHOT_ID);
   const splitTools = page.locator('.split-studio-grid__tools');
   await expect(
     splitTools.locator(':scope > .entry-manual-split').first(),
@@ -1602,16 +1911,15 @@ test('saves, previews, and applies one versioned local split rule', async ({
   await page.goto('/');
 
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
-  await navigation.getByRole('button', {name: '拆分', exact: true}).click();
+  await openWorkspace(page, '拆分', navigation);
   await page
-    .getByRole('button', {name: /synthetic-split-source/u})
-    .first()
-    .click();
-  await page
-    .locator('.workflow-tool-drawer > summary', {
-      hasText: '结构规则',
-    })
-    .click();
+    .getByRole('combobox', {name: '选择来源文档', exact: true})
+    .selectOption(SNAPSHOT_ID);
+  const ruleSummary = page
+    .locator('.workflow-tool-drawer > summary')
+    .filter({hasText: '结构规则'});
+  await ruleSummary.focus();
+  await page.keyboard.press('Enter');
 
   const panel = page.locator('.split-rule-panel');
   await expect(
@@ -1676,16 +1984,26 @@ test('previews and atomically applies a post-materialization scalar restructure'
   await page.goto('/');
 
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
-  await navigation.getByRole('button', {name: '拆分', exact: true}).click();
+  await openWorkspace(page, '拆分', navigation);
   await page
-    .getByRole('button', {name: /synthetic-split-source/u})
-    .first()
-    .click();
+    .getByRole('combobox', {name: '选择来源文档', exact: true})
+    .selectOption(SNAPSHOT_ID);
   await page
-    .locator('.workflow-tool-drawer > summary', {
-      hasText: '调整已经拆分的结构',
-    })
-    .click();
+    .locator('.split-studio-grid__tools > details > summary')
+    .filter({hasText: '拆分前全文修改'})
+    .focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByText(
+      '当前文档已经生成条目；如需改变结构，请使用“调整已经拆分的结构”。',
+      {exact: true},
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('textbox', {name: '当前全文', exact: true}),
+  ).toHaveCount(0);
+  await page.locator('summary').filter({hasText: '调整已经拆分的结构'}).focus();
+  await page.keyboard.press('Enter');
 
   await expect(
     page.getByRole('heading', {name: '重新拆分已有条目', exact: true}),
@@ -1950,10 +2268,7 @@ test('keeps the radial graph, equivalent list and source controls operable', asy
     if (message.type() === 'error') errors.push(message.text());
   });
   await page.goto('/');
-  await page
-    .getByRole('navigation', {name: '产品工作区'})
-    .getByRole('button', {name: '知识', exact: true})
-    .click();
+  await openWorkspace(page, '知识');
   const graph = page.getByRole('group', {name: '条目关系图', exact: true});
   await expect(graph.locator('.knowledge-radial-edge')).toHaveCount(12);
   await expect(graph.locator('[data-origin="ai_assisted"]')).toHaveAttribute(
@@ -1972,6 +2287,27 @@ test('keeps the radial graph, equivalent list and source controls operable', asy
         () => document.documentElement.scrollWidth - window.innerWidth,
       ),
     ).toBeLessThanOrEqual(1);
+    const nodeOverlap = await graph
+      .locator('.knowledge-node')
+      .evaluateAll((nodes) => {
+        const boxes = nodes.map((node) => node.getBoundingClientRect());
+        return boxes.some((box, index) =>
+          boxes
+            .slice(index + 1)
+            .some(
+              (other) =>
+                Math.min(box.right, other.right) -
+                  Math.max(box.left, other.left) >
+                  1 &&
+                Math.min(box.bottom, other.bottom) -
+                  Math.max(box.top, other.top) >
+                  1,
+            ),
+        );
+      });
+    expect(nodeOverlap, 'Graph node overlap at ' + width.toString()).toBe(
+      false,
+    );
     const edge = graph.locator('.knowledge-radial-edge').first();
     await edge.focus();
     await edge.press('Enter');
@@ -2123,10 +2459,7 @@ test('discards graph targets from a former privacy scope and closed source reque
   const fixture = await installGraphReadCandidate(page);
   await page.setViewportSize({width: 390, height: 844});
   await page.goto('/');
-  await page
-    .getByRole('navigation', {name: '产品工作区'})
-    .getByRole('button', {name: '知识', exact: true})
-    .click();
+  await openWorkspace(page, '知识');
   await page
     .getByRole('combobox', {name: '隐私范围', exact: true})
     .selectOption('include_private');
@@ -2188,10 +2521,7 @@ test('keeps late graph reads and writes out of a newer privacy scope', async ({
 }) => {
   const fixture = await installGraphReadCandidate(page);
   await page.goto('/');
-  await page
-    .getByRole('navigation', {name: '产品工作区'})
-    .getByRole('button', {name: '知识', exact: true})
-    .click();
+  await openWorkspace(page, '知识');
   await expect(page.locator('.knowledge-node-inspector')).toContainText(
     '合成图谱中心',
   );
@@ -2244,12 +2574,12 @@ test('keeps late graph reads and writes out of a newer privacy scope', async ({
     exact: true,
   });
   await search.fill('synthetic-empty');
-  await page.getByRole('button', {name: '设为知识中心', exact: true}).click();
+  await page.getByRole('button', {name: '探索这个话题', exact: true}).click();
   await expect(
     page.getByText('当前范围没有可作为中心的条目。', {exact: true}),
   ).toBeVisible();
   await search.fill('synthetic-failure');
-  await page.getByRole('button', {name: '设为知识中心', exact: true}).click();
+  await page.getByRole('button', {name: '探索这个话题', exact: true}).click();
   await expect(page.locator('.knowledge-state[role="alert"]')).toBeVisible();
   await expect(
     page
@@ -2257,7 +2587,7 @@ test('keeps late graph reads and writes out of a newer privacy scope', async ({
       .getByRole('button', {name: '重试', exact: true}),
   ).toBeEnabled();
   await search.fill('');
-  await page.getByRole('button', {name: '设为知识中心', exact: true}).click();
+  await page.getByRole('button', {name: '探索这个话题', exact: true}).click();
   await expect(page.locator('.knowledge-node-inspector')).toContainText(
     '合成图谱中心',
   );
@@ -2404,6 +2734,7 @@ test('refreshes the index explicitly, pauses between windows and retries only un
     .getByRole('navigation', {name: '产品工作区'})
     .getByRole('button', {name: '查询', exact: true})
     .click();
+  await openQuerySettings(page);
   const panel = page.getByRole('complementary', {name: '搜索索引维护'});
   await expect(panel).toContainText('已收录 0 / 65');
   expect(fixture.requests).toEqual([]);
@@ -2518,13 +2849,15 @@ test('leaves index checkpoints durable without letting late requests resume an u
   await page.goto('/');
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
   const query = navigation.getByRole('button', {name: '查询', exact: true});
-  const overview = navigation.getByRole('button', {name: '总览', exact: true});
+  const overview = {click: () => openWorkspace(page, '总览', navigation)};
   const panel = page.getByRole('complementary', {name: '搜索索引维护'});
   await query.click();
+  await openQuerySettings(page);
   await expect.poll(() => fixture.reads).toBe(1);
   await overview.click();
   fixture.index = syntheticIndexStatus(32, 0, false);
   await query.click();
+  await openQuerySettings(page);
   await expect(panel).toContainText('已收录 32 / 65');
   lateRead.release();
   await expect.poll(() => fixture.completedReads).toBe(2);
@@ -2536,6 +2869,7 @@ test('leaves index checkpoints durable without letting late requests resume an u
   lateWindow.release();
   await expect.poll(() => fixture.completedRefreshes).toBe(1);
   await query.click();
+  await openQuerySettings(page);
   await expect(panel).toContainText('已收录 64 / 65');
   expect(fixture.requests).toHaveLength(1);
   await panel.getByRole('button', {name: '刷新变化项', exact: true}).click();
@@ -2608,10 +2942,7 @@ test('refreshes an accepted AI relation after a manual graph save is rejected', 
     }
   });
   await page.goto('/');
-  await page
-    .getByRole('navigation', {name: '产品工作区'})
-    .getByRole('button', {name: '知识', exact: true})
-    .click();
+  await openWorkspace(page, '知识');
   const edge = page.locator('.knowledge-radial-edge').first();
   await edge.focus();
   await edge.press('Enter');
@@ -2749,6 +3080,7 @@ test('saves and reopens named queries with current source and graph return', asy
   await page.goto('/');
   const nav = page.getByRole('navigation', {name: '产品工作区'});
   await nav.getByRole('button', {name: '查询', exact: true}).click();
+  await openQuerySettings(page);
   await page
     .getByRole('searchbox', {name: '搜索信息条目'})
     .fill('合成检索条件');
@@ -2765,6 +3097,7 @@ test('saves and reopens named queries with current source and graph return', asy
   expect(fixture.writes[0]?.query).not.toHaveProperty('after');
   await page.reload();
   await nav.getByRole('button', {name: '查询', exact: true}).click();
+  await openQuerySettings(page);
   await openSavedQueryPanel(page);
   await panel
     .getByRole('combobox', {name: '已保存查询'})
@@ -2773,7 +3106,7 @@ test('saves and reopens named queries with current source and graph return', asy
   await expect(page.getByRole('searchbox', {name: '搜索信息条目'})).toHaveValue(
     '合成检索条件',
   );
-  await page.getByRole('button', {name: '查看原文', exact: true}).click();
+  await page.getByRole('button', {name: '出处与文档', exact: true}).click();
   await expect(
     page.getByText(SYNTHETIC_FRAGMENT_TEXT, {exact: true}).first(),
   ).toBeVisible();
@@ -2785,7 +3118,7 @@ test('saves and reopens named queries with current source and graph return', asy
   );
   await page.getByRole('button', {name: '在图谱中查看', exact: true}).click();
   await expect(
-    page.getByRole('heading', {name: '知识', exact: true}),
+    page.getByRole('heading', {name: '专题', exact: true}),
   ).toBeVisible();
   expect(graphReads.at(-1)).toMatchObject({
     centerEntryId: ENTRY_ID,
@@ -2848,6 +3181,7 @@ test('restores an off-page selection and requires fresh private scope after navi
   await page.goto('/');
   const nav = page.getByRole('navigation', {name: '产品工作区'});
   await nav.getByRole('button', {name: '查询', exact: true}).click();
+  await openQuerySettings(page);
   const panel = await openSavedQueryPanel(page);
   await panel
     .getByRole('combobox', {name: '已保存查询'})
@@ -2875,11 +3209,12 @@ test('restores an off-page selection and requires fresh private scope after navi
   await page.getByRole('button', {name: '按保存的隐私范围打开'}).click();
   await expect.poll(() => searches.at(-1)?.onlyPrivate).toBe(true);
   await expect.poll(() => fixture.reads.at(-1)?.includePrivate).toBe(true);
-  await nav.getByRole('button', {name: '总览', exact: true}).click();
+  await openWorkspace(page, '总览', nav);
   const previousPrivateCalls = searches.filter(
     (query) => query.includePrivate === true,
   ).length;
   await nav.getByRole('button', {name: '查询', exact: true}).click();
+  await openQuerySettings(page);
   await expect(
     page.getByRole('region', {name: '重新选择隐私范围'}),
   ).toBeVisible();
@@ -2948,6 +3283,7 @@ test('keeps saved-query controls responsive and offers recovery for unavailable 
     .getByRole('navigation', {name: '产品工作区'})
     .getByRole('button', {name: '查询', exact: true})
     .click();
+  await openQuerySettings(page);
   const panel = await openSavedQueryPanel(page);
   await panel
     .getByRole('combobox', {name: '已保存查询'})
@@ -2971,7 +3307,7 @@ test('keeps saved-query controls responsive and offers recovery for unavailable 
       const results = await page.locator('.query-studio-results').boundingBox();
       if (search === null || results === null)
         throw new Error('Query layout is missing.');
-      expect(results.y - search.y - search.height).toBeLessThanOrEqual(32);
+      expect(results.y).toBeGreaterThan(search.y + search.height);
     }
     await page.screenshot({
       path: 'test-results/playwright/saved-query-' + width.toString() + '.png',
@@ -3045,6 +3381,7 @@ test('discards a late private reading position and recovers from saved-view conf
     .getByRole('navigation', {name: '产品工作区'})
     .getByRole('button', {name: '查询', exact: true})
     .click();
+  await openQuerySettings(page);
   const panel = await openSavedQueryPanel(page);
   await panel
     .getByRole('combobox', {name: '已保存查询'})
@@ -3378,10 +3715,7 @@ async function installSourceReviewFixture(page: Page, count = 22) {
 }
 async function openSourceReview(page: Page) {
   await page.goto('/');
-  await page
-    .getByRole('navigation', {name: '产品工作区'})
-    .getByRole('button', {name: '知识', exact: true})
-    .click();
+  await openWorkspace(page, '知识');
   const action = page.getByRole('button', {name: '来源复核', exact: true});
   await action.focus();
   await action.press('Enter');
@@ -3467,7 +3801,7 @@ test('reviews both exact sources, binds displayed revisions, handles conflicts a
   ).toHaveCount(20);
   await page.getByRole('button', {name: '返回图谱'}).click();
   await expect(
-    page.getByRole('heading', {name: '知识', exact: true}),
+    page.getByRole('heading', {name: '专题', exact: true}),
   ).toBeVisible();
 });
 
@@ -3707,6 +4041,11 @@ async function installMarkdownExportFixture(page: Page) {
   };
 }
 async function openMarkdownExportPanel(page: Page) {
+  const container = page
+    .locator('.query-sidebar-section > details')
+    .filter({has: page.locator('.entry-markdown-export')});
+  if ((await container.getAttribute('open')) === null)
+    await container.locator(':scope > summary').click();
   const panel = page.locator('.entry-markdown-export');
   if ((await panel.getAttribute('open')) === null)
     await panel.locator('summary').click();
@@ -3718,6 +4057,7 @@ async function openQueryForExport(page: Page) {
     .getByRole('navigation', {name: '产品工作区'})
     .getByRole('button', {name: '查询', exact: true})
     .click();
+  await openQuerySettings(page);
   await expect(page.getByRole('region', {name: '条目查询结果'})).toContainText(
     '合成导出条目 1',
   );
@@ -3899,7 +4239,10 @@ test('waits for current query results before collecting or comparing after a fil
   await expect(
     panel.getByRole('button', {name: '加入资料清单'}),
   ).toBeDisabled();
-  await page.locator('.query-result-tools-drawer > summary').click();
+  await page
+    .locator('.query-sidebar-section > details > summary')
+    .filter({hasText: '更多工具'})
+    .click();
   await expect(
     page.getByRole('button', {name: '加入比较', exact: true}),
   ).toBeDisabled();
@@ -3947,4 +4290,925 @@ test('keeps query pagination aligned after resubmitting and repeatedly clearing 
     '合成导出条目 2',
   );
   await expect(page.locator('.entry-pagination')).toContainText('第 2 页');
+});
+
+test('loads an out-of-page association candidate and clears it when selection scope changes', async ({
+  page,
+}) => {
+  await installCurrentProductApi(page);
+  const writes: {path: string; body: Record<string, unknown>}[] = [];
+  const policy = {
+    revision: 0,
+    version: 'struinfo.entry-association.local-index.v1',
+    contentWeight: 65,
+    typeWeight: 15,
+    domainWeight: 20,
+    threshold: 1100,
+    candidateLimit: 12,
+    adjustmentStep: 1500,
+  };
+  await page.route('**/api/v1/entries/*/associations**', async (route) => {
+    if (route.request().method() !== 'GET') {
+      writes.push({
+        path: new URL(route.request().url()).pathname,
+        body: route.request().postDataJSON() as Record<string, unknown>,
+      });
+      await route.fulfill({json: {status: 'applied'}});
+      return;
+    }
+    await route.fulfill({
+      json: {
+        status: 'ok',
+        entryId: ENTRY_ID,
+        totalCount: 1,
+        policy,
+        associations: [
+          {
+            relatedEntry: SYNTHETIC_EXPLORATION_ENTRY,
+            effectiveScore: 7600,
+            isBlocked: false,
+          },
+        ],
+      },
+    });
+  });
+  await page.goto('/');
+  await openWorkspace(page, '联系');
+  const editor = page.locator('.association-pair-editor');
+  await expect(editor.getByRole('button', {name: '保存新联系'})).toBeDisabled();
+  await page.getByRole('button', {name: '载入编辑区', exact: true}).click();
+  await expect(editor).toContainText(
+    SYNTHETIC_EXPLORATION_ENTRY.value.titlePath,
+  );
+  await expect(editor.getByRole('button', {name: '增强此联系'})).toBeEnabled();
+  await editor.getByRole('button', {name: '增强此联系'}).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]?.path).toContain(EXPLORATION_ENTRY_ID);
+  expect(writes[0]?.body).toMatchObject({
+    expectedRevision: 0,
+    action: 'enhance',
+  });
+  await page.getByRole('checkbox', {name: '查看隐私条目与联系'}).check();
+  await expect(editor).not.toContainText(
+    SYNTHETIC_EXPLORATION_ENTRY.value.titlePath,
+  );
+  await page.getByRole('button', {name: '载入编辑区', exact: true}).click();
+  await expect(editor).toContainText(
+    SYNTHETIC_EXPLORATION_ENTRY.value.titlePath,
+  );
+  await page.getByRole('searchbox', {name: '查找联系条目'}).fill('changed');
+  await expect(editor).not.toContainText(
+    SYNTHETIC_EXPLORATION_ENTRY.value.titlePath,
+  );
+  expect(writes).toHaveLength(1);
+});
+
+test('keeps type coverage and its correction controls within the available workspace', async ({
+  page,
+}, testInfo) => {
+  await installCurrentProductApi(page);
+  await page.route('**/api/v1/entries/type-review', (route) =>
+    route.fulfill({
+      json: {
+        status: 'ok',
+        coverage: {
+          totalCount: 15000,
+          classifiedCount: 10793,
+          missingCount: 4207,
+          byType: [
+            {typeKeyword: 'factual_material', count: 7000},
+            {typeKeyword: 'other', count: 3793},
+          ],
+        },
+        items: [SYNTHETIC_ENTRY],
+      },
+    }),
+  );
+  await page.goto('/');
+  await openWorkspace(page, '标签');
+  await page.getByRole('button', {name: '类型覆盖与纠错', exact: true}).click();
+  const panel = page.locator('.type-review-workbench');
+  await expect(panel).toContainText('4,207');
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({width, height: 1000});
+    const overflow = await panel.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return [
+        ...element.querySelectorAll(
+          '.type-coverage-summary, .type-review-workbench__body, input, select, button',
+        ),
+      ]
+        .filter((child) => {
+          const rect = child.getBoundingClientRect();
+          return (
+            rect.width > 0 &&
+            (rect.left < bounds.left - 1 || rect.right > bounds.right + 1)
+          );
+        })
+        .map((child) => child.className || child.tagName);
+    });
+    expect(overflow, 'Type panel at ' + String(width)).toEqual([]);
+    expect(await page.locator('main').count()).toBe(1);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - innerWidth,
+      ),
+    ).toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: testInfo.outputPath('type-review-' + String(width) + '.png'),
+      fullPage: true,
+    });
+  }
+});
+
+test('prioritizes reading with closed settings and keeps long titles and safe Markdown usable', async ({
+  page,
+}, testInfo) => {
+  await installCurrentProductApi(page);
+  const title =
+    'Synthetic reading title with enough words to exercise several lines in a narrow knowledge workspace';
+  const entry = {
+    ...SYNTHETIC_ENTRY,
+    value: {
+      ...SYNTHETIC_ENTRY.value,
+      titlePath: title,
+      body:
+        '# ' +
+        title +
+        '\n\nA **structured** article.\n\n- First point\n- Second point\n\n[Source reference](https://example.invalid/reference)\n\n<script>window.unsafe = true</script>\n\n![Remote image](https://example.invalid/pixel.png)' +
+        '\n\nA long synthetic paragraph for bounded reading and keyboard scrolling. '.repeat(
+          120,
+        ),
+    },
+  };
+  await page.route('**/api/v1/entries/search', (route) =>
+    route.fulfill({
+      json: {
+        status: 'ok',
+        totalCount: 1,
+        items: [{entry, matchReasons: [], filterReasons: []}],
+        privateDocuments: {totalCount: 0, items: []},
+      },
+    }),
+  );
+  await page.goto('/');
+  await page
+    .getByRole('navigation', {name: '产品工作区'})
+    .getByRole('button', {name: '查询', exact: true})
+    .click();
+  await expect(page.locator('.reading-content strong')).toHaveText(
+    'structured',
+  );
+  await expect(
+    page.locator('.reading-content img, .reading-content script'),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('link', {name: 'Source reference'}),
+  ).toHaveAttribute('rel', 'noopener noreferrer');
+  const textRegion = page.getByRole('region', {name: '原文正文', exact: true});
+  await expect(textRegion).toHaveAttribute('tabindex', '0');
+  await textRegion.focus();
+  await page.keyboard.press('End');
+  await expect
+    .poll(() => textRegion.evaluate((node) => node.scrollTop))
+    .toBeGreaterThan(0);
+  for (const width of [320, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({width, height: 1000});
+    const results = await page.locator('.query-studio-results').boundingBox();
+    expect(results?.y).toBeLessThan(720);
+    expect((await textRegion.boundingBox())?.height).toBeLessThanOrEqual(500);
+    const reading = await page.locator('.entry-readonly-detail').boundingBox();
+    expect(reading?.width).toBeGreaterThan(width < 400 ? 210 : 350);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - innerWidth,
+      ),
+    ).toBeLessThanOrEqual(1);
+    await page.screenshot({
+      path: testInfo.outputPath('reading-' + String(width) + '.png'),
+      fullPage: true,
+    });
+  }
+});
+
+test('shows only the latest actual task stage and handles cancellation and empty work', async ({
+  page,
+}) => {
+  await installCurrentProductApi(page);
+  await page.route('**/api/v1/workspace', async (route) => {
+    await route.fulfill({
+      status: 200,
+      json: {
+        workspaceId: WORKSPACE_ID,
+        apiVersion: 'm1c.v1',
+        capabilities: ['processing_runs'],
+      },
+    });
+  });
+  let status: 'cancelled' | 'succeeded' = 'cancelled';
+  let totalUnits = 0;
+  await page.route('**/api/v1/processing-runs?*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      json: {
+        status: 'ok',
+        runs: [
+          {
+            runId: '11111111-1111-4111-8111-111111111119',
+            origin: 'deterministic',
+            status,
+            privacyScope: 'public_only',
+            currentStage: 'tags',
+            completedUnits: 0,
+            totalUnits,
+            attempt: 1,
+            version: 2,
+            createdAt: '2040-01-01T00:00:00.000Z',
+            updatedAt: '2040-01-01T00:01:00.000Z',
+            proposals: [],
+          },
+        ],
+      },
+    });
+  });
+  await page.goto('/');
+  await openWorkspace(page, '总览');
+  const rail = page.getByRole('complementary', {name: '最近处理任务'});
+  await expect(rail.locator('.ai-stage-list li')).toHaveCount(1);
+  await expect(rail.locator('.ai-stage-list')).toContainText('03 / 标签');
+  await expect(rail.locator('.ai-stage-list')).toContainText('已取消');
+  await expect(rail).toContainText('没有待处理项');
+  await expect(rail).not.toContainText('NaN');
+  await expect(rail.locator('.ai-stage-list')).not.toContainText('处理中');
+  status = 'succeeded';
+  totalUnits = 1;
+  await page.getByRole('button', {name: '刷新总览', exact: true}).click();
+  await expect(rail.locator('.ai-stage-list')).toContainText('已完成');
+  await expect(rail.locator('.ai-stage-list li')).toHaveCount(1);
+  for (const width of [320, 768, 1024]) {
+    await page.setViewportSize({width, height: 900});
+    const navigation = page.getByRole('navigation', {name: '产品工作区'});
+    for (const label of ['收件箱', '资料库', '专题', '查询', '设置']) {
+      await expect(
+        navigation
+          .getByRole('button', {name: label, exact: true})
+          .locator('strong'),
+      ).toBeVisible();
+    }
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - innerWidth,
+      ),
+    ).toBeLessThanOrEqual(1);
+  }
+});
+
+test('paginates and filters long document lists with exact source return', async ({
+  page,
+}) => {
+  await installCurrentProductApi(page);
+  const snapshots = Array.from({length: 45}, (_, index) => ({
+    ...SYNTHETIC_SNAPSHOT,
+    snapshotId: String(index).padStart(8, '0') + '-0000-4000-8000-000000000045',
+    sourceKey: 'synthetic-document-' + String(index + 1).padStart(3, '0'),
+  }));
+  await page.route('**/api/v1/evidence?*', (route) =>
+    route.fulfill({
+      json: {status: 'ok', snapshots, totalCount: snapshots.length},
+    }),
+  );
+  const requestedSources: string[] = [];
+  await page.route('**/api/v1/evidence/snapshots/*', (route) => {
+    const snapshotId = new URL(route.request().url()).pathname
+      .split('/')
+      .at(-1);
+    const snapshot = snapshots.find((value) => value.snapshotId === snapshotId);
+    requestedSources.push(snapshotId ?? '');
+    return route.fulfill({json: {status: 'ok', snapshot}});
+  });
+  await page.goto('/');
+  await openWorkspace(page, '导入');
+  const list = page.getByRole('list', {name: '本页文档'});
+  const pagination = page.getByRole('combobox', {name: '文档列表页码'});
+  await expect(list.locator(':scope > li')).toHaveCount(20);
+  await pagination.selectOption('2');
+  await expect(list.locator(':scope > li')).toHaveCount(5);
+  await expect(list).toContainText('synthetic-document-045');
+  const sourceButton = list
+    .getByRole('button', {name: '查看原文', exact: true})
+    .last();
+  await sourceButton.click();
+  await expect(page.locator('.evidence-rail')).toBeVisible();
+  expect(requestedSources.at(-1)).toBe(snapshots[44]?.snapshotId);
+  await page.keyboard.press('Escape');
+  await expect(sourceButton).toBeFocused();
+  const filter = page.getByRole('searchbox', {name: '筛选已导入文档'});
+  await filter.fill('synthetic-document-001');
+  await expect(list.locator(':scope > li')).toHaveCount(1);
+  await expect(pagination).toHaveValue('0');
+  await filter.fill('no-match');
+  await expect(list.locator(':scope > li')).toHaveCount(0);
+  await expect(page.getByText('没有匹配的文档', {exact: true})).toBeVisible();
+  await filter.fill('');
+  await expect(list.locator(':scope > li')).toHaveCount(20);
+  for (const width of [320, 768, 1440]) {
+    await page.setViewportSize({width, height: 900});
+    await page.getByRole('button', {name: '下一页', exact: true}).click();
+    await expect(pagination).toHaveValue('1');
+    await expect(list).toContainText('synthetic-document-021');
+    await expect.poll(() => list.evaluate((node) => node.scrollTop)).toBe(0);
+    expect((await list.boundingBox())?.height).toBeLessThanOrEqual(500);
+    await page.getByRole('button', {name: '上一页', exact: true}).click();
+  }
+});
+
+test('keeps subscription save outside a long scrollable list and locates new drafts', async ({
+  page,
+}) => {
+  await installCurrentProductApi(page);
+  await page.route('**/api/v1/workspace', (route) =>
+    route.fulfill({
+      json: {
+        status: 'ok',
+        workspaceId: WORKSPACE_ID,
+        capabilities: ['source_subscriptions'],
+      },
+    }),
+  );
+  let subscriptions = Array.from({length: 12}, (_, index) => ({
+    subscriptionId:
+      String(index).padStart(8, '0') + '-0000-4000-8000-000000000012',
+    kind: 'rss_atom',
+    label: 'Synthetic subscription ' + String(index + 1),
+    enabled: false,
+    sourceAlias: 'synthetic-' + String(index),
+    isPrivate: false,
+    routeAfterImport: false,
+    intervalMinutes: 1440,
+    feedUrl: 'https://example.invalid/feed-' + String(index),
+    itemLimit: 20,
+  }));
+  let saves = 0;
+  await page.route('**/api/v1/source-subscriptions', (route) => {
+    if (route.request().method() === 'PUT') {
+      const body = route.request().postDataJSON() as {
+        subscriptions: typeof subscriptions;
+      };
+      subscriptions = body.subscriptions;
+      saves += 1;
+      return route.fulfill({
+        json: {status: 'applied', revision: saves, subscriptions},
+      });
+    }
+    return route.fulfill({
+      json: {
+        status: 'ok',
+        revision: saves,
+        connectors: Array.from({length: 3}, (_, index) => ({
+          connectorId: 'synthetic-connector-' + String(index),
+          displayName:
+            index === 0
+              ? 'Synthetic' + 'LongConnectorName'.repeat(8)
+              : 'Synthetic connector ' + String(index),
+          origin: 'builtin',
+          configurationMode: 'internal',
+        })),
+        subscriptions,
+      },
+    });
+  });
+  await page.goto('/');
+  await openWorkspace(page, '导入');
+  await page.getByRole('button', {name: '关闭手动导入'}).click();
+  await page.getByRole('button', {name: '订阅信源', exact: true}).click();
+  const list = page.getByRole('list', {name: '订阅列表'});
+  await page.locator('summary').filter({hasText: '可用订阅渠道'}).click();
+  const channels = page.getByLabel('可用订阅方式', {exact: true});
+  await expect(channels.getByRole('listitem')).toHaveCount(3);
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({width, height: 900});
+    await expect(channels).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      ),
+    ).toBeLessThanOrEqual(1);
+    const last = list.locator(':scope > li').last();
+    const disclosure = last.locator('summary');
+    if (
+      !(await last
+        .locator('details')
+        .evaluate((node) => node.hasAttribute('open')))
+    )
+      await disclosure.click();
+    await last
+      .getByRole('textbox', {name: '显示名称', exact: true})
+      .fill('Synthetic edited ' + String(width));
+    const save = page.getByRole('button', {name: '保存订阅设置', exact: true});
+    expect(
+      await save.evaluate((node) => !node.closest('.source-subscription-list')),
+    ).toBe(true);
+    expect((await list.boundingBox())?.height).toBeLessThanOrEqual(540);
+    await save.click();
+    await expect(page.getByText('订阅已保存', {exact: true})).toBeVisible();
+    expect(subscriptions.at(-1)?.label).toBe(
+      'Synthetic edited ' + String(width),
+    );
+  }
+  expect(saves).toBe(3);
+  await page.getByRole('button', {name: '新增订阅', exact: true}).click();
+  const draft = list.locator(':scope > li').last();
+  await expect(
+    draft.getByRole('textbox', {name: '显示名称', exact: true}),
+  ).toBeFocused();
+  await draft.getByRole('button', {name: '删除', exact: true}).click();
+  await expect(list.locator(':scope > li')).toHaveCount(12);
+  await expect(
+    page.getByRole('button', {name: '保存订阅设置', exact: true}),
+  ).toBeDisabled();
+});
+
+test('aligns selection and detail columns while keeping the editor keyboard reachable', async ({
+  page,
+}) => {
+  await installCurrentProductApi(page);
+  await page.route('**/api/v1/entries/search', (route) =>
+    route.fulfill({
+      json: {
+        status: 'ok',
+        totalCount: 2,
+        items: [SYNTHETIC_ENTRY, SYNTHETIC_EXPLORATION_ENTRY].map((entry) => ({
+          entry,
+          matchReasons: [],
+          filterReasons: [],
+        })),
+        privateDocuments: {totalCount: 0, items: []},
+      },
+    }),
+  );
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await page.setViewportSize({width: 1440, height: 900});
+  await page.goto('/');
+  const navigation = page.getByRole('navigation', {name: '产品工作区'});
+  for (const name of ['拆分', '标签', '查询']) {
+    await openWorkspace(page, name, navigation);
+    const list = page.locator('.entry-result-list');
+    const detail = page.getByRole('region', {
+      name: '所选条目详情',
+      exact: true,
+    });
+    await expect(list).toBeVisible();
+    await expect(detail).toBeVisible();
+    const listBounds = await list.boundingBox();
+    const detailBounds = await detail.boundingBox();
+    if (listBounds === null || detailBounds === null)
+      throw new Error('Missing workspace columns');
+    expect(
+      Math.abs(listBounds.height - detailBounds.height),
+    ).toBeLessThanOrEqual(1);
+    expect(Math.abs(listBounds.y - detailBounds.y)).toBeLessThanOrEqual(1);
+    expect(detailBounds.x).toBeGreaterThan(listBounds.x);
+    expect(detailBounds.height).toBeLessThan(900);
+
+    if (name === '标签') {
+      await detail.focus();
+      await page.keyboard.press('End');
+      await expect
+        .poll(() => detail.evaluate((node) => node.scrollTop))
+        .toBeGreaterThan(0);
+      const save = page.getByRole('button', {name: '保存并继续', exact: true});
+      await save.scrollIntoViewIfNeeded();
+      await expect(save).toBeInViewport();
+      await list.locator('ol button').last().click();
+      await expect
+        .poll(() => detail.evaluate((node) => node.scrollTop))
+        .toBe(0);
+    }
+    await page.setViewportSize({width: 1024, height: 900});
+    await expect
+      .poll(async () => {
+        const narrowList = await list.boundingBox();
+        const narrowDetail = await detail.boundingBox();
+        return (
+          narrowList !== null &&
+          narrowDetail !== null &&
+          narrowDetail.y >= narrowList.y + narrowList.height
+        );
+      })
+      .toBe(true);
+    expect(
+      (await list.locator('ol').boundingBox())?.height,
+    ).toBeLessThanOrEqual(192);
+    await page.setViewportSize({width: 390, height: 844});
+    await expect(detail).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - innerWidth,
+      ),
+    ).toBeLessThanOrEqual(1);
+    await page.setViewportSize({width: 1440, height: 900});
+  }
+});
+
+async function openWorkspace(
+  page: Page,
+  label: string,
+  navigation: Locator = page.getByRole('navigation', {name: '产品工作区'}),
+) {
+  const current =
+    label === '导入'
+      ? '收件箱'
+      : label === '知识'
+        ? '专题'
+        : ['拆分', '标签', '联系', '总览'].includes(label)
+          ? '设置'
+          : label;
+  await navigation.getByRole('button', {name: current, exact: true}).click();
+  if (label === '导入')
+    await page.getByRole('button', {name: '手动导入', exact: true}).click();
+  if (['拆分', '标签', '联系', '总览'].includes(label)) {
+    await page
+      .getByRole('button', {
+        name: label === '总览' ? '数据与维护' : '处理流程',
+        exact: true,
+      })
+      .click();
+    if (label !== '总览')
+      await page
+        .locator('summary')
+        .filter({hasText: '批量处理与高级工具'})
+        .click();
+    const actions: Record<string, string> = {
+      拆分: '批量结构工具',
+      标签: '批量标签与待处理队列',
+      联系: '联系维护',
+      总览: '运行总览与任务记录',
+    };
+    await page
+      .getByRole('button', {name: actions[label] ?? label, exact: true})
+      .click();
+  }
+}
+
+test('keeps document reading stable through source, structure, tags and relationship workbenches', async ({
+  page,
+}) => {
+  const restructureRequests: Readonly<{path: string; body: string}>[] = [];
+  const writes: Record<string, unknown>[] = [];
+  await installCurrentProductApi(page, {restructureRequests});
+  await page.route('**/api/v1/entries/' + ENTRY_ID, async (route) => {
+    writes.push(route.request().postDataJSON() as Record<string, unknown>);
+    await route.fulfill({
+      json: {status: 'applied', entry: {...SYNTHETIC_ENTRY, revision: 2}},
+    });
+  });
+  await page.setViewportSize({width: 1440, height: 1000});
+  await page.goto('/');
+  const paper = page.locator('.document-paper');
+  await expect(paper).toContainText(SYNTHETIC_ENTRY.value.titlePath);
+  const before = await paper.boundingBox();
+  if (before === null) throw Error('Reading paper missing');
+  await page.getByRole('button', {name: '来源详情', exact: true}).click();
+  await expect(
+    page.getByRole('region', {name: '来源详情', exact: true}),
+  ).toContainText('原文片段');
+  await page.keyboard.press('Escape');
+  await expect(
+    page.getByRole('button', {name: '来源详情', exact: true}),
+  ).toBeFocused();
+  await page.getByRole('button', {name: '调整结构', exact: true}).click();
+  const structure = page.getByRole('region', {name: '调整结构', exact: true});
+  await expect(structure.getByLabel('条目 1 来源段 1 正文')).toHaveValue(
+    SYNTHETIC_FRAGMENT_TEXT,
+  );
+  await structure.getByLabel('条目标题', {exact: true}).fill('合成修订标题');
+  await structure.getByRole('button', {name: '预览修改', exact: true}).click();
+  await expect(
+    structure.getByRole('heading', {name: '本次将发生什么'}),
+  ).toBeVisible();
+  expect(JSON.parse(restructureRequests.at(-1)?.body ?? '{}')).toMatchObject({
+    snapshotId: SNAPSHOT_ID,
+    includePrivate: false,
+    groups: [{titlePath: '合成修订标题'}],
+  });
+  await structure.locator('summary').filter({hasText: '结构规则'}).click();
+  expect(
+    await structure
+      .locator('.workspace-tool-panel__content')
+      .evaluate((e) => e.scrollWidth - e.clientWidth),
+  ).toBeLessThanOrEqual(1);
+  await page.getByRole('button', {name: '关闭调整结构'}).click();
+  await page.getByRole('button', {name: '添加标签', exact: true}).click();
+  const tags = page.getByRole('region', {name: '添加标签', exact: true});
+  const keywords = tags.getByLabel('内容关键词（逗号或换行分隔）');
+  await keywords.fill('合成关键词');
+  await tags
+    .getByRole('combobox', {name: '主领域', exact: true})
+    .selectOption('engineering_computing');
+  await page.getByRole('button', {name: '关闭添加标签'}).click();
+  await page.getByRole('button', {name: '建立联系', exact: true}).click();
+  await expect(
+    page
+      .getByRole('region', {name: '建立联系', exact: true})
+      .locator('.knowledge-inspector'),
+  ).toBeVisible();
+  await page.getByRole('button', {name: '关闭建立联系'}).click();
+  await page.getByRole('button', {name: '添加标签', exact: true}).click();
+  await expect(keywords).toHaveValue('合成关键词');
+  const after = await paper.boundingBox();
+  expect(after?.width).toBeCloseTo(before.width, 1);
+  await tags.locator('summary').filter({hasText: '整篇文档标签'}).click();
+  await expect(
+    tags.getByRole('button', {name: '按全文重新聚合'}),
+  ).toBeVisible();
+  await tags.getByRole('button', {name: '保存标注', exact: true}).click();
+  await expect(page.getByText('条目已保存', {exact: true})).toBeVisible();
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toMatchObject({
+    expectedRevision: 1,
+    includePrivate: false,
+    annotation: {
+      body: SYNTHETIC_ENTRY.value.body,
+      contentKeywords: ['合成关键词'],
+    },
+  });
+  await expect(
+    page.getByRole('heading', {name: '资料库', exact: true}),
+  ).toBeVisible();
+});
+
+test('persists sidebar order and theme, keeps hidden actions reachable and preserves a conflicting draft', async ({
+  page,
+}) => {
+  await installCurrentProductApi(page);
+  let saved = structuredClone(DEFAULT_WORKSPACE_UI_PREFERENCES);
+  const writes: (typeof saved)[] = [];
+  let conflict = false;
+  await page.route('**/api/v1/preferences/interface', async (route) => {
+    if (route.request().method() === 'PUT') {
+      const candidate = route.request().postDataJSON() as typeof saved;
+      writes.push(candidate);
+      if (conflict) {
+        saved = {...saved, revision: saved.revision + 1};
+        await route.fulfill({
+          status: 409,
+          json: {status: 'conflict', preferences: saved},
+        });
+        return;
+      }
+      saved = {...candidate, revision: saved.revision + 1};
+    }
+    await route.fulfill({json: {status: 'ok', preferences: saved}});
+  });
+  await page.goto('/');
+  const nav = page.getByRole('navigation', {name: '产品工作区'});
+  await nav.getByRole('button', {name: '设置', exact: true}).click();
+  const documents = page.getByRole('group', {name: '资料库', exact: true});
+  await documents
+    .getByRole('checkbox', {name: '建立联系', exact: true})
+    .uncheck();
+  await page
+    .getByRole('button', {name: '资料库调整结构上移', exact: true})
+    .click();
+  await page
+    .getByRole('group', {name: '查询', exact: true})
+    .getByRole('checkbox', {name: '资料清单与导出', exact: true})
+    .uncheck();
+  await page.getByRole('combobox', {name: '默认外观'}).selectOption('dark');
+  await page.getByRole('button', {name: '保存页面设置', exact: true}).click();
+  await expect(page.getByText('页面设置已保存。', {exact: true})).toBeVisible();
+  expect(writes[0]?.sidebars.documents).toEqual([
+    'structure',
+    'source',
+    'tags',
+  ]);
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  const rail = page.locator('.document-tool-area > .workspace-action-rail');
+  await expect(rail.locator('ol > li > button')).toHaveText([
+    '调整结构',
+    '来源详情',
+    '添加标签',
+  ]);
+  await expect(
+    rail.getByRole('button', {name: '建立联系', exact: true}),
+  ).toBeHidden();
+  await rail.locator('summary').filter({hasText: '更多操作'}).click();
+  await expect(
+    rail.getByRole('button', {name: '建立联系', exact: true}),
+  ).toBeVisible();
+  await nav.getByRole('button', {name: '查询', exact: true}).click();
+  const sidebar = page.getByRole('complementary', {name: '阅读与资料工具'});
+  await expect(
+    sidebar
+      .locator('.query-sidebar-section > details > summary')
+      .filter({hasText: '资料清单与导出'}),
+  ).toBeHidden();
+  await sidebar.locator('summary').filter({hasText: '更多操作'}).click();
+  await sidebar
+    .locator('.query-sidebar-section > details > summary')
+    .filter({hasText: '资料清单与导出'})
+    .click();
+  await expect(
+    sidebar.getByRole('button', {name: '加入资料清单', exact: true}),
+  ).toBeVisible();
+  await nav.getByRole('button', {name: '设置', exact: true}).click();
+  conflict = true;
+  await page.getByRole('combobox', {name: '默认外观'}).selectOption('light');
+  await page.getByRole('button', {name: '保存页面设置', exact: true}).click();
+  await expect(page.getByRole('status')).toContainText('当前草稿仍然保留');
+  await expect(page.getByRole('combobox', {name: '默认外观'})).toHaveValue(
+    'light',
+  );
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.getByRole('button', {name: '重新读取页面设置'}).click();
+  await expect(page.getByRole('combobox', {name: '默认外观'})).toHaveValue(
+    'dark',
+  );
+});
+
+test('AI controls preserve drafts across refresh and filters, pause saved policy and expose queue recovery', async ({
+  page,
+}) => {
+  await installCurrentProductApi(page);
+  let policy: AiPolicy = {
+    revision: 1,
+    settings: {
+      enabled: true,
+      paused: false,
+      subscriptionIds: [],
+      manualUploads: true,
+      model: 'synthetic-model',
+      maxEntries: 12,
+      maxRelations: 2,
+      maxModelCalls: 20,
+      maxDocumentsPerDay: 10,
+    },
+  };
+  const writes: {expectedRevision: number; settings: AiPolicy['settings']}[] =
+    [];
+  const controls: unknown[] = [];
+  let configured = false;
+  let status = 'attention',
+    version = 1;
+  await page.route('**/api/v1/*/commands', async (route) => {
+    const {operation, input} = route.request().postDataJSON() as {
+      operation: string;
+      input: Record<string, unknown>;
+    };
+    let result: unknown;
+    if (operation === 'system_status')
+      result = {
+        role: 'all',
+        agentEnabled: false,
+        grants: [],
+        ...(configured ? {model: 'synthetic-model'} : {}),
+      };
+    else if (operation === 'subscriptions_list' || operation === 'tasks_list')
+      result = [];
+    else if (operation === 'ingestion_status')
+      result = {
+        policy,
+        modelConfigured: configured,
+        summary: {counts: {[status]: 1}, admittedToday: 1, modelAttempts: 2},
+        items:
+          input.status && input.status !== status
+            ? []
+            : [
+                {
+                  snapshotId: SNAPSHOT_ID,
+                  sourceLabel: '合成自动处理文档',
+                  status,
+                  version,
+                  errorCode: 'ai_provider_unavailable',
+                  task: {status: 'failed', phase: 'split', calls: 2},
+                },
+              ],
+      };
+    else if (operation === 'ingestion_policy_save') {
+      const write = input as unknown as (typeof writes)[number];
+      writes.push(structuredClone(write));
+      if (write.expectedRevision !== policy.revision) {
+        await route.fulfill({
+          status: 409,
+          json: {error: {code: 'stale_ingestion_policy'}},
+        });
+        return;
+      }
+      policy = {revision: policy.revision + 1, settings: write.settings};
+      result = policy;
+    } else if (operation === 'ingestion_item_control') {
+      controls.push(input);
+      status = input.action === 'take_over' ? 'taken_over' : 'pending';
+      version++;
+      result = {};
+    } else throw new Error('Unexpected synthetic command: ' + operation);
+    await route.fulfill({json: {result}});
+  });
+  await page.goto('/');
+  const nav = page.getByRole('navigation', {name: '产品工作区'});
+  await nav.getByRole('button', {name: '设置', exact: true}).click();
+  await page.getByRole('button', {name: 'AI 接入', exact: true}).click();
+  const panel = page.locator('.settings-content .ai-workflow-panel');
+  await expect(
+    panel.getByText('内部模型：未配置', {exact: true}),
+  ).toBeVisible();
+  await panel.locator('summary').filter({hasText: '处理范围与预算'}).click();
+  await panel
+    .getByRole('spinbutton', {name: '每日新文档', exact: true})
+    .fill('7');
+  await expect(
+    panel.getByRole('button', {name: '保存处理策略', exact: true}),
+  ).toBeDisabled();
+  configured = true;
+  await panel.getByRole('button', {name: '刷新处理状态', exact: true}).click();
+  await expect(
+    panel.getByRole('button', {name: '保存处理策略', exact: true}),
+  ).toBeEnabled();
+  await expect(
+    panel.getByRole('spinbutton', {name: '每日新文档', exact: true}),
+  ).toHaveValue('7');
+  await panel
+    .getByRole('combobox', {name: '自动处理状态筛选'})
+    .selectOption('completed');
+  await expect(
+    panel.getByText(
+      '当前没有符合条件的记录。新资料进入授权范围后会出现在这里。',
+    ),
+  ).toBeVisible();
+  await expect(
+    panel.getByRole('spinbutton', {name: '每日新文档', exact: true}),
+  ).toHaveValue('7');
+  await panel.getByRole('button', {name: '暂停自动处理', exact: true}).click();
+  await expect(
+    panel.getByRole('button', {name: '恢复自动处理', exact: true}),
+  ).toBeVisible();
+  expect(writes[0]).toMatchObject({
+    expectedRevision: 1,
+    settings: {paused: true, maxDocumentsPerDay: 10},
+  });
+  await panel.getByRole('button', {name: '保存处理策略', exact: true}).click();
+  await expect(
+    panel.getByRole('spinbutton', {name: '每日新文档', exact: true}),
+  ).toHaveValue('7');
+  await expect(
+    panel.getByText('服务器策略已变化，当前草稿保留。可重新读取最新策略。'),
+  ).toBeVisible();
+  await panel.getByRole('button', {name: '重新读取策略', exact: true}).click();
+  await expect(
+    panel.getByRole('spinbutton', {name: '每日新文档', exact: true}),
+  ).toHaveValue('10');
+  await panel
+    .getByRole('combobox', {name: '自动处理状态筛选'})
+    .selectOption('attention');
+  await panel.getByRole('button', {name: '重试 / 继续', exact: true}).click();
+  expect(controls[0]).toMatchObject({
+    snapshotId: SNAPSHOT_ID,
+    expectedVersion: 1,
+    action: 'retry',
+  });
+  await panel
+    .getByRole('combobox', {name: '自动处理状态筛选'})
+    .selectOption('');
+  await panel.getByRole('button', {name: '人工接管', exact: true}).click();
+  expect(controls[1]).toMatchObject({
+    snapshotId: SNAPSHOT_ID,
+    expectedVersion: 2,
+    action: 'take_over',
+  });
+  await expect(
+    panel
+      .getByRole('list', {name: '自动处理文档'})
+      .getByText('已接管', {exact: false}),
+  ).toBeVisible();
+  for (const [width, height] of [
+    [1440, 1000],
+    [768, 1024],
+    [320, 800],
+  ] as const) {
+    await page.setViewportSize({width, height});
+    await page.emulateMedia({
+      colorScheme: width === 1440 ? 'dark' : 'light',
+      reducedMotion: 'reduce',
+    });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      )
+      .toBe(true);
+    await page.locator('.settings-content').evaluate((el) => {
+      el.scrollTop = 0;
+    });
+    if (process.env.STRUIINFO_UI_EVIDENCE_ROOT)
+      await page.screenshot({
+        path:
+          process.env.STRUIINFO_UI_EVIDENCE_ROOT +
+          '/ai-settings-' +
+          width.toString() +
+          '.png',
+        fullPage: true,
+      });
+  }
 });

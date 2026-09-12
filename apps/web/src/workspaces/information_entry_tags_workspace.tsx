@@ -163,12 +163,12 @@ export function InformationEntryTagsWorkspace({
         </div>
       </header>
 
-      <aside className="workflow-mode-summary" aria-label="标签页操作指南">
-        <strong>标注条目</strong>
+      <details className="workflow-mode-summary" aria-label="标签页操作指南">
+        <summary>操作指南 · 标注条目</summary>
         <span>1. 先选择文档，再选择条目</span>
         <span>2. 检查关键词并完成评分</span>
         <span>3. 需要时调整偏好与自动分流</span>
-      </aside>
+      </details>
 
       <div className="tags-studio-grid">
         <aside className="tags-studio-grid__documents">
@@ -183,7 +183,7 @@ export function InformationEntryTagsWorkspace({
           />
         </aside>
 
-        <main className="tags-studio-grid__review">
+        <section className="tags-studio-grid__review">
           <div className="tags-review-mode-switch" aria-label="标签工作模式">
             <button
               className={reviewMode === 'document' ? 'is-active' : undefined}
@@ -278,24 +278,27 @@ export function InformationEntryTagsWorkspace({
               </section>
 
               {controller.selectedDocument === undefined ? null : (
-                <InformationDocumentPanel
-                  key={`${controller.selectedDocument.snapshotId}:${controller.selectedDocument.currentTags?.revision.toString() ?? '0'}`}
-                  document={controller.selectedDocument}
-                  includePrivate={controller.includePrivate}
-                  onOpenDocument={() => {
-                    onOpenEvidence(
-                      controller.selectedDocument?.snapshotId ?? '',
-                      undefined,
-                      controller.selectedDocument?.isPrivate === true,
-                    );
-                  }}
-                  onAggregate={onAggregateDocumentTags}
-                  onRevise={onReviseDocumentTags}
-                  onChanged={async (nextFeedback) => {
-                    setFeedback(nextFeedback);
-                    await controller.refreshDocuments();
-                  }}
-                />
+                <details className="workflow-tool-drawer">
+                  <summary>文档标签与聚合</summary>
+                  <InformationDocumentPanel
+                    key={`${controller.selectedDocument.snapshotId}:${controller.selectedDocument.currentTags?.revision.toString() ?? '0'}`}
+                    document={controller.selectedDocument}
+                    includePrivate={controller.includePrivate}
+                    onOpenDocument={() => {
+                      onOpenEvidence(
+                        controller.selectedDocument?.snapshotId ?? '',
+                        undefined,
+                        controller.selectedDocument?.isPrivate === true,
+                      );
+                    }}
+                    onAggregate={onAggregateDocumentTags}
+                    onRevise={onReviseDocumentTags}
+                    onChanged={async (nextFeedback) => {
+                      setFeedback(nextFeedback);
+                      await controller.refreshDocuments();
+                    }}
+                  />
+                </details>
               )}
 
               <InformationEntryResults
@@ -315,19 +318,6 @@ export function InformationEntryTagsWorkspace({
               >
                 {controller.selectedEntry === undefined ? undefined : (
                   <>
-                    <InformationEntryAiTags
-                      key={`ai:${controller.selectedEntry.entryId}:${controller.selectedEntry.revision.toString()}`}
-                      enabled={aiEnabled}
-                      entry={controller.selectedEntry}
-                      onListAiTagProposals={onListAiTagProposals}
-                      onStartAiTagProposal={onStartAiTagProposal}
-                      onAcceptAiTagProposal={onAcceptAiTagProposal}
-                      onRejectAiTagProposal={onRejectAiTagProposal}
-                      onAccepted={async () => {
-                        await controller.executeSearch();
-                        await controller.refreshDocuments();
-                      }}
-                    />
                     <InformationEntryEditor
                       key={`${controller.selectedEntry.entryId}:${controller.selectedEntry.revision.toString()}`}
                       entry={controller.selectedEntry}
@@ -351,12 +341,30 @@ export function InformationEntryTagsWorkspace({
                         await controller.refreshDocuments();
                       }}
                     />
+                    <details className="workflow-tool-drawer">
+                      <summary>
+                        AI 标签建议{aiEnabled ? '' : '（未启用）'}
+                      </summary>
+                      <InformationEntryAiTags
+                        key={`ai:${controller.selectedEntry.entryId}:${controller.selectedEntry.revision.toString()}`}
+                        enabled={aiEnabled}
+                        entry={controller.selectedEntry}
+                        onListAiTagProposals={onListAiTagProposals}
+                        onStartAiTagProposal={onStartAiTagProposal}
+                        onAcceptAiTagProposal={onAcceptAiTagProposal}
+                        onRejectAiTagProposal={onRejectAiTagProposal}
+                        onAccepted={async () => {
+                          await controller.executeSearch();
+                          await controller.refreshDocuments();
+                        }}
+                      />
+                    </details>
                   </>
                 )}
               </InformationEntryResults>
             </>
           )}
-        </main>
+        </section>
 
         <aside className="tags-studio-grid__rules" aria-label="偏好与自动分流">
           <details className="workflow-tool-drawer">

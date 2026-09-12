@@ -1,3 +1,8 @@
+import {
+  loadCachedEntrySearchTranslations,
+  type EntryTranslation,
+  type EntryTranslationSearchRepositoryPort,
+} from './information_entry_translation.js';
 import {refreshInformationEntrySearchIndex} from './information_entry_search_index_refresh.js';
 import type {InformationEntryAssociationRepositoryPort} from './information_entry_association_repository.js';
 import type {
@@ -37,6 +42,7 @@ export interface InformationEntryRetrievalServiceDependencies {
   readonly associations: InformationEntryAssociationRepositoryPort;
   readonly index: InformationEntrySearchIndexRepositoryPort;
   readonly embeddingProvider?: InformationEntryEmbeddingProviderPort;
+  readonly translations?: EntryTranslationSearchRepositoryPort;
 }
 
 export class InformationEntryRetrievalService implements InformationEntryRetrievalServicePort {
@@ -61,6 +67,11 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
   ): Promise<Readonly<InformationEntrySearchResult>> {
     const mode = request.retrievalMode ?? 'lexical';
     if (mode !== 'lexical') this.#assertSemanticRequest(request);
+    const translations = await loadCachedEntrySearchTranslations(
+      this.#dependencies.workspaceId,
+      request,
+      this.#dependencies.translations,
+    );
     if (mode === 'lexical') {
       const browsePage = await this.#loadPlainBrowsePage(request);
       if (browsePage !== undefined) {
@@ -70,7 +81,10 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
         );
         return Object.freeze({...result, totalCount: browsePage.totalCount});
       }
-      const accelerated = await this.#loadAcceleratedLexicalEntries(request);
+      const accelerated = await this.#loadAcceleratedLexicalEntries(
+        request,
+        translations,
+      );
       const [entries, associations] = await Promise.all([
         accelerated === undefined
           ? this.#dependencies.entries.loadCurrentEntries(
@@ -85,7 +99,13 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
               request.includePrivate,
             ),
       ]);
-      return searchCurrentInformationEntries(entries, request, associations);
+      return searchCurrentInformationEntries(
+        entries,
+        request,
+        associations,
+        undefined,
+        translations,
+      );
     }
     const [entries, associations] = await Promise.all([
       this.#dependencies.entries.loadCurrentEntries(
@@ -152,6 +172,7 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
       request,
       associations,
       semanticMatches,
+      translations,
     );
   }
 
@@ -361,6 +382,7 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
 
   async #loadAcceleratedLexicalEntries(
     request: Readonly<InformationEntrySearchRequest>,
+    translations: ReadonlyMap<string, Readonly<EntryTranslation>>,
   ): Promise<readonly Readonly<CurrentInformationEntry>[] | undefined> {
     const findCandidates =
       this.#dependencies.index.findLexicalCandidateEntryIds?.bind(
@@ -403,7 +425,13 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
     );
     return candidateIds === undefined
       ? undefined
-      : loadCandidates(this.#dependencies.workspaceId, false, candidateIds);
+      : loadCandidates(
+          this.#dependencies.workspaceId,
+          false,
+          Object.freeze([
+            ...new Set([...candidateIds, ...translations.keys()]),
+          ]),
+        );
   }
 
   async #loadPlainBrowsePage(
