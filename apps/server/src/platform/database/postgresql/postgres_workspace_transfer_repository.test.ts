@@ -29,6 +29,52 @@ const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 const CREATED_AT = '2040-01-02T03:04:05.000Z';
 
 describe('PostgresM1cDomainTransferRepository', () => {
+  it('restores unattended policy paused with a fresh version while leaving archived authority intact', async () => {
+    const {pool, statements, parameters} = createPool(() => rows([]));
+    const empty = createEmptyM1cWorkspaceTransferSnapshot(
+      WORKSPACE_ID,
+      CREATED_AT,
+    );
+    const policy = {
+      workspace_id: WORKSPACE_ID,
+      current_version: 2,
+      authorized_by_kind: 'owner',
+      authorized_by_id: 'synthetic-owner',
+      settings_text: JSON.stringify({
+        enabled: true,
+        manualUploads: true,
+        model: 'synthetic-model',
+      }),
+      updated_at: CREATED_AT,
+    };
+    const snapshot = {
+      ...empty,
+      processing: {
+        ...empty.processing,
+        tables: empty.processing.tables.map((t) =>
+          t.name === 'processing_ingestion_policy' ? {...t, rows: [policy]} : t,
+        ),
+      },
+    };
+    await new PostgresM1cDomainTransferRepository(pool).restoreEmptyWorkspace(
+      WORKSPACE_ID,
+      snapshot,
+    );
+    const index = statements.findIndex((s) =>
+      s.startsWith('INSERT INTO struinfo.processing_ingestion_policy'),
+    );
+    const [restored] = JSON.parse(String(parameters[index]?.[0])) as {
+      current_version: number;
+      settings_text: string;
+    }[];
+    expect(restored?.current_version).toBe(3);
+    expect(JSON.parse(restored?.settings_text ?? '{}')).toMatchObject({
+      enabled: true,
+      paused: true,
+    });
+    expect(JSON.parse(policy.settings_text)).not.toHaveProperty('paused');
+  });
+
   it('exports every domain table inside one repeatable-read snapshot', async () => {
     const {pool, statements, release} = createPool((sql) => {
       if (sql.includes('FROM struinfo.workspace AS t')) {

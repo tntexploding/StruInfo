@@ -1,3 +1,4 @@
+import {ingestionSettingsSchema} from '../../../application/ingestion_contract.js';
 import {
   assertM1cDomainWorkspace,
   M1C_DOMAIN_BUNDLE_SCHEMA,
@@ -190,7 +191,20 @@ async function restoreInTransaction(
   ]) {
     if (tableSnapshot.rows.length === 0) continue;
     await client.query<Row>(insertTableSql(tableSnapshot.name), [
-      JSON.stringify(tableSnapshot.rows),
+      JSON.stringify(
+        tableSnapshot.name === 'processing_ingestion_policy'
+          ? tableSnapshot.rows.map((row) => ({
+              ...row,
+              current_version: Number(row.current_version) + 1,
+              settings_text: JSON.stringify({
+                ...ingestionSettingsSchema.parse(
+                  JSON.parse(String(row.settings_text)) as unknown,
+                ),
+                paused: true,
+              }),
+            }))
+          : tableSnapshot.rows,
+      ),
     ]);
   }
   return true;

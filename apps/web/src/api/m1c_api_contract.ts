@@ -1129,7 +1129,13 @@ export type InformationEntryRevisionResponse =
   | DomainFailure;
 
 export type InformationEntryMatchReason =
-  'title' | 'body' | 'content_keyword' | 'type_keyword' | 'domain_keyword';
+  | 'title'
+  | 'body'
+  | 'translation_title'
+  | 'translation_body'
+  | 'content_keyword'
+  | 'type_keyword'
+  | 'domain_keyword';
 
 export type InformationEntryFilterReason =
   | 'content_keyword'
@@ -1674,3 +1680,22 @@ export type EntryMarkdownExportResponse =
       file: Readonly<{fileName: string; byteLength: number}>;
     }>
   | Readonly<{status: 'rejected'; issue: Readonly<{code: string}>}>;
+
+export interface EntryTranslation {
+  readonly entryId: string;
+  readonly sourceRevision: number;
+  readonly sourceRevisionId: string;
+  readonly targetLanguage: 'zh-CN';
+  readonly title: string;
+  readonly body: string;
+  readonly providerKey: 'openai-responses-v1' | 'provided-translation-v1';
+  readonly model: string;
+  readonly promptVersion: string;
+  readonly translatedAt: string;
+}
+export type EntryTranslationResponse =
+  | Readonly<{status: 'ok'; translation: Readonly<EntryTranslation> | null}>
+  | Readonly<{
+      status: 'rejected' | 'failed' | 'invalid';
+      issue: Readonly<{code: string}>;
+    }>;

@@ -1,4 +1,5 @@
-import type {ReactNode} from 'react';
+import {useWorkspaceUi} from './use_workspace_ui.js';
+import {useEffect, useState, type ReactNode} from 'react';
 
 import type {WorkspaceResponse} from '../api/m1c_api_contract.js';
 import type {HealthPageState} from '../health/health_state.js';
@@ -9,21 +10,39 @@ const NAVIGATION: readonly Readonly<{
   section: ProductSection;
   index: string;
   label: string;
+  icon: string;
+  groupStart?: boolean;
 }>[] = [
-  {section: 'overview', index: '00', label: '总览'},
-  {section: 'import', index: '01', label: '导入'},
-  {section: 'split', index: '02', label: '拆分'},
-  {section: 'tags', index: '03', label: '标签'},
   {
-    section: 'associations',
-    index: '04',
-    label: '联系',
+    section: 'import',
+    index: '01',
+    label: '收件箱',
+    icon: 'M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5',
   },
-  {section: 'query', index: '05', label: '查询'},
+  {
+    section: 'documents',
+    index: '02',
+    label: '资料库',
+    icon: 'M5 3h10l4 4v14H5z M14 3v5h5 M8 12h8 M8 16h6',
+  },
   {
     section: 'knowledge',
-    index: '06',
-    label: '知识',
+    index: '03',
+    label: '专题',
+    icon: 'M12 4l7 5v8l-7 4-7-4V9z M5 9l7 4 7-4 M12 13v8',
+  },
+  {
+    section: 'query',
+    index: '04',
+    label: '查询',
+    icon: 'M10.5 3a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15 M16 16l5 5',
+  },
+  {
+    section: 'settings',
+    index: '05',
+    label: '设置',
+    icon: 'M4 7h16 M4 17h16 M8 4v6 M16 14v6',
+    groupStart: true,
   },
 ];
 
@@ -45,6 +64,28 @@ export function ProductAppShell({
   onNavigate,
   workspace,
 }: ProductAppShellProps) {
+  const {preferences} = useWorkspaceUi();
+  const effectiveSection = [
+    'split',
+    'tags',
+    'associations',
+    'overview',
+  ].includes(activeSection)
+    ? 'settings'
+    : activeSection;
+  const [themeOverride, setThemeOverride] = useState<{
+    revision: number;
+    theme: string;
+  }>();
+  const theme =
+    themeOverride?.revision === preferences.revision
+      ? themeOverride.theme
+      : preferences.theme;
+  useEffect(() => {
+    if (theme === 'system') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
   const healthLabel = describeHealth(health);
   const aiEnabled =
     workspace?.capabilities.some(
@@ -64,23 +105,35 @@ export function ProductAppShell({
             <span className="primary-rail__mark" aria-hidden="true">
               SI
             </span>
+            <span className="primary-rail__name">StruInfo</span>
           </div>
           <nav className="primary-navigation" aria-label="产品工作区">
             <ol className="workflow-navigation__list">
               {NAVIGATION.map((item) => (
-                <li key={item.section}>
+                <li key={item.section} data-group-start={item.groupStart}>
                   <button
                     className="primary-navigation__item"
-                    data-active={item.section === activeSection}
+                    data-active={item.section === effectiveSection}
                     type="button"
                     aria-label={item.label}
                     aria-current={
-                      item.section === activeSection ? 'page' : undefined
+                      item.section === effectiveSection ? 'page' : undefined
                     }
                     onClick={() => {
                       onNavigate(item.section);
                     }}
                   >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d={item.icon} />
+                    </svg>
                     <span
                       className="primary-navigation__index"
                       aria-hidden="true"
@@ -99,12 +152,10 @@ export function ProductAppShell({
               ))}
             </ol>
           </nav>
+          <p className="primary-rail__hint">阅读 · 整理 · 再发现</p>
         </aside>
 
         <header className="product-command-bar">
-          <div className="product-lockup">
-            <p className="product-lockup__name">StruInfo</p>
-          </div>
           <dl className="command-status" aria-label="当前运行状态">
             <div>
               <dt>工作区</dt>
@@ -119,6 +170,23 @@ export function ProductAppShell({
               <dd>{aiEnabled ? '已启用' : '未启用'}</dd>
             </div>
           </dl>
+          <label className="theme-control">
+            <span>外观</span>
+            <select
+              aria-label="界面外观"
+              value={theme}
+              onChange={(event) => {
+                setThemeOverride({
+                  revision: preferences.revision,
+                  theme: event.currentTarget.value,
+                });
+              }}
+            >
+              <option value="system">跟随系统</option>
+              <option value="light">浅色</option>
+              <option value="dark">深色</option>
+            </select>
+          </label>
         </header>
 
         <main className="product-workspace" id="main-workspace" tabIndex={-1}>

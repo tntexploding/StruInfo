@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import type {
   M1cHttpResponse,
@@ -59,6 +59,7 @@ export function SourceSubscriptionPanel({
   const [feedback, setFeedback] = useState<ActionFeedback>();
   const [saving, setSaving] = useState(false);
   const [runningId, setRunningId] = useState<string>();
+  const pendingNewSubscription = useRef<string | undefined>(undefined);
 
   const load = useCallback(async () => {
     if (!enabled) return;
@@ -171,6 +172,9 @@ export function SourceSubscriptionPanel({
   }
 
   function addSubscription() {
+    if (state.status !== 'ready' || state.drafts.length >= 32) return;
+    const subscriptionId = createClientUuid();
+    pendingNewSubscription.current = subscriptionId;
     setState((current) =>
       current.status !== 'ready' || current.drafts.length >= 32
         ? current
@@ -180,7 +184,7 @@ export function SourceSubscriptionPanel({
               ...current.drafts,
               Object.freeze({
                 kind: 'github_markdown' as const,
-                subscriptionId: createClientUuid(),
+                subscriptionId,
                 label: '',
                 enabled: false,
                 repositoryUri: '',
@@ -425,13 +429,20 @@ export function SourceSubscriptionPanel({
               新增订阅
             </button>
           </div>
-          <SourceConnectorCapabilityList connectors={state.connectors} />
+          <details className="workflow-tool-drawer">
+            <summary>可用订阅渠道</summary>
+            <SourceConnectorCapabilityList connectors={state.connectors} />
+          </details>
           {state.drafts.length === 0 ? (
             <p className="empty-copy">
               尚无订阅。新增后先保存，再执行一次手动检查。
             </p>
           ) : (
-            <ol className="source-subscription-list">
+            <ol
+              className="source-subscription-list"
+              aria-label="订阅列表"
+              tabIndex={0}
+            >
               {state.drafts.map((subscription) => {
                 const saved = state.saved.find(
                   (candidate) =>
@@ -453,507 +464,541 @@ export function SourceSubscriptionPanel({
                         删除
                       </button>
                     </header>
-                    <div className="source-subscription-fields">
-                      <label className="field">
-                        <span>来源类型</span>
-                        <select
-                          value={subscription.kind}
-                          onChange={(event) => {
-                            changeSubscriptionKind(
-                              subscription,
-                              event.currentTarget
-                                .value as SourceSubscriptionWrite['kind'],
-                            );
-                          }}
-                        >
-                          <option value="github_markdown">
-                            GitHub Markdown 文件
-                          </option>
-                          <option value="rss_atom">RSS / Atom 订阅</option>
-                          <option value="json_api">JSON API</option>
-                          <option value="web">受限网页</option>
-                          {subscription.kind === 'plugin' ||
-                          state.connectors.some(
-                            (connector) => connector.origin === 'plugin',
-                          ) ? (
-                            <option value="plugin">已安装插件</option>
-                          ) : null}
-                        </select>
-                      </label>
-                      <label className="field">
-                        <span>显示名称</span>
-                        <input
-                          value={subscription.label}
-                          maxLength={80}
-                          onChange={(event) => {
-                            updateDraft(subscription.subscriptionId, {
-                              label: event.currentTarget.value,
-                            });
-                          }}
-                        />
-                      </label>
-                      <label className="field">
-                        <span>来源别名</span>
-                        <input
-                          value={subscription.sourceAlias}
-                          maxLength={120}
-                          onChange={(event) => {
-                            updateDraft(subscription.subscriptionId, {
-                              sourceAlias: event.currentTarget.value,
-                            });
-                          }}
-                        />
-                      </label>
-                      {subscription.kind === 'github_markdown' ? (
-                        <>
-                          <label className="field field--wide">
-                            <span>GitHub 仓库</span>
-                            <input
-                              value={subscription.repositoryUri}
-                              placeholder="https://github.com/owner/repository"
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  repositoryUri: event.currentTarget.value,
-                                });
-                              }}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>分支或引用</span>
-                            <input
-                              value={subscription.repositoryRef}
-                              maxLength={200}
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  repositoryRef: event.currentTarget.value,
-                                });
-                              }}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>仓库内文件路径</span>
-                            <input
-                              value={subscription.repositoryPath}
-                              placeholder="docs/weekly.md"
-                              maxLength={500}
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  repositoryPath: event.currentTarget.value,
-                                });
-                              }}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>解析规则</span>
-                            <select
-                              value={subscription.profile}
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  profile: event.currentTarget.value as
-                                    'commonmark-v1' | 'ruanyf-weekly-v1',
-                                });
-                              }}
-                            >
-                              <option value="commonmark-v1">
-                                通用 Markdown
-                              </option>
-                              <option value="ruanyf-weekly-v1">周刊结构</option>
-                            </select>
-                          </label>
-                        </>
-                      ) : subscription.kind === 'rss_atom' ? (
-                        <>
-                          <label className="field field--wide">
-                            <span>RSS / Atom 地址</span>
-                            <input
-                              type="url"
-                              value={subscription.feedUrl}
-                              placeholder="https://example.invalid/feed.xml"
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  feedUrl: event.currentTarget.value,
-                                });
-                              }}
-                            />
-                            <small>
-                              仅 HTTPS RSS/Atom；不会跟随重定向或抓取条目链接。
-                            </small>
-                          </label>
-                          <label className="field">
-                            <span>每次最多处理条目</span>
-                            <input
-                              type="number"
-                              min={1}
-                              max={20}
-                              step={1}
-                              value={subscription.itemLimit}
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  itemLimit: Number(event.currentTarget.value),
-                                });
-                              }}
-                            />
-                          </label>
-                        </>
-                      ) : subscription.kind === 'json_api' ? (
-                        <>
-                          <label className="field field--wide">
-                            <span>JSON API 地址</span>
-                            <input
-                              type="url"
-                              value={subscription.endpointUrl}
-                              placeholder="https://api.example.invalid/entries"
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  endpointUrl: event.currentTarget.value,
-                                });
-                              }}
-                            />
-                            <small>
-                              仅发出公开 HTTPS GET；不会执行脚本或跟随重定向。
-                            </small>
-                          </label>
-                          <label className="field">
-                            <span>记录数组路径</span>
-                            <input
-                              value={subscription.recordsPath}
-                              placeholder="data.items（留空表示根数组）"
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  recordsPath: event.currentTarget.value,
-                                });
-                              }}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>每次记录上限</span>
-                            <input
-                              type="number"
-                              min={1}
-                              max={32}
-                              step={1}
-                              value={subscription.recordLimit}
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  recordLimit: Number(
-                                    event.currentTarget.value,
-                                  ),
-                                });
-                              }}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>记录 ID 路径</span>
-                            <input
-                              value={subscription.externalIdPath}
-                              placeholder="id"
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  externalIdPath: event.currentTarget.value,
-                                });
-                              }}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>标题路径</span>
-                            <input
-                              value={subscription.titlePath}
-                              placeholder="title"
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  titlePath: event.currentTarget.value,
-                                });
-                              }}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>正文路径</span>
-                            <input
-                              value={subscription.bodyPath}
-                              placeholder="content.body"
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  bodyPath: event.currentTarget.value,
-                                });
-                              }}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>原文地址路径（可选）</span>
-                            <input
-                              value={subscription.canonicalUriPath ?? ''}
-                              placeholder="url"
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  canonicalUriPath: event.currentTarget.value,
-                                });
-                              }}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>发布时间路径（可选）</span>
-                            <input
-                              value={subscription.publishedAtPath ?? ''}
-                              placeholder="published_at"
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  publishedAtPath: event.currentTarget.value,
-                                });
-                              }}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>远端版本路径（可选）</span>
-                            <input
-                              value={subscription.versionPath ?? ''}
-                              placeholder="updated_at"
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  versionPath: event.currentTarget.value,
-                                });
-                              }}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>认证方式</span>
-                            <select
-                              value={subscription.authentication.kind}
-                              onChange={(event) => {
-                                updateDraft(subscription.subscriptionId, {
-                                  authentication:
-                                    event.currentTarget.value === 'bearer_env'
-                                      ? Object.freeze({
-                                          kind: 'bearer_env' as const,
-                                          variable: '',
-                                        })
-                                      : Object.freeze({kind: 'none' as const}),
-                                });
-                              }}
-                            >
-                              <option value="none">无认证</option>
-                              <option value="bearer_env">
-                                Bearer（环境变量）
-                              </option>
-                            </select>
-                          </label>
-                          {subscription.authentication.kind === 'bearer_env' ? (
-                            <label className="field">
-                              <span>令牌环境变量名</span>
+                    <details
+                      className="source-subscription-editor"
+                      open={saved === undefined ? true : undefined}
+                    >
+                      <summary>编辑订阅配置</summary>
+                      <div className="source-subscription-fields">
+                        <label className="field">
+                          <span>来源类型</span>
+                          <select
+                            value={subscription.kind}
+                            onChange={(event) => {
+                              changeSubscriptionKind(
+                                subscription,
+                                event.currentTarget
+                                  .value as SourceSubscriptionWrite['kind'],
+                              );
+                            }}
+                          >
+                            <option value="github_markdown">
+                              GitHub Markdown 文件
+                            </option>
+                            <option value="rss_atom">RSS / Atom 订阅</option>
+                            <option value="json_api">JSON API</option>
+                            <option value="web">受限网页</option>
+                            {subscription.kind === 'plugin' ||
+                            state.connectors.some(
+                              (connector) => connector.origin === 'plugin',
+                            ) ? (
+                              <option value="plugin">已安装插件</option>
+                            ) : null}
+                          </select>
+                        </label>
+                        <label className="field">
+                          <span>显示名称</span>
+                          <input
+                            ref={(element) => {
+                              if (
+                                element !== null &&
+                                pendingNewSubscription.current ===
+                                  subscription.subscriptionId
+                              ) {
+                                pendingNewSubscription.current = undefined;
+                                element.focus();
+                              }
+                            }}
+                            value={subscription.label}
+                            maxLength={80}
+                            onChange={(event) => {
+                              updateDraft(subscription.subscriptionId, {
+                                label: event.currentTarget.value,
+                              });
+                            }}
+                          />
+                        </label>
+                        <label className="field">
+                          <span>来源别名</span>
+                          <input
+                            value={subscription.sourceAlias}
+                            maxLength={120}
+                            onChange={(event) => {
+                              updateDraft(subscription.subscriptionId, {
+                                sourceAlias: event.currentTarget.value,
+                              });
+                            }}
+                          />
+                        </label>
+                        {subscription.kind === 'github_markdown' ? (
+                          <>
+                            <label className="field field--wide">
+                              <span>GitHub 仓库</span>
                               <input
-                                value={subscription.authentication.variable}
-                                placeholder="STRUIINFO_JSON_API_TOKEN"
+                                value={subscription.repositoryUri}
+                                placeholder="https://github.com/owner/repository"
                                 onChange={(event) => {
                                   updateDraft(subscription.subscriptionId, {
-                                    authentication: Object.freeze({
-                                      kind: 'bearer_env' as const,
-                                      variable: event.currentTarget.value,
-                                    }),
+                                    repositoryUri: event.currentTarget.value,
+                                  });
+                                }}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>分支或引用</span>
+                              <input
+                                value={subscription.repositoryRef}
+                                maxLength={200}
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    repositoryRef: event.currentTarget.value,
+                                  });
+                                }}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>仓库内文件路径</span>
+                              <input
+                                value={subscription.repositoryPath}
+                                placeholder="docs/weekly.md"
+                                maxLength={500}
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    repositoryPath: event.currentTarget.value,
+                                  });
+                                }}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>解析规则</span>
+                              <select
+                                value={subscription.profile}
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    profile: event.currentTarget.value as
+                                      'commonmark-v1' | 'ruanyf-weekly-v1',
+                                  });
+                                }}
+                              >
+                                <option value="commonmark-v1">
+                                  通用 Markdown
+                                </option>
+                                <option value="ruanyf-weekly-v1">
+                                  周刊结构
+                                </option>
+                              </select>
+                            </label>
+                          </>
+                        ) : subscription.kind === 'rss_atom' ? (
+                          <>
+                            <label className="field field--wide">
+                              <span>RSS / Atom 地址</span>
+                              <input
+                                type="url"
+                                value={subscription.feedUrl}
+                                placeholder="https://example.invalid/feed.xml"
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    feedUrl: event.currentTarget.value,
                                   });
                                 }}
                               />
                               <small>
-                                只保存变量名；令牌不会写入个人配置。
+                                仅 HTTPS
+                                RSS/Atom；不会跟随重定向或抓取条目链接。
                               </small>
                             </label>
-                          ) : null}
-                          <label className="source-subscription-inline-option">
-                            <input
-                              type="checkbox"
-                              checked={subscription.pageCursor !== undefined}
-                              onChange={(event) => {
-                                if (event.currentTarget.checked) {
+                            <label className="field">
+                              <span>每次最多处理条目</span>
+                              <input
+                                type="number"
+                                min={1}
+                                max={20}
+                                step={1}
+                                value={subscription.itemLimit}
+                                onChange={(event) => {
                                   updateDraft(subscription.subscriptionId, {
-                                    pageCursor: Object.freeze({
-                                      queryParameter: 'cursor',
-                                      responsePath: 'next_cursor',
-                                    }),
+                                    itemLimit: Number(
+                                      event.currentTarget.value,
+                                    ),
                                   });
-                                } else {
-                                  removeJsonApiCursorMapping(
-                                    subscription.subscriptionId,
-                                    'pageCursor',
-                                  );
-                                }
-                              }}
-                            />
-                            使用分页游标（最多 5 页）
-                          </label>
-                          {subscription.pageCursor === undefined ? null : (
-                            <>
+                                }}
+                              />
+                            </label>
+                          </>
+                        ) : subscription.kind === 'json_api' ? (
+                          <>
+                            <label className="field field--wide">
+                              <span>JSON API 地址</span>
+                              <input
+                                type="url"
+                                value={subscription.endpointUrl}
+                                placeholder="https://api.example.invalid/entries"
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    endpointUrl: event.currentTarget.value,
+                                  });
+                                }}
+                              />
+                              <small>
+                                仅发出公开 HTTPS GET；不会执行脚本或跟随重定向。
+                              </small>
+                            </label>
+                            <label className="field">
+                              <span>记录数组路径</span>
+                              <input
+                                value={subscription.recordsPath}
+                                placeholder="data.items（留空表示根数组）"
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    recordsPath: event.currentTarget.value,
+                                  });
+                                }}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>每次记录上限</span>
+                              <input
+                                type="number"
+                                min={1}
+                                max={32}
+                                step={1}
+                                value={subscription.recordLimit}
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    recordLimit: Number(
+                                      event.currentTarget.value,
+                                    ),
+                                  });
+                                }}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>记录 ID 路径</span>
+                              <input
+                                value={subscription.externalIdPath}
+                                placeholder="id"
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    externalIdPath: event.currentTarget.value,
+                                  });
+                                }}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>标题路径</span>
+                              <input
+                                value={subscription.titlePath}
+                                placeholder="title"
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    titlePath: event.currentTarget.value,
+                                  });
+                                }}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>正文路径</span>
+                              <input
+                                value={subscription.bodyPath}
+                                placeholder="content.body"
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    bodyPath: event.currentTarget.value,
+                                  });
+                                }}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>原文地址路径（可选）</span>
+                              <input
+                                value={subscription.canonicalUriPath ?? ''}
+                                placeholder="url"
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    canonicalUriPath: event.currentTarget.value,
+                                  });
+                                }}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>发布时间路径（可选）</span>
+                              <input
+                                value={subscription.publishedAtPath ?? ''}
+                                placeholder="published_at"
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    publishedAtPath: event.currentTarget.value,
+                                  });
+                                }}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>远端版本路径（可选）</span>
+                              <input
+                                value={subscription.versionPath ?? ''}
+                                placeholder="updated_at"
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    versionPath: event.currentTarget.value,
+                                  });
+                                }}
+                              />
+                            </label>
+                            <label className="field">
+                              <span>认证方式</span>
+                              <select
+                                value={subscription.authentication.kind}
+                                onChange={(event) => {
+                                  updateDraft(subscription.subscriptionId, {
+                                    authentication:
+                                      event.currentTarget.value === 'bearer_env'
+                                        ? Object.freeze({
+                                            kind: 'bearer_env' as const,
+                                            variable: '',
+                                          })
+                                        : Object.freeze({
+                                            kind: 'none' as const,
+                                          }),
+                                  });
+                                }}
+                              >
+                                <option value="none">无认证</option>
+                                <option value="bearer_env">
+                                  Bearer（环境变量）
+                                </option>
+                              </select>
+                            </label>
+                            {subscription.authentication.kind ===
+                            'bearer_env' ? (
                               <label className="field">
-                                <span>分页请求参数</span>
+                                <span>令牌环境变量名</span>
                                 <input
-                                  value={subscription.pageCursor.queryParameter}
+                                  value={subscription.authentication.variable}
+                                  placeholder="STRUIINFO_JSON_API_TOKEN"
                                   onChange={(event) => {
+                                    updateDraft(subscription.subscriptionId, {
+                                      authentication: Object.freeze({
+                                        kind: 'bearer_env' as const,
+                                        variable: event.currentTarget.value,
+                                      }),
+                                    });
+                                  }}
+                                />
+                                <small>
+                                  只保存变量名；令牌不会写入个人配置。
+                                </small>
+                              </label>
+                            ) : null}
+                            <label className="source-subscription-inline-option">
+                              <input
+                                type="checkbox"
+                                checked={subscription.pageCursor !== undefined}
+                                onChange={(event) => {
+                                  if (event.currentTarget.checked) {
                                     updateDraft(subscription.subscriptionId, {
                                       pageCursor: Object.freeze({
-                                        queryParameter:
-                                          event.currentTarget.value,
-                                        responsePath:
-                                          subscription.pageCursor
-                                            ?.responsePath ?? '',
+                                        queryParameter: 'cursor',
+                                        responsePath: 'next_cursor',
                                       }),
                                     });
-                                  }}
-                                />
-                              </label>
-                              <label className="field">
-                                <span>下一页游标路径</span>
-                                <input
-                                  value={subscription.pageCursor.responsePath}
-                                  onChange={(event) => {
-                                    updateDraft(subscription.subscriptionId, {
-                                      pageCursor: Object.freeze({
-                                        queryParameter:
-                                          subscription.pageCursor
-                                            ?.queryParameter ?? '',
-                                        responsePath: event.currentTarget.value,
-                                      }),
-                                    });
-                                  }}
-                                />
-                              </label>
-                            </>
-                          )}
-                          <label className="source-subscription-inline-option">
-                            <input
-                              type="checkbox"
-                              checked={
-                                subscription.incrementalCursor !== undefined
-                              }
-                              onChange={(event) => {
-                                if (event.currentTarget.checked) {
-                                  updateDraft(subscription.subscriptionId, {
-                                    incrementalCursor: Object.freeze({
-                                      queryParameter: 'since',
-                                      responsePath: 'checkpoint',
-                                    }),
-                                  });
-                                } else {
-                                  removeJsonApiCursorMapping(
-                                    subscription.subscriptionId,
-                                    'incrementalCursor',
-                                  );
+                                  } else {
+                                    removeJsonApiCursorMapping(
+                                      subscription.subscriptionId,
+                                      'pageCursor',
+                                    );
+                                  }
+                                }}
+                              />
+                              使用分页游标（最多 5 页）
+                            </label>
+                            {subscription.pageCursor === undefined ? null : (
+                              <>
+                                <label className="field">
+                                  <span>分页请求参数</span>
+                                  <input
+                                    value={
+                                      subscription.pageCursor.queryParameter
+                                    }
+                                    onChange={(event) => {
+                                      updateDraft(subscription.subscriptionId, {
+                                        pageCursor: Object.freeze({
+                                          queryParameter:
+                                            event.currentTarget.value,
+                                          responsePath:
+                                            subscription.pageCursor
+                                              ?.responsePath ?? '',
+                                        }),
+                                      });
+                                    }}
+                                  />
+                                </label>
+                                <label className="field">
+                                  <span>下一页游标路径</span>
+                                  <input
+                                    value={subscription.pageCursor.responsePath}
+                                    onChange={(event) => {
+                                      updateDraft(subscription.subscriptionId, {
+                                        pageCursor: Object.freeze({
+                                          queryParameter:
+                                            subscription.pageCursor
+                                              ?.queryParameter ?? '',
+                                          responsePath:
+                                            event.currentTarget.value,
+                                        }),
+                                      });
+                                    }}
+                                  />
+                                </label>
+                              </>
+                            )}
+                            <label className="source-subscription-inline-option">
+                              <input
+                                type="checkbox"
+                                checked={
+                                  subscription.incrementalCursor !== undefined
                                 }
-                              }}
-                            />
-                            使用增量游标
-                          </label>
-                          {subscription.incrementalCursor ===
-                          undefined ? null : (
-                            <>
-                              <label className="field">
-                                <span>增量请求参数</span>
-                                <input
-                                  value={
-                                    subscription.incrementalCursor
-                                      .queryParameter
-                                  }
-                                  onChange={(event) => {
+                                onChange={(event) => {
+                                  if (event.currentTarget.checked) {
                                     updateDraft(subscription.subscriptionId, {
                                       incrementalCursor: Object.freeze({
-                                        queryParameter:
-                                          event.currentTarget.value,
-                                        responsePath:
-                                          subscription.incrementalCursor
-                                            ?.responsePath ?? '',
+                                        queryParameter: 'since',
+                                        responsePath: 'checkpoint',
                                       }),
                                     });
-                                  }}
-                                />
-                              </label>
-                              <label className="field">
-                                <span>增量标记路径</span>
-                                <input
-                                  value={
-                                    subscription.incrementalCursor.responsePath
+                                  } else {
+                                    removeJsonApiCursorMapping(
+                                      subscription.subscriptionId,
+                                      'incrementalCursor',
+                                    );
                                   }
-                                  onChange={(event) => {
-                                    updateDraft(subscription.subscriptionId, {
-                                      incrementalCursor: Object.freeze({
-                                        queryParameter:
-                                          subscription.incrementalCursor
-                                            ?.queryParameter ?? '',
-                                        responsePath: event.currentTarget.value,
-                                      }),
-                                    });
-                                  }}
-                                />
-                              </label>
-                            </>
-                          )}
-                        </>
-                      ) : subscription.kind === 'web' ? (
-                        <WebSourceSubscriptionFields
-                          subscription={subscription}
-                          onChange={(change) => {
-                            updateDraft(subscription.subscriptionId, change);
-                          }}
-                        />
-                      ) : (
-                        <PluginSourceSubscriptionFields
-                          subscription={subscription}
-                          connectors={state.connectors}
-                          onChange={(change) => {
-                            updateDraft(subscription.subscriptionId, change);
-                          }}
-                        />
-                      )}
-                      <label className="field">
-                        <span>检查间隔（分钟）</span>
-                        <input
-                          type="number"
-                          min={15}
-                          max={10_080}
-                          step={15}
-                          value={subscription.intervalMinutes}
-                          onChange={(event) => {
-                            updateDraft(subscription.subscriptionId, {
-                              intervalMinutes: Number(
-                                event.currentTarget.value,
-                              ),
-                            });
-                          }}
-                        />
-                      </label>
-                    </div>
-                    <div className="source-subscription-options">
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={subscription.enabled}
-                          onChange={(event) => {
-                            updateDraft(subscription.subscriptionId, {
-                              enabled: event.currentTarget.checked,
-                            });
-                          }}
-                        />
-                        开启定期检查
-                      </label>
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={subscription.isPrivate}
-                          onChange={(event) => {
-                            updateDraft(subscription.subscriptionId, {
-                              isPrivate: event.currentTarget.checked,
-                            });
-                          }}
-                        />
-                        导入为隐私文档
-                      </label>
-                      <label>
-                        <input
-                          type="checkbox"
-                          checked={subscription.routeAfterImport}
-                          onChange={(event) => {
-                            updateDraft(subscription.subscriptionId, {
-                              routeAfterImport: event.currentTarget.checked,
-                            });
-                          }}
-                        />
-                        变化后自动拆分并分流
-                      </label>
+                                }}
+                              />
+                              使用增量游标
+                            </label>
+                            {subscription.incrementalCursor ===
+                            undefined ? null : (
+                              <>
+                                <label className="field">
+                                  <span>增量请求参数</span>
+                                  <input
+                                    value={
+                                      subscription.incrementalCursor
+                                        .queryParameter
+                                    }
+                                    onChange={(event) => {
+                                      updateDraft(subscription.subscriptionId, {
+                                        incrementalCursor: Object.freeze({
+                                          queryParameter:
+                                            event.currentTarget.value,
+                                          responsePath:
+                                            subscription.incrementalCursor
+                                              ?.responsePath ?? '',
+                                        }),
+                                      });
+                                    }}
+                                  />
+                                </label>
+                                <label className="field">
+                                  <span>增量标记路径</span>
+                                  <input
+                                    value={
+                                      subscription.incrementalCursor
+                                        .responsePath
+                                    }
+                                    onChange={(event) => {
+                                      updateDraft(subscription.subscriptionId, {
+                                        incrementalCursor: Object.freeze({
+                                          queryParameter:
+                                            subscription.incrementalCursor
+                                              ?.queryParameter ?? '',
+                                          responsePath:
+                                            event.currentTarget.value,
+                                        }),
+                                      });
+                                    }}
+                                  />
+                                </label>
+                              </>
+                            )}
+                          </>
+                        ) : subscription.kind === 'web' ? (
+                          <WebSourceSubscriptionFields
+                            subscription={subscription}
+                            onChange={(change) => {
+                              updateDraft(subscription.subscriptionId, change);
+                            }}
+                          />
+                        ) : (
+                          <PluginSourceSubscriptionFields
+                            subscription={subscription}
+                            connectors={state.connectors}
+                            onChange={(change) => {
+                              updateDraft(subscription.subscriptionId, change);
+                            }}
+                          />
+                        )}
+                        <label className="field">
+                          <span>检查间隔（分钟）</span>
+                          <input
+                            type="number"
+                            min={15}
+                            max={10_080}
+                            step={15}
+                            value={subscription.intervalMinutes}
+                            onChange={(event) => {
+                              updateDraft(subscription.subscriptionId, {
+                                intervalMinutes: Number(
+                                  event.currentTarget.value,
+                                ),
+                              });
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <div className="source-subscription-options">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={subscription.enabled}
+                            onChange={(event) => {
+                              updateDraft(subscription.subscriptionId, {
+                                enabled: event.currentTarget.checked,
+                              });
+                            }}
+                          />
+                          开启定期检查
+                        </label>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={subscription.isPrivate}
+                            onChange={(event) => {
+                              updateDraft(subscription.subscriptionId, {
+                                isPrivate: event.currentTarget.checked,
+                              });
+                            }}
+                          />
+                          导入为隐私文档
+                        </label>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={subscription.routeAfterImport}
+                            onChange={(event) => {
+                              updateDraft(subscription.subscriptionId, {
+                                routeAfterImport: event.currentTarget.checked,
+                              });
+                            }}
+                          />
+                          变化后自动拆分并分流
+                        </label>
+                      </div>
+                    </details>
+                    <div className="source-subscription-status">
+                      <span>
+                        {subscription.enabled ? '定期检查已开启' : '手动检查'}
+                      </span>
                       <span>
                         {saved?.lastSuccessAt === undefined
                           ? '尚未成功检查'

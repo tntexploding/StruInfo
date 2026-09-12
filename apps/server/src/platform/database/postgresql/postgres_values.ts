@@ -61,7 +61,3 @@ export function expectOneAffected(rowCount: number | null): void {
     throw new PostgresAdapterError();
   }
 }
-
-export function compareText(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}

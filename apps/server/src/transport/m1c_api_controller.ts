@@ -123,6 +123,27 @@ export class M1cApiController {
     );
   }
 
+  @Get('preferences/interface')
+  public async workspaceUiPreferences(
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.loadWorkspaceUiPreferences(),
+    );
+  }
+
+  @Put('preferences/interface')
+  public async saveWorkspaceUiPreferences(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.saveWorkspaceUiPreferences(body),
+    );
+  }
+
   @Get('preferences/review')
   public async reviewPreferences(@Res() response: Response): Promise<void> {
     writeLocalApiResponse(
@@ -581,6 +602,42 @@ export class M1cApiController {
     writeLocalApiResponse(
       response,
       await this.#service.exploreInformationEntries(body),
+    );
+  }
+
+  @Put('entries/:entryId/translation')
+  public async importEntryTranslation(
+    @Param('entryId') entryId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.importEntryTranslation(entryId, body),
+    );
+  }
+
+  @Get('entries/:entryId/translation')
+  public async readEntryTranslation(
+    @Param('entryId') entryId: string,
+    @Query('expectedRevision') revision: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.readEntryTranslation(entryId, revision),
+    );
+  }
+
+  @Post('entries/:entryId/translation')
+  public async generateEntryTranslation(
+    @Param('entryId') entryId: string,
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.generateEntryTranslation(entryId, body),
     );
   }
 

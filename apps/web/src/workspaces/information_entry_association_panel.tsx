@@ -1,3 +1,4 @@
+import {readingTitle, sourceShortName} from '../components/reading_text.js';
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 import type {
@@ -245,13 +246,15 @@ export function InformationEntryAssociationPanel({
       <section className="association-pair-editor" aria-label="联系编辑">
         <article>
           <span>起点</span>
-          <strong>{entry.value.titlePath || '未命名条目'}</strong>
+          <strong>{readingTitle(entry.value.titlePath)}</strong>
         </article>
         <div aria-hidden="true">↔</div>
         <article>
           <span>终点</span>
           <strong>
-            {targetEntry?.value.titlePath ?? '从右侧选择一个条目'}
+            {targetEntry === undefined
+              ? '从上方或推荐联系中选择条目'
+              : readingTitle(targetEntry.value.titlePath)}
           </strong>
         </article>
         <div className="association-pair-editor__actions">
@@ -349,7 +352,11 @@ export function InformationEntryAssociationPanel({
             <small>先为多个条目设置内容、类型和领域标签，再重建联系。</small>
           </div>
         ) : (
-          <ul className="entry-association-list">
+          <ul
+            className="entry-association-list"
+            aria-label="推荐联系"
+            tabIndex={0}
+          >
             {view.response.associations.map((association) => {
               const related = association.relatedEntry;
               const overrideRevision = association.override?.revision ?? 0;
@@ -364,9 +371,10 @@ export function InformationEntryAssociationPanel({
                             ? '已屏蔽'
                             : `${scorePercentage(association.effectiveScore)}%`}
                         </span>
-                        <h3>{related.value.titlePath || '未命名条目'}</h3>
+                        <h3>{readingTitle(related.value.titlePath)}</h3>
                         <small>
-                          {related.sourceKey} · v{related.revision.toString()}
+                          {sourceShortName(related)} · v
+                          {related.revision.toString()}
                           {related.value.isPrivate ? ' · 私密' : ''}
                         </small>
                       </div>
@@ -524,7 +532,8 @@ export function InformationEntryAssociationPanel({
         )}
       </div>
       {view.status === 'ready' ? (
-        <section className="association-policy-dock" aria-label="联系权重">
+        <details className="association-policy-dock workflow-tool-drawer">
+          <summary>联系权重设置</summary>
           <AssociationPolicyPanel
             key={view.response.policy.revision}
             policy={view.response.policy}
@@ -533,7 +542,7 @@ export function InformationEntryAssociationPanel({
               void savePolicy(draft);
             }}
           />
-        </section>
+        </details>
       ) : null}
     </section>
   );

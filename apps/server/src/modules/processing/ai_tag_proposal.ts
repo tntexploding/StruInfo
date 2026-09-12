@@ -32,7 +32,7 @@ export interface AiTagProposalProviderResult {
 }
 
 export interface AiTagProposalProviderPort {
-  readonly providerKey: 'openai-responses-v1';
+  readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
   readonly model: string;
   readonly promptVersion: string;
 

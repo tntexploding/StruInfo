@@ -1952,7 +1952,7 @@ function decodeEvaluation(
       (value.supportedClassCount === undefined ||
         projection === undefined ||
         byType.some(
-          (item, index) =>
+          (_item, index) =>
             ![
               'trustedExampleCount',
               'trustedSnapshotCount',

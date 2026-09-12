@@ -23,7 +23,7 @@ import {
   type ParsedMarkdownFragment,
   type ParsedMarkdownNode,
 } from './markdown_contract.js';
-import {MarkdownFault, markdownFail} from './markdown_failure.js';
+import {markdownFail} from './markdown_failure.js';
 import {
   SHA256_PATTERN,
   deriveDocumentNodeId,
@@ -112,21 +112,6 @@ export function computeMarkdownStructureSha256WithTextIndex(
     source.normalizedTextByteLength,
     tree,
     fragments,
-  );
-}
-
-export function validateFixedMarkdownEvidenceStructure(
-  structure: Readonly<DocumentStructureInput>,
-  snapshot: Readonly<SnapshotInput>,
-  normalizedText: string,
-): FixedMarkdownEvidenceCheck {
-  if (!isFixedParserName(structure.parserName)) {
-    return Object.freeze({status: 'not_applicable'});
-  }
-  return validateFixedMarkdownEvidenceStructureWithTextIndex(
-    structure,
-    snapshot,
-    indexMarkdownText(normalizedText),
   );
 }
 
@@ -649,10 +634,6 @@ function isOneOf<const Values extends readonly string[]>(
   candidate: string,
 ): candidate is Values[number] {
   return values.some((value) => value === candidate);
-}
-
-export function isMarkdownProjectionFault(error: unknown): boolean {
-  return error instanceof MarkdownFault;
 }
 
 function runtimeFragmentField(

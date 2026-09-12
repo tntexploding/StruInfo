@@ -36,6 +36,9 @@ export const EMPTY_ENTRY_ADVANCED_SEARCH_FILTERS: Readonly<EntryAdvancedSearchFi
 type PageSelection = 'preserve' | 'first' | 'last';
 
 export interface InformationEntryControllerOptions {
+  readonly initialDocument?:
+    | Readonly<{snapshotId?: string | undefined; includePrivate: boolean}>
+    | undefined;
   readonly initialQueryContext?: Readonly<EntryQueryContext>;
   readonly autoSearchDelayMs?: number;
   readonly loadDocuments?: boolean;
@@ -44,6 +47,7 @@ export interface InformationEntryControllerOptions {
 }
 
 export function useInformationEntryController({
+  initialDocument,
   initialQueryContext,
   autoSearchDelayMs = 0,
   loadDocuments = false,
@@ -65,7 +69,9 @@ export function useInformationEntryController({
   const [textFields, setTextFields] = useState<readonly EntryTextSearchField[]>(
     initial?.textFields ?? Object.freeze(['title', 'body', 'tags']),
   );
-  const [snapshotId, setSnapshotId] = useState(initial?.snapshotId ?? '');
+  const [snapshotId, setSnapshotId] = useState(
+    initialDocument?.snapshotId ?? initial?.snapshotId ?? '',
+  );
   const [typeKeyword, setTypeKeyword] = useState<'' | EntryTypeKeyword>(
     initial?.typeKeyword ?? '',
   );
@@ -75,7 +81,9 @@ export function useInformationEntryController({
   const [advancedFilters, setAdvancedFilters] = useState<
     Readonly<EntryAdvancedSearchFilters>
   >(filtersFromSavedQuery(initial));
-  const [includePrivate, setIncludePrivate] = useState(false);
+  const [includePrivate, setIncludePrivate] = useState(
+    initialDocument?.includePrivate ?? false,
+  );
   const [onlyPrivate, setOnlyPrivate] = useState(false);
   const [receivedView, setView] = useState<InformationEntryViewState>({
     status: 'loading',

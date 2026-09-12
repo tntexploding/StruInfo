@@ -3,6 +3,11 @@ import {
   decodeEntrySavedQueries,
   type EntrySavedQueries,
 } from '../../modules/entries/information_entry_saved_queries.js';
+import {
+  DEFAULT_WORKSPACE_UI_PREFERENCES,
+  decodeWorkspaceUiPreferences,
+  type WorkspaceUiPreferences,
+} from '../../storage/workspace_ui_preferences.js';
 import {randomUUID} from 'node:crypto';
 import {lstat, readFile, rename, unlink, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -124,6 +129,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     entrySplitRuleProfile: Readonly<EntrySplitRuleProfile> = DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
     entryClassificationProfile: Readonly<EntryClassificationProfile> = DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
     entrySavedQueries: Readonly<EntrySavedQueries> = DEFAULT_ENTRY_SAVED_QUERIES,
+    uiPreferences: Readonly<WorkspaceUiPreferences> = DEFAULT_WORKSPACE_UI_PREFERENCES,
   ): Promise<Readonly<ReviewPreferences>> {
     validateWorkspaceId(workspaceId);
     const attempt = this.#restoreAttempts.get(workspaceId);
@@ -143,6 +149,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
         entrySplitRuleProfile,
         entryClassificationProfile,
         entrySavedQueries,
+        uiPreferences,
       );
     });
   }
@@ -224,6 +231,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       preferences.entryClassificationProfile ??
         DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       preferences.entrySavedQueries ?? DEFAULT_ENTRY_SAVED_QUERIES,
+      preferences.uiPreferences ?? DEFAULT_WORKSPACE_UI_PREFERENCES,
     );
   }
 
@@ -240,7 +248,9 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     entrySplitRuleProfile: Readonly<EntrySplitRuleProfile>,
     entryClassificationProfile: Readonly<EntryClassificationProfile>,
     entrySavedQueries: Readonly<EntrySavedQueries>,
+    uiPreferences: Readonly<WorkspaceUiPreferences>,
   ): Promise<Readonly<ReviewPreferences>> {
+    const decodedUi = decodeWorkspaceUiPreferences(uiPreferences);
     const savedQueries = decodeEntrySavedQueries(entrySavedQueries);
     const decoded = decodeReviewQuickTags(quickTags);
     const decodedAutomaticKeywords =
@@ -269,6 +279,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       entryClassificationProfile,
     );
     if (
+      decodedUi === undefined ||
       savedQueries === undefined ||
       decoded === undefined ||
       decodedAutomaticKeywords === undefined ||
@@ -298,6 +309,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       decodedEntrySplitRuleProfile,
       decodedEntryClassificationProfile,
       savedQueries,
+      decodedUi,
     );
     const bytes = new TextEncoder().encode(
       `${JSON.stringify(preferences, undefined, 2)}\n`,
@@ -360,6 +372,11 @@ function decodePreferences(
   ) {
     throw invalid();
   }
+  const uiPreferences =
+    value.uiPreferences === undefined
+      ? DEFAULT_WORKSPACE_UI_PREFERENCES
+      : decodeWorkspaceUiPreferences(value.uiPreferences);
+  if (uiPreferences === undefined) throw invalid();
   const savedQueries =
     value.entrySavedQueries === undefined
       ? DEFAULT_ENTRY_SAVED_QUERIES
@@ -433,6 +450,7 @@ function decodePreferences(
     entrySplitRuleProfile,
     entryClassificationProfile,
     savedQueries,
+    uiPreferences,
   );
 }
 

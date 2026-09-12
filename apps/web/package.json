@@ -12,6 +12,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "mdast-util-from-markdown": "2.0.3",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

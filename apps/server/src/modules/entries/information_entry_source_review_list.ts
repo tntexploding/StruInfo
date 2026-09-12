@@ -2,12 +2,12 @@ import type {CurrentInformationEntry} from './information_entry_contract.js';
 import type {
   InformationEntryAssociationRepositorySnapshot,
   InformationEntryGraphEdge,
+  InformationEntrySourceReview,
 } from './information_entry_association_contract.js';
 import {prepareInformationEntryAssociationReadIndex} from './information_entry_association.js';
 import {toInformationEntryGraphEdge} from './information_entry_knowledge_graph.js';
 import {
   sourceReviewMatches,
-  type InformationEntrySourceReview,
   type InformationEntrySourceReviewRequest,
   type InformationEntrySourceReviewCursor,
 } from './information_entry_source_review.js';

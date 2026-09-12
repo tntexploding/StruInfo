@@ -256,8 +256,6 @@ export function InformationDocumentWorkingCopy({
     }
   }
 
-  if (snapshotId === '') return null;
-
   return (
     <section
       className="information-document-working-copy"
@@ -273,9 +271,13 @@ export function InformationDocumentWorkingCopy({
         这里修改的是拆分前草稿，不会改动已导入的原文。确认后会另存为新文档。
       </p>
 
-      {alreadyMaterialized ? (
+      {snapshotId === '' ? (
+        <p className="information-document-working-copy__state" role="status">
+          请先在来源文档导航中选择一份具体文档，再修改拆分前全文。
+        </p>
+      ) : alreadyMaterialized ? (
         <p className="information-document-working-copy__state">
-          当前文档已经生成条目；如需改变结构，请使用下方“重整现有条目”。
+          当前文档已经生成条目；如需改变结构，请使用“调整已经拆分的结构”。
         </p>
       ) : isPrivate && !includePrivate ? (
         <p className="information-document-working-copy__state">

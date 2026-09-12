@@ -1,7 +1,16 @@
+import {createHash} from 'node:crypto';
 import {describe, expect, it} from 'vitest';
 
+import {
+  deriveEvidenceBlobId,
+  materializeMarkdownEvidence,
+  parseMarkdownStructure,
+} from '../evidence/index.js';
+import type {MaterializedEvidenceSnapshot} from './information_entry.js';
 import type {CurrentInformationEntry} from './information_entry_contract.js';
 import {
+  aiSplitEvidenceFragments,
+  prepareAiSplitInformationEntries,
   informationEntrySearchKey,
   prepareManualEntryRevision,
   prepareManualSplitInformationEntries,
@@ -15,6 +24,60 @@ const SNAPSHOT_ID = '33333333-3333-4333-8333-333333333333';
 const STRUCTURE_ID = '44444444-4444-4444-8444-444444444444';
 
 describe('InformationEntry', () => {
+  it.each([
+    {
+      name: 'disjoint headings and paragraphs',
+      text: '# Synthetic\n\nA paragraph.\n\n## Detail\n\nSecond paragraph.\n',
+      documentFallback: false,
+    },
+    {
+      name: 'nested list and quote syntax',
+      text: '# Synthetic\n\nA paragraph.\n\n- First\n- Second\n\n> Quoted text.\n',
+      documentFallback: true,
+    },
+  ])(
+    'preserves all CommonMark evidence for $name',
+    ({text, documentFallback}) => {
+      const snapshot = commonMarkSnapshot(false, text);
+      const fragments = aiSplitEvidenceFragments(snapshot);
+      if (documentFallback) {
+        expect(fragments).toHaveLength(1);
+        expect(fragments[0]).toMatchObject({
+          nodeKind: 'document',
+          selectedText: text,
+        });
+      } else {
+        expect(fragments.length).toBeGreaterThan(1);
+        expect(fragments.every((f) => f.nodeKind !== 'document')).toBe(true);
+      }
+      expect(
+        fragments.every(
+          (f, index) =>
+            index === 0 ||
+            (fragments[index - 1]?.codePointRange.end ?? 0) <=
+              f.codePointRange.start,
+        ),
+      ).toBe(true);
+      const rows = prepareAiSplitInformationEntries(snapshot, [
+        {
+          titlePath: 'Synthetic grouping',
+          fragmentIds: fragments.map((f) => f.fragmentId),
+        },
+      ]);
+      expect(rows).toHaveLength(1);
+      // Every source character remains once, including list and quotation markers.
+      expect(rows?.[0]?.value.body.trim()).toBe(text.trim());
+      expect(
+        prepareAiSplitInformationEntries(snapshot, [
+          {
+            titlePath: 'Incomplete',
+            fragmentIds: fragments.slice(0, -1).map((f) => f.fragmentId),
+          },
+        ]),
+      ).toBeUndefined();
+    },
+  );
+
   it('materializes one stable Entry per section while preserving exact provenance and privacy', () => {
     const snapshot = Object.freeze({
       workspaceId: WORKSPACE_ID,
@@ -63,6 +126,147 @@ describe('InformationEntry', () => {
     expect(first[0]?.entryId).toMatch(/^[0-9a-f-]{36}$/u);
     expect(first[0]?.revisionId).toMatch(/^[0-9a-f-]{36}$/u);
     expect(first[0]?.value.bodySha256).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it.each([false, true])(
+    'materializes captured CommonMark as one exact whole Entry (private=%s)',
+    (isPrivate) => {
+      const snapshot = commonMarkSnapshot(isPrivate);
+      const before = structuredClone(snapshot);
+      const structure = snapshot.structures[0];
+      const document = structure?.fragments.find(
+        (candidate) => candidate.nodeKind === 'document',
+      );
+      expect(
+        structure?.fragments.some(
+          (candidate) => candidate.nodeKind === 'section',
+        ),
+      ).toBe(false);
+      const first = prepareSplitInformationEntries(snapshot);
+      expect(first).toHaveLength(1);
+      expect(first).toEqual(prepareSplitInformationEntries(snapshot));
+      expect(first[0]).toMatchObject({
+        workspaceId: WORKSPACE_ID,
+        resourceId: RESOURCE_ID,
+        snapshotId: SNAPSHOT_ID,
+        value: {
+          documentOrder: 0,
+          titlePath: 'Synthetic article',
+          body: structure?.normalizedText,
+          chunkMode: 'whole',
+          splitRuleVersion: 'struinfo.entry-split.document-fallback.v1',
+          isPrivate,
+          fragmentIds: [document?.fragmentId],
+        },
+      });
+      expect(first[0]?.value.bodySha256).toBe(
+        createHash('sha256')
+          .update(document?.selectedText ?? '')
+          .digest('hex'),
+      );
+      expect(snapshot).toEqual(before);
+    },
+  );
+
+  it('keeps section materialization unchanged when a full document Fragment also exists', () => {
+    const documentText = '# Synthetic article\n\n## Section\n\nBody.';
+    const snapshot = {
+      workspaceId: WORKSPACE_ID,
+      resourceId: RESOURCE_ID,
+      snapshotId: SNAPSHOT_ID,
+      structures: [
+        {
+          structureId: STRUCTURE_ID,
+          normalizedText: documentText,
+          fragments: [
+            fragment(
+              '55555555-5555-4555-8555-555555555555',
+              'section',
+              21,
+              '## Section\n\nBody.',
+            ),
+            fragment(
+              '66666666-6666-4666-8666-666666666666',
+              'document',
+              0,
+              documentText,
+            ),
+          ],
+        },
+      ],
+    };
+    const sectionOnly = {
+      ...snapshot,
+      structures: [
+        {
+          ...snapshot.structures[0],
+          structureId: STRUCTURE_ID,
+          fragments:
+            snapshot.structures[0]?.fragments.filter(
+              (candidate) => candidate.nodeKind === 'section',
+            ) ?? [],
+        },
+      ],
+    };
+    expect(prepareSplitInformationEntries(snapshot)).toEqual(
+      prepareSplitInformationEntries(sectionOnly),
+    );
+    expect(prepareSplitInformationEntries(snapshot)[0]?.value.chunkMode).toBe(
+      'split',
+    );
+  });
+
+  it('rejects a missing, ambiguous or incomplete document fallback and preserves the body limit', () => {
+    const body = '# Synthetic article\n\nBody 😀.';
+    const document = fragment(
+      '55555555-5555-4555-8555-555555555555',
+      'document',
+      0,
+      body,
+    );
+    const candidates = [
+      {normalizedText: body, fragments: []},
+      {
+        normalizedText: body,
+        fragments: [
+          document,
+          {...document, fragmentId: '66666666-6666-4666-8666-666666666666'},
+        ],
+      },
+      {normalizedText: body + ' More.', fragments: [document]},
+      {
+        normalizedText: body,
+        fragments: [
+          {
+            ...document,
+            codePointRange: {start: 1, end: Array.from(body).length},
+          },
+        ],
+      },
+      {
+        normalizedText: body,
+        fragments: [
+          {...document, structureId: '77777777-7777-4777-8777-777777777777'},
+        ],
+      },
+      {fragments: [document]},
+      {
+        normalizedText: 'x'.repeat(200_001),
+        fragments: [
+          fragment(document.fragmentId, 'document', 0, 'x'.repeat(200_001)),
+        ],
+      },
+    ];
+    for (const candidate of candidates) {
+      expect(
+        prepareSplitInformationEntries({
+          workspaceId: WORKSPACE_ID,
+          resourceId: RESOURCE_ID,
+          snapshotId: SNAPSHOT_ID,
+          structures: [{...candidate, structureId: STRUCTURE_ID}],
+        }),
+      ).toEqual([]);
+    }
   });
 
   it('groups every section range exactly once for stable manual materialization', () => {
@@ -333,5 +537,75 @@ function currentEntry(
       ]),
       fragmentIds: Object.freeze(['55555555-5555-4555-8555-555555555555']),
     }),
+  });
+}
+
+function commonMarkSnapshot(
+  isPrivate: boolean,
+  text = '# Synthetic article\r\n\r\nA source summary 😀.\r\n\r\n## Detail\r\n\r\nMore text.\r\n',
+): Readonly<MaterializedEvidenceSnapshot> {
+  const sourceUtf8 = new TextEncoder().encode(text);
+  const digest = createHash('sha256').update(sourceUtf8).digest('hex');
+  const parsed = parseMarkdownStructure({
+    workspaceId: WORKSPACE_ID,
+    resourceId: RESOURCE_ID,
+    snapshotId: SNAPSHOT_ID,
+    rawBlob: {
+      workspaceId: WORKSPACE_ID,
+      blobId: deriveEvidenceBlobId(WORKSPACE_ID, digest),
+      digestAlgorithm: 'sha256',
+      digest,
+      byteLength: sourceUtf8.byteLength,
+    },
+    profile: 'commonmark-v1',
+    sourceUtf8,
+  });
+  if (parsed.status !== 'parsed')
+    throw new Error('Synthetic CommonMark parse failed.');
+  const materialized = materializeMarkdownEvidence({
+    parsed: parsed.value,
+    snapshot: {
+      workspaceId: WORKSPACE_ID,
+      resourceId: RESOURCE_ID,
+      snapshotId: SNAPSHOT_ID,
+      rawBlob: parsed.value.rawBlob,
+      rawSha256: digest,
+      canonicalContentSha256: parsed.value.normalizedTextSha256,
+      canonicalizationVersion: 'utf8-lf-v1',
+      capturedAt: '2040-01-02T03:04:05Z',
+    },
+    mediaPolicy: 'external_reference_only',
+    sourceUtf8,
+  });
+  if (materialized.status !== 'materialized')
+    throw new Error('Synthetic Evidence materialization failed.');
+  const structure = materialized.value.structure;
+  const normalizedText = new TextDecoder().decode(structure.normalizedTextUtf8);
+  const codePoints = Array.from(normalizedText);
+  const kinds = new Map(
+    structure.nodes.map((node) => [node.nodeId, node.kind]),
+  );
+  return Object.freeze({
+    workspaceId: WORKSPACE_ID,
+    resourceId: RESOURCE_ID,
+    snapshotId: SNAPSHOT_ID,
+    ...(isPrivate ? {isPrivate: true as const} : {}),
+    structures: [
+      Object.freeze({
+        structureId: structure.structureId,
+        normalizedText,
+        fragments: structure.fragments.map((input) =>
+          Object.freeze({
+            fragmentId: input.fragmentId,
+            structureId: input.structureId,
+            nodeKind: kinds.get(input.nodeId) ?? 'unknown',
+            codePointRange: input.codePointRange,
+            selectedText: codePoints
+              .slice(input.codePointRange.start, input.codePointRange.end)
+              .join(''),
+          }),
+        ),
+      }),
+    ],
   });
 }

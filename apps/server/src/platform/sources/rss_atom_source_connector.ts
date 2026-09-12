@@ -3,6 +3,7 @@ import {lookup} from 'node:dns/promises';
 import {isIP} from 'node:net';
 
 import {XMLParser, XMLValidator} from 'fast-xml-parser';
+import {parseFragment, type DefaultTreeAdapterTypes} from 'parse5';
 
 import {projectStructuredDocument} from '../../modules/evidence/index.js';
 import {
@@ -98,22 +99,16 @@ export class RssAtomSourceConnector implements SourceConnectorPort {
       throw new SourceConnectorError('connector_result_invalid');
     }
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, REQUEST_TIMEOUT_MILLISECONDS);
     let response: Response;
     try {
       response = await this.#fetch(feedUrl, {
         method: 'GET',
         redirect: 'error',
-        signal: controller.signal,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
         headers: requestHeaders(previousCursor),
       });
     } catch {
       throw new SourceConnectorError('connector_unavailable');
-    } finally {
-      clearTimeout(timeout);
     }
 
     if (response.status === 304 && previousCursor !== undefined) {
@@ -159,11 +154,12 @@ export class RssAtomSourceConnector implements SourceConnectorPort {
       throw new SourceConnectorError('connector_result_invalid');
     }
     const parsedItems = parseFeed(feedText, feedUrl.toString());
-    if (parsedItems.length === 0) {
-      throw new SourceConnectorError('connector_result_invalid');
-    }
     const currentItems = parsedItems.slice(0, configuration.itemLimit);
-    const currentTokens = Object.freeze(currentItems.map((item) => item.token));
+    // A temporarily empty feed must not forget the last successfully read items.
+    const currentTokens =
+      currentItems.length === 0 && previousCursor !== undefined
+        ? previousCursor.itemTokens
+        : Object.freeze(currentItems.map((item) => item.token));
     const feedSha256 = digestBytes(feedBytes);
     const cursorWithoutHeaders: Readonly<RssAtomCursor> = Object.freeze({
       version: 1 as const,
@@ -339,6 +335,8 @@ function parseFeed(
       processEntities: true,
       ignoreDeclaration: true,
       ignorePiTags: true,
+      // Preserve mixed title order and distinguish XML from HTML escaping.
+      stopNodes: ['*.title'],
       maxNestedTags: 100,
       isArray: (tagName) =>
         tagName === 'item' || tagName === 'entry' || tagName === 'link',
@@ -365,9 +363,10 @@ function parseRssItems(
   const items = toArray(channel.item);
   return Object.freeze(
     items.flatMap((candidate) => {
-      if (!isRecord(candidate)) return [];
-      const title =
-        normalizedText(textValue(candidate.title)) || '未命名订阅条目';
+      if (!isRecord(candidate)) {
+        throw new SourceConnectorError('connector_result_invalid');
+      }
+      const title = feedTitle(candidate.title, 'html');
       const link = admittedItemUri(firstText(candidate.link), feedUrl);
       const content =
         textValue(candidate.encoded) ?? textValue(candidate.description) ?? '';
@@ -402,9 +401,10 @@ function parseAtomItems(
   const items = toArray(feed.entry);
   return Object.freeze(
     items.flatMap((candidate) => {
-      if (!isRecord(candidate)) return [];
-      const title =
-        normalizedText(textValue(candidate.title)) || '未命名订阅条目';
+      if (!isRecord(candidate)) {
+        throw new SourceConnectorError('connector_result_invalid');
+      }
+      const title = feedTitle(candidate.title, 'text');
       const link = atomLink(candidate.link, feedUrl);
       const contentNode = candidate.content ?? candidate.summary;
       const content = textValue(contentNode) ?? deepText(contentNode);
@@ -684,6 +684,41 @@ function isBlockedAddress(address: string): boolean {
     );
   }
   return true;
+}
+
+function feedTitle(value: unknown, defaultType: 'text' | 'html'): string {
+  const type =
+    isRecord(value) && typeof value['@_type'] === 'string'
+      ? value['@_type']
+      : defaultType;
+  // CDATA is literal XML text; escape it before the first entity decode.
+  const raw = (textValue(value) ?? '').replace(
+    /<!\[CDATA\[([\s\S]*?)\]\]>/gu,
+    (_match: string, content: string) =>
+      content
+        .replace(/&/gu, '&amp;')
+        .replace(/</gu, '&lt;')
+        .replace(/>/gu, '&gt;'),
+  );
+  const decoded = htmlText(raw);
+  const title = type === 'html' ? htmlText(decoded) : decoded;
+  return normalizedText(title) || '未命名订阅条目';
+}
+
+function htmlText(value: string): string {
+  const visit = (node: DefaultTreeAdapterTypes.Node): string => {
+    if (node.nodeName === '#text' && 'value' in node) return node.value;
+    if (
+      'tagName' in node &&
+      ['script', 'style', 'template', 'noscript', 'iframe', 'object'].includes(
+        node.tagName,
+      )
+    ) {
+      return '';
+    }
+    return 'childNodes' in node ? node.childNodes.map(visit).join('') : '';
+  };
+  return visit(parseFragment(value));
 }
 
 function textValue(value: unknown): string | undefined {

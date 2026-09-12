@@ -36,7 +36,7 @@ export interface WorkflowOverviewProps {
 }
 
 const STAGES: readonly Readonly<{
-  section: Exclude<ProductSection, 'overview' | 'knowledge'>;
+  section: Exclude<ProductSection, 'overview' | 'knowledge' | 'documents'>;
   index: string;
   label: string;
   detail: string;
@@ -169,13 +169,8 @@ export function WorkflowOverview({
             className="project-intro"
             aria-labelledby="project-intro-title"
           >
-            <div className="project-intro__mark" aria-hidden="true">
-              SI
-            </div>
             <div>
-              <h2 id="project-intro-title">
-                把一份文档变成可以查找、修改和追溯的信息
-              </h2>
+              <h2 id="project-intro-title">知识工作区</h2>
               <p>
                 原始文档始终保留。拆分后的条目可以添加标签和联系，并在知识页组成可编辑的关系图谱。
               </p>
@@ -186,7 +181,11 @@ export function WorkflowOverview({
             <Metric label="文档" value={metrics.documents} unit="份" />
             <Metric label="来源片段" value={metrics.fragments} unit="段" />
             <Metric label="信息条目" value={metrics.entries} unit="条" />
-            <Metric label="已标注条目" value={metrics.annotated} unit="条" />
+            <Metric
+              label="已有标签的条目"
+              value={metrics.annotated}
+              unit="条"
+            />
             <Metric label="文档标签" value={metrics.documentTags} unit="个" />
           </section>
 
@@ -257,7 +256,7 @@ function Metric({
 }
 
 function stageStatus(
-  section: Exclude<ProductSection, 'overview' | 'knowledge'>,
+  section: Exclude<ProductSection, 'overview' | 'knowledge' | 'documents'>,
   metrics: Readonly<{
     documents: number;
     fragments: number;
@@ -276,9 +275,11 @@ function stageStatus(
     case 'tags':
       return metrics.annotated === undefined || metrics.entries === undefined
         ? '读取中'
-        : `${metrics.annotated.toString()} / ${metrics.entries.toString()} 已标注`;
+        : `${metrics.annotated.toString()} / ${metrics.entries.toString()} 已有标签`;
     case 'associations':
       return '按需重建';
+    case 'settings':
+      return '全局配置';
     case 'query':
       return metrics.entries === undefined ? '读取中' : '可以查询';
   }

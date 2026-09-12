@@ -1,3 +1,4 @@
+import {sourceShortName} from '../components/reading_text.js';
 import type {InformationEntry} from '../api/m1c_api_contract.js';
 import type {InformationEntryServices} from './information_entry_components.js';
 import type {InformationEntrySearchItem} from './information_entry_query_state.js';
@@ -66,7 +67,7 @@ function ComparisonCard({
           <span>条目 {(index + 1).toString()}</span>
           <h3 id={titleId}>{entryTitle(entry)}</h3>
           <p>
-            {entry.sourceKey} · v{entry.revision.toString()}
+            {sourceShortName(entry)} · v{entry.revision.toString()}
             {entry.value.isPrivate ? ' · 隐私内容' : ' · 公开内容'}
           </p>
         </div>

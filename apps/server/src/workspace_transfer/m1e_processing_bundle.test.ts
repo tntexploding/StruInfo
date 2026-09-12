@@ -4,6 +4,8 @@ import {
   assertM1eProcessingWorkspace,
   createEmptyM1eProcessingSnapshot,
   M1E_PROCESSING_BUNDLE_SCHEMA,
+  M1E_PROCESSING_VERSION_TEN_BUNDLE_CODEC,
+  M1E_PROCESSING_VERSION_ELEVEN_BUNDLE_CODEC,
   M1E_PROCESSING_LEGACY_BUNDLE_CODEC,
   M1E_PROCESSING_LEGACY_BUNDLE_SCHEMA,
   M1E_PROCESSING_TABLES,
@@ -29,7 +31,30 @@ import {
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('M1E processing Bundle section', () => {
-  it('keeps the nineteen typed processing tables in a closed canonical order', () => {
+  it('upgrades v11 with empty unattended policy and queue', () => {
+    expect(
+      M1E_PROCESSING_VERSION_ELEVEN_BUNDLE_CODEC.decode({
+        schemaVersion: 'struinfo.m1e-processing.v11',
+        tables: M1E_PROCESSING_TABLES.slice(0, 20).map((t) => ({
+          name: t.name,
+          rows: [],
+        })),
+      }),
+    ).toEqual(createEmptyM1eProcessingSnapshot());
+  });
+  it('upgrades v10 packages with empty task authorization and progress', () => {
+    const previous = {
+      schemaVersion: 'struinfo.m1e-processing.v10',
+      tables: M1E_PROCESSING_TABLES.slice(0, 19).map((t) => ({
+        name: t.name,
+        rows: [],
+      })),
+    };
+    expect(M1E_PROCESSING_VERSION_TEN_BUNDLE_CODEC.decode(previous)).toEqual(
+      createEmptyM1eProcessingSnapshot(),
+    );
+  });
+  it('keeps the typed typed processing tables in a closed canonical order', () => {
     const empty = createEmptyM1eProcessingSnapshot();
     expect(empty.schemaVersion).toBe(M1E_PROCESSING_BUNDLE_SCHEMA);
     expect(empty.tables.map((table) => table.name)).toEqual(

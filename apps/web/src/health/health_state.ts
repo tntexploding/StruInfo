@@ -1,14 +1,14 @@
 import {
   HealthConfigurationError,
-  HealthContractError,
   type HealthClient,
   HealthNetworkError,
   HealthResponseError,
 } from './health_client.js';
-import type {
-  HealthReadiness,
-  NotReadyHealthResponse,
-  ReadyHealthResponse,
+import {
+  HealthContractError,
+  type HealthReadiness,
+  type NotReadyHealthResponse,
+  type ReadyHealthResponse,
 } from './health_contract.js';
 
 export type HealthPageState =

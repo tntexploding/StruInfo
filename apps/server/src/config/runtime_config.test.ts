@@ -20,6 +20,40 @@ const RUNTIME_ENVIRONMENT = {
 };
 
 describe('parseRuntimeConfig', () => {
+  it('keeps Agent access off and separates read, annotation and model grants', () => {
+    expect(
+      parseRuntimeConfig('all', RUNTIME_ENVIRONMENT).agentInterface,
+    ).toBeUndefined();
+    const enabled = parseRuntimeConfig('all', {
+      ...RUNTIME_ENVIRONMENT,
+      STRUIINFO_AGENT_TOKEN: 'synthetic-token-'.repeat(3),
+      STRUIINFO_AGENT_ID: 'synthetic-agent',
+      STRUIINFO_AGENT_GRANTS: 'annotate',
+    }).agentInterface;
+    expect(enabled).toMatchObject({
+      identity: 'synthetic-agent',
+      read: false,
+      annotate: true,
+      processDocuments: false,
+      automate: false,
+    });
+    expect(() =>
+      parseRuntimeConfig('all', {
+        ...RUNTIME_ENVIRONMENT,
+        STRUIINFO_AGENT_TOKEN: 'short',
+        STRUIINFO_AGENT_ID: 'synthetic-agent',
+      }),
+    ).toThrow(ConfigurationError);
+    expect(() =>
+      parseRuntimeConfig('all', {
+        ...RUNTIME_ENVIRONMENT,
+        STRUIINFO_AGENT_TOKEN: 'synthetic-token-'.repeat(3),
+        STRUIINFO_AGENT_ID: 'synthetic-agent',
+        STRUIINFO_AGENT_GRANTS: 'owner',
+      }),
+    ).toThrow(ConfigurationError);
+  });
+
   it('parses defaults once into a frozen ordinary object', () => {
     const config = parseRuntimeConfig('api', RUNTIME_ENVIRONMENT);
 

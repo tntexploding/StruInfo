@@ -1,4 +1,4 @@
-import type {InformationEntryRetrievalServiceDependencies} from './information_entry_retrieval.js';
+import type {InformationEntryRepositoryPort} from './information_entry_repository.js';
 import {
   prepareInformationEntrySearchProjection,
   withInformationEntryEmbedding,
@@ -7,11 +7,26 @@ import {
   INFORMATION_ENTRY_EMBEDDING_BATCH_MAXIMUM,
   InformationEntryRetrievalServiceError,
   type InformationEntrySearchIndexRefreshProgress,
+  type InformationEntrySearchIndexRepositoryPort,
+  type InformationEntryEmbeddingProviderPort,
 } from './information_entry_search_index_contract.js';
+
+interface SearchIndexRefreshDependencies {
+  readonly workspaceId: string;
+  readonly entries: Pick<
+    InformationEntryRepositoryPort,
+    'loadCurrentEntriesByIds'
+  >;
+  readonly index: Pick<
+    InformationEntrySearchIndexRepositoryPort,
+    'loadRefreshBatch' | 'applyRefreshBatch'
+  >;
+  readonly embeddingProvider?: InformationEntryEmbeddingProviderPort;
+}
 
 /** The committed projection is the checkpoint; each call selects remaining work. */
 export async function refreshInformationEntrySearchIndex(
-  dependencies: Readonly<InformationEntryRetrievalServiceDependencies>,
+  dependencies: Readonly<SearchIndexRefreshDependencies>,
   limit: number,
 ): Promise<Readonly<InformationEntrySearchIndexRefreshProgress>> {
   const loadBatch = dependencies.index.loadRefreshBatch?.bind(

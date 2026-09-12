@@ -266,7 +266,11 @@ export function InformationEntryManualSplit({
               <pre>{snapshot.structures[0].normalizedText}</pre>
             </details>
           )}
-          <ol className="entry-manual-split__groups">
+          <ol
+            className="entry-manual-split__groups"
+            aria-label="人工拆分分组"
+            tabIndex={0}
+          >
             {groups.map((group, groupIndex) => (
               <ManualSplitGroupEditor
                 key={`${group.pieces[0]?.fragment.fragmentId ?? 'manual-group'}:${group.pieces[0]?.startCodePoint.toString() ?? groupIndex.toString()}`}

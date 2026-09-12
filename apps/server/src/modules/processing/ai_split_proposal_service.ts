@@ -1,5 +1,6 @@
 import type {BlobStore} from '../../storage/blob_store.js';
 import {
+  aiSplitEvidenceFragments,
   prepareAiSplitInformationEntries,
   type CurrentInformationEntry,
   type InformationEntryEmptySnapshotRepositoryPort,
@@ -56,7 +57,7 @@ export interface AiSplitProposalDecisionResult {
   readonly entries?: readonly Readonly<CurrentInformationEntry>[];
 }
 export interface AiSplitProposalServicePort {
-  readonly providerKey: 'openai-responses-v1';
+  readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
   readonly model: string;
   listForSnapshot(
     snapshotId: string,
@@ -84,13 +85,14 @@ export interface AiSplitProposalServiceDependencies {
 }
 
 export class AiSplitProposalService implements AiSplitProposalServicePort {
-  public readonly providerKey = 'openai-responses-v1' as const;
+  public readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
   public readonly model: string;
   readonly #dependencies: Readonly<AiSplitProposalServiceDependencies>;
   public constructor(
     dependencies: Readonly<AiSplitProposalServiceDependencies>,
   ) {
     this.#dependencies = dependencies;
+    this.providerKey = dependencies.provider.providerKey;
     this.model = dependencies.provider.model;
   }
   public listForSnapshot(snapshotId: string) {
@@ -125,7 +127,7 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
       targetSnapshotId: snapshotId,
       privacyScope: 'public_only',
       initialStage: 'split',
-      initialStep: '等待 OpenAI 拆分提案',
+      initialStep: '等待拆分提案',
     });
     if (created === 'conflict')
       throw new AiSplitProposalServiceError('ai_run_conflict');
@@ -147,7 +149,7 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
         expectedVersion: 1,
         status: 'running',
         currentStage: 'split',
-        currentStep: 'OpenAI 正在按连续原文片段生成拆分建议',
+        currentStep: '正在按连续原文片段生成拆分建议',
         completedUnits: 0,
         totalUnits: 1,
       }),
@@ -155,6 +157,20 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
     try {
       const generated =
         await this.#dependencies.provider.proposeSplit(sections);
+      let nextOrdinal = 0;
+      for (const group of generated.groups) {
+        if (
+          !Number.isSafeInteger(group.startOrdinal) ||
+          !Number.isSafeInteger(group.endOrdinal) ||
+          group.startOrdinal !== nextOrdinal ||
+          group.endOrdinal < group.startOrdinal ||
+          group.endOrdinal >= sections.length
+        )
+          throw new AiSplitProposalServiceError('ai_provider_invalid_response');
+        nextOrdinal = group.endOrdinal + 1;
+      }
+      if (nextOrdinal !== sections.length)
+        throw new AiSplitProposalServiceError('ai_provider_invalid_response');
       const payload = storedPayload(
         this.#dependencies.provider,
         generated.groups.map((group) => ({
@@ -315,19 +331,13 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
   }
 }
 
-function orderedSectionFragments(
+export function orderedSectionFragments(
   snapshot: Awaited<ReturnType<typeof materializeEvidenceSnapshot>>,
 ) {
   const structure = snapshot.structures[0];
   if (structure === undefined)
     throw new AiSplitProposalServiceError('ai_split_input_unsupported');
-  const sections = structure.fragments
-    .filter((fragment) => fragment.nodeKind === 'section')
-    .sort((left, right) =>
-      left.codePointRange.start !== right.codePointRange.start
-        ? left.codePointRange.start - right.codePointRange.start
-        : left.fragmentId.localeCompare(right.fragmentId),
-    );
+  const sections = aiSplitEvidenceFragments(snapshot);
   const codePoints = sections.reduce(
     (total, fragment) => total + Array.from(fragment.selectedText).length,
     0,
@@ -337,7 +347,7 @@ function orderedSectionFragments(
   }
   return sections;
 }
-function providerSections(
+export function providerSections(
   fragments: ReturnType<typeof orderedSectionFragments>,
 ): readonly Readonly<AiSplitProposalSection>[] {
   return Object.freeze(

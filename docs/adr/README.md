@@ -391,3 +391,19 @@ for old unbound checks, concurrent edits, privacy and projection rebuild behavio
 ADR 0069 adds explicit selected-Entry Markdown preview and export under the
 existing workspace lock. See [the decision](0069-cited-entry-markdown-export.md)
 for exact evidence, privacy, current-version checks and external file ownership.
+
+ADR 0070 adds explicit public Entry translation for Chinese reading, exact-version caching and Entry Bundle v6. See [the decision](0070-on-demand-entry-translation.md); the Provider remains unconfigured.
+
+ADR 0071 adds local matching over valid cached translations while retaining one canonical Entry, original evidence and existing index/Provider boundaries. See [the decision](0071-cached-translation-entry-search.md).
+
+- [ADR 0072: Supplied Chinese translation for owner reading](0072-provided-entry-translation.md)
+
+- [ADR 0073: Content workspaces and external interface preferences](0073-content-workspaces-and-interface-preferences.md)
+
+- [ADR 0074: Shared application use cases and execution authority](0074-shared-application-use-cases-and-execution-authority.md)
+
+- [ADR 0075: Bounded AI tasks and the Agent interface](0075-bounded-ai-tasks-and-agent-interface.md)
+
+- [ADR 0076: Policy-authorized processing of new material](0076-policy-authorized-new-material-processing.md)
+
+- [ADR 0077: Complete the bounded AI and Agent workflow](0077-complete-ai-and-agent-workflow.md)

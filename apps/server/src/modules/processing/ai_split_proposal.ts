@@ -26,7 +26,7 @@ export interface AiSplitProposalProviderResult {
   readonly groups: readonly Readonly<AiSplitProposalProviderGroup>[];
 }
 export interface AiSplitProposalProviderPort {
-  readonly providerKey: 'openai-responses-v1';
+  readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
   readonly model: string;
   readonly promptVersion: string;
   proposeSplit(

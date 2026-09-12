@@ -1,3 +1,4 @@
+import {verifyEntryTranslationCandidate} from './entry_translation_candidate.js';
 import {verifyMarkdownExportCandidate} from './markdown_export_candidate.js';
 import {spawn} from 'node:child_process';
 import {verifyCurrentReadCandidate} from './current_read_candidate.js';
@@ -20,6 +21,8 @@ import {
   BulkIngestionAdjudicationService,
   BulkIngestionEnrichmentService,
   BulkIngestionService,
+  deriveProcessingRunId,
+  type ProcessingRunRepositoryPort,
 } from '../apps/server/src/modules/processing/index.js';
 import {preparePgBossSchema} from '../apps/server/src/queue/prepare_pg_boss_schema.js';
 import {SystemPgBossFactory} from '../apps/server/src/queue/pg_boss_runtime.js';
@@ -167,6 +170,9 @@ export interface M2P0dReport {
   >;
   readonly incrementalIndex: Awaited<
     ReturnType<typeof verifyIncrementalIndexCandidate>
+  >;
+  readonly translation: Awaited<
+    ReturnType<typeof verifyEntryTranslationCandidate>
   >;
   readonly markdownExport: Awaited<
     ReturnType<typeof verifyMarkdownExportCandidate>
@@ -588,6 +594,12 @@ export async function runM2P0dPostgresWorkload(
 
     stage = 'p5d_product_flow_failed';
     const productFlowStarted = performance.now();
+    activeBoundary = 'processingRunLifecycle';
+    await verifyProcessingRunLifecycle(
+      repositories.processingRuns,
+      WORKSPACE_ID,
+    );
+    activeBoundary = undefined;
     const retrieval = new InformationEntryRetrievalService({
       workspaceId: WORKSPACE_ID,
       entries: repositories.informationEntries,
@@ -721,6 +733,11 @@ export async function runM2P0dPostgresWorkload(
       blobStore,
       layout.areaRoots.exports,
     );
+    activeBoundary = 'verifyEntryTranslationCandidate';
+    const translation = await verifyEntryTranslationCandidate(
+      runtimePool,
+      WORKSPACE_ID,
+    );
     const totalMilliseconds = elapsed(started);
     result = Object.freeze({
       schemaVersion: M2_P0D_REPORT_SCHEMA,
@@ -759,6 +776,7 @@ export async function runM2P0dPostgresWorkload(
       incrementalIndex,
       sourceReview,
       markdownExport,
+      translation,
       measurements: Object.freeze({
         ...roundedTimings(timings),
         totalMilliseconds: round(totalMilliseconds),
@@ -1264,3 +1282,79 @@ const MAXIMUM_PROCESS_OUTPUT = 1024 * 1024;
 const SILENT_MIGRATION_LOGGER: MigrationLogger = Object.freeze({
   write: () => undefined,
 });
+
+async function verifyProcessingRunLifecycle(
+  repository: ProcessingRunRepositoryPort,
+  workspaceId: string,
+): Promise<void> {
+  // Exercise the production parameterized SQL against the disposable database;
+  // a query-string mock cannot detect PostgreSQL parameter type inference.
+  for (const status of ['succeeded', 'failed', 'cancelled'] as const) {
+    const idempotencyKey = `synthetic-processing-lifecycle:${status}`;
+    const runId = deriveProcessingRunId(workspaceId, idempotencyKey);
+    const created = await repository.createRun({
+      workspaceId,
+      runId,
+      idempotencyKey,
+      origin: 'deterministic',
+      privacyScope: 'public_only',
+      initialStage: 'import',
+    });
+    const running = {
+      workspaceId,
+      runId,
+      status: 'running' as const,
+      currentStage: 'import' as const,
+      completedUnits: 0,
+      totalUnits: 1,
+    };
+    const started = await repository.writeProgress({
+      ...running,
+      expectedVersion: 1,
+    });
+    const active = (await repository.listRecentRuns(workspaceId, 100)).find(
+      (run) => run.runId === runId,
+    );
+    if (
+      created !== 'applied' ||
+      started !== 'applied' ||
+      active?.status !== 'running' ||
+      active.version !== 2 ||
+      active.startedAt === undefined ||
+      active.finishedAt !== undefined ||
+      (await repository.writeProgress({...running, expectedVersion: 2})) !==
+        'unchanged' ||
+      (await repository.writeProgress({...running, expectedVersion: 1})) !==
+        'stale'
+    ) {
+      throw new Error(
+        'Synthetic processing-run start or concurrency guard failed.',
+      );
+    }
+    const completed = await repository.writeProgress({
+      ...running,
+      expectedVersion: 2,
+      status,
+      completedUnits: status === 'succeeded' ? 1 : 0,
+      ...(status === 'failed' ? {errorCode: 'synthetic_failure'} : {}),
+    });
+    const final = (await repository.listRecentRuns(workspaceId, 100)).find(
+      (run) => run.runId === runId,
+    );
+    if (
+      completed !== 'applied' ||
+      final?.status !== status ||
+      final.version !== 3 ||
+      final.startedAt !== active.startedAt ||
+      final.finishedAt === undefined ||
+      final.errorCode !==
+        (status === 'failed' ? 'synthetic_failure' : undefined) ||
+      (await repository.writeProgress({...running, expectedVersion: 3})) !==
+        'terminal'
+    ) {
+      throw new Error(
+        'Synthetic processing-run settlement or terminal guard failed.',
+      );
+    }
+  }
+}

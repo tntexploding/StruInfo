@@ -1,3 +1,4 @@
+import {agentHttpMiddleware, type AgentHttpOptions} from './agent_http.js';
 import {NestFactory} from '@nestjs/core';
 import type {INestApplication} from '@nestjs/common';
 import type {NestExpressApplication} from '@nestjs/platform-express';
@@ -34,6 +35,7 @@ export interface HealthListenerFactory {
   start(options: {
     readonly health: OperationalHealthService;
     readonly api?: M1cApiServicePort;
+    readonly agentHttp?: AgentHttpOptions;
     readonly host: string;
     readonly port: number;
     readonly webRoot?: string;
@@ -44,6 +46,7 @@ export class NestHealthListenerFactory implements HealthListenerFactory {
   public async start(options: {
     readonly health: OperationalHealthService;
     readonly api?: M1cApiServicePort;
+    readonly agentHttp?: AgentHttpOptions;
     readonly host: string;
     readonly port: number;
     readonly webRoot?: string;
@@ -72,6 +75,7 @@ export class NestHealthListenerFactory implements HealthListenerFactory {
 export async function createNestRuntimeHttpApplication(options: {
   readonly health: OperationalHealthService;
   readonly api?: M1cApiServicePort;
+  readonly agentHttp?: AgentHttpOptions;
   readonly webRoot?: string;
 }): Promise<NestExpressApplication> {
   const application = await NestFactory.create<NestExpressApplication>(
@@ -80,6 +84,8 @@ export async function createNestRuntimeHttpApplication(options: {
   );
   application.useBodyParser('json', {limit: M1C_JSON_BODY_LIMIT});
   application.disable('x-powered-by');
+  if (options.agentHttp)
+    application.use(agentHttpMiddleware(options.agentHttp));
   application.use(
     (_request: Request, response: Response, next: NextFunction): void => {
       for (const [name, value] of Object.entries(
@@ -90,6 +96,8 @@ export async function createNestRuntimeHttpApplication(options: {
       next();
     },
   );
+  if (options.agentHttp)
+    application.use(agentHttpMiddleware(options.agentHttp));
   if (options.api !== undefined) {
     application.useStaticAssets(
       options.webRoot ?? DEFAULT_WEB_APPLICATION_ROOT,

@@ -38,6 +38,10 @@ export interface InformationEntrySplitWorkspaceProps extends Pick<
   | 'onOpenEvidence'
   | 'onSearch'
 > {
+  readonly initialDocument?:
+    | Readonly<{snapshotId?: string | undefined; includePrivate: boolean}>
+    | undefined;
+  readonly onReturnToDocument?: (() => void) | undefined;
   readonly aiEnabled: boolean;
   readonly onLoadEvidenceSnapshot: InformationEntryManualSplitProps['onLoadSnapshot'];
   readonly onLoadDocumentWorkingCopy: InformationDocumentWorkingCopyProps['onLoad'];
@@ -63,6 +67,8 @@ export interface InformationEntrySplitWorkspaceProps extends Pick<
 }
 
 export function InformationEntrySplitWorkspace({
+  initialDocument,
+  onReturnToDocument,
   aiEnabled,
   onAcceptAiSplitProposal,
   onListAiSplitProposals,
@@ -86,6 +92,7 @@ export function InformationEntrySplitWorkspace({
   onStartAiSplitProposal,
 }: InformationEntrySplitWorkspaceProps) {
   const controller = useInformationEntryController({
+    initialDocument,
     loadDocuments: true,
     onListDocuments,
     onSearch,
@@ -258,14 +265,23 @@ export function InformationEntrySplitWorkspace({
         <div>
           <h1>拆分</h1>
         </div>
+        {onReturnToDocument === undefined ? null : (
+          <button
+            type="button"
+            className="secondary-action"
+            onClick={onReturnToDocument}
+          >
+            返回文档工作台
+          </button>
+        )}
       </header>
 
-      <aside className="workflow-mode-summary" aria-label="拆分页操作指南">
-        <strong>拆分文档</strong>
-        <span>1. 从左侧选择来源文档</span>
+      <details className="workflow-mode-summary" aria-label="拆分页操作指南">
+        <summary>操作指南 · 拆分文档</summary>
+        <span>1. 选择来源文档</span>
         <span>2. 在中间检查条目与正文</span>
-        <span>3. 从右侧拆分并保存结构</span>
-      </aside>
+        <span>3. 拆分并保存结构</span>
+      </details>
 
       <div className="split-studio-grid">
         <aside className="split-studio-grid__documents">
@@ -280,7 +296,7 @@ export function InformationEntrySplitWorkspace({
           />
         </aside>
 
-        <main className="split-studio-grid__preview">
+        <section className="split-studio-grid__preview">
           <InformationEntryResults
             ariaLabel="拆分条目预览"
             emptyDescription="从左侧选择文档，再在右侧人工拆分或应用结构规则。"
@@ -322,7 +338,7 @@ export function InformationEntrySplitWorkspace({
               await controller.refreshDocuments();
             }}
           />
-        </main>
+        </section>
 
         <aside className="split-studio-grid__tools">
           <InformationEntryManualSplit

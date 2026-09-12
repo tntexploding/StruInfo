@@ -144,6 +144,9 @@ export function InformationEntryTextSearchOptions({
           })}
         </div>
       </div>
+      <p>
+        文字匹配包含所选字段的原文和已保存的有效中文译文，同一条目只返回一次。未翻译内容可用原文或已有标签查找。
+      </p>
       <p>近似匹配会寻找拼写相近的文字，不调用 AI，也不表示含义相同。</p>
     </fieldset>
   );

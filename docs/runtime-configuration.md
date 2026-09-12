@@ -1,7 +1,7 @@
 # StruInfo 运行配置与数据根
 
 - 状态：外部工作区选择、严格 secret 文件注入、M1M 维护运行及 M2-P0E 外部审阅工作区已实现
-- 最近更新：2026-08-31
+- 最近更新：2026-09-12
 - 对应决策：[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)
 
 ## 1. 边界
@@ -39,18 +39,20 @@ M1C 首版不要求后台文件监视或无中断热切换。允许采用明确�
 
 外部配置文件只接受以下字段；任何其他字段都会使进程启动失败：
 
-| 字段                               | 必需 | 默认值      | 说明                                     |
-| ---------------------------------- | ---- | ----------- | ---------------------------------------- |
-| `STRUIINFO_DATA_ROOT`              | 是   | 无          | 已存在的绝对目录；启动后保存规范真实路径 |
-| `STRUIINFO_WORKSPACE_ID`           | 是   | 无          | 小写规范 UUID；选择本次运行打开的工作区  |
-| `STRUIINFO_HOST`                   | 否   | `127.0.0.1` | API 监听地址                             |
-| `STRUIINFO_PORT`                   | 否   | `3000`      | API 端口，范围 1–65535                   |
-| `STRUIINFO_HEALTH_HOST`            | 否   | `127.0.0.1` | scheduler/worker 健康检查监听地址        |
-| `STRUIINFO_HEALTH_PORT`            | 否   | 按角色确定  | scheduler 默认 3001，worker 默认 3002    |
-| `STRUIINFO_SHUTDOWN_TIMEOUT_MS`    | 否   | `10000`     | 关闭预算，范围 1000–60000 毫秒           |
-| `STRUIINFO_LOG_LEVEL`              | 否   | `info`      | `debug`、`info`、`warn` 或 `error`       |
-| `STRUIINFO_OPENAI_MODEL`           | 否   | 无          | Responses 模型；启用公开 AI 提案/综合    |
-| `STRUIINFO_OPENAI_EMBEDDING_MODEL` | 否   | 无          | Embedding 模型；启用公共语义/混合检索    |
+| 字段                               | 必需          | 默认值      | 说明                                                              |
+| ---------------------------------- | ------------- | ----------- | ----------------------------------------------------------------- |
+| `STRUIINFO_DATA_ROOT`              | 是            | 无          | 已存在的绝对目录；启动后保存规范真实路径                          |
+| `STRUIINFO_WORKSPACE_ID`           | 是            | 无          | 小写规范 UUID；选择本次运行打开的工作区                           |
+| `STRUIINFO_HOST`                   | 否            | `127.0.0.1` | API 监听地址                                                      |
+| `STRUIINFO_PORT`                   | 否            | `3000`      | API 端口，范围 1–65535                                            |
+| `STRUIINFO_HEALTH_HOST`            | 否            | `127.0.0.1` | scheduler/worker 健康检查监听地址                                 |
+| `STRUIINFO_HEALTH_PORT`            | 否            | 按角色确定  | scheduler 默认 3001，worker 默认 3002                             |
+| `STRUIINFO_SHUTDOWN_TIMEOUT_MS`    | 否            | `10000`     | 关闭预算，范围 1000–60000 毫秒                                    |
+| `STRUIINFO_LOG_LEVEL`              | 否            | `info`      | `debug`、`info`、`warn` 或 `error`                                |
+| `STRUIINFO_AGENT_ID`               | 启用 Agent 时 | 无          | 固定外部 Agent 身份名                                             |
+| `STRUIINFO_AGENT_GRANTS`           | 否            | `read`      | `read,capture,structure,annotate,process,automate` 的逗号分隔子集 |
+| `STRUIINFO_OPENAI_MODEL`           | 否            | 无          | Responses 模型；启用公开 AI 提案/综合                             |
+| `STRUIINFO_OPENAI_EMBEDDING_MODEL` | 否            | 无          | Embedding 模型；启用公共语义/混合检索                             |
 
 同名进程环境变量会覆盖文件中的非秘密运行参数，便于容器和托管环境注入。`STRUIINFO_CONFIG_PATH`、`DATABASE_URL`、迁移专用的 `STRUIINFO_MIGRATION_DATABASE_URL` 和 `OPENAI_API_KEY` 只能由进程环境/秘密机制提供，写入配置文件会被拒绝。M1M 为后三者增加互斥的 `DATABASE_URL_FILE`、`STRUIINFO_MIGRATION_DATABASE_URL_FILE` 和 `OPENAI_API_KEY_FILE`：文件路径必须绝对，目标为至多 16 KiB 的普通文件，内容为严格 UTF-8 的单行非空值；直接值与对应文件变量同时存在会失败。`OPENAI_API_KEY` 必须与至少一个 OpenAI 模型同时存在；Responses 与 Embedding 模型可以分别配置，缺少 Embedding 模型时词法查询仍完整可用且不会宣告语义检索 capability。
 
@@ -60,6 +62,8 @@ query/fragment 覆盖或含糊的 authority。这样既支持本机 `localhost`�
 受信任私网；跨不可信网络时必须在部署层提供 TLS，不能把明文数据库连接当作公网边界。
 
 配置文件上限为 64 KiB，必须是现存普通文件和有效 UTF-8。错误信息只报告字段或合同问题，不回显数据库地址、未知字段名、配置内容或个人路径。
+
+ADR 0075 增加默认关闭的 Agent 入口。非秘密字段 `STRUIINFO_AGENT_ID` 与 `STRUIINFO_AGENT_GRANTS` 可保存在外部配置文件：启用时必须提供身份名，grants 默认为 `read`，可显式加入 `capture`、`structure`、`annotate`、`process` 或 `automate`。`STRUIINFO_AGENT_TOKEN` 必须通过进程环境，或互斥的 `STRUIINFO_AGENT_TOKEN_FILE` 注入，不能写入 runtime.env。缺少令牌时保持关闭；完整参数、数据库授权和 MCP 启动方式见 [Agent 接入说明](agent-interface.md)。
 
 ## 4. 路径规则
 
