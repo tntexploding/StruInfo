@@ -244,6 +244,12 @@ record of why that unissued harness never blocked product work.
 
 ### DH-014: Existing inactive multipart dependency advisories
 
+- Resolved 2026-09-15: the owner-requested CI investigation updated the exact
+  Multer override to 2.3.0. Production audit reports no known vulnerabilities;
+  license and SPDX updates are recorded in the
+  [security repair](dependencies/evidence/maintenance-security-2026-09-15.md).
+  The following paragraphs retain the original pre-repair assessment.
+
 - Source: ADR 0075 runtime dependency scan on 2026-09-12
 - Owner: Platform
 - Status: DEFERRED_HARDENING
