@@ -65,6 +65,7 @@ describe('InformationEntry', () => {
         },
       ]);
       expect(rows).toHaveLength(1);
+      expect(rows?.[0]?.value.chunkMode).toBe('whole');
       // Every source character remains once, including list and quotation markers.
       expect(rows?.[0]?.value.body.trim()).toBe(text.trim());
       expect(

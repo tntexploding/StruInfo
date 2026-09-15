@@ -1,3 +1,9 @@
+import {isAiPriceWait} from '../../modules/processing/ai_price_policy.js';
+import {
+  responsesEndpoint,
+  responsesOptions,
+  responsesPromptVersion,
+} from './responses_configuration.js';
 import type {AiProposalProviderConfig} from '../../config/runtime_config.js';
 import {
   AiSplitProposalProviderError,
@@ -5,17 +11,18 @@ import {
   type AiSplitProposalProviderResult,
   type AiSplitProposalSection,
 } from '../../modules/processing/index.js';
+import {type OpenAiFetch} from './responses_entry_tag_provider.js';
 import {
-  OPENAI_RESPONSES_ENDPOINT,
-  type OpenAiFetch,
-} from './openai_entry_tag_provider.js';
+  responseMetadata,
+  RESPONSE_METADATA_INSTRUCTIONS,
+} from './responses_metadata.js';
 
-export const OPENAI_SPLIT_PROMPT_VERSION = 'struinfo.openai-entry-split.v1';
+export const OPENAI_SPLIT_PROMPT_VERSION = 'struinfo.openai-entry-split.v2';
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 
-export class OpenAiEntrySplitProvider implements AiSplitProposalProviderPort {
-  public readonly providerKey = 'openai-responses-v1' as const;
-  public readonly promptVersion = OPENAI_SPLIT_PROMPT_VERSION;
+export class ResponsesEntrySplitProvider implements AiSplitProposalProviderPort {
+  public readonly providerKey: AiProposalProviderConfig['providerKey'];
+  public readonly promptVersion: string;
   public readonly model: string;
   readonly #config: Readonly<AiProposalProviderConfig>;
   readonly #fetch: OpenAiFetch;
@@ -26,6 +33,11 @@ export class OpenAiEntrySplitProvider implements AiSplitProposalProviderPort {
     this.#config = config;
     this.#fetch = fetchImplementation;
     this.model = config.model;
+    this.providerKey = config.providerKey;
+    this.promptVersion = responsesPromptVersion(
+      config,
+      OPENAI_SPLIT_PROMPT_VERSION,
+    );
   }
   public async proposeSplit(
     sections: readonly Readonly<AiSplitProposalSection>[],
@@ -33,7 +45,7 @@ export class OpenAiEntrySplitProvider implements AiSplitProposalProviderPort {
     if (sections.length < 1 || sections.length > 64) fail();
     let response: Response;
     try {
-      response = await this.#fetch(OPENAI_RESPONSES_ENDPOINT, {
+      response = await this.#fetch(responsesEndpoint(this.#config), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.#config.apiKey}`,
@@ -43,6 +55,7 @@ export class OpenAiEntrySplitProvider implements AiSplitProposalProviderPort {
         signal: AbortSignal.timeout(this.#config.timeoutMs),
       });
     } catch (error) {
+      if (isAiPriceWait(error)) throw error;
       const name = error instanceof Error ? error.name : '';
       throw new AiSplitProposalProviderError(
         name === 'AbortError' || name === 'TimeoutError'
@@ -75,7 +88,7 @@ export class OpenAiEntrySplitProvider implements AiSplitProposalProviderPort {
     } catch {
       fail();
     }
-    return decodePayload(payload, sections.length);
+    return decodePayload(payload, sections);
   }
 }
 
@@ -85,14 +98,22 @@ function createRequest(
 ): Readonly<Record<string, unknown>> {
   return Object.freeze({
     model: config.model,
+    ...responsesOptions(config),
     store: false,
     max_output_tokens: config.maxOutputTokens,
     instructions: [
-      'Group the ordered public document sections into useful InformationEntries.',
+      'Choose the appropriate reading unit for the complete public document.',
+      'Default documentMode to whole for a coherent article, news story, essay, case study, tutorial, paper or report.',
+      'Use independent_entries only when the source is already a collection of separate, independently understandable items, such as a digest or unrelated resource list.',
+      'Paragraphs, headings, changes of subtopic and model context limits do not justify separate Entries.',
+      'Never isolate author introductions, captions, narrative steps or conclusions. Attach a collection preface to its first item.',
+      'A standalone Entry must identify its subject and preserve the context of pronouns, examples, comparisons and conclusions without its siblings.',
+      'If uncertain, choose whole. Whole means one group containing every section; it is a successful result.',
       'Every section ordinal must appear exactly once, in its original order.',
       'Groups must be contiguous and cover ordinal 0 through the final ordinal.',
       'Do not rewrite, summarize, omit, duplicate, or reorder source text.',
       'Return concise entry titles and only the requested JSON schema.',
+      RESPONSE_METADATA_INSTRUCTIONS,
     ].join(' '),
     input: JSON.stringify({sections}),
     text: {
@@ -103,9 +124,13 @@ function createRequest(
         schema: {
           type: 'object',
           additionalProperties: false,
-          required: ['summary', 'groups'],
+          required: ['summary', 'documentMode', 'groups'],
           properties: {
             summary: {type: 'string', minLength: 1, maxLength: 240},
+            documentMode: {
+              type: 'string',
+              enum: ['whole', 'independent_entries'],
+            },
             groups: {
               type: 'array',
               minItems: 1,
@@ -113,11 +138,17 @@ function createRequest(
               items: {
                 type: 'object',
                 additionalProperties: false,
-                required: ['titlePath', 'startOrdinal', 'endOrdinal'],
+                required: [
+                  'titlePath',
+                  'startOrdinal',
+                  'endOrdinal',
+                  'selfContained',
+                ],
                 properties: {
                   titlePath: {type: 'string', minLength: 1, maxLength: 200},
                   startOrdinal: {type: 'integer', minimum: 0, maximum: 63},
                   endOrdinal: {type: 'integer', minimum: 0, maximum: 63},
+                  selfContained: {type: 'boolean'},
                 },
               },
             },
@@ -156,10 +187,12 @@ function extractOutputText(value: unknown): string {
 }
 function decodePayload(
   value: unknown,
-  sectionCount: number,
+  sections: readonly Readonly<AiSplitProposalSection>[],
 ): Readonly<AiSplitProposalProviderResult> {
+  const sectionCount = sections.length;
   if (
-    !isClosedRecord(value, ['summary', 'groups']) ||
+    !isClosedRecord(value, ['summary', 'documentMode', 'groups']) ||
+    !['whole', 'independent_entries'].includes(String(value.documentMode)) ||
     !Array.isArray(value.groups) ||
     value.groups.length < 1 ||
     value.groups.length > Math.min(64, sectionCount)
@@ -167,7 +200,13 @@ function decodePayload(
     fail();
   const groups = value.groups.map((candidate) => {
     if (
-      !isClosedRecord(candidate, ['titlePath', 'startOrdinal', 'endOrdinal']) ||
+      !isClosedRecord(candidate, [
+        'titlePath',
+        'startOrdinal',
+        'endOrdinal',
+        'selfContained',
+      ]) ||
+      typeof candidate.selfContained !== 'boolean' ||
       typeof candidate.startOrdinal !== 'number' ||
       !Number.isSafeInteger(candidate.startOrdinal) ||
       typeof candidate.endOrdinal !== 'number' ||
@@ -193,23 +232,35 @@ function decodePayload(
     groups.at(-1)?.endOrdinal !== sectionCount - 1
   )
     fail();
+  // Source coverage is necessary but does not make narrative chunks independent.
+  // A doubtful proposal retains the complete document.
+  if (
+    value.documentMode === 'whole' ||
+    value.groups.some(
+      (group) => isRecord(group) && group.selfContained === false,
+    )
+  ) {
+    const sourceTitle = sections[0]?.text.match(/^#{1,6}\s+([^\n]+)/u)?.[1];
+    const firstGroup = groups[0];
+    return Object.freeze({
+      summary: boundedText(value.summary, 240),
+      groups: Object.freeze([
+        Object.freeze({
+          titlePath: responseMetadata(sourceTitle, 200) ?? firstGroup.titlePath,
+          startOrdinal: 0,
+          endOrdinal: sectionCount - 1,
+        }),
+      ]),
+    });
+  }
   return Object.freeze({
     summary: boundedText(value.summary, 240),
     groups: Object.freeze(groups),
   });
 }
 function boundedText(value: unknown, maximum: number): string {
-  if (typeof value !== 'string') fail();
-  const normalized = value.trim().normalize('NFC');
-  if (
-    normalized.length === 0 ||
-    Array.from(normalized).length > maximum ||
-    Array.from(normalized).some((character) => {
-      const code = character.codePointAt(0);
-      return code !== undefined && (code <= 0x1f || code === 0x7f);
-    })
-  )
-    fail();
+  const normalized = responseMetadata(value, maximum);
+  if (normalized === undefined) fail();
   return normalized;
 }
 function isClosedRecord(

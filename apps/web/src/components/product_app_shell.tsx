@@ -38,8 +38,14 @@ const NAVIGATION: readonly Readonly<{
     icon: 'M10.5 3a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15 M16 16l5 5',
   },
   {
-    section: 'settings',
+    section: 'reports',
     index: '05',
+    label: '报告',
+    icon: 'M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5',
+  },
+  {
+    section: 'settings',
+    index: '06',
     label: '设置',
     icon: 'M4 7h16 M4 17h16 M8 4v6 M16 14v6',
     groupStart: true,
@@ -65,12 +71,9 @@ export function ProductAppShell({
   workspace,
 }: ProductAppShellProps) {
   const {preferences} = useWorkspaceUi();
-  const effectiveSection = [
-    'split',
-    'tags',
-    'associations',
-    'overview',
-  ].includes(activeSection)
+  const effectiveSection = ['split', 'tags', 'associations'].includes(
+    activeSection,
+  )
     ? 'settings'
     : activeSection;
   const [themeOverride, setThemeOverride] = useState<{
@@ -101,12 +104,21 @@ export function ProductAppShell({
         data-section={activeSection}
       >
         <aside className="primary-rail" aria-label="主要导航">
-          <div className="primary-rail__identity" aria-label="StruInfo">
+          <button
+            className="primary-rail__identity"
+            type="button"
+            aria-label="StruInfo · 运行总览"
+            title="运行总览"
+            aria-current={activeSection === 'overview' ? 'page' : undefined}
+            onClick={() => {
+              onNavigate('overview');
+            }}
+          >
             <span className="primary-rail__mark" aria-hidden="true">
               SI
             </span>
             <span className="primary-rail__name">StruInfo</span>
-          </div>
+          </button>
           <nav className="primary-navigation" aria-label="产品工作区">
             <ol className="workflow-navigation__list">
               {NAVIGATION.map((item) => (

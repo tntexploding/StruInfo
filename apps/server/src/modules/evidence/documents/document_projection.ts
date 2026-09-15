@@ -143,7 +143,9 @@ function projectHtml(
   }
   const document = parse(html);
   const root =
+    findExplicitArticleBody(document) ??
     findFirstElement(document, 'article') ??
+    findHeadingContentContainer(document) ??
     findFirstElement(document, 'main') ??
     findFirstElement(document, 'body') ??
     document;
@@ -259,6 +261,11 @@ class PdfTextExtractionDomMatrix {
 }
 
 function renderHtmlBlocks(node: HtmlNode, blocks: string[]): void {
+  if (isTextNode(node)) {
+    const text = normalizeInlineText(node.value);
+    if (text !== '') blocks.push(escapeMarkdown(text));
+    return;
+  }
   if (isHtmlElement(node)) {
     const tagName = node.tagName.toLowerCase();
     if (SKIPPED_HTML_ELEMENTS.has(tagName) || isHiddenElement(node)) return;
@@ -271,7 +278,7 @@ function renderHtmlBlocks(node: HtmlNode, blocks: string[]): void {
       }
       return;
     }
-    if (tagName === 'p' || tagName === 'address') {
+    if (tagName === 'p' || tagName === 'address' || tagName === 'figcaption') {
       pushInlineBlock(blocks, node);
       return;
     }
@@ -326,16 +333,28 @@ function inlineMarkdown(node: HtmlNode): string {
   if (isHiddenElement(node)) return '';
   if (node.tagName === 'br') return '\n';
   if (node.tagName === 'img') {
-    const alt = attributeValue(node, 'alt');
-    return alt === undefined || alt.trim() === ''
-      ? ''
-      : `图片：${escapeMarkdown(normalizeInlineText(alt))}`;
+    const alt = normalizeInlineText(attributeValue(node, 'alt') ?? '');
+    const source = safeImageReference(
+      attributeValue(node, 'src') ?? attributeValue(node, 'data-src'),
+    );
+    return source === undefined
+      ? alt === ''
+        ? ''
+        : `图片：${escapeMarkdown(alt)}`
+      : `![${escapeMarkdown(alt || '查看原图')}](${escapeMarkdownDestination(source)})`;
   }
   const value = childNodes(node).map(inlineMarkdown).join('');
   if (node.tagName === 'code' && value.trim() !== '') {
     return `\`${value.trim()}\``;
   }
   if (node.tagName === 'a') {
+    // The reader exposes images as explicit links; do not create nested links.
+    if (
+      childNodes(node).some(
+        (child) => isHtmlElement(child) && child.tagName === 'img',
+      )
+    )
+      return value;
     const href = attributeValue(node, 'href');
     const label = value.trim();
     if (href !== undefined && href.trim() !== '' && label !== '') {
@@ -343,6 +362,24 @@ function inlineMarkdown(node: HtmlNode): string {
     }
   }
   return value;
+}
+
+function safeImageReference(value: string | undefined): string | undefined {
+  if (value === undefined || value.trim() === '') return undefined;
+  const source = value.trim();
+  try {
+    // Relative references resolve against the original document when read.
+    const parsed = new URL(source, 'https://document.invalid/');
+    if (
+      !['http:', 'https:'].includes(parsed.protocol) ||
+      parsed.username ||
+      parsed.password
+    )
+      return undefined;
+    return source;
+  } catch {
+    return undefined;
+  }
 }
 
 function pdfTextLines(items: readonly unknown[]): string[] {
@@ -407,6 +444,7 @@ function findFirstElement(
   node: HtmlNode,
   tagName: string,
 ): HtmlElement | undefined {
+  if (isHtmlElement(node) && isHiddenElement(node)) return undefined;
   if (isHtmlElement(node) && node.tagName.toLowerCase() === tagName)
     return node;
   for (const child of childNodes(node)) {
@@ -414,6 +452,98 @@ function findFirstElement(
     if (found !== undefined) return found;
   }
   return undefined;
+}
+
+/** Prefer an explicitly marked reading body over an outer article with tag menus. */
+function findExplicitArticleBody(document: HtmlNode): HtmlElement | undefined {
+  const candidates: HtmlElement[] = [];
+  const visit = (node: HtmlNode) => {
+    if (isHtmlElement(node)) {
+      if (isHiddenElement(node) || SKIPPED_HTML_ELEMENTS.has(node.tagName))
+        return;
+      const markers = [
+        attributeValue(node, 'id') ?? '',
+        attributeValue(node, 'class') ?? '',
+      ].join(' ');
+      const itemprop = attributeValue(node, 'itemprop') ?? '';
+      if (
+        (/(?:^|\s)articleBody(?:$|\s)/u.test(itemprop) ||
+          /(?:^|[\s_-])(?:article|post|entry|story)[_-](?:body|content)(?:$|[\s_-])/u.test(
+            markers,
+          )) &&
+        findFirstElement(node, 'p')
+      )
+        candidates.push(node);
+    }
+    for (const child of childNodes(node)) visit(child);
+  };
+  visit(document);
+  const leaves = candidates.filter(
+    (candidate) =>
+      !candidates.some((other) => {
+        if (other === candidate) return false;
+        let parent = other.parentNode;
+        while (parent && isHtmlElement(parent)) {
+          if (parent === candidate) return true;
+          parent = parent.parentNode;
+        }
+        return false;
+      }),
+  );
+  return leaves.length === 1 ? leaves[0] : undefined;
+}
+
+/** One marked article container may coexist with site-banner headings. */
+function findHeadingContentContainer(
+  document: HtmlNode,
+): HtmlElement | undefined {
+  const headings: HtmlElement[] = [];
+  const visit = (node: HtmlNode) => {
+    if (
+      isHtmlElement(node) &&
+      (isHiddenElement(node) ||
+        SKIPPED_HTML_ELEMENTS.has(node.tagName) ||
+        node.tagName === 'nav')
+    )
+      return;
+    if (isHtmlElement(node) && node.tagName === 'h1') headings.push(node);
+    for (const child of childNodes(node)) visit(child);
+  };
+  visit(document);
+  const headingCounts = new Map<HtmlNode, number>();
+  for (const heading of headings) {
+    let parent = heading.parentNode;
+    while (parent && isHtmlElement(parent)) {
+      headingCounts.set(parent, (headingCounts.get(parent) ?? 0) + 1);
+      parent = parent.parentNode;
+    }
+  }
+  const candidates = new Set<HtmlElement>();
+  for (const heading of headings) {
+    let parent = heading.parentNode;
+    while (
+      parent &&
+      isHtmlElement(parent) &&
+      !['body', 'html'].includes(parent.tagName)
+    ) {
+      const markers = [
+        attributeValue(parent, 'id') ?? '',
+        attributeValue(parent, 'class') ?? '',
+      ].join(' ');
+      if (
+        headingCounts.get(parent) === 1 &&
+        /(?:^|[\s_-])(?:article|post|entry|story|body|content)(?:$|[\s_-])/u.test(
+          markers,
+        ) &&
+        findFirstElement(parent, 'p')
+      ) {
+        candidates.add(parent);
+        break;
+      }
+      parent = parent.parentNode;
+    }
+  }
+  return candidates.size === 1 ? [...candidates][0] : undefined;
 }
 
 function descendantText(node: HtmlNode): string {

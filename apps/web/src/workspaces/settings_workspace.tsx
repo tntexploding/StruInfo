@@ -34,6 +34,20 @@ export function SettingsWorkspace({
         </div>
       </header>
       <div className="settings-layout">
+        <WorkspaceActionRail
+          page="settings"
+          active={section}
+          actions={['appearance', 'workflow', 'ai', 'maintenance'].map(
+            (id) => ({
+              id,
+              label: SIDEBAR_ACTION_LABELS[id] ?? id,
+              onClick: () => {
+                setSection(id);
+                setVisited((current) => new Set([...current, id]));
+              },
+            }),
+          )}
+        />
         <div className="settings-content">
           <div hidden={section !== 'appearance'}>
             <InterfaceSettings />
@@ -76,31 +90,8 @@ export function SettingsWorkspace({
           <div hidden={section !== 'ai'}>{visited.has('ai') ? ai : null}</div>
           <div hidden={section !== 'maintenance'}>
             {visited.has('maintenance') ? maintenance : null}
-            <button
-              type="button"
-              className="secondary-action"
-              onClick={() => {
-                onNavigate('overview');
-              }}
-            >
-              运行总览与任务记录
-            </button>
           </div>
         </div>
-        <WorkspaceActionRail
-          page="settings"
-          active={section}
-          actions={['appearance', 'workflow', 'ai', 'maintenance'].map(
-            (id) => ({
-              id,
-              label: SIDEBAR_ACTION_LABELS[id] ?? id,
-              onClick: () => {
-                setSection(id);
-                setVisited((current) => new Set([...current, id]));
-              },
-            }),
-          )}
-        />
       </div>
     </div>
   );
@@ -110,7 +101,7 @@ function InterfaceSettings() {
   return (
     <section className="interface-settings">
       <h2>页面与外观</h2>
-      <p>选择各页右侧常用按钮并调整顺序。隐藏的功能仍可从“更多操作”进入。</p>
+      <p>选择各页侧栏常用按钮并调整顺序。隐藏的功能仍可从“更多操作”进入。</p>
       {!ui.ready ? (
         <p>正在使用默认布局；读取成功后可以保存个人设置。</p>
       ) : (

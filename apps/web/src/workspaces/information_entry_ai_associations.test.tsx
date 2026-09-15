@@ -16,7 +16,7 @@ describe('InformationEntryAiAssociations', () => {
       />,
     );
 
-    expect(markup).toContain('OpenAI 未启用');
+    expect(markup).toContain('模型服务 未启用');
     expect(markup).toContain('仍可查看相似条目并人工编辑关系');
     expect(markup).not.toContain('生成 AI 关系建议</button>');
   });
@@ -32,7 +32,7 @@ describe('InformationEntryAiAssociations', () => {
       />,
     );
 
-    expect(markup).toContain('隐私条目不会发送给 OpenAI');
+    expect(markup).toContain('隐私条目不会发送给 模型服务');
     expect(markup).not.toContain('生成 AI 关系建议</button>');
   });
 
@@ -48,7 +48,7 @@ describe('InformationEntryAiAssociations', () => {
     );
 
     expect(markup).toContain(
-      '当前两个公开条目的标题、正文和标签会发送给 OpenAI',
+      '当前两个公开条目的标题、正文和标签会发送给 模型服务',
     );
     expect(markup).toContain('其他条目不会发送');
     expect(markup).toContain('结果需要你确认后才会保存');

@@ -21,7 +21,10 @@ import {ActionNotice} from '../components/action_notice.js';
 import type {ActionFeedback} from '../components/product_types.js';
 import {describeInformationEntryFailure} from './information_entry_shared.js';
 import {InformationEntryAiAssociations} from './information_entry_ai_associations.js';
-import {formatBasisPointPercentage} from './information_entry_score.js';
+import {
+  formatBasisPointPercentage,
+  formatRuleSimilarity,
+} from './information_entry_score.js';
 import {createLatestRequestTracker} from './latest_request.js';
 
 type ReadyGraphResponse = Extract<
@@ -845,7 +848,7 @@ export function InformationEntryRadialGraph({
                 data-selected={selectedEdgeKey === key}
                 role="button"
                 tabIndex={0}
-                aria-label={`${displayEdgeLabel(edge)}，${directionLabel(edge, center.entryId)}。${explanation}。联系强度 ${formatBasisPointPercentage(edge.effectiveScore)}，${originLabel(edge.origin)}。`}
+                aria-label={`${displayEdgeLabel(edge)}，${directionLabel(edge, center.entryId)}。${explanation}。${graphEdgeStatus(edge)}，${formatRuleSimilarity(edge.projection)}。`}
                 aria-pressed={selectedEdgeKey === key}
                 key={key}
                 onClick={() => {
@@ -939,8 +942,7 @@ export function InformationEntryRadialGraph({
               }}
             >
               <small>
-                {displayEdgeLabel(edge)} ·{' '}
-                {formatBasisPointPercentage(edge.effectiveScore)}
+                {displayEdgeLabel(edge)} · {graphEdgeMetric(edge)}
               </small>
               <strong>{entryTitle(related)}</strong>
             </button>
@@ -959,8 +961,8 @@ export function InformationEntryRadialGraph({
                 </strong>
                 <span>{describeGraphEdge(edge)}</span>
                 <small>
-                  {formatBasisPointPercentage(edge.effectiveScore)} ·{' '}
-                  {originLabel(edge.origin)}
+                  {graphEdgeStatus(edge)} ·{' '}
+                  {formatRuleSimilarity(edge.projection)}
                 </small>
               </div>
             ) : null,
@@ -1019,9 +1021,7 @@ function RelationListView({
                   }}
                 >
                   <strong>{entryTitle(related)}</strong>
-                  <small>
-                    {formatBasisPointPercentage(edge.effectiveScore)} 联系
-                  </small>
+                  <small>{graphEdgeMetric(edge)}</small>
                 </button>
               </li>
             );
@@ -1158,12 +1158,20 @@ function EdgeInspector({
       ) : edge.sourceReview?.reason === 'unbound' ? (
         <p role="status">这次来源核验未绑定条目版本，需要重新复核。</p>
       ) : null}
-      {edge.projection === undefined ? null : (
+      {edge.projection === undefined ? (
+        <p>未计算规则相似度</p>
+      ) : (
         <dl className="knowledge-edge-metrics">
           <div>
-            <dt>综合</dt>
-            <dd>{score(edge.effectiveScore)}</dd>
+            <dt>规则相似度</dt>
+            <dd>{score(edge.projection.baseScore)}</dd>
           </div>
+          {edge.effectiveScore === edge.projection.baseScore ? null : (
+            <div>
+              <dt>调整后推荐分</dt>
+              <dd>{score(edge.effectiveScore)}</dd>
+            </div>
+          )}
           <div>
             <dt>内容</dt>
             <dd>{score(edge.projection.contentSimilarity)}</dd>
@@ -1665,7 +1673,7 @@ function describeGraphEdge(edge: Readonly<InformationEntryGraphEdge>): string {
   }
   if (note !== '') return note;
   if (calculatedReason !== '') return calculatedReason;
-  if (edge.origin === 'ai_assisted') return 'AI 提议后由用户保存';
+  if (edge.origin === 'ai_assisted') return 'AI 建立，未填写补充说明';
   if (edge.origin === 'user_created') return '由用户创建，未填写补充说明';
   if (edge.origin === 'user_edited') return '由用户调整，未填写补充说明';
   return '根据条目相似度自动建立';
@@ -1685,8 +1693,20 @@ function associationBasisLabel(
 function originLabel(origin: InformationEntryGraphEdge['origin']): string {
   if (origin === 'user_created') return '用户创建';
   if (origin === 'user_edited') return '用户编辑';
-  if (origin === 'ai_assisted') return 'AI 辅助';
+  if (origin === 'ai_assisted') return 'AI 建立';
   return '自动计算';
+}
+
+function graphEdgeStatus(edge: Readonly<InformationEntryGraphEdge>): string {
+  return edge.verificationStatus === 'calculated'
+    ? originLabel(edge.origin)
+    : `${originLabel(edge.origin)} · ${verificationLabel(edge.verificationStatus)}`;
+}
+
+function graphEdgeMetric(edge: Readonly<InformationEntryGraphEdge>): string {
+  return edge.projection === undefined
+    ? graphEdgeStatus(edge)
+    : formatRuleSimilarity(edge.projection);
 }
 
 function displayEdgeLabel(edge: Readonly<InformationEntryGraphEdge>): string {

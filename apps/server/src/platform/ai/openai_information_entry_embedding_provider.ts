@@ -1,6 +1,6 @@
 import type {InformationEntryEmbeddingProviderPort} from '../../modules/entries/index.js';
 import type {EmbeddingProviderConfig} from '../../config/runtime_config.js';
-import type {OpenAiFetch} from './openai_entry_tag_provider.js';
+import type {OpenAiFetch} from './responses_entry_tag_provider.js';
 
 export const OPENAI_EMBEDDINGS_ENDPOINT =
   'https://api.openai.com/v1/embeddings' as const;

@@ -1,3 +1,12 @@
+import {
+  isAiPriceWait,
+  AI_PRICE_WAIT,
+} from '../../modules/processing/ai_price_policy.js';
+import {
+  responsesEndpoint,
+  responsesOptions,
+  responsesPromptVersion,
+} from './responses_configuration.js';
 import type {AiProposalProviderConfig} from '../../config/runtime_config.js';
 import {
   EntryTranslationError,
@@ -5,26 +14,28 @@ import {
   type EntryTranslationProviderPort,
   type EntryTranslationText,
 } from '../../modules/entries/information_entry_translation.js';
-import {
-  OPENAI_RESPONSES_ENDPOINT,
-  type OpenAiFetch,
-} from './openai_entry_tag_provider.js';
+import {type OpenAiFetch} from './responses_entry_tag_provider.js';
 
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 export const ENTRY_TRANSLATION_TIMEOUT_MS = 120_000;
 
-export class OpenAiEntryTranslationProvider implements EntryTranslationProviderPort {
-  public readonly providerKey = 'openai-responses-v1' as const;
-  public readonly promptVersion = 'struinfo.openai-entry-translation.v1';
+export class ResponsesEntryTranslationProvider implements EntryTranslationProviderPort {
+  public readonly providerKey: AiProposalProviderConfig['providerKey'];
+  public readonly promptVersion: string;
   public readonly model: string;
   readonly #apiKey: string;
   readonly #fetch: OpenAiFetch;
 
   public constructor(
-    config: Pick<AiProposalProviderConfig, 'apiKey' | 'model'>,
+    config: Pick<AiProposalProviderConfig, 'apiKey' | 'model' | 'providerKey'>,
     fetchImplementation: OpenAiFetch = globalThis.fetch,
   ) {
     this.model = config.model;
+    this.providerKey = config.providerKey;
+    this.promptVersion = responsesPromptVersion(
+      config,
+      'struinfo.openai-entry-translation.v1',
+    );
     this.#apiKey = config.apiKey;
     this.#fetch = fetchImplementation;
   }
@@ -34,7 +45,7 @@ export class OpenAiEntryTranslationProvider implements EntryTranslationProviderP
   ): Promise<Readonly<EntryTranslationText>> {
     const signal = AbortSignal.timeout(ENTRY_TRANSLATION_TIMEOUT_MS);
     try {
-      const response = await this.#fetch(OPENAI_RESPONSES_ENDPOINT, {
+      const response = await this.#fetch(responsesEndpoint(this), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.#apiKey}`,
@@ -43,6 +54,7 @@ export class OpenAiEntryTranslationProvider implements EntryTranslationProviderP
         signal,
         body: JSON.stringify({
           model: this.model,
+          ...responsesOptions(this),
           store: false,
           max_output_tokens: 16_384,
           instructions: [
@@ -100,6 +112,7 @@ export class OpenAiEntryTranslationProvider implements EntryTranslationProviderP
         new TextDecoder('utf-8', {fatal: true}).decode(bytes),
       );
     } catch (error) {
+      if (isAiPriceWait(error)) throw new EntryTranslationError(AI_PRICE_WAIT);
       if (error instanceof EntryTranslationError) throw error;
       if (signal.aborted)
         throw new EntryTranslationError('ai_provider_timeout');

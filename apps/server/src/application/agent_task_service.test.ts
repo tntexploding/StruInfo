@@ -1,3 +1,7 @@
+import {
+  AiPriceWindowClosedError,
+  AI_PRICE_WAIT,
+} from '../modules/processing/ai_price_policy.js';
 import {requireOperationValue} from './operation_error.js';
 import {describe, it, expect, vi} from 'vitest';
 import type {
@@ -21,7 +25,10 @@ const S = '00000000-0000-4000-8000-000000000002';
 const E = '00000000-0000-4000-8000-000000000003';
 const P = '00000000-0000-4000-8000-000000000004';
 const owner = ExecutionAuthority.owner(W);
-function fixture(guard?: (task: AgentTask) => Promise<string | undefined>) {
+function fixture(
+  guard?: (task: AgentTask) => Promise<string | undefined>,
+  priceGate?: ConstructorParameters<typeof AgentTaskService>[4],
+) {
   const rows = new Map<string, AgentTask>();
   const locks = new Set<string>();
   const runs = new Map<string, ProcessingRun>();
@@ -68,6 +75,16 @@ function fixture(guard?: (task: AgentTask) => Promise<string | undefined>) {
   let count = 0;
   const actions = {
     model: 'synthetic-model',
+    guard: vi.fn(() => Promise.resolve(undefined as string | undefined)),
+    prepareIntake: vi.fn(() => Promise.resolve(true)),
+    reviewIntake: vi.fn(() => Promise.resolve()),
+    intakeTarget: vi.fn(() => Promise.resolve(S)),
+    recallSteps: vi.fn(() => Promise.resolve([] as AgentTaskStep[])),
+    recall: vi.fn(() =>
+      Promise.resolve({
+        concepts: [{term: 'Synthetic', variants: ['合成概念']}],
+      }),
+    ),
     preflight: vi.fn(() => {
       return Promise.resolve();
     }),
@@ -116,6 +133,7 @@ function fixture(guard?: (task: AgentTask) => Promise<string | undefined>) {
     repository,
     actions as unknown as AgentTaskActions,
     guard,
+    priceGate,
   );
   const done = async (id: string) => {
     await vi.waitFor(() => {
@@ -141,6 +159,211 @@ function fixture(guard?: (task: AgentTask) => Promise<string | undefined>) {
   };
 }
 describe('bounded Agent tasks', () => {
+  it('waits before claiming calls, resumes after restart, and rechecks between stages', async () => {
+    let blocked = true;
+    const priceGate = {
+      check: async () => {
+        await Promise.resolve();
+        if (blocked) throw new AiPriceWindowClosedError();
+      },
+      canResume: () => true,
+    };
+    const f = fixture(undefined, priceGate);
+    const task = await f.service.start(owner, 'price', {
+      kind: 'document',
+      snapshotId: S,
+    });
+    await f.done(task.taskId);
+    expect(f.rows.get(task.taskId)?.state).toMatchObject({
+      status: 'paused',
+      calls: 0,
+      errorCode: AI_PRICE_WAIT,
+    });
+    expect(f.actions.generate).not.toHaveBeenCalled();
+    await f.service.pollPriceDeferred();
+    expect(f.actions.generate).not.toHaveBeenCalled();
+    await f.service.drain();
+    const resumed = new AgentTaskService(
+      W,
+      f.repository,
+      f.actions as unknown as AgentTaskActions,
+      undefined,
+      priceGate,
+    );
+    blocked = false;
+    f.actions.accept.mockImplementationOnce(async () => {
+      await Promise.resolve();
+      blocked = true;
+    });
+    await resumed.pollPriceDeferred();
+    await vi.waitFor(() => {
+      expect(f.rows.get(task.taskId)?.state).toMatchObject({
+        status: 'paused',
+        calls: 1,
+        errorCode: AI_PRICE_WAIT,
+      });
+    });
+    expect(f.actions.generate).toHaveBeenCalledTimes(1);
+    await vi.waitFor(async () => {
+      expect((await resumed.read(owner, task.taskId)).runtimeStatus).toBe(
+        'idle',
+      );
+    });
+    blocked = false;
+    await resumed.pollPriceDeferred();
+    await vi.waitFor(() => {
+      expect(f.rows.get(task.taskId)?.state).toMatchObject({
+        status: 'succeeded',
+        calls: 2,
+      });
+    });
+  });
+  it('refunds a final-dispatch deferral and does not reuse its failed proposal run', async () => {
+    const f = fixture(undefined, {
+      check: () => Promise.resolve(),
+      canResume: () => true,
+    });
+    f.actions.generate.mockImplementationOnce(async (_task, step) => {
+      await Promise.resolve();
+      const run = {
+        runId: step.runId,
+        status: 'failed',
+        proposals: [],
+        errorCode: AI_PRICE_WAIT,
+      } as unknown as ProcessingRun;
+      f.runs.set(requireOperationValue(step.runId), run);
+      return run;
+    });
+    const task = await f.service.start(owner, 'dispatch-price', {
+      kind: 'document',
+      snapshotId: S,
+      maxModelCalls: 2,
+    });
+    await f.done(task.taskId);
+    expect(f.rows.get(task.taskId)?.state).toMatchObject({
+      calls: 0,
+      steps: [{attempt: 0, complete: false}],
+    });
+    const abortedId = f.actions.generate.mock.calls[0]?.[1].runId;
+    await vi.waitFor(async () => {
+      expect((await f.service.read(owner, task.taskId)).runtimeStatus).toBe(
+        'idle',
+      );
+    });
+    await f.service.pollPriceDeferred();
+    await vi.waitFor(() => {
+      expect(f.rows.get(task.taskId)?.state).toMatchObject({
+        status: 'succeeded',
+        calls: 2,
+      });
+    });
+    expect(f.actions.generate.mock.calls[1]?.[1].runId).not.toBe(abortedId);
+  });
+  it.each(['pause', 'cancel'] as const)(
+    'does not resume an explicitly %sd price wait',
+    async (action) => {
+      let blocked = true;
+      const f = fixture(undefined, {
+        check: async () => {
+          await Promise.resolve();
+          if (blocked) throw new AiPriceWindowClosedError();
+        },
+        canResume: () => true,
+      });
+      const task = await f.service.start(owner, 'stop-price-' + action, {
+        kind: 'document',
+        snapshotId: S,
+      });
+      await f.done(task.taskId);
+      const current = await f.service.read(owner, task.taskId);
+      await f.service.control(owner, task.taskId, current.version, action);
+      blocked = false;
+      await f.service.pollPriceDeferred();
+      expect(f.actions.generate).not.toHaveBeenCalled();
+    },
+  );
+  it('honors revoked resume authority and does not gate external supplied results', async () => {
+    const check = vi.fn<() => Promise<void>>(async () => {
+      await Promise.resolve();
+      throw new AiPriceWindowClosedError();
+    });
+    const f = fixture(undefined, {check, canResume: () => false});
+    const task = await f.service.start(owner, 'revoked-price', {
+      kind: 'document',
+      snapshotId: S,
+    });
+    await f.done(task.taskId);
+    check.mockResolvedValue(undefined);
+    await f.service.pollPriceDeferred();
+    expect(f.actions.generate).not.toHaveBeenCalled();
+    check.mockRejectedValue(new AiPriceWindowClosedError());
+    const external = await f.service.start(owner, 'external-price', {
+      kind: 'split',
+      snapshotId: S,
+      result: {
+        summary: 'Synthetic',
+        groups: [{titlePath: 'Synthetic', startOrdinal: 0, endOrdinal: 0}],
+      },
+    });
+    expect((await f.done(external.taskId)).state.status).toBe('succeeded');
+  });
+  it('recovers a completed no-relation evaluation without another call or graph write', async () => {
+    const f = fixture();
+    const generate = requireOperationValue(
+      f.actions.generate.getMockImplementation(),
+    );
+    f.actions.relationSteps.mockResolvedValue([
+      {
+        kind: 'relation',
+        targetId: E,
+        relatedEntryId: S,
+        attempt: 0,
+        complete: false,
+      },
+    ]);
+    f.actions.generate.mockImplementation(async (task, step) => {
+      if (step.kind !== 'relation') return generate(task, step);
+      const run = {
+        runId: step.runId,
+        status: 'succeeded',
+        currentStage: 'associations',
+        currentStep: '未发现有意义的联系',
+        completedUnits: 1,
+        totalUnits: 1,
+        proposals: [],
+      } as unknown as ProcessingRun;
+      f.runs.set(requireOperationValue(step.runId), run);
+      const current = requireOperationValue(f.rows.get(task.taskId));
+      f.rows.set(task.taskId, {...current, pauseRequested: true});
+      return run;
+    });
+    const task = await f.service.start(owner, 'no-relation-recovery', {
+      kind: 'document',
+      snapshotId: S,
+      maxModelCalls: 3,
+    });
+    expect((await f.done(task.taskId)).state).toMatchObject({
+      status: 'paused',
+      calls: 3,
+    });
+    await vi.waitFor(async () => {
+      expect((await f.service.read(owner, task.taskId)).runtimeStatus).toBe(
+        'idle',
+      );
+    });
+    const current = await f.service.read(owner, task.taskId);
+    await f.service.control(owner, task.taskId, current.version, 'resume');
+    await vi.waitFor(() => {
+      expect(f.rows.get(task.taskId)?.state.status).toBe('succeeded');
+    });
+    expect(f.rows.get(task.taskId)?.state.steps.at(-1)).toMatchObject({
+      complete: true,
+      outcome: 'no_relation',
+    });
+    expect(f.actions.generate).toHaveBeenCalledTimes(3);
+    expect(f.writes).toBe(2);
+  });
+
   it('rechecks saved automation authority after generation and resumes the same proposal', async () => {
     let denied: string | undefined;
     const f = fixture(() => Promise.resolve(denied));
@@ -365,5 +588,125 @@ describe('bounded Agent tasks', () => {
     await expect(
       f.service.list(ExecutionAuthority.owner(S)),
     ).rejects.toMatchObject({code: 'workspace_mismatch'});
+  });
+});
+
+describe('intake and multilingual task stages', () => {
+  it('holds before splitting and re-reviews after an explicit reset', async () => {
+    const f = fixture();
+    let held = false;
+    f.actions.reviewIntake.mockImplementationOnce(() => {
+      held = true;
+      return Promise.resolve();
+    });
+    f.actions.intakeTarget.mockImplementation(() => {
+      if (held)
+        return Promise.reject(new OperationError('rejected', 'intake_held'));
+      return Promise.resolve(S);
+    });
+    const task = await f.service.start(owner, 'intake-hold', {
+      kind: 'document',
+      snapshotId: S,
+      intake: {fetchFullText: false},
+      maxRelations: 0,
+      maxModelCalls: 4,
+    });
+    expect((await f.done(task.taskId)).state).toMatchObject({
+      status: 'paused',
+      phase: 'intake',
+      calls: 1,
+      errorCode: 'intake_held',
+    });
+    expect(f.writes).toBe(0);
+    expect(f.actions.generate).not.toHaveBeenCalled();
+    await vi.waitFor(async () => {
+      expect((await f.service.read(owner, task.taskId)).runtimeStatus).toBe(
+        'idle',
+      );
+    });
+    held = false;
+    const current = await f.service.read(owner, task.taskId);
+    await f.service.control(owner, task.taskId, current.version, 'resume');
+    await vi.waitFor(() => {
+      expect(f.rows.get(task.taskId)?.state.status).toBe('succeeded');
+    });
+    expect(f.actions.reviewIntake).toHaveBeenCalledTimes(2);
+    expect(f.rows.get(task.taskId)?.state.calls).toBe(4);
+    expect(f.writes).toBe(2);
+  });
+  it('checks more candidates than the accepted edge cap and persists recall reasons', async () => {
+    const f = fixture();
+    f.actions.recallSteps.mockResolvedValue([
+      {
+        kind: 'recall',
+        targetId: E,
+        expectedRevision: 2,
+        attempt: 0,
+        complete: false,
+      },
+    ]);
+    f.actions.relationSteps.mockResolvedValue(
+      [S, P, W].map((relatedEntryId) => ({
+        kind: 'relation',
+        targetId: E,
+        relatedEntryId,
+        attempt: 0,
+        complete: false,
+        candidateReasons: ['Synthetic → 合成概念（正文）'],
+      })),
+    );
+    const generate = requireOperationValue(
+      f.actions.generate.getMockImplementation(),
+    );
+    f.actions.generate.mockImplementation(async (task, step) => {
+      if (step.kind !== 'relation' || step.relatedEntryId !== S)
+        return generate(task, step);
+      const run = {
+        runId: step.runId,
+        status: 'succeeded',
+        currentStage: 'associations',
+        currentStep: '未发现有意义的联系',
+        completedUnits: 1,
+        totalUnits: 1,
+        proposals: [],
+      } as unknown as ProcessingRun;
+      f.runs.set(requireOperationValue(step.runId), run);
+      return run;
+    });
+    const task = await f.service.start(owner, 'recall-budget', {
+      kind: 'document',
+      snapshotId: S,
+      maxRelations: 1,
+      maxRelationCandidates: 3,
+      maxModelCalls: 5,
+    });
+    const result = await f.done(task.taskId);
+    expect(result.state.status).toBe('succeeded');
+    expect(result.state.calls).toBe(5);
+    expect(
+      result.state.steps
+        .filter((s) => s.kind === 'relation')
+        .map((s) => s.outcome),
+    ).toEqual(['no_relation', undefined, 'edge_budget_reached']);
+    expect(
+      result.state.steps.find((s) => s.kind === 'recall')?.recallPlan
+        ?.concepts[0]?.variants,
+    ).toContain('合成概念');
+    expect(f.writes).toBe(3);
+  });
+  it('does not grant capture access through an existing process grant', async () => {
+    const f = fixture();
+    const authority = ExecutionAuthority.agent(W, 'synthetic-agent', [
+      'tasks.control',
+      'models.use',
+    ]);
+    await expect(
+      f.service.start(authority, 'no-capture', {
+        kind: 'document',
+        snapshotId: S,
+        intake: {fetchFullText: true},
+      }),
+    ).rejects.toMatchObject({code: 'operation_not_authorized'});
+    expect(f.actions.preflight).not.toHaveBeenCalled();
   });
 });

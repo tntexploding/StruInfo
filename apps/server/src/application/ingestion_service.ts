@@ -183,7 +183,12 @@ export class IngestionService {
     if (
       task.request.maxEntries > current.settings.maxEntries ||
       task.request.maxRelations > current.settings.maxRelations ||
-      task.request.maxModelCalls > current.settings.maxModelCalls
+      task.request.maxModelCalls > current.settings.maxModelCalls ||
+      (task.request.maxRelationCandidates ?? task.request.maxRelations) >
+        (current.settings.maxRelationCandidates ??
+          current.settings.maxRelations) ||
+      JSON.stringify(task.request.intake) !==
+        JSON.stringify(current.settings.intake)
     )
       return 'ingestion_budget_changed';
     return undefined;
@@ -233,6 +238,12 @@ export class IngestionService {
           task.taskId,
         );
       } else if (task.runtimeStatus !== 'running') {
+        // The model price scheduler owns these waits; they are not failed intake.
+        if (
+          task.state.errorCode === 'ai_price_window_closed' &&
+          !task.pauseRequested
+        )
+          return;
         const blocked = await this.guard(task);
         const needsPolicyReview = Boolean(
           current.settings.enabled && !current.settings.paused && blocked,
@@ -289,7 +300,13 @@ export class IngestionService {
     if (
       item.policy.settings.maxEntries > current.settings.maxEntries ||
       item.policy.settings.maxRelations > current.settings.maxRelations ||
-      item.policy.settings.maxModelCalls > current.settings.maxModelCalls
+      item.policy.settings.maxModelCalls > current.settings.maxModelCalls ||
+      (item.policy.settings.maxRelationCandidates ??
+        item.policy.settings.maxRelations) >
+        (current.settings.maxRelationCandidates ??
+          current.settings.maxRelations) ||
+      JSON.stringify(item.policy.settings.intake) !==
+        JSON.stringify(current.settings.intake)
     )
       throw new OperationError('conflict', 'ingestion_budget_changed');
     if (

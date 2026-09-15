@@ -86,6 +86,7 @@ describe('LocalReviewPreferencesStore', () => {
     const {store} = createStore();
 
     await expect(store.load(WORKSPACE_A)).resolves.toEqual({
+      aiPricePolicy: {revision: 0, enabled: false},
       format: 'struinfo.review-preferences',
       version: 1,
       workspaceId: WORKSPACE_A,

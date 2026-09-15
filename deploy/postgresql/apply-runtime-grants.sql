@@ -63,4 +63,8 @@ SELECT format(
   current_database()
 ) \gexec
 
+GRANT SELECT, INSERT, UPDATE ON TABLE struinfo.processing_document_intake TO struinfo_tm2_runtime;
+
+GRANT SELECT, INSERT, UPDATE ON TABLE struinfo.processing_report TO struinfo_tm2_runtime;
+
 COMMIT;

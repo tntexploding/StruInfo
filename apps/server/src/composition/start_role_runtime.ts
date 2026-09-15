@@ -1,5 +1,13 @@
+import {ReportService} from '../application/report_service.js';
+import {PostgresReportRepository} from '../platform/database/postgresql/postgres_report_repository.js';
+import {ResponsesReportProvider} from '../platform/ai/responses_report_provider.js';
+import {DocumentIntakeService} from '../application/document_intake_service.js';
+import {PostgresDocumentIntakeRepository} from '../platform/database/postgresql/postgres_document_intake_repository.js';
+import {ResponsesDocumentIntelligenceProvider} from '../platform/ai/responses_document_intelligence_provider.js';
 import {AgentCaptureService} from '../application/agent_capture_service.js';
 import {IngestionService} from '../application/ingestion_service.js';
+import {AiPriceService} from '../application/ai_price_service.js';
+import {priceAwareFetch} from '../platform/ai/price_aware_fetch.js';
 import {
   INGESTION_ACTOR_ID,
   ingestionTaskKey,
@@ -24,7 +32,7 @@ import {
 } from '../application/execution_authority.js';
 import {PostgresAgentTaskRepository} from '../platform/database/postgresql/postgres_agent_task_repository.js';
 import {EntryTranslationService} from '../modules/entries/information_entry_translation.js';
-import {OpenAiEntryTranslationProvider} from '../platform/ai/openai_entry_translation_provider.js';
+import {ResponsesEntryTranslationProvider} from '../platform/ai/responses_entry_translation_provider.js';
 import {EntryMarkdownExportService} from '../modules/entries/information_entry_markdown_export_service.js';
 import type {RuntimeConfig} from '../config/runtime_config.js';
 import {
@@ -43,10 +51,10 @@ import {
   type SourceConnectorPort,
 } from '../modules/subscriptions/index.js';
 import {
-  OpenAiEntryAssociationProvider,
-  OpenAiEntrySplitProvider,
-  OpenAiEntryTagProvider,
-  OpenAiInformationEntryQuerySynthesisProvider,
+  ResponsesEntryAssociationProvider,
+  ResponsesEntrySplitProvider,
+  ResponsesEntryTagProvider,
+  ResponsesInformationEntryQuerySynthesisProvider,
   OpenAiInformationEntryEmbeddingProvider,
 } from '../platform/ai/index.js';
 import {
@@ -167,6 +175,12 @@ export async function startRoleRuntime(
   const listenerFactory =
     dependencies.healthListenerFactory ?? new NestHealthListenerFactory();
   const address = listenerAddress(config);
+  const aiPrice = new AiPriceService(
+    config.workspaceId,
+    storage.reviewPreferences,
+    config.aiProposalProvider?.providerKey,
+  );
+  const modelFetch = priceAwareFetch(aiPrice);
   const aiSplitProposals =
     config.aiProposalProvider === undefined
       ? undefined
@@ -176,7 +190,10 @@ export async function startRoleRuntime(
           evidence: repositories.evidenceRead,
           entries: repositories.informationEntries,
           processing: repositories.processingRuns,
-          provider: new OpenAiEntrySplitProvider(config.aiProposalProvider),
+          provider: new ResponsesEntrySplitProvider(
+            config.aiProposalProvider,
+            modelFetch,
+          ),
         });
   const aiTagProposals =
     config.aiProposalProvider === undefined
@@ -185,7 +202,10 @@ export async function startRoleRuntime(
           workspaceId: config.workspaceId,
           entries: repositories.informationEntries,
           processing: repositories.processingRuns,
-          provider: new OpenAiEntryTagProvider(config.aiProposalProvider),
+          provider: new ResponsesEntryTagProvider(
+            config.aiProposalProvider,
+            modelFetch,
+          ),
         });
   const aiAssociationProposals =
     config.aiProposalProvider === undefined
@@ -195,8 +215,9 @@ export async function startRoleRuntime(
           entries: repositories.informationEntries,
           associations: repositories.informationEntryAssociations,
           processing: repositories.aiAssociationProposals,
-          provider: new OpenAiEntryAssociationProvider(
+          provider: new ResponsesEntryAssociationProvider(
             config.aiProposalProvider,
+            modelFetch,
           ),
         });
   const informationEntryRetrieval = new InformationEntryRetrievalService({
@@ -221,8 +242,9 @@ export async function startRoleRuntime(
           entries: repositories.informationEntries,
           associations: repositories.informationEntryAssociations,
           retrieval: informationEntryRetrieval,
-          provider: new OpenAiInformationEntryQuerySynthesisProvider(
+          provider: new ResponsesInformationEntryQuerySynthesisProvider(
             config.aiProposalProvider,
+            modelFetch,
           ),
         });
   const entryTranslations = new EntryTranslationService({
@@ -239,8 +261,9 @@ export async function startRoleRuntime(
     ...(config.aiProposalProvider === undefined
       ? {}
       : {
-          provider: new OpenAiEntryTranslationProvider(
+          provider: new ResponsesEntryTranslationProvider(
             config.aiProposalProvider,
+            modelFetch,
           ),
         }),
   });
@@ -252,10 +275,54 @@ export async function startRoleRuntime(
     new PostgresEvidenceRepository(database.pool, (client, capture) =>
       recordIngestionCapture(client, capture, origin),
     );
+  const intelligence = config.aiProposalProvider
+    ? new ResponsesDocumentIntelligenceProvider(
+        config.aiProposalProvider,
+        modelFetch,
+      )
+    : undefined;
+  const intakeWeb = new WebSourceConnector();
+  const intake = new DocumentIntakeService({
+    workspaceId: config.workspaceId,
+    repository: new PostgresDocumentIntakeRepository(
+      database.pool,
+      config.workspaceId,
+    ),
+    evidence: repositories.evidenceRead,
+    capture: repositories.evidence,
+    blobStore: storage.blobStore,
+    readWeb: (snapshotId, pageUrl) =>
+      intakeWeb.read({
+        subscriptionId: snapshotId,
+        configuration: {pageUrl, additionalPaths: []},
+      }),
+    ...(intelligence ? {provider: intelligence} : {}),
+  });
+  const reports = new ReportService({
+    workspaceId: config.workspaceId,
+    repository: new PostgresReportRepository(database.pool, config.workspaceId),
+    entries: repositories.informationEntries,
+    evidence: repositories.evidenceRead,
+    intake,
+    checkModelCall: () => aiPrice.assertAllowed(),
+    ...(config.aiProposalProvider
+      ? {
+          provider: new ResponsesReportProvider(
+            config.aiProposalProvider,
+            modelFetch,
+          ),
+        }
+      : {}),
+  });
   const agentTasks = new AgentTaskService(
     config.workspaceId,
     new PostgresAgentTaskRepository(database.pool),
     new AgentTaskActions({
+      intake,
+      ...(intelligence ? {intelligence} : {}),
+      aliases: async () =>
+        (await storage.reviewPreferences.load(config.workspaceId)).vocabulary
+          ?.aliases ?? [],
       workspaceId: config.workspaceId,
       blobStore: storage.blobStore,
       splitProcessing: repositories.processingRuns,
@@ -269,6 +336,18 @@ export async function startRoleRuntime(
       ...(aiAssociationProposals ? {relations: aiAssociationProposals} : {}),
     }),
     (task) => ingestion.guard(task),
+    {
+      check: () => aiPrice.assertAllowed(),
+      canResume: (task) =>
+        task.actorKind !== 'external_agent' ||
+        (config.agentInterface?.identity === task.actorId &&
+          config.agentInterface.processDocuments &&
+          (!(
+            task.request.kind === 'document' &&
+            task.request.intake?.fetchFullText
+          ) ||
+            config.agentInterface.capture)),
+    },
   );
   const sourceSubscriptions = new SourceSubscriptionService({
     workspaceId: config.workspaceId,
@@ -311,6 +390,10 @@ export async function startRoleRuntime(
           maxEntries: policy.settings.maxEntries,
           maxRelations: policy.settings.maxRelations,
           maxModelCalls: policy.settings.maxModelCalls,
+          ...(policy.settings.intake ? {intake: policy.settings.intake} : {}),
+          ...(policy.settings.maxRelationCandidates !== undefined
+            ? {maxRelationCandidates: policy.settings.maxRelationCandidates}
+            : {}),
         }),
       read: (taskId) => agentTasks.read(automationAuthority, taskId),
       resume: (task) =>
@@ -331,9 +414,19 @@ export async function startRoleRuntime(
     () => config.aiProposalProvider?.model,
     async () => (await sourceSubscriptions.list()).subscriptions,
   );
-  if (config.role === 'worker' || config.role === 'all') {
+  if (
+    config.role === 'worker' ||
+    config.role === 'api' ||
+    config.role === 'all'
+  ) {
     starters.push(() =>
-      Promise.resolve(new IngestionScheduler(() => ingestion.poll(), logger)),
+      Promise.resolve(
+        new IngestionScheduler(async () => {
+          if (config.role !== 'api') await ingestion.poll();
+          await agentTasks.pollPriceDeferred();
+          await reports.pollPriceDeferred();
+        }, logger),
+      ),
     );
   }
   if (config.role === 'scheduler' || config.role === 'all') {
@@ -421,7 +514,10 @@ export async function startRoleRuntime(
       entries: new EntryUseCases(authority, commandDependencies),
       relations: new RelationUseCases(authority, commandDependencies),
       tasks: agentTasks,
+      aiPrice,
+      reports,
       capture,
+      intake,
       runtimeStatus: {
         ...(config.aiProposalProvider
           ? {model: config.aiProposalProvider.model}
@@ -488,8 +584,11 @@ export async function startRoleRuntime(
       name: 'agent-tasks',
       stopAccepting: () => {
         agentTasks.stop();
+        reports.stop();
       },
-      drain: () => agentTasks.drain(),
+      drain: async () => {
+        await Promise.all([agentTasks.drain(), reports.drain()]);
+      },
       close: () => {
         return Promise.resolve();
       },

@@ -1,3 +1,9 @@
+import {isAiPriceWait} from '../../modules/processing/ai_price_policy.js';
+import {
+  responsesEndpoint,
+  responsesOptions,
+  responsesPromptVersion,
+} from './responses_configuration.js';
 import {
   ENTRY_DOMAIN_KEYWORDS,
   ENTRY_TYPE_KEYWORDS,
@@ -11,8 +17,13 @@ import {
 } from '../../modules/processing/index.js';
 import type {AiProposalProviderConfig} from '../../config/runtime_config.js';
 
-export const OPENAI_RESPONSES_ENDPOINT = 'https://api.openai.com/v1/responses';
-export const OPENAI_TAG_PROMPT_VERSION = 'struinfo.openai-entry-tags.v1';
+export {OPENAI_RESPONSES_ENDPOINT} from './responses_configuration.js';
+import {
+  responseMetadata,
+  RESPONSE_METADATA_INSTRUCTIONS,
+} from './responses_metadata.js';
+
+export const OPENAI_TAG_PROMPT_VERSION = 'struinfo.openai-entry-tags.v3';
 
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 const TYPE_VALUES = [...ENTRY_TYPE_KEYWORDS];
@@ -23,9 +34,9 @@ export type OpenAiFetch = (
   init?: RequestInit,
 ) => Promise<Response>;
 
-export class OpenAiEntryTagProvider implements AiTagProposalProviderPort {
-  public readonly providerKey = 'openai-responses-v1' as const;
-  public readonly promptVersion = OPENAI_TAG_PROMPT_VERSION;
+export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
+  public readonly providerKey: AiProposalProviderConfig['providerKey'];
+  public readonly promptVersion: string;
   public readonly model: string;
   readonly #config: Readonly<AiProposalProviderConfig>;
   readonly #fetch: OpenAiFetch;
@@ -37,6 +48,11 @@ export class OpenAiEntryTagProvider implements AiTagProposalProviderPort {
     this.#config = config;
     this.#fetch = fetchImplementation;
     this.model = config.model;
+    this.providerKey = config.providerKey;
+    this.promptVersion = responsesPromptVersion(
+      config,
+      OPENAI_TAG_PROMPT_VERSION,
+    );
   }
 
   public async proposeTags(
@@ -47,7 +63,7 @@ export class OpenAiEntryTagProvider implements AiTagProposalProviderPort {
     }
     let response: Response;
     try {
-      response = await this.#fetch(OPENAI_RESPONSES_ENDPOINT, {
+      response = await this.#fetch(responsesEndpoint(this.#config), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.#config.apiKey}`,
@@ -57,6 +73,7 @@ export class OpenAiEntryTagProvider implements AiTagProposalProviderPort {
         signal: AbortSignal.timeout(this.#config.timeoutMs),
       });
     } catch (error) {
+      if (isAiPriceWait(error)) throw error;
       const name = error instanceof Error ? error.name : '';
       throw new AiTagProposalProviderError(
         name === 'AbortError' || name === 'TimeoutError'
@@ -103,14 +120,17 @@ function createRequest(
 ): Readonly<Record<string, unknown>> {
   return Object.freeze({
     model: config.model,
+    ...responsesOptions(config),
     store: false,
     max_output_tokens: config.maxOutputTokens,
     instructions: [
       'You classify one InformationEntry for a personal knowledge system.',
       'Return only the requested JSON schema. Do not quote or summarize sensitive details.',
       'Choose 3-12 concise content keywords. Merge capitalization-only duplicates.',
+      'Use the central article subject. Ignore site navigation, recommended reading, publisher boilerplate and incidental examples. Publisher names are not topical tags unless the article studies the publisher.',
       'Choose exactly one type and 1-3 ordered domains (primary first).',
       'Use customName only when keyword is other; otherwise return null.',
+      RESPONSE_METADATA_INSTRUCTIONS,
     ].join(' '),
     input: JSON.stringify({
       titlePath: entry.value.titlePath,
@@ -274,18 +294,8 @@ function decodeFixedOrOther<T extends string>(
 }
 
 function boundedText(value: unknown, maximum: number): string {
-  if (typeof value !== 'string') fail();
-  const normalized = value.trim().normalize('NFC');
-  if (
-    normalized.length === 0 ||
-    Array.from(normalized).length > maximum ||
-    Array.from(normalized).some((character) => {
-      const code = character.codePointAt(0);
-      return code !== undefined && (code <= 0x1f || code === 0x7f);
-    })
-  ) {
-    fail();
-  }
+  const normalized = responseMetadata(value, maximum);
+  if (normalized === undefined) fail();
   return normalized;
 }
 

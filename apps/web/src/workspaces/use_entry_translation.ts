@@ -142,6 +142,8 @@ function translationErrorMessage(code: string): string {
       return '标题与正文超过 24,000 字符，本次无法翻译。原文仍可阅读。';
     case 'ai_provider_not_configured':
       return '翻译服务尚未启用，原文仍可阅读。';
+    case 'ai_price_window_closed':
+      return '当前为 DeepSeek 高峰时段，请在低价时段重新翻译。恢复时间见设置 → AI 接入。';
     case 'ai_provider_timeout':
       return '翻译超时，未保存不完整译文。可稍后重试。';
     case 'ai_provider_invalid_response':

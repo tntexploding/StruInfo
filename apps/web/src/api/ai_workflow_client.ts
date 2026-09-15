@@ -1,3 +1,38 @@
+export interface AiIntakePolicy {
+  fetchFullText: boolean;
+  blockedKinds: string[];
+  preferredTopics: string[];
+  excludedTopics: string[];
+}
+export const DEFAULT_INTAKE_POLICY: AiIntakePolicy = {
+  fetchFullText: true,
+  blockedKinds: ['event_notice', 'promotion', 'update_notice'],
+  preferredTopics: [],
+  excludedTopics: [],
+};
+export interface IntakeRecord {
+  snapshotId: string;
+  version: number;
+  updatedAt: string;
+  value: {
+    decision: 'pending' | 'admitted' | 'held' | 'blocked';
+    origin: 'manual' | 'model' | 'system';
+    reason: string;
+    preparedSnapshotId?: string;
+    preparation: 'received' | 'web_article';
+    assessment?: {
+      completeness: 'complete' | 'summary' | 'uncertain';
+      contentKind: string;
+      reason: string;
+    };
+  };
+}
+export const INTAKE_LABELS = {
+  pending: '待审核',
+  admitted: '已放行',
+  held: '已暂缓',
+  blocked: '已拒收',
+};
 export interface AiPolicySettings {
   enabled: boolean;
   paused: boolean;
@@ -8,6 +43,8 @@ export interface AiPolicySettings {
   maxRelations: number;
   maxModelCalls: number;
   maxDocumentsPerDay: number;
+  intake?: AiIntakePolicy;
+  maxRelationCandidates?: number;
 }
 export interface AiPolicy {
   revision: number;
@@ -18,12 +55,22 @@ export interface AiTask {
   version: number;
   model: string;
   actorKind: string;
+  pauseRequested?: boolean;
   request: {kind: string; snapshotId?: string; entryId?: string};
   state: {
     status: string;
     phase: string;
     calls: number;
-    steps: {complete: boolean}[];
+    steps: {
+      kind?: string;
+      targetId?: string;
+      relatedEntryId?: string;
+      proposalId?: string;
+      candidateReasons?: string[];
+      recallPlan?: {concepts: {term: string; variants: string[]}[]};
+      complete: boolean;
+      outcome?: 'no_relation' | 'edge_budget_reached';
+    }[];
     errorCode?: string;
   };
 }
@@ -71,7 +118,9 @@ export const aiWorkflowCommand: AiWorkflowClient = async <T>(
   input: unknown = {},
 ) => {
   const path =
-    operation.startsWith('ingestion_') || operation === 'subscriptions_list'
+    operation.startsWith('ingestion_') ||
+    operation.startsWith('intake_') ||
+    operation === 'subscriptions_list'
       ? '/api/v1/ingestion/commands'
       : '/api/v1/ai-tasks/commands';
   const response = await fetch(path, {
@@ -101,6 +150,11 @@ export function aiError(error: unknown): string {
     stale_ingestion_policy:
       '策略已被其他操作修改。草稿已保留，请重新读取后再保存。',
     stale_ingestion_item: '文档处理状态已更新，请刷新后重试。',
+    intake_blocked: '本篇已拒收，后续自动处理停止；可在收件箱恢复。',
+    intake_held: '本篇已暂缓，请在收件箱查看原因并决定重试或放行。',
+    stale_intake_version: '审核状态已变化，请重新读取后再操作。',
+    intake_busy: '正在获取全文，请稍后重试。',
+    intake_unavailable: '接收审核服务暂不可用，请确认服务已升级。',
     stale_task_version: '任务已更新，请刷新后重试。',
     snapshot_already_materialized:
       '这份文档已经有条目，请在资料库中整理现有结构。',
@@ -109,6 +163,11 @@ export function aiError(error: unknown): string {
     ingestion_scope_required: '请选择至少一个订阅，或勾选手动导入。',
     task_queue_unavailable: '处理队列暂时已满，请稍后重试。',
     ai_provider_unavailable: '模型服务暂时不可用，原文和已完成步骤仍保留。',
+    ai_price_window_closed:
+      '等待 DeepSeek 低价时段，届时自动续跑；未消耗调用预算。',
+    ai_price_resume_required: '此任务由数据包恢复，请确认后手动继续。',
+    task_authority_changed:
+      '外部 Agent 授权已改变，任务暂停，请确认权限后再继续。',
     ai_provider_timeout: '模型响应超时，可以重试或接管。',
     ai_split_input_unsupported: '文档超出自动拆分的范围，请在资料库调整结构。',
     daily_document_budget_reached:

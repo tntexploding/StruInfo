@@ -1,8 +1,18 @@
 # AI 自动处理与外部 Agent 接口
 
+## Reports (ADR 0081)
+
+MCP and the authenticated Agent HTTP gateway expose `report_preview`, `reports_list`, `report_read`, and `report_export`. Preview requires `entries.search`; other reads require both `entries.search` and `processing.read`. All inputs and citations remain limited to admitted public Entries. `report_export` returns a filename and Markdown; it does not send messages or write an external file. The current local owner may create, generate, cancel and edit via `/api/v1/reports/commands`. Existing Agent grants remain unchanged and external report writes are unavailable. See [report workflow and input fields](daily-weekly-reports.md).
+
+## 接收质量与召回接口
+
+`intake_status`（read）返回公开收件决定、原因和全文快照关联；`intake_prepare`（capture）仅获取已知公开文章地址并另存证据，不调用模型；`intake_control`（automate）提交 snapshotId、expectedVersion、action（block/admit/reset）和 reason。没有记录时 expectedVersion 为 0。控制不删除证据，也不自动启动任务。
+
+`task_start` 的 document 请求可增加 intake（fetchFullText、blockedKinds、preferredTopics、excludedTopics）与 maxRelationCandidates（0–24）。maxRelations 仍是 0–8 的实际联系上限；所有阶段共享 maxModelCalls。外部 Agent 请求获取正文时同时需要 process 和 capture，已有 grant 不因升级扩大。任务步骤返回 recallPlan 和 candidateReasons；no_relation 表示判断未发现明确联系，edge_budget_reached 表示达到联系上限而未评估。旧请求省略新字段时沿用原候选行为。
+
 内置流程和外部 Agent 共用应用层与持久任务。内置流程按保存策略处理新增公开资料；
 外部 Agent 可以使用自己的模型，通过 MCP / HTTP 直接收件、查询、拆分与标注。
-当前没有真实模型配置，默认保持关闭。无人值守范围与异常处理见[自动处理说明](ingestion-automation.md)。
+模型默认关闭；是否启用取决于所选外部实例的配置。无人值守范围与异常处理见[自动处理说明](ingestion-automation.md)。
 
 ## 界面入口
 
@@ -12,13 +22,13 @@
 
 ## 外部配置与授权
 
-按既有升级流程应用迁移至 000035，并执行 `deploy/postgresql/apply-runtime-grants.sql`。
+按既有升级流程应用迁移至 000037，并执行 `deploy/postgresql/apply-runtime-grants.sql`。
 在所选外部实例配置身份与 grants；令牌、密钥通过进程环境或只读 secret 文件提供：
 
 - `STRUIINFO_AGENT_ID`：稳定身份名，字母、数字、点、下划线或短横线。
 - `STRUIINFO_AGENT_TOKEN` 或 `STRUIINFO_AGENT_TOKEN_FILE`：32–256 字符的独立随机令牌；两者不能同时指定。
 - `STRUIINFO_AGENT_GRANTS`：下表的逗号分隔子集，默认只有 read。
-- 内部模型另需 `OPENAI_API_KEY` / `OPENAI_API_KEY_FILE` 和 `STRUIINFO_OPENAI_MODEL`。
+- 内部模型可选 OpenAI：`OPENAI_API_KEY` / `OPENAI_API_KEY_FILE` 和 `STRUIINFO_OPENAI_MODEL`；或 DeepSeek：`DEEPSEEK_API_KEY` / `DEEPSEEK_API_KEY_FILE` 和 `STRUIINFO_DEEPSEEK_MODEL`。两种 Responses 配置不能同时启用。
 
 | 授权      | 能力                                           |
 | --------- | ---------------------------------------------- |
@@ -77,7 +87,7 @@ Codex 的连接配置、工具白名单和超时字段见[官方 MCP 文档](htt
 
 ## 工具与常用流程
 
-工具发现提供每项完整 JSON Schema，共 19 个命名工具：
+工具发现提供每项完整 JSON Schema，共 22 个命名工具：
 
 | 用途       | 工具                                                                         |
 | ---------- | ---------------------------------------------------------------------------- |

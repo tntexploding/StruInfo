@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {FloatingToolPanel} from '../components/floating_tool_panel.js';
 import type {M1cApiClient} from '../api/m1c_api_client.js';
 import type {
   EntryQueryContext,
@@ -116,11 +117,13 @@ export function InformationEntrySavedQueries({
     }
   }
   return (
-    <details className="workflow-tool-drawer saved-query-panel">
-      <summary>
-        保存的查询
-        {state === undefined ? '' : ' · ' + state.views.length.toString()}
-      </summary>
+    <FloatingToolPanel
+      className="saved-query-panel"
+      title={
+        '保存的查询' +
+        (state === undefined ? '' : ' · ' + state.views.length.toString())
+      }
+    >
       <div className="saved-query-panel__body" aria-busy={busy || loading}>
         <p>保存条件和当前条目位置，打开时查询最新数据。</p>
         <label className="field">
@@ -223,6 +226,6 @@ export function InformationEntrySavedQueries({
         {loading ? <p role="status">正在读取保存的查询…</p> : null}
         {message === '' ? null : <p role="status">{message}</p>}
       </div>
-    </details>
+    </FloatingToolPanel>
   );
 }

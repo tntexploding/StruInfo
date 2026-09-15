@@ -1,4 +1,8 @@
 import {
+  DEFAULT_AI_PRICE_POLICY,
+  aiPricePolicySchema,
+} from '../modules/processing/ai_price_policy.js';
+import {
   DEFAULT_WORKSPACE_UI_PREFERENCES,
   decodeWorkspaceUiPreferences,
 } from '../storage/workspace_ui_preferences.js';
@@ -177,6 +181,10 @@ function decodeIdentity(
 
 function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
   if (!isRecord(value)) fail();
+  const price = aiPricePolicySchema.safeParse(
+    value.aiPricePolicy ?? DEFAULT_AI_PRICE_POLICY,
+  );
+  if (!price.success) fail();
   const uiPreferences =
     value.uiPreferences === undefined
       ? DEFAULT_WORKSPACE_UI_PREFERENCES
@@ -259,6 +267,7 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     entryClassificationProfile,
     savedQueries,
     uiPreferences,
+    price.data,
   );
 }
 

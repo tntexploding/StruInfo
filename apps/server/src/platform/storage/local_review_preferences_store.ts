@@ -1,4 +1,9 @@
 import {
+  DEFAULT_AI_PRICE_POLICY,
+  aiPricePolicySchema,
+  type AiPricePolicy,
+} from '../../modules/processing/ai_price_policy.js';
+import {
   DEFAULT_ENTRY_SAVED_QUERIES,
   decodeEntrySavedQueries,
   type EntrySavedQueries,
@@ -130,6 +135,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     entryClassificationProfile: Readonly<EntryClassificationProfile> = DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
     entrySavedQueries: Readonly<EntrySavedQueries> = DEFAULT_ENTRY_SAVED_QUERIES,
     uiPreferences: Readonly<WorkspaceUiPreferences> = DEFAULT_WORKSPACE_UI_PREFERENCES,
+    aiPricePolicy: Readonly<AiPricePolicy> = DEFAULT_AI_PRICE_POLICY,
   ): Promise<Readonly<ReviewPreferences>> {
     validateWorkspaceId(workspaceId);
     const attempt = this.#restoreAttempts.get(workspaceId);
@@ -150,6 +156,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
         entryClassificationProfile,
         entrySavedQueries,
         uiPreferences,
+        aiPricePolicy,
       );
     });
   }
@@ -232,6 +239,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
         DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       preferences.entrySavedQueries ?? DEFAULT_ENTRY_SAVED_QUERIES,
       preferences.uiPreferences ?? DEFAULT_WORKSPACE_UI_PREFERENCES,
+      preferences.aiPricePolicy ?? DEFAULT_AI_PRICE_POLICY,
     );
   }
 
@@ -249,7 +257,10 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     entryClassificationProfile: Readonly<EntryClassificationProfile>,
     entrySavedQueries: Readonly<EntrySavedQueries>,
     uiPreferences: Readonly<WorkspaceUiPreferences>,
+    aiPricePolicy: Readonly<AiPricePolicy>,
   ): Promise<Readonly<ReviewPreferences>> {
+    const decodedPrice = aiPricePolicySchema.safeParse(aiPricePolicy);
+    if (!decodedPrice.success) throw invalid();
     const decodedUi = decodeWorkspaceUiPreferences(uiPreferences);
     const savedQueries = decodeEntrySavedQueries(entrySavedQueries);
     const decoded = decodeReviewQuickTags(quickTags);
@@ -310,6 +321,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       decodedEntryClassificationProfile,
       savedQueries,
       decodedUi,
+      decodedPrice.data,
     );
     const bytes = new TextEncoder().encode(
       `${JSON.stringify(preferences, undefined, 2)}\n`,
@@ -372,6 +384,10 @@ function decodePreferences(
   ) {
     throw invalid();
   }
+  const price = aiPricePolicySchema.safeParse(
+    value.aiPricePolicy ?? DEFAULT_AI_PRICE_POLICY,
+  );
+  if (!price.success) throw invalid();
   const uiPreferences =
     value.uiPreferences === undefined
       ? DEFAULT_WORKSPACE_UI_PREFERENCES
@@ -451,6 +467,7 @@ function decodePreferences(
     entryClassificationProfile,
     savedQueries,
     uiPreferences,
+    price.data,
   );
 }
 

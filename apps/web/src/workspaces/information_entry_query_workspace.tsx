@@ -1,4 +1,5 @@
 import {useWorkspaceUi} from '../components/use_workspace_ui.js';
+import {FloatingToolPanel} from '../components/floating_tool_panel.js';
 import {sourceDisplayName} from '../components/reading_text.js';
 import {InformationEntryTranslation} from './information_entry_translation.js';
 import type {EntryTranslationServices} from './use_entry_translation.js';
@@ -343,8 +344,10 @@ export function InformationEntryQueryWorkspace({
                 onOpen={openContext}
               />
             )}
-            <details className="workflow-tool-drawer query-filter-drawer">
-              <summary>筛选与匹配方式</summary>
+            <FloatingToolPanel
+              className="query-filter-drawer"
+              title="筛选与匹配方式"
+            >
               <div className="query-filter-drawer__body">
                 <InformationEntryTextSearchOptions
                   mode={controller.textMode}
@@ -440,9 +443,8 @@ export function InformationEntryQueryWorkspace({
                   </button>
                 </div>
               </div>
-            </details>
-            <details className="workflow-tool-drawer">
-              <summary>索引维护</summary>
+            </FloatingToolPanel>
+            <FloatingToolPanel title="索引维护">
               {onLoadSearchIndex === undefined ||
               onRebuildSearchIndex === undefined ? null : (
                 <InformationEntrySearchIndexPanel
@@ -455,7 +457,7 @@ export function InformationEntryQueryWorkspace({
                   onRebuild={onRebuildSearchIndex}
                 />
               )}
-            </details>
+            </FloatingToolPanel>
           </aside>
         </form>
 

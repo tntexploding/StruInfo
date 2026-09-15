@@ -1,17 +1,18 @@
+import {
+  responsesEndpoint,
+  responsesPromptVersion,
+} from './responses_configuration.js';
 import {describe, expect, it, vi} from 'vitest';
 
 import type {CurrentInformationEntry} from '../../modules/entries/index.js';
 import {AiAssociationProposalProviderError} from '../../modules/processing/index.js';
 import {
   OPENAI_ASSOCIATION_PROMPT_VERSION,
-  OpenAiEntryAssociationProvider,
-} from './openai_entry_association_provider.js';
-import {
-  OPENAI_RESPONSES_ENDPOINT,
-  type OpenAiFetch,
-} from './openai_entry_tag_provider.js';
+  ResponsesEntryAssociationProvider,
+} from './responses_entry_association_provider.js';
+import {type OpenAiFetch} from './responses_entry_tag_provider.js';
 
-const CONFIG = Object.freeze({
+const BASE_CONFIG = Object.freeze({
   providerKey: 'openai-responses-v1' as const,
   model: 'gpt-5-mini',
   apiKey: 'synthetic-api-key',
@@ -19,7 +20,14 @@ const CONFIG = Object.freeze({
   timeoutMs: 60_000 as const,
 });
 
-describe('OpenAiEntryAssociationProvider', () => {
+describe.each([
+  BASE_CONFIG,
+  {
+    ...BASE_CONFIG,
+    providerKey: 'deepseek-responses-v1' as const,
+    model: 'deepseek-synthetic',
+  },
+])('$providerKey $model', (CONFIG) => {
   it('sends only the explicitly selected public pair with storage and tools disabled', async () => {
     const fetchImplementation = vi.fn<OpenAiFetch>(() =>
       Promise.resolve(
@@ -30,7 +38,7 @@ describe('OpenAiEntryAssociationProvider', () => {
         }),
       ),
     );
-    const provider = new OpenAiEntryAssociationProvider(
+    const provider = new ResponsesEntryAssociationProvider(
       CONFIG,
       fetchImplementation,
     );
@@ -42,25 +50,68 @@ describe('OpenAiEntryAssociationProvider', () => {
       relationLabel: '补充说明',
       direction: 'low_to_high',
     });
-    expect(provider.promptVersion).toBe(OPENAI_ASSOCIATION_PROMPT_VERSION);
+    expect(provider.promptVersion).toBe(
+      responsesPromptVersion(CONFIG, OPENAI_ASSOCIATION_PROMPT_VERSION),
+    );
     const [url, init] = fetchImplementation.mock.calls[0] ?? [];
-    expect(url).toBe(OPENAI_RESPONSES_ENDPOINT);
+    expect(url).toBe(responsesEndpoint(CONFIG));
     if (typeof init?.body !== 'string') throw new Error('missing request body');
     const request = JSON.parse(init.body) as Record<string, unknown>;
     expect(request).toMatchObject({
-      model: 'gpt-5-mini',
+      model: CONFIG.model,
       store: false,
       max_output_tokens: 800,
     });
     expect(request).not.toHaveProperty('tools');
+    expect(provider.providerKey).toBe(CONFIG.providerKey);
+    expect(request.reasoning).toEqual(
+      CONFIG.providerKey === 'deepseek-responses-v1'
+        ? {effort: 'none'}
+        : undefined,
+    );
     expect(String(request.input)).toContain('Synthetic body 2');
     expect(String(request.input)).toContain('Synthetic body 3');
     expect(String(request.input)).not.toContain('synthetic:source');
   });
 
+  it('returns no relation for insufficient evidence without inventing a label', async () => {
+    const provider = new ResponsesEntryAssociationProvider(CONFIG, () =>
+      Promise.resolve(
+        responseEnvelope({
+          outcome: 'no_relation',
+          summary: 'Only a broad topic is shared.',
+          relationLabel: null,
+          direction: null,
+        }),
+      ),
+    );
+    await expect(
+      provider.proposeAssociation(entry('2', false), entry('3', false)),
+    ).resolves.toEqual({
+      outcome: 'no_relation',
+      summary: 'Only a broad topic is shared.',
+    });
+  });
+
+  it('rejects a contradictory no-relation payload', async () => {
+    const provider = new ResponsesEntryAssociationProvider(CONFIG, () =>
+      Promise.resolve(
+        responseEnvelope({
+          outcome: 'no_relation',
+          summary: 'Insufficient evidence',
+          relationLabel: 'Invented link',
+          direction: 'symmetric',
+        }),
+      ),
+    );
+    await expect(
+      provider.proposeAssociation(entry('2', false), entry('3', false)),
+    ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});
+  });
+
   it('rejects a private pair before calling the Provider', async () => {
     const fetchImplementation = vi.fn<OpenAiFetch>();
-    const provider = new OpenAiEntryAssociationProvider(
+    const provider = new ResponsesEntryAssociationProvider(
       CONFIG,
       fetchImplementation,
     );
@@ -74,7 +125,7 @@ describe('OpenAiEntryAssociationProvider', () => {
   });
 
   it('fails closed when the result contains an unrequested field', async () => {
-    const provider = new OpenAiEntryAssociationProvider(CONFIG, () =>
+    const provider = new ResponsesEntryAssociationProvider(CONFIG, () =>
       Promise.resolve(
         responseEnvelope({
           summary: 'Synthetic summary',
@@ -93,14 +144,19 @@ describe('OpenAiEntryAssociationProvider', () => {
   });
 });
 
-function responseEnvelope(payload: unknown): Response {
+function responseEnvelope(payload: Record<string, unknown>): Response {
   return new Response(
     JSON.stringify({
       status: 'completed',
       output: [
         {
           type: 'message',
-          content: [{type: 'output_text', text: JSON.stringify(payload)}],
+          content: [
+            {
+              type: 'output_text',
+              text: JSON.stringify({outcome: 'relation', ...payload}),
+            },
+          ],
         },
       ],
     }),

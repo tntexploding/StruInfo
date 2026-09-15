@@ -1,15 +1,18 @@
+import {
+  responsesEndpoint,
+  responsesPromptVersion,
+} from './responses_configuration.js';
 import {describe, expect, it, vi} from 'vitest';
 
 import type {CurrentInformationEntry} from '../../modules/entries/index.js';
 import {AiTagProposalProviderError} from '../../modules/processing/index.js';
 import {
-  OPENAI_RESPONSES_ENDPOINT,
   OPENAI_TAG_PROMPT_VERSION,
-  OpenAiEntryTagProvider,
+  ResponsesEntryTagProvider,
   type OpenAiFetch,
-} from './openai_entry_tag_provider.js';
+} from './responses_entry_tag_provider.js';
 
-const CONFIG = Object.freeze({
+const BASE_CONFIG = Object.freeze({
   providerKey: 'openai-responses-v1' as const,
   model: 'gpt-5-mini',
   apiKey: 'synthetic-api-key',
@@ -17,7 +20,14 @@ const CONFIG = Object.freeze({
   timeoutMs: 60_000 as const,
 });
 
-describe('OpenAiEntryTagProvider', () => {
+describe.each([
+  BASE_CONFIG,
+  {
+    ...BASE_CONFIG,
+    providerKey: 'deepseek-responses-v1' as const,
+    model: 'deepseek-synthetic',
+  },
+])('$providerKey $model', (CONFIG) => {
   it('sends one public Entry through the Responses API with storage and tools disabled', async () => {
     const fetchImplementation = vi.fn<OpenAiFetch>(() =>
       Promise.resolve(
@@ -29,7 +39,7 @@ describe('OpenAiEntryTagProvider', () => {
         }),
       ),
     );
-    const provider = new OpenAiEntryTagProvider(CONFIG, fetchImplementation);
+    const provider = new ResponsesEntryTagProvider(CONFIG, fetchImplementation);
 
     await expect(provider.proposeTags(entry())).resolves.toEqual({
       summary: '可检查的标签建议',
@@ -37,10 +47,12 @@ describe('OpenAiEntryTagProvider', () => {
       typeKeyword: 'knowledge_explanation',
       domains: [{keyword: 'engineering_computing'}],
     });
-    expect(provider.promptVersion).toBe(OPENAI_TAG_PROMPT_VERSION);
+    expect(provider.promptVersion).toBe(
+      responsesPromptVersion(CONFIG, OPENAI_TAG_PROMPT_VERSION),
+    );
     expect(fetchImplementation).toHaveBeenCalledTimes(1);
     const [url, init] = fetchImplementation.mock.calls[0] ?? [];
-    expect(url).toBe(OPENAI_RESPONSES_ENDPOINT);
+    expect(url).toBe(responsesEndpoint(CONFIG));
     expect(init?.method).toBe('POST');
     expect(init?.headers).toEqual({
       Authorization: 'Bearer synthetic-api-key',
@@ -49,17 +61,23 @@ describe('OpenAiEntryTagProvider', () => {
     if (typeof init?.body !== 'string') throw new Error('missing request body');
     const request = JSON.parse(init.body) as Record<string, unknown>;
     expect(request).toMatchObject({
-      model: 'gpt-5-mini',
+      model: CONFIG.model,
       store: false,
       max_output_tokens: 800,
     });
     expect(request).not.toHaveProperty('tools');
+    expect(provider.providerKey).toBe(CONFIG.providerKey);
+    expect(request.reasoning).toEqual(
+      CONFIG.providerKey === 'deepseek-responses-v1'
+        ? {effort: 'none'}
+        : undefined,
+    );
     expect(String(request.input)).toContain('Synthetic public body');
   });
 
   it('rejects private Entries before calling the Provider', async () => {
     const fetchImplementation = vi.fn<OpenAiFetch>();
-    const provider = new OpenAiEntryTagProvider(CONFIG, fetchImplementation);
+    const provider = new ResponsesEntryTagProvider(CONFIG, fetchImplementation);
 
     await expect(provider.proposeTags(entry(true))).rejects.toMatchObject({
       code: 'ai_provider_rejected',
@@ -68,7 +86,7 @@ describe('OpenAiEntryTagProvider', () => {
   });
 
   it('fails closed on duplicate normalized keywords and invalid envelopes', async () => {
-    const duplicateProvider = new OpenAiEntryTagProvider(CONFIG, () =>
+    const duplicateProvider = new ResponsesEntryTagProvider(CONFIG, () =>
       Promise.resolve(
         responseEnvelope({
           summary: '重复标签',
@@ -82,7 +100,7 @@ describe('OpenAiEntryTagProvider', () => {
       new AiTagProposalProviderError('ai_provider_invalid_response'),
     );
 
-    const incompleteProvider = new OpenAiEntryTagProvider(CONFIG, () =>
+    const incompleteProvider = new ResponsesEntryTagProvider(CONFIG, () =>
       Promise.resolve(
         new Response('{"status":"incomplete","output":[]}', {status: 200}),
       ),

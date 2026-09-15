@@ -1,4 +1,5 @@
 import {requireOperationValue} from './operation_error.js';
+import type {DocumentIntakeService} from './document_intake_service.js';
 import {describe, it, expect, vi} from 'vitest';
 import type {CurrentInformationEntry} from '../modules/entries/index.js';
 import type {
@@ -165,6 +166,112 @@ function fixture(isPrivate = false) {
   };
 }
 describe('Agent actions reuse actual proposal acceptance', () => {
+  it.each(['intake_held', 'intake_blocked'] as const)(
+    'rechecks a planned relation candidate when intake changes to %s',
+    async (decision) => {
+      const f = fixture();
+      const candidate = {
+        ...f.current,
+        entryId: '00000000-0000-4000-8000-000000000004',
+        snapshotId: '00000000-0000-4000-8000-000000000005',
+      };
+      let excluded = false;
+      const actions = new AgentTaskActions({
+        ...f.dependencies,
+        entries: {
+          ...f.dependencies.entries,
+          loadCurrentEntries: () => Promise.resolve([f.current, candidate]),
+        },
+        intake: {
+          guard: (snapshotId: string) =>
+            Promise.resolve(
+              excluded && snapshotId === candidate.snapshotId
+                ? decision
+                : undefined,
+            ),
+        } as unknown as DocumentIntakeService,
+      });
+      const task: AgentTask = {
+        ...f.task,
+        request: {
+          kind: 'document',
+          snapshotId: S,
+          maxEntries: 8,
+          maxRelations: 2,
+          maxModelCalls: 14,
+        },
+        state: {
+          status: 'running',
+          calls: 2,
+          phase: 'relations',
+          steps: [
+            {
+              kind: 'relation',
+              targetId: E,
+              relatedEntryId: candidate.entryId,
+              attempt: 1,
+              complete: false,
+            },
+          ],
+        },
+      };
+      expect(await actions.guard(task)).toBeUndefined();
+      excluded = true;
+      expect(await actions.guard(task)).toBe(decision);
+      excluded = false;
+      expect(await actions.guard(task)).toBeUndefined();
+    },
+  );
+  it('excludes earlier captures of the same article while retaining other matching sources', async () => {
+    const f = fixture();
+    const current: CurrentInformationEntry = {
+      ...f.current,
+      revision: 2,
+      canonicalUri: 'https://example.invalid/article',
+      value: {
+        ...f.current.value,
+        contentKeywords: [
+          {
+            displayValue: 'Synthetic',
+            normalizedValue: 'synthetic',
+            origin: 'manual',
+            originVersion: 'synthetic-v1',
+          },
+        ],
+      },
+    };
+    const previous = {
+      ...current,
+      entryId: '00000000-0000-4000-8000-000000000004',
+      snapshotId: '00000000-0000-4000-8000-000000000005',
+    };
+    const other = {
+      ...previous,
+      entryId: '00000000-0000-4000-8000-000000000006',
+      canonicalUri: 'https://example.invalid/other',
+    };
+    const actions = new AgentTaskActions({
+      ...f.dependencies,
+      entries: {
+        ...f.dependencies.entries,
+        loadCurrentEntries: () => Promise.resolve([current, previous, other]),
+      },
+    });
+    const task = {
+      ...f.task,
+      request: {
+        kind: 'document',
+        snapshotId: S,
+        maxEntries: 8,
+        maxRelations: 2,
+        maxModelCalls: 14,
+      },
+      state: {steps: [{...f.step, expectedRevision: 1, complete: true}]},
+    } as AgentTask;
+    const steps = await actions.relationSteps(task);
+    expect(steps).toHaveLength(1);
+    expect(steps[0]?.relatedEntryId).toBe(other.entryId);
+  });
   it('writes external tags without an internal model and preserves source/body/scores', async () => {
     const f = fixture();
     const actions = new AgentTaskActions(f.dependencies);

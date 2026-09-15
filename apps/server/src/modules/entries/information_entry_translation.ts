@@ -16,13 +16,15 @@ export interface EntryTranslation extends EntryTranslationText {
   readonly sourceRevision: number;
   readonly sourceRevisionId: string;
   readonly targetLanguage: 'zh-CN';
-  readonly providerKey: 'openai-responses-v1' | 'provided-translation-v1';
+  readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'provided-translation-v1';
   readonly model: string;
   readonly promptVersion: string;
   readonly translatedAt: string;
 }
 
 export type EntryTranslationErrorCode =
+  | 'ai_price_window_closed'
   | 'translation_entry_unavailable'
   | 'translation_source_stale'
   | 'translation_input_too_large'
@@ -42,7 +44,7 @@ export class EntryTranslationError extends Error {
 }
 
 export interface EntryTranslationProviderPort {
-  readonly providerKey: 'openai-responses-v1';
+  readonly providerKey: 'openai-responses-v1' | 'deepseek-responses-v1';
   readonly model: string;
   readonly promptVersion: string;
   translate(

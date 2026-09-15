@@ -1,3 +1,7 @@
+import {
+  responsesEndpoint,
+  responsesPromptVersion,
+} from './responses_configuration.js';
 import {describe, expect, it, vi} from 'vitest';
 
 import {
@@ -6,14 +10,11 @@ import {
 } from '../../modules/entries/index.js';
 import {
   OPENAI_QUERY_SYNTHESIS_PROMPT_VERSION,
-  OpenAiInformationEntryQuerySynthesisProvider,
-} from './openai_information_entry_query_synthesis_provider.js';
-import {
-  OPENAI_RESPONSES_ENDPOINT,
-  type OpenAiFetch,
-} from './openai_entry_tag_provider.js';
+  ResponsesInformationEntryQuerySynthesisProvider,
+} from './responses_information_entry_query_synthesis_provider.js';
+import {type OpenAiFetch} from './responses_entry_tag_provider.js';
 
-const CONFIG = Object.freeze({
+const BASE_CONFIG = Object.freeze({
   providerKey: 'openai-responses-v1' as const,
   model: 'gpt-5-mini',
   apiKey: 'synthetic-api-key',
@@ -21,7 +22,14 @@ const CONFIG = Object.freeze({
   timeoutMs: 60_000 as const,
 });
 
-describe('OpenAiInformationEntryQuerySynthesisProvider', () => {
+describe.each([
+  BASE_CONFIG,
+  {
+    ...BASE_CONFIG,
+    providerKey: 'deepseek-responses-v1' as const,
+    model: 'deepseek-synthetic',
+  },
+])('$providerKey $model', (CONFIG) => {
   it('sends only bounded evidence handles and uses a stored-off tool-free Responses request', async () => {
     const fetchImplementation = vi.fn<OpenAiFetch>(() =>
       Promise.resolve(
@@ -33,7 +41,7 @@ describe('OpenAiInformationEntryQuerySynthesisProvider', () => {
         }),
       ),
     );
-    const provider = new OpenAiInformationEntryQuerySynthesisProvider(
+    const provider = new ResponsesInformationEntryQuerySynthesisProvider(
       CONFIG,
       fetchImplementation,
     );
@@ -44,17 +52,25 @@ describe('OpenAiInformationEntryQuerySynthesisProvider', () => {
       answer: '合成答案',
       evidenceStatus: 'supported',
     });
-    expect(provider.promptVersion).toBe(OPENAI_QUERY_SYNTHESIS_PROMPT_VERSION);
+    expect(provider.promptVersion).toBe(
+      responsesPromptVersion(CONFIG, OPENAI_QUERY_SYNTHESIS_PROMPT_VERSION),
+    );
     const [url, init] = fetchImplementation.mock.calls[0] ?? [];
-    expect(url).toBe(OPENAI_RESPONSES_ENDPOINT);
+    expect(url).toBe(responsesEndpoint(CONFIG));
     if (typeof init?.body !== 'string') throw new Error('missing body');
     const request = JSON.parse(init.body) as Record<string, unknown>;
     expect(request).toMatchObject({
-      model: 'gpt-5-mini',
+      model: CONFIG.model,
       store: false,
       max_output_tokens: 800,
     });
     expect(request).not.toHaveProperty('tools');
+    expect(provider.providerKey).toBe(CONFIG.providerKey);
+    expect(request.reasoning).toEqual(
+      CONFIG.providerKey === 'deepseek-responses-v1'
+        ? {effort: 'none'}
+        : undefined,
+    );
     expect(String(request.input)).toContain('E01');
     expect(String(request.input)).toContain('合成公开正文');
     expect(String(request.input)).not.toContain(
@@ -64,7 +80,7 @@ describe('OpenAiInformationEntryQuerySynthesisProvider', () => {
   });
 
   it('fails closed on unknown evidence handles and uncited supported output', async () => {
-    const unknown = new OpenAiInformationEntryQuerySynthesisProvider(
+    const unknown = new ResponsesInformationEntryQuerySynthesisProvider(
       CONFIG,
       () =>
         Promise.resolve(
@@ -80,7 +96,7 @@ describe('OpenAiInformationEntryQuerySynthesisProvider', () => {
       new AiQuerySynthesisProviderError('ai_provider_invalid_response'),
     );
 
-    const uncited = new OpenAiInformationEntryQuerySynthesisProvider(
+    const uncited = new ResponsesInformationEntryQuerySynthesisProvider(
       CONFIG,
       () =>
         Promise.resolve(
@@ -98,7 +114,7 @@ describe('OpenAiInformationEntryQuerySynthesisProvider', () => {
   });
 
   it('distinguishes timeout and HTTP rejection from malformed output', async () => {
-    const timeout = new OpenAiInformationEntryQuerySynthesisProvider(
+    const timeout = new ResponsesInformationEntryQuerySynthesisProvider(
       CONFIG,
       () =>
         Promise.reject(new DOMException('synthetic timeout', 'TimeoutError')),
@@ -107,7 +123,7 @@ describe('OpenAiInformationEntryQuerySynthesisProvider', () => {
       new AiQuerySynthesisProviderError('ai_provider_timeout'),
     );
 
-    const rejected = new OpenAiInformationEntryQuerySynthesisProvider(
+    const rejected = new ResponsesInformationEntryQuerySynthesisProvider(
       CONFIG,
       () => Promise.resolve(new Response('', {status: 429})),
     );
@@ -115,7 +131,7 @@ describe('OpenAiInformationEntryQuerySynthesisProvider', () => {
       new AiQuerySynthesisProviderError('ai_provider_rejected'),
     );
 
-    const malformed = new OpenAiInformationEntryQuerySynthesisProvider(
+    const malformed = new ResponsesInformationEntryQuerySynthesisProvider(
       CONFIG,
       () =>
         Promise.resolve(

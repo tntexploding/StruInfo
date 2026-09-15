@@ -1,3 +1,9 @@
+import type {DocumentIntakeService} from './document_intake_service.js';
+import type {DocumentIntelligenceProvider} from './document_intake_contract.js';
+import {
+  recallRelationCandidates,
+  type RecallAlias,
+} from './relation_candidate_recall.js';
 import type {BlobStore} from '../storage/blob_store.js';
 import {AiSplitProposalService} from '../modules/processing/ai_split_proposal_service.js';
 import {
@@ -33,6 +39,9 @@ import {OperationError} from './operation_error.js';
 
 export interface AgentTaskActionsDependencies {
   readonly workspaceId: string;
+  readonly intake?: DocumentIntakeService;
+  readonly intelligence?: DocumentIntelligenceProvider;
+  readonly aliases?: () => Promise<readonly RecallAlias[]>;
   readonly blobStore?: BlobStore;
   readonly splitProcessing?: AiSplitProposalRepositoryPort;
   readonly evidence: EvidenceReadRepositoryPort;
@@ -120,6 +129,94 @@ export class AgentTaskActions {
           throw new OperationError('conflict', 'stale_relation_revision');
       }
     }
+  }
+  public async guard(task: AgentTask) {
+    if (task.request.kind !== 'document' || !this.deps.intake) return undefined;
+    const documentGuard = await this.deps.intake.guard(task.request.snapshotId);
+    if (documentGuard) return documentGuard;
+    const step = task.state.steps.find((candidate) => !candidate.complete);
+    if (step?.kind === 'relation') {
+      for (const entryId of [
+        step.targetId,
+        requireOperationValue(step.relatedEntryId),
+      ]) {
+        const entry = await this.entry(entryId);
+        const candidateGuard = await this.deps.intake.guard(entry.snapshotId);
+        if (candidateGuard) return candidateGuard;
+      }
+    }
+    return undefined;
+  }
+  public async prepareIntake(task: AgentTask) {
+    if (task.request.kind !== 'document' || !task.request.intake)
+      throw new OperationError('rejected', 'task_state_incomplete');
+    return requireOperationValue(this.deps.intake).needsReview(
+      task.request.snapshotId,
+      task.request.intake,
+    );
+  }
+  public async reviewIntake(task: AgentTask) {
+    if (task.request.kind !== 'document' || !task.request.intake)
+      throw new OperationError('rejected', 'task_state_incomplete');
+    return requireOperationValue(this.deps.intake).review(
+      task.request.snapshotId,
+      task.request.intake,
+    );
+  }
+  public async intakeTarget(task: AgentTask) {
+    if (task.request.kind !== 'document')
+      throw new OperationError('rejected', 'task_state_incomplete');
+    const record = await requireOperationValue(this.deps.intake).record(
+      task.request.snapshotId,
+    );
+    if (record?.value.decision !== 'admitted')
+      throw new OperationError(
+        'rejected',
+        record?.value.decision === 'blocked' ? 'intake_blocked' : 'intake_held',
+      );
+    return record.value.preparedSnapshotId ?? task.request.snapshotId;
+  }
+  public async recallSteps(task: AgentTask): Promise<AgentTaskStep[]> {
+    if (
+      task.request.kind !== 'document' ||
+      !task.request.maxRelationCandidates ||
+      !task.request.maxRelations
+    )
+      return [];
+    return Promise.all(
+      task.state.steps
+        .filter((s) => s.kind === 'tags' && s.complete)
+        .map(async (s) => {
+          const entry = await this.entry(s.targetId);
+          if (entry.revision !== (s.expectedRevision ?? 0) + 1)
+            throw new OperationError('conflict', 'document_changed_after_tags');
+          return {
+            kind: 'recall' as const,
+            targetId: entry.entryId,
+            expectedRevision: entry.revision,
+            attempt: 0,
+            complete: false,
+          };
+        }),
+    );
+  }
+  public async recall(step: AgentTaskStep) {
+    const entry = await this.entry(step.targetId);
+    if (entry.revision !== step.expectedRevision)
+      throw new OperationError('conflict', 'stale_entry_revision');
+    return requireOperationValue(this.deps.intelligence).planRecall({
+      title: entry.value.titlePath,
+      body: entry.value.body,
+      keywords: entry.value.contentKeywords.map((k) => k.displayValue),
+    });
+  }
+  private documentTarget(task: AgentTask) {
+    return requireOperationValue(
+      task.state.steps.find((s) => s.kind === 'split')?.targetId ??
+        (task.request.kind === 'document' && !task.request.intake
+          ? task.request.snapshotId
+          : undefined),
+    );
   }
   public async entries() {
     return (
@@ -253,7 +350,7 @@ export class AgentTaskActions {
   }
   public async tagSteps(task: AgentTask): Promise<AgentTaskStep[]> {
     if (task.request.kind !== 'document') return [];
-    const snapshotId = task.request.snapshotId;
+    const snapshotId = this.documentTarget(task);
     const entries = (await this.entries()).filter(
       (e) => e.snapshotId === snapshotId,
     );
@@ -279,7 +376,9 @@ export class AgentTaskActions {
     if (task.request.kind !== 'document') return [];
     const request = task.request;
     const all = await this.entries();
-    const selected = all.filter((e) => e.snapshotId === request.snapshotId);
+    const selected = all.filter(
+      (e) => e.snapshotId === this.documentTarget(task),
+    );
     const tagged = task.state.steps.filter(
       (step) => step.kind === 'tags' && step.complete,
     );
@@ -300,6 +399,7 @@ export class AgentTaskActions {
       a: CurrentInformationEntry;
       b: CurrentInformationEntry;
       score: number;
+      reasons?: string[];
     }[] = [];
     const overrides = (
       await this.deps.associations.loadAssociationSnapshot(
@@ -308,27 +408,99 @@ export class AgentTaskActions {
       )
     ).overrides;
     const seen = new Set<string>();
-    for (const a of selected)
-      for (const b of all) {
-        if (a.entryId === b.entryId) continue;
-        const [low, high] = [a.entryId, b.entryId].sort();
-        if (!low || !high)
-          throw new OperationError('rejected', 'invalid_relation_pair');
-        const key = low + ':' + high;
+    if (request.maxRelationCandidates !== undefined) {
+      const aliases = (await this.deps.aliases?.()) ?? [];
+      const records = (await this.deps.intake?.list()) ?? [];
+      const excludedSnapshots = new Set(
+        records.flatMap((r) =>
+          r.value.decision === 'held' || r.value.decision === 'blocked'
+            ? [
+                r.snapshotId,
+                ...(r.value.preparedSnapshotId
+                  ? [r.value.preparedSnapshotId]
+                  : []),
+              ]
+            : r.value.preparedSnapshotId
+              ? [r.snapshotId]
+              : [],
+        ),
+      );
+      const excluded = new Set(
+        all
+          .filter((e) => excludedSnapshots.has(e.snapshotId))
+          .map((e) => e.entryId),
+      );
+      for (const a of selected) {
+        const plan = task.state.steps.find(
+          (s) => s.kind === 'recall' && s.targetId === a.entryId && s.complete,
+        )?.recallPlan;
         if (
-          seen.has(key) ||
-          overrides.some((o) => o.entryLowId === low && o.entryHighId === high)
+          request.maxRelationCandidates > 0 &&
+          request.maxRelations > 0 &&
+          !plan
         )
-          continue;
-        seen.add(key);
-        const terms = new Set(
-          a.value.contentKeywords.map((t) => t.normalizedValue),
-        );
-        const score = b.value.contentKeywords.filter((t) =>
-          terms.has(t.normalizedValue),
-        ).length;
-        if (score > 0) candidates.push({a, b, score});
+          throw new OperationError('rejected', 'task_state_incomplete');
+        const pairExcluded = new Set([
+          ...excluded,
+          ...overrides
+            .filter(
+              (o) => o.entryLowId === a.entryId || o.entryHighId === a.entryId,
+            )
+            .map((o) =>
+              o.entryLowId === a.entryId ? o.entryHighId : o.entryLowId,
+            ),
+        ]);
+        for (const hit of recallRelationCandidates(
+          a,
+          all,
+          plan,
+          aliases,
+          request.maxRelations ? request.maxRelationCandidates : 0,
+          pairExcluded,
+        )) {
+          const key = [a.entryId, hit.entry.entryId].sort().join(':');
+          if (!seen.has(key)) {
+            candidates.push({
+              a,
+              b: hit.entry,
+              score: hit.score,
+              reasons: [...hit.reasons],
+            });
+            seen.add(key);
+          }
+        }
       }
+    } else
+      for (const a of selected)
+        for (const b of all) {
+          if (a.entryId === b.entryId) continue;
+          // Different captures of the same source are versions, not related topics.
+          if (
+            a.snapshotId !== b.snapshotId &&
+            a.canonicalUri !== undefined &&
+            a.canonicalUri === b.canonicalUri
+          )
+            continue;
+          const [low, high] = [a.entryId, b.entryId].sort();
+          if (!low || !high)
+            throw new OperationError('rejected', 'invalid_relation_pair');
+          const key = low + ':' + high;
+          if (
+            seen.has(key) ||
+            overrides.some(
+              (o) => o.entryLowId === low && o.entryHighId === high,
+            )
+          )
+            continue;
+          seen.add(key);
+          const terms = new Set(
+            a.value.contentKeywords.map((t) => t.normalizedValue),
+          );
+          const score = b.value.contentKeywords.filter((t) =>
+            terms.has(t.normalizedValue),
+          ).length;
+          if (score > 0) candidates.push({a, b, score});
+        }
     return candidates
       .sort(
         (x, y) =>
@@ -336,8 +508,9 @@ export class AgentTaskActions {
           x.a.entryId.localeCompare(y.a.entryId) ||
           x.b.entryId.localeCompare(y.b.entryId),
       )
-      .slice(0, request.maxRelations)
-      .map(({a, b}) => ({
+      .slice(0, request.maxRelationCandidates ?? request.maxRelations)
+      .map(({a, b, reasons}) => ({
+        ...(reasons ? {candidateReasons: reasons} : {}),
         kind: 'relation',
         targetId: a.entryId,
         relatedEntryId: b.entryId,

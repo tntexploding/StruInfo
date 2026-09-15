@@ -3981,8 +3981,8 @@
 .query-studio-settings {
   grid-area: settings;
   min-inline-size: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: var(--si-space-3);
   align-items: start;
 }
@@ -4334,9 +4334,6 @@
   }
   .type-review-workbench__controls {
     flex-wrap: wrap;
-  }
-  .query-studio-settings {
-    grid-template-columns: minmax(0, 1fr);
   }
   .workflow-stage-workspace[data-workflow-page='query'] .entry-result-list ol,
   .tags-studio-grid__review .entry-result-list ol,

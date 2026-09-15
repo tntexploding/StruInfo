@@ -164,17 +164,17 @@ export function InformationEntryAiTags({
 
       {!enabled ? (
         <p className="entry-ai-tags__boundary">
-          OpenAI 未启用，仍可使用人工评分和自动标签建议。
+          模型服务 未启用，仍可使用人工评分和自动标签建议。
         </p>
       ) : entry.value.isPrivate ? (
         <p className="entry-ai-tags__boundary">
-          隐私条目不会发送给 OpenAI，请使用人工编辑。
+          隐私条目不会发送给 模型服务，请使用人工编辑。
         </p>
       ) : (
         <>
           <p className="entry-ai-tags__boundary">
             点击生成后，当前条目的标题、正文和标签会发送给
-            OpenAI。其他条目不会发送，结果需要你确认后才会保存。
+            模型服务。其他条目不会发送，结果需要你确认后才会保存。
           </p>
           <div className="entry-ai-tags__actions">
             <button
@@ -287,12 +287,14 @@ function proposalStatusLabel(status: ProcessingProposalView['status']): string {
 
 function failureFeedback(code: string): ActionFeedback {
   const known: Readonly<Record<string, string>> = Object.freeze({
-    ai_private_entry_forbidden: '隐私条目不会发送给 OpenAI。',
-    ai_provider_not_configured: '当前服务未启用 OpenAI。',
-    ai_provider_timeout: 'OpenAI 请求超时，条目没有变化。',
-    ai_provider_unavailable: 'OpenAI 暂时不可用，条目没有变化。',
-    ai_provider_rejected: 'OpenAI 拒绝了本次请求，条目没有变化。',
-    ai_provider_invalid_response: 'OpenAI 返回的标签结构无效，条目没有变化。',
+    ai_private_entry_forbidden: '隐私条目不会发送给 模型服务。',
+    ai_provider_not_configured: '当前服务未启用 模型服务。',
+    ai_price_window_closed:
+      '当前为 DeepSeek 高峰时段，请在低价时段重试。恢复时间见设置 → AI 接入。',
+    ai_provider_timeout: '模型服务 请求超时，条目没有变化。',
+    ai_provider_unavailable: '模型服务 暂时不可用，条目没有变化。',
+    ai_provider_rejected: '模型服务 拒绝了本次请求，条目没有变化。',
+    ai_provider_invalid_response: '模型服务 返回的标签结构无效，条目没有变化。',
     stale_entry_revision: '条目已被修改；请刷新后重新生成建议。',
   });
   return {

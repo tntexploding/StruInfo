@@ -1,5 +1,10 @@
 import {createHash} from 'node:crypto';
+import {isNoRelationRun} from '../modules/processing/ai_association_proposal.js';
 import {deriveProcessingRunId} from '../modules/processing/processing_identity.js';
+import {
+  AI_PRICE_WAIT,
+  isAiPriceWait,
+} from '../modules/processing/ai_price_policy.js';
 import {
   agentTaskRequestSchema,
   type AgentTask,
@@ -28,6 +33,10 @@ export class AgentTaskService {
     private readonly automationGuard?: (
       task: AgentTask,
     ) => Promise<string | undefined>,
+    private readonly priceGate?: {
+      check: () => Promise<void>;
+      canResume: (task: AgentTask) => boolean;
+    },
   ) {}
   public async start(
     authority: ExecutionAuthority,
@@ -52,6 +61,12 @@ export class AgentTaskService {
             ? 'agent.tags'
             : 'agent.relations',
     );
+    if (
+      request.kind === 'document' &&
+      request.intake?.fetchFullText &&
+      authority.identity.kind === 'external_agent'
+    )
+      authority.require('sources.capture');
     const identity = authority.identity;
     const taskId = deriveProcessingRunId(
       this.workspaceId,
@@ -70,7 +85,10 @@ export class AgentTaskService {
     const first: AgentTaskStep =
       request.kind === 'document' || request.kind === 'split'
         ? {
-            kind: 'split',
+            kind:
+              request.kind === 'document' && request.intake
+                ? 'intake'
+                : 'split',
             targetId: request.snapshotId,
             attempt: 0,
             complete: false,
@@ -111,7 +129,9 @@ export class AgentTaskService {
         calls: 0,
         phase:
           request.kind === 'document' || request.kind === 'split'
-            ? 'split'
+            ? request.kind === 'document' && request.intake
+              ? 'intake'
+              : 'split'
             : request.kind === 'tags'
               ? 'tags'
               : 'relations',
@@ -172,6 +192,12 @@ export class AgentTaskService {
               ? 'agent.tags'
               : 'agent.relations',
       );
+      if (
+        task.request.kind === 'document' &&
+        task.request.intake?.fetchFullText &&
+        authority.identity.kind === 'external_agent'
+      )
+        authority.require('sources.capture');
       if (task.request.kind === 'document' && task.model !== this.actions.model)
         throw new OperationError('conflict', 'task_model_changed');
     }
@@ -193,6 +219,7 @@ export class AgentTaskService {
       if (!task || ['succeeded', 'cancelled'].includes(task.state.status))
         return;
       let state: AgentTaskState = {...task.state, status: 'running'};
+      let unsentAttempt: AgentTaskState | undefined;
       delete state.errorCode;
       const save = async () => {
         await this.repository.saveState(this.workspaceId, taskId, state);
@@ -224,6 +251,39 @@ export class AgentTaskService {
           }
           const index = state.steps.findIndex((s) => !s.complete);
           if (index < 0) {
+            if (task.request.kind === 'document' && state.phase === 'intake') {
+              state = {
+                ...state,
+                phase: 'split',
+                steps: [
+                  ...state.steps,
+                  {
+                    kind: 'split',
+                    targetId: await this.actions.intakeTarget(task),
+                    attempt: 0,
+                    complete: false,
+                  },
+                ],
+              };
+              await save();
+              continue;
+            }
+            if (
+              task.request.kind === 'document' &&
+              state.phase === 'tags' &&
+              task.request.maxRelationCandidates !== undefined
+            ) {
+              state = {
+                ...state,
+                phase: 'recall',
+                steps: [
+                  ...state.steps,
+                  ...(await this.actions.recallSteps(task)),
+                ],
+              };
+              await save();
+              continue;
+            }
             if (task.request.kind === 'document' && state.phase === 'split') {
               state = {
                 ...state,
@@ -233,7 +293,10 @@ export class AgentTaskService {
               await save();
               continue;
             }
-            if (task.request.kind === 'document' && state.phase === 'tags') {
+            if (
+              task.request.kind === 'document' &&
+              (state.phase === 'tags' || state.phase === 'recall')
+            ) {
               state = {
                 ...state,
                 phase: 'relations',
@@ -250,9 +313,92 @@ export class AgentTaskService {
             return;
           }
           let step = requireOperationValue(state.steps[index]);
+          if (
+            task.request.kind === 'document' &&
+            step.kind === 'relation' &&
+            state.steps.filter(
+              (s) =>
+                s.kind === 'relation' &&
+                s.complete &&
+                s.proposalId &&
+                !s.outcome,
+            ).length >= task.request.maxRelations
+          ) {
+            state = {
+              ...state,
+              steps: state.steps.map((s, i) =>
+                i === index
+                  ? {...s, complete: true, outcome: 'edge_budget_reached'}
+                  : s,
+              ),
+            };
+            await save();
+            continue;
+          }
+          if (step.kind === 'intake' || step.kind === 'recall') {
+            const needsCall =
+              step.kind === 'recall'
+                ? !step.recallPlan
+                : await this.actions.prepareIntake(task);
+            const currentTask = requireOperationValue(
+              await this.repository.read(this.workspaceId, taskId),
+            );
+            const guard = await this.checkAutomation(currentTask);
+            if (currentTask.pauseRequested || this.stopping() || guard) {
+              state = {
+                ...state,
+                status: currentTask.cancelRequested ? 'cancelled' : 'paused',
+                ...(guard ? {errorCode: guard} : {}),
+              };
+              await save();
+              return;
+            }
+            if (needsCall) {
+              await this.priceGate?.check();
+              if (
+                task.request.kind !== 'document' ||
+                state.calls >= task.request.maxModelCalls
+              )
+                throw new OperationError(
+                  'rejected',
+                  'model_call_budget_exhausted',
+                );
+              if (step.attempt >= 3)
+                throw new OperationError(
+                  'rejected',
+                  'step_attempt_budget_exhausted',
+                );
+              unsentAttempt = structuredClone(state);
+              step = {...step, attempt: step.attempt + 1};
+              state = {
+                ...state,
+                calls: state.calls + 1,
+                steps: state.steps.map((s, i) => (i === index ? step : s)),
+              };
+              await save();
+              if (step.kind === 'intake') await this.actions.reviewIntake(task);
+              else
+                step = {...step, recallPlan: await this.actions.recall(step)};
+              unsentAttempt = undefined;
+            }
+            if (step.kind === 'intake') await this.actions.intakeTarget(task);
+            state = {
+              ...state,
+              steps: state.steps.map((s, i) =>
+                i === index ? {...step, complete: true} : s,
+              ),
+            };
+            await save();
+            continue;
+          }
           let run = await this.actions.loadRun(step);
           let proposal = run?.proposals[0];
-          if (!proposal) {
+          let noRelation =
+            task.request.kind === 'document' &&
+            step.kind === 'relation' &&
+            isNoRelationRun(run);
+          if (!proposal && !noRelation) {
+            if (task.request.kind === 'document') await this.priceGate?.check();
             if (
               task.request.kind === 'document' &&
               state.calls >= task.request.maxModelCalls
@@ -267,7 +413,9 @@ export class AgentTaskService {
                 'step_attempt_budget_exhausted',
               );
             const attempt = step.attempt + 1;
-            const key = [taskId, index, attempt].join('-');
+            // A price-only deferral can retry without reusing its aborted run identity.
+            const key = [taskId, index, attempt, task.version].join('-');
+            unsentAttempt = structuredClone(state);
             step = {...step, attempt, runId: this.actions.runId(step, key)};
             state = {
               ...state,
@@ -277,13 +425,22 @@ export class AgentTaskService {
             await save(); // Reserve the attempt before calling the model.
             run = await this.actions.generate(task, step, key);
             proposal = run.proposals[0];
-            if (!proposal)
+            noRelation =
+              task.request.kind === 'document' &&
+              step.kind === 'relation' &&
+              isNoRelationRun(run);
+            if (!proposal && !noRelation)
               throw new OperationError(
                 'rejected',
                 safeCode(run.errorCode ?? 'proposal_generation_incomplete'),
               );
+            unsentAttempt = undefined;
           }
-          step = {...step, proposalId: proposal.proposalId};
+          step = {
+            ...step,
+            ...(proposal ? {proposalId: proposal.proposalId} : {}),
+            ...(noRelation ? {outcome: 'no_relation' as const} : {}),
+          };
           state = {
             ...state,
             steps: state.steps.map((s, i) => (i === index ? step : s)),
@@ -306,7 +463,7 @@ export class AgentTaskService {
             await save();
             return;
           }
-          await this.actions.accept(task, step, proposal);
+          if (proposal) await this.actions.accept(task, step, proposal);
           state = {
             ...state,
             steps: state.steps.map((s, i) =>
@@ -316,9 +473,22 @@ export class AgentTaskService {
           await save();
         }
       } catch (error) {
+        if (isAiPriceWait(error)) {
+          state = {
+            ...(unsentAttempt ?? state),
+            status: 'paused',
+            errorCode: AI_PRICE_WAIT,
+          };
+          await save();
+          return;
+        }
         state = {
           ...state,
-          status: 'failed',
+          status:
+            error instanceof OperationError &&
+            ['intake_held', 'intake_blocked'].includes(error.code)
+              ? 'paused'
+              : 'failed',
           errorCode: safeCode(
             error instanceof OperationError
               ? error.code
@@ -331,7 +501,9 @@ export class AgentTaskService {
       }
     });
   }
-  private checkAutomation(task: AgentTask): Promise<string | undefined> {
+  private async checkAutomation(task: AgentTask): Promise<string | undefined> {
+    const intake = await this.actions.guard(task);
+    if (intake) return intake;
     if (task.actorKind !== 'automation') return Promise.resolve(undefined);
     return (
       this.automationGuard?.(task) ??
@@ -340,6 +512,48 @@ export class AgentTaskService {
   }
   private stopping() {
     return this.#closing;
+  }
+  /** Only price-deferred requests resume automatically; manual pauses and failed tasks do not. */
+  public async pollPriceDeferred() {
+    if (this.#closing || !this.priceGate) return;
+    try {
+      await this.priceGate.check();
+    } catch (error) {
+      if (isAiPriceWait(error)) return;
+      throw error;
+    }
+    const tasks = this.repository.listPriceDeferred
+      ? await this.repository.listPriceDeferred(this.workspaceId)
+      : await this.repository.list(this.workspaceId);
+    for (const task of tasks) {
+      if (this.#running.size >= 32) break;
+      if (
+        task.request.kind === 'document' &&
+        task.state.status === 'paused' &&
+        task.state.errorCode === AI_PRICE_WAIT &&
+        !task.pauseRequested &&
+        !task.cancelRequested
+      ) {
+        if (this.priceGate.canResume(task)) this.launch(task.taskId);
+        else
+          await this.repository.withLock(
+            this.workspaceId,
+            task.taskId,
+            async () => {
+              const current = await this.repository.read(
+                this.workspaceId,
+                task.taskId,
+              );
+              if (current?.version === task.version)
+                await this.repository.saveState(this.workspaceId, task.taskId, {
+                  ...current.state,
+                  status: 'paused',
+                  errorCode: 'task_authority_changed',
+                });
+            },
+          );
+      }
+    }
   }
   public stop() {
     this.#closing = true;

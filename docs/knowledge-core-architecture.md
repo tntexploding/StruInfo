@@ -1,5 +1,27 @@
 # StruInfo 知识核心架构
 
+## Event-first report planning (ADR 0083)
+
+The model groups every frozen candidate without seeing a story quota. The
+application validates complete, non-overlapping coverage and selects recommended
+groups under the existing limit; remaining groups stay in typed report state.
+Optional publication/receipt metadata and point roles preserve older report
+reads without modifying evidence or adding a model stage or migration.
+
+## Price-aware model dispatch (ADR 0082)
+
+`AiPriceService` owns the versioned external workspace setting and clock-based Beijing tariff check. Composition injects a guarded fetch into every Responses adapter. Durable document/report services defer before budget reservation and refund only a final-dispatch price rejection. A bounded minute poll resumes only price waits under existing authority; restored packages require explicit continuation. No migration or new provider is introduced. The historical unconditional restart statements below now have this narrow ordinary-restart exception.
+
+## Reviewable reports (ADR 0081)
+
+`ReportService` owns public admitted-entry selection, bounded model planning/summarization, source revision checks, CAS edits and export. `ReportCommands` is shared by the owner HTTP surface and four read-only Agent/MCP tools; no Agent write grants change. The report repository stores closed typed state in `processing_report` (migration 000038). Processing Bundle v14 includes reports; older sections upgrade with empty history. Restart/restore never invokes a report model automatically. Full Entry bodies are read only for selected summaries, while the durable report retains source identities, versions, short excerpts and separate model/manual wording. See [daily/weekly reports](daily-weekly-reports.md).
+
+## 2026-09-13：接收审核与关联召回
+
+DocumentIntakeService 复用受限 WebSourceConnector 和 Evidence 导入，processing_document_intake 保存原始 Snapshot → 正文 Snapshot、版本化收件决定和类型化审核结果。模型调用期间不持有状态锁，写回通过 CAS 保留人工决定；获取全文幂等，失败暂缓而不静默处理摘要。AgentTaskService 的可选 intake / recall 阶段沿用持久预算与显式恢复。原请求身份保持稳定，拆分与后续标签针对实际正文 Snapshot。
+
+RecallPlan 是有界概念及中英文检索变体列表，持久化在已有任务状态中。局部词法召回结合原始词、用户确认别名链、标题及正文，按命中通道与词项区分度排序并按来源去重，再经原有配对模型提案与接受用例写回。maxRelationCandidates 和 maxRelations 分别限制检查与写入，所有模型阶段共享 maxModelCalls。不新增向量或模型服务，不把检索词推断为规范词表。
+
 - 状态：M1M 单机生产边界与 M2-P5A–D 生产收口已完成
 - 最近更新：2026-09-12（代码职责核对；记录下一阶段双通道接入边界）
 - 当前运行约束：维护基线继续采用私人单用户 `all` 单实例；跨进程共享偏好写入仍遵守 DH-012，见[维护交接](maintenance-handoff.md)
@@ -12,6 +34,10 @@
 - 当前正式知识维护决策：[ADR 0042](adr/0042-formal-knowledge-relation-semantics-and-source-review.md)
 - 当前检索与性能决策：[ADR 0043](adr/0043-rebuildable-entry-search-index-and-rag.md)、[ADR 0044](adr/0044-evidence-driven-local-performance.md)
 - 当前生产运行决策：[ADR 0045](adr/0045-operational-production-baseline.md)
+
+## 2026-09-12：上下文保留的内容单元
+
+[ADR 0079](adr/0079-context-preserving-document-processing.md)沿用原有 Snapshot/Fragment/Entry 分层。模型适配器先判定整篇或独立集合，连续分组仍由本地证据重建；单组 AI Entry 使用 whole。无关系结果存为成功的 ProcessingRun，无提案和图谱写入；任务通过闭合状态识别并记录 no_relation，恢复时不重复调用。HTML 投影保留安全图片引用和图注，阅读层继续显式打开媒体。原文不重写，不新增表或迁移。
 
 ## 2026-09-12：双通道闭环与操作面板
 

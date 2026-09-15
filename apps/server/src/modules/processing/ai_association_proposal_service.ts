@@ -13,6 +13,7 @@ import {
   deriveProcessingProposalId,
   deriveProcessingRunId,
 } from './processing_identity.js';
+import {AI_NO_RELATION_STEP} from './ai_association_proposal.js';
 import type {
   AiAssociationProposalProviderErrorCode,
   AiAssociationProposalProviderPort,
@@ -57,7 +58,8 @@ export interface AiAssociationProposalDecisionResult {
 }
 
 export interface AiAssociationProposalServicePort {
-  readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
+  readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   readonly model: string;
 
   listForPair(
@@ -95,7 +97,8 @@ interface PublicPair {
 }
 
 export class AiAssociationProposalService implements AiAssociationProposalServicePort {
-  public readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
+  public readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   public readonly model: string;
   readonly #dependencies: Readonly<AiAssociationProposalServiceDependencies>;
 
@@ -190,6 +193,27 @@ export class AiAssociationProposalService implements AiAssociationProposalServic
         entries.entryLow,
         entries.entryHigh,
       );
+      if (generated.outcome === 'no_relation') {
+        await requireWriteOutcome(
+          this.#dependencies.processing.writeProgress({
+            workspaceId: this.#dependencies.workspaceId,
+            runId,
+            expectedVersion: 2,
+            status: 'succeeded',
+            currentStage: 'associations',
+            currentStep: AI_NO_RELATION_STEP,
+            completedUnits: 1,
+            totalUnits: 1,
+          }),
+        );
+        const completed = await this.#dependencies.processing.loadRun(
+          this.#dependencies.workspaceId,
+          runId,
+        );
+        if (completed === undefined)
+          throw new AiAssociationProposalServiceError('ai_run_invalid_state');
+        return Object.freeze({outcome: 'created', run: completed});
+      }
       const payload: Readonly<ProcessingAssociationProposalPayload> =
         Object.freeze({
           expectedEntryLowRevision: entries.entryLow.revision,
@@ -497,7 +521,8 @@ function providerErrorCode(
   if (
     error instanceof Error &&
     'code' in error &&
-    (error.code === 'ai_provider_timeout' ||
+    (error.code === 'ai_price_window_closed' ||
+      error.code === 'ai_provider_timeout' ||
       error.code === 'ai_provider_unavailable' ||
       error.code === 'ai_provider_rejected' ||
       error.code === 'ai_provider_invalid_response')

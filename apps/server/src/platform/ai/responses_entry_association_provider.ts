@@ -1,3 +1,9 @@
+import {isAiPriceWait} from '../../modules/processing/ai_price_policy.js';
+import {
+  responsesEndpoint,
+  responsesOptions,
+  responsesPromptVersion,
+} from './responses_configuration.js';
 import type {AiProposalProviderConfig} from '../../config/runtime_config.js';
 import type {CurrentInformationEntry} from '../../modules/entries/index.js';
 import {
@@ -5,20 +11,21 @@ import {
   type AiAssociationProposalProviderPort,
   type AiAssociationProposalProviderResult,
 } from '../../modules/processing/index.js';
+import {type OpenAiFetch} from './responses_entry_tag_provider.js';
 import {
-  OPENAI_RESPONSES_ENDPOINT,
-  type OpenAiFetch,
-} from './openai_entry_tag_provider.js';
+  responseMetadata,
+  RESPONSE_METADATA_INSTRUCTIONS,
+} from './responses_metadata.js';
 
 export const OPENAI_ASSOCIATION_PROMPT_VERSION =
-  'struinfo.openai-entry-association.v1';
+  'struinfo.openai-entry-association.v3';
 
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 const DIRECTIONS = ['symmetric', 'low_to_high', 'high_to_low'] as const;
 
-export class OpenAiEntryAssociationProvider implements AiAssociationProposalProviderPort {
-  public readonly providerKey = 'openai-responses-v1' as const;
-  public readonly promptVersion = OPENAI_ASSOCIATION_PROMPT_VERSION;
+export class ResponsesEntryAssociationProvider implements AiAssociationProposalProviderPort {
+  public readonly providerKey: AiProposalProviderConfig['providerKey'];
+  public readonly promptVersion: string;
   public readonly model: string;
   readonly #config: Readonly<AiProposalProviderConfig>;
   readonly #fetch: OpenAiFetch;
@@ -30,6 +37,11 @@ export class OpenAiEntryAssociationProvider implements AiAssociationProposalProv
     this.#config = config;
     this.#fetch = fetchImplementation;
     this.model = config.model;
+    this.providerKey = config.providerKey;
+    this.promptVersion = responsesPromptVersion(
+      config,
+      OPENAI_ASSOCIATION_PROMPT_VERSION,
+    );
   }
 
   public async proposeAssociation(
@@ -41,7 +53,7 @@ export class OpenAiEntryAssociationProvider implements AiAssociationProposalProv
     }
     let response: Response;
     try {
-      response = await this.#fetch(OPENAI_RESPONSES_ENDPOINT, {
+      response = await this.#fetch(responsesEndpoint(this.#config), {
         method: 'POST',
         headers: {
           Authorization: 'Bearer ' + this.#config.apiKey,
@@ -51,6 +63,7 @@ export class OpenAiEntryAssociationProvider implements AiAssociationProposalProv
         signal: AbortSignal.timeout(this.#config.timeoutMs),
       });
     } catch (error) {
+      if (isAiPriceWait(error)) throw error;
       const name = error instanceof Error ? error.name : '';
       throw new AiAssociationProposalProviderError(
         name === 'AbortError' || name === 'TimeoutError'
@@ -96,15 +109,21 @@ function createRequest(
 ): Readonly<Record<string, unknown>> {
   return Object.freeze({
     model: config.model,
+    ...responsesOptions(config),
     store: false,
     max_output_tokens: config.maxOutputTokens,
     instructions: [
-      'You propose one concise relationship between two public InformationEntry records.',
+      'Evaluate whether two public InformationEntry records have a specific, useful relationship.',
+      'Choose outcome no_relation when evidence is insufficient, the connection is merely a broad domain or generic keyword, or either item lacks the context needed to judge.',
+      'Judge the main subject of both articles. Shared publishers, website navigation, recommendations or cited catalog names alone do not establish a useful relation.',
+      'A no_relation outcome is a successful decision: return null for relationLabel and direction.',
+      'For outcome relation, name the concrete connection grounded in both records. Never invent a connection just to fill a quota.',
       'Entry A is the lower stable UUID and Entry B is the higher stable UUID.',
       'Return only the requested JSON schema.',
       'The relation label must be neutral and no longer than 80 Unicode code points.',
       'Use symmetric when neither direction is justified.',
       'Do not invent facts beyond the two supplied records.',
+      RESPONSE_METADATA_INSTRUCTIONS,
     ].join(' '),
     input: JSON.stringify({
       entryA: providerEntry(entryLow),
@@ -118,11 +137,16 @@ function createRequest(
         schema: {
           type: 'object',
           additionalProperties: false,
-          required: ['summary', 'relationLabel', 'direction'],
+          required: ['summary', 'outcome', 'relationLabel', 'direction'],
           properties: {
             summary: {type: 'string', minLength: 1, maxLength: 240},
-            relationLabel: {type: 'string', minLength: 1, maxLength: 80},
-            direction: {type: 'string', enum: DIRECTIONS},
+            outcome: {type: 'string', enum: ['relation', 'no_relation']},
+            relationLabel: {
+              type: ['string', 'null'],
+              minLength: 1,
+              maxLength: 80,
+            },
+            direction: {type: ['string', 'null'], enum: [...DIRECTIONS, null]},
           },
         },
       },
@@ -180,12 +204,22 @@ function decodePayload(
   value: unknown,
 ): Readonly<AiAssociationProposalProviderResult> {
   if (
-    !isClosedRecord(value, ['summary', 'relationLabel', 'direction']) ||
+    !isClosedRecord(value, ['summary', 'outcome', 'relationLabel', 'direction'])
+  )
+    fail();
+  if (value.outcome === 'no_relation') {
+    if (value.relationLabel !== null || value.direction !== null) fail();
+    return Object.freeze({
+      outcome: 'no_relation',
+      summary: boundedText(value.summary, 240),
+    });
+  }
+  if (
+    value.outcome !== 'relation' ||
     typeof value.direction !== 'string' ||
     !DIRECTIONS.includes(value.direction as (typeof DIRECTIONS)[number])
-  ) {
+  )
     fail();
-  }
   return Object.freeze({
     summary: boundedText(value.summary, 240),
     relationLabel: boundedText(value.relationLabel, 80),
@@ -194,18 +228,8 @@ function decodePayload(
 }
 
 function boundedText(value: unknown, maximum: number): string {
-  if (typeof value !== 'string') fail();
-  const normalized = value.trim().normalize('NFC');
-  if (
-    normalized.length === 0 ||
-    Array.from(normalized).length > maximum ||
-    Array.from(normalized).some((character) => {
-      const code = character.codePointAt(0);
-      return code !== undefined && (code <= 0x1f || code === 0x7f);
-    })
-  ) {
-    fail();
-  }
+  const normalized = responseMetadata(value, maximum);
+  if (normalized === undefined) fail();
   return normalized;
 }
 

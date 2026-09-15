@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {
   aiWorkflowCommand,
+  DEFAULT_INTAKE_POLICY,
   aiError,
   type AiWorkflowClient,
   type AiQueueStatus,
@@ -24,6 +25,8 @@ const labels: Record<string, string> = {
   failed: '失败',
   succeeded: '已完成',
   cancelled: '已取消',
+  intake: '接收审核',
+  recall: '多语候选召回',
   split: '拆分',
   tags: '标签',
   relations: '联系',
@@ -246,6 +249,12 @@ export function AiWorkflowPanel({
                         request: {
                           kind: 'document',
                           snapshotId,
+                          intake:
+                            view.queue.policy.settings.intake ??
+                            DEFAULT_INTAKE_POLICY,
+                          maxRelationCandidates:
+                            view.queue.policy.settings.maxRelationCandidates ??
+                            12,
                           maxEntries: view.queue.policy.settings.maxEntries,
                           maxRelations: view.queue.policy.settings.maxRelations,
                           maxModelCalls:
@@ -422,8 +431,52 @@ export function AiWorkflowPanel({
                         {task.state.steps.length} 步 · {task.state.calls}{' '}
                         次调用尝试
                       </span>
+                      {task.state.steps.some(
+                        (step) =>
+                          step.complete && step.outcome === 'no_relation',
+                      ) ? (
+                        <span>
+                          未建立联系：
+                          {
+                            task.state.steps.filter(
+                              (step) =>
+                                step.complete && step.outcome === 'no_relation',
+                            ).length
+                          }{' '}
+                          对候选缺少明确依据。
+                        </span>
+                      ) : null}
+                      {task.state.steps.some(
+                        (s) => s.candidateReasons?.length,
+                      ) ? (
+                        <details>
+                          <summary>关联候选与召回理由</summary>
+                          <ul>
+                            {task.state.steps
+                              .filter((s) => s.candidateReasons?.length)
+                              .map((step, index) => (
+                                <li key={index}>
+                                  <span>
+                                    {step.outcome === 'no_relation'
+                                      ? '未建立联系'
+                                      : step.outcome === 'edge_budget_reached'
+                                        ? '已达联系上限，未评估'
+                                        : step.complete && step.proposalId
+                                          ? '已建立联系'
+                                          : '候选待评估'}
+                                  </span>
+                                  <p>{step.candidateReasons?.join('；')}</p>
+                                </li>
+                              ))}
+                          </ul>
+                        </details>
+                      ) : null}
                       {task.state.errorCode ? (
-                        <span>{aiError(new Error(task.state.errorCode))}</span>
+                        <span>
+                          {task.pauseRequested
+                            ? '已手动暂停，继续后仍遵守时段设置。'
+                            : aiError(new Error(task.state.errorCode))}
+                        </span>
                       ) : null}
                     </div>
                     {!['succeeded', 'cancelled'].includes(task.state.status) ? (
@@ -438,17 +491,24 @@ export function AiWorkflowPanel({
                               {
                                 taskId: task.taskId,
                                 expectedVersion: task.version,
-                                action: ['paused', 'failed'].includes(
-                                  task.state.status,
-                                )
-                                  ? 'resume'
-                                  : 'pause',
+                                action:
+                                  (task.pauseRequested ||
+                                    task.state.errorCode !==
+                                      'ai_price_window_closed') &&
+                                  ['paused', 'failed'].includes(
+                                    task.state.status,
+                                  )
+                                    ? 'resume'
+                                    : 'pause',
                               },
                               '任务状态已更新。',
                             );
                           }}
                         >
-                          {['paused', 'failed'].includes(task.state.status)
+                          {(task.pauseRequested ||
+                            task.state.errorCode !==
+                              'ai_price_window_closed') &&
+                          ['paused', 'failed'].includes(task.state.status)
                             ? '继续任务'
                             : '暂停任务'}
                         </button>

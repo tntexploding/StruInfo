@@ -1,3 +1,12 @@
+import {
+  isAiPriceWait,
+  AI_PRICE_WAIT,
+} from '../../modules/processing/ai_price_policy.js';
+import {
+  responsesEndpoint,
+  responsesOptions,
+  responsesPromptVersion,
+} from './responses_configuration.js';
 import type {AiProposalProviderConfig} from '../../config/runtime_config.js';
 import {
   AiQuerySynthesisProviderError,
@@ -7,18 +16,15 @@ import {
   type InformationEntryQuerySynthesisProviderPort,
   type InformationEntryQuerySynthesisProviderResult,
 } from '../../modules/entries/index.js';
-import {
-  OPENAI_RESPONSES_ENDPOINT,
-  type OpenAiFetch,
-} from './openai_entry_tag_provider.js';
+import {type OpenAiFetch} from './responses_entry_tag_provider.js';
 
 export const OPENAI_QUERY_SYNTHESIS_PROMPT_VERSION =
   'struinfo.openai-entry-query-synthesis.v1';
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 
-export class OpenAiInformationEntryQuerySynthesisProvider implements InformationEntryQuerySynthesisProviderPort {
-  public readonly providerKey = 'openai-responses-v1' as const;
-  public readonly promptVersion = OPENAI_QUERY_SYNTHESIS_PROMPT_VERSION;
+export class ResponsesInformationEntryQuerySynthesisProvider implements InformationEntryQuerySynthesisProviderPort {
+  public readonly providerKey: AiProposalProviderConfig['providerKey'];
+  public readonly promptVersion: string;
   public readonly model: string;
   readonly #config: Readonly<AiProposalProviderConfig>;
   readonly #fetch: OpenAiFetch;
@@ -30,6 +36,11 @@ export class OpenAiInformationEntryQuerySynthesisProvider implements Information
     this.#config = config;
     this.#fetch = fetchImplementation;
     this.model = config.model;
+    this.providerKey = config.providerKey;
+    this.promptVersion = responsesPromptVersion(
+      config,
+      OPENAI_QUERY_SYNTHESIS_PROMPT_VERSION,
+    );
   }
 
   public async synthesize(
@@ -39,7 +50,7 @@ export class OpenAiInformationEntryQuerySynthesisProvider implements Information
     if (evidence.length < 1 || evidence.length > 8) fail();
     let response: Response;
     try {
-      response = await this.#fetch(OPENAI_RESPONSES_ENDPOINT, {
+      response = await this.#fetch(responsesEndpoint(this.#config), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.#config.apiKey}`,
@@ -49,6 +60,8 @@ export class OpenAiInformationEntryQuerySynthesisProvider implements Information
         signal: AbortSignal.timeout(this.#config.timeoutMs),
       });
     } catch (error) {
+      if (isAiPriceWait(error))
+        throw new AiQuerySynthesisProviderError(AI_PRICE_WAIT);
       const name = error instanceof Error ? error.name : '';
       throw new AiQuerySynthesisProviderError(
         name === 'AbortError' || name === 'TimeoutError'
@@ -94,6 +107,7 @@ function createRequest(
   const handles = evidence.map((item) => item.handle);
   return Object.freeze({
     model: config.model,
+    ...responsesOptions(config),
     store: false,
     max_output_tokens: config.maxOutputTokens,
     instructions: [
