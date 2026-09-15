@@ -264,7 +264,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `mime-types@3.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/mime-types@3.0.2/LICENSE` |
 | `minimatch@10.2.6` | transitive | `BlueOak-1.0.0` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/minimatch@10.2.6/LICENSE.md` |
 | `ms@2.1.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ms@2.1.3/license.md` |
-| `multer@2.2.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/multer@2.2.0/LICENSE` |
+| `multer@2.3.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/multer@2.3.0/LICENSE` |
 | `nanoid@3.3.18` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/nanoid@3.3.18/LICENSE` |
 | `natural-compare@1.4.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm-source/natural-compare@1.4.0/canonical-MIT.txt` (SOURCE_LEGAL_TEXT_RETAINED) |
 | `negotiator@1.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/negotiator@1.0.0/LICENSE` |

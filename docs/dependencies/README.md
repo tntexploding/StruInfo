@@ -1,5 +1,9 @@
 # Dependency Governance
 
+The [September 15 maintenance repair](evidence/maintenance-security-2026-09-15.md)
+updates Multer to 2.3.0, the pinned Node 24 base and its PCRE2 security package.
+Production npm audit passes; the existing unfixed Debian backlog remains visible.
+
 - Status: tracked foundation inventory plus the M1A Markdown, M1E-5B document-import and M1I-2 RSS/Atom dependency increments
 - Contracts: `C-M0-S-r2`, `C-SLICE-A-MARKDOWN-r2`
 - Review date: 2026-09-08

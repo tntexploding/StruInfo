@@ -41,8 +41,8 @@ export function validateM1mDeploymentSources(
   ]);
 
   requireAll(sources.dockerfile, [
-    'FROM node:24-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS build',
-    'FROM node:24-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS runtime',
+    'FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS build',
+    'FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS runtime',
     'RUN --network=none pnpm run build',
     'RUN --network=none pnpm --offline --config.trust-lockfile=true --config.inject-workspace-packages=true --filter @struinfo/server deploy --prod --no-optional /runtime-server',
     'COPY --from=build --chown=10001:10001 /workspace/LICENSE /opt/struinfo/LICENSE',

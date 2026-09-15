@@ -7507,8 +7507,8 @@
     {
       "SPDXID": "SPDXRef-Package-ed4bbf16eb92dd73",
       "name": "multer",
-      "versionInfo": "2.2.0",
-      "downloadLocation": "https://registry.npmjs.org/multer/-/multer-2.2.0.tgz",
+      "versionInfo": "2.3.0",
+      "downloadLocation": "https://registry.npmjs.org/multer/-/multer-2.3.0.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -7516,18 +7516,18 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "D8DB592B059FCD47FAC67A048ACE3FAD6B8C812FCDC89C6C60FD27A3601CBC2E"
+          "checksumValue": "A8810897A9443E32DE583BACFA8FD413483B973B5C5DFC09726A5405583C0969"
         },
         {
           "algorithm": "SHA512",
-          "checksumValue": "EAB772160DA42EB321F4979EEFF04C3EE57D94401DEE52D6D9852917DFD8C51EE78F2A14C3043464F8774DA218E744B0EAF9720F61D6DF018E9134B83FBF71AD"
+          "checksumValue": "72335B9B7B2DB6CCE065E19F251D76E03FA31447E45C2540B283C19859FD5FB5319834851D6A84D82A048F4BEB992A6E0059EA591D52CDC9BD413B221EBEB45F"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/multer@2.2.0"
+          "referenceLocator": "pkg:npm/multer@2.3.0"
         }
       ],
       "supplier": "Person: ulisesgascon",
