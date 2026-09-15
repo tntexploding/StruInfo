@@ -36,7 +36,10 @@ export interface WorkflowOverviewProps {
 }
 
 const STAGES: readonly Readonly<{
-  section: Exclude<ProductSection, 'overview' | 'knowledge' | 'documents'>;
+  section: Exclude<
+    ProductSection,
+    'overview' | 'knowledge' | 'documents' | 'reports'
+  >;
   index: string;
   label: string;
   detail: string;
@@ -256,7 +259,10 @@ function Metric({
 }
 
 function stageStatus(
-  section: Exclude<ProductSection, 'overview' | 'knowledge' | 'documents'>,
+  section: Exclude<
+    ProductSection,
+    'overview' | 'knowledge' | 'documents' | 'reports'
+  >,
   metrics: Readonly<{
     documents: number;
     fragments: number;

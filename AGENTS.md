@@ -21,6 +21,48 @@ Before frontend implementation or frontend design review, also read:
 
 ## Current Phase
 
+### Owner-requested Report Editorial Improvements (2026-09-15)
+
+ADR 0083 implements the owner's selected improvements 1, 2 and 4: identify
+independent events before applying the report limit, retain other reading,
+distinguish publication from receipt dates, and structure cited summaries.
+Preserve old reports, owner review, existing budgets and price gates. No new
+migration, recurring report or unattended ingestion is authorized. Comparison
+reports use the already selected public material in the external instance.
+
+### Owner-authorized DeepSeek Price Windows (2026-09-14)
+
+The owner requested a peak/off-peak setting covering every internal DeepSeek operation, including existing daily/weekly reports. ADR 0082 adds a default-off external preference and a final-dispatch check. Only already-authorized durable document/report requests may automatically resume from price waits; existing pause/cancel, source scope, model budgets and Agent process/capture grants still apply. Ordinary restart may resume price waits; package restore must require explicit continuation. Keep global unattended ingestion off unless separately enabled by the owner. No new Provider, dependency, migration, private transfer, recurring report creation or delivery is authorized by this increment. Use synthetic clocks and content for tests, and keep instance settings/evidence outside Git.
+
+### Owner-authorized Intake Quality and Recall (2026-09-13)
+
+The owner explicitly authorized ADR 0080's four steps and separately confirmed
+one new table for interception/restoration and full-text capture links, its
+compatible migration/package changes, reuse of the existing DeepSeek
+configuration, and a real-source pilot of at most 15 public documents in the
+selected external instance. Record no real material or credentials in Git.
+Engineering tests remain synthetic; global unattended processing stays off.
+The no-migration statement in ADR 0079 below describes that completed fix.
+Preserve existing evidence, manual revisions, old request limits and Agent
+grants. No new model service, dependency, private transfer or reports are part
+of this increment.
+Implementation, local deployment and the bounded pilot are complete. Owner
+review of selection and relation quality remains the next step. Preserve prior
+comparison captures and reversible interception records; do not widen the pilot
+or enable unattended work merely because engineering verification passed.
+
+### Context-Preserving Owner Pilot (2026-09-12)
+
+ADR 0079 responds to the owner's real-use findings. Coherent articles default to
+one whole Entry; only independently understandable collections are split.
+An association evaluation may complete without an edge, including across task
+recovery. Preserve source image references and captions without background
+media fetching. Owner-selected reprocessing uses distinct comparison captures
+and never overwrites prior evidence. The bounded three-document pilot is
+complete; the owner reviews quality before broader automation or report work.
+The selected external instance has DeepSeek configured while global automatic
+processing remains off. No new migration or dependency is part of this fix.
+
 ### Completed AI and Agent Workflow, Model Off (2026-09-12)
 
 The owner accepted completion of the dual-channel workflow. ADR 0077 adds operator controls, public Agent capture/source management and independent external split tasks. Capture and structure grants are separate; existing grants are not widened. ADR 0074 provides
@@ -49,6 +91,8 @@ Use `docs/maintenance-handoff.md` for the running private Docker instance.
 Existing instance authorization never permits putting its content, secrets or
 configuration in Git, fixtures or artifacts; material operations remain scoped
 to the owner-selected external instance and purpose.
+
+ADR 0078 admits owner-selected DeepSeek via the existing Responses adapters and an independent external secret/model pair. One Responses provider at a time; no automatic widening of source scope or Agent grants. Real-model tests use isolated synthetic data. Migration 000036 preserves translation provider identity. See docs/runtime-configuration.md.
 
 ### Data-Free Development Baseline
 

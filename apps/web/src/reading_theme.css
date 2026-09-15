@@ -32,9 +32,25 @@ html[data-ui-family='struinfo-reading'] {
   border-color: var(--si-color-border-subtle);
 }
 .primary-rail__identity {
+  display: flex;
+  flex-shrink: 0;
   padding: 1rem;
   border: 0;
+  border-radius: var(--si-radius-control);
+  background: transparent;
   justify-content: flex-start;
+  text-align: start;
+  transition: background-color var(--si-motion-direct) var(--si-motion-ease);
+}
+.primary-rail__identity:hover,
+.primary-rail__identity[aria-current='page'] {
+  background: var(--si-color-surface-1);
+}
+.primary-rail__identity[aria-current='page'] {
+  box-shadow: inset 3px 0 0 var(--si-color-signal);
+}
+.primary-rail__identity:active {
+  background: var(--si-color-surface-2);
 }
 .primary-rail__mark {
   display: grid;
@@ -261,6 +277,11 @@ html[data-ui-family='struinfo-reading'] {
   .workflow-navigation__list {
     display: flex;
     inline-size: max-content;
+    max-inline-size: none;
+    flex-wrap: nowrap;
+  }
+  .workflow-navigation__list li {
+    flex: 0 0 auto;
   }
   .workflow-navigation__list li[data-group-start='true'] {
     margin: 0;

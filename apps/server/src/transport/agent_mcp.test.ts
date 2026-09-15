@@ -14,7 +14,7 @@ describe('StruInfo MCP protocol', () => {
     await client.connect(b);
     try {
       const tools = await client.listTools();
-      expect(tools.tools).toHaveLength(19);
+      expect(tools.tools).toHaveLength(26);
       expect(
         tools.tools.find((t) => t.name === 'entries_search')?.annotations
           ?.readOnlyHint,
@@ -44,6 +44,7 @@ describe('StruInfo MCP protocol', () => {
       ).toBe(true);
       expect(call).not.toHaveBeenCalled();
       for (const name of [
+        'intake_prepare',
         'document_import',
         'subscription_put',
         'subscription_check',
@@ -59,6 +60,21 @@ describe('StruInfo MCP protocol', () => {
         tools.tools.find((tool) => tool.name === 'subscription_put')
           ?.annotations?.destructiveHint,
       ).toBe(true);
+      for (const name of [
+        'report_preview',
+        'reports_list',
+        'report_read',
+        'report_export',
+      ])
+        expect(
+          tools.tools.find((tool) => tool.name === name)?.annotations
+            ?.readOnlyHint,
+        ).toBe(true);
+      expect(tools.tools.some((tool) => tool.name === 'report_generate')).toBe(
+        false,
+      );
+      await client.callTool({name: 'reports_list', arguments: {}});
+      expect(call).toHaveBeenCalledWith('reports_list', {});
       const searched = await client.callTool({
         name: 'entries_search',
         arguments: {text: 'Synthetic'},

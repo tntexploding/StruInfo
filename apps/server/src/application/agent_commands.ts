@@ -1,3 +1,10 @@
+import type {AiPriceService} from './ai_price_service.js';
+import {
+  ReportCommands,
+  REPORT_OPERATIONS,
+  reportReadCommandSchemas,
+} from './report_commands.js';
+import type {ReportService} from './report_service.js';
 import {
   ENTRY_TEXT_SEARCH_MODES,
   ENTRY_TYPE_KEYWORDS,
@@ -9,6 +16,8 @@ import {
   type AgentCaptureService,
 } from './agent_capture_service.js';
 import {z} from 'zod';
+import type {DocumentIntakeService} from './document_intake_service.js';
+import {intakePolicySchema} from './document_intake_contract.js';
 import {
   ingestionSettingsSchema,
   ingestionStatusQuerySchema,
@@ -42,6 +51,7 @@ const cursor = z
   })
   .strict();
 export const agentCommandSchemas = {
+  ...reportReadCommandSchemas,
   system_status: z.object({}).strict(),
   document_import: captureTextSchema,
   document_sections: z.object({snapshotId: id}).strict(),
@@ -60,6 +70,16 @@ export const agentCommandSchemas = {
     })
     .strict(),
 
+  intake_status: z.object({}).strict(),
+  intake_control: z
+    .object({
+      snapshotId: id,
+      expectedVersion: z.number().int().min(0),
+      action: z.enum(['block', 'admit', 'reset']),
+      reason: z.string().trim().min(1).max(500),
+    })
+    .strict(),
+  intake_prepare: z.object({snapshotId: id}).strict(),
   ingestion_status: ingestionStatusQuerySchema,
   ingestion_policy_save: z
     .object({
@@ -137,6 +157,8 @@ export const agentCommandSchemas = {
 };
 export type AgentCommandName = keyof typeof agentCommandSchemas;
 export interface AgentCommandDependencies {
+  readonly aiPrice?: AiPriceService;
+  readonly reports?: ReportService;
   readonly capture?: AgentCaptureService;
   readonly runtimeStatus?: Readonly<{
     model?: string;
@@ -145,6 +167,7 @@ export interface AgentCommandDependencies {
     grants: readonly string[];
   }>;
   readonly ingestion?: IngestionService;
+  readonly intake?: DocumentIntakeService;
   readonly subscriptions?: () => Promise<unknown>;
   readonly documents: DocumentUseCases;
   readonly entries: EntryUseCases;
@@ -161,23 +184,49 @@ export class AgentCommands {
       throw new OperationError('rejected', 'capture_unavailable');
     return this.deps.capture;
   }
+  private intake() {
+    if (!this.deps.intake)
+      throw new OperationError('rejected', 'intake_unavailable');
+    return this.deps.intake;
+  }
   private ingestion() {
     if (!this.deps.ingestion)
       throw new OperationError('rejected', 'ingestion_unavailable');
     return this.deps.ingestion;
   }
   public async execute(name: string, input: unknown): Promise<unknown> {
+    if (REPORT_OPERATIONS.includes(name)) {
+      if (!this.deps.reports)
+        throw new OperationError('rejected', 'reports_unavailable');
+      return new ReportCommands(this.authority, this.deps.reports).execute(
+        name,
+        input,
+      );
+    }
     switch (name) {
+      case 'ai_price_status':
+        parse(agentCommandSchemas.system_status, input);
+        this.authority.require('processing.read');
+        if (!this.deps.aiPrice)
+          throw new OperationError('rejected', 'ai_price_unavailable');
+        return this.deps.aiPrice.status();
+      case 'ai_price_save':
+        if (!this.deps.aiPrice)
+          throw new OperationError('rejected', 'ai_price_unavailable');
+        return this.deps.aiPrice.save(this.authority, input);
       case 'system_status':
         parse(agentCommandSchemas.system_status, input);
         this.authority.require('processing.read');
-        return (
-          this.deps.runtimeStatus ?? {
+        return {
+          ...(this.deps.runtimeStatus ?? {
             role: 'unknown',
             agentEnabled: false,
             grants: [],
-          }
-        );
+          }),
+          ...(this.deps.aiPrice
+            ? {aiPrice: await this.deps.aiPrice.status()}
+            : {}),
+        };
       case 'document_import':
         return this.capture().importText(
           this.authority,
@@ -211,6 +260,30 @@ export class AgentCommands {
         );
       }
 
+      case 'intake_status':
+        parse(agentCommandSchemas.intake_status, input);
+        this.authority.require('documents.read');
+        return {records: await this.intake().list()};
+      case 'intake_control': {
+        const request = parse(agentCommandSchemas.intake_control, input);
+        this.authority.require('ingestion.manage');
+        return this.intake().control(
+          request.snapshotId,
+          request.expectedVersion,
+          request.action,
+          request.reason,
+        );
+      }
+      case 'intake_prepare': {
+        const request = parse(agentCommandSchemas.intake_prepare, input);
+        this.authority.require('sources.capture');
+        return (
+          (await this.intake().prepare(
+            request.snapshotId,
+            intakePolicySchema.parse({fetchFullText: true}),
+          )) ?? null
+        );
+      }
       case 'subscriptions_list':
         parse(agentCommandSchemas.subscriptions_list, input);
         this.authority.require('documents.read');

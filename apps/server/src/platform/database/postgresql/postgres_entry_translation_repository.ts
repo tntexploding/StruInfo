@@ -125,6 +125,7 @@ function decodeTranslation(
   const providerKey = text(row.provider_key);
   if (
     providerKey !== 'openai-responses-v1' &&
+    providerKey !== 'deepseek-responses-v1' &&
     providerKey !== 'provided-translation-v1'
   )
     throw new Error('Unsupported translation origin.');

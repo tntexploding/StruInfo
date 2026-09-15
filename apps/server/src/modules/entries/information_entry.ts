@@ -464,7 +464,10 @@ function prepareGroupedInformationEntries(
           titlePath,
           body,
           bodySha256: informationEntryBodySha256(body),
-          chunkMode: 'split' as const,
+          chunkMode:
+            options.commonMark && groups.length === 1
+              ? ('whole' as const)
+              : ('split' as const),
           splitRuleVersion: options.splitRuleVersion,
           isPrivate: options.isPrivate,
           contentKeywords: Object.freeze([]),

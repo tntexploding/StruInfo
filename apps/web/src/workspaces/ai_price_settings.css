@@ -1,0 +1,39 @@
+.ai-price-settings {
+  padding: 1.25rem;
+  margin-block-end: 1rem;
+  border: 1px solid var(--si-color-border-subtle);
+  border-radius: 1rem;
+  background: var(--si-color-surface-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ai-price-heading,
+.ai-price-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+.ai-price-heading {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.ai-price-heading h2 {
+  margin: 0;
+}
+.ai-price-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-block: 0.5rem;
+}
+.ai-price-actions button {
+  width: auto;
+}
+.ai-price-actions small,
+.ai-price-settings .field-hint {
+  color: var(--si-color-text-secondary);
+}
+.ai-price-settings > [role='status']:empty {
+  display: none;
+}

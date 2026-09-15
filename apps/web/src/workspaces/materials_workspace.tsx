@@ -1,8 +1,14 @@
+import {DocumentIntakePanel} from './document_intake_panel.js';
+import {
+  aiWorkflowCommand,
+  INTAKE_LABELS,
+  type IntakeRecord,
+} from '../api/ai_workflow_client.js';
 import {WorkspaceActionRail} from '../components/workspace_action_rail.js';
 import {WorkspaceToolPanel} from '../components/workspace_tool_panel.js';
 import type {ReactNode} from 'react';
 import {sourceDisplayName} from '../components/reading_text.js';
-import {useRef, useState} from 'react';
+import {useRef, useState, useEffect, useCallback} from 'react';
 import type {DragEvent, SyntheticEvent} from 'react';
 
 import type {
@@ -108,6 +114,35 @@ export function MaterialsWorkspace({
   const toolReturn = useRef<HTMLElement | null>(null);
   const inbox = presentation === 'inbox';
   const maintenance = presentation === 'maintenance';
+  const [intakeRecords, setIntakeRecords] = useState<IntakeRecord[]>([]);
+  const [reviewSnapshot, setReviewSnapshot] =
+    useState<EvidenceSnapshotSummary>();
+  const intakeGeneration = useRef(0);
+  const loadIntake = useCallback(async () => {
+    if (!inbox) return;
+    const current = ++intakeGeneration.current;
+    try {
+      const result = await aiWorkflowCommand<{records: IntakeRecord[]}>(
+        'intake_status',
+      );
+      if (current === intakeGeneration.current && Array.isArray(result.records))
+        setIntakeRecords(result.records);
+    } catch {
+      /* The review panel presents load failures with a retry action. */
+    }
+  }, [inbox]);
+  useEffect(() => {
+    const timer = globalThis.setTimeout(() => {
+      void loadIntake();
+    }, 0);
+    const interval = globalThis.setInterval(() => {
+      if (document.visibilityState !== 'hidden') void loadIntake();
+    }, 30000);
+    return () => {
+      globalThis.clearTimeout(timer);
+      globalThis.clearInterval(interval);
+    };
+  }, [loadIntake]);
   const openInboxTool = (id: string) => {
     toolReturn.current =
       document.activeElement instanceof HTMLElement
@@ -886,9 +921,42 @@ export function MaterialsWorkspace({
             importHeading.current?.focus();
           }}
           showPrivateDocuments={showPrivateDocuments}
+          intakeRecords={intakeRecords}
+          {...(inbox
+            ? {
+                onReview: (snapshot: EvidenceSnapshotSummary) => {
+                  setReviewSnapshot(snapshot);
+                  openInboxTool('review');
+                },
+              }
+            : {})}
         />
       </section>
 
+      {inbox && reviewSnapshot ? (
+        <div className="inbox-activity-tool" hidden={inboxTool !== 'review'}>
+          <WorkspaceToolPanel
+            title="接收审核与拦截"
+            open={inboxTool === 'review'}
+            onClose={closeInboxTool}
+          >
+            {inboxTool === 'review' ? (
+              <DocumentIntakePanel
+                key={reviewSnapshot.snapshotId}
+                snapshotId={reviewSnapshot.snapshotId}
+                title={sourceDisplayName(reviewSnapshot)}
+                onChanged={() => {
+                  void loadIntake();
+                  onRefresh();
+                }}
+                onOpenDocument={(id) => {
+                  onOpenDocument?.(id, false);
+                }}
+              />
+            ) : null}
+          </WorkspaceToolPanel>
+        </div>
+      ) : null}
       {inbox ? (
         <WorkspaceActionRail
           page="inbox"
@@ -1022,6 +1090,8 @@ export function MaterialsWorkspace({
 }
 
 function SnapshotList({
+  intakeRecords = [],
+  onReview,
   onOpenDocument,
   onOpenEvidence,
   onStartImport,
@@ -1040,18 +1110,29 @@ function SnapshotList({
   readonly selectedSnapshotId?: string | undefined;
   readonly snapshots: Loadable<readonly Readonly<EvidenceSnapshotSummary>[]>;
   readonly showPrivateDocuments: boolean;
+  readonly intakeRecords?: readonly IntakeRecord[];
+  readonly onReview?: (snapshot: EvidenceSnapshotSummary) => void;
 }) {
   const [filter, setFilter] = useState('');
+  const [intakeFilter, setIntakeFilter] = useState('');
+  const intakeFor = (id: string) =>
+    intakeRecords.find(
+      (r) => r.snapshotId === id || r.value.preparedSnapshotId === id,
+    );
   const [requestedPage, setRequestedPage] = useState(0);
   const query = filter.trim().toLowerCase();
   const filtered =
     snapshots.status === 'ready'
-      ? snapshots.value.filter((snapshot) =>
-          [
-            sourceDisplayName(snapshot),
-            snapshot.sourceKey,
-            snapshot.canonicalUri ?? '',
-          ].some((value) => value.toLowerCase().includes(query)),
+      ? snapshots.value.filter(
+          (snapshot) =>
+            [
+              sourceDisplayName(snapshot),
+              snapshot.sourceKey,
+              snapshot.canonicalUri ?? '',
+            ].some((value) => value.toLowerCase().includes(query)) &&
+            (!intakeFilter ||
+              (intakeFor(snapshot.snapshotId)?.value.decision ?? 'pending') ===
+                intakeFilter),
         )
       : [];
   const pageCount = Math.max(1, Math.ceil(filtered.length / 20));
@@ -1101,6 +1182,25 @@ function SnapshotList({
           }}
         />
       </label>
+      {onReview ? (
+        <label className="field record-list-filter">
+          <span>接收状态</span>
+          <select
+            value={intakeFilter}
+            onChange={(e) => {
+              setIntakeFilter(e.currentTarget.value);
+              setRequestedPage(0);
+            }}
+          >
+            <option value="">全部接收状态</option>
+            {Object.entries(INTAKE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       <p className="record-list-range" role="status">
         {filtered.length === 0
           ? '没有匹配的文档'
@@ -1129,7 +1229,15 @@ function SnapshotList({
                 <p className="record-list__meta">
                   {formatDate(snapshot.capturedAt)} ·{' '}
                   {resourceKindLabel(snapshot.resourceKind)}
-                  {snapshot.isPrivate === true ? ' · 私密' : ''}
+                  {snapshot.isPrivate === true
+                    ? ' · 私密'
+                    : intakeFor(snapshot.snapshotId)
+                      ? ' · ' +
+                        INTAKE_LABELS[
+                          intakeFor(snapshot.snapshotId)?.value.decision ??
+                            'pending'
+                        ]
+                      : ''}
                 </p>
               </div>
               <dl className="record-list__facts">
@@ -1143,6 +1251,17 @@ function SnapshotList({
                 </div>
               </dl>
               <div className="record-list-actions">
+                {onReview && !snapshot.isPrivate ? (
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={() => {
+                      onReview(snapshot);
+                    }}
+                  >
+                    接收审核
+                  </button>
+                ) : null}
                 {onOpenDocument === undefined ? null : (
                   <button
                     type="button"

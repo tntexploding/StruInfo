@@ -14,6 +14,7 @@ import {
 } from './association_policy_panel.js';
 import type {InformationEntryServices} from './information_entry_components.js';
 import {describeInformationEntryFailure} from './information_entry_shared.js';
+import {formatRuleSimilarity} from './information_entry_score.js';
 import {createLatestRequestTracker} from './latest_request.js';
 
 type AssociationViewState =
@@ -369,7 +370,7 @@ export function InformationEntryAssociationPanel({
                         <span className="entry-association-score">
                           {association.isBlocked
                             ? '已屏蔽'
-                            : `${scorePercentage(association.effectiveScore)}%`}
+                            : formatRuleSimilarity(association.projection)}
                         </span>
                         <h3>{readingTitle(related.value.titlePath)}</h3>
                         <small>
@@ -395,44 +396,52 @@ export function InformationEntryAssociationPanel({
                     <p className="entry-association-excerpt">
                       {excerpt(related.value.body)}
                     </p>
-                    <dl className="entry-association-metrics">
-                      <div>
-                        <dt>内容</dt>
-                        <dd>
-                          {scorePercentage(
-                            association.projection?.contentSimilarity ?? 0,
-                          )}
-                          %
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>类型</dt>
-                        <dd>
-                          {scorePercentage(
-                            association.projection?.typeSimilarity ?? 0,
-                          )}
-                          %
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>领域</dt>
-                        <dd>
-                          {scorePercentage(
-                            association.projection?.domainSimilarity ?? 0,
-                          )}
-                          %
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>自动匹配分</dt>
-                        <dd>
-                          {scorePercentage(
-                            association.projection?.baseScore ?? 0,
-                          )}
-                          %
-                        </dd>
-                      </div>
-                    </dl>
+                    {association.projection === undefined ? null : (
+                      <dl className="entry-association-metrics">
+                        <div>
+                          <dt>内容</dt>
+                          <dd>
+                            {scorePercentage(
+                              association.projection.contentSimilarity,
+                            )}
+                            %
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>类型</dt>
+                          <dd>
+                            {scorePercentage(
+                              association.projection.typeSimilarity,
+                            )}
+                            %
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>领域</dt>
+                          <dd>
+                            {scorePercentage(
+                              association.projection.domainSimilarity,
+                            )}
+                            %
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>规则相似度</dt>
+                          <dd>
+                            {scorePercentage(association.projection.baseScore)}%
+                          </dd>
+                        </div>
+                        {association.effectiveScore ===
+                        association.projection.baseScore ? null : (
+                          <div>
+                            <dt>调整后推荐分</dt>
+                            <dd>
+                              {scorePercentage(association.effectiveScore)}%
+                            </dd>
+                          </div>
+                        )}
+                      </dl>
+                    )}
                     <div
                       className="entry-association-basis"
                       aria-label="推荐原因"
@@ -445,11 +454,14 @@ export function InformationEntryAssociationPanel({
                         ),
                       )}
                       {association.override === undefined ? null : (
-                        <span data-manual="true">
-                          人工：
-                          {associationActionLabel(
-                            association.override.value.action,
-                          )}
+                        <span
+                          data-manual={
+                            association.override.value.graph?.origin !== 'ai'
+                          }
+                        >
+                          {association.override.value.graph?.origin === 'ai'
+                            ? 'AI 建立'
+                            : `人工：${associationActionLabel(association.override.value.action)}`}
                         </span>
                       )}
                     </div>

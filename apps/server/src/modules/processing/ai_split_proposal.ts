@@ -1,4 +1,5 @@
 export type AiSplitProposalProviderErrorCode =
+  | 'ai_price_window_closed'
   | 'ai_provider_timeout'
   | 'ai_provider_unavailable'
   | 'ai_provider_rejected'
@@ -26,7 +27,8 @@ export interface AiSplitProposalProviderResult {
   readonly groups: readonly Readonly<AiSplitProposalProviderGroup>[];
 }
 export interface AiSplitProposalProviderPort {
-  readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
+  readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   readonly model: string;
   readonly promptVersion: string;
   proposeSplit(

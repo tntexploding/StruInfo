@@ -36,6 +36,31 @@ const PROJECTION = Object.freeze({
 });
 
 describe('AiAssociationProposalService', () => {
+  it('persists a no-relation result without a proposal or graph write and reuses it on retry', async () => {
+    const fixture = createFixture(false);
+    fixture.proposeAssociation.mockResolvedValue({
+      outcome: 'no_relation',
+      summary: 'No specific shared evidence.',
+    });
+    const first = await fixture.service.start(
+      ENTRY_LOW_ID,
+      ENTRY_HIGH_ID,
+      'no-relation',
+    );
+    expect(first.run).toMatchObject({
+      status: 'succeeded',
+      currentStep: '未发现有意义的联系',
+      completedUnits: 1,
+      totalUnits: 1,
+    });
+    expect(
+      await fixture.service.listForPair(ENTRY_LOW_ID, ENTRY_HIGH_ID),
+    ).toEqual([]);
+    await fixture.service.start(ENTRY_LOW_ID, ENTRY_HIGH_ID, 'no-relation');
+    expect(fixture.proposeAssociation).toHaveBeenCalledTimes(1);
+    expect(fixture.writeAssociationOverride).not.toHaveBeenCalled();
+  });
+
   it('creates a reviewable pair proposal and applies it through the graph write boundary', async () => {
     const fixture = createFixture(false);
 

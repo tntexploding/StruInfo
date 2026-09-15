@@ -1,3 +1,4 @@
+import {REPORT_OPERATIONS} from '../application/report_commands.js';
 import {timingSafeEqual} from 'node:crypto';
 import type {Request, Response, NextFunction} from 'express';
 import type {AgentCommands} from '../application/agent_commands.js';
@@ -14,7 +15,13 @@ export function agentHttpMiddleware(options: AgentHttpOptions) {
   ): Promise<void> => {
     const external = request.path === '/api/v1/agent/commands';
     const ingestion = request.path === '/api/v1/ingestion/commands';
-    const owner = request.path === '/api/v1/ai-tasks/commands' || ingestion;
+    const reports = request.path === '/api/v1/reports/commands';
+    const price = request.path === '/api/v1/ai-price/commands';
+    const owner =
+      request.path === '/api/v1/ai-tasks/commands' ||
+      ingestion ||
+      reports ||
+      price;
     if (!external && !owner) {
       next();
       return;
@@ -63,21 +70,28 @@ export function agentHttpMiddleware(options: AgentHttpOptions) {
     if (
       owner &&
       !(
-        ingestion
-          ? [
-              'system_status',
-              'ingestion_status',
-              'ingestion_policy_save',
-              'ingestion_item_control',
-              'subscriptions_list',
-            ]
-          : [
-              'system_status',
-              'tasks_list',
-              'task_read',
-              'task_start',
-              'task_control',
-            ]
+        price
+          ? ['ai_price_status', 'ai_price_save']
+          : reports
+            ? REPORT_OPERATIONS
+            : ingestion
+              ? [
+                  'system_status',
+                  'ingestion_status',
+                  'intake_status',
+                  'intake_control',
+                  'intake_prepare',
+                  'ingestion_policy_save',
+                  'ingestion_item_control',
+                  'subscriptions_list',
+                ]
+              : [
+                  'system_status',
+                  'tasks_list',
+                  'task_read',
+                  'task_start',
+                  'task_control',
+                ]
       ).includes(body.operation)
     ) {
       response.status(400).json({error: {code: 'unknown_agent_operation'}});

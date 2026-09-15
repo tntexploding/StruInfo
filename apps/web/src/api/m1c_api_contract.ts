@@ -1339,7 +1339,7 @@ export type InformationEntryQuerySynthesisResponse =
       status: 'ok';
       requestId: string;
       querySha256: string;
-      providerKey: 'openai-responses-v1';
+      providerKey: 'openai-responses-v1' | 'deepseek-responses-v1';
       model: string;
       promptVersion: string;
       answer: string;
@@ -1688,7 +1688,8 @@ export interface EntryTranslation {
   readonly targetLanguage: 'zh-CN';
   readonly title: string;
   readonly body: string;
-  readonly providerKey: 'openai-responses-v1' | 'provided-translation-v1';
+  readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'provided-translation-v1';
   readonly model: string;
   readonly promptVersion: string;
   readonly translatedAt: string;

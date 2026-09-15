@@ -151,6 +151,7 @@ describe('loadRuntimeConfig', () => {
     ['DATABASE_URL', 'database-secret-in-file'],
     ['STRUIINFO_MIGRATION_DATABASE_URL', 'migration-secret-in-file'],
     ['OPENAI_API_KEY', 'openai-secret-in-file'],
+    ['DEEPSEEK_API_KEY', 'deepseek-secret-in-file'],
     ['STRUIINFO_AGENT_TOKEN', 'agent-secret-in-file'],
     ['STRUIINFO_CONFIG_PATH', 'recursive-path-in-file'],
   ])(

@@ -204,13 +204,13 @@ export function InformationEntryAiSplit({
 
       {!enabled ? (
         <p className="entry-ai-split__boundary">
-          OpenAI 未启用，仍可使用人工拆分和结构规则。
+          模型服务 未启用，仍可使用人工拆分和结构规则。
         </p>
       ) : snapshotId === '' ? (
         <p className="entry-ai-split__boundary">请先选择一份来源文档。</p>
       ) : isPrivate ? (
         <p className="entry-ai-split__boundary">
-          隐私文档不会发送给 OpenAI，请使用人工拆分或结构规则。
+          隐私文档不会发送给 模型服务，请使用人工拆分或结构规则。
         </p>
       ) : alreadyMaterialized ? (
         <p className="entry-ai-split__boundary">
@@ -220,7 +220,7 @@ export function InformationEntryAiSplit({
         <>
           <p className="entry-ai-split__boundary">
             点击生成后，当前公开文档的段落会发送给
-            OpenAI。其他文档和隐私内容不会发送，结果需要你确认后才会保存。
+            模型服务。其他文档和隐私内容不会发送，结果需要你确认后才会保存。
           </p>
           <div className="entry-ai-split__actions">
             <button
@@ -366,12 +366,14 @@ function proposalStatusLabel(status: ProcessingProposalView['status']): string {
 
 function splitFailure(code: string): ActionFeedback {
   const known: Readonly<Record<string, string>> = Object.freeze({
-    ai_private_snapshot_forbidden: '隐私文档不会发送给 OpenAI。',
-    ai_provider_not_configured: '当前服务未启用 OpenAI。',
-    ai_provider_timeout: 'OpenAI 请求超时，文档没有变化。',
-    ai_provider_unavailable: 'OpenAI 暂时不可用，文档没有变化。',
-    ai_provider_rejected: 'OpenAI 拒绝了本次请求，文档没有变化。',
-    ai_provider_invalid_response: 'OpenAI 返回的拆分结构无效，文档没有变化。',
+    ai_private_snapshot_forbidden: '隐私文档不会发送给 模型服务。',
+    ai_provider_not_configured: '当前服务未启用 模型服务。',
+    ai_price_window_closed:
+      '当前为 DeepSeek 高峰时段，请在低价时段重试。恢复时间见设置 → AI 接入。',
+    ai_provider_timeout: '模型服务 请求超时，文档没有变化。',
+    ai_provider_unavailable: '模型服务 暂时不可用，文档没有变化。',
+    ai_provider_rejected: '模型服务 拒绝了本次请求，文档没有变化。',
+    ai_provider_invalid_response: '模型服务 返回的拆分结构无效，文档没有变化。',
     ai_split_input_unsupported: '当前文档结构不适合本次 AI 拆分。',
     ai_snapshot_already_materialized: '当前文档已经生成条目。',
     stale_split_materialization: '文档已通过其他方式生成条目，请刷新。',

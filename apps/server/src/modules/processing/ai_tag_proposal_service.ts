@@ -53,7 +53,8 @@ export interface AiTagProposalDecisionResult {
 }
 
 export interface AiTagProposalServicePort {
-  readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
+  readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   readonly model: string;
 
   listForEntry(
@@ -81,7 +82,8 @@ export interface AiTagProposalServiceDependencies {
 }
 
 export class AiTagProposalService implements AiTagProposalServicePort {
-  public readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
+  public readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   public readonly model: string;
   readonly #dependencies: Readonly<AiTagProposalServiceDependencies>;
 
@@ -395,7 +397,9 @@ function originVersion(
   const origin =
     payload.promptVersion === 'struinfo.agent-tool.v1'
       ? 'external-agent'
-      : 'openai';
+      : payload.promptVersion.startsWith('struinfo.deepseek-')
+        ? 'deepseek'
+        : 'openai';
   return origin + ':' + payload.providerModel + ':' + payload.promptVersion;
 }
 
@@ -403,7 +407,8 @@ function providerErrorCode(error: unknown): AiTagProposalServiceErrorCode {
   if (
     error instanceof Error &&
     'code' in error &&
-    (error.code === 'ai_provider_timeout' ||
+    (error.code === 'ai_price_window_closed' ||
+      error.code === 'ai_provider_timeout' ||
       error.code === 'ai_provider_unavailable' ||
       error.code === 'ai_provider_rejected' ||
       error.code === 'ai_provider_invalid_response')

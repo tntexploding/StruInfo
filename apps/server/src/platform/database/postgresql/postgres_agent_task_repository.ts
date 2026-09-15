@@ -41,6 +41,13 @@ export class PostgresAgentTaskRepository implements AgentTaskRepository {
     );
     return result.rows.map(decode);
   }
+  public async listPriceDeferred(workspaceId: string) {
+    const result = await this.pool.query(
+      "SELECT * FROM struinfo.processing_agent_task WHERE workspace_id=$1 AND NOT pause_requested AND NOT cancel_requested AND state_text::jsonb->>'status'='paused' AND state_text::jsonb->>'errorCode'='ai_price_window_closed' ORDER BY updated_at,task_id LIMIT 32",
+      [workspaceId],
+    );
+    return result.rows.map(decode);
+  }
   /** Only the holder of withLock may update progress. Control flags are separate. */
   public async saveState(
     workspaceId: string,

@@ -11,7 +11,7 @@ export type ProcessRole = 'api' | 'scheduler' | 'worker' | 'all';
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 export interface AiProposalProviderConfig {
-  readonly providerKey: 'openai-responses-v1';
+  readonly providerKey: 'openai-responses-v1' | 'deepseek-responses-v1';
   readonly model: string;
   readonly apiKey: string;
   readonly maxOutputTokens: 800;
@@ -114,10 +114,15 @@ export function parseRuntimeConfig(
     environment.STRUIINFO_OPENAI_MODEL,
     environment.STRUIINFO_OPENAI_EMBEDDING_MODEL,
   );
-  const aiProposalProvider = parseAiProposalProvider(
+  const openAiProvider = parseAiProposalProvider(
     openAiApiKey,
     environment.STRUIINFO_OPENAI_MODEL,
   );
+  const deepSeekProvider = parseDeepSeekProvider(environment);
+  if (openAiProvider && deepSeekProvider) {
+    throw new ConfigurationError('Configure only one AI response provider.');
+  }
+  const aiProposalProvider = deepSeekProvider ?? openAiProvider;
   const embeddingProvider = parseEmbeddingProvider(
     openAiApiKey,
     environment.STRUIINFO_OPENAI_EMBEDDING_MODEL,
@@ -154,6 +159,33 @@ function parseAiProposalProvider(
   }
   return Object.freeze({
     providerKey: 'openai-responses-v1' as const,
+    model,
+    apiKey,
+    maxOutputTokens: 800 as const,
+    timeoutMs: 60_000 as const,
+  });
+}
+
+function parseDeepSeekProvider(
+  environment: Readonly<Record<string, string | undefined>>,
+): Readonly<AiProposalProviderConfig> | undefined {
+  const apiKey = environment.DEEPSEEK_API_KEY;
+  const model = environment.STRUIINFO_DEEPSEEK_MODEL;
+  if (apiKey === undefined && model === undefined) return undefined;
+  if (
+    !apiKey ||
+    apiKey.length > 4096 ||
+    containsWhitespaceOrControl(apiKey) ||
+    !model ||
+    !validModel(model) ||
+    !model.startsWith('deepseek-')
+  ) {
+    throw new ConfigurationError(
+      'DEEPSEEK_API_KEY and STRUIINFO_DEEPSEEK_MODEL must both be supplied to enable DeepSeek.',
+    );
+  }
+  return Object.freeze({
+    providerKey: 'deepseek-responses-v1' as const,
     model,
     apiKey,
     maxOutputTokens: 800 as const,

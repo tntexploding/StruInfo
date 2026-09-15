@@ -57,7 +57,8 @@ export interface AiSplitProposalDecisionResult {
   readonly entries?: readonly Readonly<CurrentInformationEntry>[];
 }
 export interface AiSplitProposalServicePort {
-  readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
+  readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   readonly model: string;
   listForSnapshot(
     snapshotId: string,
@@ -85,7 +86,8 @@ export interface AiSplitProposalServiceDependencies {
 }
 
 export class AiSplitProposalService implements AiSplitProposalServicePort {
-  public readonly providerKey: 'openai-responses-v1' | 'external-agent-v1';
+  public readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   public readonly model: string;
   readonly #dependencies: Readonly<AiSplitProposalServiceDependencies>;
   public constructor(
@@ -389,7 +391,8 @@ function providerErrorCode(error: unknown): AiSplitProposalServiceErrorCode {
   if (
     error instanceof Error &&
     'code' in error &&
-    (error.code === 'ai_provider_timeout' ||
+    (error.code === 'ai_price_window_closed' ||
+      error.code === 'ai_provider_timeout' ||
       error.code === 'ai_provider_unavailable' ||
       error.code === 'ai_provider_rejected' ||
       error.code === 'ai_provider_invalid_response')

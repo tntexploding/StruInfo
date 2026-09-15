@@ -1,3 +1,4 @@
+import {ReportWorkspace} from './workspaces/report_workspace.js';
 import {AiWorkflowPanel} from './workspaces/ai_workflow_panel.js';
 import {WorkspaceUiProvider} from './components/workspace_ui_context.js';
 import {SettingsWorkspace} from './workspaces/settings_workspace.js';
@@ -6,6 +7,7 @@ import {InformationEntryPreferenceProfilePanel} from './workspaces/information_e
 import {InformationEntryAutomationPolicyPanel} from './workspaces/information_entry_automation_policy_panel.js';
 import {InformationEntryAiTags} from './workspaces/information_entry_ai_tags.js';
 import {ProcessingRunRail} from './workspaces/processing_run_rail.js';
+import {AiPriceSettings} from './workspaces/ai_price_settings.js';
 import {
   FormalKnowledgeGraphWorkspace,
   type FormalKnowledgeGraphWorkspaceProps,
@@ -1180,9 +1182,9 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
             onSavePreferences: saveReviewPreferences,
           }}
         />
-        {(
-          ['split', 'tags', 'associations', 'overview'] as ProductSection[]
-        ).includes(activeSection) ? (
+        {(['split', 'tags', 'associations'] as ProductSection[]).includes(
+          activeSection,
+        ) ? (
           <div className="legacy-tool-return">
             <button
               type="button"
@@ -1263,6 +1265,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
             }
             ai={
               <>
+                <AiPriceSettings />
                 <AiWorkflowPanel
                   documents={snapshotValues}
                   onOpenDocument={(id) => {
@@ -1274,7 +1277,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
                   <section className="ai-connection-settings">
                     <h2>AI 接入</h2>
                     <p>
-                      当前使用可选 OpenAI
+                      可配置 OpenAI 或 DeepSeek
                       服务。每项能力独立启用，未配置时可以继续阅读、人工整理与文字查询。
                     </p>
                     <dl>
@@ -1301,17 +1304,21 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
                     <ol>
                       <li>
                         在现有外部运行环境文件中设置{' '}
-                        <code>STRUIINFO_OPENAI_MODEL</code> 为可用模型名称。
+                        <code>STRUIINFO_OPENAI_MODEL</code> 或{' '}
+                        <code>STRUIINFO_DEEPSEEK_MODEL</code>
+                        ，选择一种服务并设置模型名称。
                       </li>
                       <li>
                         通过服务器环境 <code>OPENAI_API_KEY</code> 或{' '}
-                        <code>OPENAI_API_KEY_FILE</code>{' '}
-                        引用密钥，二者选择其一。
+                        <code>OPENAI_API_KEY_FILE</code> 引用 OpenAI
+                        密钥；DeepSeek 使用 <code>DEEPSEEK_API_KEY</code> 或{' '}
+                        <code>DEEPSEEK_API_KEY_FILE</code>
+                        。直接值与文件各选其一。
                       </li>
                       <li>重启当前实例后，点击下方按钮检查能力状态。</li>
                     </ol>
                     <p>
-                      密钥由服务器读取；页面设置不存储密钥。启用服务后，发送内容仍需要你明确操作，隐私条目不会发送。
+                      密钥由服务器读取；页面设置不存储密钥。模型只处理明确选择或已启用策略授权的公开资料，隐私条目不会发送。
                     </p>
                     <button
                       className="secondary-action"
@@ -1493,6 +1500,12 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
             }
           />
         ) : null}
+        <ReportWorkspace
+          active={activeSection === 'reports'}
+          onOpenSource={(snapshotId) => {
+            openDocument(snapshotId, false);
+          }}
+        />
         {activeSection === 'query' ? (
           <InformationEntryQueryWorkspace
             onPreviewMarkdownExport={previewMarkdownExport}

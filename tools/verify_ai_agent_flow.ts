@@ -1,4 +1,11 @@
+import {ReportService} from '../apps/server/src/application/report_service.js';
+import {ReportCommands} from '../apps/server/src/application/report_commands.js';
+import {reportRequestSchema} from '../apps/server/src/application/report_contract.js';
+import {PostgresReportRepository} from '../apps/server/src/platform/database/postgresql/postgres_report_repository.js';
 import assert from 'node:assert/strict';
+import {DocumentIntakeService} from '../apps/server/src/application/document_intake_service.js';
+import {PostgresDocumentIntakeRepository} from '../apps/server/src/platform/database/postgresql/postgres_document_intake_repository.js';
+import {PostgresM1cDomainTransferRepository} from '../apps/server/src/platform/database/postgresql/postgres_workspace_transfer_repository.js';
 import {randomUUID} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {mkdir, readFile, writeFile} from 'node:fs/promises';
@@ -78,6 +85,7 @@ const admin = createNodePostgresPool(connection);
 let runtime: ReturnType<typeof createNodePostgresPool> | undefined;
 const services: AgentTaskService[] = [];
 const checks: string[] = [];
+const reportServices: ReportService[] = [];
 const mark = (name: string) => {
   checks.push(name);
   process.stdout.write(name + '\n');
@@ -130,7 +138,15 @@ try {
     (await runtime.query('SELECT current_user AS role')).rows[0]?.role,
     'struinfo_tm2_runtime',
   );
-  mark('35 migrations replay safely; restricted runtime grants applied');
+  assert.equal(
+    (
+      await admin.query(
+        'SELECT count(*)::integer AS total FROM struinfo_meta.schema_migrations',
+      )
+    ).rows[0]?.total,
+    38,
+  );
+  mark('38 migrations replay safely; restricted runtime grants applied');
 
   await mkdir(output, {recursive: true});
   const layout = await initializeLocalDataRoot(output);
@@ -649,6 +665,273 @@ try {
   mark(
     'invalid partition writes no entries; private content and missing grants rejected',
   );
+  const intakeRepository = new PostgresDocumentIntakeRepository(runtime, w);
+  let fullFetches = 0;
+  const syntheticIntelligence = {
+    model: metadata.model,
+    reviewIntake: () =>
+      Promise.resolve({
+        completeness: 'complete' as const,
+        contentKind: 'article' as const,
+        decision: 'admit' as const,
+        reason: 'Complete synthetic article',
+      }),
+    planRecall: () =>
+      Promise.resolve({
+        concepts: [{term: 'Synthetic', variants: ['synthetic', '合成']}],
+      }),
+  };
+  const intake = new DocumentIntakeService({
+    workspaceId: w,
+    repository: intakeRepository,
+    evidence: repo.evidenceRead,
+    capture: repo.evidence,
+    blobStore,
+    provider: syntheticIntelligence,
+    readWeb: () => {
+      fullFetches++;
+      return Promise.resolve({
+        status: 'changed',
+        cursor: 'synthetic',
+        documents: [
+          {
+            externalId: 'synthetic-page',
+            version: 'v1',
+            canonicalUri: 'https://example.invalid/intake',
+            mediaType: 'text/html',
+            profile: 'commonmark-v1',
+            sourceUtf8: new TextEncoder().encode(
+              '# Synthetic full article\n\nComplete synthetic evidence and context.\n',
+            ),
+            rawSourceBytes: new TextEncoder().encode(
+              '<article><h1>Synthetic full article</h1><p>Complete synthetic evidence and context.</p></article>',
+            ),
+          },
+        ],
+      });
+    },
+  });
+  const intakeSource = randomUUID(),
+    intakeResource = randomUUID();
+  assert.equal(
+    (
+      await importMarkdownEvidence(
+        {blobStore, evidenceRepository: repo.evidence},
+        {
+          workspaceId: w,
+          commandIdempotencyKey: 'intake-synthetic-feed',
+          resource: {
+            workspaceId: w,
+            resourceId: intakeResource,
+            resourceKind: 'remote_document',
+            sourceKey: 'Synthetic intake feed',
+            canonicalUri: 'https://example.invalid/intake',
+          },
+          snapshot: {
+            workspaceId: w,
+            resourceId: intakeResource,
+            snapshotId: intakeSource,
+            capturedAt: '2040-01-01T00:00:00.000Z',
+            mediaType: 'text/markdown',
+          },
+          gitObservations: [],
+          profile: 'commonmark-v1',
+          sourceUtf8: new TextEncoder().encode(
+            '# Synthetic feed title\n\nShort synthetic excerpt.\n',
+          ),
+        },
+      )
+    ).status,
+    'created',
+  );
+  const intakeTasks = new AgentTaskService(
+    w,
+    taskRepo,
+    new AgentTaskActions({
+      ...common,
+      split,
+      tags,
+      relations,
+      intake,
+      intelligence: syntheticIntelligence,
+    }),
+  );
+  services.push(intakeTasks);
+  const intakeTask = await intakeTasks.start(owner, 'intake-recall-smoke', {
+    kind: 'document',
+    snapshotId: intakeSource,
+    intake: {fetchFullText: true},
+    maxRelationCandidates: 3,
+    maxRelations: 1,
+    maxModelCalls: 12,
+  });
+  await settled(intakeTasks);
+  const intakeResult = await intakeTasks.read(owner, intakeTask.taskId);
+  assert.equal(
+    intakeResult.state.status,
+    'succeeded',
+    JSON.stringify(intakeResult.state),
+  );
+  const intakeRow = await intakeRepository.read(intakeSource);
+  assert(intakeRow?.value.preparedSnapshotId);
+  assert.equal(intakeRow.value.decision, 'admitted');
+  const prepared = intakeRow.value.preparedSnapshotId;
+  assert.notEqual(prepared, intakeSource);
+  const intakeEntries = await repo.informationEntries.loadCurrentEntries(
+    w,
+    false,
+  );
+  assert(!intakeEntries.some((e) => e.snapshotId === intakeSource));
+  assert(
+    intakeEntries.some(
+      (e) =>
+        e.snapshotId === prepared &&
+        e.value.body.includes('Complete synthetic evidence and context.'),
+    ),
+  );
+  assert(
+    intakeResult.state.steps.some(
+      (step) => step.kind === 'recall' && step.recallPlan,
+    ),
+  );
+  await intake.prepare(intakeSource, {
+    fetchFullText: true,
+    blockedKinds: [],
+    preferredTopics: [],
+    excludedTopics: [],
+  });
+  assert.equal(fullFetches, 1);
+  const reports = new ReportService({
+    workspaceId: w,
+    repository: new PostgresReportRepository(runtime, w),
+    entries: repo.informationEntries,
+    evidence: repo.evidenceRead,
+    intake,
+    provider: {
+      model: 'synthetic-report-model',
+      plan: (input) =>
+        Promise.resolve({
+          groups: [
+            {
+              title: 'Synthetic report',
+              sources: input.sources.map((source) => source.handle),
+              recommended: true,
+            },
+          ],
+        }),
+      summarize: (input) =>
+        Promise.resolve({
+          title: 'Synthetic report',
+          points: [
+            {
+              text: 'Complete synthetic evidence and context.',
+              sources: input.sources.map((source) => source.handle),
+            },
+          ],
+        }),
+    },
+  });
+  reportServices.push(reports);
+  const report = (
+    await reports.create(
+      owner,
+      'synthetic-report',
+      reportRequestSchema.parse({
+        kind: 'daily',
+        date: '2040-01-01',
+        timeZone: 'UTC',
+      }),
+    )
+  ).report;
+  assert.equal(report.state.sources[0]?.snapshotId, prepared);
+  assert.equal(report.state.sources[0].intakeSnapshotId, intakeSource);
+  await reports.generate(owner, report.reportId, report.version);
+  for (
+    let i = 0;
+    i < 200 && (await reports.read(owner, report.reportId)).active;
+    i++
+  )
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  const readyReport = (await reports.read(owner, report.reportId)).report;
+  assert.equal(readyReport.state.status, 'ready');
+  assert.equal(readyReport.state.calls, 2);
+  const exportedReport = await new ReportCommands(readOnly, reports).execute(
+    'report_export',
+    {reportId: report.reportId},
+  );
+  assert(
+    JSON.stringify(exportedReport).includes(
+      'Complete synthetic evidence and context.',
+    ),
+  );
+  await assert.rejects(
+    () => reports.generate(readOnly, report.reportId, readyReport.version),
+    {code: 'report_owner_required'},
+  );
+  mark(
+    'daily report preview, bounded generation, source citations and read-only Agent export use runtime grants',
+  );
+  await intake.control(
+    prepared,
+    intakeRow.version,
+    'block',
+    'Synthetic manual block',
+  );
+  assert.equal(await intake.guard(prepared), 'intake_blocked');
+  assert.equal(await intake.guard(intakeSource), 'intake_blocked');
+  await assert.rejects(
+    () => intake.control(intakeSource, intakeRow.version, 'admit', 'Stale'),
+    {code: 'stale_intake_version'},
+  );
+  await assert.rejects(
+    () =>
+      intake.needsReview(privateId, {
+        fetchFullText: true,
+        blockedKinds: [],
+        preferredTopics: [],
+        excludedTopics: [],
+      }),
+    {code: 'private_model_transfer_forbidden'},
+  );
+  mark(
+    'full-text evidence stays separate; intake CAS, private rejection and multilingual task run through runtime grants',
+  );
+  const transfer = new PostgresM1cDomainTransferRepository(runtime);
+  const exported = await transfer.exportWorkspace(w);
+  assert.equal(
+    exported.processing.schemaVersion,
+    'struinfo.m1e-processing.v14',
+  );
+  const restoredWorkspace = randomUUID();
+  const relocated = JSON.parse(
+    JSON.stringify(exported).replaceAll(w, restoredWorkspace),
+  ) as typeof exported;
+  await transfer.restoreEmptyWorkspace(restoredWorkspace, relocated);
+  const restored = new PostgresDocumentIntakeRepository(
+    runtime,
+    restoredWorkspace,
+  );
+  assert.equal((await restored.read(intakeSource))?.value.decision, 'blocked');
+  assert.equal(
+    (await restored.read(intakeSource))?.value.preparedSnapshotId,
+    prepared,
+  );
+  assert.equal(
+    (await new PostgresIngestionRepository(runtime, restoredWorkspace).policy())
+      .settings.paused,
+    true,
+  );
+  assert.deepEqual(
+    (
+      await new PostgresReportRepository(runtime, restoredWorkspace).read(
+        report.reportId,
+      )
+    )?.state,
+    readyReport.state,
+  );
+  mark(
+    'v14 database export and empty-workspace restore preserve intake links, report drafts and spent budgets; unattended processing stays paused',
+  );
   await writeFile(
     resolve(output, 'report.json'),
     JSON.stringify(
@@ -664,8 +947,10 @@ try {
     ),
   );
 } finally {
-  for (const service of services) service.stop();
-  await Promise.all(services.map((service) => service.drain()));
+  for (const service of [...services, ...reportServices]) service.stop();
+  await Promise.all(
+    [...services, ...reportServices].map((service) => service.drain()),
+  );
   await runtime?.end();
   await admin.end();
 }

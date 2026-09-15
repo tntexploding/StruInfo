@@ -43,6 +43,20 @@ describe('materializeExternalSecretEnvironment', () => {
     expect(Object.isFrozen(result)).toBe(true);
   });
 
+  it('resolves an independent DeepSeek file and rejects simultaneous direct secrets', () => {
+    const file = join(createRoot(), 'deepseek');
+    writeFileSync(file, 'synthetic-deepseek-key\n');
+    expect(
+      materializeExternalSecretEnvironment({DEEPSEEK_API_KEY_FILE: file}),
+    ).toEqual({DEEPSEEK_API_KEY: 'synthetic-deepseek-key'});
+    expect(() =>
+      materializeExternalSecretEnvironment({
+        DEEPSEEK_API_KEY: 'synthetic-direct',
+        DEEPSEEK_API_KEY_FILE: file,
+      }),
+    ).toThrow(ConfigurationError);
+  });
+
   it('keeps direct secret values when no file form is supplied', () => {
     const result = materializeExternalSecretEnvironment({
       DATABASE_URL: 'synthetic-direct-value',

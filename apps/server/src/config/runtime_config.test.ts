@@ -146,6 +146,54 @@ describe('parseRuntimeConfig', () => {
     expect(Object.isFrozen(config.aiProposalProvider)).toBe(true);
   });
 
+  it('enables DeepSeek independently without borrowing the OpenAI secret', () => {
+    const config = parseRuntimeConfig('api', {
+      ...RUNTIME_ENVIRONMENT,
+      DEEPSEEK_API_KEY: 'synthetic-deepseek-key',
+      STRUIINFO_DEEPSEEK_MODEL: 'deepseek-synthetic',
+    });
+    expect(config.aiProposalProvider).toEqual({
+      providerKey: 'deepseek-responses-v1',
+      model: 'deepseek-synthetic',
+      apiKey: 'synthetic-deepseek-key',
+      maxOutputTokens: 800,
+      timeoutMs: 60_000,
+    });
+    expect(config.embeddingProvider).toBeUndefined();
+    expect(() =>
+      parseRuntimeConfig('api', {
+        ...RUNTIME_ENVIRONMENT,
+        OPENAI_API_KEY: 'synthetic-openai-key',
+        STRUIINFO_DEEPSEEK_MODEL: 'deepseek-synthetic',
+      }),
+    ).toThrow(ConfigurationError);
+  });
+  it.each([
+    {DEEPSEEK_API_KEY: 'synthetic-key'},
+    {STRUIINFO_DEEPSEEK_MODEL: 'deepseek-synthetic'},
+    {
+      DEEPSEEK_API_KEY: 'bad key',
+      STRUIINFO_DEEPSEEK_MODEL: 'deepseek-synthetic',
+    },
+    {
+      DEEPSEEK_API_KEY: 'synthetic-key',
+      STRUIINFO_DEEPSEEK_MODEL: 'other-model',
+    },
+    {
+      DEEPSEEK_API_KEY: 'synthetic-key',
+      STRUIINFO_DEEPSEEK_MODEL: 'deepseek-synthetic',
+      OPENAI_API_KEY: 'synthetic-openai-key',
+      STRUIINFO_OPENAI_MODEL: 'synthetic-model',
+    },
+  ])(
+    'rejects partial, invalid and ambiguous DeepSeek configuration',
+    (settings) => {
+      expect(() =>
+        parseRuntimeConfig('api', {...RUNTIME_ENVIRONMENT, ...settings}),
+      ).toThrow(ConfigurationError);
+    },
+  );
+
   it('configures embeddings independently while sharing the environment-only secret', () => {
     const embeddingOnly = parseRuntimeConfig('api', {
       ...RUNTIME_ENVIRONMENT,

@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {intakePolicySchema} from './document_intake_contract.js';
 import type {AgentTask} from './agent_task_contract.js';
 
 export const INGESTION_ACTOR_ID = 'new-materials-policy';
@@ -12,6 +13,8 @@ export const ingestionSettingsSchema = z
     maxEntries: z.number().int().min(1).max(24).default(12),
     maxRelations: z.number().int().min(0).max(8).default(4),
     maxModelCalls: z.number().int().min(1).max(64).default(24),
+    intake: intakePolicySchema.optional(),
+    maxRelationCandidates: z.number().int().min(0).max(24).optional(),
     maxDocumentsPerDay: z.number().int().min(1).max(100).default(10),
   })
   .strict()

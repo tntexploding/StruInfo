@@ -40,6 +40,57 @@ describe('Agent HTTP authentication and dispatch', () => {
     return {send, owner, agent};
   }
 
+  it('keeps report writes on the owner route and rejects bearer access there', async () => {
+    const f = fixture();
+    await f.send('/api/v1/reports/commands', undefined, {
+      operation: 'report_create',
+      input: {},
+    });
+    expect(f.owner.execute).toHaveBeenCalledWith('report_create', {});
+    expect(
+      (
+        await f.send('/api/v1/reports/commands', 'Bearer ' + 'a'.repeat(32), {
+          operation: 'report_generate',
+          input: {},
+        })
+      ).status,
+    ).toHaveBeenCalledWith(403);
+    expect(
+      (
+        await f.send('/api/v1/reports/commands', undefined, {
+          operation: 'task_start',
+          input: {},
+        })
+      ).status,
+    ).toHaveBeenCalledWith(400);
+  });
+  it('restricts the price-settings route to its two operations and rejects agent credentials', async () => {
+    const f = fixture();
+    await f.send('/api/v1/ai-price/commands', undefined, {
+      operation: 'ai_price_save',
+      input: {revision: 0, enabled: true},
+    });
+    expect(f.owner.execute).toHaveBeenCalledWith('ai_price_save', {
+      revision: 0,
+      enabled: true,
+    });
+    expect(
+      (
+        await f.send('/api/v1/ai-price/commands', 'Bearer ' + 'a'.repeat(32), {
+          operation: 'ai_price_save',
+          input: {},
+        })
+      ).status,
+    ).toHaveBeenCalledWith(403);
+    expect(
+      (
+        await f.send('/api/v1/ai-price/commands', undefined, {
+          operation: 'task_start',
+          input: {},
+        })
+      ).status,
+    ).toHaveBeenCalledWith(400);
+  });
   it('uses the same authenticated gateway for unattended policy controls', async () => {
     const f = fixture();
     await f.send('/api/v1/ingestion/commands', undefined, {

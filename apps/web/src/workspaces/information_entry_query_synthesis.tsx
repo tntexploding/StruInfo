@@ -61,12 +61,12 @@ export function InformationEntryQuerySynthesis({
 
       <p className="entry-query-synthesis__disclosure" id="ai-disclosure">
         点击回答后，你的问题和最多 8 条公开结果会发送给
-        OpenAI。隐私内容不会发送，回答也不会保存。
+        模型服务。隐私内容不会发送，回答也不会保存。
       </p>
 
       {!enabled ? (
         <p className="entry-query-synthesis__notice" aria-live="polite">
-          AI 未启用：请先在服务配置中添加 OpenAI API Key
+          AI 未启用：请先在服务配置中添加 模型服务 API Key
           和模型；本地查询仍可使用。
         </p>
       ) : privateScope ? (
@@ -112,7 +112,7 @@ export function InformationEntryQuerySynthesis({
 
       <div className="entry-query-synthesis__status" aria-live="polite">
         {synthesis.state.status === 'loading' ? (
-          <p>OpenAI 正在生成回答；你仍可继续阅读搜索结果。</p>
+          <p>模型服务 正在生成回答；你仍可继续阅读搜索结果。</p>
         ) : synthesis.state.status === 'error' ? (
           <p role="alert">{synthesis.state.message}</p>
         ) : null}
@@ -181,7 +181,8 @@ export function InformationEntryQuerySynthesisAnswer({
 
       <details className="entry-query-synthesis-evidence">
         <summary>
-          查看发送给 OpenAI 的 {response.evidence.length.toString()} 条公开内容
+          查看发送给 模型服务 的 {response.evidence.length.toString()}{' '}
+          条公开内容
         </summary>
         <ol>
           {response.evidence.map((item) => (

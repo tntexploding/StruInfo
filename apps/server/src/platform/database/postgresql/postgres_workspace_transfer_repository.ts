@@ -203,7 +203,31 @@ async function restoreInTransaction(
                 paused: true,
               }),
             }))
-          : tableSnapshot.rows,
+          : tableSnapshot.name === 'processing_agent_task' ||
+              tableSnapshot.name === 'processing_report'
+            ? tableSnapshot.rows.map((row) => {
+                const state = JSON.parse(String(row.state_text)) as Record<
+                  string,
+                  unknown
+                >;
+                if (state.errorCode !== 'ai_price_window_closed') return row;
+                return {
+                  ...row,
+                  current_version: Number(row.current_version) + 1,
+                  ...(tableSnapshot.name === 'processing_agent_task'
+                    ? {pause_requested: true}
+                    : {}),
+                  state_text: JSON.stringify({
+                    ...state,
+                    status:
+                      tableSnapshot.name === 'processing_agent_task'
+                        ? 'paused'
+                        : 'failed',
+                    errorCode: 'ai_price_resume_required',
+                  }),
+                };
+              })
+            : tableSnapshot.rows,
       ),
     ]);
   }

@@ -1,5 +1,9 @@
 import {z} from 'zod';
 import {
+  intakePolicySchema,
+  relationRecallPlanSchema,
+} from './document_intake_contract.js';
+import {
   ENTRY_TYPE_KEYWORDS,
   ENTRY_DOMAIN_KEYWORDS,
 } from '../modules/entries/index.js';
@@ -65,6 +69,8 @@ export const agentTaskRequestSchema = z.discriminatedUnion('kind', [
       maxEntries: z.number().int().min(1).max(24).default(12),
       maxRelations: z.number().int().min(0).max(8).default(4),
       maxModelCalls: z.number().int().min(1).max(64).default(24),
+      intake: intakePolicySchema.optional(),
+      maxRelationCandidates: z.number().int().min(0).max(24).optional(),
     })
     .strict(),
   z
@@ -90,7 +96,7 @@ export const agentTaskRequestSchema = z.discriminatedUnion('kind', [
 export type AgentTaskRequest = z.infer<typeof agentTaskRequestSchema>;
 export const agentTaskStepSchema = z
   .object({
-    kind: z.enum(['split', 'tags', 'relation']),
+    kind: z.enum(['intake', 'split', 'tags', 'recall', 'relation']),
     targetId: id,
     relatedEntryId: id.optional(),
     expectedRevision: version.optional(),
@@ -100,6 +106,9 @@ export const agentTaskStepSchema = z
     runId: id.optional(),
     proposalId: id.optional(),
     complete: z.boolean(),
+    outcome: z.enum(['no_relation', 'edge_budget_reached']).optional(),
+    recallPlan: relationRecallPlanSchema.optional(),
+    candidateReasons: z.array(z.string().max(240)).max(12).optional(),
   })
   .strict();
 export type AgentTaskStep = z.infer<typeof agentTaskStepSchema>;
@@ -114,8 +123,15 @@ export const agentTaskStateSchema = z
       'cancelled',
     ]),
     calls: z.number().int().min(0).max(64),
-    phase: z.enum(['split', 'tags', 'relations', 'complete']),
-    steps: z.array(agentTaskStepSchema).max(64),
+    phase: z.enum([
+      'intake',
+      'split',
+      'tags',
+      'recall',
+      'relations',
+      'complete',
+    ]),
+    steps: z.array(agentTaskStepSchema).max(80),
     errorCode: z
       .string()
       .regex(/^[a-z][a-z0-9_]{0,119}$/u)
@@ -143,6 +159,7 @@ export interface AgentTaskRepository {
   create(task: AgentTask): Promise<boolean>;
   read(workspaceId: string, taskId: string): Promise<AgentTask | undefined>;
   list(workspaceId: string): Promise<readonly AgentTask[]>;
+  listPriceDeferred?(workspaceId: string): Promise<readonly AgentTask[]>;
   saveState(
     workspaceId: string,
     taskId: string,

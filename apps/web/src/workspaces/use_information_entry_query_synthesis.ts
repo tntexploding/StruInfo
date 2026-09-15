@@ -140,6 +140,8 @@ function describeSynthesisFailure(value: unknown): string {
   ) {
     const labels: Readonly<Record<string, string>> = Object.freeze({
       ai_provider_not_configured: 'OpenAI 未配置；本地查询不受影响。',
+      ai_price_window_closed:
+        '当前为 DeepSeek 高峰时段，请在低价时段重新综合。恢复时间见设置 → AI 接入。',
       ai_query_private_scope_forbidden:
         '隐私查询不能发送给 OpenAI；请切换到“仅公开结果”。',
       ai_query_no_evidence: '当前公开查询没有可供回答的内容。',

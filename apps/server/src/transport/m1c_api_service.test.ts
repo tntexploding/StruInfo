@@ -437,6 +437,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       DEFAULT_ENTRY_SAVED_QUERIES,
       DEFAULT_WORKSPACE_UI_PREFERENCES,
+      {revision: 0, enabled: false},
     );
   });
 
@@ -572,6 +573,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       DEFAULT_ENTRY_SAVED_QUERIES,
       DEFAULT_WORKSPACE_UI_PREFERENCES,
+      {revision: 0, enabled: false},
     );
     await expect(
       service.saveInformationEntryPreferenceProfile({
@@ -941,6 +943,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       DEFAULT_ENTRY_SAVED_QUERIES,
       DEFAULT_WORKSPACE_UI_PREFERENCES,
+      {revision: 0, enabled: false},
     );
     await expect(
       service.reviseInformationEntryAssociationPolicy({
@@ -1063,6 +1066,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       DEFAULT_ENTRY_SAVED_QUERIES,
       DEFAULT_WORKSPACE_UI_PREFERENCES,
+      {revision: 0, enabled: false},
     );
 
     await expect(
@@ -1127,6 +1131,7 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       DEFAULT_ENTRY_SAVED_QUERIES,
       DEFAULT_WORKSPACE_UI_PREFERENCES,
+      {revision: 0, enabled: false},
     );
   });
 

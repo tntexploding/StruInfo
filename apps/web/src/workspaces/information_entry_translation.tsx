@@ -81,7 +81,7 @@ export function InformationEntryTranslation({
               ? '翻译服务尚未启用。配置后可按需生成。'
               : tooLarge
                 ? '标题与正文超过 24,000 字符，本次无法翻译。'
-                : '点击生成会将当前条目的标题和正文发送给 OpenAI。译文单独保存，原文保留；仅翻译已入库内容，摘要不会补全为全文。'}
+                : '点击生成会将当前条目的标题和正文发送给 模型服务。译文单独保存，原文保留；仅翻译已入库内容，摘要不会补全为全文。'}
       </p>
       <div role="status" aria-live="polite">
         {state.busy === 'reading' ? <p>正在读取已保存的译文…</p> : null}

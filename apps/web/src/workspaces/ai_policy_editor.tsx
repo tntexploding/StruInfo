@@ -1,3 +1,5 @@
+import {IntakeOptions} from './intake_options.js';
+import {DEFAULT_INTAKE_POLICY} from '../api/ai_workflow_client.js';
 import {useState} from 'react';
 import type {
   AiPolicy,
@@ -114,6 +116,62 @@ export function AiPolicyEditor({
             )}
           </div>
         </fieldset>
+        <label>
+          <input
+            type="checkbox"
+            checked={Boolean(draft.settings.intake)}
+            onChange={(e) => {
+              if (e.currentTarget.checked)
+                set({intake: structuredClone(DEFAULT_INTAKE_POLICY)});
+              else
+                setDraft((current) => {
+                  const settings = {...current.settings};
+                  delete settings.intake;
+                  return {...current, settings};
+                });
+            }}
+          />{' '}
+          入库前审核完整性与内容
+        </label>
+        {draft.settings.intake ? (
+          <IntakeOptions
+            value={draft.settings.intake}
+            onChange={(intake) => {
+              set({intake});
+            }}
+          />
+        ) : null}
+        <label>
+          <input
+            type="checkbox"
+            checked={draft.settings.maxRelationCandidates !== undefined}
+            onChange={(e) => {
+              if (e.currentTarget.checked) set({maxRelationCandidates: 12});
+              else
+                setDraft((current) => {
+                  const settings = {...current.settings};
+                  delete settings.maxRelationCandidates;
+                  return {...current, settings};
+                });
+            }}
+          />{' '}
+          多语与近义词召回（保留原标签）
+        </label>
+        {draft.settings.maxRelationCandidates !== undefined ? (
+          <label className="field">
+            <span>每篇最多检查关联候选</span>
+            <input
+              type="number"
+              min={0}
+              max={24}
+              required
+              value={draft.settings.maxRelationCandidates}
+              onChange={(e) => {
+                set({maxRelationCandidates: e.currentTarget.valueAsNumber});
+              }}
+            />
+          </label>
+        ) : null}
         <div className="ai-budget-fields">
           <label className="field">
             <span>任务模型</span>

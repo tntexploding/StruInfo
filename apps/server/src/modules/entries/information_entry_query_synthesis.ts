@@ -28,7 +28,7 @@ export interface InformationEntryQuerySynthesisServiceDependencies {
 }
 
 export class InformationEntryQuerySynthesisService implements InformationEntryQuerySynthesisServicePort {
-  public readonly providerKey = 'openai-responses-v1' as const;
+  public readonly providerKey: InformationEntryQuerySynthesisProviderPort['providerKey'];
   public readonly model: string;
   public readonly promptVersion: string;
   readonly #dependencies: Readonly<InformationEntryQuerySynthesisServiceDependencies>;
@@ -38,6 +38,7 @@ export class InformationEntryQuerySynthesisService implements InformationEntryQu
   ) {
     this.#dependencies = dependencies;
     this.model = dependencies.provider.model;
+    this.providerKey = dependencies.provider.providerKey;
     this.promptVersion = dependencies.provider.promptVersion;
   }
 

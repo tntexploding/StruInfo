@@ -1,4 +1,9 @@
 import {
+  DEFAULT_AI_PRICE_POLICY,
+  aiPricePolicySchema,
+  type AiPricePolicy,
+} from '../modules/processing/ai_price_policy.js';
+import {
   DEFAULT_ENTRY_SAVED_QUERIES,
   type EntrySavedQueries,
 } from '../modules/entries/information_entry_saved_queries.js';
@@ -331,6 +336,7 @@ export interface ReviewPreferences {
   readonly entryClassificationProfile?: Readonly<EntryClassificationProfile>;
   readonly entrySavedQueries?: Readonly<EntrySavedQueries>;
   readonly uiPreferences?: Readonly<WorkspaceUiPreferences>;
+  readonly aiPricePolicy?: Readonly<AiPricePolicy>;
 }
 
 export interface ReviewPreferencesStore {
@@ -355,6 +361,7 @@ export interface ReviewPreferencesStore {
     entryClassificationProfile?: Readonly<EntryClassificationProfile>,
     entrySavedQueries?: Readonly<EntrySavedQueries>,
     uiPreferences?: Readonly<WorkspaceUiPreferences>,
+    aiPricePolicy?: Readonly<AiPricePolicy>,
   ): Promise<Readonly<ReviewPreferences>>;
   update?<T>(
     workspaceId: string,
@@ -389,6 +396,7 @@ export interface ReviewPreferencesPatch {
   readonly entryClassificationProfile?: Readonly<EntryClassificationProfile>;
   readonly entrySavedQueries?: Readonly<EntrySavedQueries>;
   readonly uiPreferences?: Readonly<WorkspaceUiPreferences>;
+  readonly aiPricePolicy?: Readonly<AiPricePolicy>;
 }
 
 export function patchReviewPreferences(
@@ -431,6 +439,7 @@ export function patchReviewPreferences(
     patch.uiPreferences ??
       current.uiPreferences ??
       DEFAULT_WORKSPACE_UI_PREFERENCES,
+    patch.aiPricePolicy ?? current.aiPricePolicy ?? DEFAULT_AI_PRICE_POLICY,
   );
 }
 
@@ -467,6 +476,7 @@ export async function updateReviewPreferences<T>(
           update.next.entryClassificationProfile,
           update.next.entrySavedQueries,
           update.next.uiPreferences,
+          update.next.aiPricePolicy,
         );
   return Object.freeze({preferences, result: update.result});
 }
@@ -769,6 +779,7 @@ export function createReviewPreferences(
   entryClassificationProfile: Readonly<EntryClassificationProfile> = DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
   entrySavedQueries: Readonly<EntrySavedQueries> = DEFAULT_ENTRY_SAVED_QUERIES,
   uiPreferences: Readonly<WorkspaceUiPreferences> = DEFAULT_WORKSPACE_UI_PREFERENCES,
+  aiPricePolicy: Readonly<AiPricePolicy> = DEFAULT_AI_PRICE_POLICY,
 ): Readonly<ReviewPreferences> {
   const advanceActions =
     entryAutomationPolicy.advanceActions ??
@@ -783,6 +794,7 @@ export function createReviewPreferences(
     quickTags: Object.freeze([...quickTags]),
     entrySavedQueries,
     uiPreferences,
+    aiPricePolicy: Object.freeze(aiPricePolicySchema.parse(aiPricePolicy)),
     automaticKeywords: Object.freeze({
       enabled: automaticKeywords.enabled,
       includeLinkDomains: automaticKeywords.includeLinkDomains,

@@ -4,6 +4,13 @@ import {
   type AgentCommandName,
 } from '../application/agent_commands.js';
 const descriptions: Record<AgentCommandName, string> = {
+  report_preview:
+    'Preview bounded public admitted material for a daily/weekly report. Local date, time zone and original received/published date basis are explicit. Read-only.',
+  reports_list: 'List visible public report drafts and reviewed reports.',
+  report_read:
+    'Read a report, its citations, source revisions and generation/review state.',
+  report_export:
+    'Read local Markdown for a completed report; labels draft/reviewed status and preserves citations. Does not send or publish it.',
   system_status:
     'Inspect model availability, process role and configured Agent grants. No secrets are returned.',
   document_import:
@@ -19,6 +26,12 @@ const descriptions: Record<AgentCommandName, string> = {
   subscription_check:
     'Check one configured public source using a stable requestKey. Source fetch and capture may take time; reuse that key if the response is uncertain. Requires capture.',
 
+  intake_status:
+    'List public intake decisions, completeness assessments and original/full-text capture links. Read grant.',
+  intake_control:
+    'Reversibly block, manually admit or reset intake with expectedVersion and a reason. Requires automate grant. Does not delete evidence or start a task.',
+  intake_prepare:
+    'Capture the known public source page as separate evidence; never edits the feed capture. Requires capture grant. No model call.',
   ingestion_status:
     'Inspect the saved new-material policy and recent queue, including budgets and exceptions.',
   ingestion_policy_save:
@@ -62,6 +75,8 @@ export function createAgentMcpServer(
             'task_control',
             'ingestion_policy_save',
             'ingestion_item_control',
+            'intake_control',
+            'intake_prepare',
           ].includes(name),
           destructiveHint: [
             'subscription_put',
@@ -72,6 +87,7 @@ export function createAgentMcpServer(
           ].includes(name),
           idempotentHint: name === 'task_start',
           openWorldHint: [
+            'intake_prepare',
             'document_import',
             'subscription_put',
             'subscription_check',

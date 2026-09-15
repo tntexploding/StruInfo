@@ -4,6 +4,7 @@ import {
   assertM1eProcessingWorkspace,
   createEmptyM1eProcessingSnapshot,
   M1E_PROCESSING_BUNDLE_SCHEMA,
+  M1E_PROCESSING_VERSION_TWELVE_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_TEN_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_ELEVEN_BUNDLE_CODEC,
   M1E_PROCESSING_LEGACY_BUNDLE_CODEC,
@@ -31,6 +32,55 @@ import {
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('M1E processing Bundle section', () => {
+  it('upgrades v12 without creating intake decisions', () => {
+    expect(
+      M1E_PROCESSING_VERSION_TWELVE_BUNDLE_CODEC.decode({
+        schemaVersion: 'struinfo.m1e-processing.v12',
+        tables: M1E_PROCESSING_TABLES.slice(0, 22).map((t) => ({
+          name: t.name,
+          rows: [],
+        })),
+      }),
+    ).toEqual(createEmptyM1eProcessingSnapshot());
+  });
+  it('round-trips typed intake links and rejects inconsistent or arbitrary state', () => {
+    const row = {
+      workspace_id: WORKSPACE_ID,
+      snapshot_id: WORKSPACE_ID,
+      prepared_snapshot_id: null,
+      state_text: JSON.stringify({
+        decision: 'blocked',
+        origin: 'manual',
+        reason: 'Synthetic hold',
+        preparation: 'received',
+      }),
+      current_version: 1,
+      updated_at: '2040-01-01T00:00:00.000Z',
+    };
+    const source = (patch = {}) => ({
+      ...createEmptyM1eProcessingSnapshot(),
+      tables: createEmptyM1eProcessingSnapshot().tables.map((t) =>
+        t.name === 'processing_document_intake'
+          ? {...t, rows: [{...row, ...patch}]}
+          : t,
+      ),
+    });
+    expect(
+      normalizeM1eProcessingSnapshot(source()).tables.find(
+        (t) => t.name === 'processing_document_intake',
+      )?.rows,
+    ).toEqual([row]);
+    expect(() =>
+      normalizeM1eProcessingSnapshot(
+        source({state_text: '{"arbitrary":"value"}'}),
+      ),
+    ).toThrow();
+    expect(() =>
+      normalizeM1eProcessingSnapshot(
+        source({prepared_snapshot_id: '22222222-2222-4222-8222-222222222222'}),
+      ),
+    ).toThrow();
+  });
   it('upgrades v11 with empty unattended policy and queue', () => {
     expect(
       M1E_PROCESSING_VERSION_ELEVEN_BUNDLE_CODEC.decode({
