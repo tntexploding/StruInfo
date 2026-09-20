@@ -569,16 +569,16 @@ function digestText(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
+export function normalizeSourceConnectorAlias(alias: string): string {
+  return alias.trim().normalize('NFC').replace(/[\\/]/gu, '／').slice(0, 300);
+}
+
 function sourceKey(
   alias: string,
   subscriptionId: string,
   externalId: string,
 ): string {
-  const safeAlias = alias
-    .trim()
-    .normalize('NFC')
-    .replace(/[\\/]/gu, '／')
-    .slice(0, 300);
+  const safeAlias = normalizeSourceConnectorAlias(alias);
   const identity = digestText(`${subscriptionId}\u0000${externalId}`).slice(
     0,
     24,

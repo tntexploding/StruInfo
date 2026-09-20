@@ -19,6 +19,8 @@ import {
 } from './information_entry_identity.js';
 
 export const ENTRY_SPLIT_RULE_VERSION = 'struinfo.entry-split.section.v1';
+export const ENTRY_DOCUMENT_FALLBACK_RULE_VERSION =
+  'struinfo.entry-split.document-fallback.v1';
 export const AI_ENTRY_SPLIT_RULE_VERSION = 'struinfo.entry-split.ai-group.v1';
 export const MANUAL_ENTRY_SPLIT_RULE_VERSION =
   'struinfo.entry-split.manual-range.v1';
@@ -27,7 +29,7 @@ export const MANUAL_ENTRY_RESTRUCTURE_RULE_VERSION =
 export const CONFIGURABLE_ENTRY_SPLIT_RULE_VERSION =
   'struinfo.entry-split.configurable-group.v1';
 export const ENTRY_MANUAL_ORIGIN_VERSION = 'manual-entry-editor.v1';
-export const MAXIMUM_ENTRY_BODY_CODE_POINTS = 200_000;
+export const MAXIMUM_ENTRY_BODY_CODE_POINTS = 320_000;
 export const MAXIMUM_CONTENT_KEYWORDS = 32;
 
 export interface MaterializedEvidenceFragment {
@@ -81,15 +83,42 @@ export function prepareSplitInformationEntries(
 ): readonly Readonly<InformationEntryMaterializeRow>[] {
   const structure = snapshot.structures[0];
   if (structure === undefined) return Object.freeze([]);
-  const sections = structure.fragments
+  let fragments = structure.fragments
     .filter((fragment) => fragment.nodeKind === 'section')
     .sort((left, right) =>
       left.codePointRange.start !== right.codePointRange.start
         ? left.codePointRange.start - right.codePointRange.start
         : left.fragmentId.localeCompare(right.fragmentId),
     );
+  let chunkMode: InformationEntryRevisionValue['chunkMode'] = 'split';
+  let splitRuleVersion = ENTRY_SPLIT_RULE_VERSION;
+  if (fragments.length === 0) {
+    // CommonMark stores a complete document Fragment but no intake sections.
+    // Reuse its immutable locator instead of inventing or rewriting evidence.
+    const documents = structure.fragments.filter(
+      (fragment) => fragment.nodeKind === 'document',
+    );
+    const document = documents[0];
+    const normalizedText = structure.normalizedText;
+    if (
+      documents.length !== 1 ||
+      document === undefined ||
+      normalizedText === undefined ||
+      normalizedText.trim().length === 0 ||
+      document.structureId !== structure.structureId ||
+      document.codePointRange.start !== 0 ||
+      document.codePointRange.end !== Array.from(normalizedText).length ||
+      document.codePointRange.end > MAXIMUM_ENTRY_BODY_CODE_POINTS ||
+      document.selectedText !== normalizedText
+    ) {
+      return Object.freeze([]);
+    }
+    fragments = documents;
+    chunkMode = 'whole';
+    splitRuleVersion = ENTRY_DOCUMENT_FALLBACK_RULE_VERSION;
+  }
   return Object.freeze(
-    sections.map((fragment, documentOrder) => {
+    fragments.map((fragment, documentOrder) => {
       const entryId = deriveInformationEntryId(
         snapshot.snapshotId,
         structure.structureId,
@@ -108,8 +137,8 @@ export function prepareSplitInformationEntries(
           titlePath: deriveInformationEntryTitlePath(body),
           body,
           bodySha256: informationEntryBodySha256(body),
-          chunkMode: 'split' as const,
-          splitRuleVersion: ENTRY_SPLIT_RULE_VERSION,
+          chunkMode,
+          splitRuleVersion,
           isPrivate: snapshot.isPrivate === true,
           contentKeywords: Object.freeze([]),
           domains: Object.freeze([]),
@@ -120,11 +149,65 @@ export function prepareSplitInformationEntries(
   );
 }
 
+/** The same immutable evidence units are used for proposal input and acceptance. */
+export function aiSplitEvidenceFragments(
+  snapshot: Readonly<MaterializedEvidenceSnapshot>,
+) {
+  const structure = snapshot.structures[0];
+  if (!structure) return [];
+  const byPosition = (
+    a: MaterializedEvidenceFragment,
+    b: MaterializedEvidenceFragment,
+  ) =>
+    a.codePointRange.start - b.codePointRange.start ||
+    b.codePointRange.end - a.codePointRange.end ||
+    a.fragmentId.localeCompare(b.fragmentId);
+  const sections = structure.fragments
+    .filter((f) => f.nodeKind === 'section')
+    .sort(
+      (a, b) =>
+        a.codePointRange.start - b.codePointRange.start ||
+        a.fragmentId.localeCompare(b.fragmentId),
+    );
+  if (sections.length) return sections;
+  const text = structure.normalizedText;
+  if (!text?.trim()) return [];
+  const points = Array.from(text);
+  const documents = structure.fragments.filter(
+    (f) =>
+      f.nodeKind === 'document' &&
+      f.codePointRange.start === 0 &&
+      f.codePointRange.end === points.length &&
+      f.selectedText === text,
+  );
+  if (documents.length !== 1) return [];
+  const blocks: MaterializedEvidenceFragment[] = [];
+  let end = 0;
+  for (const fragment of structure.fragments
+    .filter((f) => f.nodeKind !== 'document')
+    .sort(byPosition)) {
+    const range = fragment.codePointRange;
+    if (range.end <= end) continue; // Nested inline/list children are already covered.
+    if (
+      range.start < end ||
+      points.slice(end, range.start).join('').trim() ||
+      points.slice(range.start, range.end).join('') !== fragment.selectedText
+    )
+      return documents;
+    blocks.push(fragment);
+    end = range.end;
+  }
+  return blocks.length && !points.slice(end).join('').trim()
+    ? blocks
+    : documents;
+}
+
 export function prepareAiSplitInformationEntries(
   snapshot: Readonly<MaterializedEvidenceSnapshot>,
   groups: readonly Readonly<EntryFragmentGroupInput>[],
 ): readonly Readonly<InformationEntryMaterializeRow>[] | undefined {
   return prepareGroupedInformationEntries(snapshot, groups, {
+    commonMark: true,
     splitRuleVersion: AI_ENTRY_SPLIT_RULE_VERSION,
     identityVersion: 'ai-group-v1',
     includeTitleInIdentity: false,
@@ -309,6 +392,7 @@ function prepareGroupedInformationEntries(
   snapshot: Readonly<MaterializedEvidenceSnapshot>,
   groups: readonly Readonly<EntryFragmentGroupInput>[],
   options: Readonly<{
+    commonMark?: boolean;
     splitRuleVersion: string;
     identityVersion: string;
     includeTitleInIdentity: boolean;
@@ -324,7 +408,26 @@ function prepareGroupedInformationEntries(
         ? left.codePointRange.start - right.codePointRange.start
         : left.fragmentId.localeCompare(right.fragmentId),
     );
-  const expectedIds = sections.map((fragment) => fragment.fragmentId);
+  const whole =
+    options.commonMark &&
+    groups.length === 1 &&
+    groups[0]?.fragmentIds.length === 1
+      ? structure.fragments.find(
+          (f) =>
+            f.fragmentId === groups[0]?.fragmentIds[0] &&
+            f.nodeKind === 'document' &&
+            f.codePointRange.start === 0 &&
+            f.codePointRange.end ===
+              Array.from(structure.normalizedText ?? '').length &&
+            f.selectedText === structure.normalizedText,
+        )
+      : undefined;
+  const selected = whole
+    ? [whole]
+    : options.commonMark
+      ? aiSplitEvidenceFragments(snapshot)
+      : sections;
+  const expectedIds = selected.map((fragment) => fragment.fragmentId);
   const actualIds = groups.flatMap((group) => group.fragmentIds);
   if (
     actualIds.length !== expectedIds.length ||
@@ -333,7 +436,7 @@ function prepareGroupedInformationEntries(
     return undefined;
   }
   const sectionById = new Map(
-    sections.map((fragment) => [fragment.fragmentId, fragment]),
+    selected.map((fragment) => [fragment.fragmentId, fragment]),
   );
   const rows: Readonly<InformationEntryMaterializeRow>[] = [];
   for (const [documentOrder, group] of groups.entries()) {
@@ -377,7 +480,10 @@ function prepareGroupedInformationEntries(
           titlePath,
           body,
           bodySha256: informationEntryBodySha256(body),
-          chunkMode: 'split' as const,
+          chunkMode:
+            options.commonMark && groups.length === 1
+              ? ('whole' as const)
+              : ('split' as const),
           splitRuleVersion: options.splitRuleVersion,
           isPrivate: options.isPrivate,
           contentKeywords: Object.freeze([]),

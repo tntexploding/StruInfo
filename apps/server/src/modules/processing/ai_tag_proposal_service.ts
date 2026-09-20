@@ -53,7 +53,8 @@ export interface AiTagProposalDecisionResult {
 }
 
 export interface AiTagProposalServicePort {
-  readonly providerKey: 'openai-responses-v1';
+  readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   readonly model: string;
 
   listForEntry(
@@ -81,7 +82,8 @@ export interface AiTagProposalServiceDependencies {
 }
 
 export class AiTagProposalService implements AiTagProposalServicePort {
-  public readonly providerKey: 'openai-responses-v1';
+  public readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   public readonly model: string;
   readonly #dependencies: Readonly<AiTagProposalServiceDependencies>;
 
@@ -123,7 +125,7 @@ export class AiTagProposalService implements AiTagProposalServicePort {
       targetSnapshotId: entry.snapshotId,
       privacyScope: 'public_only',
       initialStage: 'tags',
-      initialStep: '等待 OpenAI 标签提案',
+      initialStep: '等待 AI 标签提案',
     });
     if (created === 'conflict') {
       throw new AiTagProposalServiceError('ai_run_conflict');
@@ -147,7 +149,7 @@ export class AiTagProposalService implements AiTagProposalServicePort {
       expectedVersion: 1,
       status: 'running',
       currentStage: 'tags',
-      currentStep: 'OpenAI 正在生成关键词、类型和领域建议',
+      currentStep: 'AI 正在生成关键词、类型和领域建议',
       completedUnits: 0,
       totalUnits: 1,
     });
@@ -392,14 +394,22 @@ function isAcceptedTagState(
 function originVersion(
   payload: Readonly<ProcessingTagProposalPayload>,
 ): string {
-  return `openai:${payload.providerModel}:${payload.promptVersion}`;
+  const origin =
+    payload.promptVersion === 'struinfo.agent-tool.v1'
+      ? 'external-agent'
+      : payload.promptVersion.startsWith('struinfo.deepseek-')
+        ? 'deepseek'
+        : 'openai';
+  return origin + ':' + payload.providerModel + ':' + payload.promptVersion;
 }
 
 function providerErrorCode(error: unknown): AiTagProposalServiceErrorCode {
   if (
     error instanceof Error &&
     'code' in error &&
-    (error.code === 'ai_provider_timeout' ||
+    (error.code === 'ai_operations_paused' ||
+      error.code === 'ai_price_window_closed' ||
+      error.code === 'ai_provider_timeout' ||
       error.code === 'ai_provider_unavailable' ||
       error.code === 'ai_provider_rejected' ||
       error.code === 'ai_provider_invalid_response')

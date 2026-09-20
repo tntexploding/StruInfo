@@ -71,7 +71,12 @@ describe('M1C workspace transfer', () => {
       M1cDomainTransferRepositoryPort['restoreEmptyWorkspace']
     >((workspaceId, restoredSnapshot) => {
       expect(workspaceId).toBe(WORKSPACE_ID);
-      expect(restoredSnapshot.entries.tables).toHaveLength(9);
+      expect(restoredSnapshot.entries.tables).toHaveLength(10);
+      expect(
+        restoredSnapshot.entries.tables.find(
+          (table) => table.name === 'information_entry_translation',
+        )?.rows[0],
+      ).toMatchObject({title: '合成译文', body: '独立的合成中文阅读文本。'});
       expect(restoredSnapshot.associations.tables).toHaveLength(2);
       return Promise.resolve();
     });
@@ -679,7 +684,23 @@ function syntheticSnapshot(): M1cWorkspaceTransferSnapshot {
                 1,
               ),
             ]
-          : [],
+          : descriptor.name === 'information_entry_translation'
+            ? [
+                {
+                  workspace_id: WORKSPACE_ID,
+                  entry_id: '44444444-4444-4444-8444-444444444444',
+                  target_language: 'zh-CN',
+                  source_revision: 1,
+                  source_revision_id: '77777777-7777-4777-8777-777777777777',
+                  title: '合成译文',
+                  body: '独立的合成中文阅读文本。',
+                  provider_key: 'openai-responses-v1',
+                  model: 'synthetic-model',
+                  prompt_version: 'synthetic-v1',
+                  translated_at: CREATED_AT,
+                },
+              ]
+            : [],
     })),
   });
   const associations = normalizeM1dAssociationSnapshot({

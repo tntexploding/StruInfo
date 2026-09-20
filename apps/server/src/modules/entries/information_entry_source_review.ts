@@ -1,23 +1,10 @@
 import type {
   InformationEntryGraphRelationValue,
   InformationEntryGraphVerificationStatus,
+  InformationEntrySourceReview,
+  InformationEntrySourceReviewRevisions,
 } from './information_entry_association_contract.js';
 
-export interface InformationEntrySourceReviewRevisions {
-  readonly entryLowRevision: number;
-  readonly entryHighRevision: number;
-}
-export interface InformationEntrySourceReview {
-  readonly status: InformationEntryGraphVerificationStatus;
-  readonly storedStatus: InformationEntryGraphVerificationStatus | 'calculated';
-  readonly reason:
-    | 'not_reviewed'
-    | 'owner_requested'
-    | 'unbound'
-    | 'entry_changed'
-    | 'current';
-  readonly reviewedRevisions?: Readonly<InformationEntrySourceReviewRevisions>;
-}
 export type InformationEntrySourceReviewFilter =
   'pending' | 'all' | InformationEntryGraphVerificationStatus;
 export type InformationEntrySourceReviewPrivacy =

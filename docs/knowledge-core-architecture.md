@@ -1,7 +1,76 @@
 # StruInfo 知识核心架构
 
+## 上下文与长文容量修复（2026-09-20）
+
+HTML 阅读投影将表格行、图片及其说明归为连续单元，保留空单元格和引用，排除有明确标记的分享控件。既有 Snapshot 不改写；模型输入可按章节、表格和图注组织为阅读包，包边界不表示知识条目边界。
+
+完整 CommonMark 证据超过 128 个细碎片段时，使用已保存的精确全文 Fragment 保守整篇处理；不虚构新证据、不按长度强切。历史逐段提案仍可按原证据接受。仍最多 64 条目 / 128 输入单元。真实连贯长文的正文上限为 320,000 字符，含参考文献；已识别的大上下文 DeepSeek 模型允许至 360,000 字符的请求封装，未知模型保持较小输入界限。超过容量仍停止，不截断原文。
+
+未编号合集也会将明确命名的前言、订阅页脚和参考资料并回相邻条目。短合集的多语言关联检索计划最多四条合用一次模型请求，输出按条目逐一校验；每条保留自身版本、尝试次数和持久断点。拆分采用前按实际能力预留标签、召回和关系调用额度，不增加任务的已保存调用总额。
+
+所有者可在显式继续时重算因预算不足而失败的待采用拆分建议（`task_control.regenerateSplit`），仅适用于尚有原额度和尝试次数的失败任务；旧 run 以 `previousRunIds` 保留，不自动重置或重复重启。人工决定、已完成步骤、发布边界、价格时段和 AI 总控均保留。此轮仅授权部署后重跑此前诊断的 16 个公开失败文档，逐篇复核当前状态；不纳入新到材料、不启用无人值守、不提交或推送。
+
+## 批量恢复与历史待处理文档（2026-09-19）
+
+总览任务队列直接提供“批量从断点继续”“批量取消任务”；“为耗尽任务重启一轮”“处理未开始文档”收在更多批量操作中。勾选后每批提交最多 32 篇。
+取消只停止后续处理，不改变接收决定或删除原文、已完成结果；无模型配置时也可取消。取消窗口默认不勾选，支持仅选失败任务，显示逐篇状态和原因。已完成、已取消和被替代的旧任务不列入。弹窗打开后固定所见版本，提交逐篇检查版本并报告部分失败；取消后不能直接继续该任务。容量超限等不可直接重试的问题不列入断点继续。
+继续保留断点与剩余额度；重启仅针对额度或尝试次数耗尽的失败文档任务，开启同额度的新一轮，保留已完成步骤、前驱记录和累计历史调用数，旧任务不能再次写入。
+较新的人工修改与正文版本冲突须先处理，批量操作不覆盖。
+历史待处理范围为已接受或旧版直接收存的公开文档，排除待审、拒绝、暂缓、已完成／取消的任务和重复来源版本；创建新任务仍经过接收规则。
+继续、新建与重启遵守 AI 总控、串行队列、原有价格窗口及既有确认入库规则；取消不受模型或价格许可限制。不启用无人值守订阅或自动重启。
+此前授权的历史批次已分批入队；本次增补取消控件不自动执行真实任务。真实资料与操作记录保存在仓库外。
+
+## 统一文档处理与入库（2026-09-19，ADR 0085）
+
+文档为连续任务的核心：审核接收 → 拆分 → 标签与联系 → 确认入库。
+文档入口提交的 AI 审核默认走完整任务；人工接受可同时送入处理队列。
+处理中保存断点，工作台可读可编辑；未完成、被拒收或当前版本未确认的文档不进入查询、RAG、图谱或新报告选材。
+AI 全流程成功后确认入库；人工修改公开文档后通过“确认入库”提交当前全部条目版本。
+外部 Agent 使用同一确认边界，独立拆分/标注任务不自动发布。
+
+总览 AI 小框仅显示总控、当前状态和处理数字；右侧任务队列显示逐篇阶段、发起者、等待原因、恢复/暂停/取消与文档跳转。
+内部模型请求串行执行，发出前再次检查全局许可和价格窗口。
+失败保留进度、尝试次数及调用预算；人工暂停和历史失败不会因为部署而自动继续。
+既有无人值守开关、来源范围、私密边界及 Agent 授权保持不变。
+未受任务管理的历史资料保持可读；从本次开始手动修改或重新处理时进入确认规则。
+无需数据库迁移或新依赖，发布确认记录在既有接收 JSON 中。
+
+## 文档工作区与现有应用边界（2026-09-19）
+
+ADR 0084 的工作区重组复用接收、Entry、关系、处理任务和报告应用服务。临时接收翻译是仅供当前阅读的派生值，不创建 Entry 或改写接收决定；公开可见性和最终 dispatch 检查先于模型传输。只重做标签的任务冻结既有 Entry 版本且跳过拆分和关系阶段。机器译文重做校验当前 Entry 版本及既有译文时间，人工外部译文不覆盖。自然语言提问按问题匹配现有公开材料后进入原引用回答服务；材料不足时不生成无据回答。月报、专题与确定性摘录扩展现有报告请求 JSON，无新增表；旧请求缺省仍按原 AI 日/周报方式读取。私有模型传输、外部 Agent 授权、无人值守范围均未扩大。
+
+> 2026-09-19 标签修正：不硬压缩数量；合辑首条区分导语与本条主题；确认别名共用于查询和 RAG，保持原标签、隐私与游标解释；文档覆盖概览与条目标记分层；长文索引保留标签优先级。详见 [当前状态](current-project-state.md#标签归属与检索修正2026-09-19)。已有向量输入变更后须显式刷新或重建，不新增迁移、依赖或自动处理范围。
+
+## 合辑阅读单元与预算预检（2026-09-18）
+
+拆分适配器只以编号标题提示候选边界，并由封闭模型结果选择整篇或独立合集；各组声明 self / previous / next 上下文依赖，完整连续分区经校验后仅合并相邻依赖边；模型已确认编号独立合集时，非编号新闻起点的边界也合并，保留每条新闻的完整正文。选择、合并数量和理由保存在原有 proposal summary；证据重建、持久载荷及外部 Agent 分组契约不变。
+
+文档任务在接受拆分前预留条目标签数、启用多语召回时的逐条调用数，以及文档级候选检查上限。预算不足停止接受，保留提案；不增加冻结的调用额度。召回计划保持紧凑，召回请求启用结构响应的安全错误分类，不保存原始响应；其他消费者保持原错误契约。任务恢复不重做已完成阶段或重置尝试数。
+
+## Event-first report planning (ADR 0083)
+
+The model groups every frozen candidate without seeing a story quota. The
+application validates complete, non-overlapping coverage and selects recommended
+groups under the existing limit; remaining groups stay in typed report state.
+Optional publication/receipt metadata and point roles preserve older report
+reads without modifying evidence or adding a model stage or migration.
+
+## Price-aware model dispatch (ADR 0082)
+
+`AiPriceService` owns the versioned external workspace setting and clock-based Beijing tariff check. Composition injects a guarded fetch into every Responses adapter. Durable document/report services defer before budget reservation and refund only a final-dispatch price rejection. A bounded minute poll resumes only price waits under existing authority; restored packages require explicit continuation. No migration or new provider is introduced. The historical unconditional restart statements below now have this narrow ordinary-restart exception.
+
+## Reviewable reports (ADR 0081)
+
+`ReportService` owns public admitted-entry selection, bounded model planning/summarization, source revision checks, CAS edits and export. `ReportCommands` is shared by the owner HTTP surface and four read-only Agent/MCP tools; no Agent write grants change. The report repository stores closed typed state in `processing_report` (migration 000038). Processing Bundle v14 includes reports; older sections upgrade with empty history. Restart/restore never invokes a report model automatically. Full Entry bodies are read only for selected summaries, while the durable report retains source identities, versions, short excerpts and separate model/manual wording. See [daily/weekly reports](daily-weekly-reports.md).
+
+## 2026-09-13：接收审核与关联召回
+
+DocumentIntakeService 复用受限 WebSourceConnector 和 Evidence 导入，processing_document_intake 保存原始 Snapshot → 正文 Snapshot、版本化收件决定和类型化审核结果。模型调用期间不持有状态锁，写回通过 CAS 保留人工决定；获取全文幂等，失败暂缓而不静默处理摘要。AgentTaskService 的可选 intake / recall 阶段沿用持久预算与显式恢复。原请求身份保持稳定，拆分与后续标签针对实际正文 Snapshot。
+
+RecallPlan 是有界概念及中英文检索变体列表，持久化在已有任务状态中。局部词法召回结合原始词、用户确认别名链、标题及正文，按命中通道与词项区分度排序并按来源去重，再经原有配对模型提案与接受用例写回。maxRelationCandidates 和 maxRelations 分别限制检查与写入，所有模型阶段共享 maxModelCalls。不新增向量或模型服务，不把检索词推断为规范词表。
+
 - 状态：M1M 单机生产边界与 M2-P5A–D 生产收口已完成
-- 最近更新：2026-09-05（维护阶段，不改变已接受架构）
+- 最近更新：2026-09-12（代码职责核对；记录下一阶段双通道接入边界）
 - 当前运行约束：维护基线继续采用私人单用户 `all` 单实例；跨进程共享偏好写入仍遵守 DH-012，见[维护交接](maintenance-handoff.md)
 - 相关决策：[ADR 0005](adr/0005-versioned-knowledge-core-and-ai-optional-operations.md)、[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)、[ADR 0007](adr/0007-information-entry-first-document-processing.md)、[ADR 0008](adr/0008-current-entry-state-and-portable-personal-data.md)、[ADR 0009](adr/0009-retire-superseded-m1c-runtime.md)、[ADR 0010](adr/0010-entry-centered-formal-knowledge-graph.md)、[ADR 0011](adr/0011-association-derived-formal-graph-edges.md)、[ADR 0012](adr/0012-provider-neutral-processing-runs-and-proposals.md)、[ADR 0013](adr/0013-openai-entry-tag-proposals.md)、[ADR 0014](adr/0014-openai-entry-association-proposals.md)、[ADR 0015](adr/0015-openai-entry-split-proposals.md)、[ADR 0016](adr/0016-manual-entry-fragment-grouping.md)、[ADR 0017](adr/0017-manual-within-fragment-entry-boundaries.md)、[ADR 0018](adr/0018-local-text-file-import.md)、[ADR 0019](adr/0019-local-html-pdf-import.md)、[ADR 0020](adr/0020-explainable-lexical-entry-search.md)、[ADR 0021](adr/0021-query-association-and-result-comparison.md)、[ADR 0022](adr/0022-evidence-bounded-ai-query-synthesis.md)、[ADR 0023](adr/0023-deterministic-entry-exploration-policy.md)、[ADR 0024](adr/0024-versioned-git-source-subscriptions.md)、[ADR 0025](adr/0025-explainable-entry-preference-profile.md)、[ADR 0026](adr/0026-entry-automation-policy-dry-run.md)、[ADR 0027](adr/0027-recoverable-entry-automation-routing-execution.md)、[ADR 0046](adr/0046-codex-operated-bulk-ingestion.md)
 - 当前实现与未完成项：[当前项目状态与实现清单](current-project-state.md)
@@ -12,6 +81,58 @@
 - 当前正式知识维护决策：[ADR 0042](adr/0042-formal-knowledge-relation-semantics-and-source-review.md)
 - 当前检索与性能决策：[ADR 0043](adr/0043-rebuildable-entry-search-index-and-rag.md)、[ADR 0044](adr/0044-evidence-driven-local-performance.md)
 - 当前生产运行决策：[ADR 0045](adr/0045-operational-production-baseline.md)
+
+## 2026-09-12：上下文保留的内容单元
+
+[ADR 0079](adr/0079-context-preserving-document-processing.md)沿用原有 Snapshot/Fragment/Entry 分层。模型适配器先判定整篇或独立集合，连续分组仍由本地证据重建；单组 AI Entry 使用 whole。无关系结果存为成功的 ProcessingRun，无提案和图谱写入；任务通过闭合状态识别并记录 no_relation，恢复时不重复调用。HTML 投影保留安全图片引用和图注，阅读层继续显式打开媒体。原文不重写，不新增表或迁移。
+
+## 2026-09-12：双通道闭环与操作面板
+
+ADR 0077 的 AgentCaptureService 复用现有证据导入及 SourceSubscriptionService，传输层只接收封闭公开配置。源目录使用版本检查，执行前在来源串行区间内再次核对授权。外部 split 与内置 split 共用 AiSplitProposalService；通用 Markdown 原文片段的选择与接纳由 entries 的纯函数统一，不允许请求携带替代正文。
+
+AiWorkflowPanel 和独立策略编辑器分别管理远端状态与本地草稿，调用相同 owner 业务接口。PostgresIngestionRepository 汇总真实队列状态和调用尝试；关系运行读取带回完整提案载荷，ProcessingRun 幂等创建只比较不可变身份。没有新增反向模块依赖、数据库表或恢复格式。
+
+## 2026-09-12：新材料自动处理连接
+
+ADR 0076 的 IngestionService 管理保存策略、队列和现有 AgentTaskService；模型调用前及提案接受前复核当前策略。原文 PostgreSQL 适配器只有一个可选的新 Snapshot 事务回调，组合层绑定手动或订阅来源，并在同事务写入队列。SourceSubscriptionService 通过注入端口辨认自动处理所有权，避免与旧确定性首次拆分竞争；不反向导入应用层。
+
+策略与队列存于外部工作区数据库，冻结范围、预算、版本和授权人。处理任务、HTTP 与 MCP 复用应用服务，worker/all 通过有界定时器推进，外部 Agent 管理需独立 automate grant。Processing Bundle v12 在恢复时强制暂停策略；原有兼容段保持可读。
+
+## 2026-09-12：两条通道的运行装配
+
+[ADR 0075](adr/0075-bounded-ai-tasks-and-agent-interface.md)沿共享应用层增加 AgentCommands、AgentTaskService 与 AgentTaskActions。HTTP 独立装配所有者和受限 Agent 身份；MCP stdio 适配器只转发固定业务命令。任务状态存于 processing_agent_task，已有 ProcessingRun/类型化提案记录模型调用和写回证据。每任务数据库 advisory lock 防止重复执行，本进程按队列逐份执行；暂停和取消保留已完成写入，重启后显式恢复。原有三种 AI 接受命令继续负责证据和版本校验。内部自动联系排除已有覆盖关系，并在人工修改后停止。
+
+以上为第二步原始范围；第三步现已通过 ADR 0076 的策略与事务队列连接 SourceSubscriptionService。网页常驻任务面板仍未增加。
+
+## 2026-09-12：代码职责与双通道接入边界
+
+当前继续采用模块化单体。源码职责如下；路径相对于仓库根。
+
+| 位置                                                      | 当前职责                                                 |
+| --------------------------------------------------------- | -------------------------------------------------------- |
+| `apps/server/src/entrypoints`、`composition`、`lifecycle` | 角色启动、依赖注入、资源关闭及订阅调度                   |
+| `apps/server/src/modules/evidence`                        | 不可变来源、文档解析、Fragment 及证据校验                |
+| `apps/server/src/modules/entries`                         | Entry、结构、标签、联系、查询、图谱及对应端口和纯策略    |
+| `apps/server/src/modules/processing`、`subscriptions`     | 有类型的 AI 提案、路由/批次任务与来源检查编排            |
+| `apps/server/src/platform`                                | PostgreSQL、Blob/偏好文件、来源连接器与模型供应商适配    |
+| `apps/server/src/application`                             | 共享文档、条目、联系、任务用例；固定工作区执行身份与授权 |
+| `apps/server/src/transport`                               | HTTP 解析与响应映射；尚未被第二调用方复用的高级操作编排  |
+| `apps/server/src/workspace_transfer`、`operations`        | 数据包兼容、备份恢复与维护操作                           |
+| `apps/web/src/app.tsx`、`api`                             | 前端组合、导航、当前 HTTP 契约及客户端                   |
+| `apps/web/src/workspaces`、`components`                   | 文档工作区与高级工具、阅读控件、侧栏和本地交互状态       |
+| `apps/server/migrations`、历史数据包段                    | 前向迁移与恢复兼容，不能因旧页面退出主导航而删除         |
+
+静态审计未发现运行时模块循环或业务模块依赖 `platform` / `transport` / `composition`。三处类型循环已经按职责解除：来源复核数据归图谱契约，索引刷新仅依赖所需 repository 方法，健康契约异常归解析契约。
+
+`M1cApiService` 仍承载多类 HTTP 请求解析和业务编排；`App` 仍集中装配较多工作区回调。这是后续扩展需要控制的集中点，不以任意行数为依据拆文件。接入第二调用方时，应从选中的业务路径提取可独立调用的用例，逐步让 HTTP 与 MCP 共用，不复制 HTTP 方法、依赖 React 回调或直接写表。
+
+已接受的下一阶段目标由[路线图](roadmap.md#下一阶段内部-ai-自动处理与外部-agent-接口)控制：内部后台执行器与外部 Agent 适配器共享用例；模型适配器只提供受约束结果，应用服务校验后写入。[ADR 0074](adr/0074-shared-application-use-cases-and-execution-authority.md)已定义进程内固定工作区身份与独立读取授权，并抽取 11 个现有 HTTP 入口的业务实现。执行身份不来自请求正文；HTTP 明确装配所有者，后续 Agent/后台策略分别装配委托身份。委托身份默认无权执行人工写入、取消任务或调用模型。持久授权、自动接受、幂等阶段执行与来源审计在下一增量定义，不能由本地只读权限推导。
+
+当前 `AutomationPolicy` 的路由/确定性推进以及三类手动接受 AI 提案，均不隐含这个未来自动执行权。尤其不能在订阅已确定性物化后再调用只支持空 Snapshot 的 AI 拆分；未来应在物化前选定路径。当前单用户固定工作区、外部配置及既有数据包兼容边界继续有效。
+
+## 2026-09-11：内容工作区与界面配置
+
+[ADR 0073](adr/0073-content-workspaces-and-interface-preferences.md)以五工作区重组既有命令入口，Document/Entry、证据、图谱与 Provider 的写边界保持一致。`uiPreferences` 只含版本、默认主题及五页各自受限的有序按钮子集；存于外部偏好文件，沿用工作区内原子更新、乐观版本检查与个人数据包迁移。旧文件和旧包采用默认布局。此字段不含内容、密钥、隐私可见性或执行权限。
 
 ## 1. 核心结论
 
@@ -653,6 +774,7 @@ ADR 0010/0011 接受的页面对象、检索语义和边来源已由 M1E-2 实�
 - `remote_document` 通用准备器从外部身份、原始字节和服务端 Markdown 投影派生幂等 Resource/Snapshot，精确原始字节继续进入外部内容寻址 Blob；
 - `builtin.rss-atom.v1` 只读取公开 HTTPS RSS/Atom，拒绝凭据、redirect、DTD 和本地/私有目标，限制 20 秒、1 MiB 和 20 条；不跟随 item link；
 - cursor 绑定 Feed 摘要、条目身份/版本 token、ETag 与 Last-Modified；整批入库及可选确定性物化/分流成功后才由订阅服务提交；
+- 在当前 `all` 单实例中，同订阅的 API/定时检查按服务内执行队列串行，取得执行位后重读配置、成功游标和到期状态；失败释放执行位，不同订阅不互锁，不扩展跨进程共享写入边界；
 - `builtin.json-api.v1` 只执行公开 HTTPS GET；以受限点分路径映射记录，独立处理同次分页和跨次增量 cursor，限制 20 秒、每页 1 MiB、最多 5 页/32 条，并在超限时整体失败；
 - JSON API 可选 Bearer 只保存环境变量名并在请求时读取秘密；不持久化 token，不执行脚本/JSONPath，也不抓取记录链接；
 - `builtin.web.v1` 只读取用户明确填写的一个公开 HTTPS 首页与最多七个 root-relative 同源路径；服务端从 `article`、`main` 或正文提取 Markdown，拒绝私网、redirect 和非 HTML，不执行脚本或发现链接；
@@ -830,3 +952,16 @@ ADR 0069 的独立读取端口仅接收 1–20 个显式 Entry/revision/revision
 生成重新计算预览摘要，拒绝条目版本变化或关系变化；只允许服务器生成的 Markdown 进入外部文件端口。
 文件采用独占临时写与重命名，HTTP 返回安全文件名与相同内容供浏览器下载。
 没有迁移、领域写入、Provider 或 Bundle 增量；现有个人数据包仍承担完整恢复。见[交付记录](cited-entry-export.md)。
+
+## 按需译文派生层（ADR 0070）
+
+`EntryTranslationService` 只持有单条公开 Entry 读取、译文仓储和可选翻译 Provider；没有 Entry/Evidence 写端口。`000032` 建立 `information_entry_translation`，按 workspace/Entry/zh-CN 保存一份带 revision number/UUID 的阅读缓存。写入在 workspace 锁内检查当前公开结构和版本，读取与当前 Entry 联接过滤；原文变化使旧缓存不可见。Entry Bundle v6 携带该表，旧版本补空表。源正文和译文都位于外部数据边界，原文词项/向量投影和标签不复制译文。参见 [ADR 0070](adr/0070-on-demand-entry-translation.md)。
+
+ADR 0071 为检索服务注入仅能读取当前公开译文的端口；它按工作区、当前结构和原文双版本联接缓存，把缓存身份与原文索引候选合并，再由既有搜索核心按选定字段和模式匹配。
+结果保持原 Entry 与 Fragment 身份，新增译文命中原因，同一逻辑字段的双语命中不重复参与排序。
+有效缓存直接读取，保存或恢复后无需重建原文索引；没有第二套 Entry、图谱节点、译文向量或自动翻译权限。
+查询摘要使用 v3，游标信封保持 v2；见 [ADR 0071](adr/0071-cached-translation-entry-search.md)。
+
+## 外部译文导入（ADR 0072）
+
+现成译文复用EntryTranslationService的公共当前来源检查与工作区锁写入。000033只扩展已存在译文表的来源约束；provided-translation-v1的model/prompt_version为空，不假称API生成。当前同版本缓存由首次提交者保留；导入幂等或冲突，Provider晚到结果不能覆盖。Entry Bundle v7读取v6原表行和更旧空译文状态。

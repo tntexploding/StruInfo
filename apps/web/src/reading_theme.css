@@ -1,0 +1,345 @@
+/* Shared reading workspace surfaces. Existing product tools retain their layout. */
+.workspace-view {
+  min-block-size: 0;
+  animation: none;
+}
+[hidden] {
+  display: none !important;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+html[data-ui-family='struinfo-reading'] {
+  --si-family-ink: var(--si-color-bg-shell);
+  --si-family-paper: var(--si-color-text-primary);
+  --si-family-signal: var(--si-color-signal);
+  --si-family-radius: var(--si-radius-control);
+}
+.workspace-grid,
+.primary-rail::after,
+.workflow-navigation__list::before,
+.workflow-navigation__node,
+.primary-navigation__index {
+  display: none;
+}
+.product-shell {
+  grid-template-columns: var(--si-navigation-width) minmax(0, 1fr);
+}
+.primary-rail {
+  border-color: var(--si-color-border-subtle);
+}
+.primary-rail__identity {
+  display: flex;
+  flex-shrink: 0;
+  padding: 1rem;
+  border: 0;
+  border-radius: var(--si-radius-control);
+  background: transparent;
+  justify-content: flex-start;
+  text-align: start;
+  transition: background-color var(--si-motion-direct) var(--si-motion-ease);
+}
+.primary-rail__identity:hover,
+.primary-rail__identity[aria-current='page'] {
+  background: var(--si-color-surface-1);
+}
+.primary-rail__identity[aria-current='page'] {
+  box-shadow: inset 3px 0 0 var(--si-color-signal);
+}
+.primary-rail__identity:active {
+  background: var(--si-color-surface-2);
+}
+.primary-rail__mark {
+  display: grid;
+  place-items: center;
+  inline-size: 2.5rem;
+  block-size: 2.5rem;
+  border-radius: 0.8rem;
+  background: var(--si-color-signal);
+  color: var(--si-color-signal-ink);
+  letter-spacing: -0.04em;
+  box-shadow: var(--si-shadow-control);
+}
+.primary-rail__name {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.primary-navigation {
+  padding: 0.75rem;
+  gap: 0.375rem;
+}
+.workflow-navigation__list {
+  gap: 0.375rem;
+}
+.workflow-navigation__list li[data-group-start='true'] {
+  margin-block-start: 1.125rem;
+}
+.workflow-shell .primary-navigation__item {
+  grid-template-columns: 1.25rem minmax(0, 1fr);
+  gap: 0.75rem;
+  min-block-size: 2.875rem;
+  border: 1px solid transparent;
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.875rem;
+}
+.primary-navigation__item svg {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+}
+.primary-navigation__item[data-active='true'] {
+  border-color: var(--si-color-border-subtle);
+  background: var(--si-color-surface-1);
+  color: var(--si-color-signal);
+  box-shadow: var(--si-shadow-control);
+}
+.primary-navigation__item::before {
+  inset-inline-start: 0.25rem;
+  inset-block: 0.7rem;
+  border-radius: 1rem;
+}
+.primary-navigation__copy strong {
+  font-size: 0.9375rem;
+  font-weight: 650;
+}
+.primary-rail__hint {
+  padding: 1.25rem;
+  margin-block-start: auto;
+  color: var(--si-color-text-muted);
+  font-size: 0.75rem;
+}
+.product-command-bar {
+  background: var(--si-color-bg-canvas);
+  border: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-inline: 1.5rem;
+  gap: 1rem;
+}
+.command-status {
+  justify-self: start;
+  gap: 1.25rem;
+}
+.command-status > div {
+  inline-size: auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0;
+  border: 0;
+}
+.command-status dd {
+  font-family: var(--si-font-ui);
+}
+.theme-control {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  color: var(--si-color-text-secondary);
+  font-size: 0.8125rem;
+}
+.theme-control select {
+  max-inline-size: 7rem;
+  border: 1px solid var(--si-color-control-edge);
+  border-radius: var(--si-radius-control);
+  background: var(--si-color-surface-1);
+  padding: 0.375rem 0.5rem;
+}
+.product-workspace {
+  padding: 1rem 1.5rem 1.5rem;
+}
+.workflow-page-heading {
+  border: 0;
+  padding-block-end: 0;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.workflow-page-heading h1 {
+  font-size: 1.625rem;
+  letter-spacing: -0.035em;
+}
+.workflow-page-heading p:last-child {
+  margin-block-start: 0.25rem;
+}
+.primary-action,
+.secondary-action,
+.row-action,
+.icon-action {
+  font-weight: 600;
+  box-shadow: var(--si-shadow-control);
+}
+.secondary-action,
+.row-action,
+.icon-action {
+  border-color: var(--si-color-control-edge);
+  background: var(--si-color-surface-raised);
+}
+.primary-action:hover:not(:disabled) {
+  background: color-mix(
+    in srgb,
+    var(--si-color-signal),
+    var(--si-color-signal-ink) 10%
+  );
+  border-color: var(--si-color-signal);
+  color: var(--si-color-signal-ink);
+  transform: none;
+}
+.secondary-action:hover:not(:disabled),
+.row-action:hover:not(:disabled),
+.icon-action:hover:not(:disabled) {
+  background: var(--si-color-surface-2);
+  color: var(--si-color-text-primary);
+}
+.primary-action:active:not(:disabled),
+.secondary-action:active:not(:disabled),
+.row-action:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+.field input,
+.field select,
+.field textarea,
+.search-query input {
+  background: var(--si-color-surface-1);
+  border-color: var(--si-color-control-edge);
+}
+.field input:hover,
+.field select:hover,
+.field textarea:hover,
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  background: var(--si-color-surface-1);
+}
+.status-chip,
+.record-count {
+  border-radius: 0.5rem;
+}
+.evidence-list,
+.entry-editor,
+.entry-document-panel {
+  border-radius: var(--si-radius-surface);
+}
+.evidence-rail {
+  background: var(--si-color-surface-1);
+  box-shadow: var(--si-shadow-paper);
+}
+.evidence-rail__open-document {
+  align-self: start;
+  margin: 0.75rem 1rem;
+}
+.entry-body-editor {
+  min-inline-size: 0;
+}
+.entry-body-editor > summary {
+  padding-block: 0.5rem;
+  color: var(--si-color-text-secondary);
+}
+.entry-body-editor > .field {
+  margin-block-start: 0.5rem;
+}
+.entry-editor[data-presentation='review'] .entry-body-editor > summary {
+  display: none;
+}
+@media (max-width: 63.9375rem) {
+  .product-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  .primary-rail {
+    position: static;
+    block-size: auto;
+    grid-column: 1;
+    grid-row: 1;
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--si-color-border-subtle);
+    flex-direction: row;
+    align-items: center;
+    overflow: visible;
+  }
+  .primary-rail__identity {
+    padding: 0.75rem;
+    min-block-size: 0;
+  }
+  .primary-rail__name,
+  .primary-rail__hint {
+    display: none;
+  }
+  .primary-navigation {
+    min-inline-size: 0;
+    flex: 1;
+    padding: 0.5rem;
+    overflow-x: auto;
+  }
+  .workflow-navigation__list {
+    display: flex;
+    inline-size: max-content;
+    max-inline-size: none;
+    flex-wrap: nowrap;
+  }
+  .workflow-navigation__list li {
+    flex: 0 0 auto;
+  }
+  .workflow-navigation__list li[data-group-start='true'] {
+    margin: 0;
+  }
+  .workflow-shell .primary-navigation__item {
+    grid-template-columns: auto;
+    padding-inline: 0.875rem;
+    min-block-size: 2.75rem;
+  }
+  .primary-navigation__item svg {
+    display: none;
+  }
+  .product-command-bar {
+    grid-row: 2;
+    grid-column: 1;
+    min-block-size: 3rem;
+    padding: 0.5rem 1rem;
+  }
+  .product-workspace {
+    grid-row: 3;
+    grid-column: 1;
+    padding: 0.75rem 1rem 1rem;
+  }
+}
+@media (max-width: 39.9375rem) {
+  .product-command-bar {
+    gap: 0.5rem;
+    padding-inline: 0.75rem;
+  }
+  .command-status {
+    gap: 0.625rem;
+    flex-wrap: wrap;
+  }
+  .command-status > div {
+    gap: 0.25rem;
+  }
+  .command-status > div:first-child {
+    display: none;
+  }
+  .theme-control > span {
+    display: none;
+  }
+  .product-workspace {
+    padding-inline: 0.75rem;
+  }
+  .workflow-page-heading h1 {
+    font-size: 1.5rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --si-motion-direct: 0ms;
+    --si-motion-reveal: 0ms;
+    --si-motion-attention: 0ms;
+  }
+  .primary-action:active:not(:disabled),
+  .secondary-action:active:not(:disabled),
+  .row-action:active:not(:disabled) {
+    transform: none;
+  }
+}

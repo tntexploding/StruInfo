@@ -18,6 +18,38 @@ const ENTRY_ID = '44444444-4444-4444-8444-444444444444';
 const FRAGMENT_ID = '55555555-5555-4555-8555-555555555555';
 
 describe('PostgresProcessingRunRepository', () => {
+  it('replays a completed run without comparing mutable progress, but rejects identity changes', async () => {
+    const pool = createPool((sql) => {
+      if (sql === READ_WORKSPACE_SQL) return rows({workspace_id: WORKSPACE_ID});
+      if (sql.includes('WHERE workspace_id = $1 AND idempotency_key = $2'))
+        return rows({
+          run_id: RUN_ID,
+          idempotency_key: 'synthetic-run',
+          origin: 'deterministic',
+          provider_key: null,
+          target_snapshot_id: null,
+          privacy_scope: 'public_only',
+          current_stage: 'tags',
+          current_step: 'Completed',
+        });
+      return rows();
+    });
+    const repository = new PostgresProcessingRunRepository(pool);
+    const input = {
+      workspaceId: WORKSPACE_ID,
+      runId: RUN_ID,
+      idempotencyKey: 'synthetic-run',
+      origin: 'deterministic' as const,
+      privacyScope: 'public_only' as const,
+      initialStage: 'import' as const,
+      initialStep: 'Waiting',
+    };
+    await expect(repository.createRun(input)).resolves.toBe('unchanged');
+    await expect(
+      repository.createRun({...input, privacyScope: 'include_private'}),
+    ).resolves.toBe('conflict');
+  });
+
   it('loads recent runs with typed proposals and exact Fragment evidence', async () => {
     const pool = createPool((sql) => {
       if (
@@ -121,6 +153,9 @@ describe('PostgresProcessingRunRepository', () => {
       }),
     ).resolves.toBe('applied');
     expect(statements).toContain(ACQUIRE_WORKSPACE_WRITE_LOCK_SQL);
+    expect(statements).toContain(
+      'INSERT INTO struinfo.workspace(workspace_id) VALUES ($1) ON CONFLICT DO NOTHING',
+    );
     expect(
       statements.some((sql) =>
         sql.startsWith('INSERT INTO struinfo.processing_run'),

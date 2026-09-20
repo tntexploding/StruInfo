@@ -1,4 +1,9 @@
 import type {
+  EntryTranslationRepositoryPort,
+  EntryTranslationSearchRepositoryPort,
+} from '../../../modules/entries/information_entry_translation.js';
+import {PostgresEntryTranslationRepository} from './postgres_entry_translation_repository.js';
+import type {
   InformationDocumentWorkingCopyRepositoryPort,
   InformationDocumentTagRepositoryPort,
   InformationEntryAssociationRepositoryPort,
@@ -48,6 +53,8 @@ import type {EntryMarkdownExportRepositoryPort} from '../../../modules/entries/i
 import {PostgresEntryMarkdownExportRepository} from './postgres_entry_markdown_export_repository.js';
 
 export interface PostgresRepositorySet {
+  readonly entryTranslations: EntryTranslationRepositoryPort &
+    EntryTranslationSearchRepositoryPort;
   readonly entryMarkdownExports: EntryMarkdownExportRepositoryPort;
   readonly evidence: EvidenceRepositoryPort;
   readonly evidenceRead: EvidenceReadRepositoryPort;
@@ -78,6 +85,7 @@ export function createPostgresRepositories(
 ): Readonly<PostgresRepositorySet> {
   const entryAutomation = new PostgresEntryAutomationExecutionRepository(pool);
   return Object.freeze({
+    entryTranslations: new PostgresEntryTranslationRepository(pool),
     entryMarkdownExports: new PostgresEntryMarkdownExportRepository(pool),
     evidence: new PostgresEvidenceRepository(pool),
     evidenceRead: new PostgresEvidenceReadRepository(pool),

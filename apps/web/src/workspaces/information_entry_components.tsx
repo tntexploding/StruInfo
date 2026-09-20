@@ -1,5 +1,7 @@
 import {useId, type ReactNode} from 'react';
 
+import {ReadingContent} from '../components/reading_content.js';
+import {readingTitle, sourceShortName} from '../components/reading_text.js';
 import type {
   AiTagProposalDecisionResponse,
   AiTagProposalListResponse,
@@ -324,10 +326,11 @@ export function InformationEntryResults({
           <span>条目列表</span>
           <strong>{state.response.totalCount.toString()}</strong>
         </header>
-        <ol>
+        <ol key={pageIndex} aria-label="本页条目" tabIndex={0}>
           {state.response.items.map(
             ({
               association,
+              aliasMatches,
               entry,
               filterReasons,
               matchReasons,
@@ -339,6 +342,7 @@ export function InformationEntryResults({
                 <button
                   type="button"
                   data-active={entry.entryId === selectedEntryId}
+                  title={readingTitle(entry.value.titlePath)}
                   onClick={() => {
                     onSelectEntry(entry.entryId);
                   }}
@@ -349,13 +353,13 @@ export function InformationEntryResults({
                       .padStart(2, '0')}
                   </span>
                   <span>
-                    <strong>{entry.value.titlePath || '未命名条目'}</strong>
+                    <strong>{readingTitle(entry.value.titlePath)}</strong>
                     <small>
-                      {entry.sourceKey}
+                      {sourceShortName(entry)}
                       {entry.value.isPrivate ? ' · 私密' : ''}
                     </small>
                     {matchReasons.length > 0 ? (
-                      <em>
+                      <em className="entry-result-list__matches">
                         命中：{matchReasons.map(matchReasonLabel).join(' / ')}
                         {textMatch === undefined ? null : (
                           <>
@@ -364,6 +368,14 @@ export function InformationEntryResults({
                             {scorePercentage(textMatch.score)}/100
                           </>
                         )}
+                      </em>
+                    ) : null}
+                    {aliasMatches?.length ? (
+                      <em className="entry-result-list__matches">
+                        确认别名：
+                        {aliasMatches
+                          .map(({query, tag}) => `${query} → ${tag}`)
+                          .join(' / ')}
                       </em>
                     ) : null}
                     {semanticMatch === undefined ? null : (
@@ -412,7 +424,15 @@ export function InformationEntryResults({
         </footer>
       </section>
       {children === undefined ? null : (
-        <div className="entry-detail-stack">{children}</div>
+        <div
+          key={selectedEntryId}
+          className="entry-detail-stack"
+          role="region"
+          aria-label="所选条目详情"
+          tabIndex={0}
+        >
+          {children}
+        </div>
       )}
     </div>
   );
@@ -422,11 +442,15 @@ export function InformationEntryReadOnlyDetail({
   entry,
   variant,
   headingLevel = 2,
+  hideSourceAction = false,
+  bodyContent,
   onOpenEvidence,
 }: {
   readonly entry: Readonly<InformationEntry>;
   readonly variant: 'query' | 'split';
   readonly headingLevel?: 2 | 4;
+  readonly hideSourceAction?: boolean;
+  readonly bodyContent?: ReactNode;
   readonly onOpenEvidence: InformationEntryServices['onOpenEvidence'];
 }) {
   const titleId = useId();
@@ -435,15 +459,15 @@ export function InformationEntryReadOnlyDetail({
     <article className="entry-readonly-detail" aria-labelledby={titleId}>
       <header className="console-heading">
         <div>
-          <Heading id={titleId}>
-            {entry.value.titlePath || '未命名条目'}
-          </Heading>
+          <Heading id={titleId}>{readingTitle(entry.value.titlePath)}</Heading>
           <p>
-            {entry.sourceKey} · 第 {(entry.value.documentOrder + 1).toString()}{' '}
-            条{entry.value.isPrivate ? ' · 隐私内容' : ''}
+            {sourceShortName(entry)} · 第{' '}
+            {(entry.value.documentOrder + 1).toString()} 条
+            {entry.value.isPrivate ? ' · 隐私内容' : ''}
           </p>
         </div>
         <button
+          hidden={hideSourceAction}
           className="secondary-action"
           type="button"
           onClick={() => {
@@ -457,45 +481,59 @@ export function InformationEntryReadOnlyDetail({
           查看原文
         </button>
       </header>
-      <div className="entry-readonly-detail__body">{entry.value.body}</div>
-      <dl className="entry-readonly-detail__facts">
-        <div>
-          <dt>拆分方式</dt>
-          <dd>
-            {entry.value.chunkMode === 'split' ? '按结构拆分' : '全文条目'}
-          </dd>
+      {bodyContent ?? (
+        <ReadingContent
+          text={entry.value.body}
+          scrollLabel="条目正文"
+          baseUri={entry.canonicalUri}
+          omitLeadingTitle={entry.value.titlePath}
+        />
+      )}
+      <details className="entry-reading-metadata">
+        <summary>条目信息与来源标识</summary>
+        <p className="technical-identifier">{entry.sourceKey}</p>
+        <dl className="entry-readonly-detail__facts">
+          <div>
+            <dt>拆分方式</dt>
+            <dd>
+              {entry.value.chunkMode === 'split' ? '按结构拆分' : '全文条目'}
+            </dd>
+          </div>
+          <div>
+            <dt>类型</dt>
+            <dd>
+              {entry.value.typeKeyword === undefined
+                ? '未标注'
+                : TYPE_LABELS[entry.value.typeKeyword]}
+            </dd>
+          </div>
+          <div>
+            <dt>领域</dt>
+            <dd>
+              {entry.value.domains.length === 0
+                ? '未标注'
+                : entry.value.domains
+                    .map(
+                      (domain) =>
+                        domain.customName ?? DOMAIN_LABELS[domain.keyword],
+                    )
+                    .join(' / ')}
+            </dd>
+          </div>
+        </dl>
+        <div
+          className="entry-readonly-detail__keywords"
+          aria-label="内容关键词"
+        >
+          {entry.value.contentKeywords.length === 0 ? (
+            <span>尚无内容关键词</span>
+          ) : (
+            entry.value.contentKeywords.map((keyword) => (
+              <span key={keyword.normalizedValue}>{keyword.displayValue}</span>
+            ))
+          )}
         </div>
-        <div>
-          <dt>类型</dt>
-          <dd>
-            {entry.value.typeKeyword === undefined
-              ? '未标注'
-              : TYPE_LABELS[entry.value.typeKeyword]}
-          </dd>
-        </div>
-        <div>
-          <dt>领域</dt>
-          <dd>
-            {entry.value.domains.length === 0
-              ? '未标注'
-              : entry.value.domains
-                  .map(
-                    (domain) =>
-                      domain.customName ?? DOMAIN_LABELS[domain.keyword],
-                  )
-                  .join(' / ')}
-          </dd>
-        </div>
-      </dl>
-      <div className="entry-readonly-detail__keywords" aria-label="内容关键词">
-        {entry.value.contentKeywords.length === 0 ? (
-          <span>尚无内容关键词</span>
-        ) : (
-          entry.value.contentKeywords.map((keyword) => (
-            <span key={keyword.normalizedValue}>{keyword.displayValue}</span>
-          ))
-        )}
-      </div>
+      </details>
       {variant === 'split' ? (
         <p className="workflow-boundary-note">
           已导入的原文不会改变。这里显示生成后的段落；若要修改拆分前全文，请在“导入”页另存为新文档版本，再重新生成条目。
@@ -507,11 +545,17 @@ export function InformationEntryReadOnlyDetail({
 function matchReasonLabel(value: string): string {
   switch (value) {
     case 'title':
-      return '标题';
+      return '原文标题';
     case 'body':
-      return '正文';
+      return '原文正文';
+    case 'translation_title':
+      return '中文译文标题';
+    case 'translation_body':
+      return '中文译文正文';
+    case 'content_keyword_alias':
+      return '确认别名（标签）';
     case 'content_keyword':
-      return '内容词';
+      return '原标签';
     case 'type_keyword':
       return '类型';
     case 'domain_keyword':

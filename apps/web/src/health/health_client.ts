@@ -20,13 +20,6 @@ export class HealthConfigurationError extends Error {
   }
 }
 
-export class HealthContractError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = 'HealthContractError';
-  }
-}
-
 export class HealthNetworkError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);

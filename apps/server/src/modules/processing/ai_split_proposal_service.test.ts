@@ -1,3 +1,4 @@
+import {assertProcessingProposalAppend} from './processing.js';
 import {createHash} from 'node:crypto';
 
 import {describe, expect, it, vi} from 'vitest';
@@ -28,7 +29,6 @@ const FRAGMENT_A_ID = '55555555-5555-4555-8555-555555555555';
 const FRAGMENT_B_ID = '66666666-6666-4666-8666-666666666666';
 const SECTION_A = 'Synthetic public section A.';
 const SECTION_B = 'Synthetic public section B.';
-const NORMALIZED_TEXT = SECTION_A + '\n' + SECTION_B;
 
 describe('AiSplitProposalService', () => {
   it('creates a reviewable grouping and materializes exact Fragment text only after acceptance', async () => {
@@ -82,6 +82,58 @@ describe('AiSplitProposalService', () => {
     });
   });
 
+  it.each([1, 64])(
+    'materializes %i entries from 128 exact evidence sections without dropping the tail',
+    async (groupCount) => {
+      const texts = Array.from(
+        {length: 128},
+        (_, i) => 'Synthetic evidence ' + i.toString() + '.',
+      );
+      const fixture = createFixture(false, texts);
+      const perGroup = 128 / groupCount;
+      fixture.proposeSplit.mockResolvedValue({
+        summary: 'Complete synthetic coverage',
+        groups: Array.from({length: groupCount}, (_, i) => ({
+          titlePath: 'Synthetic entry ' + i.toString(),
+          startOrdinal: i * perGroup,
+          endOrdinal: (i + 1) * perGroup - 1,
+        })),
+      });
+      const started = await fixture.service.start(
+        SNAPSHOT_ID,
+        'synthetic-capacity',
+      );
+      expect(started.run.status).toBe('succeeded');
+      expect(fixture.proposeSplit.mock.calls[0]?.[0]).toHaveLength(128);
+      const [proposal] = await fixture.service.listForSnapshot(SNAPSHOT_ID);
+      await fixture.service.accept(SNAPSHOT_ID, proposal?.proposalId ?? '');
+      expect(fixture.currentEntries).toHaveLength(groupCount);
+      expect(
+        fixture.currentEntries.flatMap((e) => e.value.fragmentIds),
+      ).toHaveLength(128);
+      expect(fixture.currentEntries.map((e) => e.value.body).join('\n\n')).toBe(
+        texts.join('\n\n'),
+      );
+    },
+  );
+
+  it.each([
+    {texts: Array.from({length: 129}, () => 'Synthetic section.')},
+    {texts: ['x'.repeat(320_001)]},
+  ])(
+    'rejects oversized evidence before creating a run or calling the model',
+    async ({texts}) => {
+      const fixture = createFixture(false, texts);
+      await expect(
+        fixture.service.start(SNAPSHOT_ID, 'too-large'),
+      ).rejects.toEqual(
+        new AiSplitProposalServiceError('ai_split_input_unsupported'),
+      );
+      expect(fixture.proposeSplit).not.toHaveBeenCalled();
+      expect(fixture.runs.size).toBe(0);
+    },
+  );
+
   it('rejects a proposal without creating an Entry', async () => {
     const fixture = createFixture(false);
     await fixture.service.start(SNAPSHOT_ID, 'reject-request');
@@ -129,13 +181,13 @@ describe('AiSplitProposalService', () => {
   });
 });
 
-function createFixture(isPrivate: boolean) {
-  const snapshot = evidenceSnapshot(isPrivate);
+function createFixture(isPrivate: boolean, texts = [SECTION_A, SECTION_B]) {
+  const snapshot = evidenceSnapshot(isPrivate, texts);
   let currentEntries: readonly Readonly<CurrentInformationEntry>[] = [];
   const runs = new Map<string, Readonly<ProcessingRun>>();
   const proposals = new Map<string, Readonly<ProcessingProposal>>();
 
-  const bytes = new TextEncoder().encode(NORMALIZED_TEXT);
+  const bytes = new TextEncoder().encode(texts.join('\n'));
   const blobRead = vi.fn<BlobStore['read']>(() => Promise.resolve(bytes));
   const blobStore: BlobStore = {
     put: () => Promise.resolve(blobIdentity(bytes)),
@@ -234,6 +286,7 @@ function createFixture(isPrivate: boolean) {
         ),
       ),
     appendSplitProposal: (append) => {
+      assertProcessingProposalAppend(append);
       proposals.set(
         append.proposalId,
         Object.freeze({
@@ -255,7 +308,7 @@ function createFixture(isPrivate: boolean) {
           Object.freeze({
             titlePath: 'Combined synthetic entry',
             startOrdinal: 0,
-            endOrdinal: 1,
+            endOrdinal: texts.length - 1,
           }),
         ]),
       }),
@@ -294,10 +347,24 @@ function createFixture(isPrivate: boolean) {
 
 function evidenceSnapshot(
   isPrivate: boolean,
+  texts: string[],
 ): Readonly<EvidenceSnapshotReadState> {
-  const bytes = new TextEncoder().encode(NORMALIZED_TEXT);
-  const secondStart = Array.from(SECTION_A + '\n').length;
-  return Object.freeze({
+  const normalized = texts.join('\n');
+  const bytes = new TextEncoder().encode(normalized);
+  let start = 0;
+  const fragments = texts.map((text, index) => {
+    const end = start + Array.from(text).length;
+    const id =
+      index === 0
+        ? FRAGMENT_A_ID
+        : index === 1
+          ? FRAGMENT_B_ID
+          : '00000000-0000-4000-8000-' + String(index).padStart(12, '0');
+    const value = fragment(id, start, end, text);
+    start = end + 1;
+    return value;
+  });
+  return {
     workspaceId: WORKSPACE_ID,
     snapshotId: SNAPSHOT_ID,
     resourceId: RESOURCE_ID,
@@ -305,30 +372,22 @@ function evidenceSnapshot(
     sourceKey: 'synthetic:public-split',
     ...(isPrivate ? {isPrivate: true as const} : {}),
     capturedAt: '2040-01-02T03:04:05.000Z',
-    fragmentCount: 2,
-    rawSha256: digest(NORMALIZED_TEXT),
-    canonicalContentSha256: digest(NORMALIZED_TEXT),
+    fragmentCount: texts.length,
+    rawSha256: digest(normalized),
+    canonicalContentSha256: digest(normalized),
     canonicalizationVersion: 'utf8-lf-v1',
-    structures: Object.freeze([
-      Object.freeze({
+    structures: [
+      {
         structureId: STRUCTURE_ID,
         parserName: 'struinfo-commonmark',
         parserVersion: '1',
         textNormalizationVersion: 'utf8-lf-v1',
         structureSha256: 'a'.repeat(64),
         textBlob: blobIdentity(bytes),
-        fragments: Object.freeze([
-          fragment(FRAGMENT_A_ID, 0, Array.from(SECTION_A).length, SECTION_A),
-          fragment(
-            FRAGMENT_B_ID,
-            secondStart,
-            Array.from(NORMALIZED_TEXT).length,
-            SECTION_B,
-          ),
-        ]),
-      }),
-    ]),
-  });
+        fragments,
+      },
+    ],
+  };
 }
 
 function fragment(

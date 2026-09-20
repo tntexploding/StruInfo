@@ -1,4 +1,9 @@
-import {HealthContractError} from './health_client.js';
+export class HealthContractError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'HealthContractError';
+  }
+}
 
 export const HEALTH_READINESS_PATH = 'health/ready';
 

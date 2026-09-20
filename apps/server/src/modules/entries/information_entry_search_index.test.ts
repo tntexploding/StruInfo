@@ -53,6 +53,67 @@ describe('InformationEntry derived search index', () => {
     );
   });
 
+  it('keeps every ordinary tag in a long-body embedding and keeps tag postings before the term cap', () => {
+    const original = currentEntry({
+      body: Array.from({length: 5_000}, (_, n) => `word${n.toString()}`).join(
+        ' ',
+      ),
+    });
+    const source = {
+      ...original,
+      value: {
+        ...original.value,
+        contentKeywords: Array.from({length: 12}, (_, n) => ({
+          displayValue: `合成主题${n.toString()}`,
+          normalizedValue: `合成主题${n.toString()}`,
+          origin: 'ai' as const,
+          originVersion: 'synthetic',
+        })),
+      },
+    };
+    const prepared = prepareInformationEntrySearchProjection(source);
+    for (const tag of source.value.contentKeywords)
+      expect(prepared.input).toContain(tag.displayValue);
+    expect(prepared.input).toContain('正文\nword0');
+    expect(prepared.postings).toHaveLength(4_096);
+    expect(prepared.postings).toContainEqual(
+      expect.objectContaining({field: 'tags', term: '11'}),
+    );
+    expect(Buffer.byteLength(prepared.input, 'utf8')).toBeLessThanOrEqual(
+      7_500,
+    );
+    expect(prepared.input).not.toContain('�');
+  });
+
+  it('preserves a preview of each extreme-length tag within the existing vector input budget', () => {
+    const original = currentEntry({
+      titlePath: '题'.repeat(600),
+      body: '正文事实'.repeat(3_000),
+    });
+    const source = {
+      ...original,
+      value: {
+        ...original.value,
+        contentKeywords: Array.from({length: 32}, (_, n) => ({
+          displayValue: `tag${n.toString()}-` + '界'.repeat(74),
+          normalizedValue: `tag${n.toString()}`,
+          origin: 'manual' as const,
+          originVersion: 'synthetic',
+        })),
+      },
+    };
+    const prepared = prepareInformationEntrySearchProjection(source);
+    for (let n = 0; n < 32; n++)
+      expect(prepared.input).toContain(`tag${n.toString()}-`);
+    expect(prepared.input).toContain('正文事实');
+    expect(Buffer.byteLength(prepared.input, 'utf8')).toBeLessThanOrEqual(
+      7_500,
+    );
+    expect(source.value.contentKeywords[31]?.displayValue).toContain(
+      '界'.repeat(74),
+    );
+  });
+
   it('orders term postings by unsigned UTF-8 bytes rather than host locale', () => {
     const prepared = prepareInformationEntrySearchProjection(
       currentEntry({titlePath: 'Ａ é a'}),

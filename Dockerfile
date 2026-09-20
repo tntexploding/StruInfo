@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM node:24-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS build
+FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS build
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=/pnpm:$PATH
@@ -23,9 +23,9 @@ COPY docs/dependencies docs/dependencies
 RUN --network=none pnpm run build
 RUN --network=none pnpm --offline --config.trust-lockfile=true --config.inject-workspace-packages=true --filter @struinfo/server deploy --prod --no-optional /runtime-server
 
-FROM node:24-bookworm-slim@sha256:a9f5f7c91a432850b2a8a7797adf5eadb6c733ceed61167806cee7ea7fbc29df AS runtime
+FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS runtime
 
-ARG STRUIINFO_VERSION=0.2.0
+ARG STRUIINFO_VERSION=0.3.0
 ENV NODE_ENV=production
 WORKDIR /opt/struinfo/apps/server
 
@@ -33,6 +33,11 @@ LABEL org.opencontainers.image.title="StruInfo" \
   org.opencontainers.image.version="${STRUIINFO_VERSION}" \
   org.opencontainers.image.licenses="MIT" \
   org.opencontainers.image.source="https://github.com/tntexploding/StruInfo"
+
+# The current Node base predates Debian's PCRE2 security update.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends libpcre2-8-0=10.42-1+deb12u1 \
+  && rm -rf /var/lib/apt/lists/*
 
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v1.22.22 \
   && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg \

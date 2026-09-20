@@ -461,7 +461,13 @@ class EvidenceContentConflict extends Error {}
 export class PostgresEvidenceRepository implements EvidenceRepositoryPort {
   readonly #pool: PostgresPoolBoundary;
 
-  public constructor(pool: PostgresPoolBoundary) {
+  public constructor(
+    pool: PostgresPoolBoundary,
+    private readonly onNewSnapshot?: (
+      client: PostgresClientBoundary,
+      capture: ValidatedCaptureEvidence,
+    ) => Promise<void>,
+  ) {
     this.#pool = pool;
   }
 
@@ -481,7 +487,11 @@ export class PostgresEvidenceRepository implements EvidenceRepositoryPort {
     try {
       await client.query(BEGIN_READ_COMMITTED_SQL);
       transactionActive = true;
-      result = await saveCaptureInTransaction(client, request);
+      result = await saveCaptureInTransaction(
+        client,
+        request,
+        this.onNewSnapshot,
+      );
       await client.query(COMMIT_TRANSACTION_SQL);
       transactionActive = false;
     } catch (error) {
@@ -515,6 +525,10 @@ export class PostgresEvidenceRepository implements EvidenceRepositoryPort {
 async function saveCaptureInTransaction(
   client: PostgresClientBoundary,
   request: Readonly<EvidenceCaptureRepositoryRequest>,
+  onNewSnapshot?: (
+    client: PostgresClientBoundary,
+    capture: ValidatedCaptureEvidence,
+  ) => Promise<void>,
 ): Promise<EvidenceCaptureRepositoryResult> {
   const {capture} = request;
   await client.query(ACQUIRE_EVIDENCE_WORKSPACE_LOCK_SQL, [
@@ -545,7 +559,11 @@ async function saveCaptureInTransaction(
     return Object.freeze({status: 'existing' as const});
   }
 
-  const createdRows = await persistCaptureGraph(client, capture);
+  const {createdRows, snapshotCreated} = await persistCaptureGraph(
+    client,
+    capture,
+  );
+  if (snapshotCreated && onNewSnapshot) await onNewSnapshot(client, capture);
   const insertedCommand = await client.query(
     INSERT_EVIDENCE_CAPTURE_COMMAND_SQL,
     [capture.workspaceId, capture.commandIdempotencyKey, request.requestSha256],
@@ -561,19 +579,20 @@ async function saveCaptureInTransaction(
 async function persistCaptureGraph(
   client: PostgresClientBoundary,
   capture: ValidatedCaptureEvidence,
-): Promise<number> {
+): Promise<{createdRows: number; snapshotCreated: boolean}> {
   let created = 0;
   created += await persistBlobs(client, capture);
   created += await persistResource(client, capture);
   created += await persistGitResource(client, capture);
-  created += await persistSnapshot(client, capture);
+  const snapshotCreated = await persistSnapshot(client, capture);
+  created += snapshotCreated;
   created += await persistGitObservations(client, capture);
   created += await persistStructure(client, capture);
   created += await persistNodes(client, capture);
   created += await persistFragments(client, capture);
   created += await persistMediaAssets(client, capture);
   created += await persistMediaUsages(client, capture);
-  return created;
+  return {createdRows: created, snapshotCreated: snapshotCreated > 0};
 }
 
 function persistBlobs(

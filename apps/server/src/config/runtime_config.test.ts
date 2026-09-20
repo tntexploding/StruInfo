@@ -20,6 +20,40 @@ const RUNTIME_ENVIRONMENT = {
 };
 
 describe('parseRuntimeConfig', () => {
+  it('keeps Agent access off and separates read, annotation and model grants', () => {
+    expect(
+      parseRuntimeConfig('all', RUNTIME_ENVIRONMENT).agentInterface,
+    ).toBeUndefined();
+    const enabled = parseRuntimeConfig('all', {
+      ...RUNTIME_ENVIRONMENT,
+      STRUIINFO_AGENT_TOKEN: 'synthetic-token-'.repeat(3),
+      STRUIINFO_AGENT_ID: 'synthetic-agent',
+      STRUIINFO_AGENT_GRANTS: 'annotate',
+    }).agentInterface;
+    expect(enabled).toMatchObject({
+      identity: 'synthetic-agent',
+      read: false,
+      annotate: true,
+      processDocuments: false,
+      automate: false,
+    });
+    expect(() =>
+      parseRuntimeConfig('all', {
+        ...RUNTIME_ENVIRONMENT,
+        STRUIINFO_AGENT_TOKEN: 'short',
+        STRUIINFO_AGENT_ID: 'synthetic-agent',
+      }),
+    ).toThrow(ConfigurationError);
+    expect(() =>
+      parseRuntimeConfig('all', {
+        ...RUNTIME_ENVIRONMENT,
+        STRUIINFO_AGENT_TOKEN: 'synthetic-token-'.repeat(3),
+        STRUIINFO_AGENT_ID: 'synthetic-agent',
+        STRUIINFO_AGENT_GRANTS: 'owner',
+      }),
+    ).toThrow(ConfigurationError);
+  });
+
   it('parses defaults once into a frozen ordinary object', () => {
     const config = parseRuntimeConfig('api', RUNTIME_ENVIRONMENT);
 
@@ -112,6 +146,54 @@ describe('parseRuntimeConfig', () => {
     expect(Object.isFrozen(config.aiProposalProvider)).toBe(true);
   });
 
+  it('enables DeepSeek independently without borrowing the OpenAI secret', () => {
+    const config = parseRuntimeConfig('api', {
+      ...RUNTIME_ENVIRONMENT,
+      DEEPSEEK_API_KEY: 'synthetic-deepseek-key',
+      STRUIINFO_DEEPSEEK_MODEL: 'deepseek-synthetic',
+    });
+    expect(config.aiProposalProvider).toEqual({
+      providerKey: 'deepseek-responses-v1',
+      model: 'deepseek-synthetic',
+      apiKey: 'synthetic-deepseek-key',
+      maxOutputTokens: 800,
+      timeoutMs: 60_000,
+    });
+    expect(config.embeddingProvider).toBeUndefined();
+    expect(() =>
+      parseRuntimeConfig('api', {
+        ...RUNTIME_ENVIRONMENT,
+        OPENAI_API_KEY: 'synthetic-openai-key',
+        STRUIINFO_DEEPSEEK_MODEL: 'deepseek-synthetic',
+      }),
+    ).toThrow(ConfigurationError);
+  });
+  it.each([
+    {DEEPSEEK_API_KEY: 'synthetic-key'},
+    {STRUIINFO_DEEPSEEK_MODEL: 'deepseek-synthetic'},
+    {
+      DEEPSEEK_API_KEY: 'bad key',
+      STRUIINFO_DEEPSEEK_MODEL: 'deepseek-synthetic',
+    },
+    {
+      DEEPSEEK_API_KEY: 'synthetic-key',
+      STRUIINFO_DEEPSEEK_MODEL: 'other-model',
+    },
+    {
+      DEEPSEEK_API_KEY: 'synthetic-key',
+      STRUIINFO_DEEPSEEK_MODEL: 'deepseek-synthetic',
+      OPENAI_API_KEY: 'synthetic-openai-key',
+      STRUIINFO_OPENAI_MODEL: 'synthetic-model',
+    },
+  ])(
+    'rejects partial, invalid and ambiguous DeepSeek configuration',
+    (settings) => {
+      expect(() =>
+        parseRuntimeConfig('api', {...RUNTIME_ENVIRONMENT, ...settings}),
+      ).toThrow(ConfigurationError);
+    },
+  );
+
   it('configures embeddings independently while sharing the environment-only secret', () => {
     const embeddingOnly = parseRuntimeConfig('api', {
       ...RUNTIME_ENVIRONMENT,
@@ -120,7 +202,7 @@ describe('parseRuntimeConfig', () => {
     });
     expect(embeddingOnly.aiProposalProvider).toBeUndefined();
     expect(embeddingOnly.embeddingProvider).toEqual({
-      providerKey: 'openai-embeddings-v1',
+      providerKey: 'openai-embeddings-v2',
       model: 'text-embedding-synthetic',
       apiKey: 'synthetic-openai-key',
       maximumBatchSize: 32,

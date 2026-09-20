@@ -1,13 +1,14 @@
 import type {InformationEntryEmbeddingProviderPort} from '../../modules/entries/index.js';
 import type {EmbeddingProviderConfig} from '../../config/runtime_config.js';
-import type {OpenAiFetch} from './openai_entry_tag_provider.js';
+import type {OpenAiFetch} from './responses_entry_tag_provider.js';
 
 export const OPENAI_EMBEDDINGS_ENDPOINT =
   'https://api.openai.com/v1/embeddings' as const;
 const MAXIMUM_RESPONSE_BYTES = 8 * 1024 * 1024;
 
 export class OpenAiInformationEntryEmbeddingProvider implements InformationEntryEmbeddingProviderPort {
-  public readonly providerKey = 'openai-embeddings-v1' as const;
+  // v2 binds vectors to metadata-first Entry inputs; explicit refresh can retire v1 in batches.
+  public readonly providerKey = 'openai-embeddings-v2' as const;
   public readonly model: string;
   readonly #config: Readonly<EmbeddingProviderConfig>;
   readonly #fetch: OpenAiFetch;

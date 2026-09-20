@@ -1,7 +1,6 @@
 import {describe, expect, it} from 'vitest';
 
-import {HealthContractError} from './health_client.js';
-import {parseHealthReadiness} from './health_contract.js';
+import {HealthContractError, parseHealthReadiness} from './health_contract.js';
 import {
   NOT_READY_HEALTH_FIXTURE,
   READY_HEALTH_FIXTURE,

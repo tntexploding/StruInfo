@@ -15,7 +15,7 @@ describe('InformationEntryAiTags', () => {
       />,
     );
 
-    expect(markup).toContain('OpenAI 未启用');
+    expect(markup).toContain('模型服务 未启用');
     expect(markup).toContain('仍可使用人工评分和自动标签建议');
     expect(markup).not.toContain('生成 AI 标签建议</button>');
   });
@@ -30,7 +30,7 @@ describe('InformationEntryAiTags', () => {
       />,
     );
 
-    expect(markup).toContain('隐私条目不会发送给 OpenAI');
+    expect(markup).toContain('隐私条目不会发送给 模型服务');
     expect(markup).not.toContain('生成 AI 标签建议</button>');
   });
 
@@ -44,7 +44,7 @@ describe('InformationEntryAiTags', () => {
       />,
     );
 
-    expect(markup).toContain('当前条目的标题、正文和标签会发送给 OpenAI');
+    expect(markup).toContain('当前条目的标题、正文和标签会发送给 模型服务');
     expect(markup).toContain('结果需要你确认后才会保存');
     expect(markup).toContain('生成 AI 标签建议');
     expect(markup).not.toContain('origin-label');

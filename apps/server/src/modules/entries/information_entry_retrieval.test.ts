@@ -1,4 +1,8 @@
 import {describe, expect, it, vi} from 'vitest';
+import type {
+  EntryTranslation,
+  EntryTranslationSearchRepositoryPort,
+} from './information_entry_translation.js';
 
 import type {InformationEntryAssociationRepositoryPort} from './information_entry_association_repository.js';
 import type {CurrentInformationEntry} from './information_entry_contract.js';
@@ -14,6 +18,235 @@ import {
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('InformationEntryRetrievalService', () => {
+  it('keeps alias-only candidates when an accelerated index would return no literal matches', async () => {
+    const fixture = harness(false);
+    const source = currentEntry(
+      '22222222-2222-4222-8222-222222222221',
+      'Synthetic network',
+      'A public fact.',
+    );
+    const entries = [
+      {
+        ...source,
+        value: {
+          ...source.value,
+          contentKeywords: [
+            {
+              displayValue: '无线网络',
+              normalizedValue: '无线网络',
+              origin: 'manual' as const,
+              originVersion: 'synthetic',
+            },
+          ],
+        },
+      },
+    ];
+    const findCandidates = vi.fn(() => Promise.resolve([] as string[]));
+    const aliases = vi.fn(() =>
+      Promise.resolve([{source: 'WiFi', canonical: '无线网络'}]),
+    );
+    const service = new InformationEntryRetrievalService({
+      workspaceId: WORKSPACE_ID,
+      entries: {
+        ...fixture.entryRepository,
+        loadCurrentEntries: () => Promise.resolve(entries),
+        loadCurrentEntriesByIds: () => Promise.resolve([]),
+      },
+      associations: fixture.associationRepository,
+      index: {
+        ...fixture.indexRepository,
+        findLexicalCandidateEntryIds: findCandidates,
+      },
+      aliases,
+    });
+    const result = await service.search({
+      text: 'WiFi',
+      textFields: ['tags'],
+      includePrivate: false,
+      limit: 10,
+    });
+    expect(result.items[0]?.entry).toBe(entries[0]);
+    expect(result.items[0]?.aliasMatches).toEqual([
+      {query: 'WiFi', tag: '无线网络'},
+    ]);
+    expect(findCandidates).not.toHaveBeenCalled();
+    expect(aliases).toHaveBeenCalledTimes(1);
+    expect(fixture.embed).not.toHaveBeenCalled();
+  });
+
+  it('requires an explicit rebuild before treating old embedding input hashes as current', async () => {
+    const fixture = harness(true);
+    await fixture.service.rebuild();
+    const current = fixture.snapshot;
+    fixture.replaceSnapshot({
+      ...current,
+      projections: current.projections.map((projection) => ({
+        ...projection,
+        projectionSha256: '0'.repeat(64),
+      })),
+    });
+    expect(await fixture.service.status()).toMatchObject({
+      semanticSearchReady: false,
+      embeddedProjectionCount: 0,
+    });
+    fixture.embed.mockClear();
+    await expect(
+      fixture.service.search({
+        text: 'Alpha',
+        retrievalMode: 'semantic',
+        includePrivate: false,
+        limit: 10,
+      }),
+    ).rejects.toMatchObject({code: 'semantic_search_index_not_ready'});
+    expect(fixture.embed).not.toHaveBeenCalled();
+    await fixture.service.rebuild();
+    expect((await fixture.service.status()).semanticSearchReady).toBe(true);
+  });
+
+  it('adds cached translation candidates to a ready original index without a rebuild or full Entry load', async () => {
+    const fixture = harness(false);
+    const source = fixture.entries[0];
+    if (source === undefined) throw new Error('Synthetic source is missing.');
+    const cached: Readonly<EntryTranslation>[] = [];
+    const loadTranslations = vi.fn(() => Promise.resolve(cached));
+    const findCandidates = vi.fn(() =>
+      Promise.resolve([] as readonly string[]),
+    );
+    const loadByIds = vi.fn(
+      (_workspaceId: string, _private: boolean, ids: readonly string[]) =>
+        Promise.resolve(
+          fixture.entries.filter((entry) => ids.includes(entry.entryId)),
+        ),
+    );
+    const service = new InformationEntryRetrievalService({
+      workspaceId: WORKSPACE_ID,
+      entries: {...fixture.entryRepository, loadCurrentEntriesByIds: loadByIds},
+      associations: fixture.associationRepository,
+      index: {
+        ...fixture.indexRepository,
+        findLexicalCandidateEntryIds: findCandidates,
+      },
+      translations: {loadCurrentTranslations: loadTranslations},
+    });
+    const request = {text: '合成译文', includePrivate: false, limit: 10};
+    expect((await service.search(request)).totalCount).toBe(0);
+    cached.push(translation(source));
+    const result = await service.search(request);
+    expect(result.totalCount).toBe(1);
+    expect(result.items[0]?.entry).toBe(source);
+    expect(result.items[0]?.matchReasons).toEqual([
+      'translation_title',
+      'translation_body',
+    ]);
+    expect(loadByIds).toHaveBeenLastCalledWith(WORKSPACE_ID, false, [
+      source.entryId,
+    ]);
+    expect(loadTranslations).toHaveBeenCalledWith(WORKSPACE_ID);
+    expect(fixture.loadEntries).not.toHaveBeenCalled();
+    expect(fixture.embed).not.toHaveBeenCalled();
+    expect(fixture.replacements).toBe(0);
+
+    findCandidates.mockResolvedValue([source.entryId]);
+    expect((await service.search(request)).totalCount).toBe(1);
+    expect(loadByIds).toHaveBeenLastCalledWith(WORKSPACE_ID, false, [
+      source.entryId,
+    ]);
+  });
+
+  it.each([
+    {textMode: 'substring' as const, includePrivate: false},
+    {textMode: 'fuzzy' as const, includePrivate: false},
+    {textMode: 'substring' as const, includePrivate: true},
+  ])(
+    'keeps translation matches on the complete fallback path: %j',
+    async (scope) => {
+      const fixture = harness(false);
+      const source = fixture.entries[0];
+      if (source === undefined) throw new Error('Synthetic source is missing.');
+      const service = new InformationEntryRetrievalService({
+        workspaceId: WORKSPACE_ID,
+        entries: fixture.entryRepository,
+        associations: fixture.associationRepository,
+        index: {
+          ...fixture.indexRepository,
+          findLexicalCandidateEntryIds: () => Promise.resolve(undefined),
+        },
+        translations: {
+          loadCurrentTranslations: () => Promise.resolve([translation(source)]),
+        },
+      });
+      const result = await service.search({
+        text: '合成译文',
+        ...scope,
+        limit: 10,
+      });
+      expect(result.items.map((item) => item.entry.entryId)).toEqual([
+        source.entryId,
+      ]);
+      expect(fixture.loadEntries).toHaveBeenCalledTimes(1);
+      expect(fixture.embed).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not load caches for browsing, tag-only matching or private-only search', async () => {
+    const fixture = harness(false);
+    const loadTranslations = vi.fn(() =>
+      Promise.reject(new Error('unnecessary translation read')),
+    );
+    const service = new InformationEntryRetrievalService({
+      workspaceId: WORKSPACE_ID,
+      entries: fixture.entryRepository,
+      associations: fixture.associationRepository,
+      index: fixture.indexRepository,
+      translations: {loadCurrentTranslations: loadTranslations},
+    });
+    for (const request of [
+      {text: '', includePrivate: false},
+      {text: '   ', includePrivate: false},
+      {text: '合成', textFields: ['tags'] as const, includePrivate: false},
+      {text: '合成', includePrivate: true, onlyPrivate: true},
+    ])
+      await service.search({...request, limit: 10});
+    expect(loadTranslations).not.toHaveBeenCalled();
+    expect(fixture.embed).not.toHaveBeenCalled();
+  });
+
+  it('uses cached text only in the lexical lane of hybrid retrieval and never embeds translations', async () => {
+    const source = currentEntry(
+      '22222222-2222-4222-8222-222222222221',
+      'Alpha',
+      'first body',
+    );
+    const loadTranslations = vi.fn(() =>
+      Promise.resolve([{...translation(source), body: 'literal-only'}]),
+    );
+    const fixture = harness(true, [source], {
+      loadCurrentTranslations: loadTranslations,
+    });
+    await fixture.service.rebuild();
+    expect(fixture.embed.mock.calls.flat(2).join(' ')).not.toContain(
+      '合成译文',
+    );
+    loadTranslations.mockClear();
+    const request = {text: 'literal-only', includePrivate: false, limit: 10};
+    expect(
+      (await fixture.service.search({...request, retrievalMode: 'semantic'}))
+        .totalCount,
+    ).toBe(0);
+    expect(loadTranslations).not.toHaveBeenCalled();
+    const hybrid = await fixture.service.search({
+      ...request,
+      retrievalMode: 'hybrid',
+    });
+    expect(hybrid.items[0]).toMatchObject({
+      entry: {entryId: source.entryId},
+      matchReasons: ['translation_body'],
+      retrievalScore: 10_000,
+    });
+    expect(hybrid.items[0]?.semanticMatch).toBeUndefined();
+    expect(fixture.embed).toHaveBeenLastCalledWith(['literal-only']);
+  });
+
   it('rebuilds a wholly replaceable index and reports provider readiness', async () => {
     const fixture = harness();
     const status = await fixture.service.rebuild();
@@ -388,6 +621,7 @@ function harness(
       'literal-only second body',
     ),
   ],
+  translations?: EntryTranslationSearchRepositoryPort,
 ) {
   let snapshot: Readonly<InformationEntrySearchIndexSnapshot> = Object.freeze({
     projections: Object.freeze([]),
@@ -441,9 +675,13 @@ function harness(
     associations: associationRepository,
     index: indexRepository,
     ...(withProvider ? {embeddingProvider: provider} : {}),
+    ...(translations === undefined ? {} : {translations}),
   });
   return {
     service,
+    entryRepository,
+    associationRepository,
+    indexRepository,
     entries,
     loadEntries,
     embed,
@@ -486,5 +724,22 @@ function currentEntry(
       domains: Object.freeze([]),
       fragmentIds: Object.freeze(['66666666-6666-4666-8666-666666666666']),
     }),
+  });
+}
+
+function translation(
+  entry: Readonly<CurrentInformationEntry>,
+): Readonly<EntryTranslation> {
+  return Object.freeze({
+    entryId: entry.entryId,
+    sourceRevision: entry.revision,
+    sourceRevisionId: entry.revisionId,
+    targetLanguage: 'zh-CN',
+    title: '合成译文标题',
+    body: '合成译文正文',
+    providerKey: 'openai-responses-v1',
+    model: 'synthetic-model',
+    promptVersion: 'synthetic-v1',
+    translatedAt: '2040-01-04T00:00:00.000Z',
   });
 }

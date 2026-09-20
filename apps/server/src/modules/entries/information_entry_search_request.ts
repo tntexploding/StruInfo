@@ -14,15 +14,21 @@ import {
 
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+export const ENTRY_SEARCH_TEXT_LIMIT = 300;
+export const ENTRY_SEARCH_CONTENT_KEYWORD_LIMIT = 80;
+
 export function decodeEntrySearchBody(
   body: unknown,
 ): Readonly<InformationEntrySearchRequest> | undefined {
   if (!isRecord(body)) return undefined;
-  const textValue = optionalBoundedText(body.text, 300);
+  const textValue = optionalBoundedText(body.text, ENTRY_SEARCH_TEXT_LIMIT);
   const retrievalMode = body.retrievalMode ?? 'lexical';
   const textMode = body.textMode ?? 'substring';
   const textFields = decodeEntrySearchTextFields(body.textFields);
-  const contentKeyword = optionalBoundedText(body.contentKeyword, 80);
+  const contentKeyword = optionalBoundedText(
+    body.contentKeyword,
+    ENTRY_SEARCH_CONTENT_KEYWORD_LIMIT,
+  );
   const sourceKey = optionalBoundedText(body.sourceKey, 2_048);
   const snapshotId = body.snapshotId ?? undefined;
   const typeKeyword = body.typeKeyword ?? undefined;

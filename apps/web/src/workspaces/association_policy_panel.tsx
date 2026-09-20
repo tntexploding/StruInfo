@@ -21,7 +21,13 @@ export function AssociationPolicyPanel({
   saving,
 }: {
   readonly onSave: (draft: Readonly<AssociationPolicyDraft>) => void;
-  readonly policy: Readonly<AssociationPolicy>;
+  readonly policy: Readonly<
+    Pick<
+      AssociationPolicy,
+      'contentWeight' | 'typeWeight' | 'domainWeight' | 'threshold'
+    > &
+      Partial<AssociationPolicy>
+  >;
   readonly saving: boolean;
 }) {
   const [draft, setDraft] = useState<AssociationPolicyDraft>(() =>
@@ -30,7 +36,8 @@ export function AssociationPolicyPanel({
 
   const totalWeight =
     draft.contentWeight + draft.typeWeight + draft.domainWeight;
-  const valid = totalWeight === 100;
+  const valid =
+    totalWeight === 100 && draft.threshold >= 0 && draft.threshold <= 10_000;
 
   function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -77,7 +84,7 @@ export function AssociationPolicyPanel({
           label="最低相似度"
           value={draft.threshold}
           maximum={10_000}
-          step={100}
+          step={1}
           percent
           onChange={(threshold) => {
             setDraft((current) => ({...current, threshold}));
@@ -96,11 +103,15 @@ export function AssociationPolicyPanel({
         <dl>
           <div>
             <dt>每条推荐上限</dt>
-            <dd>{policy.candidateLimit.toString()}</dd>
+            <dd>{policy.candidateLimit?.toString() ?? '由服务决定'}</dd>
           </div>
           <div>
             <dt>人工调整步长</dt>
-            <dd>{(policy.adjustmentStep / 100).toFixed(0)}%</dd>
+            <dd>
+              {policy.adjustmentStep === undefined
+                ? '由服务决定'
+                : (policy.adjustmentStep / 100).toFixed(0) + '%'}
+            </dd>
           </div>
         </dl>
         <div className="association-policy-actions">
@@ -133,9 +144,9 @@ function PolicyControl({
   readonly step?: number;
   readonly value: number;
 }) {
-  const display = percent
-    ? `${(value / 100).toFixed(0)}%`
-    : `${value.toString()}%`;
+  const scale = percent ? 100 : 1;
+  const displayValue = value / scale;
+  const display = `${displayValue.toString()}%`;
   return (
     <div className="association-policy-meter">
       <label>
@@ -143,12 +154,13 @@ function PolicyControl({
         <output>{display}</output>
         <input
           type="range"
+          aria-label={label}
           min={0}
-          max={maximum}
-          step={step}
-          value={value}
+          max={maximum / scale}
+          step={step / scale}
+          value={displayValue}
           onChange={(event) => {
-            onChange(Number(event.currentTarget.value));
+            onChange(Math.round(Number(event.currentTarget.value) * scale));
           }}
         />
       </label>
@@ -157,12 +169,12 @@ function PolicyControl({
         <input
           type="number"
           min={0}
-          max={maximum}
-          step={step}
-          value={value}
+          max={maximum / scale}
+          step={step / scale}
+          value={displayValue}
           onChange={(event) => {
-            const next = Number(event.currentTarget.value);
-            if (Number.isSafeInteger(next)) onChange(next);
+            const next = Number(event.currentTarget.value) * scale;
+            if (Number.isFinite(next)) onChange(Math.round(next));
           }}
         />
       </label>
@@ -171,7 +183,13 @@ function PolicyControl({
 }
 
 function policyDraft(
-  policy: Readonly<AssociationPolicy>,
+  policy: Readonly<
+    Pick<
+      AssociationPolicy,
+      'contentWeight' | 'typeWeight' | 'domainWeight' | 'threshold'
+    > &
+      Partial<AssociationPolicy>
+  >,
 ): AssociationPolicyDraft {
   return {
     contentWeight: policy.contentWeight,

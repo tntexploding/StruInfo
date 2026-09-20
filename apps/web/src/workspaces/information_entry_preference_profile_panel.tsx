@@ -429,7 +429,11 @@ export function InformationEntryPreferenceProfilePanel({
             暂无规则。可手动新增，也可根据已有评分生成建议。
           </p>
         ) : (
-          <ol className="entry-preference-rule-list">
+          <ol
+            className="entry-preference-rule-list"
+            aria-label="偏好规则草稿"
+            tabIndex={0}
+          >
             {draft.rules.map((rule) => (
               <li key={rule.ruleId}>
                 <RuleEditor
@@ -817,7 +821,11 @@ function SuggestionResults({
         {state.value.totalCandidateCount.toString()} 个建议
         {state.value.truncated ? ' · 仅显示前 64 个' : ''}
       </p>
-      <ul className="entry-preference-suggestion-list">
+      <ul
+        className="entry-preference-suggestion-list"
+        aria-label="偏好规则建议"
+        tabIndex={0}
+      >
         {state.value.candidates.map((candidate) => (
           <li
             key={[

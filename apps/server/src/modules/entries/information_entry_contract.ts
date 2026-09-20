@@ -139,8 +139,6 @@ export interface EntryFragmentGroupInput {
   readonly fragmentIds: readonly string[];
 }
 
-export type AiSplitEntryGroupInput = EntryFragmentGroupInput;
-
 export interface ManualEntryFragmentInput extends EntryFragmentRange {
   readonly fragmentId: string;
 }
@@ -189,7 +187,14 @@ export interface InformationEntrySearchRequest {
 }
 
 export type InformationEntryMatchReason =
-  'title' | 'body' | 'content_keyword' | 'type_keyword' | 'domain_keyword';
+  | 'title'
+  | 'body'
+  | 'translation_title'
+  | 'translation_body'
+  | 'content_keyword_alias'
+  | 'content_keyword'
+  | 'type_keyword'
+  | 'domain_keyword';
 
 export type InformationEntryFilterReason =
   | 'content_keyword'
@@ -232,6 +237,7 @@ export interface InformationEntrySearchCursor {
 export interface InformationEntrySearchItem {
   readonly entry: Readonly<CurrentInformationEntry>;
   readonly matchReasons: readonly InformationEntryMatchReason[];
+  readonly aliasMatches?: readonly Readonly<{query: string; tag: string}>[];
   readonly textMatch?: Readonly<{
     mode: EntryTextSearchMode;
     score: number;

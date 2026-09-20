@@ -1,101 +1,110 @@
+import type {InformationEntryRepositoryPort} from '../modules/entries/information_entry_repository.js';
+import {searchCurrentInformationEntries} from '../modules/entries/information_entry_search.js';
+import {Buffer} from 'node:buffer';
+import {DocumentUseCases} from '../application/document_use_cases.js';
+import {
+  EntryUseCases,
+  type EntryRevisionRequest,
+} from '../application/entry_use_cases.js';
+import {ExecutionAuthority} from '../application/execution_authority.js';
+import {OperationError} from '../application/operation_error.js';
+import {ProcessingUseCases} from '../application/processing_use_cases.js';
+import {
+  RelationUseCases,
+  informationEntryAssociationPolicyFromPreferences,
+  type GraphEdgeWriteRequest,
+  type GraphReadRequest,
+} from '../application/relation_use_cases.js';
 import {
   DEFAULT_ENTRY_SAVED_QUERIES,
   decodeEntrySavedQueryWrite,
   reviseEntrySavedQueries,
 } from '../modules/entries/information_entry_saved_queries.js';
 import {decodeEntrySearchBody} from '../modules/entries/information_entry_search_request.js';
-import {Buffer} from 'node:buffer';
+import {
+  EntryTranslationError,
+  type EntryTranslationSearchRepositoryPort,
+  type EntryTranslationServicePort,
+} from '../modules/entries/information_entry_translation.js';
+import {
+  DEFAULT_WORKSPACE_UI_PREFERENCES,
+  decodeWorkspaceUiPreferences,
+} from '../storage/workspace_ui_preferences.js';
 
 import {
+  DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
   ENTRY_DOMAIN_KEYWORDS,
-  ENTRY_TEXT_SEARCH_FIELDS,
   ENTRY_TYPE_KEYWORDS,
   INFORMATION_ENTRY_ASSOCIATION_ACTIONS,
-  INFORMATION_ENTRY_ASSOCIATION_POLICY,
   INFORMATION_ENTRY_EXPLORATION_POLICY_VERSION,
   INFORMATION_ENTRY_GRAPH_DIRECTIONS,
+  INFORMATION_ENTRY_GRAPH_MAXIMUM_NEIGHBORS,
   INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS,
   INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES,
-  INFORMATION_ENTRY_GRAPH_MAXIMUM_NEIGHBORS,
-  InformationEntrySearchCursorError,
-  InformationEntryRetrievalServiceError,
+  INFORMATION_ENTRY_QUERY_SYNTHESIS_MAXIMUM_QUESTION_CODE_POINTS,
   InformationEntryQuerySynthesisServiceError,
-  buildInformationEntryKnowledgeGraph,
+  InformationEntryRetrievalServiceError,
+  InformationEntrySearchCursorError,
   buildInformationEntryAssociationProjection,
-  deriveEditedInformationDocumentResourceId,
-  deriveEditedInformationDocumentSnapshotId,
-  exploreCurrentInformationEntries,
-  deriveInformationDocumentTagRevisionId,
-  deriveInformationEntryAssociationOverrideRevisionId,
-  deriveInformationEntryRevisionId,
-  deriveInformationEntryRestructureGroups,
-  informationEntrySearchKey,
-  listInformationEntryAssociations as selectInformationEntryAssociations,
-  orderedInformationEntryAssociationPair,
-  prepareAggregatedInformationDocumentTags,
-  prepareInformationEntryAssociationOverride,
-  prepareInformationEntryGraphEdit,
+  decodeEntrySplitRuleProfile,
+  decodeEntrySplitRuleSettings,
   decodeSourceReviewRequest,
   decodeSourceReviewRevisions,
   decodeSourceReviewWrite,
+  deriveEditedInformationDocumentResourceId,
+  deriveEditedInformationDocumentSnapshotId,
+  deriveInformationDocumentTagRevisionId,
+  deriveInformationEntryAssociationOverrideRevisionId,
+  deriveInformationEntryRestructureGroups,
+  exploreCurrentInformationEntries,
   isSourceReviewUuid,
   listInformationEntrySourceReviewItems,
+  orderedInformationEntryAssociationPair,
   paginateInformationEntrySourceReviews,
-  type InformationEntrySourceReviewRevisions,
-  prepareInformationEntryGraphRelation,
-  prepareInformationEntryGraphVisibility,
-  prepareManualInformationDocumentTags,
-  prepareManualEntryRevision,
-  prepareManualSplitInformationEntries,
-  prepareInformationEntryRestructure,
-  prepareSplitInformationEntries,
-  reviewCurrentInformationEntryTypes,
-  decodeEntrySplitRuleProfile,
-  decodeEntrySplitRuleSettings,
-  DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
   planInformationEntrySplitRule,
-  searchCurrentInformationEntries,
-  scoreInformationEntrySearchText,
+  prepareAggregatedInformationDocumentTags,
+  prepareInformationEntryAssociationOverride,
+  prepareInformationEntryGraphRelation,
+  prepareInformationEntryRestructure,
+  prepareManualInformationDocumentTags,
+  reviewCurrentInformationEntryTypes,
   suggestInformationEntryPreferenceRules,
   trialInformationEntryAutomationPolicy,
   trialInformationEntryPreferenceProfile,
   validateInformationDocumentWorkingCopyText,
+  type CurrentInformationDocumentTags,
   type CurrentInformationEntry,
   type EntryDomainKeyword,
+  type EntrySplitRuleProfile,
   type EntryTypeKeyword,
-  type ManualEntryFragmentGroupInput,
+  type InformationDocumentTagRepositoryPort,
+  type InformationDocumentWorkingCopyRepositoryPort,
   type InformationEntryAssociationAction,
   type InformationEntryAssociationPolicy,
+  type InformationEntryAssociationRepositoryPort,
+  type InformationEntryEmptySnapshotRepositoryPort,
   type InformationEntryExplorationPolicy,
   type InformationEntryExplorationRequest,
-  type InformationEntryAssociationRepositoryPort,
-  type InformationEntryAssociationRepositorySnapshot,
   type InformationEntryGraphDirection,
   type InformationEntryGraphSemanticKind,
   type InformationEntryGraphVerificationStatus,
   type InformationEntryPreferenceTrialExpectedEntry,
-  type InformationDocumentTagRepositoryPort,
-  type InformationDocumentWorkingCopyRepositoryPort,
-  type InformationEntryDocumentView,
-  type InformationEntryEmptySnapshotRepositoryPort,
-  type InformationEntrySearchRequest,
-  type InformationEntryTypeReviewCursor,
-  type InformationEntryTypeReviewFilter,
   type InformationEntryQuerySynthesisRequest,
   type InformationEntryQuerySynthesisServicePort,
-  type InformationEntryRetrievalServicePort,
-  type InformationEntrySearchEvaluationCase,
   type InformationEntryRestructurePreparation,
   type InformationEntryRestructureRepositoryPort,
-  type CurrentInformationDocumentTags,
+  type InformationEntryRetrievalServicePort,
+  type InformationEntrySearchEvaluationCase,
+  type InformationEntryTypeReviewCursor,
+  type InformationEntryTypeReviewFilter,
+  type ManualEntryFragmentGroupInput,
   type MaterializedEvidenceSnapshot,
-  type EntrySplitRuleProfile,
 } from '../modules/entries/index.js';
 import {
+  EVIDENCE_SNAPSHOT_PAGE_LIMIT,
   importMarkdownEvidence,
   importStructuredDocumentEvidence,
   materializeEvidenceSnapshot,
-  EVIDENCE_SNAPSHOT_PAGE_LIMIT,
   type EvidenceReadRepositoryPort,
   type EvidenceRepositoryPort,
   type EvidenceSnapshotPageCursor,
@@ -115,9 +124,9 @@ import {
   type AiAssociationProposalServicePort,
   type AiSplitProposalServicePort,
   type AiTagProposalServicePort,
+  type EntryAutomationActionRepositoryPort,
   type EntryAutomationExecution,
   type EntryAutomationExecutionRepositoryPort,
-  type EntryAutomationActionRepositoryPort,
   type EntryAutomationWorkQueueRepositoryPort,
   type ExecuteEntryAutomationResult,
   type ProcessingProposal,
@@ -131,26 +140,26 @@ import {
 } from '../modules/subscriptions/index.js';
 import type {BlobStore} from '../storage/blob_store.js';
 import {
-  decodeReviewAssociationPolicyPreferences,
-  decodeReviewAutomaticKeywordPreferences,
-  decodeEntryAutomationPolicy,
-  decodeEntryPreferenceProfile,
-  decodeReviewExplorationPolicyPreferences,
-  decodeReviewSourceSubscriptionPreferences,
-  decodeReviewQuickTags,
-  decodeReviewVocabularyPreferences,
   DEFAULT_ENTRY_AUTOMATION_POLICY,
   DEFAULT_ENTRY_PREFERENCE_PROFILE,
   DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
   DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
+  decodeEntryAutomationPolicy,
+  decodeEntryPreferenceProfile,
+  decodeReviewAssociationPolicyPreferences,
+  decodeReviewAutomaticKeywordPreferences,
+  decodeReviewExplorationPolicyPreferences,
+  decodeReviewQuickTags,
+  decodeReviewSourceSubscriptionPreferences,
+  decodeReviewVocabularyPreferences,
   patchReviewPreferences,
   updateReviewPreferences,
-  type ReviewAssociationPolicyPreferences,
-  type ReviewExplorationPolicyPreferences,
   type EntryAutomationPolicy,
   type EntryPreferenceProfile,
+  type ReviewAssociationPolicyPreferences,
+  type ReviewExplorationPolicyPreferences,
   type ReviewPreferencesStore,
 } from '../storage/review_preferences_store.js';
 import {
@@ -161,15 +170,21 @@ import {
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
-import type {EntryMarkdownExportServicePort} from '../modules/entries/information_entry_markdown_export_service.js';
 import type {EntryMarkdownExportResult} from '../modules/entries/information_entry_markdown_export.js';
+import type {EntryMarkdownExportServicePort} from '../modules/entries/information_entry_markdown_export_service.js';
+
+import type {DocumentIntakeRepository} from '../application/document_intake_contract.js';
 
 export interface M1cApiServiceDependencies {
+  readonly stageDocument?: (snapshotId: string) => Promise<void>;
+  readonly knowledgeEntries?: InformationEntryRepositoryPort;
+  readonly documentIntakeRepository?: DocumentIntakeRepository;
   readonly entryMarkdownExports?: EntryMarkdownExportServicePort;
   readonly workspaceId: string;
   readonly blobStore: BlobStore;
   readonly reviewPreferences: ReviewPreferencesStore;
   readonly evidenceRepository: EvidenceRepositoryPort;
+  readonly manualImportEvidenceRepository?: EvidenceRepositoryPort;
   readonly evidenceReadRepository: EvidenceReadRepositoryPort;
   readonly informationEntryRepository: InformationEntryEmptySnapshotRepositoryPort;
   readonly informationDocumentTagRepository: InformationDocumentTagRepositoryPort;
@@ -186,6 +201,8 @@ export interface M1cApiServiceDependencies {
   readonly aiTagProposals?: AiTagProposalServicePort;
   readonly aiAssociationProposals?: AiAssociationProposalServicePort;
   readonly aiQuerySynthesis?: InformationEntryQuerySynthesisServicePort;
+  readonly entryTranslations?: EntryTranslationServicePort;
+  readonly entryTranslationSearch?: EntryTranslationSearchRepositoryPort;
   readonly workspaceTransfer: M1cWorkspaceTransferPort;
 }
 
@@ -214,6 +231,18 @@ type LoadedInformationEntryRestructure =
     }>;
 
 export interface M1cApiServicePort {
+  importEntryTranslation(
+    entryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult>;
+  readEntryTranslation(
+    entryId: string,
+    revision: unknown,
+  ): Promise<M1cHttpResult>;
+  generateEntryTranslation(
+    entryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult>;
   previewEntryMarkdownExport(body: unknown): Promise<M1cHttpResult>;
   generateEntryMarkdownExport(body: unknown): Promise<M1cHttpResult>;
   workspace(): M1cHttpResult;
@@ -245,6 +274,8 @@ export interface M1cApiServicePort {
   loadEntrySavedQueries(): Promise<M1cHttpResult>;
   writeEntrySavedQuery(body: unknown): Promise<M1cHttpResult>;
   readEntryQueryContext(body: unknown): Promise<M1cHttpResult>;
+  loadWorkspaceUiPreferences(): Promise<M1cHttpResult>;
+  saveWorkspaceUiPreferences(body: unknown): Promise<M1cHttpResult>;
   loadReviewPreferences(): Promise<M1cHttpResult>;
   saveReviewPreferences(body: unknown): Promise<M1cHttpResult>;
   loadInformationEntryPreferenceProfile(): Promise<M1cHttpResult>;
@@ -391,83 +422,26 @@ export interface M1cApiServicePort {
   restoreWorkspaceBundle(body: unknown): Promise<M1cHttpResult>;
 }
 
-/** Thin local HTTP application layer over the accepted domain commands. */
+/** Owner-facing HTTP adapter over the accepted domain commands. */
 export class M1cApiService implements M1cApiServicePort {
   readonly #dependencies: Readonly<M1cApiServiceDependencies>;
+  readonly #documents: DocumentUseCases;
+  readonly #entries: EntryUseCases;
+  readonly #relations: RelationUseCases;
+  readonly #processing: ProcessingUseCases;
 
   public constructor(dependencies: Readonly<M1cApiServiceDependencies>) {
     this.#dependencies = dependencies;
-  }
-
-  async #loadCurrentInformationEntriesByIds(
-    entryIds: readonly string[],
-    includePrivate: boolean,
-  ): Promise<readonly Readonly<CurrentInformationEntry>[]> {
-    const repository = this.#dependencies.informationEntryRepository;
-    return repository.loadCurrentEntriesByIds === undefined
-      ? repository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          includePrivate,
-        )
-      : repository.loadCurrentEntriesByIds(
-          this.#dependencies.workspaceId,
-          includePrivate,
-          entryIds,
-        );
-  }
-
-  async #loadInformationEntryAssociationNeighborhood(
-    entryIds: readonly string[],
-    includePrivate: boolean,
-  ): Promise<
-    Readonly<{
-      entries: readonly Readonly<CurrentInformationEntry>[];
-      snapshot: Readonly<InformationEntryAssociationRepositorySnapshot>;
-    }>
-  > {
-    const associationRepository =
-      this.#dependencies.informationEntryAssociationRepository;
-    const loadTargeted =
-      associationRepository.loadAssociationSnapshotForEntries?.bind(
-        associationRepository,
-      );
-    const loadEntriesByIds =
-      this.#dependencies.informationEntryRepository.loadCurrentEntriesByIds?.bind(
-        this.#dependencies.informationEntryRepository,
-      );
-    if (loadTargeted === undefined || loadEntriesByIds === undefined) {
-      const [entries, snapshot] = await Promise.all([
-        this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          includePrivate,
-        ),
-        associationRepository.loadAssociationSnapshot(
-          this.#dependencies.workspaceId,
-          includePrivate,
-        ),
-      ]);
-      return Object.freeze({entries, snapshot});
-    }
-    const snapshot = await loadTargeted(
-      this.#dependencies.workspaceId,
-      includePrivate,
-      entryIds,
-    );
-    const endpointIds = new Set(entryIds);
-    for (const projection of snapshot.projections) {
-      endpointIds.add(projection.entryLowId);
-      endpointIds.add(projection.entryHighId);
-    }
-    for (const override of snapshot.overrides) {
-      endpointIds.add(override.entryLowId);
-      endpointIds.add(override.entryHighId);
-    }
-    const entries = await loadEntriesByIds(
-      this.#dependencies.workspaceId,
-      includePrivate,
-      [...endpointIds],
-    );
-    return Object.freeze({entries, snapshot});
+    const authority = ExecutionAuthority.owner(dependencies.workspaceId);
+    this.#documents = new DocumentUseCases(authority, dependencies);
+    this.#entries = new EntryUseCases(authority, {
+      ...dependencies,
+      entryAliases: async () =>
+        (await dependencies.reviewPreferences.load(dependencies.workspaceId))
+          .vocabulary?.aliases ?? [],
+    });
+    this.#relations = new RelationUseCases(authority, dependencies);
+    this.#processing = new ProcessingUseCases(authority, dependencies);
   }
 
   async #loadInformationEntryAssociationPolicy(): Promise<
@@ -494,194 +468,6 @@ export class M1cApiService implements M1cApiServicePort {
     );
   }
 
-  async #searchPrivateDocuments(
-    request: Readonly<InformationEntrySearchRequest>,
-    entries: readonly Readonly<CurrentInformationEntry>[],
-    associationSnapshot: Readonly<InformationEntryAssociationRepositorySnapshot>,
-  ): Promise<
-    Readonly<{
-      totalCount: number;
-      items: readonly Readonly<Record<string, unknown>>[];
-    }>
-  > {
-    if (!request.includePrivate) {
-      return Object.freeze({totalCount: 0, items: Object.freeze([])});
-    }
-    const textMode = request.textMode ?? 'substring';
-    const textFields = request.textFields ?? ENTRY_TEXT_SEARCH_FIELDS;
-    const requiresStructuralEntryMatch =
-      request.contentKeyword !== undefined ||
-      request.typeKeyword !== undefined ||
-      request.typeCustomName !== undefined ||
-      request.domainKeyword !== undefined ||
-      request.domainCustomName !== undefined ||
-      request.chunkMode !== undefined ||
-      request.association !== undefined;
-    const {
-      text: ignoredText,
-      textMode: ignoredTextMode,
-      textFields: ignoredTextFields,
-      after: ignoredAfter,
-      ...structuralRequest
-    } = request;
-    void ignoredText;
-    void ignoredTextMode;
-    void ignoredTextFields;
-    void ignoredAfter;
-    const structuralEntryMatches = requiresStructuralEntryMatch
-      ? searchCurrentInformationEntries(
-          entries,
-          {
-            ...structuralRequest,
-            limit: Math.max(1, entries.length),
-          },
-          associationSnapshot,
-        ).items
-      : Object.freeze([]);
-    const structuralEntryMatchCounts = entryMatchCountsBySnapshot(
-      structuralEntryMatches,
-    );
-    const query = informationEntrySearchKey(request.text ?? '');
-    const tagEntryMatches =
-      query !== '' && textFields.includes('tags')
-        ? searchCurrentInformationEntries(
-            entries,
-            {
-              ...structuralRequest,
-              text: request.text ?? '',
-              textMode,
-              textFields: Object.freeze(['tags']),
-              limit: Math.max(1, entries.length),
-            },
-            associationSnapshot,
-          ).items
-        : Object.freeze([]);
-    const tagEntryMatchesBySnapshot = new Map<
-      string,
-      Readonly<{count: number; score: number}>
-    >();
-    for (const match of tagEntryMatches) {
-      if (!match.entry.value.isPrivate || match.textMatch === undefined)
-        continue;
-      const previous = tagEntryMatchesBySnapshot.get(match.entry.snapshotId);
-      tagEntryMatchesBySnapshot.set(
-        match.entry.snapshotId,
-        Object.freeze({
-          count: (previous?.count ?? 0) + 1,
-          score: Math.max(previous?.score ?? 0, match.textMatch.score),
-        }),
-      );
-    }
-    const summaries = (
-      await this.#dependencies.evidenceReadRepository.listSnapshots(
-        this.#dependencies.workspaceId,
-      )
-    )
-      .filter((snapshot) => snapshot.isPrivate === true)
-      .filter((snapshot) =>
-        privateDocumentMatchesStructuralFilters(
-          snapshot,
-          request,
-          requiresStructuralEntryMatch ? structuralEntryMatchCounts : undefined,
-        ),
-      )
-      .sort((left, right) => {
-        const captured = right.capturedAt.localeCompare(left.capturedAt);
-        return captured === 0
-          ? left.snapshotId.localeCompare(right.snapshotId)
-          : captured;
-      });
-    const items: Readonly<Record<string, unknown>>[] = [];
-    for (const summary of summaries) {
-      const matchReasons: string[] = [];
-      let excerpt: string | undefined;
-      let textScore = 0;
-      if (query !== '') {
-        if (textFields.includes('title')) {
-          const sourceScore = scoreInformationEntrySearchText(
-            summary.sourceKey,
-            query,
-            textMode,
-          );
-          if (sourceScore !== undefined) {
-            matchReasons.push('source');
-            textScore = Math.max(textScore, sourceScore);
-          }
-          if (summary.canonicalUri !== undefined) {
-            const uriScore = scoreInformationEntrySearchText(
-              summary.canonicalUri,
-              query,
-              textMode,
-            );
-            if (uriScore !== undefined) {
-              matchReasons.push('uri');
-              textScore = Math.max(textScore, uriScore);
-            }
-          }
-        }
-        if (textFields.includes('tags')) {
-          const tagMatch = tagEntryMatchesBySnapshot.get(summary.snapshotId);
-          if (tagMatch !== undefined) {
-            matchReasons.push('entry_tags');
-            textScore = Math.max(textScore, tagMatch.score);
-          }
-        }
-        if (textFields.includes('body')) {
-          const snapshot =
-            await this.#dependencies.evidenceReadRepository.loadSnapshot(
-              this.#dependencies.workspaceId,
-              summary.snapshotId,
-            );
-          if (snapshot === undefined) {
-            throw new Error(
-              'Private evidence Snapshot disappeared during search.',
-            );
-          }
-          const materialized = await materializeEvidenceSnapshot(
-            snapshot,
-            this.#dependencies.blobStore,
-          );
-          const documentText = materialized.structures
-            .map((structure) =>
-              typeof structure.normalizedText === 'string'
-                ? structure.normalizedText
-                : '',
-            )
-            .join('\n');
-          const bodyScore = scoreInformationEntrySearchText(
-            documentText,
-            query,
-            textMode,
-          );
-          if (bodyScore !== undefined) {
-            matchReasons.push('body');
-            textScore = Math.max(textScore, bodyScore);
-            excerpt = privateDocumentExcerpt(documentText);
-          }
-        }
-        if (matchReasons.length === 0) continue;
-      }
-      const structuralCount =
-        structuralEntryMatchCounts.get(summary.snapshotId) ?? 0;
-      const tagCount =
-        tagEntryMatchesBySnapshot.get(summary.snapshotId)?.count ?? 0;
-      items.push(
-        Object.freeze({
-          snapshot: summary,
-          matchReasons: Object.freeze(matchReasons),
-          entryMatchCount: Math.max(structuralCount, tagCount),
-          ...(query === ''
-            ? {}
-            : {textMatch: Object.freeze({mode: textMode, score: textScore})}),
-          ...(excerpt === undefined ? {} : {excerpt}),
-        }),
-      );
-    }
-    return Object.freeze({
-      totalCount: items.length,
-      items: Object.freeze(items),
-    });
-  }
   public workspace(): M1cHttpResult {
     return httpResult(200, {
       status: 'ok',
@@ -726,6 +512,9 @@ export class M1cApiService implements M1cApiServicePort {
         ...(this.#dependencies.aiQuerySynthesis === undefined
           ? []
           : ['ai_query_synthesis']),
+        ...(this.#dependencies.entryTranslations?.enabled === true
+          ? ['ai_entry_translation']
+          : []),
         ...(this.#dependencies.informationEntryRetrieval
           ?.semanticSearchAvailable === true
           ? ['semantic_entry_search']
@@ -798,34 +587,12 @@ export class M1cApiService implements M1cApiServicePort {
       return inputFailure('query.includePrivate');
     }
     try {
-      const snapshot =
-        await this.#dependencies.evidenceReadRepository.loadSnapshot(
-          this.#dependencies.workspaceId,
-          snapshotId,
-        );
-      if (snapshot === undefined) {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({code: 'snapshot_not_found'}),
-        });
-      }
-      if (snapshot.isPrivate === true && !includePrivate) {
-        return httpResult(403, {
-          status: 'rejected',
-          issue: Object.freeze({
-            code: 'private_content_requires_opt_in',
-            path: 'query.includePrivate',
-          }),
-        });
-      }
-      return httpResult(200, {
-        status: 'ok',
-        snapshot: await materializeEvidenceSnapshot(
-          snapshot,
-          this.#dependencies.blobStore,
-        ),
-      });
-    } catch {
+      return httpResult(
+        200,
+        await this.#documents.read(snapshotId, includePrivate),
+      );
+    } catch (error) {
+      if (error instanceof OperationError) return operationFailure(error);
       return httpResult(503, {
         status: 'failed',
         issue: Object.freeze({code: 'evidence_read_failed'}),
@@ -1296,6 +1063,56 @@ export class M1cApiService implements M1cApiServicePort {
         : httpResult(200, {status: 'ok', entry});
     } catch {
       return repositoryFailure();
+    }
+  }
+
+  public async loadWorkspaceUiPreferences(): Promise<M1cHttpResult> {
+    try {
+      const current = await this.#dependencies.reviewPreferences.load(
+        this.#dependencies.workspaceId,
+      );
+      return httpResult(200, {
+        status: 'ok',
+        preferences: current.uiPreferences ?? DEFAULT_WORKSPACE_UI_PREFERENCES,
+      });
+    } catch {
+      return reviewPreferencesFailure();
+    }
+  }
+
+  public async saveWorkspaceUiPreferences(
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    const candidate = decodeWorkspaceUiPreferences(body);
+    if (
+      candidate === undefined ||
+      candidate.revision >= Number.MAX_SAFE_INTEGER
+    )
+      return inputFailure('body');
+    try {
+      const updated = await updateReviewPreferences(
+        this.#dependencies.reviewPreferences,
+        this.#dependencies.workspaceId,
+        (current) => {
+          const previous =
+            current.uiPreferences ?? DEFAULT_WORKSPACE_UI_PREFERENCES;
+          if (previous.revision !== candidate.revision)
+            return {next: current, result: false};
+          return {
+            next: patchReviewPreferences(current, {
+              uiPreferences: {...candidate, revision: previous.revision + 1},
+            }),
+            result: true,
+          };
+        },
+      );
+      return httpResult(updated.result ? 200 : 409, {
+        status: updated.result ? 'ok' : 'conflict',
+        preferences:
+          updated.preferences.uiPreferences ?? DEFAULT_WORKSPACE_UI_PREFERENCES,
+      });
+    } catch {
+      return reviewPreferencesFailure();
     }
   }
 
@@ -2137,7 +1954,9 @@ export class M1cApiService implements M1cApiServicePort {
     const result = await importMarkdownEvidence(
       {
         blobStore: this.#dependencies.blobStore,
-        evidenceRepository: this.#dependencies.evidenceRepository,
+        evidenceRepository:
+          this.#dependencies.manualImportEvidenceRepository ??
+          this.#dependencies.evidenceRepository,
       },
       input,
     );
@@ -2157,7 +1976,9 @@ export class M1cApiService implements M1cApiServicePort {
       const result = await importStructuredDocumentEvidence(
         {
           blobStore: this.#dependencies.blobStore,
-          evidenceRepository: this.#dependencies.evidenceRepository,
+          evidenceRepository:
+            this.#dependencies.manualImportEvidenceRepository ??
+            this.#dependencies.evidenceRepository,
         },
         input,
       );
@@ -2423,56 +2244,14 @@ export class M1cApiService implements M1cApiServicePort {
     }
     const snapshotId = body.snapshotId;
     try {
-      const snapshot =
-        await this.#dependencies.evidenceReadRepository.loadSnapshot(
-          this.#dependencies.workspaceId,
-          snapshotId,
-        );
-      if (
-        snapshot === undefined ||
-        (snapshot.isPrivate === true && !includePrivate)
-      ) {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({code: 'snapshot_not_found'}),
-        });
-      }
-      const materialized = await materializeEvidenceSnapshot(
-        snapshot,
-        this.#dependencies.blobStore,
-      );
-      const entries = prepareSplitInformationEntries(materialized);
-      if (entries.length === 0) {
-        return httpResult(422, {
-          status: 'rejected',
-          issue: Object.freeze({code: 'entry_sections_not_found'}),
-        });
-      }
-      const persisted =
-        await this.#dependencies.informationEntryRepository.materializeEntriesIfSnapshotEmpty(
-          entries,
-        );
-      if (persisted.outcome === 'snapshot_not_empty') {
-        return httpResult(409, {
-          status: 'rejected',
-          issue: Object.freeze({code: 'split_structure_already_materialized'}),
-        });
-      }
-      const current =
-        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          includePrivate,
-        );
-      const entryIds = new Set(entries.map((entry) => entry.entryId));
-      return httpResult(persisted.outcome === 'created' ? 201 : 200, {
-        status: persisted.outcome,
+      const result = await this.#documents.materialize({
         snapshotId,
-        createdCount: persisted.createdCount,
-        entries: Object.freeze(
-          current.filter((entry) => entryIds.has(entry.entryId)),
-        ),
+        includePrivate,
+        mode: 'deterministic',
       });
-    } catch {
+      return httpResult(result.status === 'created' ? 201 : 200, result);
+    } catch (error) {
+      if (error instanceof OperationError) return operationFailure(error);
       return repositoryFailure();
     }
   }
@@ -2483,59 +2262,13 @@ export class M1cApiService implements M1cApiServicePort {
     const input = decodeManualEntrySplitBody(body);
     if (input === undefined) return inputFailure('body');
     try {
-      const snapshot =
-        await this.#dependencies.evidenceReadRepository.loadSnapshot(
-          this.#dependencies.workspaceId,
-          input.snapshotId,
-        );
-      if (
-        snapshot === undefined ||
-        (snapshot.isPrivate === true && !input.includePrivate)
-      ) {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({code: 'snapshot_not_found'}),
-        });
-      }
-      const materialized = await materializeEvidenceSnapshot(
-        snapshot,
-        this.#dependencies.blobStore,
-      );
-      const entries = prepareManualSplitInformationEntries(
-        materialized,
-        input.groups,
-      );
-      if (entries === undefined || entries.length === 0) {
-        return httpResult(422, {
-          status: 'rejected',
-          issue: Object.freeze({code: 'manual_split_invalid'}),
-        });
-      }
-      const persisted =
-        await this.#dependencies.informationEntryRepository.materializeEntriesIfSnapshotEmpty(
-          entries,
-        );
-      if (persisted.outcome === 'snapshot_not_empty') {
-        return httpResult(409, {
-          status: 'rejected',
-          issue: Object.freeze({code: 'split_structure_already_materialized'}),
-        });
-      }
-      const current =
-        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          input.includePrivate,
-        );
-      const entryIds = new Set(entries.map((entry) => entry.entryId));
-      return httpResult(persisted.outcome === 'created' ? 201 : 200, {
-        status: persisted.outcome,
-        snapshotId: input.snapshotId,
-        createdCount: persisted.createdCount,
-        entries: Object.freeze(
-          current.filter((entry) => entryIds.has(entry.entryId)),
-        ),
+      const result = await this.#documents.materialize({
+        ...input,
+        mode: 'manual',
       });
-    } catch {
+      return httpResult(result.status === 'created' ? 201 : 200, result);
+    } catch (error) {
+      if (error instanceof OperationError) return operationFailure(error);
       return repositoryFailure();
     }
   }
@@ -2630,6 +2363,8 @@ export class M1cApiService implements M1cApiServicePort {
         preparation.resultingEntries,
         loaded.currentDocumentTags,
       );
+      if (!preparation.resultingEntries.some((entry) => entry.value.isPrivate))
+        await this.#dependencies.stageDocument?.(preparation.snapshotId);
       const outcome = await repository.applyEntryRestructure({
         workspaceId: this.#dependencies.workspaceId,
         snapshotId: preparation.snapshotId,
@@ -2789,51 +2524,9 @@ export class M1cApiService implements M1cApiServicePort {
     const input = decodeEntryRevisionBody(body);
     if (input === undefined) return inputFailure('body');
     try {
-      const entries = await this.#loadCurrentInformationEntriesByIds(
-        [entryId],
-        input.includePrivate,
-      );
-      const current = entries.find((entry) => entry.entryId === entryId);
-      if (current === undefined) {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({code: 'information_entry_not_found'}),
-        });
-      }
-      const value = prepareManualEntryRevision(current, input.annotation);
-      if (value === undefined) return inputFailure('body.annotation');
-      const outcome =
-        await this.#dependencies.informationEntryRepository.reviseEntry({
-          workspaceId: this.#dependencies.workspaceId,
-          entryId,
-          expectedRevision: input.expectedRevision,
-          revisionId: deriveInformationEntryRevisionId(
-            entryId,
-            input.expectedRevision + 1,
-          ),
-          value,
-        });
-      if (outcome === 'not_found') {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({code: 'information_entry_not_found'}),
-        });
-      }
-      if (outcome === 'stale') {
-        return httpResult(409, {
-          status: 'rejected',
-          issue: Object.freeze({code: 'stale_entry_revision'}),
-        });
-      }
-      const refreshed = await this.#loadCurrentInformationEntriesByIds(
-        [entryId],
-        input.includePrivate,
-      );
-      return httpResult(200, {
-        status: outcome,
-        entry: refreshed.find((entry) => entry.entryId === entryId),
-      });
-    } catch {
+      return httpResult(200, await this.#entries.revise(entryId, input));
+    } catch (error) {
+      if (error instanceof OperationError) return operationFailure(error);
       return repositoryFailure();
     }
   }
@@ -2864,50 +2557,31 @@ export class M1cApiService implements M1cApiServicePort {
     const request = decodeEntrySearchBody(body);
     if (request === undefined) return inputFailure('body');
     try {
-      const retrievalMode = request.retrievalMode ?? 'lexical';
       if (
-        this.#dependencies.informationEntryRetrieval !== undefined &&
-        (retrievalMode !== 'lexical' || !request.includePrivate)
+        typeof body === 'object' &&
+        body !== null &&
+        'workbench' in body &&
+        body.workbench === true
       ) {
-        const result =
-          await this.#dependencies.informationEntryRetrieval.search(request);
+        if (
+          !request.snapshotId ||
+          (request.retrievalMode && request.retrievalMode !== 'lexical')
+        )
+          return inputFailure('body');
+        const entries =
+          await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+            this.#dependencies.workspaceId,
+            request.includePrivate,
+          );
         return httpResult(200, {
           status: 'ok',
-          ...result,
-          privateDocuments: Object.freeze({
-            totalCount: 0,
-            items: Object.freeze([]),
-          }),
+          ...searchCurrentInformationEntries(entries, request),
+          privateDocuments: {totalCount: 0, items: []},
         });
       }
-      const [entries, associationSnapshot] = await Promise.all([
-        this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          request.includePrivate,
-        ),
-        request.association === undefined
-          ? Promise.resolve({projections: [], overrides: []})
-          : this.#dependencies.informationEntryAssociationRepository.loadAssociationSnapshot(
-              this.#dependencies.workspaceId,
-              request.includePrivate,
-            ),
-      ]);
-      const result = searchCurrentInformationEntries(
-        entries,
-        request,
-        associationSnapshot,
-      );
-      const privateDocuments = await this.#searchPrivateDocuments(
-        request,
-        entries,
-        associationSnapshot,
-      );
-      return httpResult(200, {
-        status: 'ok',
-        ...result,
-        privateDocuments,
-      });
+      return httpResult(200, await this.#entries.search(request));
     } catch (error) {
+      if (error instanceof OperationError) return operationFailure(error);
       if (error instanceof InformationEntrySearchCursorError) {
         return httpResult(422, {
           status: 'rejected',
@@ -3002,7 +2676,10 @@ export class M1cApiService implements M1cApiServicePort {
     if (request === undefined) return inputFailure('body');
     try {
       const [entries, associationSnapshot, policy] = await Promise.all([
-        this.#dependencies.informationEntryRepository.loadCurrentEntries(
+        (
+          this.#dependencies.knowledgeEntries ??
+          this.#dependencies.informationEntryRepository
+        ).loadCurrentEntries(
           this.#dependencies.workspaceId,
           request.includePrivate,
         ),
@@ -3027,6 +2704,130 @@ export class M1cApiService implements M1cApiServicePort {
       return httpResult(200, {status: 'ok', ...result});
     } catch {
       return repositoryFailure();
+    }
+  }
+
+  public async importEntryTranslation(
+    entryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
+    if (
+      !isRecord(body) ||
+      Object.keys(body).sort().join(',') !==
+        'body,expectedRevision,sourceRevisionId,title' ||
+      typeof body.expectedRevision !== 'number' ||
+      !Number.isSafeInteger(body.expectedRevision) ||
+      body.expectedRevision < 1 ||
+      body.expectedRevision > 2_147_483_647 ||
+      typeof body.sourceRevisionId !== 'string' ||
+      !CANONICAL_UUID.test(body.sourceRevisionId) ||
+      typeof body.title !== 'string' ||
+      typeof body.body !== 'string'
+    )
+      return inputFailure('body');
+    const service = this.#dependencies.entryTranslations;
+    if (service === undefined)
+      return httpResult(503, {
+        status: 'rejected',
+        issue: {code: 'translation_import_unavailable'},
+      });
+    try {
+      const translation = await service.importProvided(
+        entryId,
+        body.expectedRevision,
+        body.sourceRevisionId,
+        {title: body.title, body: body.body},
+      );
+      return httpResult(200, {status: 'ok', translation});
+    } catch (error) {
+      if (!(error instanceof EntryTranslationError)) return repositoryFailure();
+      return httpResult(
+        error.code === 'translation_entry_unavailable'
+          ? 404
+          : error.code === 'translation_invalid_text'
+            ? 422
+            : 409,
+        {status: 'rejected', issue: {code: error.code}},
+      );
+    }
+  }
+
+  public async readEntryTranslation(
+    entryId: string,
+    revision: unknown,
+  ): Promise<M1cHttpResult> {
+    if (typeof revision !== 'string' || !/^[1-9]\d{0,9}$/u.test(revision))
+      return inputFailure('query.expectedRevision');
+    return this.#entryTranslation(entryId, Number(revision), false);
+  }
+
+  public async generateEntryTranslation(
+    entryId: string,
+    body: unknown,
+  ): Promise<M1cHttpResult> {
+    if (
+      !isRecord(body) ||
+      Object.keys(body).some(
+        (key) => !['expectedRevision', 'expectedTranslatedAt'].includes(key),
+      ) ||
+      (body.expectedTranslatedAt !== undefined &&
+        (typeof body.expectedTranslatedAt !== 'string' ||
+          !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/u.test(
+            body.expectedTranslatedAt,
+          ) ||
+          !Number.isFinite(Date.parse(body.expectedTranslatedAt)))) ||
+      typeof body.expectedRevision !== 'number'
+    )
+      return inputFailure('body');
+    return this.#entryTranslation(
+      entryId,
+      body.expectedRevision,
+      true,
+      body.expectedTranslatedAt,
+    );
+  }
+
+  async #entryTranslation(
+    entryId: string,
+    revision: number,
+    generate: boolean,
+    expectedTranslatedAt?: string,
+  ): Promise<M1cHttpResult> {
+    if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
+    if (
+      !Number.isSafeInteger(revision) ||
+      revision < 1 ||
+      revision > 2_147_483_647
+    )
+      return inputFailure('expectedRevision');
+    const service = this.#dependencies.entryTranslations;
+    if (service === undefined)
+      return httpResult(503, {
+        status: 'rejected',
+        issue: {code: 'ai_provider_not_configured'},
+      });
+    try {
+      const translation = await (generate
+        ? service.generate(entryId, revision, expectedTranslatedAt)
+        : service.read(entryId, revision));
+      return httpResult(200, {status: 'ok', translation: translation ?? null});
+    } catch (error) {
+      if (!(error instanceof EntryTranslationError)) return repositoryFailure();
+      const status =
+        error.code === 'translation_entry_unavailable'
+          ? 404
+          : error.code === 'translation_source_stale'
+            ? 409
+            : error.code === 'translation_input_too_large'
+              ? 422
+              : error.code === 'ai_provider_not_configured'
+                ? 503
+                : 502;
+      return httpResult(status, {
+        status: 'rejected',
+        issue: {code: error.code},
+      });
     }
   }
 
@@ -3060,106 +2861,20 @@ export class M1cApiService implements M1cApiServicePort {
     const input = decodeInformationEntryKnowledgeGraphRequest(body);
     if (input === undefined) return inputFailure('body');
     try {
-      const retrieval = this.#dependencies.informationEntryRetrieval;
-      if (
-        retrieval !== undefined &&
-        this.#dependencies.informationEntryRepository
-          .loadCurrentEntriesByIds !== undefined &&
-        this.#dependencies.informationEntryAssociationRepository
-          .loadAssociationSnapshotForEntries !== undefined
-      ) {
-        const searchResult = await retrieval.search({
-          ...(input.query === undefined ? {} : {text: input.query}),
-          includePrivate: input.includePrivate,
-          onlyPrivate: input.onlyPrivate,
-          limit: input.candidateLimit,
-        });
-        const centerEntryId =
-          input.centerEntryId ?? searchResult.items[0]?.entry.entryId;
-        if (centerEntryId === undefined) {
-          return httpResult(200, {
-            status: 'ok',
-            querySha256: searchResult.querySha256,
-            candidateTotalCount: searchResult.totalCount,
-            candidates: searchResult.items,
-            graph: null,
-          });
-        }
-        const neighborhood =
-          await this.#loadInformationEntryAssociationNeighborhood(
-            [centerEntryId],
-            input.includePrivate,
-          );
-        const entries = input.onlyPrivate
-          ? neighborhood.entries.filter((entry) => entry.value.isPrivate)
-          : neighborhood.entries;
-        if (!entries.some((entry) => entry.entryId === centerEntryId)) {
-          return httpResult(404, {
-            status: 'not_found',
-            issue: Object.freeze({code: 'information_entry_not_found'}),
-          });
-        }
-        const graph = buildInformationEntryKnowledgeGraph(
-          centerEntryId,
-          entries,
-          neighborhood.snapshot,
-          input.neighborLimit,
-        );
-        return httpResult(200, {
-          status: 'ok',
-          querySha256: searchResult.querySha256,
-          candidateTotalCount: searchResult.totalCount,
-          candidates: searchResult.items,
-          graph: graph ?? null,
-        });
-      }
-      const [loadedEntries, associationSnapshot] = await Promise.all([
-        this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          input.includePrivate,
-        ),
-        this.#dependencies.informationEntryAssociationRepository.loadAssociationSnapshot(
-          this.#dependencies.workspaceId,
-          input.includePrivate,
-        ),
-      ]);
-      const entries = input.onlyPrivate
-        ? loadedEntries.filter((entry) => entry.value.isPrivate)
-        : loadedEntries;
-      const searchResult = searchCurrentInformationEntries(entries, {
-        ...(input.query === undefined ? {} : {text: input.query}),
-        includePrivate: input.includePrivate,
-        onlyPrivate: input.onlyPrivate,
-        limit: input.candidateLimit,
-      });
-      const centerEntryId =
-        input.centerEntryId ?? searchResult.items[0]?.entry.entryId;
-      if (
-        input.centerEntryId !== undefined &&
-        !entries.some((entry) => entry.entryId === input.centerEntryId)
-      ) {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({code: 'information_entry_not_found'}),
-        });
-      }
-      const graph =
-        centerEntryId === undefined
-          ? undefined
-          : buildInformationEntryKnowledgeGraph(
-              centerEntryId,
-              entries,
-              associationSnapshot,
-              input.neighborLimit,
-            );
-      return httpResult(200, {
-        status: 'ok',
-        querySha256: searchResult.querySha256,
-        candidateTotalCount: searchResult.totalCount,
-        candidates: searchResult.items,
-        graph: graph ?? null,
-      });
-    } catch {
+      return httpResult(
+        200,
+        await new RelationUseCases(
+          ExecutionAuthority.owner(this.#dependencies.workspaceId),
+          {
+            ...this.#dependencies,
+            informationEntryRepository:
+              this.#dependencies.knowledgeEntries ??
+              this.#dependencies.informationEntryRepository,
+          },
+        ).readGraph(input),
+      );
+    } catch (error) {
+      if (error instanceof OperationError) return operationFailure(error);
       return repositoryFailure();
     }
   }
@@ -3336,117 +3051,12 @@ export class M1cApiService implements M1cApiServicePort {
     );
     if (input === undefined || pair === undefined) return inputFailure('body');
     try {
-      const [entries, snapshot] = await Promise.all([
-        this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          input.includePrivate,
-        ),
-        this.#dependencies.informationEntryAssociationRepository.loadAssociationSnapshot(
-          this.#dependencies.workspaceId,
-          input.includePrivate,
-        ),
-      ]);
-      if (
-        !entries.some((entry) => entry.entryId === entryId) ||
-        !entries.some((entry) => entry.entryId === relatedEntryId)
-      ) {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({code: 'information_entry_not_found'}),
-        });
-      }
-      const projection = snapshot.projections.find(
-        (candidate) =>
-          candidate.entryLowId === pair.entryLowId &&
-          candidate.entryHighId === pair.entryHighId,
+      return httpResult(
+        200,
+        await this.#relations.reviseEdge(entryId, relatedEntryId, input),
       );
-      const current = snapshot.overrides.find(
-        (candidate) =>
-          candidate.entryLowId === pair.entryLowId &&
-          candidate.entryHighId === pair.entryHighId,
-      );
-      if (
-        input.operation !== 'edit' &&
-        projection === undefined &&
-        current?.value.graph === undefined
-      ) {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({
-            code: 'information_entry_graph_edge_not_found',
-          }),
-        });
-      }
-      let value;
-      if (input.operation === 'edit') {
-        const origin =
-          current?.value.graph?.origin === 'ai'
-            ? projection === undefined
-              ? 'user'
-              : 'association'
-            : (current?.value.graph?.origin ??
-              (projection === undefined ? 'user' : 'association'));
-        const graph = prepareInformationEntryGraphRelation(
-          input.label,
-          input.direction,
-          origin,
-          {
-            semanticKind: input.semanticKind,
-            verificationStatus: input.verificationStatus,
-            note: input.note,
-          },
-        );
-        if (graph === undefined) return inputFailure('body.label');
-        value = prepareInformationEntryGraphEdit(
-          current?.value,
-          projection !== undefined,
-          input.expectedEntryRevisions === undefined
-            ? graph
-            : Object.freeze({
-                ...graph,
-                reviewedRevisions: input.expectedEntryRevisions,
-              }),
-        );
-      } else {
-        value = prepareInformationEntryGraphVisibility(
-          current?.value,
-          projection !== undefined,
-          input.operation === 'block',
-        );
-      }
-      const outcome =
-        await this.#dependencies.informationEntryAssociationRepository.writeAssociationOverride(
-          {
-            workspaceId: this.#dependencies.workspaceId,
-            ...pair,
-            expectedRevision: input.expectedRevision,
-            revisionId: deriveInformationEntryAssociationOverrideRevisionId(
-              pair.entryLowId,
-              pair.entryHighId,
-              input.expectedRevision + 1,
-            ),
-            includePrivate: input.includePrivate,
-            ...(input.operation === 'edit' &&
-            input.expectedEntryRevisions !== undefined
-              ? {expectedEntryRevisions: input.expectedEntryRevisions}
-              : {}),
-            value,
-          },
-        );
-      if (outcome === 'not_found') {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({code: 'information_entry_not_found'}),
-        });
-      }
-      if (outcome === 'stale') {
-        return httpResult(409, {
-          status: 'rejected',
-          issue: Object.freeze({code: 'stale_association_override_revision'}),
-        });
-      }
-      return httpResult(200, {status: outcome});
-    } catch {
+    } catch (error) {
+      if (error instanceof OperationError) return operationFailure(error);
       return repositoryFailure();
     }
   }
@@ -3646,33 +3256,12 @@ export class M1cApiService implements M1cApiServicePort {
       return inputFailure('query.includePrivate');
     }
     try {
-      const [neighborhood, policy] = await Promise.all([
-        this.#loadInformationEntryAssociationNeighborhood(
-          [entryId],
-          includePrivate,
-        ),
-        this.#loadInformationEntryAssociationPolicy(),
-      ]);
-      const {entries, snapshot} = neighborhood;
-      if (!entries.some((entry) => entry.entryId === entryId)) {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({code: 'information_entry_not_found'}),
-        });
-      }
-      const associations = selectInformationEntryAssociations(
-        entryId,
-        entries,
-        snapshot,
+      return httpResult(
+        200,
+        await this.#relations.list(entryId, includePrivate),
       );
-      return httpResult(200, {
-        status: 'ok',
-        entryId,
-        totalCount: associations.length,
-        policy,
-        associations,
-      });
-    } catch {
+    } catch (error) {
+      if (error instanceof OperationError) return operationFailure(error);
       return repositoryFailure();
     }
   }
@@ -3766,79 +3355,9 @@ export class M1cApiService implements M1cApiServicePort {
       return inputFailure('query.includePrivate');
     }
     try {
-      const [snapshots, entries, currentTags, workingCopies] =
-        await Promise.all([
-          this.#dependencies.evidenceReadRepository.listSnapshots(
-            this.#dependencies.workspaceId,
-          ),
-          this.#dependencies.informationEntryRepository.loadCurrentEntries(
-            this.#dependencies.workspaceId,
-            includePrivate,
-          ),
-          this.#dependencies.informationDocumentTagRepository.loadCurrentDocumentTags(
-            this.#dependencies.workspaceId,
-            includePrivate,
-          ),
-          this.#dependencies.informationDocumentWorkingCopyRepository.list(
-            this.#dependencies.workspaceId,
-          ),
-        ]);
-      const workingCopyBySource = new Map(
-        workingCopies.map((workingCopy) => [
-          workingCopy.sourceSnapshotId,
-          workingCopy,
-        ]),
-      );
-      const sourceByDerived = new Map(
-        workingCopies.flatMap((workingCopy) =>
-          workingCopy.derivedSnapshotId === undefined
-            ? []
-            : [
-                [
-                  workingCopy.derivedSnapshotId,
-                  workingCopy.sourceSnapshotId,
-                ] as const,
-              ],
-        ),
-      );
-      const documents = snapshots
-        .filter((snapshot) => includePrivate || snapshot.isPrivate !== true)
-        .map((snapshot): Readonly<InformationEntryDocumentView> => {
-          const documentEntries = entries.filter(
-            (entry) => entry.snapshotId === snapshot.snapshotId,
-          );
-          const tags = currentTags.find(
-            (candidate) => candidate.snapshotId === snapshot.snapshotId,
-          );
-          if (tags !== undefined && tags.resourceId !== snapshot.resourceId) {
-            throw new Error('Document tag source identity mismatch.');
-          }
-          const workingCopy = workingCopyBySource.get(snapshot.snapshotId);
-          const derivedFromSnapshotId = sourceByDerived.get(
-            snapshot.snapshotId,
-          );
-          return Object.freeze({
-            ...snapshot,
-            entryCount: documentEntries.length,
-            annotatedEntryCount: documentEntries.filter(
-              (entry) =>
-                entry.value.contentKeywords.length > 0 ||
-                entry.value.typeKeyword !== undefined ||
-                entry.value.domains.length > 0,
-            ).length,
-            ...(tags === undefined ? {} : {currentTags: tags}),
-            ...(workingCopy === undefined ? {} : {workingCopy}),
-            ...(derivedFromSnapshotId === undefined
-              ? {}
-              : {derivedFromSnapshotId}),
-          });
-        });
-      return httpResult(200, {
-        status: 'ok',
-        totalCount: documents.length,
-        documents: Object.freeze(documents),
-      });
-    } catch {
+      return httpResult(200, await this.#documents.list(includePrivate));
+    } catch (error) {
+      if (error instanceof OperationError) return operationFailure(error);
       return repositoryFailure();
     }
   }
@@ -3917,6 +3436,8 @@ export class M1cApiService implements M1cApiServicePort {
           ? prepareAggregatedInformationDocumentTags(aggregationInput)
           : prepareManualInformationDocumentTags(aggregationInput, input.tags);
       if (value === undefined) return inputFailure('body.tags');
+      if (!snapshot.isPrivate)
+        await this.#dependencies.stageDocument?.(snapshotId);
       const outcome =
         await this.#dependencies.informationDocumentTagRepository.writeDocumentTags(
           {
@@ -3963,16 +3484,13 @@ export class M1cApiService implements M1cApiServicePort {
     const limit = decodeProcessingRunLimit(limitInput);
     if (limit === undefined) return inputFailure('query.limit');
     try {
-      const runs =
-        await this.#dependencies.processingRunRepository.listRecentRuns(
-          this.#dependencies.workspaceId,
-          limit,
-        );
+      const result = await this.#processing.list(limit, true);
       return httpResult(200, {
         status: 'ok',
-        runs: Object.freeze(runs.map(processingRunResponse)),
+        runs: Object.freeze(result.map(processingRunResponse)),
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof OperationError) return operationFailure(error);
       return repositoryFailure();
     }
   }
@@ -3991,37 +3509,12 @@ export class M1cApiService implements M1cApiServicePort {
       return inputFailure('body.expectedVersion');
     }
     try {
-      const outcome =
-        await this.#dependencies.processingRunRepository.cancelRun(
-          this.#dependencies.workspaceId,
-          runId,
-          body.expectedVersion as number,
-        );
-      if (outcome === 'not_found') {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({code: 'processing_run_not_found'}),
-        });
-      }
-      if (outcome === 'stale') {
-        return httpResult(409, {
-          status: 'rejected',
-          issue: Object.freeze({code: 'stale_processing_run_version'}),
-        });
-      }
-      if (outcome === 'terminal') {
-        return httpResult(409, {
-          status: 'rejected',
-          issue: Object.freeze({code: 'processing_run_terminal'}),
-        });
-      }
-      if (outcome !== 'applied') return repositoryFailure();
-      return httpResult(200, {
-        status: 'cancelled',
-        runId,
-        version: (body.expectedVersion as number) + 1,
-      });
-    } catch {
+      return httpResult(
+        200,
+        await this.#processing.cancel(runId, body.expectedVersion as number),
+      );
+    } catch (error) {
+      if (error instanceof OperationError) return operationFailure(error);
       return repositoryFailure();
     }
   }
@@ -4162,6 +3655,8 @@ export class M1cApiService implements M1cApiServicePort {
     const service = this.#dependencies.aiSplitProposals;
     if (service === undefined) return aiProviderNotConfigured();
     try {
+      if (decision === 'accepted')
+        await this.#dependencies.stageDocument?.(snapshotId);
       const result =
         decision === 'accepted'
           ? await service.accept(snapshotId, proposalId)
@@ -4246,6 +3741,15 @@ export class M1cApiService implements M1cApiServicePort {
     const service = this.#dependencies.aiTagProposals;
     if (service === undefined) return aiProviderNotConfigured();
     try {
+      if (decision === 'accepted' && this.#dependencies.stageDocument) {
+        const entry = (
+          await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+            this.#dependencies.workspaceId,
+            false,
+          )
+        ).find((entry) => entry.entryId === entryId);
+        if (entry) await this.#dependencies.stageDocument(entry.snapshotId);
+      }
       const result =
         decision === 'accepted'
           ? await service.accept(entryId, proposalId)
@@ -4361,6 +3865,15 @@ export class M1cApiService implements M1cApiServicePort {
     const service = this.#dependencies.aiAssociationProposals;
     if (service === undefined) return aiProviderNotConfigured();
     try {
+      if (decision === 'accepted' && this.#dependencies.stageDocument) {
+        const entry = (
+          await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+            this.#dependencies.workspaceId,
+            false,
+          )
+        ).find((entry) => entry.entryId === entryId);
+        if (entry) await this.#dependencies.stageDocument(entry.snapshotId);
+      }
       const result =
         decision === 'accepted'
           ? await service.accept(entryId, relatedEntryId, proposalId)
@@ -4849,24 +4362,9 @@ function prepareRestructuredDocumentTags(
     value,
   });
 }
-function decodeEntryRevisionBody(body: unknown):
-  | Readonly<{
-      expectedRevision: number;
-      includePrivate: boolean;
-      annotation: Readonly<{
-        body: string;
-        contentKeywords: readonly string[];
-        typeKeyword: EntryTypeKeyword;
-        typeCustomName?: string;
-        usefulnessScore?: 1 | 2 | 3 | 4 | 5;
-        interestScore?: 1 | 2 | 3 | 4 | 5;
-        domains: readonly Readonly<{
-          keyword: EntryDomainKeyword;
-          customName?: string;
-        }>[];
-      }>;
-    }>
-  | undefined {
+function decodeEntryRevisionBody(
+  body: unknown,
+): EntryRevisionRequest | undefined {
   if (!isRecord(body) || !isRecord(body.annotation)) return undefined;
   if (
     typeof body.expectedRevision !== 'number' ||
@@ -5065,7 +4563,14 @@ function decodeInformationEntryQuerySynthesisBody(
 ): Readonly<InformationEntryQuerySynthesisRequest> | undefined {
   if (
     !isRecord(body) ||
-    Object.keys(body).length !== 3 ||
+    Object.keys(body).some(
+      (key) =>
+        !['requestId', 'question', 'query', 'retrieveForQuestion'].includes(
+          key,
+        ),
+    ) ||
+    (body.retrieveForQuestion !== undefined &&
+      typeof body.retrieveForQuestion !== 'boolean') ||
     !Object.hasOwn(body, 'requestId') ||
     !Object.hasOwn(body, 'question') ||
     !Object.hasOwn(body, 'query') ||
@@ -5078,12 +4583,20 @@ function decodeInformationEntryQuerySynthesisBody(
   ) {
     return undefined;
   }
-  const question = optionalBoundedText(body.question, 600);
+  const question = optionalBoundedText(
+    body.question,
+    INFORMATION_ENTRY_QUERY_SYNTHESIS_MAXIMUM_QUESTION_CODE_POINTS,
+  );
   const query = decodeEntrySearchBody({...body.query, limit: 8});
   if (question === undefined || question === null || query === undefined) {
     return undefined;
   }
-  return Object.freeze({requestId: body.requestId, question, query});
+  return Object.freeze({
+    requestId: body.requestId,
+    question,
+    query,
+    ...(body.retrieveForQuestion === true ? {retrieveForQuestion: true} : {}),
+  });
 }
 
 function querySynthesisRequestsPrivateScope(body: unknown): boolean {
@@ -5117,16 +4630,9 @@ function optionalBoundedText(
   return Array.from(normalized).length <= maximumCodePoints ? normalized : null;
 }
 
-function decodeInformationEntryKnowledgeGraphRequest(body: unknown):
-  | Readonly<{
-      query?: string;
-      centerEntryId?: string;
-      includePrivate: boolean;
-      onlyPrivate: boolean;
-      candidateLimit: number;
-      neighborLimit: number;
-    }>
-  | undefined {
+function decodeInformationEntryKnowledgeGraphRequest(
+  body: unknown,
+): GraphReadRequest | undefined {
   if (!isRecord(body)) return undefined;
   const query = optionalBoundedText(body.query, 300);
   const centerEntryId = body.centerEntryId ?? undefined;
@@ -5163,26 +4669,9 @@ function decodeInformationEntryKnowledgeGraphRequest(body: unknown):
   });
 }
 
-function decodeInformationEntryKnowledgeGraphEdgeWrite(body: unknown):
-  | Readonly<
-      | {
-          expectedRevision: number;
-          includePrivate: boolean;
-          operation: 'edit';
-          expectedEntryRevisions?: Readonly<InformationEntrySourceReviewRevisions>;
-          label: string;
-          direction: InformationEntryGraphDirection;
-          semanticKind: InformationEntryGraphSemanticKind;
-          verificationStatus: InformationEntryGraphVerificationStatus;
-          note: string;
-        }
-      | {
-          expectedRevision: number;
-          includePrivate: boolean;
-          operation: 'block' | 'restore';
-        }
-    >
-  | undefined {
+function decodeInformationEntryKnowledgeGraphEdgeWrite(
+  body: unknown,
+): GraphEdgeWriteRequest | undefined {
   if (!isRecord(body)) return undefined;
   const includePrivate = body.includePrivate ?? false;
   if (
@@ -5394,64 +4883,6 @@ function workingCopyWriteFailure(outcome: string): M1cHttpResult {
   });
 }
 
-function entryMatchCountsBySnapshot(
-  matches: readonly Readonly<{entry: Readonly<CurrentInformationEntry>}>[],
-): ReadonlyMap<string, number> {
-  const counts = new Map<string, number>();
-  for (const match of matches) {
-    if (!match.entry.value.isPrivate) continue;
-    counts.set(
-      match.entry.snapshotId,
-      (counts.get(match.entry.snapshotId) ?? 0) + 1,
-    );
-  }
-  return counts;
-}
-function privateDocumentMatchesStructuralFilters(
-  snapshot: Readonly<EvidenceSnapshotSummary>,
-  request: Readonly<InformationEntrySearchRequest>,
-  entryMatchCounts?: ReadonlyMap<string, number>,
-): boolean {
-  if (
-    request.sourceKey !== undefined &&
-    snapshot.sourceKey !== request.sourceKey
-  ) {
-    return false;
-  }
-  if (
-    request.snapshotId !== undefined &&
-    snapshot.snapshotId !== request.snapshotId
-  ) {
-    return false;
-  }
-  if (request.time !== undefined) {
-    const value =
-      request.time.field === 'published'
-        ? snapshot.publication?.instant
-        : snapshot.capturedAt;
-    if (value === undefined) return false;
-    const date = value.slice(0, 10);
-    if (
-      (request.time.from !== undefined && date < request.time.from) ||
-      (request.time.to !== undefined && date > request.time.to)
-    ) {
-      return false;
-    }
-  }
-  return (
-    entryMatchCounts === undefined ||
-    (entryMatchCounts.get(snapshot.snapshotId) ?? 0) > 0
-  );
-}
-
-function privateDocumentExcerpt(value: string): string {
-  const normalized = value.replace(/\s+/gu, ' ').trim();
-  const codePoints = Array.from(normalized);
-  return codePoints.length <= 280
-    ? normalized
-    : `${codePoints.slice(0, 277).join('')}…`;
-}
-
 function decodeInformationEntryAssociationPolicyWrite(body: unknown):
   | Readonly<{
       expectedRevision: number;
@@ -5578,21 +5009,6 @@ function decodeInformationEntryExplorationPolicyWrite(body: unknown):
         crossDomain: decoded.crossDomain,
         serendipity: decoded.serendipity,
       });
-}
-
-function informationEntryAssociationPolicyFromPreferences(
-  preferences: Readonly<ReviewAssociationPolicyPreferences>,
-): Readonly<InformationEntryAssociationPolicy> {
-  return Object.freeze({
-    revision: preferences.revision,
-    version: INFORMATION_ENTRY_ASSOCIATION_POLICY.version,
-    contentWeight: preferences.contentWeight,
-    typeWeight: preferences.typeWeight,
-    domainWeight: preferences.domainWeight,
-    threshold: preferences.threshold,
-    candidateLimit: INFORMATION_ENTRY_ASSOCIATION_POLICY.candidateLimit,
-    adjustmentStep: INFORMATION_ENTRY_ASSOCIATION_POLICY.adjustmentStep,
-  });
 }
 
 function informationEntryExplorationPolicyFromPreferences(
@@ -6312,4 +5728,28 @@ function entryMarkdownHttpResult(
             : 503,
     result,
   );
+}
+
+function operationFailure(error: OperationError): M1cHttpResult {
+  if (error.kind === 'invalid_input')
+    return inputFailure(
+      error.field === undefined || error.field === 'body'
+        ? 'body'
+        : 'body.' + error.field,
+    );
+  const statusCode = {
+    not_found: 404,
+    conflict: 409,
+    rejected: 422,
+    forbidden: 403,
+  }[error.kind];
+  return httpResult(statusCode, {
+    status: error.kind === 'not_found' ? 'not_found' : 'rejected',
+    issue: Object.freeze({
+      code: error.code,
+      ...(error.code === 'private_content_requires_opt_in'
+        ? {path: 'query.includePrivate'}
+        : {}),
+    }),
+  });
 }

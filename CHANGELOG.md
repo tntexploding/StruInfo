@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 - 2026-09-20
+
+- Consolidates document entry, processing, reading and reports into four document-centred workspaces.
+- Completes bounded AI receipt review, contextual splitting, tags, relations and revision-checked publication; exposes the same authority boundary through Agent / MCP commands.
+- Adds remembered layouts, source-aware previews, optional on-demand summaries and visible per-document queues with checkpoint recovery and cancellation.
+- Preserves coherent long articles, confirms tag aliases in retrieval, separates draft work from published knowledge and respects AI permission / price windows.
+- Extends reports to monthly/topic periods and model-free collections, with Markdown and local PDF printing.
+- Corrects settled-history queue counts and an ordinary-English false positive in backup credential checks.
+- Keeps owner data external and requires no new dependency or migration beyond the existing 000038 baseline.
+
+See [v0.3.0 release notes](docs/releases/v0.3.0.md) for upgrade and operating limits.
+
+## 0.2.0 - 2026-09-05
+
+Maintenance baseline: recoverable processing, incremental indexes, saved reading contexts, source review and cited Markdown export. See [v0.2.0 notes](docs/releases/v0.2.0.md).
+
 ## 0.1.0 - 2026-08-28
 
 Initial private single-user release.

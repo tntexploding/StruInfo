@@ -1,4 +1,10 @@
+export const MAXIMUM_AI_SPLIT_ENTRIES = 64;
+export const MAXIMUM_AI_SPLIT_FRAGMENTS = 128;
+
 export type AiSplitProposalProviderErrorCode =
+  | 'ai_operations_paused'
+  | 'ai_price_window_closed'
+  | 'ai_split_input_unsupported'
   | 'ai_provider_timeout'
   | 'ai_provider_unavailable'
   | 'ai_provider_rejected'
@@ -26,7 +32,8 @@ export interface AiSplitProposalProviderResult {
   readonly groups: readonly Readonly<AiSplitProposalProviderGroup>[];
 }
 export interface AiSplitProposalProviderPort {
-  readonly providerKey: 'openai-responses-v1';
+  readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   readonly model: string;
   readonly promptVersion: string;
   proposeSplit(

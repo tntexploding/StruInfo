@@ -1,5 +1,12 @@
+import {splitReadingPackets} from './ai_split_input.js';
+import {
+  MAXIMUM_ENTRY_BODY_CODE_POINTS,
+  type MaterializedEvidenceSnapshot,
+} from '../entries/information_entry.js';
+import {MAXIMUM_AI_SPLIT_FRAGMENTS} from './ai_split_proposal.js';
 import type {BlobStore} from '../../storage/blob_store.js';
 import {
+  aiSplitEvidenceFragments,
   prepareAiSplitInformationEntries,
   type CurrentInformationEntry,
   type InformationEntryEmptySnapshotRepositoryPort,
@@ -56,7 +63,8 @@ export interface AiSplitProposalDecisionResult {
   readonly entries?: readonly Readonly<CurrentInformationEntry>[];
 }
 export interface AiSplitProposalServicePort {
-  readonly providerKey: 'openai-responses-v1';
+  readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   readonly model: string;
   listForSnapshot(
     snapshotId: string,
@@ -84,13 +92,15 @@ export interface AiSplitProposalServiceDependencies {
 }
 
 export class AiSplitProposalService implements AiSplitProposalServicePort {
-  public readonly providerKey = 'openai-responses-v1' as const;
+  public readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   public readonly model: string;
   readonly #dependencies: Readonly<AiSplitProposalServiceDependencies>;
   public constructor(
     dependencies: Readonly<AiSplitProposalServiceDependencies>,
   ) {
     this.#dependencies = dependencies;
+    this.providerKey = dependencies.provider.providerKey;
     this.model = dependencies.provider.model;
   }
   public listForSnapshot(snapshotId: string) {
@@ -110,6 +120,7 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
       this.#dependencies.blobStore,
     );
     const sectionFragments = orderedSectionFragments(materialized);
+    const packets = splitReadingPackets(sectionFragments);
     const sections = providerSections(sectionFragments);
     const idempotencyKey = `ai-split:${snapshotId}:${requestKey}`;
     const runId = deriveProcessingRunId(
@@ -125,7 +136,7 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
       targetSnapshotId: snapshotId,
       privacyScope: 'public_only',
       initialStage: 'split',
-      initialStep: '等待 OpenAI 拆分提案',
+      initialStep: '等待拆分提案',
     });
     if (created === 'conflict')
       throw new AiSplitProposalServiceError('ai_run_conflict');
@@ -147,7 +158,7 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
         expectedVersion: 1,
         status: 'running',
         currentStage: 'split',
-        currentStep: 'OpenAI 正在按连续原文片段生成拆分建议',
+        currentStep: '正在按连续原文片段生成拆分建议',
         completedUnits: 0,
         totalUnits: 1,
       }),
@@ -155,13 +166,27 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
     try {
       const generated =
         await this.#dependencies.provider.proposeSplit(sections);
+      let nextOrdinal = 0;
+      for (const group of generated.groups) {
+        if (
+          !Number.isSafeInteger(group.startOrdinal) ||
+          !Number.isSafeInteger(group.endOrdinal) ||
+          group.startOrdinal !== nextOrdinal ||
+          group.endOrdinal < group.startOrdinal ||
+          group.endOrdinal >= sections.length
+        )
+          throw new AiSplitProposalServiceError('ai_provider_invalid_response');
+        nextOrdinal = group.endOrdinal + 1;
+      }
+      if (nextOrdinal !== sections.length)
+        throw new AiSplitProposalServiceError('ai_provider_invalid_response');
       const payload = storedPayload(
         this.#dependencies.provider,
         generated.groups.map((group) => ({
           titlePath: group.titlePath,
-          fragmentIds: sectionFragments
+          fragmentIds: packets
             .slice(group.startOrdinal, group.endOrdinal + 1)
-            .map((fragment) => fragment.fragmentId),
+            .flatMap((packet) => packet.map((fragment) => fragment.fragmentId)),
         })),
       );
       const proposalId = deriveProcessingProposalId(runId, 0);
@@ -315,34 +340,48 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
   }
 }
 
-function orderedSectionFragments(
-  snapshot: Awaited<ReturnType<typeof materializeEvidenceSnapshot>>,
+export function orderedSectionFragments(
+  snapshot: Readonly<MaterializedEvidenceSnapshot>,
 ) {
   const structure = snapshot.structures[0];
   if (structure === undefined)
     throw new AiSplitProposalServiceError('ai_split_input_unsupported');
-  const sections = structure.fragments
-    .filter((fragment) => fragment.nodeKind === 'section')
-    .sort((left, right) =>
-      left.codePointRange.start !== right.codePointRange.start
-        ? left.codePointRange.start - right.codePointRange.start
-        : left.fragmentId.localeCompare(right.fragmentId),
+  let sections = aiSplitEvidenceFragments(snapshot);
+  // CommonMark may expose hundreds of chart cells. An exact document Fragment
+  // preserves all bytes and provenance without manufacturing standalone entries.
+  if (sections.length > MAXIMUM_AI_SPLIT_FRAGMENTS) {
+    const whole = structure.fragments.find(
+      (f) =>
+        f.nodeKind === 'document' &&
+        f.codePointRange.start === 0 &&
+        f.selectedText === structure.normalizedText &&
+        f.codePointRange.end ===
+          Array.from(structure.normalizedText ?? '').length,
     );
+    if (whole) sections = [whole];
+  }
   const codePoints = sections.reduce(
     (total, fragment) => total + Array.from(fragment.selectedText).length,
-    0,
+    Math.max(0, sections.length - 1) * 2,
   );
-  if (sections.length < 1 || sections.length > 64 || codePoints > 120_000) {
+  if (
+    sections.length < 1 ||
+    sections.length > MAXIMUM_AI_SPLIT_FRAGMENTS ||
+    codePoints > MAXIMUM_ENTRY_BODY_CODE_POINTS
+  ) {
     throw new AiSplitProposalServiceError('ai_split_input_unsupported');
   }
   return sections;
 }
-function providerSections(
+export function providerSections(
   fragments: ReturnType<typeof orderedSectionFragments>,
 ): readonly Readonly<AiSplitProposalSection>[] {
   return Object.freeze(
-    fragments.map((fragment, ordinal) =>
-      Object.freeze({ordinal, text: fragment.selectedText}),
+    splitReadingPackets(fragments).map((packet, ordinal) =>
+      Object.freeze({
+        ordinal,
+        text: packet.map((fragment) => fragment.selectedText).join('\n\n'),
+      }),
     ),
   );
 }
@@ -379,7 +418,10 @@ function providerErrorCode(error: unknown): AiSplitProposalServiceErrorCode {
   if (
     error instanceof Error &&
     'code' in error &&
-    (error.code === 'ai_provider_timeout' ||
+    (error.code === 'ai_operations_paused' ||
+      error.code === 'ai_price_window_closed' ||
+      error.code === 'ai_split_input_unsupported' ||
+      error.code === 'ai_provider_timeout' ||
       error.code === 'ai_provider_unavailable' ||
       error.code === 'ai_provider_rejected' ||
       error.code === 'ai_provider_invalid_response')

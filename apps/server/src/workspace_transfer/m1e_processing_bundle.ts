@@ -1,4 +1,7 @@
 import {Buffer} from 'node:buffer';
+import {reportStateSchema} from '../application/report_contract.js';
+import {validateReportState} from '../application/report_content.js';
+import {intakeRecordValueSchema} from '../application/document_intake_contract.js';
 
 import {
   encodeCanonicalJson,
@@ -13,8 +16,20 @@ import {
 } from './workspace_bundle.js';
 
 export const M1E_PROCESSING_BUNDLE_SECTION_TYPE = 'struinfo.m1e-processing';
-export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 10;
-export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v10';
+export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 14;
+export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v14';
+export const M1E_PROCESSING_VERSION_THIRTEEN_BUNDLE_SECTION_VERSION = 13;
+export const M1E_PROCESSING_VERSION_THIRTEEN_BUNDLE_SCHEMA =
+  'struinfo.m1e-processing.v13';
+export const M1E_PROCESSING_VERSION_TWELVE_BUNDLE_SECTION_VERSION = 12;
+export const M1E_PROCESSING_VERSION_TWELVE_BUNDLE_SCHEMA =
+  'struinfo.m1e-processing.v12';
+export const M1E_PROCESSING_VERSION_ELEVEN_BUNDLE_SECTION_VERSION = 11;
+export const M1E_PROCESSING_VERSION_ELEVEN_BUNDLE_SCHEMA =
+  'struinfo.m1e-processing.v11';
+export const M1E_PROCESSING_VERSION_TEN_BUNDLE_SECTION_VERSION = 10;
+export const M1E_PROCESSING_VERSION_TEN_BUNDLE_SCHEMA =
+  'struinfo.m1e-processing.v10';
 export const M1E_PROCESSING_VERSION_NINE_BUNDLE_SECTION_VERSION = 9;
 export const M1E_PROCESSING_VERSION_NINE_BUNDLE_SCHEMA =
   'struinfo.m1e-processing.v9';
@@ -290,7 +305,77 @@ export const M1E_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescript
       'decided_at',
       'updated_at',
     ]),
+    table('processing_agent_task', [
+      'workspace_id',
+      'task_id',
+      'actor_kind',
+      'actor_id',
+      'policy_version',
+      'request_key',
+      'request_text',
+      'model',
+      'state_text',
+      'cancel_requested',
+      'pause_requested',
+      'current_version',
+      'created_at',
+      'updated_at',
+    ]),
+    table('processing_ingestion_policy', [
+      'workspace_id',
+      'current_version',
+      'settings_text',
+      'authorized_by_kind',
+      'authorized_by_id',
+      'updated_at',
+    ]),
+    table('processing_ingestion_item', [
+      'workspace_id',
+      'snapshot_id',
+      'source_kind',
+      'subscription_id',
+      'policy_revision',
+      'settings_text',
+      'authorized_by_kind',
+      'authorized_by_id',
+      'status',
+      'task_id',
+      'error_code',
+      'current_version',
+      'created_at',
+      'admitted_at',
+      'updated_at',
+    ]),
+    table('processing_document_intake', [
+      'workspace_id',
+      'snapshot_id',
+      'prepared_snapshot_id',
+      'state_text',
+      'current_version',
+      'updated_at',
+    ]),
+    table('processing_report', [
+      'workspace_id',
+      'report_id',
+      'state_text',
+      'current_version',
+      'created_at',
+      'updated_at',
+    ]),
   ]);
+
+const VERSION_THIRTEEN_PROCESSING_TABLES = Object.freeze(
+  M1E_PROCESSING_TABLES.slice(0, 23),
+);
+const VERSION_TWELVE_PROCESSING_TABLES = Object.freeze(
+  M1E_PROCESSING_TABLES.slice(0, 22),
+);
+const VERSION_ELEVEN_PROCESSING_TABLES = Object.freeze(
+  M1E_PROCESSING_TABLES.slice(0, 20),
+);
+const VERSION_TEN_PROCESSING_TABLES = Object.freeze(
+  M1E_PROCESSING_TABLES.slice(0, 19),
+);
 
 const VERSION_NINE_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
   Object.freeze(M1E_PROCESSING_TABLES.slice(0, 18));
@@ -325,6 +410,45 @@ export const M1E_PROCESSING_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     version: M1E_PROCESSING_BUNDLE_SECTION_VERSION,
     encode: normalizeM1eProcessingSnapshot,
     decode: normalizeM1eProcessingSnapshot,
+  });
+
+export const M1E_PROCESSING_VERSION_THIRTEEN_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: M1E_PROCESSING_VERSION_THIRTEEN_BUNDLE_SECTION_VERSION,
+    encode: normalizeVersionThirteenSnapshot,
+    decode(payload: JsonValue): unknown {
+      return upgradePreviousSnapshot(normalizeVersionThirteenSnapshot(payload));
+    },
+  });
+export const M1E_PROCESSING_VERSION_TWELVE_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: M1E_PROCESSING_VERSION_TWELVE_BUNDLE_SECTION_VERSION,
+    encode: normalizeVersionTwelveSnapshot,
+    decode(payload: JsonValue): unknown {
+      return upgradePreviousSnapshot(normalizeVersionTwelveSnapshot(payload));
+    },
+  });
+
+export const M1E_PROCESSING_VERSION_ELEVEN_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: M1E_PROCESSING_VERSION_ELEVEN_BUNDLE_SECTION_VERSION,
+    encode: normalizeVersionElevenSnapshot,
+    decode(payload: JsonValue): unknown {
+      return upgradePreviousSnapshot(normalizeVersionElevenSnapshot(payload));
+    },
+  });
+
+export const M1E_PROCESSING_VERSION_TEN_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: M1E_PROCESSING_VERSION_TEN_BUNDLE_SECTION_VERSION,
+    encode: normalizeVersionTenSnapshot,
+    decode(payload: JsonValue): unknown {
+      return upgradePreviousSnapshot(normalizeVersionTenSnapshot(payload));
+    },
   });
 
 export const M1E_PROCESSING_VERSION_NINE_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
@@ -424,6 +548,61 @@ export function normalizeM1eProcessingSnapshot(
     M1E_PROCESSING_BUNDLE_SCHEMA,
     M1E_PROCESSING_TABLES,
   ) as M1eProcessingSnapshot;
+}
+
+function normalizeVersionThirteenSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1E_PROCESSING_VERSION_THIRTEEN_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1E_PROCESSING_VERSION_THIRTEEN_BUNDLE_SCHEMA,
+    VERSION_THIRTEEN_PROCESSING_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1E_PROCESSING_VERSION_THIRTEEN_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+  }>;
+}
+function normalizeVersionTwelveSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1E_PROCESSING_VERSION_TWELVE_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1E_PROCESSING_VERSION_TWELVE_BUNDLE_SCHEMA,
+    VERSION_TWELVE_PROCESSING_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1E_PROCESSING_VERSION_TWELVE_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+  }>;
+}
+
+function normalizeVersionElevenSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1E_PROCESSING_VERSION_ELEVEN_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1E_PROCESSING_VERSION_ELEVEN_BUNDLE_SCHEMA,
+    VERSION_ELEVEN_PROCESSING_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1E_PROCESSING_VERSION_ELEVEN_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+  }>;
+}
+
+function normalizeVersionTenSnapshot(value: unknown): Readonly<{
+  schemaVersion: typeof M1E_PROCESSING_VERSION_TEN_BUNDLE_SCHEMA;
+  tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+}> {
+  return normalizeSnapshot(
+    value,
+    M1E_PROCESSING_VERSION_TEN_BUNDLE_SCHEMA,
+    VERSION_TEN_PROCESSING_TABLES,
+  ) as Readonly<{
+    schemaVersion: typeof M1E_PROCESSING_VERSION_TEN_BUNDLE_SCHEMA;
+    tables: readonly Readonly<M1eProcessingTableSnapshot>[];
+  }>;
 }
 
 function normalizeVersionNineSnapshot(value: unknown): Readonly<{
@@ -663,6 +842,57 @@ function normalizeRow(
       fail();
     }
     row[column] = field;
+  }
+  if (descriptor.name === 'processing_report') {
+    try {
+      if (
+        typeof row.state_text !== 'string' ||
+        Buffer.byteLength(row.state_text) > ROW_BYTE_LIMIT ||
+        typeof row.report_id !== 'string' ||
+        !CANONICAL_UUID.test(row.report_id) ||
+        typeof row.current_version !== 'number' ||
+        !Number.isInteger(row.current_version) ||
+        row.current_version < 1 ||
+        typeof row.created_at !== 'string' ||
+        !Number.isFinite(Date.parse(row.created_at)) ||
+        typeof row.updated_at !== 'string' ||
+        !Number.isFinite(Date.parse(row.updated_at))
+      )
+        fail();
+      validateReportState(reportStateSchema.parse(JSON.parse(row.state_text)));
+    } catch {
+      fail();
+    }
+  }
+  if (descriptor.name === 'processing_document_intake') {
+    try {
+      if (
+        typeof row.state_text !== 'string' ||
+        Buffer.byteLength(row.state_text) > 16384 ||
+        typeof row.snapshot_id !== 'string' ||
+        !CANONICAL_UUID.test(row.snapshot_id) ||
+        typeof row.current_version !== 'number' ||
+        !Number.isInteger(row.current_version) ||
+        row.current_version < 1 ||
+        typeof row.updated_at !== 'string' ||
+        !Number.isFinite(Date.parse(row.updated_at))
+      )
+        fail();
+      const state = intakeRecordValueSchema.parse(JSON.parse(row.state_text));
+      if (
+        (state.preparedSnapshotId ?? null) !== row.prepared_snapshot_id ||
+        state.preparedSnapshotId === row.snapshot_id ||
+        (state.bodySource === 'web_article' && !state.preparedSnapshotId) ||
+        (state.previousPreparedSnapshotIds ?? []).some(
+          (id) => id === row.snapshot_id || id === state.preparedSnapshotId,
+        ) ||
+        new Set(state.previousPreparedSnapshotIds ?? []).size !==
+          (state.previousPreparedSnapshotIds?.length ?? 0)
+      )
+        fail();
+    } catch {
+      fail();
+    }
   }
   return Object.freeze(row);
 }

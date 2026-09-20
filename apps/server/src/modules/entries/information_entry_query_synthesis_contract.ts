@@ -19,6 +19,8 @@ export type InformationEntryQuerySynthesisEvidenceStatus =
   (typeof INFORMATION_ENTRY_QUERY_SYNTHESIS_EVIDENCE_STATUSES)[number];
 
 export type AiQuerySynthesisProviderErrorCode =
+  | 'ai_operations_paused'
+  | 'ai_price_window_closed'
   | 'ai_provider_timeout'
   | 'ai_provider_unavailable'
   | 'ai_provider_rejected'
@@ -63,7 +65,7 @@ export interface InformationEntryQuerySynthesisProviderResult {
 }
 
 export interface InformationEntryQuerySynthesisProviderPort {
-  readonly providerKey: 'openai-responses-v1';
+  readonly providerKey: 'openai-responses-v1' | 'deepseek-responses-v1';
   readonly model: string;
   readonly promptVersion: string;
 
@@ -76,6 +78,7 @@ export interface InformationEntryQuerySynthesisProviderPort {
 export interface InformationEntryQuerySynthesisRequest {
   readonly requestId: string;
   readonly question: string;
+  readonly retrieveForQuestion?: boolean;
   readonly query: Readonly<InformationEntrySearchRequest>;
 }
 
@@ -89,7 +92,7 @@ export interface InformationEntryQuerySynthesisEvidence extends InformationEntry
 export interface InformationEntryQuerySynthesisResult {
   readonly requestId: string;
   readonly querySha256: string;
-  readonly providerKey: 'openai-responses-v1';
+  readonly providerKey: 'openai-responses-v1' | 'deepseek-responses-v1';
   readonly model: string;
   readonly promptVersion: string;
   readonly answer: string;
@@ -115,7 +118,7 @@ export class InformationEntryQuerySynthesisServiceError extends Error {
 }
 
 export interface InformationEntryQuerySynthesisServicePort {
-  readonly providerKey: 'openai-responses-v1';
+  readonly providerKey: 'openai-responses-v1' | 'deepseek-responses-v1';
   readonly model: string;
   readonly promptVersion: string;
 

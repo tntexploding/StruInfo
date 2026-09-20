@@ -1,3 +1,4 @@
+import {InformationEntryRetrievalService} from './information_entry_retrieval.js';
 import {describe, expect, it, vi} from 'vitest';
 
 import type {CurrentInformationEntry} from './information_entry_contract.js';
@@ -67,6 +68,59 @@ describe('InformationEntryQuerySynthesisService', () => {
       entryRevision: 1,
       snapshotId: '10000000-0000-4000-8000-000000000001',
     });
+  });
+
+  it('uses the same confirmed alias retrieval for RAG and retains original tags and factual excerpts', async () => {
+    const original = entry(0);
+    const entries = entryRepository([original, entry(1, true)]);
+    const associations = associationRepository();
+    const retrieval = new InformationEntryRetrievalService({
+      workspaceId: WORKSPACE_ID,
+      entries,
+      associations,
+      index: {
+        loadSearchIndex: () => Promise.resolve({projections: [], postings: []}),
+        replaceSearchIndex: () => Promise.reject(new Error('no write')),
+      },
+      aliases: () =>
+        Promise.resolve([{source: 'Synthetic label', canonical: '合成关键词'}]),
+    });
+    const synthesize = vi.fn<
+      InformationEntryQuerySynthesisProviderPort['synthesize']
+    >(() =>
+      Promise.resolve({
+        answer: '材料不足',
+        evidenceStatus: 'insufficient',
+        claims: [],
+        limitations: ['标签本身不是事实证据'],
+      }),
+    );
+    const service = new InformationEntryQuerySynthesisService({
+      workspaceId: WORKSPACE_ID,
+      entries,
+      associations,
+      retrieval,
+      provider: provider(synthesize),
+    });
+    const result = await service.synthesize({
+      requestId: 'synthetic-alias-rag',
+      question: '有哪些事实？',
+      query: {
+        text: 'Synthetic label',
+        textFields: ['tags'],
+        includePrivate: false,
+        limit: 8,
+      },
+    });
+    expect(result.evidence).toHaveLength(1);
+    expect(result.evidence[0]).toMatchObject({
+      entryId: original.entryId,
+      contentKeywords: ['合成关键词'],
+    });
+    expect(result.evidence[0]?.excerpt).toBe(original.value.body);
+    expect(synthesize.mock.calls[0]?.[1]?.[0]?.contentKeywords).toEqual([
+      '合成关键词',
+    ]);
   });
 
   it('rejects private scope before repository and Provider access', async () => {
@@ -211,3 +265,64 @@ function entry(
     }),
   });
 }
+
+it('retrieves for the new question instead of taking recent unrelated documents, and excludes private matches', async () => {
+  const source = entry(0);
+  const relevant = {
+    ...source,
+    value: {
+      ...source.value,
+      titlePath: 'Synthetic battery study',
+      body: 'Battery storage retains energy with a measured capacity limit.',
+    },
+  };
+  const unrelated = {
+    ...entry(1),
+    value: {
+      ...entry(1).value,
+      titlePath: 'Synthetic gardening',
+      body: 'Planting in spring.',
+    },
+  };
+  const hidden = {
+    ...entry(2, true),
+    value: {
+      ...entry(2, true).value,
+      titlePath: 'Private battery study',
+      body: 'Battery details that stay private.',
+    },
+  };
+  const synthesize = vi.fn<
+    InformationEntryQuerySynthesisProviderPort['synthesize']
+  >(() =>
+    Promise.resolve({
+      answer: 'Storage has limits.',
+      evidenceStatus: 'supported',
+      claims: [{statement: 'Capacity is limited.', evidenceRefs: ['E01']}],
+      limitations: [],
+    }),
+  );
+  const service = new InformationEntryQuerySynthesisService({
+    workspaceId: WORKSPACE_ID,
+    entries: entryRepository([unrelated, hidden, relevant]),
+    associations: associationRepository(),
+    provider: provider(synthesize),
+  });
+  const result = await service.synthesize({
+    requestId: 'question-recall',
+    retrieveForQuestion: true,
+    question: 'What are the battery storage limits?',
+    query: {includePrivate: false, limit: 8},
+  });
+  expect(result.evidence.map((e) => e.entryId)).toEqual([relevant.entryId]);
+  expect(JSON.stringify(synthesize.mock.calls)).not.toContain('stay private');
+  await expect(
+    service.synthesize({
+      requestId: 'no-match',
+      retrieveForQuestion: true,
+      question: 'Tell me about zebras',
+      query: {includePrivate: false, limit: 8},
+    }),
+  ).rejects.toMatchObject({code: 'ai_query_no_evidence'});
+  expect(synthesize).toHaveBeenCalledTimes(1);
+});

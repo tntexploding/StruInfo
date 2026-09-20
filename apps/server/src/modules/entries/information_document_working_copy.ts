@@ -3,8 +3,6 @@ import {createHash} from 'node:crypto';
 import {deriveUuidV5} from './information_entry_identity.js';
 
 export const INFORMATION_DOCUMENT_WORKING_COPY_MAX_BYTES = 1_048_576;
-export const INFORMATION_DOCUMENT_EDIT_RULE_VERSION =
-  'struinfo.document-edit.owner.v1' as const;
 
 export type InformationDocumentWorkingCopyState = 'editing' | 'committed';
 

@@ -90,11 +90,11 @@ const LOCK_RUN_SQL = sql(
 
 const UPDATE_RUN_PROGRESS_SQL = sql(
   'UPDATE struinfo.processing_run SET',
-  '  status = $4, current_stage = $5, current_step = $6,',
+  '  status = $4::varchar, current_stage = $5, current_step = $6,',
   '  completed_units = $7, total_units = $8, error_code = $9,',
   '  current_version = current_version + 1,',
-  "  started_at = CASE WHEN status = 'queued' AND $4 = 'running' THEN CURRENT_TIMESTAMP ELSE started_at END,",
-  "  finished_at = CASE WHEN $4 IN ('succeeded', 'failed', 'cancelled') THEN CURRENT_TIMESTAMP ELSE NULL END,",
+  "  started_at = CASE WHEN status = 'queued' AND $4::varchar = 'running' THEN CURRENT_TIMESTAMP ELSE started_at END,",
+  "  finished_at = CASE WHEN $4::varchar IN ('succeeded', 'failed', 'cancelled') THEN CURRENT_TIMESTAMP ELSE NULL END,",
   '  updated_at = CURRENT_TIMESTAMP',
   'WHERE workspace_id = $1 AND run_id = $2 AND current_version = $3',
 );
@@ -219,7 +219,7 @@ export class PostgresProcessingRunRepository implements ProcessingRunRepositoryP
       this.#pool,
       'read_committed',
       async (client) => {
-        await acquireWorkspaceWriteLock(client, workspaceId);
+        await acquireWorkspaceWriteLock(client, workspaceId, true);
         const existing = await client.query<Row>(
           READ_RUN_BY_IDEMPOTENCY_KEY_SQL,
           [workspaceId, create.idempotencyKey],
@@ -467,9 +467,8 @@ function sameRunCreate(
     row.origin === create.origin &&
     optionalText(row.provider_key) === create.providerKey &&
     optionalUuid(row.target_snapshot_id) === create.targetSnapshotId &&
-    row.privacy_scope === create.privacyScope &&
-    row.current_stage === create.initialStage &&
-    optionalText(row.current_step) === create.initialStep
+    // Progress may already have advanced when the caller retries creation.
+    row.privacy_scope === create.privacyScope
   );
 }
 

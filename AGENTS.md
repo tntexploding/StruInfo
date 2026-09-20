@@ -21,18 +21,273 @@ Before frontend implementation or frontend design review, also read:
 
 ## Current Phase
 
-### Maintenance and Owner Use (2026-09-05)
+### Owner-requested v0.3.0 Consolidation and Push (2026-09-20)
 
-The owner has completed the five accepted roadmap increments and directed the
-project to pause feature development after the finite maintenance closeout.
-Use `docs/maintenance-handoff.md` as the current handoff. Do not start roadmap
-candidates, frozen M2-P4R, refactors or new integrations autonomously. Continue
-only requested usage support, reproducible product fixes, security and necessary
-compatibility maintenance. The owner has authorized this closeout to inspect,
-back up, upgrade and restore-drill the existing private Docker instance; this
-does not authorize placing any of its content, secrets or configuration in Git,
-fixtures or application artifacts. Future material operations remain scoped to
-the owner-selected external instance and purpose.
+The owner requests completing the accumulated project changes and pushing a
+version update. This supersedes the earlier no-commit/no-push restrictions for
+these accepted increments. Audit and validate the existing document-centred
+workflow, close reproduced release blockers, synchronize v0.3.0 identity and
+usage documentation, then commit and push. Preserve the existing independent
+public-main source-tree release history; do not merge internal history into it
+or force-push. Keep owner references, browser captures, data and operational
+records outside Git and release artifacts. Use synthetic release validation;
+this request does not authorize new content processing, model calls, source or
+unattended scope expansion. No new dependency or migration is planned.
+
+### Owner-requested Historical Task and Empty-version Cleanup (2026-09-20)
+
+The owner requests correcting stale task counts and deleting the previously
+identified empty document versions from the selected external instance. Exclude
+idle rejected/blocked history from current bulk controls and attention counts;
+active writers must remain cancellable. The owner authorizes closing those
+settled historical tasks and deleting the audited 28 zero-Entry versions after
+a fresh reference check and verified external backup. Preserve every populated
+version, Entry, tag, relation, report and unrelated inbox record; do not widen
+the deletion to new arrivals. Keep diagnostic/deletion material and recovery
+copies outside Git. No model calls, unattended expansion, dependency, migration,
+commit or push. Validate the queue fix with synthetic regressions and verify
+retained knowledge and deleted-version absence after local deployment.
+
+### Owner-requested Context and Capacity Repair (2026-09-20)
+
+The owner approved repairing HTML extraction, contextual model-input grouping,
+collection boundary validation and long-document/call planning, then rerunning
+only the previously diagnosed 16 failed public document tasks. Preserve immutable
+evidence, manual decisions, completed stages, remaining attempts and the frozen
+per-document call limits. Group technical input without inventing independent
+knowledge Entries; reference lists remain in the source. Use synthetic regressions
+and an external backup before local deployment and the selected rerun. Recheck
+versions and exclude newer manual holds/rejections, cancelled or completed work.
+No later arrivals, unattended expansion, dependency, migration, commit or push.
+Keep all real documents and operation records outside Git.
+
+### Owner-requested Batch Checkpoint Continue and Cancellation (2026-09-19)
+
+The owner requests direct batch checkpoint-continue/cancel controls and diagnosis
+of remaining failures. Keep the existing owner-only, version-checked 32-document
+boundary. Cancellation includes held, failed and active document tasks without
+requiring model access; preserve receipt decisions, evidence and completed work.
+Do not treat capacity errors as retryable or silently renew budgets. Validate
+with synthetic tasks and read-only checks of the selected external instance;
+no real batch continuation or cancellation is implied by adding these controls.
+Keep diagnostic material outside Git. No dependency, migration, commit or push.
+
+### Owner-requested Batch Recovery and Existing Backlog (2026-09-19)
+
+The owner requests batch continue/restart controls and processing of existing
+unprocessed public documents. They explicitly chose new bounded recovery rounds
+that retain completed steps, original evidence and manual edits. This extends
+the prior rollout-only restriction on historical task recovery. Continue keeps
+remaining budgets; restart is owner-only, renews the same per-round budget only
+for exhausted failed work, records its predecessor and cumulative prior calls,
+and disables the old writer. No automatic repeated restarts. Batch selection
+is version-checked, at most 32 documents per request. Existing pending receipts,
+manual holds/rejections, private material and duplicate source versions are
+excluded from backlog admission. Preserve price/permission gates and the saved
+unattended policy. After synthetic validation, backup and an explicit scope
+confirmation, the owner authorizes this one batch in the selected external
+instance: continue 14 existing tasks and start the 237 audited unprocessed public
+documents (251 total). New tasks retain the saved maximum of 24 model calls per
+document. Do not include later arrivals or enable ongoing unattended processing.
+No dependency, migration, commit or push is included.
+
+### Owner-requested Unified Document Lifecycle (2026-09-19)
+
+The owner now requests one document-centred flow: AI receipt review, structure,
+tags and relations, then knowledge publication. This supersedes the historical
+receipt-only requirement for new owner-facing document tasks. Preserve evidence,
+manual decisions, existing budgets and price/permission gates. Raw workbench
+progress stays durable; only completed or explicitly confirmed document versions
+enter search, RAG, graph and reports. Owner and external Agent confirmation use
+the same revision-checked publication boundary and existing write grants.
+Overview AI control shows only permission, state and counts; its task queue owns
+per-document progress, waits, failures and navigation. Keep selected sources and
+unattended policy unchanged, and do not restart historical tasks during rollout.
+Use synthetic validation and read-only instance checks. No dependency, commit
+or push is included.
+
+### Owner-requested Document-centred UI (2026-09-19)
+
+The owner replaces the old work-step pages with document entry, workbench,
+data reading and reports, preserving the rounded visual language. Overview is
+on the logo and settings stays at the navigation bottom. See ADR 0084.
+Manual document changes remain drafts until explicit confirmation; AI uses
+existing bounded tasks, dispatch/price controls and public-only model transfer.
+The owner selected local PDF / Markdown exports and no delivery channel.
+Source descriptions remain external preferences. Temporary intake translation
+never accepts or materializes a document; tag redo preserves source structure;
+translation redo compares both source revision and the previous translation.
+Question retrieval uses matching public evidence, not arbitrary recent entries.
+Reports admit monthly/topic periods and model-free collections within existing
+512-source and call budgets. No migration, dependency, unattended scope, Agent
+grant expansion, commit or push is included. Use synthetic tests and read-only
+instance checks; keep owner data and operational evidence outside Git.
+
+### Owner-requested Inbox Reading Preview (2026-09-19)
+
+The owner requested visible sources and optional short AI summaries, then chose
+explicit single-document or selected-document generation. Show original titles,
+subscription names and received-text excerpts without a model. Summaries default
+to off, reuse the existing provider and dispatch/price gates, and make at most
+one model call per selected public document; no automatic retries or receipt
+changes. Cache bounded summaries as independent derived metadata in the existing
+intake JSON without advancing receipt decision versions. Preserve manual choices,
+evidence, private-transfer prohibition and package compatibility. No migration,
+dependency, unattended scope, Agent grant, commit or push is included. Use synthetic
+model tests and read-only checks of the selected external instance; real summary
+calls remain owner-triggered.
+
+### Owner-requested Tag Attribution and Retrieval Repair (2026-09-19)
+
+The owner accepted the tag-distribution findings and requested correction and
+verification without hard compression. Separate a numbered digest preface from
+its first item's model tagging subject while preserving stored evidence. Reuse
+only confirmed external aliases for query/RAG retrieval, preserve original tags,
+privacy and query-bound cursors, and explain alias matches. Distinguish document
+coverage from item-specific tags in the reading header. Reserve tag metadata in
+bounded embedding inputs and postings; factual synthesis remains grounded in
+body excerpts. No new dependency, migration, unattended scope or bulk tag rewrite.
+Use synthetic regression tests and the existing external instance for bounded
+verification of the two already selected digest first items; retain old results
+and manual decisions. No commit or push is included.
+
+### Owner-requested Collection Splitting and Recall Recovery (2026-09-18)
+
+The owner selected numbered-collection splitting and failed recall recovery.
+Preserve coherent articles, merge only adjacent context-dependent groups, and
+save the split decision in the existing proposal summary. Check the remaining
+document call budget before accepting a split. Make model format failures
+actionable without storing raw responses or resetting attempts. Use synthetic
+tests, then the existing external instance for two distinct digest comparison
+captures and explicit recovery of the two selected failed tasks. Preserve old
+evidence, completed stages, manual decisions, price/dispatch gates and all
+existing budgets. Do not process the remaining unstarted articles or enable
+unattended work. No migration, dependency, commit or push is included.
+
+### Owner-requested Split Capacity Repair (2026-09-18)
+
+The owner requested 64 Entries / 128 evidence fragments for document splitting.
+Align internal AI, external Agent, saved-policy validation and UI bounds; preserve
+complete ordered evidence and existing per-request budgets, defaults, price
+windows, manual holds and unattended scope. Split output alone scales up to
+8,192 tokens. No migration or dependency is needed. Use synthetic boundary
+fixtures; do not silently resume or rewrite existing tasks.
+
+### Owner-requested Promotion and Technical-content Review (2026-09-18)
+
+The owner selected step 3: distinguish solicitation and thin update notices from
+substantive technical writing, including short notes and product-release articles.
+Classify by the main reading contribution, not the publisher or announcement
+wording. Preserve the saved blocked kinds, topic filters, manual choices, evidence,
+receipt-only behavior, budgets and dispatch/price gates. No migration, dependency,
+source expansion or unattended processing is added. Review already selected
+public examples outside Git; model comparison must wait for the existing price
+gate and must not overwrite prior owner decisions.
+
+### Owner-requested RSS and Genre-aware Intake Repair (2026-09-18)
+
+The owner selected received-body fallback and genre-aware completeness review.
+Prefer substantial syndicated text for review; a failed page fetch may fall back
+to readable received prose. Ignore only the connector return footer in model
+input, preserving immutable evidence. Briefs and editorial digests are assessed
+by their own format. Existing blocked kinds, manual decisions, receipt-only
+behavior, budgets, price/dispatch gates and unattended scope stay unchanged.
+No migration or dependency is added. Use synthetic engineering tests and a
+read-only comparison of at most ten already selected public documents through
+the existing model; keep instance material and comparison records outside Git.
+
+### Owner-requested AI Oversight and Adjustable Columns (2026-09-17)
+
+The owner requested a global allow/deny control for further internal AI work,
+per-document stage visibility, and adjustable library/inbox columns. Reuse the
+external versioned dispatch preference and existing task authorization, budgets
+and price windows. Stop before subsequent requests and automatic acceptance;
+preserve in-flight results. Only dispatch-deferred requests may resume under
+their original authority; individual pauses, uncertain intake and restored tasks
+remain held. External Agent grants and unattended source scope do not change.
+No migration or dependency is added. Validation uses synthetic material.
+
+### Owner-requested AI Receipt Review (2026-09-16)
+
+The owner requested AI-assisted inbox acceptance and explicitly selected review
+and accept only, with later processing started separately. Reuse the existing
+model, bounded task service, intake rules and price gate. Preserve manual choices
+and evidence; hold uncertain material for the owner. No unattended scope, model
+provider, dependency or migration is added. Instance settings and material stay
+outside Git.
+
+### Owner-requested Report Editorial Improvements (2026-09-15)
+
+ADR 0083 implements the owner's selected improvements 1, 2 and 4: identify
+independent events before applying the report limit, retain other reading,
+distinguish publication from receipt dates, and structure cited summaries.
+Preserve old reports, owner review, existing budgets and price gates. No new
+migration, recurring report or unattended ingestion is authorized. Comparison
+reports use the already selected public material in the external instance.
+
+### Owner-authorized DeepSeek Price Windows (2026-09-14)
+
+The owner requested a peak/off-peak setting covering every internal DeepSeek operation, including existing daily/weekly reports. ADR 0082 adds a default-off external preference and a final-dispatch check. Only already-authorized durable document/report requests may automatically resume from price waits; existing pause/cancel, source scope, model budgets and Agent process/capture grants still apply. Ordinary restart may resume price waits; package restore must require explicit continuation. Keep global unattended ingestion off unless separately enabled by the owner. No new Provider, dependency, migration, private transfer, recurring report creation or delivery is authorized by this increment. Use synthetic clocks and content for tests, and keep instance settings/evidence outside Git.
+
+### Owner-authorized Intake Quality and Recall (2026-09-13)
+
+The owner explicitly authorized ADR 0080's four steps and separately confirmed
+one new table for interception/restoration and full-text capture links, its
+compatible migration/package changes, reuse of the existing DeepSeek
+configuration, and a real-source pilot of at most 15 public documents in the
+selected external instance. Record no real material or credentials in Git.
+Engineering tests remain synthetic; global unattended processing stays off.
+The no-migration statement in ADR 0079 below describes that completed fix.
+Preserve existing evidence, manual revisions, old request limits and Agent
+grants. No new model service, dependency, private transfer or reports are part
+of this increment.
+Implementation, local deployment and the bounded pilot are complete. Owner
+review of selection and relation quality remains the next step. Preserve prior
+comparison captures and reversible interception records; do not widen the pilot
+or enable unattended work merely because engineering verification passed.
+
+### Context-Preserving Owner Pilot (2026-09-12)
+
+ADR 0079 responds to the owner's real-use findings. Coherent articles default to
+one whole Entry; only independently understandable collections are split.
+An association evaluation may complete without an edge, including across task
+recovery. Preserve source image references and captions without background
+media fetching. Owner-selected reprocessing uses distinct comparison captures
+and never overwrites prior evidence. The bounded three-document pilot is
+complete; the owner reviews quality before broader automation or report work.
+The selected external instance has DeepSeek configured while global automatic
+processing remains off. No new migration or dependency is part of this fix.
+
+### Completed AI and Agent Workflow, Model Off (2026-09-12)
+
+The owner accepted completion of the dual-channel workflow. ADR 0077 adds operator controls, public Agent capture/source management and independent external split tasks. Capture and structure grants are separate; existing grants are not widened. ADR 0074 provides
+shared use cases; ADR 0075 now implements a selected public, empty-Snapshot
+AI task and an independent external Agent API with a stdio MCP adapter.
+See docs/agent-interface.md for configuration and exact commands.
+
+Explicit tasks or the saved ADR 0076 policy authorize bounded automatic acceptance,
+under its fixed workspace, actor, model, Entry limit, relation limit and call
+budget. Existing standalone proposals keep their explicit acceptance behavior.
+Agent grants are server-configured and separate from owner/manual writers.
+External split, tags and relations use typed AI proposals with external-agent provenance;
+they do not call the internal model. Private transfer remains forbidden.
+Task state and authorization are durable and exported in Processing Bundle v12;
+credentials stay external. Standalone task resume remains explicit. The saved
+unattended policy may resume its queue after restart; restored policy is paused.
+
+ADR 0076 connects new public subscription/manual-import Snapshots through a
+default-off policy and a durable queue. See docs/ingestion-automation.md.
+Processing Bundle v12 restores unattended policy paused. Other candidates and frozen M2-P4R remain paused. Continue to
+share application use cases, preserve evidence and manual revisions, and retain
+historical migrations and package compatibility. Development validation uses
+only synthetic data; no live Provider configuration or deployment is implied.
+
+Use `docs/maintenance-handoff.md` for the running private Docker instance.
+Existing instance authorization never permits putting its content, secrets or
+configuration in Git, fixtures or artifacts; material operations remain scoped
+to the owner-selected external instance and purpose.
+
+ADR 0078 admits owner-selected DeepSeek via the existing Responses adapters and an independent external secret/model pair. One Responses provider at a time; no automatic widening of source scope or Agent grants. Real-model tests use isolated synthetic data. Migration 000036 preserves translation provider identity. See docs/runtime-configuration.md.
 
 ### Data-Free Development Baseline
 

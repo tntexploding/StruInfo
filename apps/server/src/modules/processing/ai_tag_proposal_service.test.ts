@@ -72,6 +72,44 @@ describe('AiTagProposalService', () => {
     expect(fixture.current.revision).toBe(1);
   });
 
+  it('keeps the stored DeepSeek origin when accepting after the configured provider changes', async () => {
+    const fixture = createFixture(false, {
+      providerKey: 'deepseek-responses-v1',
+      model: 'deepseek-flash',
+      promptVersion: 'struinfo.deepseek-entry-tags.v1',
+    });
+    await fixture.service.start(ENTRY_ID, 'deepseek-request');
+    const [proposal] = await fixture.service.listForEntry(ENTRY_ID);
+    const service = new AiTagProposalService({
+      workspaceId: WORKSPACE_ID,
+      entries: fixture.entries,
+      processing: fixture.processing,
+      provider: {
+        ...fixture.provider,
+        providerKey: 'openai-responses-v1',
+        model: 'gpt-5-mini',
+        promptVersion: 'struinfo.openai-entry-tags.v1',
+      },
+    });
+
+    const accepted = await service.accept(ENTRY_ID, proposal?.proposalId ?? '');
+    expect(accepted.outcome).toBe('accepted');
+    const annotations = [
+      ...fixture.current.value.contentKeywords,
+      ...fixture.current.value.domains,
+    ];
+    expect(annotations.length).toBeGreaterThan(0);
+    for (const annotation of annotations) {
+      expect(annotation.originVersion).toBe(
+        'deepseek:deepseek-flash:struinfo.deepseek-entry-tags.v1',
+      );
+    }
+    expect(
+      (await service.accept(ENTRY_ID, proposal?.proposalId ?? '')).outcome,
+    ).toBe('unchanged');
+    expect(fixture.reviseEntry).toHaveBeenCalledTimes(1);
+  });
+
   it('never invokes the Provider for a private Entry', async () => {
     const fixture = createFixture(true);
 
@@ -85,7 +123,12 @@ describe('AiTagProposalService', () => {
   });
 });
 
-function createFixture(isPrivate: boolean) {
+function createFixture(
+  isPrivate: boolean,
+  providerConfig: Partial<
+    Pick<AiTagProposalProviderPort, 'providerKey' | 'model' | 'promptVersion'>
+  > = {},
+) {
   let current = entry(isPrivate);
   const runs = new Map<string, Readonly<ProcessingRun>>();
   const proposals = new Map<string, Readonly<ProcessingProposal>>();
@@ -256,6 +299,7 @@ function createFixture(isPrivate: boolean) {
     providerKey: 'openai-responses-v1' as const,
     model: 'gpt-5-mini',
     promptVersion: 'struinfo.openai-entry-tags.v1',
+    ...providerConfig,
     proposeTags,
   } satisfies AiTagProposalProviderPort;
   const service = new AiTagProposalService({

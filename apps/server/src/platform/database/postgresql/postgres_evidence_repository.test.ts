@@ -1,4 +1,4 @@
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 
 import {
   createSyntheticEvidenceCapture,
@@ -88,6 +88,58 @@ class FakePool implements PostgresPoolBoundary {
 }
 
 describe('PostgreSQL evidence repository', () => {
+  it('records a new-document trigger before commit and rolls back both on a queue failure', async () => {
+    const capture = createSyntheticEvidenceCapture(),
+      client = new FakeClient();
+    const hook = vi.fn((connection: PostgresClientBoundary) =>
+      connection
+        .query('INSERT INTO synthetic_queue DEFAULT VALUES')
+        .then(() => undefined),
+    );
+    await new PostgresEvidenceRepository(
+      new FakePool(client),
+      hook,
+    ).saveCapture({
+      capture,
+      requestSha256: computeEvidenceCaptureRequestSha256(capture),
+    });
+    expect(hook).toHaveBeenCalledTimes(1);
+    expect(
+      client.calls.findIndex(
+        (c) => c.sql === 'INSERT INTO synthetic_queue DEFAULT VALUES',
+      ),
+    ).toBeLessThan(
+      client.calls.findIndex((c) => c.sql === COMMIT_TRANSACTION_SQL),
+    );
+    const failedClient = new FakeClient();
+    await expect(
+      new PostgresEvidenceRepository(new FakePool(failedClient), () =>
+        Promise.reject(new Error('synthetic queue failure')),
+      ).saveCapture({
+        capture,
+        requestSha256: computeEvidenceCaptureRequestSha256(capture),
+      }),
+    ).rejects.toMatchObject({code: 'transaction_failed'});
+    expect(failedClient.calls.at(-1)?.sql).toBe(ROLLBACK_TRANSACTION_SQL);
+  });
+  it('does not enroll an old Snapshot when a new capture command adds only observations', async () => {
+    const capture = createSyntheticEvidenceCapture();
+    const client = new FakeClient((sql, params) =>
+      sql.startsWith('INSERT INTO struinfo.snapshot')
+        ? {rowCount: 0}
+        : defaultResponse(sql, params),
+    );
+    const hook = vi.fn(() => Promise.resolve());
+    await new PostgresEvidenceRepository(
+      new FakePool(client),
+      hook,
+    ).saveCapture({
+      capture,
+      requestSha256: computeEvidenceCaptureRequestSha256(capture),
+    });
+    expect(hook).not.toHaveBeenCalled();
+  });
+
   it('writes the complete graph in dependency order and commits once', async () => {
     const capture = createSyntheticEvidenceCapture();
     const client = new FakeClient();

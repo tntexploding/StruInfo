@@ -1,4 +1,9 @@
 import type {
+  WorkspaceUiPreferences,
+  WorkspaceUiPreferencesResponse,
+} from './workspace_ui_preferences.js';
+import type {EntryTranslationResponse} from './m1c_api_contract.js';
+import type {
   EntryMarkdownExportResponse,
   EntrySavedQueriesResponse,
   EntryQueryContextResponse,
@@ -86,6 +91,13 @@ export type M1cApiFetch = (
 ) => Promise<Response>;
 
 export interface M1cApiClient {
+  loadWorkspaceUiPreferences(
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<WorkspaceUiPreferencesResponse>>;
+  saveWorkspaceUiPreferences(
+    body: WorkspaceUiPreferences,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<WorkspaceUiPreferencesResponse>>;
   previewEntryMarkdownExport(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -328,6 +340,18 @@ export interface M1cApiClient {
     body: unknown,
     options?: M1cApiRequestOptions,
   ): Promise<M1cHttpResponse<InformationEntryExplorationResponse>>;
+  readEntryTranslation(
+    entryId: string,
+    revision: number,
+    options?: M1cApiRequestOptions,
+  ): Promise<M1cHttpResponse<EntryTranslationResponse>>;
+  generateEntryTranslation(
+    entryId: string,
+    revision: number,
+    options?: M1cApiRequestOptions & {
+      expectedTranslatedAt?: string | undefined;
+    },
+  ): Promise<M1cHttpResponse<EntryTranslationResponse>>;
   synthesizeInformationEntryQuery(
     body: unknown,
     options?: M1cApiRequestOptions,
@@ -506,6 +530,8 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     readEntryQueryContext: reject,
     previewEntryMarkdownExport: reject,
     generateEntryMarkdownExport: reject,
+    loadWorkspaceUiPreferences: reject,
+    saveWorkspaceUiPreferences: reject,
     loadReviewPreferences: reject,
     saveReviewPreferences: reject,
     loadInformationEntryPreferenceProfile: reject,
@@ -540,6 +566,8 @@ export function createUnavailableM1cApiClient(cause: unknown): M1cApiClient {
     evaluateInformationEntrySearch: reject,
     exploreInformationEntries: reject,
     synthesizeInformationEntryQuery: reject,
+    readEntryTranslation: reject,
+    generateEntryTranslation: reject,
     readInformationEntryKnowledgeGraph: reject,
     reviseInformationEntryKnowledgeGraphEdge: reject,
     listInformationEntrySourceReviews: reject,
@@ -707,6 +735,17 @@ export function createM1cApiClient(
     readEntryQueryContext: (body, options) =>
       post<EntryQueryContextResponse>(
         'api/v1/entries/query-context',
+        body,
+        options,
+      ),
+    loadWorkspaceUiPreferences: (options) =>
+      get<WorkspaceUiPreferencesResponse>(
+        'api/v1/preferences/interface',
+        options,
+      ),
+    saveWorkspaceUiPreferences: (body, options) =>
+      put<WorkspaceUiPreferencesResponse>(
+        'api/v1/preferences/interface',
         body,
         options,
       ),
@@ -897,6 +936,25 @@ export function createM1cApiClient(
       post<InformationEntryExplorationResponse>(
         'api/v1/entries/exploration/candidates',
         body,
+        options,
+      ),
+    readEntryTranslation: (entryId, revision, options) =>
+      get<EntryTranslationResponse>(
+        'api/v1/entries/' +
+          encodeURIComponent(entryId) +
+          '/translation?expectedRevision=' +
+          revision.toString(),
+        options,
+      ),
+    generateEntryTranslation: (entryId, revision, options) =>
+      post<EntryTranslationResponse>(
+        'api/v1/entries/' + encodeURIComponent(entryId) + '/translation',
+        {
+          expectedRevision: revision,
+          ...(options?.expectedTranslatedAt
+            ? {expectedTranslatedAt: options.expectedTranslatedAt}
+            : {}),
+        },
         options,
       ),
     synthesizeInformationEntryQuery: (body, options) =>

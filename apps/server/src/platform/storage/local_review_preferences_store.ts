@@ -1,8 +1,18 @@
 import {
+  DEFAULT_AI_PRICE_POLICY,
+  aiPricePolicySchema,
+  type AiPricePolicy,
+} from '../../modules/processing/ai_price_policy.js';
+import {
   DEFAULT_ENTRY_SAVED_QUERIES,
   decodeEntrySavedQueries,
   type EntrySavedQueries,
 } from '../../modules/entries/information_entry_saved_queries.js';
+import {
+  DEFAULT_WORKSPACE_UI_PREFERENCES,
+  decodeWorkspaceUiPreferences,
+  type WorkspaceUiPreferences,
+} from '../../storage/workspace_ui_preferences.js';
 import {randomUUID} from 'node:crypto';
 import {lstat, readFile, rename, unlink, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -124,6 +134,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     entrySplitRuleProfile: Readonly<EntrySplitRuleProfile> = DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
     entryClassificationProfile: Readonly<EntryClassificationProfile> = DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
     entrySavedQueries: Readonly<EntrySavedQueries> = DEFAULT_ENTRY_SAVED_QUERIES,
+    uiPreferences: Readonly<WorkspaceUiPreferences> = DEFAULT_WORKSPACE_UI_PREFERENCES,
+    aiPricePolicy: Readonly<AiPricePolicy> = DEFAULT_AI_PRICE_POLICY,
   ): Promise<Readonly<ReviewPreferences>> {
     validateWorkspaceId(workspaceId);
     const attempt = this.#restoreAttempts.get(workspaceId);
@@ -143,6 +155,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
         entrySplitRuleProfile,
         entryClassificationProfile,
         entrySavedQueries,
+        uiPreferences,
+        aiPricePolicy,
       );
     });
   }
@@ -224,6 +238,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       preferences.entryClassificationProfile ??
         DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       preferences.entrySavedQueries ?? DEFAULT_ENTRY_SAVED_QUERIES,
+      preferences.uiPreferences ?? DEFAULT_WORKSPACE_UI_PREFERENCES,
+      preferences.aiPricePolicy ?? DEFAULT_AI_PRICE_POLICY,
     );
   }
 
@@ -240,7 +256,12 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     entrySplitRuleProfile: Readonly<EntrySplitRuleProfile>,
     entryClassificationProfile: Readonly<EntryClassificationProfile>,
     entrySavedQueries: Readonly<EntrySavedQueries>,
+    uiPreferences: Readonly<WorkspaceUiPreferences>,
+    aiPricePolicy: Readonly<AiPricePolicy>,
   ): Promise<Readonly<ReviewPreferences>> {
+    const decodedPrice = aiPricePolicySchema.safeParse(aiPricePolicy);
+    if (!decodedPrice.success) throw invalid();
+    const decodedUi = decodeWorkspaceUiPreferences(uiPreferences);
     const savedQueries = decodeEntrySavedQueries(entrySavedQueries);
     const decoded = decodeReviewQuickTags(quickTags);
     const decodedAutomaticKeywords =
@@ -269,6 +290,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       entryClassificationProfile,
     );
     if (
+      decodedUi === undefined ||
       savedQueries === undefined ||
       decoded === undefined ||
       decodedAutomaticKeywords === undefined ||
@@ -298,6 +320,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       decodedEntrySplitRuleProfile,
       decodedEntryClassificationProfile,
       savedQueries,
+      decodedUi,
+      decodedPrice.data,
     );
     const bytes = new TextEncoder().encode(
       `${JSON.stringify(preferences, undefined, 2)}\n`,
@@ -360,6 +384,15 @@ function decodePreferences(
   ) {
     throw invalid();
   }
+  const price = aiPricePolicySchema.safeParse(
+    value.aiPricePolicy ?? DEFAULT_AI_PRICE_POLICY,
+  );
+  if (!price.success) throw invalid();
+  const uiPreferences =
+    value.uiPreferences === undefined
+      ? DEFAULT_WORKSPACE_UI_PREFERENCES
+      : decodeWorkspaceUiPreferences(value.uiPreferences);
+  if (uiPreferences === undefined) throw invalid();
   const savedQueries =
     value.entrySavedQueries === undefined
       ? DEFAULT_ENTRY_SAVED_QUERIES
@@ -433,6 +466,8 @@ function decodePreferences(
     entrySplitRuleProfile,
     entryClassificationProfile,
     savedQueries,
+    uiPreferences,
+    price.data,
   );
 }
 

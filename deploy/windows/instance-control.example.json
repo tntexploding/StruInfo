@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "dockerContext": "example-local-context",
+  "appContainer": "example-app",
+  "databaseContainer": "example-database",
+  "url": "http://127.0.0.1:3000/",
+  "stateFile": "D:\\external\\operations\\control-state.json",
+  "operationMutexName": "Local\\Example-StruInfo-operations",
+  "dockerDesktopPath": null,
+  "startupTimeoutSeconds": 120
+}

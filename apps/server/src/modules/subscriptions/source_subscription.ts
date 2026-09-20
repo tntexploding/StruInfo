@@ -60,6 +60,7 @@ const WEB_CONNECTOR_ID = 'builtin.web.v1';
 interface SourceSubscriptionWriteBase {
   readonly subscriptionId: string;
   readonly label: string;
+  readonly description?: string;
   readonly enabled: boolean;
   readonly sourceAlias: string;
   readonly isPrivate: boolean;
@@ -204,6 +205,7 @@ export interface SourceSubscriptionServicePort {
   runNow(
     subscriptionId: string,
     requestKey: string,
+    authorize?: (source: Readonly<SourceSubscriptionWrite>) => void,
   ): Promise<Readonly<SourceSubscriptionRunResult>>;
   runDue(): Promise<readonly Readonly<SourceSubscriptionRunResult>[]>;
 }
@@ -216,6 +218,10 @@ export interface SourceSubscriptionServiceDependencies {
   readonly connectors?: SourceConnectorRegistry;
   readonly blobStore: BlobStore;
   readonly evidence: EvidenceRepositoryPort;
+  readonly evidenceForSubscription?: (
+    subscriptionId: string,
+  ) => EvidenceRepositoryPort;
+  readonly ownsAutomaticSnapshot?: (snapshotId: string) => Promise<boolean>;
   readonly evidenceRead?: EvidenceReadRepositoryPort;
   readonly entries?: InformationEntryEmptySnapshotRepositoryPort;
   readonly automationExecutions?: EntryAutomationExecutionRepositoryPort;
@@ -241,6 +247,7 @@ interface SourceSubscriptionState {
 
 export class SourceSubscriptionService implements SourceSubscriptionServicePort {
   readonly #dependencies: Readonly<SourceSubscriptionServiceDependencies>;
+  readonly #subscriptionRuns = new Map<string, Promise<void>>();
 
   public constructor(
     dependencies: Readonly<SourceSubscriptionServiceDependencies>,
@@ -345,17 +352,23 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
   public async runNow(
     subscriptionId: string,
     requestKey: string,
+    authorize?: (source: Readonly<SourceSubscriptionWrite>) => void,
   ): Promise<Readonly<SourceSubscriptionRunResult>> {
     if (!CANONICAL_UUID.test(subscriptionId) || !REQUEST_KEY.test(requestKey)) {
       throw new SourceSubscriptionServiceError('source_subscription_invalid');
     }
-    const subscription = (await this.list()).subscriptions.find(
-      (candidate) => candidate.subscriptionId === subscriptionId,
-    );
-    if (subscription === undefined) {
-      throw new SourceSubscriptionServiceError('source_subscription_not_found');
-    }
-    return this.#run(subscription, `manual:${requestKey}`);
+    return this.#serializeSubscriptionRun(subscriptionId, async () => {
+      const subscription = (await this.list()).subscriptions.find(
+        (candidate) => candidate.subscriptionId === subscriptionId,
+      );
+      if (subscription === undefined) {
+        throw new SourceSubscriptionServiceError(
+          'source_subscription_not_found',
+        );
+      }
+      authorize?.(subscription);
+      return this.#run(subscription, `manual:${requestKey}`);
+    });
   }
 
   public async runDue(): Promise<
@@ -367,20 +380,58 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
     );
     const results: SourceSubscriptionRunResult[] = [];
     for (const subscription of subscriptions) {
-      const dueAt = nextDueAt(subscription);
       try {
-        results.push(
-          await this.#run(
-            subscription,
-            `scheduled:${dueAt.replace(/[^0-9A-Za-z._:-]/gu, '-')}`,
-          ),
+        const result = await this.#serializeSubscriptionRun(
+          subscription.subscriptionId,
+          async () => {
+            const current = (await this.list()).subscriptions.find(
+              (candidate) =>
+                candidate.subscriptionId === subscription.subscriptionId,
+            );
+            if (
+              current === undefined ||
+              !current.enabled ||
+              !isDue(current, this.#now())
+            ) {
+              return undefined;
+            }
+            const dueAt = nextDueAt(current);
+            return this.#run(
+              current,
+              `scheduled:${dueAt.replace(/[^0-9A-Za-z._:-]/gu, '-')}`,
+            );
+          },
         );
+        if (result !== undefined) results.push(result);
       } catch {
         // Each run already records a closed failure state. A broken source must
         // not prevent another due subscription from being checked.
       }
     }
     return Object.freeze(results);
+  }
+
+  async #serializeSubscriptionRun<T>(
+    subscriptionId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    // API checks and the scheduler share this service in the supported single
+    // instance. Load the current cursor only after earlier work has settled.
+    const previous =
+      this.#subscriptionRuns.get(subscriptionId) ?? Promise.resolve();
+    const run = previous.then(operation);
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#subscriptionRuns.set(subscriptionId, settled);
+    try {
+      return await run;
+    } finally {
+      if (this.#subscriptionRuns.get(subscriptionId) === settled) {
+        this.#subscriptionRuns.delete(subscriptionId);
+      }
+    }
   }
 
   async #run(
@@ -504,7 +555,10 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
       )(
         {
           blobStore: this.#dependencies.blobStore,
-          evidenceRepository: this.#dependencies.evidence,
+          evidenceRepository:
+            this.#dependencies.evidenceForSubscription?.(
+              subscription.subscriptionId,
+            ) ?? this.#dependencies.evidence,
         },
         importInput,
       );
@@ -515,13 +569,17 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
             : 'source_import_rejected',
         );
       }
-      const routed = subscription.routeAfterImport
-        ? await this.#routeImportedSnapshot(
-            subscription,
-            imported.snapshotId,
-            sourceSha256,
-          )
-        : undefined;
+      const owned = await this.#dependencies.ownsAutomaticSnapshot?.(
+        imported.snapshotId,
+      );
+      const routed =
+        subscription.routeAfterImport && !owned
+          ? await this.#routeImportedSnapshot(
+              subscription,
+              imported.snapshotId,
+              sourceSha256,
+            )
+          : undefined;
       await this.#recordSubscriptionState(subscription, identity, {
         lastAttemptAt: attemptAt,
         lastSuccessAt: this.#now(),
@@ -636,7 +694,10 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
     )(
       {
         blobStore: this.#dependencies.blobStore,
-        evidenceRepository: this.#dependencies.evidence,
+        evidenceRepository:
+          this.#dependencies.evidenceForSubscription?.(
+            subscription.subscriptionId,
+          ) ?? this.#dependencies.evidence,
       },
       {
         workspaceId: this.#dependencies.workspaceId,
@@ -658,6 +719,10 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
     const routed = [];
     if (subscription.routeAfterImport) {
       for (const document of imported.documents) {
+        if (
+          await this.#dependencies.ownsAutomaticSnapshot?.(document.snapshotId)
+        )
+          continue;
         routed.push(
           await this.#routeImportedSnapshot(
             subscription,
@@ -1281,6 +1346,7 @@ function sameSubscriptionConfigurations(
       return (
         current.subscriptionId === candidate.subscriptionId &&
         current.label === candidate.label &&
+        current.description === candidate.description &&
         current.enabled === candidate.enabled &&
         current.intervalMinutes === candidate.intervalMinutes &&
         sourceConfigurationIdentity(current) ===

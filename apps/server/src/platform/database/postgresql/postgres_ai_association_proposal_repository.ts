@@ -48,6 +48,15 @@ const READ_PAIR_PROPOSALS_SQL = sql(
   'LIMIT $4',
 );
 
+const READ_ASSOCIATIONS_BY_IDS_SQL = sql(
+  'SELECT workspace_id::text, proposal_id::text, run_id::text,',
+  '  proposal_ordinal, stage, proposal_kind, target_snapshot_id::text,',
+  '  target_entry_id::text, related_entry_id::text, status, summary,',
+  '  created_at, decided_at',
+  'FROM struinfo.processing_proposal',
+  "WHERE workspace_id=$1 AND proposal_id=ANY($2::uuid[]) AND proposal_kind='association'",
+);
+
 const READ_INPUTS_SQL = sql(
   'SELECT proposal_id::text, input_ordinal, fragment_id::text',
   'FROM struinfo.processing_proposal_fragment_input',
@@ -143,18 +152,52 @@ export class PostgresAiAssociationProposalRepository implements AiAssociationPro
     return this.#base.appendProposal(proposal);
   }
 
-  public listRecentRuns(
+  public async listRecentRuns(
     workspaceId: string,
     limit: number,
   ): Promise<readonly Readonly<ProcessingRun>[]> {
-    return this.#base.listRecentRuns(workspaceId, limit);
+    return this.#withAssociationPayloads(
+      await this.#base.listRecentRuns(workspaceId, limit),
+    );
   }
 
-  public loadRun(
+  public async loadRun(
     workspaceId: string,
     runId: string,
   ): Promise<Readonly<ProcessingRun> | undefined> {
-    return this.#base.loadRun(workspaceId, runId);
+    const run = await this.#base.loadRun(workspaceId, runId);
+    return run ? (await this.#withAssociationPayloads([run]))[0] : undefined;
+  }
+
+  async #withAssociationPayloads(runs: readonly Readonly<ProcessingRun>[]) {
+    const ids = runs.flatMap((run) =>
+      run.proposals
+        .filter((p) => p.kind === 'association')
+        .map((p) => p.proposalId),
+    );
+    if (!ids.length) return runs;
+    const proposals = await runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const rows = await client.query<Row>(READ_ASSOCIATIONS_BY_IDS_SQL, [
+          runs[0]?.workspaceId,
+          ids,
+        ]);
+        return loadRows(client, canonicalUuid(runs[0]?.workspaceId), rows.rows);
+      },
+    );
+    const byId = new Map(proposals.map((p) => [p.proposalId, p]));
+    return Object.freeze(
+      runs.map((run) =>
+        Object.freeze({
+          ...run,
+          proposals: Object.freeze(
+            run.proposals.map((p) => byId.get(p.proposalId) ?? p),
+          ),
+        }),
+      ),
+    );
   }
 
   public decideProposal(

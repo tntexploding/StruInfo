@@ -281,8 +281,6 @@ export function InformationEntryRestructure({
     }
   }
 
-  if (!alreadyMaterialized) return null;
-
   return (
     <section
       className="entry-manual-split entry-restructure"
@@ -301,7 +299,15 @@ export function InformationEntryRestructure({
       <p className="entry-manual-split__boundary">
         先调整分组并预览影响，确认无误后再应用。已导入的原文不会改变。
       </p>
-      {isPrivate && !includePrivate ? (
+      {snapshotId === '' ? (
+        <p className="entry-manual-split__state" role="status">
+          请先在来源文档导航中选择一份具体文档，再调整已有条目结构。
+        </p>
+      ) : !alreadyMaterialized ? (
+        <p className="entry-manual-split__state" role="status">
+          当前文档尚未生成条目，完成首次拆分后才能调整已有结构。
+        </p>
+      ) : isPrivate && !includePrivate ? (
         <p className="entry-manual-split__state">
           这是隐私文档；勾选“查看并处理隐私文档”后才会在本地载入结构。
         </p>
@@ -348,7 +354,11 @@ export function InformationEntryRestructure({
               <pre>{snapshot.structures[0].normalizedText}</pre>
             </details>
           )}
-          <ol className="entry-manual-split__groups">
+          <ol
+            className="entry-manual-split__groups"
+            aria-label="重新拆分分组"
+            tabIndex={0}
+          >
             {groups.map((group, groupIndex) => (
               <ManualSplitGroupEditor
                 key={`${group.pieces[0]?.fragment.fragmentId ?? 'restructure-group'}:${group.pieces[0]?.startCodePoint.toString() ?? groupIndex.toString()}`}

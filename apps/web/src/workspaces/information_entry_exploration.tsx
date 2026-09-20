@@ -38,6 +38,7 @@ export interface InformationEntryExplorationProps extends Pick<
   InformationEntryServices,
   'onExplore' | 'onOpenEvidence' | 'onReviseExplorationPolicy'
 > {
+  readonly scopeKey: string;
   readonly includePrivate: boolean;
   readonly onlyPrivate: boolean;
   readonly pageItems: readonly Readonly<InformationEntrySearchItem>[];
@@ -46,6 +47,7 @@ export interface InformationEntryExplorationProps extends Pick<
 }
 
 export function InformationEntryExploration({
+  scopeKey,
   includePrivate,
   onlyPrivate,
   onExplore,
@@ -62,11 +64,9 @@ export function InformationEntryExploration({
       : DEFAULT_REVIEW_EXPLORATION_POLICY;
   const [draft, setDraft] =
     useState<Readonly<ReviewExplorationPolicyPreferences>>(persistedPolicy);
-  const [view, setView] = useState<ExplorationView>({status: 'idle'});
   const [saveState, setSaveState] = useState<
     'idle' | 'saving' | 'saved' | 'error'
   >('idle');
-  const requestSequence = useRef(0);
 
   const isDirty = !samePolicy(draft, persistedPolicy);
   const previewLimit =
@@ -96,51 +96,8 @@ export function InformationEntryExploration({
       }
       setDraft(response.body.policy);
       setSaveState('saved');
-      requestSequence.current += 1;
-      setView({status: 'idle'});
     } catch {
       setSaveState('error');
-    }
-  }
-
-  async function loadCandidates(): Promise<void> {
-    if (
-      selectedItem === undefined ||
-      reviewPreferences.status !== 'ready' ||
-      isDirty ||
-      !draft.enabled ||
-      draft.resultShare === 0
-    ) {
-      return;
-    }
-    const requestId = ++requestSequence.current;
-    setView({status: 'loading'});
-    try {
-      const response = await onExplore({
-        anchorEntryId: selectedItem.entry.entryId,
-        excludeEntryIds: pageItems.map((item) => item.entry.entryId),
-        pageResultCount: pageItems.length,
-        includePrivate,
-        onlyPrivate,
-      });
-      if (requestId !== requestSequence.current) return;
-      if (response.body.status !== 'ok') {
-        setView({
-          status: 'error',
-          message:
-            response.body.status === 'not_found'
-              ? '当前锚点已不在这个可见范围内，请重新查询。'
-              : '探索推荐没有生成；普通查询结果不受影响。',
-        });
-        return;
-      }
-      setView({status: 'ready', response: response.body});
-    } catch {
-      if (requestId !== requestSequence.current) return;
-      setView({
-        status: 'error',
-        message: '探索接口当前不可达；普通查询结果不受影响。',
-      });
     }
   }
 
@@ -263,6 +220,95 @@ export function InformationEntryExploration({
         </form>
       )}
 
+      <ExplorationCandidates
+        key={scopeKey + ':' + draft.revision.toString()}
+        includePrivate={includePrivate}
+        onlyPrivate={onlyPrivate}
+        selectedItem={selectedItem}
+        pageItems={pageItems}
+        policy={draft}
+        preferencesReady={
+          reviewPreferences.status === 'ready' && saveState !== 'saving'
+        }
+        isDirty={isDirty}
+        previewLimit={previewLimit}
+        onExplore={onExplore}
+        onOpenEvidence={onOpenEvidence}
+      />
+    </section>
+  );
+}
+
+function ExplorationCandidates({
+  includePrivate,
+  onlyPrivate,
+  selectedItem,
+  pageItems,
+  policy,
+  preferencesReady,
+  isDirty,
+  previewLimit,
+  onExplore,
+  onOpenEvidence,
+}: Pick<
+  InformationEntryExplorationProps,
+  | 'includePrivate'
+  | 'onlyPrivate'
+  | 'selectedItem'
+  | 'pageItems'
+  | 'onExplore'
+  | 'onOpenEvidence'
+> & {
+  readonly policy: Readonly<ReviewExplorationPolicyPreferences>;
+  readonly preferencesReady: boolean;
+  readonly isDirty: boolean;
+  readonly previewLimit: number;
+}) {
+  const [view, setView] = useState<ExplorationView>({status: 'idle'});
+  const requestSequence = useRef(0);
+  async function loadCandidates(): Promise<void> {
+    if (
+      selectedItem === undefined ||
+      !preferencesReady ||
+      isDirty ||
+      !policy.enabled ||
+      policy.resultShare === 0
+    ) {
+      return;
+    }
+    const requestId = ++requestSequence.current;
+    setView({status: 'loading'});
+    try {
+      const response = await onExplore({
+        anchorEntryId: selectedItem.entry.entryId,
+        excludeEntryIds: pageItems.map((item) => item.entry.entryId),
+        pageResultCount: pageItems.length,
+        includePrivate,
+        onlyPrivate,
+      });
+      if (requestId !== requestSequence.current) return;
+      if (response.body.status !== 'ok') {
+        setView({
+          status: 'error',
+          message:
+            response.body.status === 'not_found'
+              ? '当前锚点已不在这个可见范围内，请重新查询。'
+              : '探索推荐没有生成；普通查询结果不受影响。',
+        });
+        return;
+      }
+      setView({status: 'ready', response: response.body});
+    } catch {
+      if (requestId !== requestSequence.current) return;
+      setView({
+        status: 'error',
+        message: '探索接口当前不可达；普通查询结果不受影响。',
+      });
+    }
+  }
+
+  return (
+    <>
       <div className="entry-exploration__run">
         <div>
           <strong>
@@ -281,10 +327,10 @@ export function InformationEntryExploration({
           type="button"
           disabled={
             selectedItem === undefined ||
-            reviewPreferences.status !== 'ready' ||
+            !preferencesReady ||
             isDirty ||
-            !draft.enabled ||
-            draft.resultShare === 0 ||
+            !policy.enabled ||
+            policy.resultShare === 0 ||
             view.status === 'loading'
           }
           onClick={() => void loadCandidates()}
@@ -372,7 +418,7 @@ export function InformationEntryExploration({
           </div>
         </>
       )}
-    </section>
+    </>
   );
 }
 

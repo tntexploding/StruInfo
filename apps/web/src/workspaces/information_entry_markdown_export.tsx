@@ -15,9 +15,11 @@ type SelectedEntry = EntryMarkdownPreview['entries'][number];
 export function InformationEntryMarkdownExport({
   selectedEntry,
   privacyScope,
+  embedded = false,
   onPreviewMarkdownExport,
   onGenerateMarkdownExport,
 }: EntryMarkdownExportServices & {
+  readonly embedded?: boolean;
   readonly selectedEntry: Readonly<InformationEntry> | undefined;
   readonly privacyScope: EntryMarkdownPreview['privacyScope'];
 }) {
@@ -141,7 +143,11 @@ export function InformationEntryMarkdownExport({
     }
   }
   return (
-    <details className="workflow-tool-drawer entry-markdown-export">
+    <details
+      className="workflow-tool-drawer entry-markdown-export"
+      open={embedded ? true : undefined}
+      data-embedded={embedded}
+    >
       <summary>资料清单与导出 · {entries.length.toString()} 条</summary>
       <section
         className="entry-markdown-export__body"
