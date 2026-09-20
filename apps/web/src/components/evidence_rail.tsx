@@ -1,9 +1,15 @@
-import {useEffect, useMemo, useRef, useState} from 'react';
+import {safeReadingLink, sourceDisplayName} from './reading_text.js';
+import {useEffect, useId, useMemo, useRef, useState} from 'react';
 
 import type {EvidenceFragment} from '../api/m1c_api_contract.js';
 import type {EvidencePanelState} from './product_types.js';
 
 export interface EvidenceRailProps {
+  readonly onOpenDocument?: (
+    snapshotId: string,
+    includePrivate: boolean,
+  ) => void;
+  readonly embedded?: boolean;
   readonly onClose: () => void;
   readonly onRetry: (snapshotId: string) => void;
   readonly onSelectFragment: (fragmentId: string) => void;
@@ -11,14 +17,17 @@ export interface EvidenceRailProps {
 }
 
 export function EvidenceRail({
+  embedded = false,
+  onOpenDocument,
   onClose,
   onRetry,
   onSelectFragment,
   state,
 }: EvidenceRailProps) {
+  const titleId = useId();
   const closeButton = useRef<HTMLButtonElement>(null);
   const rail = useRef<HTMLElement>(null);
-  const [overlay, setOverlay] = useState(
+  const [narrow, setOverlay] = useState(
     () =>
       typeof globalThis.matchMedia === 'function' &&
       globalThis.matchMedia('(max-width: 74.9375rem)').matches,
@@ -33,6 +42,7 @@ export function EvidenceRail({
       media.removeEventListener('change', update);
     };
   }, []);
+  const overlay = narrow && !embedded;
   const isOpen = state.status !== 'closed';
   useEffect(() => {
     if (!isOpen || !overlay) return;
@@ -66,16 +76,18 @@ export function EvidenceRail({
         ? state.snapshot.snapshotId
         : state.snapshotId;
   useEffect(() => {
-    if (activeSnapshotId !== undefined) {
+    if (activeSnapshotId !== undefined && !embedded) {
       closeButton.current?.focus();
     }
-  }, [activeSnapshotId]);
+  }, [activeSnapshotId, embedded]);
 
   if (state.status === 'closed') return null;
 
   return (
     <aside
-      className="evidence-rail"
+      className={
+        embedded ? 'evidence-rail evidence-rail--embedded' : 'evidence-rail'
+      }
       ref={rail}
       role={overlay ? 'dialog' : undefined}
       aria-modal={overlay ? true : undefined}
@@ -101,12 +113,13 @@ export function EvidenceRail({
           first?.focus();
         }
       }}
-      aria-labelledby="evidence-rail-title"
+      aria-labelledby={embedded ? undefined : titleId}
+      aria-label={embedded ? '来源原文' : undefined}
       aria-live="polite"
     >
       <header className="evidence-rail__header">
         <div>
-          <h2 id="evidence-rail-title">来源原文</h2>
+          <h2 id={titleId}>来源原文</h2>
         </div>
         <button
           className="icon-action"
@@ -118,6 +131,23 @@ export function EvidenceRail({
           <span aria-hidden="true">×</span>
         </button>
       </header>
+
+      {state.status === 'ready' && onOpenDocument !== undefined ? (
+        <button
+          type="button"
+          className="secondary-action evidence-rail__open-document"
+          onClick={() => {
+            onOpenDocument(
+              state.snapshot.snapshotId,
+              state.snapshot.isPrivate === true,
+            );
+          }}
+        >
+          {state.snapshot.isPrivate === true
+            ? '在资料库打开此隐私文档'
+            : '在资料库阅读与整理'}
+        </button>
+      ) : null}
 
       {state.status === 'loading' ? (
         <div className="rail-state" role="status" aria-busy="true">
@@ -174,17 +204,25 @@ function EvidenceDossier({
         {snapshot.isPrivate === true ? (
           <p className="signal-label">私密文档</p>
         ) : null}
-        <h3 id="source-identity">{snapshot.sourceKey}</h3>
+        <h3 id="source-identity">{sourceDisplayName(snapshot)}</h3>
         {snapshot.isPrivate === true ? (
           <p className="privacy-disclosure">
             此全文、由其拆出的私密条目以及涉及私密条目的关系，默认不会出现在查询中。
           </p>
         ) : null}
-        {snapshot.canonicalUri === undefined ? null : (
-          <a href={snapshot.canonicalUri} target="_blank" rel="noreferrer">
+        {safeReadingLink(snapshot.canonicalUri) === undefined ? null : (
+          <a
+            href={safeReadingLink(snapshot.canonicalUri)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             打开原网页
           </a>
         )}
+        <details className="entry-reading-metadata">
+          <summary>来源标识</summary>
+          <p className="technical-identifier">{snapshot.sourceKey}</p>
+        </details>
         <dl className="compact-facts">
           <div>
             <dt>导入时间</dt>

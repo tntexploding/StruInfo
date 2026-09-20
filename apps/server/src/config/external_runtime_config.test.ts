@@ -38,6 +38,24 @@ afterEach(() => {
 });
 
 describe('loadRuntimeConfig', () => {
+  it('loads Agent grants from external configuration but the token only from process secrets', () => {
+    const fixture = createRuntimeFixture();
+    writeRuntimeConfig(fixture.configPath, fixture.dataRoot, [
+      'STRUIINFO_AGENT_ID=synthetic-agent',
+      'STRUIINFO_AGENT_GRANTS=read,annotate',
+    ]);
+    const config = loadRuntimeConfig('api', {
+      ...runtimeEnvironment(fixture),
+      STRUIINFO_AGENT_TOKEN: 'synthetic-token-'.repeat(3),
+    });
+    expect(config.agentInterface).toMatchObject({
+      identity: 'synthetic-agent',
+      read: true,
+      annotate: true,
+      processDocuments: false,
+    });
+  });
+
   it('loads a closed external file, applies environment overrides, and canonicalizes the data root', () => {
     const fixture = createRuntimeFixture();
     writeRuntimeConfig(fixture.configPath, fixture.dataRoot, [
@@ -133,6 +151,8 @@ describe('loadRuntimeConfig', () => {
     ['DATABASE_URL', 'database-secret-in-file'],
     ['STRUIINFO_MIGRATION_DATABASE_URL', 'migration-secret-in-file'],
     ['OPENAI_API_KEY', 'openai-secret-in-file'],
+    ['DEEPSEEK_API_KEY', 'deepseek-secret-in-file'],
+    ['STRUIINFO_AGENT_TOKEN', 'agent-secret-in-file'],
     ['STRUIINFO_CONFIG_PATH', 'recursive-path-in-file'],
   ])(
     'rejects environment-only key %s without echoing its value',

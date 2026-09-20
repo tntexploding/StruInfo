@@ -1,9 +1,106 @@
 # StruInfo Frontend Design Specification
 
-- Status: Project frontend baseline
-- Version: 1.12
-- Effective date: 2026-09-05
+## 文档入口来源、操作说明与正文宽度（2026-09-19）
+
+文章选择卡和正文标题下都显示订阅名称／原始来源。“手动放入文档”仅包含真实上传与手动文本；来源未匹配的远程文档使用“其他接收来源”，不得因自动处理队列关闭而误归类。
+
+底部明确区分“我已审核，接受并整理”与“交给 AI 审核并整理”。前者采用人工接收决定，后者先由 AI 判断；接收后均完成拆分、标签、联系与入库，仍遵守总控和价格时段。说明与按钮相邻并通过 aria-describedby 关联；翻译和摘要注明只辅助阅读。
+
+正文滚动容器铺满右侧阅读区，文字以独立的内边距维持可读行宽；不可把文字最大行宽设为滚动框最大宽度。操作按钮按内容宽度排列，空间不足时换行。
+
+## 批量恢复与历史待处理文档（2026-09-19）
+
+总览任务队列直接提供“批量从断点继续”“批量取消任务”；“为耗尽任务重启一轮”“处理未开始文档”收在更多批量操作中。勾选后每批提交最多 32 篇。点击后以原生模态弹窗勾选；列表内部滚动，底部确认与返回队列始终可见。
+取消只停止后续处理，不改变接收决定或删除原文、已完成结果；无模型配置时也可取消。取消窗口默认不勾选，支持仅选失败任务，显示逐篇状态和原因。已完成、已取消和被替代的旧任务不列入。弹窗打开后固定所见版本，提交逐篇检查版本并报告部分失败；取消后不能直接继续该任务。容量超限等不可直接重试的问题不列入断点继续。
+继续保留断点与剩余额度；重启仅针对额度或尝试次数耗尽的失败文档任务，开启同额度的新一轮，保留已完成步骤、前驱记录和累计历史调用数，旧任务不能再次写入。
+较新的人工修改与正文版本冲突须先处理，批量操作不覆盖。
+历史待处理范围为已接受或旧版直接收存的公开文档，排除待审、拒绝、暂缓、已完成／取消的任务和重复来源版本；创建新任务仍经过接收规则。
+继续、新建与重启遵守 AI 总控、串行队列、原有价格窗口及既有确认入库规则；取消不受模型或价格许可限制。不启用无人值守订阅或自动重启。
+此前授权的历史批次已分批入队；本次增补取消控件不自动执行真实任务。真实资料与操作记录保存在仓库外。
+
+## 当前总览与文档发布（2026-09-19）
+
+AI 工作框保持紧凑，仅显示总控、状态和处理数字。模型型号与逐篇细节放在队列或设置；不再在 AI 框上方重复失败/待继续提示。任务队列沿用记忆展开与内部滚动，显示审核、结构、标签、联系、入库五段真实状态，支持定位原文及显式恢复。工作台中的公开文档手动修改后显示“确认入库”，使用完整条目版本提交，处理中仍可阅读原文。
+
+## 当前交互规范：文档中心工作区（2026-09-19，ADR 0084）
+
+本节替代早期独立“收件箱 / 资料库 / 专题 / 查询”的页面组织与右侧操作栏规范；历史能力与隐私约束仍保留。
+
+1. 桌面左栏上下分别为总览标志与设置，其下以普通紧凑列表连续排列文档入口、工作台、数据阅览、报告，不再拉伸均分整栏高度。左栏只保留导航，AI 状态与操作集中在总览和对应文档中。刷新时保留当前工作区；新打开项目默认进入总览，只记忆页面标识。
+2. 文档入口左侧为可筛选、排序、展开的来源列表，右侧依次是当前来源待审文档、全文与浮动操作条。来源说明由外部订阅配置提供，缺失时明确提示，实际往期标题提供阅读线索。审核完成显示工作台入口。手动放入文档作为固定来源，点击打开导入区，并在该来源下查看接收记录；不再设置单独的导入按钮组。订阅与暂停使用不同语义颜色，可按活跃订阅优先排序。
+3. 工作台左侧文档可按状态与时间/来源筛选排序；正文与文首标注共用阅读区域。底部将人工编辑与 AI 操作分组。分段线位于实际原文边界，编辑前读取完整当前分段；读取失败不能提交替代结构。草稿不自动写入，确认后才更新检索内容。切换文章时保留左侧列表的筛选、分页和滚动位置；选中文章的处理状态刷新不清空列表已有数据。
+4. 数据阅览的搜索与提问同页切换。搜索工具为可键盘关闭的浮层，应用筛选后收起；关系图占用下方完整区域。阅读语言、清单导出及更多工具不占第三栏。隐私范围仍须每次明确选择。
+5. 报告配置与任务历史始终并列；窄屏上下排列、区域内滚动。选材与生成按钮在配置区域内，历史条目展开后阅读、编辑、导出。PDF 使用本机打印保存，未配置任何推送。
+6. 两栏宽度在浏览器记忆，不保存内容或授权；窄屏导航改为四个等宽入口。圆角、色彩、正文阅读宽度继续复用现有语义令牌。AI 使用既有低饱和强调色。
+
+收件箱以原标题、独立来源行和原文预览帮助选择；AI 摘要使用既有柔和 AI 色，明确标注基于接收原文，和审核原因分开。开关默认关闭并记忆；单篇与批量生成按钮必须独立于接受／拒绝，显示正在生成、已生成和失败原因，关闭后停止剩余批次，保留在途结果。
+
+> 2026-09-19：文首标签概览优先展示人工文档标签和跨条目标签，覆盖数量依据当前可见条目计算；全部条目标记在可展开浮层按条目分组，支持定位阅读。全文阅读在每条真实拆分线下方展示其后条目的全部内容标签，首条标签置于首条正文前且不虚构分割线；无标签时不加空白标记。标签沿用柔和实色样式并随栏宽换行。条目阅读只突出当前条目标签，领域单独标明；不因展示层精简而删标签。查询解释区分原词与已确认别名，并展示实际命中的原标签。
+
+## 总览 AI 工作状态（2026-09-17）
+
+总览将“待你决定”的资料与“失败待重试 / 待手动继续”的任务分开，核对数量按当前接收记录去重，不由旧任务结果重复催办。收起 AI 框时仍提供收件箱直达按钮；逐篇标题可定位对应资料。收件箱增加“需人工核对”筛选，用柔和琥珀色、文字标记和原因区分待接受与整理暂缓。接受仅决定资料库可见性，人工放行另行解除整理限制；二者不自动启动模型。总体许可显示“已允许 / 已禁止”，仅保存变更，明确它不是启动按钮。
+
+完整的快讯、简报、新闻汇编按自身体裁判断完整性，不因篇幅短、编号或多主题被当作残缺单篇文章；摘要抓取、缺失正文、选题排除仍保持原拦截边界。新提示词只影响后续审核，已有暂缓决定与证据不改写。
+
+总览 AI 框汇总已启动的接收审核、文档整理和日报/周报任务，显示实际运行阶段、资料来源、等待数量及需要查看的结果。价格等待显示服务端返回的北京时间最早可继续时刻；手动暂停、恢复待确认、模型变化和已关闭的自动策略不承诺自动续跑。审核通过明确停在接受，整理另行启动。没有排队任务时不虚构下次运行时间。
+
+页面可见时每 10 秒只读刷新，读取失败明确标记旧结果。任务和报告各最多读取 100 条，运行/等待优先于终态历史，达到上限说明计数范围；报告仍核验公开且已放行的来源。复用已有接口和授权，不新增调度、模型调用、迁移或依赖；即时翻译/查询工具不属于该后台任务汇总。
+
+## 按需 AI 接收审核（2026-09-16）
+
+收件箱的“AI 审核所选”对显式选择的待接受资料创建独立 intake 任务。沿用已保存的接收规则、全文准备、公开范围与价格窗口；每批最多 32 份，每份最多 3 次模型尝试，且不超过当前配置的单文档调用预算。完整且通过审核的资料自动接受，不确定或不适合的资料保留待接受并显示原因。任务可暂停、取消与恢复；价格等待不消耗调用预算。
+
+审核接受后停在资料库，不拆分、标注或建联，并阻止既有自动队列继续处理，整理须另行启动。人工版本优先；接收来源与任务标识持久保存，重试不覆盖较新决定。原文不改写，无新表、迁移或依赖；既有 JSON 与数据包扩展读取，新任务随包保存，恢复仍要求明确继续。全局无人值守保持关闭。
+
+## 订阅资料的人工接受（2026-09-16）
+
+新增公开订阅资料先保存在收件箱，默认待接受；接受后进入资料库。收件箱支持按状态与来源筛选、跨页全部接受、接受所选、拒绝所选，以及从已拒绝恢复待接受。全部接受只处理点击时当前筛选中的待接受资料，批量操作逐份核验版本，明确报告部分失败。
+
+接收选择复用 processing_document_intake 的可选 receipt 状态，与 AI 完整性/选题审核独立。保存选择不调用模型，不启用自动策略；已有启用的自动队列在接受前等待，接受后仍遵守原范围、预算和价格窗口。拒绝保留原始证据。历史无 receipt 的资料保持原可见性，已有条目或已启动结构处理的资料不能通过本入口移出资料库。原文与待接受记录同事务保存，重复接收不重置决定；个人数据包携带新字段，旧包继续可读。无新增表、迁移或依赖，降级使用升级前备份。
+
+## 文档旁的 AI 处理记录（2026-09-16）
+
+资料库在文档列表与阅读区呈现真实 AI 文档任务状态，拆分虚线直接绘于原文的真实条目边界；整篇保留不画线。实际标签与关联文章集中在文首，使用普通标签与文字链接。处理状态保留为紧凑一行，阶段记录在右侧详情中查看。详情复用右侧工作台，不挤压正文；可直接查看条目、当前标签和联系，以及接收原文对应的实际处理正文。价格等待、人工暂停、拦截、部分完成、未建联和达到额度未评估分别呈现。
+
+文首联系按独立行展示完整目标标题、关联说明及真实来源/核查状态，允许自然换行。纯编号标题显示明确标注的正文摘录，保留原标题；通用英文共同关注说明以中文呈现，原始关系说明与依据按需展开。宽泛关联后排，不改写已有关系或触发模型。文首信息随全文或条目正文滚动，避免较长说明长期挤占阅读空间。
+
+资料库顶部标题默认最多两行，超长快讯优先显示完整的前置简报标题；其余超长标题使用有界文字预览。完整来源标题在可键盘操作的浮层中查看，展开不改变正文高度，来源内容不改写。
+
+原文分界按完整条目证据及 Unicode 范围定位，不受列表分页影响。文首标签保留 AI 来源，联系显示实际关联文章；任务记录说明历史执行情况，不替代当前内容或人工核查。读取采用原有任务接口的可选文档范围，在最近记录限制前筛选，保留工作区和执行身份隔离。页面可见时只读刷新，隐藏后停止轮询，不触发新任务或模型调用。
+
+虚线只用于原文真实拆分边界，不用于标签、联系或阶段按钮；处理详情沿用右侧预留列及 Escape 返回焦点。后台结果刷新保留阅读对象与标注草稿，失败显示读取错误而不宣称未处理。RSS 摘要、当前正文及历史正文必须明确区分。
+
+## 报告阅读层次（2026-09-15，ADR 0083）
+
+报告默认采用单一阅读主栏；“报告历史”按需展开，生成、核对、导出紧邻报告标题。
+摘要用自然段连续阅读，段落角色保留为内部信息，不重复生成三个小标题；重要限制直接出现在正文。
+同一条摘要的来源在底部去重列出；多来源摘要以段落后的简短编号保留各段出处，单来源不重复标号。
+出处附近紧凑显示发布/接收日期，早于本期的文章标为补充阅读。
+未入选事件默认收起在“其他阅读”中；旧稿不改写内容，也按自然段阅读。
+来源返回和人工编辑应保留既有上下文及原始 AI 草稿。核对工作台从右侧按需打开，使用原生模态对话框管理焦点；关闭或 Escape 收起而不丢弃当前页面中的编辑。
+保存使用开始编辑时的版本，冲突保留修改；只有保存或显式放弃后才允许切换报告。刷新浏览器前仍需保存。
+
+## 模型价格时段（2026-09-14，ADR 0082）
+
+AI 设置顶部提供独立峰谷开关、北京时间规则、当前状态、恢复时间和官方来源。轮询状态不覆盖未保存的开关草稿；保存冲突保留草稿。等待期间展示真实等待原因和可用的暂停/取消操作，不把等待报告标作中断。即时工具提示低价时段重试；控件保持紧凑、响应式和可键盘操作。
+
+## 报告工作区（2026-09-13，ADR 0081）
+
+主导航新增「报告」，位于查询与设置之间。使用现有圆润阅读主题。最初的三栏式布局由上文的阅读主栏与按需工具取代；桌面正文独立滚动，窄屏自然排版。来源入口打开资料库，返回报告时保留选择和编辑状态。选材、生成中、失败、无材料、模型关闭、来源已变化与人工核对状态必须明确；点击生成才调用模型，普通保存不能自动标成已核对。
+
+## 接收审核交互增量（2026-09-13）
+
+收件箱列表提供紧凑“接收审核”入口与状态筛选。详情使用现有工具面板，显示真实暂缓/拒收原因、接收原文与网页正文入口、可选人工原因、拒收、放行、恢复和本篇任务。恢复状态与执行任务是两个独立动作。设置提供可选审核规则和候选检查预算，阶段明细展示召回理由、未建立联系和额度未评估，不用百分比分数冒充模型事实置信度。
+
+- Status: Shipped frontend baseline with an owner-approved redesign target
+- Version: 1.20
+- Effective date: 2026-09-12
 - Scope: StruInfo web application design, implementation, and review
+
+## Current increment: AI workflow controls (2026-09-12)
+
+Settings → AI contains the saved policy, scope/budgets, runtime status and bounded task controls; Inbox contains the same durable queue. All progress and usage MUST come from stored records. Polling and queue filters MUST preserve an unsaved policy draft. Global pause MUST operate on saved policy; conflicts preserve the draft. The existing rounded reading theme and compact grouped actions apply to expanded forms as well as collapsed sections. Source/model secrets remain outside the Web form. No configured model means execution stays unavailable while local work remains usable.
 
 ## 1. Purpose and Authority
 
@@ -29,6 +126,153 @@ Apply frontend guidance in this order:
 External skills are authoring and review aids, not runtime dependencies.
 This specification is self-contained so a contributor does not need a personal
 Skill installation to follow the project contract.
+
+## Owner-approved document workspace direction (2026-09-11)
+
+状态：所有者已认可信息架构与视觉方向，五工作区增量完成后按 ADR 0081 增加报告入口。
+当前主导航为收件箱、资料库、专题、查询、报告和设置；首次加载、刷新或重新打开项目时默认进入运行总览，也可由左上角「SI StruInfo」标志返回。总览面板按当前浏览器记忆恢复展开状态，批量处理从设置进入。
+后续改造以本节替代下文的工序分页、工业风、仅深色主题、旧圆角与动效参数要求。
+下文有关来源证据、业务权限、隐私、可访问性、性能和真实状态的要求继续有效。
+设计确认不等于收件状态、专题存储或自动处理权限已经存在。
+
+### 内容对象与工作区
+
+文档和条目共同构成内容核心，各入口共享同一套内容详情和操作。
+文档支持完整阅读、原文与译文切换、来源回看和结构调整。
+条目支持直接阅读、标注、查询、比较和联系，不要求先回到父文档才能操作。
+本次专题复用现有 Entry 图谱，围绕所选话题或条目查看、编辑有界关系。持久专题成员和自由页面搭建不在本次范围。
+
+| 当前入口 | 主要任务                                     | 边界                                       |
+| -------- | -------------------------------------------- | ------------------------------------------ |
+| 收件箱   | 配置订阅、手动导入、查看已接收文档与实际任务 | 真实收件决定可恢复，原文与处理结果分别呈现 |
+| 资料库   | 阅读文档和条目，在同一处调整结构、标注和联系 | 工具覆盖预留的右列，展开不挤压正文         |
+| 专题     | 选择话题或条目并探索已有图谱关系             | 有界关系图，不等于持久化专题集合           |
+| 查询     | 完整检索、语言切换、比较与引用导出           | 保留原有筛选、分页、隐私与来源边界         |
+| 报告     | 周期选材、引用草稿、人工核对与 Markdown 导出 | 按需创建，来源可追溯，定时创建和发送未启用 |
+| 设置     | 页面外观、按钮布局、全局规则、AI 状态与维护  | 外部配置按版本保存；密钥仍由服务器环境读取 |
+
+现有拆分、标签和联系能力成为内容工作台的按需工具。
+查询保留独立入口与完整筛选，知识图谱以“专题”呈现有界关系探索。
+资料库优先启动；运行总览通过左上角品牌按钮进入，支持点击和键盘操作，在窄屏下也保持可达。总览显示独立的当前页状态，不归入设置分类。
+重组导航时必须保留仍受支持操作的可达入口，不能以占位页面替代既有功能。
+
+### 连续的阅读与处理
+
+工作台由列表、阅读区和按需工具组成，默认优先阅读，同一时刻突出一种整理任务。
+来源、选中对象、真实处理结果和主要操作保持可见；每个任务只突出一到两个主要操作。
+切换结构、标注或联系工具时保留阅读对象与列表上下文，不把全部表单永久堆在正文旁边。
+短文支持按需整篇保留，长文才按需要调整结构；标签、联系和翻译不是每份材料的必经步骤。
+已有结构的替换继续使用现有预览、影响说明和明确提交边界。
+
+切换工具和返回列表应保留选中身份、筛选、分页、滚动位置和未提交草稿。
+持久恢复必须基于明确的外部存储契约，并重新校验工作区、对象版本与可见范围。
+隐私可见性继续要求当前操作的显式选择；保存视图或恢复位置不能暗中扩大该范围。
+未保存、正在保存、已保存和保存失败要明确区分，动画不得提前宣称写入成功。
+失败应定位到对应材料及可用的重试或修正动作。
+
+收件决定、处理结果和阅读情况是不同维度，不能合成一个模糊的“已完成”。
+现有订阅检查会先保存来源证据；ADR 0080 的拒收/拦截停止后续自动整理，并可恢复待审核或人工放行。
+它不表示原文从未接收，也不隐含删除证据。
+保存前逐篇审批、自动创建条目或自动执行后续动作必须有各自明确的业务契约与既有授权依据。
+
+### 自定义视图与专题集合
+
+自定义页面先采用保存视图：对象类型、受支持筛选、排序、分组、显示字段、有限布局与侧栏固定顺序。
+所有视图共享阅读和操作规则，默认界面在没有个人配置时也必须完整可用。
+保存视图动态返回当前匹配材料；手动专题集合保存明确选择的成员引用，两者不可混称。
+现有命名查询与选中条目上下文可以复用；ADR 0073 已定义侧栏按钮顺序、可见性与默认主题的外部配置。文档收件决定、跨会话阅读恢复和持久专题成员仍需独立契约。
+会话内导出选择不是持久专题，现有自动路由工作队列也不是通用文档收件箱。
+新增个人视图、状态和集合保存在外部工作区，并按相应数据类别完善个人数据包兼容性。
+本方向不引入任意页面搭建器、脚本执行、隐式行为学习或额外自动处理权限。
+
+### 圆润且层次清晰的视觉
+
+目标是适合长时间阅读的桌面界面，使用稳定纸面、可辨识控件和克制的表面层次。
+参考 [Fluent 2 elevation](https://fluent2.microsoft.design/elevation) 的层级原则与
+[Fluent 2 motion](https://fluent2.microsoft.design/motion) 的状态连续性原则。
+这些是设计参考，不指定新的组件库、字体、素材或运行依赖。
+
+| 角色         | 目标规则                                                                    |
+| ------------ | --------------------------------------------------------------------------- |
+| 工作区背景   | 中性且安静，以表面明暗区分导航、列表与阅读区                                |
+| 阅读纸面     | 不透明背景，16–20px 圆角，轻微阴影或明度层级；内部通过排版组织正文          |
+| 按钮与输入框 | 8–10px 圆角，清楚边缘；按钮以填充、轻微浮起感和按压反馈表明可操作性         |
+| 主要操作     | 实色填充，短按钮按内容宽度成组排列                                          |
+| 选中条目     | 持续底色、侧边或形状标记及明确状态，切换工具后仍可识别                      |
+| 标签与元信息 | 紧凑而安静，静态标签不伪装成按钮                                            |
+| 浅色与深色   | 分别设计表面明度和对比；深色不能只依赖黑色阴影区分层次                      |
+| 正文排版     | 系统中文字体、正常字距，正文以 16–18px 和舒适行距为起点，支持缩放与长文阅读 |
+
+默认、悬停、按下、选中、聚焦、加载和禁用状态必须可辨识，必要边界不能只在悬停后出现。
+保持下文既有对比度、键盘、触控目标、强制色彩和缩放要求。
+柔和圆角不得以减弱文字或控件对比换取；大面积玻璃透明和低对比凹凸效果不作为主要质感。
+列表与正文在桌面可采用等高框架，长内容滚动区之外保持主要操作可达；窄屏按任务顺序重排。
+信源表格、图谱与维护表单使用符合自身任务的布局，不强制复制阅读工作台。
+共享语义 token 和控件统一执行这些规则，不能逐页叠加不同的圆角、描边或阴影方案。
+
+### 动效与反馈
+
+以下数值作为新组件的初始范围，按实际位移、可读性和性能验证后统一为共享 token：
+
+- 按压等直接反馈：约 90–150ms，立即响应输入；
+- 同级阅读状态或内容切换：约 150–220ms，保留稳定框架；
+- 局部工具展开与收起：约 180–260ms，帮助辨认工具属于哪个对象；
+- 保存与处理结果：在当前对象旁显示真实状态，避免使整页移动或跳转；
+- 减少动态效果：取消位移、缩放和装饰动效，保留清楚的静态反馈。
+
+正文阅读期间保持稳定，不使用持续装饰运动、批量弹跳、人工等待或虚构进度。
+展开工具仍受所在区域宽度约束，短按钮不能因展开状态拉满整行。
+
+### 实施顺序与验收
+
+1. 统一表面、按钮、输入、选中状态和反馈组件，打通单文档工作台及现有来源、译文、条目与标注调用。
+2. 接通信源与收件箱，先确定最小收件状态、失败定位和外部持久化契约。
+3. 整合资料库与查询，打通文档、条目、比较和有界关系探索之间的上下文返回。
+4. 扩展保存视图、固定入口与持久专题集合，继续复用现有身份、权限、导出和来源边界。
+
+每步先验证真实可执行的调用及失败路径，再逐步替换对应旧入口；不以概念示意的点击结果替代业务实现。
+所有自动化验证使用合成、无个人含义的数据，真实资料与视觉证据继续保持在仓库和发行物之外。
+验收围绕三条完整使用路径：新文章到达后决定如何处理、跨来源选取材料准备引用导出、中途离开后恢复工作。
+报告自动生成仍是独立能力；准备材料与引用导出不能呈现为已经生成日报或周报。
+各路径检查上下文连续性、原文/译文与出处、草稿/保存/失败状态，以及深浅主题、键盘、减少动态效果、长内容和窄屏。
+
+设计实施以 `ui-visual-design-system` 为视觉参考，`desktop-app-design` 约束工作台组织，
+`interaction-motion-design` 指导反馈与切换；这些技能服务于本节规则，不替代仓库规范。
+
+### 五工作区实施增量
+
+收件箱保留订阅列表、手动导入与实际接收记录，已接收文档可直接进入资料库。
+资料库右列按“来源详情 → 调整结构 → 添加标签 → 建立联系”呈现常用操作。
+桌面预留该列，编辑面板覆盖按钮区而不改变正文宽度；来源片段、人工/规则/AI 拆分、条目和整篇文档标签以及现有图谱编辑复用原接口。
+同一文档切换工具时保留未提交标注与结构草稿；窄屏把工具放在正文后，保持完整宽度。
+
+专题沿用现有关系图与等价列表，关系检查栏和图谱在桌面限制为一屏高度。
+查询将数量放在搜索标题旁、图谱入口放在搜索动作旁；正文旁集中语言和出处控制，资料清单与更多工具默认收起。
+查询顶部的保存查询、筛选和索引维护采用锚定触发按钮的悬浮菜单，同时只展开一个；展开不改变结果列表或正文的位置与高度。
+菜单限制在可视区域内，长表单独立滚动，保留可见收起入口；支持再次点击、点击外部及 Esc 收起，键盘关闭后返回触发按钮，未提交内容在切换菜单时保留。
+设置汇集共用规则与维护操作，AI 页只展示真实能力及现有外部接入方式。
+
+侧栏的有序按钮子集和默认外观通过 ADR 0073 的接口保存在外部偏好，旧配置保持默认布局，冲突保留草稿并要求重新读取。
+隐藏的功能仍可从各页“更多操作”进入。顶部主题选择是本次页面预览，设置中的默认外观是持久值。
+本增量不保存隐私可见性、模型密钥、任意脚本、执行权限或新专题成员。
+
+### 首个实施增量（历史记录）
+
+默认资料库复用现有文档列表、原文读取、条目分页、按需翻译和标注保存接口。
+桌面文档列表与阅读纸面等高、各自滚动，短操作在工具栏内组合；只有一个条目时不显示多余的选择和分页控件。
+标注工具按需展开，保存后留在原条目并返回标注入口的键盘焦点；正文修改为次级展开项。
+结构调整继续使用已有预览和提交工具，从文档工作台携带明确文档范围进入，并提供返回该文档的操作。
+来源侧栏也可显式打开资料库中的对应文档，隐私文档的按钮明确标明隐私范围。
+
+文档筛选、选中条目、条目分页、原文/译文各自滚动位置和标注草稿在本次应用会话内保留。
+草稿绑定原始条目版本；读取到新版本时显示旧草稿提示，不将旧草稿自动套用到新版本。
+刷新浏览器不保留这些会话状态；文档阅读恢复、通用收件箱、专题及侧栏个人布局仍未新增持久化。
+迟到请求和保存反馈按文档、条目及隐私范围隔离。退出资料库进入普通导航后重置其隐私范围。
+
+共享语义色板提供跟随系统、浅色、深色；外观选择只保存在当前页面会话。
+阅读纸面为 18px 圆角，控件为 10px，直接反馈为 120ms，工具展开为 200ms。
+整页不做位移动画；减少动态效果时关闭工具动画和按压位移。
+本增量没有新增依赖、业务路由、数据表或自动处理权限。
 
 ## 2. Design Contract
 
@@ -664,7 +908,8 @@ license review.
   --si-text-sm: 0.8125rem;
   --si-text-body: 0.875rem;
   --si-text-control: 1rem;
-  --si-text-title: clamp(1.75rem, 4vw, 3.5rem);
+  --si-text-title: clamp(1.625rem, 2.5vw, 2rem);
+  --si-text-reading: clamp(1.25rem, 2vw, 1.625rem);
 }
 ```
 
@@ -868,6 +1113,13 @@ command. Meaning and origin require more than colour:
 - every edge states whether it is automatically calculated, AI-assisted,
   user-edited or user-created;
 - an automatic edge exposes its `similarity` kind, score and explanation;
+- a percentage labelled `规则相似度` comes only from an existing projection's
+  base score; missing projections show origin and review status instead of 0%,
+  including graph nodes, tooltips, the relation list and accessible names;
+- AI-created and manual relationships have no implied percentage confidence.
+  Inspectors state `未计算规则相似度` when no projection exists. A real zero
+  score remains visible, and any adjustment is labelled separately from the
+  rule score;
 - an accepted AI edge keeps a visible AI origin until a later user edit;
 - a user label is readable on selection and in the equivalent list/tree;
 - direction has an arrow, endpoint wording and accessible text; automatic
@@ -1155,3 +1407,133 @@ This specification synthesizes:
 
 No external Skill code, reference-product asset, or runtime dependency is
 copied into the application by this document.
+
+## On-demand Chinese reading support (ADR 0070)
+
+The selected Query article keeps its original title and exact-source action. A secondary reading control switches between original text and the separately saved Chinese translation. Generating requires an explicit action with the Provider transfer scope stated before sending; absent configuration and private/oversized Entries show an explanation and disabled generation. The original remains readable while waiting and after failure. Translation is labelled machine-generated, bound to the displayed Entry revision, and displayed through the safe reading view described below. Selection, privacy/query-scope changes and revision changes invalidate pending display state. Cached reading remains available with the Provider off. No new navigation destination, design tokens, assets or dependency is introduced.
+
+## Cached translation search (ADR 0071)
+
+The title/body lexical scope includes valid saved Chinese fields. Results label
+original and translated title/body matches separately while retaining one Entry.
+Opening a translated hit initially prefers cached Chinese reading; loading,
+unavailable caches and errors preserve the original, and explicit language
+switches remain available. Search never generates a translation. The existing
+machine-origin and exact-source labels remain visible. Untranslated content is
+discoverable through original text or existing annotations. This adds no new
+navigation, token, asset or control surface.
+
+## Owner-selected seven-page UI maintenance (2026-09-08)
+
+The seven destinations retain `struinfo-industrial / complex / 3`. Page titles
+use the compact operational scale; repeated instruction panels become optional
+native disclosures. Borders separate functional regions without adding nested
+frames or decorative corners to ordinary reading content. The application has
+one main landmark, an expanded rail from 1200 px, and a bounded narrow-screen
+navigation strip. Source overlays retain focus containment, Escape dismissal
+and return to the triggering control.
+
+Source selection uses a labelled, searchable native document chooser. Desktop
+Split and Tags place the bounded Entry queue beside the main reading/editor
+surface; small workspaces stack them. Tags keeps save/previous/next at the start
+of the editor with a sticky action row. Document aggregation, AI suggestions,
+preferences and automation stay in secondary disclosures. Type coverage and
+correction controls must fit the available workspace, including large counts.
+
+Query places search first, then closed saved-query/filter/index disclosures,
+then the list and reading surface. Opening settings uses normal document flow;
+it must not compress the reader or overlap results. Article and candidate titles
+wrap to two lines where bounded, with a full accessible name/native title.
+Opaque source keys are visually replaced by a readable source name or host;
+full identifiers remain in the source dossier and Entry metadata.
+
+The original and translated reading views parse CommonMark into a whitelist of
+React elements, reusing the already locked MIT `mdast-util-from-markdown@2.0.3`
+closure. Raw HTML remains inert visible text. Links allow only HTTP(S), resolve
+relative paths against the source URI, and suppress opener/referrer access.
+Images are explicit links and do not load automatically. Rendering does not
+rewrite Entry bodies, translations, Snapshot/Fragment evidence or exports.
+The editor and exact-source view retain their original text representations.
+
+Associations places both endpoints together. A returned candidate is selectable
+even when it is outside the current page; changing the source or query/privacy
+scope invalidates the old target. Percentage controls use 0–100 consistently.
+Knowledge candidate titles cannot escape their buttons, and bounded graph nodes
+occupy non-overlapping columns around the centre. Narrow screens initially use
+the equivalent relationship list; graph mode remains available with local pan.
+
+Overview distinguishes Entries with tags from type-review coverage. Its task
+rail describes only the latest actual ProcessingRun and that run's current
+stage, rather than implying completion of the whole collection or all stages.
+Owner-content screenshots and deployment evidence remain outside Git and the
+application artifact; automated checks use only synthetic materials.
+
+## Supplied translation reading (ADR 0072)
+
+Query now initially prefers any current Chinese cache, including saved-view openings. Original text remains available during loading, on missing caches, after errors and by explicit switch. Supplied translations show a distinct external-import label with an uncertainty note; no new layout, dependency, editor, navigation or Provider generation permission is added.
+
+## Long-content and action reachability maintenance (2026-09-09)
+
+Reading bodies in Query, Split and source review retain all text in a labelled,
+keyboard-focusable scroll region capped by the viewport height. Article headers,
+language switches, exact-source actions and metadata remain outside that region.
+Changing the displayed text resets its reading scroll position. Result queues,
+association candidates, subscriptions and manual/restructure groups use bounded
+scroll areas; pagination, subscription save and split commit remain outside the
+scrolling list. Scroll gestures can continue onto the page at a region boundary.
+
+The Import document list filters locally by readable source name, source key or
+source URL, displays 20 documents per page, and provides previous/next and direct
+page selection. Filtering returns to page one; changing pages resets list scroll.
+The full count and current displayed range remain explicit. Source return and
+privacy opt-in use the existing exact-document controls. New subscription drafts
+focus their name field, bringing the new row into view without saving it.
+
+Desktop and narrow layouts retain natural page scrolling and all controls.
+Do not restore the earlier unbounded narrow-screen structure preview or place
+commit controls beneath an unbounded article/list. No business API, persistence,
+Provider permission, dependency or owner content is introduced by this repair.
+
+## Aligned workspaces and compact actions (2026-09-10)
+
+Owner workspaces other than Overview use the Import page's clear selection and
+working-surface hierarchy. At desktop widths with sufficient workspace space,
+selection and reading/editing columns share `--si-workbench-height`.
+Queues and detail panels scroll independently without losing content; result
+pagination stays outside the queue, and Tags keeps its save navigation sticky
+within the editor. Changing the selected Entry resets the detail scroll. Reading
+headers, language controls and evidence actions remain distinct from body text.
+Associations keeps its candidate list scrollable with pair and policy controls
+outside it. The graph retains local pan and its equivalent relationship list.
+
+Short action buttons use content width and retain the existing target sizes.
+Related buttons wrap together; a short label is not a reason to create a full-width
+row. Preference suggestions and trials share a row when space permits, and rule
+fields use responsive columns. Draft rules and suggestion results use labelled,
+keyboard-focusable bounded lists; generation, trial and save stay outside those
+lists even when all 64 suggestions are shown. Secondary settings retain their
+allocated column when expanded; opening a disclosure must not make it span the
+whole work area. Fields and related controls adapt to the available panel width.
+Narrow layouts stack the working columns, retain bounded queues and natural page
+scrolling, and allow controls to wrap without document overflow.
+This maintenance changes no business commands, privacy scope or Provider authority.
+
+## Stable disclosure columns (2026-09-11)
+
+Opening a secondary tool reveals its contents within the existing column; it
+must not trigger full-row spanning. Column count follows available workspace
+width rather than disclosure state. Short actions keep content width and related
+controls wrap inside the panel. A tool whose prerequisite is missing explains
+which document or preparation step is needed instead of exposing an empty drawer.
+These visible states do not enable otherwise unavailable reads or writes.
+The available-subscription list also fits its allocated width, without default
+list indentation or a minimum track wider than a narrow panel; long channel
+names wrap within the list.
+
+## 总览 AI 监督与可调整栏目
+
+- AI 工作区位于总览原有内容下方，使用共享暖铜色 AI 语义变量，与蓝灰主界面区分；浅深主题均需可读。AI 工作框与右侧任务队列首次使用时默认收起，收起后保留实时状态和待办数；两者及最近结果、独立调用记录的展开状态仅保存在当前浏览器，切换页面、刷新或下次打开时恢复，浏览器存储不可用时仍可正常展开收起；AI 工作框始终与上方统计区同宽。桌面总览限制在一屏，展开详情、队列、历史结果或独立调用记录时仅面板内部滚动；窄屏保留自然页面滚动。右侧队列优先显示进行与等待，历史记录按需展开。
+- “允许 AI 继续 / 禁止 AI 操作”为版本校验的服务端总体许可。明确保留已发出请求、既有结果、原任务范围、单独暂停和价格闸门；界面不得把允许描述为自动接管新文章。
+- 逐篇展示审核、结构、标签、联系的实际阶段，允许审核结束而后续未启动，关系评估可完成但没有边。阶段条不模拟耗时百分比；历史计数不冒充全库待办。
+- 资料库左右分隔线与收件箱工具分隔线支持指针拖动、左右方向键、Home/End 和双击复位。限制最小阅读宽度；窄屏堆叠后隐藏不适用的分隔线。尺寸仅保存在当前浏览器，不存入知识数据或仓库。
+- 收件箱导入按工具面板实际宽度排列表单，展开来源信息、切换文本/Git/本地文件不能继承整页列定位。工具区独立滚动，不推挤相邻正文或列表。

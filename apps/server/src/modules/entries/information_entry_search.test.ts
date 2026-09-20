@@ -1,7 +1,11 @@
+import {createHash} from 'node:crypto';
 import {describe, expect, it} from 'vitest';
+import type {EntryTranslation} from './information_entry_translation.js';
+import {decodeEntrySearchBody} from './information_entry_search_request.js';
 
 import type {
   CurrentInformationEntry,
+  InformationEntrySearchRequest,
   InformationEntryAssociationProjection,
   InformationEntryAssociationRepositorySnapshot,
 } from './index.js';
@@ -15,6 +19,343 @@ const RESOURCE_ID = '22222222-2222-4222-8222-222222222222';
 const SNAPSHOT_ID = '33333333-3333-4333-8333-333333333333';
 
 describe('complete InformationEntry search', () => {
+  it('expands only confirmed whole-tag equivalents with original labels, field scope and privacy intact', () => {
+    const originals = [
+      currentEntry('00000000-0000-4000-8000-000000000001', {
+        contentKeywords: ['无线网络'],
+      }),
+      currentEntry('00000000-0000-4000-8000-000000000002', {
+        contentKeywords: ['Wi-Fi'],
+        isPrivate: true,
+      }),
+      currentEntry('00000000-0000-4000-8000-000000000003', {
+        contentKeywords: ['Wi-Fi 7'],
+      }),
+    ];
+    const aliases = [
+      {source: 'WiFi', canonical: 'Wi-Fi'},
+      {source: 'Wi-Fi', canonical: '无线网络'},
+    ];
+    const find = (request: Partial<InformationEntrySearchRequest>) =>
+      searchCurrentInformationEntries(
+        originals,
+        {includePrivate: false, limit: 10, ...request},
+        undefined,
+        undefined,
+        undefined,
+        aliases,
+      );
+    expect(find({contentKeyword: 'WiFi'}).items).toMatchObject([
+      {
+        entry: {entryId: originals[0]?.entryId},
+        aliasMatches: [{query: 'WiFi', tag: '无线网络'}],
+      },
+    ]);
+    expect(
+      find({text: 'WiFi', textFields: ['tags'], textMode: 'exact'}).items[0],
+    ).toMatchObject({
+      matchReasons: ['content_keyword_alias'],
+      textMatch: {score: 10_000},
+    });
+    expect(find({text: 'WiFi', textFields: ['body']}).totalCount).toBe(0);
+    expect(find({text: 'WiF', textMode: 'exact'}).totalCount).toBe(0);
+    expect(
+      find({contentKeyword: 'WiFi', includePrivate: true}).totalCount,
+    ).toBe(2);
+    expect(
+      find({
+        contentKeyword: 'WiFi',
+        includePrivate: true,
+        onlyPrivate: true,
+      }).items.map((item) => item.entry.entryId),
+    ).toEqual([originals[1]?.entryId]);
+    expect(originals[0]?.value.contentKeywords[0]?.displayValue).toBe(
+      '无线网络',
+    );
+  });
+
+  it('binds pagination to the effective confirmed alias group without depending on unrelated alias order', () => {
+    const entries = [1, 2, 3].map((n) =>
+      currentEntry(`00000000-0000-4000-8000-${String(n).padStart(12, '0')}`, {
+        documentOrder: n,
+        contentKeywords: [n === 3 ? 'Network C' : 'Network B'],
+      }),
+    );
+    const aliases = [{source: 'Network A', canonical: 'Network B'}];
+    const request = {
+      contentKeyword: 'Network A',
+      includePrivate: false,
+      limit: 1,
+    };
+    const first = searchCurrentInformationEntries(
+      entries,
+      request,
+      undefined,
+      undefined,
+      undefined,
+      aliases,
+    );
+    expect(first.totalCount).toBe(2);
+    expect(first.nextCursor).toBeDefined();
+    if (first.nextCursor === undefined)
+      throw new Error('missing synthetic cursor');
+    const secondRequest = {...request, after: first.nextCursor};
+    const second = searchCurrentInformationEntries(
+      entries,
+      secondRequest,
+      undefined,
+      undefined,
+      undefined,
+      [{source: 'Unrelated', canonical: 'Other'}, ...aliases],
+    );
+    expect(second.items[0]?.entry.entryId).toBe(entries[1]?.entryId);
+    for (const changed of [
+      [],
+      [...aliases, {source: 'Network B', canonical: 'Network C'}],
+    ]) {
+      expect(() =>
+        searchCurrentInformationEntries(
+          entries,
+          secondRequest,
+          undefined,
+          undefined,
+          undefined,
+          changed,
+        ),
+      ).toThrow(InformationEntrySearchCursorError);
+    }
+  });
+
+  it('does not grant a second field-ranking boost when a confirmed alias and the original tag both match', () => {
+    const source = currentEntry('00000000-0000-4000-8000-000000000001', {
+      contentKeywords: ['Network A', 'Network B'],
+    });
+    const duplicate = {
+      ...source,
+      entryId: '00000000-0000-4000-8000-000000000002',
+    };
+    const result = searchCurrentInformationEntries(
+      [source, duplicate],
+      {text: 'Network A', includePrivate: false, limit: 1},
+      undefined,
+      undefined,
+      undefined,
+      [{source: 'Network A', canonical: 'Network B'}],
+    );
+    expect(result.items[0]?.matchReasons).toEqual([
+      'content_keyword_alias',
+      'content_keyword',
+    ]);
+    expect(result.nextCursor?.matchReasonCount).toBe(1);
+  });
+
+  it.each([
+    ['exact', '合成标题甲', 10_000],
+    ['substring', '标题', 9_000],
+    ['fuzzy', '合成标提甲', undefined],
+  ] as const)(
+    'matches cached Chinese titles in %s mode without replacing the Entry',
+    (textMode, text, score) => {
+      const entry = currentEntry('00000000-0000-4000-8000-000000000001', {
+        titlePath: 'Synthetic Alpha',
+      });
+      const translations = new Map([[entry.entryId, translation(entry)]]);
+      const result = searchCurrentInformationEntries(
+        [entry],
+        {
+          text,
+          textMode,
+          textFields: ['title'],
+          includePrivate: false,
+          limit: 10,
+        },
+        undefined,
+        undefined,
+        translations,
+      );
+      expect(result.totalCount).toBe(1);
+      expect(result.items[0]?.entry).toBe(entry);
+      expect(result.items[0]?.matchReasons).toEqual(['translation_title']);
+      if (score !== undefined)
+        expect(result.items[0]?.textMatch?.score).toBe(score);
+      expect(entry.value.titlePath).toBe('Synthetic Alpha');
+    },
+  );
+
+  it('respects selected fields and original structural filters for translation-only matches', () => {
+    const entry = currentEntry('00000000-0000-4000-8000-000000000001');
+    const translations = new Map([[entry.entryId, translation(entry)]]);
+    const request = {text: '合成正文', includePrivate: false, limit: 10};
+    const search = (overrides: Partial<InformationEntrySearchRequest>) =>
+      searchCurrentInformationEntries(
+        [entry],
+        {...request, ...overrides},
+        undefined,
+        undefined,
+        translations,
+      );
+    expect(search({textFields: ['body']}).items[0]?.matchReasons).toEqual([
+      'translation_body',
+    ]);
+    expect(search({textFields: ['title']}).totalCount).toBe(0);
+    expect(search({textFields: ['tags']}).totalCount).toBe(0);
+    expect(search({sourceKey: 'synthetic:another-source'}).totalCount).toBe(0);
+    expect(search({contentKeyword: '合成正文'}).totalCount).toBe(0);
+    expect(search({typeKeyword: 'other'}).totalCount).toBe(0);
+  });
+
+  it('rejects stale or mismatched translations and excludes private caches even with opt-in', () => {
+    const entry = currentEntry('00000000-0000-4000-8000-000000000001');
+    for (const invalid of [
+      {...translation(entry), sourceRevision: 2},
+      {
+        ...translation(entry),
+        sourceRevisionId: '10000000-0000-4000-8000-000000000002',
+      },
+      {...translation(entry), entryId: '00000000-0000-4000-8000-000000000002'},
+    ]) {
+      expect(
+        searchCurrentInformationEntries(
+          [entry],
+          {
+            text: '合成',
+            includePrivate: true,
+            limit: 10,
+          },
+          undefined,
+          undefined,
+          new Map([[entry.entryId, invalid]]),
+        ).totalCount,
+      ).toBe(0);
+    }
+    const privateEntry = {...entry, value: {...entry.value, isPrivate: true}};
+    for (const onlyPrivate of [false, true]) {
+      expect(
+        searchCurrentInformationEntries(
+          [privateEntry],
+          {
+            text: '合成',
+            includePrivate: true,
+            onlyPrivate,
+            limit: 10,
+          },
+          undefined,
+          undefined,
+          new Map([[entry.entryId, translation(entry)]]),
+        ).totalCount,
+      ).toBe(0);
+    }
+  });
+
+  it('counts matching language variants once for ranking and round-trips their cursor', () => {
+    const first = currentEntry('00000000-0000-4000-8000-000000000001', {
+      titlePath: '合成',
+      body: '合成',
+      contentKeywords: ['合成'],
+      typeKeyword: 'other',
+      typeCustomName: '合成',
+      domains: [domain('other', '合成')],
+    });
+    const second = {...first, entryId: '00000000-0000-4000-8000-000000000002'};
+    const third = {...first, entryId: '00000000-0000-4000-8000-000000000003'};
+    const translations = new Map([
+      [second.entryId, {...translation(second), title: '合成', body: '合成'}],
+    ]);
+    const request: InformationEntrySearchRequest = {
+      text: '合成',
+      includePrivate: false,
+      onlyPrivate: false,
+      limit: 1,
+    };
+    const page = searchCurrentInformationEntries(
+      [second, first, third],
+      request,
+      undefined,
+      undefined,
+      translations,
+    );
+    expect(page.totalCount).toBe(3);
+    expect(page.items[0]?.entry.entryId).toBe(first.entryId);
+    expect(page.nextCursor?.matchReasonCount).toBe(5);
+    const decoded = decodeEntrySearchBody({...request, after: page.nextCursor});
+    expect(decoded).toBeDefined();
+    if (decoded === undefined)
+      throw new Error('Synthetic cursor did not decode.');
+    const next = searchCurrentInformationEntries(
+      [second, first, third],
+      decoded,
+      undefined,
+      undefined,
+      translations,
+    );
+    expect(next.items).toHaveLength(1);
+    expect(next.items[0]?.entry.entryId).toBe(second.entryId);
+    expect(next.items[0]?.matchReasons).toHaveLength(7);
+    expect(next.items[0]?.textMatch?.score).toBe(10_000);
+    expect(next.nextCursor?.matchReasonCount).toBe(5);
+    const lastRequest = decodeEntrySearchBody({
+      ...request,
+      after: next.nextCursor,
+    });
+    if (lastRequest === undefined)
+      throw new Error('Translated cursor did not decode.');
+    const last = searchCurrentInformationEntries(
+      [second, first, third],
+      lastRequest,
+      undefined,
+      undefined,
+      translations,
+    );
+    expect(last.items.map((item) => item.entry.entryId)).toEqual([
+      third.entryId,
+    ]);
+    expect(last.nextCursor).toBeUndefined();
+  });
+
+  it('rejects cursors from before translation search semantics were introduced', () => {
+    const request = {text: '合成', includePrivate: false, limit: 1};
+    const legacyDigest = createHash('sha256')
+      .update(
+        JSON.stringify({
+          schemaVersion: 'struinfo.information-entry-search.v2',
+          text: {
+            value: '合成',
+            mode: 'substring',
+            fields: ['title', 'body', 'tags'],
+          },
+          contentKeyword: '',
+          sourceKey: '',
+          snapshotId: '',
+          typeKeyword: '',
+          typeCustomName: '',
+          domainKeyword: '',
+          domainCustomName: '',
+          domainScope: 'any',
+          chunkMode: '',
+          time: null,
+          association: null,
+          includePrivate: false,
+        }) + '\n',
+      )
+      .digest('hex');
+    expect(() =>
+      searchCurrentInformationEntries([], {
+        ...request,
+        after: {
+          schemaVersion: 2,
+          querySha256: legacyDigest,
+          associationDepth: 0,
+          textScore: 9_000,
+          matchReasonCount: 1,
+          associationScore: 0,
+          capturedAt: '2040-01-04T00:00:00.000Z',
+          documentOrder: 0,
+          entryId: '00000000-0000-4000-8000-000000000001',
+        },
+      }),
+    ).toThrow(InformationEntrySearchCursorError);
+  });
+
   it('combines keyword, source, document, custom type/domain, chunk and published-time filters', () => {
     const entry = currentEntry('00000000-0000-4000-8000-000000000001', {
       publishedAt: '2040-01-03T00:00:00.000Z',
@@ -388,4 +729,21 @@ function associationSnapshot(
   overrides: InformationEntryAssociationRepositorySnapshot['overrides'] = [],
 ): Readonly<InformationEntryAssociationRepositorySnapshot> {
   return Object.freeze({projections, overrides});
+}
+
+function translation(
+  entry: Readonly<CurrentInformationEntry>,
+): Readonly<EntryTranslation> {
+  return Object.freeze({
+    entryId: entry.entryId,
+    sourceRevision: entry.revision,
+    sourceRevisionId: entry.revisionId,
+    targetLanguage: 'zh-CN',
+    title: '合成标题甲',
+    body: '合成正文乙',
+    providerKey: 'openai-responses-v1',
+    model: 'synthetic-model',
+    promptVersion: 'synthetic-v1',
+    translatedAt: '2040-01-04T00:00:00.000Z',
+  });
 }

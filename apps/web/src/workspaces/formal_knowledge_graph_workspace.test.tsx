@@ -94,9 +94,81 @@ describe('InformationEntryRadialGraph', () => {
     expect(markup.match(/class="knowledge-radial-edge"/gu)).toHaveLength(2);
     expect(markup).toContain('共同内容关键词、相近正文或标题');
     expect(markup).toContain('人工确认：该条目为中心结论提供直接支持');
-    expect(markup).toContain('marker-start="url(#knowledge-arrow)"');
-    expect(markup).toContain('marker-end="url(#knowledge-arrow)"');
+    const markerId = /<marker id="([^"]+)"/u.exec(markup)?.[1];
+    if (markerId === undefined) throw new Error('Graph marker missing.');
+    expect(markup).toContain('marker-start="url(#' + markerId + ')"');
+    expect(markup).toContain('marker-end="url(#' + markerId + ')"');
     expect(markup).toContain('role="button"');
+    expect(markup).toContain('规则相似度 74%');
+    expect(markup).not.toMatch(/ · 100%<\/small>/u);
+    expect(markup).toContain('用户创建 · 已核对来源');
+  });
+
+  it('distinguishes unscored AI relations from a calculated zero score', () => {
+    const center = entry(CENTER_ID, '合成中心', '完整的合成证据。');
+    const related = entry(MANUAL_ID, '合成相关条目', '用于关系显示验证。');
+    const aiEdge: Readonly<InformationEntryGraphEdge> = {
+      entryLowId: CENTER_ID,
+      entryHighId: MANUAL_ID,
+      label: '相关',
+      direction: 'symmetric',
+      origin: 'ai_assisted',
+      semanticKind: 'related',
+      verificationStatus: 'unreviewed',
+      note: '合成关系说明',
+      effectiveScore: 0,
+      isBlocked: false,
+      overrideRevision: 1,
+    };
+    const render = (edge: Readonly<InformationEntryGraphEdge>) =>
+      renderToStaticMarkup(
+        <InformationEntryRadialGraph
+          center={center}
+          edges={[edge]}
+          nodesById={
+            new Map([
+              [CENTER_ID, center],
+              [MANUAL_ID, related],
+            ])
+          }
+          selectedEdgeKey={undefined}
+          selectedNodeId={CENTER_ID}
+          onRecenter={() => undefined}
+          onSelectEdge={() => undefined}
+          onSelectNode={() => undefined}
+        />,
+      );
+
+    const unscored = render(aiEdge);
+    expect(unscored).toContain('AI 建立 · 尚未核对');
+    expect(unscored).toContain('未计算规则相似度');
+    expect(unscored).not.toContain('联系强度 0%');
+    expect(unscored).not.toContain('规则相似度 0%');
+    expect(unscored).not.toMatch(/0%<\/small>/u);
+
+    const zeroScore = render({
+      ...aiEdge,
+      effectiveScore: 1_500,
+      projection: {
+        workspaceId: center.workspaceId,
+        entryLowId: CENTER_ID,
+        entryHighId: MANUAL_ID,
+        entryLowRevision: 1,
+        entryLowRevisionId: center.revisionId,
+        entryHighRevision: 1,
+        entryHighRevisionId: related.revisionId,
+        contentSimilarity: 0,
+        typeSimilarity: 0,
+        domainSimilarity: 0,
+        baseScore: 0,
+        algorithmVersion: 'synthetic-v1',
+        candidateBasis: [],
+        candidateRank: 1,
+      },
+    });
+    expect(zeroScore).toContain('规则相似度 0%');
+    expect(zeroScore).not.toContain('未计算规则相似度');
+    expect(zeroScore).not.toContain('规则相似度 15%');
   });
 });
 

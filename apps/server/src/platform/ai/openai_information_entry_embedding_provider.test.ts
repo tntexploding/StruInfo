@@ -4,10 +4,10 @@ import {
   OPENAI_EMBEDDINGS_ENDPOINT,
   OpenAiInformationEntryEmbeddingProvider,
 } from './openai_information_entry_embedding_provider.js';
-import type {OpenAiFetch} from './openai_entry_tag_provider.js';
+import type {OpenAiFetch} from './responses_entry_tag_provider.js';
 
 const CONFIG = Object.freeze({
-  providerKey: 'openai-embeddings-v1' as const,
+  providerKey: 'openai-embeddings-v2' as const,
   model: 'text-embedding-synthetic',
   apiKey: 'synthetic-api-key',
   maximumBatchSize: 32 as const,

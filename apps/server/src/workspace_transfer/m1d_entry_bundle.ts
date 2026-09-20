@@ -13,8 +13,11 @@ import {
 } from './workspace_bundle.js';
 
 export const M1D_ENTRY_BUNDLE_SECTION_TYPE = 'struinfo.m1d-entry';
-export const M1D_ENTRY_BUNDLE_SECTION_VERSION = 5;
-export const M1D_ENTRY_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v5';
+export const M1D_ENTRY_BUNDLE_SECTION_VERSION = 7;
+export const M1D_ENTRY_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v7';
+export const M1D_ENTRY_VERSION_SIX_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v6';
+export const M1D_ENTRY_VERSION_FIVE_BUNDLE_SECTION_VERSION = 5;
+export const M1D_ENTRY_VERSION_FIVE_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v5';
 export const M1D_ENTRY_VERSION_FOUR_BUNDLE_SECTION_VERSION = 4;
 export const M1D_ENTRY_VERSION_FOUR_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v4';
 export const M1D_ENTRY_VERSION_THREE_BUNDLE_SECTION_VERSION = 3;
@@ -149,9 +152,25 @@ export const M1D_ENTRY_TABLES: readonly Readonly<M1dEntryTableDescriptor>[] =
       'updated_at',
       'committed_at',
     ]),
+    table('information_entry_translation', [
+      'workspace_id',
+      'entry_id',
+      'target_language',
+      'source_revision',
+      'source_revision_id',
+      'title',
+      'body',
+      'provider_key',
+      'model',
+      'prompt_version',
+      'translated_at',
+    ]),
   ]);
 
-const VERSION_FOUR_ENTRY_TABLES = Object.freeze(M1D_ENTRY_TABLES.slice(0, -1));
+const VERSION_FIVE_ENTRY_TABLES = Object.freeze(M1D_ENTRY_TABLES.slice(0, -1));
+const VERSION_FOUR_ENTRY_TABLES = Object.freeze(
+  VERSION_FIVE_ENTRY_TABLES.slice(0, -1),
+);
 
 const VERSION_THREE_ENTRY_TABLES = Object.freeze(
   VERSION_FOUR_ENTRY_TABLES.map((descriptor, index) =>
@@ -273,6 +292,57 @@ export const M1D_ENTRY_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     version: M1D_ENTRY_BUNDLE_SECTION_VERSION,
     encode: normalizeM1dEntrySnapshot,
     decode: normalizeM1dEntrySnapshot,
+  });
+
+export const M1D_ENTRY_VERSION_SIX_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1D_ENTRY_BUNDLE_SECTION_TYPE,
+    version: 6,
+    encode(value: unknown): unknown {
+      return normalizeSnapshot(
+        value,
+        M1D_ENTRY_VERSION_SIX_BUNDLE_SCHEMA,
+        M1D_ENTRY_TABLES,
+      );
+    },
+    decode(payload: JsonValue): unknown {
+      const snapshot = normalizeSnapshot(
+        payload,
+        M1D_ENTRY_VERSION_SIX_BUNDLE_SCHEMA,
+        M1D_ENTRY_TABLES,
+      );
+      return normalizeM1dEntrySnapshot({
+        ...snapshot,
+        schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
+      });
+    },
+  });
+
+export const M1D_ENTRY_VERSION_FIVE_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1D_ENTRY_BUNDLE_SECTION_TYPE,
+    version: M1D_ENTRY_VERSION_FIVE_BUNDLE_SECTION_VERSION,
+    encode(value: unknown): unknown {
+      return normalizeSnapshot(
+        value,
+        M1D_ENTRY_VERSION_FIVE_BUNDLE_SCHEMA,
+        VERSION_FIVE_ENTRY_TABLES,
+      );
+    },
+    decode(payload: JsonValue): unknown {
+      const snapshot = normalizeSnapshot(
+        payload,
+        M1D_ENTRY_VERSION_FIVE_BUNDLE_SCHEMA,
+        VERSION_FIVE_ENTRY_TABLES,
+      );
+      return normalizeM1dEntrySnapshot({
+        schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
+        tables: [
+          ...snapshot.tables,
+          {name: 'information_entry_translation', rows: []},
+        ],
+      });
+    },
   });
 
 export const M1D_ENTRY_VERSION_FOUR_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
@@ -415,6 +485,7 @@ function upgradeVersionFourSnapshot(
     tables: [
       ...snapshot.tables,
       {name: 'information_document_working_copy', rows: []},
+      {name: 'information_entry_translation', rows: []},
     ],
   });
 }
@@ -609,6 +680,7 @@ function upgradeLegacySnapshot(
       {name: 'information_document_tag_value', rows: currentTagValues},
       {name: 'information_entry_fragment_range', rows: []},
       {name: 'information_document_working_copy', rows: []},
+      {name: 'information_entry_translation', rows: []},
     ],
   });
 }

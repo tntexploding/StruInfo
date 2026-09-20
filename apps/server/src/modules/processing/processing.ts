@@ -1,4 +1,8 @@
 import {
+  MAXIMUM_AI_SPLIT_ENTRIES,
+  MAXIMUM_AI_SPLIT_FRAGMENTS,
+} from './ai_split_proposal.js';
+import {
   PROCESSING_PRIVACY_SCOPES,
   PROCESSING_PROPOSAL_KINDS,
   PROCESSING_RUN_ORIGINS,
@@ -146,7 +150,7 @@ export function assertProcessingSplitProposalPayload(
   if (
     !isArrayValue(value.entries) ||
     value.entries.length < 1 ||
-    value.entries.length > 64
+    value.entries.length > MAXIMUM_AI_SPLIT_ENTRIES
   )
     fail();
   const fragmentIds = new Set<string>();
@@ -156,7 +160,7 @@ export function assertProcessingSplitProposalPayload(
     if (
       !isArrayValue(entry.fragmentIds) ||
       entry.fragmentIds.length < 1 ||
-      entry.fragmentIds.length > 64
+      entry.fragmentIds.length > MAXIMUM_AI_SPLIT_FRAGMENTS
     )
       fail();
     for (const fragmentId of entry.fragmentIds) {
@@ -166,7 +170,7 @@ export function assertProcessingSplitProposalPayload(
       inputCount += 1;
     }
   }
-  if (inputCount > 64) fail();
+  if (inputCount > MAXIMUM_AI_SPLIT_FRAGMENTS) fail();
 }
 export function assertProcessingAssociationProposalPayload(
   value: Readonly<ProcessingAssociationProposalPayload>,

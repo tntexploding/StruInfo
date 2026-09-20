@@ -28,10 +28,16 @@ export function deriveWorkspaceWriteLockKey(workspaceId: string): string {
 export async function acquireWorkspaceWriteLock(
   client: PostgresClientBoundary,
   workspaceId: string,
+  createIfMissing = false,
 ): Promise<void> {
   await client.query(ACQUIRE_WORKSPACE_WRITE_LOCK_SQL, [
     deriveWorkspaceWriteLockKey(workspaceId),
   ]);
+  if (createIfMissing)
+    await client.query(
+      'INSERT INTO struinfo.workspace(workspace_id) VALUES ($1) ON CONFLICT DO NOTHING',
+      [workspaceId],
+    );
   const workspace = await client.query<Readonly<{workspace_id: unknown}>>(
     READ_WORKSPACE_SQL,
     [workspaceId],

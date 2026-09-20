@@ -9,7 +9,11 @@ import type {
   WorkspaceResponse,
 } from '../api/m1c_api_contract.js';
 import type {Loadable, ProductSection} from '../components/product_types.js';
+import {useRememberedDisclosure} from '../components/use_remembered_disclosure.js';
 import {ProcessingRunRail} from './processing_run_rail.js';
+import {useAiActivity} from './use_ai_activity.js';
+import {activityItems} from './ai_activity_state.js';
+import {AiActivityPanel, AiTaskQueue} from './ai_activity_panel.js';
 
 type OverviewDataState =
   | Readonly<{status: 'loading'}>
@@ -33,10 +37,12 @@ export interface WorkflowOverviewProps {
     expectedVersion: number,
   ) => Promise<M1cHttpResponse<ProcessingRunCancelResponse>>;
   readonly onNavigate: (section: ProductSection) => void;
+  readonly onReviewInbox: (snapshotId?: string) => void;
+  readonly onOpenDocument?: (snapshotId: string) => void;
 }
 
 const STAGES: readonly Readonly<{
-  section: Exclude<ProductSection, 'overview' | 'knowledge'>;
+  section: 'import' | 'documents' | 'query' | 'reports';
   index: string;
   label: string;
   detail: string;
@@ -44,38 +50,34 @@ const STAGES: readonly Readonly<{
   {
     section: 'import',
     index: '01',
-    label: '导入',
-    detail: '保存来源与原文',
+    label: '文档入口',
+    detail: '查看来源，审核新文档',
   },
   {
-    section: 'split',
+    section: 'documents',
     index: '02',
-    label: '拆分',
-    detail: '把文档整理为可编辑条目',
-  },
-  {
-    section: 'tags',
-    index: '03',
-    label: '标签',
-    detail: '内容、类型、领域三个维度',
-  },
-  {
-    section: 'associations',
-    index: '04',
-    label: '联系',
-    detail: '推荐并编辑条目之间的联系',
+    label: '工作台',
+    detail: '在全文中整理分段、标签与联系',
   },
   {
     section: 'query',
-    index: '05',
-    label: '查询',
-    detail: '查找条目并查看原始来源',
+    index: '03',
+    label: '数据阅览',
+    detail: '搜索、浏览关系或向资料提问',
+  },
+  {
+    section: 'reports',
+    index: '04',
+    label: '报告',
+    detail: '配置生成任务，阅读与导出报告',
   },
 ]);
 
 export function WorkflowOverview({
   onListDocuments,
   onNavigate,
+  onReviewInbox,
+  onOpenDocument,
   snapshots,
   onCancelProcessingRun,
   workspace,
@@ -83,6 +85,21 @@ export function WorkflowOverview({
 }: WorkflowOverviewProps) {
   const [data, setData] = useState<OverviewDataState>({status: 'loading'});
   const [processingRefreshToken, setProcessingRefreshToken] = useState(0);
+  const [historyExpanded, setHistoryExpanded] = useRememberedDisclosure(
+    'overview-run-history',
+  );
+
+  const activity = useAiActivity(processingRefreshToken);
+  const items = useMemo(
+    () =>
+      activity.data
+        ? activityItems(
+            activity.data,
+            snapshots.status === 'ready' ? snapshots.value : [],
+          )
+        : [],
+    [activity.data, snapshots],
+  );
 
   const refresh = useCallback(async () => {
     setData({status: 'loading'});
@@ -157,27 +174,41 @@ export function WorkflowOverview({
       </header>
 
       <div className="workflow-overview__layout">
-        <ProcessingRunRail
-          workspace={workspace}
-          refreshToken={processingRefreshToken}
-          onListRuns={onListProcessingRuns}
-          onCancelRun={onCancelProcessingRun}
-        />
+        <aside className="overview-task-sidebar" aria-label="工作任务">
+          <AiTaskQueue
+            activity={activity}
+            items={items}
+            onNavigate={onNavigate}
+            onReviewInbox={onReviewInbox}
+            onOpenDocument={onOpenDocument}
+          >
+            <details
+              className="overview-run-history"
+              open={historyExpanded}
+              onToggle={(event) => {
+                setHistoryExpanded(event.currentTarget.open);
+              }}
+            >
+              <summary>独立调用记录</summary>
+              <ProcessingRunRail
+                workspace={workspace}
+                refreshToken={processingRefreshToken}
+                onListRuns={onListProcessingRuns}
+                onCancelRun={onCancelProcessingRun}
+              />
+            </details>
+          </AiTaskQueue>
+        </aside>
 
         <div className="workflow-overview__main">
           <section
             className="project-intro"
             aria-labelledby="project-intro-title"
           >
-            <div className="project-intro__mark" aria-hidden="true">
-              SI
-            </div>
             <div>
-              <h2 id="project-intro-title">
-                把一份文档变成可以查找、修改和追溯的信息
-              </h2>
+              <h2 id="project-intro-title">知识工作区</h2>
               <p>
-                原始文档始终保留。拆分后的条目可以添加标签和联系，并在知识页组成可编辑的关系图谱。
+                原始文档始终保留。拆分后的条目可以添加标签和联系，并在数据阅览中查看可编辑的关系图谱。
               </p>
             </div>
           </section>
@@ -186,7 +217,11 @@ export function WorkflowOverview({
             <Metric label="文档" value={metrics.documents} unit="份" />
             <Metric label="来源片段" value={metrics.fragments} unit="段" />
             <Metric label="信息条目" value={metrics.entries} unit="条" />
-            <Metric label="已标注条目" value={metrics.annotated} unit="条" />
+            <Metric
+              label="已有标签的条目"
+              value={metrics.annotated}
+              unit="条"
+            />
             <Metric label="文档标签" value={metrics.documentTags} unit="个" />
           </section>
 
@@ -230,6 +265,7 @@ export function WorkflowOverview({
               ))}
             </ol>
           </section>
+          <AiActivityPanel activity={activity} items={items} />
         </div>
       </div>
     </div>
@@ -257,7 +293,7 @@ function Metric({
 }
 
 function stageStatus(
-  section: Exclude<ProductSection, 'overview' | 'knowledge'>,
+  section: 'import' | 'documents' | 'query' | 'reports',
   metrics: Readonly<{
     documents: number;
     fragments: number;
@@ -269,16 +305,12 @@ function stageStatus(
   switch (section) {
     case 'import':
       return `${metrics.documents.toString()} 份文档`;
-    case 'split':
+    case 'documents':
       return metrics.entries === undefined
         ? '读取中'
         : `${metrics.entries.toString()} 条条目`;
-    case 'tags':
-      return metrics.annotated === undefined || metrics.entries === undefined
-        ? '读取中'
-        : `${metrics.annotated.toString()} / ${metrics.entries.toString()} 已标注`;
-    case 'associations':
-      return '按需重建';
+    case 'reports':
+      return '生成与导出';
     case 'query':
       return metrics.entries === undefined ? '读取中' : '可以查询';
   }

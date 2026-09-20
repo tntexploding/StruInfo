@@ -3,6 +3,126 @@ import {describe, expect, it} from 'vitest';
 import {projectStructuredDocument} from './document_projection.js';
 
 describe('structured document projection', () => {
+  it.each(['postBody', 'post__body', 'story_body'])(
+    'keeps all parts and intervening figures within %s',
+    async (container) => {
+      const result = await projectStructuredDocument(
+        'html',
+        new TextEncoder().encode(
+          `<main><div id="${container}"><header class="post__title"><h1>Synthetic multipart story</h1><p>A short introduction.</p></header><section class="post__content__section"><div class="post__content"><p>First source-backed argument.</p></div></section><figure><img src="/evidence.png" alt="Intervening evidence"><figcaption>Explanation between sections.</figcaption></figure><section class="post__content__section"><div class="post__content"><p>The necessary continuation.</p><p>Final conclusion with <a href="/reference">a citation</a>.</p></div></section></div><section><h2>Recommended cards</h2><p>Unrelated promoted story.</p></section></main>`,
+        ),
+      );
+      if (result.status !== 'projected') throw new Error('expected projection');
+      const text = new TextDecoder().decode(result.value.sourceUtf8);
+      expect(text).toContain('First source-backed argument.');
+      expect(text).toContain('The necessary continuation.');
+      expect(text).toContain('Intervening evidence');
+      expect(text).toContain('Explanation between sections.');
+      expect(text).toContain('[a citation](/reference)');
+      expect(text).not.toContain('Unrelated promoted story.');
+      expect(text.match(/First source-backed argument\./gu)).toHaveLength(1);
+      expect(text.indexOf('First source-backed argument.')).toBeLessThan(
+        text.indexOf('Explanation between sections.'),
+      );
+      expect(text.indexOf('Explanation between sections.')).toBeLessThan(
+        text.indexOf('The necessary continuation.'),
+      );
+    },
+  );
+
+  it('preserves independent marked articles when they have no single article owner', async () => {
+    const result = await projectStructuredDocument(
+      'html',
+      new TextEncoder().encode(
+        '<main><section class="post__body"><h1>First synthetic article</h1><p>First independent document.</p></section><section class="post__body"><h1>Second synthetic article</h1><p>Second independent document.</p></section></main>',
+      ),
+    );
+    if (result.status !== 'projected') throw new Error('expected projection');
+    const text = new TextDecoder().decode(result.value.sourceUtf8);
+    expect(text).toContain('First independent document.');
+    expect(text).toContain('Second independent document.');
+  });
+
+  it('prefers the inner article body over an outer article containing tag catalogs', async () => {
+    const result = await projectStructuredDocument(
+      'html',
+      new TextEncoder().encode(
+        '<head><title>Synthetic title</title></head><article><div class="post-content"><header><h1>Synthetic title</h1><p>Large unrelated tag catalog.</p></header><div class="article-content"><p>The full central argument.</p><figure><img src="/diagram.png" alt="Central diagram"><figcaption>Evidence caption.</figcaption></figure><p>Source-backed conclusion.</p></div><aside>Related tag catalog.</aside></div></article>',
+      ),
+    );
+    expect(result.status).toBe('projected');
+    if (result.status !== 'projected') return;
+    const text = new TextDecoder().decode(result.value.sourceUtf8);
+    expect(text).toContain('# Synthetic title');
+    expect(text).toContain('The full central argument.');
+    expect(text).toContain('Evidence caption.');
+    expect(text).toContain('Source-backed conclusion.');
+    expect(text).not.toMatch(/unrelated tag catalog|Related tag catalog/u);
+  });
+
+  it('distinguishes the article heading from navigation and site-banner headings', async () => {
+    const result = await projectStructuredDocument(
+      'html',
+      new TextEncoder().encode(
+        '<div class="body-wrapper"><nav><h1>Site logo</h1></nav><div class="banner"><h1>Daily column</h1></div><div class="news-article"><h1>Synthetic story</h1><p>First argument.</p><p>Supporting evidence.</p><figure><img src="/plot.png" alt="Evidence plot"></figure></div><footer>Site-wide menu.</footer></div>',
+      ),
+    );
+    expect(result.status).toBe('projected');
+    if (result.status !== 'projected') return;
+    const text = new TextDecoder().decode(result.value.sourceUtf8);
+    expect(text).toContain('Supporting evidence.');
+    expect(text).toContain('Evidence plot');
+    expect(text).not.toMatch(/Site logo|Daily column|Site-wide menu/u);
+  });
+
+  it('selects a marked reading body around one heading while retaining figures and citations', async () => {
+    const html =
+      '<body><nav>Site menu</nav><div class="page"><div class="story-body"><h1>Synthetic reading</h1><p>Opening argument.</p><figure><img src="/figure.png" alt="Synthetic figure"><figcaption>Figure context.</figcaption></figure><p>Continuation of the argument.</p><footer><a href="/citation">Article citation</a></footer></div><section><h2>Recommended cards</h2><p>Unrelated promoted text.</p></section></div><footer>Site boilerplate</footer></body>';
+    const result = await projectStructuredDocument(
+      'html',
+      new TextEncoder().encode(html),
+    );
+    expect(result.status).toBe('projected');
+    if (result.status !== 'projected') return;
+    const text = new TextDecoder().decode(result.value.sourceUtf8);
+    expect(text).toContain('Opening argument.');
+    expect(text).toContain('Continuation of the argument.');
+    expect(text).toContain('![Synthetic figure](/figure.png)');
+    expect(text).toContain('Figure context.');
+    expect(text).toContain('[Article citation](/citation)');
+    expect(text).not.toMatch(
+      /Site menu|Recommended cards|Unrelated promoted|Site boilerplate/u,
+    );
+  });
+  it('does not truncate a multi-document HTML upload to the first marked body', async () => {
+    const result = await projectStructuredDocument(
+      'html',
+      new TextEncoder().encode(
+        '<div class="reading-content"><h1>One</h1><p>First document.</p></div><div class="reading-content"><h1>Two</h1><p>Second document.</p></div>',
+      ),
+    );
+    expect(result.status).toBe('projected');
+    if (result.status !== 'projected') return;
+    expect(new TextDecoder().decode(result.value.sourceUtf8)).toContain(
+      'Second document.',
+    );
+  });
+
+  it('keeps image references and captions without executable URLs or nested links', async () => {
+    const source = new TextEncoder().encode(
+      '<article><h1>Synthetic diagram</h1><figure><a href="https://example.invalid/full"><img src="/diagram.png" alt="A labelled shape"></a><figcaption>The shape used in the procedure.</figcaption></figure><img src="javascript:bad()" alt="Unsafe reference"><img src="https://example.invalid/second.png"><p>Continuation.</p></article>',
+    );
+    const result = await projectStructuredDocument('html', source);
+    expect(result.status).toBe('projected');
+    if (result.status !== 'projected') return;
+    const text = new TextDecoder().decode(result.value.sourceUtf8);
+    expect(text).toContain('![A labelled shape](/diagram.png)');
+    expect(text).toContain('The shape used in the procedure.');
+    expect(text).toContain('![查看原图](https://example.invalid/second.png)');
+    expect(text).not.toContain('javascript:');
+    expect(text).not.toContain('[![');
+  });
+
   it('extracts semantic HTML blocks without executing or retaining hidden code', async () => {
     const source = new TextEncoder().encode(`<!doctype html>
       <html><head><title>Synthetic document</title><script>secret()</script></head>
@@ -93,3 +213,29 @@ function createSyntheticPdf(text: string): Uint8Array {
   pdf += `startxref\n${xrefOffset.toString()}\n%%EOF\n`;
   return new TextEncoder().encode(pdf);
 }
+
+it('keeps tables and figure context together and removes sharing controls only', async () => {
+  const result = await projectStructuredDocument(
+    'html',
+    new TextEncoder().encode(
+      '<article><h1>Synthetic measurement</h1><p>The teams share measurements.</p>' +
+        '<div class="social-share"><a href="/share">Facebook</a><a href="/email">Email</a></div>' +
+        '<figure><img src="/chart.png" alt="Chart"><figcaption>Figure 1: Complete measurement.</figcaption>' +
+        '<table><tr><th>Year</th><th>Value</th><th>Comment</th></tr><tr><td>2040</td><td></td><td>Missing</td></tr>' +
+        '<tr><td>2041</td><td>9</td><td><a href="/evidence">Evidence</a></td></tr></table><p>Source: Synthetic institute.</p></figure>' +
+        '<p class="share-research">The substantive explanation remains.</p></article>',
+    ),
+  );
+  if (result.status !== 'projected') throw new Error('expected projection');
+  const text = new TextDecoder().decode(result.value.sourceUtf8);
+  expect(text).toContain(
+    '| Year | Value | Comment |\n| 2040 |  | Missing |\n| 2041 | 9 | [Evidence](/evidence) |',
+  );
+  expect(text).toContain(
+    '![Chart](/chart.png)\nFigure 1: Complete measurement.',
+  );
+  expect(text).toContain('Source: Synthetic institute.');
+  expect(text).toContain('teams share measurements');
+  expect(text).toContain('substantive explanation');
+  expect(text).not.toMatch(/Facebook|Email/u);
+});

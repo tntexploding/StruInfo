@@ -260,7 +260,11 @@ export function InformationEntrySourceReviewWorkspace({
             </section>
           ) : (
             <div className="source-review-layout">
-              <nav className="source-review-list" aria-label="待复核关系">
+              <nav
+                className="source-review-list"
+                aria-label="待复核关系"
+                tabIndex={0}
+              >
                 {view.value.items.map((item) => (
                   <button
                     type="button"
@@ -370,7 +374,11 @@ function ReviewEditor({
     heading.current?.focus({preventScroll: true});
   }, []);
   return (
-    <section className="source-review-editor" aria-label="关系来源复核">
+    <section
+      className="source-review-editor"
+      aria-label="关系来源复核"
+      tabIndex={0}
+    >
       <header>
         <h2 tabIndex={-1} ref={heading}>
           {item.edge.label === 'similarity' ? '相似联系' : item.edge.label}

@@ -1,6 +1,10 @@
+import {rankQuestionEvidence} from './information_entry_question_recall.js';
 import {searchCurrentInformationEntries} from './information_entry_search.js';
 import type {InformationEntryAssociationRepositoryPort} from './information_entry_association_repository.js';
-import type {CurrentInformationEntry} from './information_entry_contract.js';
+import type {
+  CurrentInformationEntry,
+  InformationEntrySearchResult,
+} from './information_entry_contract.js';
 import type {InformationEntryRepositoryPort} from './information_entry_repository.js';
 import type {InformationEntryRetrievalServicePort} from './information_entry_search_index_contract.js';
 import {
@@ -28,7 +32,7 @@ export interface InformationEntryQuerySynthesisServiceDependencies {
 }
 
 export class InformationEntryQuerySynthesisService implements InformationEntryQuerySynthesisServicePort {
-  public readonly providerKey = 'openai-responses-v1' as const;
+  public readonly providerKey: InformationEntryQuerySynthesisProviderPort['providerKey'];
   public readonly model: string;
   public readonly promptVersion: string;
   readonly #dependencies: Readonly<InformationEntryQuerySynthesisServiceDependencies>;
@@ -38,6 +42,7 @@ export class InformationEntryQuerySynthesisService implements InformationEntryQu
   ) {
     this.#dependencies = dependencies;
     this.model = dependencies.provider.model;
+    this.providerKey = dependencies.provider.providerKey;
     this.promptVersion = dependencies.provider.promptVersion;
   }
 
@@ -58,29 +63,57 @@ export class InformationEntryQuerySynthesisService implements InformationEntryQu
     void ignoredLimit;
     const boundedQuery = Object.freeze({
       ...semanticQuery,
+      ...(request.retrieveForQuestion ? {text: request.question} : {}),
       includePrivate: false,
       onlyPrivate: false,
       limit: INFORMATION_ENTRY_QUERY_SYNTHESIS_MAXIMUM_EVIDENCE,
     });
-    const search =
-      this.#dependencies.retrieval === undefined
-        ? searchCurrentInformationEntries(
-            await this.#dependencies.entries.loadCurrentEntries(
+    let search: Readonly<InformationEntrySearchResult>;
+    if (
+      request.retrieveForQuestion &&
+      (!semanticQuery.retrievalMode ||
+        semanticQuery.retrievalMode === 'lexical')
+    ) {
+      const entries = await this.#dependencies.entries.loadCurrentEntries(
+        this.#dependencies.workspaceId,
+        false,
+      );
+      const eligible = searchCurrentInformationEntries(
+        entries,
+        {...boundedQuery, text: '', limit: entries.length},
+        semanticQuery.association === undefined
+          ? {projections: [], overrides: []}
+          : await this.#dependencies.associations.loadAssociationSnapshot(
               this.#dependencies.workspaceId,
               false,
             ),
-            boundedQuery,
-            semanticQuery.association === undefined
-              ? Object.freeze({
-                  projections: Object.freeze([]),
-                  overrides: Object.freeze([]),
-                })
-              : await this.#dependencies.associations.loadAssociationSnapshot(
-                  this.#dependencies.workspaceId,
-                  false,
-                ),
-          )
-        : await this.#dependencies.retrieval.search(boundedQuery);
+      );
+      search = rankQuestionEvidence(
+        eligible,
+        request.question,
+        INFORMATION_ENTRY_QUERY_SYNTHESIS_MAXIMUM_EVIDENCE,
+      );
+    } else {
+      search =
+        this.#dependencies.retrieval === undefined
+          ? searchCurrentInformationEntries(
+              await this.#dependencies.entries.loadCurrentEntries(
+                this.#dependencies.workspaceId,
+                false,
+              ),
+              boundedQuery,
+              semanticQuery.association === undefined
+                ? Object.freeze({
+                    projections: Object.freeze([]),
+                    overrides: Object.freeze([]),
+                  })
+                : await this.#dependencies.associations.loadAssociationSnapshot(
+                    this.#dependencies.workspaceId,
+                    false,
+                  ),
+            )
+          : await this.#dependencies.retrieval.search(boundedQuery);
+    }
     if (search.items.length === 0) {
       throw new InformationEntryQuerySynthesisServiceError(
         'ai_query_no_evidence',

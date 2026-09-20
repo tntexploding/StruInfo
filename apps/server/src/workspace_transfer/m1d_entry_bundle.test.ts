@@ -6,6 +6,10 @@ import {
   M1D_ENTRY_BUNDLE_SCHEMA,
   M1D_ENTRY_TABLES,
   M1D_ENTRY_VERSION_FOUR_BUNDLE_CODEC,
+  M1D_ENTRY_VERSION_FIVE_BUNDLE_CODEC,
+  M1D_ENTRY_VERSION_SIX_BUNDLE_CODEC,
+  M1D_ENTRY_VERSION_SIX_BUNDLE_SCHEMA,
+  M1D_ENTRY_VERSION_FIVE_BUNDLE_SCHEMA,
   M1D_ENTRY_VERSION_FOUR_BUNDLE_SCHEMA,
   M1D_ENTRY_VERSION_THREE_BUNDLE_CODEC,
   M1D_ENTRY_VERSION_THREE_BUNDLE_SCHEMA,
@@ -20,12 +24,21 @@ const OTHER_WORKSPACE_ID = '22222222-2222-4222-8222-222222222222';
 const CREATED_AT = '2040-01-02T03:04:05.000Z';
 
 describe('M1D Entry Bundle section', () => {
-  it('normalizes all nine current Entry, range, document-tag, and working-copy tables deterministically', () => {
+  it('reads v6 translations without dropping their exact source binding', () => {
+    const current = syntheticSnapshot(false);
+    expect(
+      M1D_ENTRY_VERSION_SIX_BUNDLE_CODEC.decode({
+        ...current,
+        schemaVersion: M1D_ENTRY_VERSION_SIX_BUNDLE_SCHEMA,
+      }),
+    ).toEqual(current);
+  });
+  it('normalizes all ten current Entry, range, document-tag, and working-copy tables deterministically', () => {
     const first = syntheticSnapshot(false);
     const reversed = syntheticSnapshot(true);
 
     expect(reversed).toEqual(first);
-    expect(first.tables).toHaveLength(9);
+    expect(first.tables).toHaveLength(10);
     expect(m1dEntryTableCounts(first)).toMatchObject({
       information_entry: 2,
       information_document_tag_set: 1,
@@ -39,7 +52,16 @@ describe('M1D Entry Bundle section', () => {
 
   it('upgrades versions four, three, and two into current structure rows', () => {
     const current = syntheticSnapshot(false);
-    const versionFourTables = current.tables.slice(0, -1);
+    const versionFiveTables = current.tables.slice(0, -1);
+    const upgradedFive = M1D_ENTRY_VERSION_FIVE_BUNDLE_CODEC.decode({
+      schemaVersion: M1D_ENTRY_VERSION_FIVE_BUNDLE_SCHEMA,
+      tables: versionFiveTables,
+    }) as ReturnType<typeof normalizeM1dEntrySnapshot>;
+    expect(upgradedFive.tables.at(-1)).toEqual({
+      name: 'information_entry_translation',
+      rows: [],
+    });
+    const versionFourTables = versionFiveTables.slice(0, -1);
     const versionThreeTables = versionFourTables.map((table) =>
       table.name === 'information_entry'
         ? {
@@ -80,15 +102,15 @@ describe('M1D Entry Bundle section', () => {
         (row) => row.is_current_structure === true,
       ),
     ).toBe(true);
-    expect(upgradedFour.tables).toHaveLength(9);
+    expect(upgradedFour.tables).toHaveLength(10);
     expect(upgradedFour.tables.at(-1)).toEqual({
-      name: 'information_document_working_copy',
+      name: 'information_entry_translation',
       rows: [],
     });
     expect(upgraded.schemaVersion).toBe(M1D_ENTRY_BUNDLE_SCHEMA);
-    expect(upgraded.tables).toHaveLength(9);
+    expect(upgraded.tables).toHaveLength(10);
     expect(upgraded.tables.at(-1)).toEqual({
-      name: 'information_document_working_copy',
+      name: 'information_entry_translation',
       rows: [],
     });
   });

@@ -1,6 +1,6 @@
 {
   "name": "@struinfo/web",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -12,6 +12,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "mdast-util-from-markdown": "2.0.3",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

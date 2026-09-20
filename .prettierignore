@@ -18,3 +18,5 @@ docs/development-outline.md
 docs/open-source-policy.md
 docs/product-requirements.md
 docs/sample-intake-template.md
+
+.playwright-cli/

@@ -461,7 +461,11 @@ function assertNoSecretMaterial(value: JsonValue): void {
 function assertSafeString(value: string): void {
   if (
     /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/u.test(value) ||
-    /\bBearer\s+[^\s]+/iu.test(value)
+    // "Bearer of ..." is ordinary prose, not an authorization value.
+    /\b(?:Proxy-)?Authorization\s*:\s*Bearer\s+[A-Za-z0-9._~+/-]+=*/iu.test(
+      value,
+    ) ||
+    /\bBearer\s+(?!of\s+[A-Za-z])[A-Za-z0-9._~+/-]+=*/iu.test(value)
   ) {
     throw secretMaterialForbidden();
   }

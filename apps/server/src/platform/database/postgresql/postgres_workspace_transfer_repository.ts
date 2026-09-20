@@ -1,3 +1,4 @@
+import {ingestionSettingsSchema} from '../../../application/ingestion_contract.js';
 import {
   assertM1cDomainWorkspace,
   M1C_DOMAIN_BUNDLE_SCHEMA,
@@ -190,7 +191,49 @@ async function restoreInTransaction(
   ]) {
     if (tableSnapshot.rows.length === 0) continue;
     await client.query<Row>(insertTableSql(tableSnapshot.name), [
-      JSON.stringify(tableSnapshot.rows),
+      JSON.stringify(
+        tableSnapshot.name === 'processing_ingestion_policy'
+          ? tableSnapshot.rows.map((row) => ({
+              ...row,
+              current_version: Number(row.current_version) + 1,
+              settings_text: JSON.stringify({
+                ...ingestionSettingsSchema.parse(
+                  JSON.parse(String(row.settings_text)) as unknown,
+                ),
+                paused: true,
+              }),
+            }))
+          : tableSnapshot.name === 'processing_agent_task' ||
+              tableSnapshot.name === 'processing_report'
+            ? tableSnapshot.rows.map((row) => {
+                const state = JSON.parse(String(row.state_text)) as Record<
+                  string,
+                  unknown
+                >;
+                if (
+                  !['ai_price_window_closed', 'ai_operations_paused'].includes(
+                    String(state.errorCode),
+                  )
+                )
+                  return row;
+                return {
+                  ...row,
+                  current_version: Number(row.current_version) + 1,
+                  ...(tableSnapshot.name === 'processing_agent_task'
+                    ? {pause_requested: true}
+                    : {}),
+                  state_text: JSON.stringify({
+                    ...state,
+                    status:
+                      tableSnapshot.name === 'processing_agent_task'
+                        ? 'paused'
+                        : 'failed',
+                    errorCode: 'ai_price_resume_required',
+                  }),
+                };
+              })
+            : tableSnapshot.rows,
+      ),
     ]);
   }
   return true;

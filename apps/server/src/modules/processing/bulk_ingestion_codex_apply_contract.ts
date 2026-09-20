@@ -8,9 +8,6 @@ export const BULK_INGESTION_CODEX_REVIEW_ACTIONS = [
   'deferred',
 ] as const;
 
-export type BulkIngestionCodexReviewAction =
-  (typeof BULK_INGESTION_CODEX_REVIEW_ACTIONS)[number];
-
 export interface BulkIngestionCodexAnnotation {
   readonly contentKeywords: readonly string[];
   readonly typeKeyword: EntryTypeKeyword;

@@ -23,3 +23,5 @@ allowBuilds:
 # Security repair for GHSA-x5fp-wj9c-mxmx and GHSA-4mjr-xmp4-gh2g.
 overrides:
   qs: 6.16.0
+  # GHSA-wc9g-mqfw-jrwm, GHSA-qfvm-cv95-jqjf, GHSA-535w-7cp7-47q4, GHSA-qvfw-j98x-7q72.
+  multer: 2.3.0

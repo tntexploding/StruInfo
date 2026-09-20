@@ -1,4 +1,4 @@
-import {useMemo, useState} from 'react';
+import {useId, useMemo, useState} from 'react';
 import type {KeyboardEvent} from 'react';
 
 import {
@@ -61,6 +61,7 @@ export function InformationEntryReviewControls({
   overridePreferences,
   usefulnessScore,
 }: InformationEntryReviewControlsProps) {
+  const headingId = useId();
   const resolved =
     preferences.status === 'ready' ? preferences.value : undefined;
   const [sessionPreferences, setSessionPreferences] = useState<
@@ -185,11 +186,11 @@ export function InformationEntryReviewControls({
   return (
     <section
       className="entry-review-controls field--full"
-      aria-labelledby="entry-review-controls-title"
+      aria-labelledby={headingId}
     >
       <header className="entry-review-controls__heading">
         <div>
-          <h3 id="entry-review-controls-title">人工评分与标签</h3>
+          <h3 id={headingId}>人工评分与标签</h3>
         </div>
       </header>
 

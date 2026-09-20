@@ -1,5 +1,17 @@
 # StruInfo Decision Log
 
+## 2026-09-15 — Report editorial quality
+
+[ADR 0083](adr/0083-event-first-report-editorial-quality.md) separates event
+grouping from story limits, retains other reading, distinguishes publication and
+receipt, and introduces cited finding/evidence/limitation paragraphs. Existing
+reports, budgets, privacy and price waits remain unchanged.
+
+## 2026-09-13 — Reviewable daily and weekly reports
+
+[ADR 0081](adr/0081-reviewable-daily-weekly-reports.md) adds public admitted-source report selection, bounded Chinese drafts with citations, human review and export, a durable report table and Processing Bundle v14. External Agents receive four read tools; owner-only generation does not widen grants or unattended authority.
+
+
 This log indexes product and engineering decisions while the project is small.
 High-impact implementation choices use an ADR under `docs/adr/` and are linked
 from this file.
@@ -13,6 +25,8 @@ from this file.
 - Rejected: Considered and not selected.
 
 ## Decisions
+
+2026-09-13：所有者接受 [ADR 0080](adr/0080-intake-quality-and-multilingual-relation-recall.md)，并明确授权单表迁移、现有 DeepSeek 与最多 15 篇公开材料的仓库外试运行。
 
 | ID | Date | Status | Decision | Rationale or review gate |
 | --- | --- | --- | --- | --- |
@@ -136,3 +150,11 @@ from this file.
 Add context, the decision, reasons, consequences, owner, evidence, and the event
 that should trigger review. Use an ADR when a decision changes architecture,
 data compatibility, security boundaries, operations, or long-term dependencies.
+
+## 2026-09-12 上下文保留
+
+所有者在真实文章试运行中确认结构分段损害阅读上下文，要求基础性调整并复测同一组选定材料。[ADR 0079](adr/0079-context-preserving-document-processing.md)接受全文优先、独立合集才分组、可不建联和保留媒体引用；手动结构能力与不可变证据边界继续保留。工程验证与三文档真实复测完成，内容质量等待所有者检查，自动处理策略保持关闭。
+
+## 2026-09-12 DeepSeek 接入
+
+所有者选择 DeepSeek 作为内置模型，并授权使用外部密钥开展隔离的真实 API 流程验收。参见 [ADR 0078](adr/0078-deepseek-responses-provider.md)。

@@ -1,3 +1,23 @@
+import {useReloadNavigation} from './components/use_reload_navigation.js';
+import {InformationEntrySourceReviewWorkspace} from './workspaces/information_entry_source_review_workspace.js';
+import {WorkspaceToolPanel} from './components/workspace_tool_panel.js';
+import {IntakeWorkspace} from './workspaces/intake_workspace.js';
+import type {InboxReviewTarget} from './workspaces/inbox_review_state.js';
+import {ReportWorkspace} from './workspaces/report_workspace.js';
+import {AiWorkflowPanel} from './workspaces/ai_workflow_panel.js';
+import {WorkspaceUiProvider} from './components/workspace_ui_context.js';
+import {SettingsWorkspace} from './workspaces/settings_workspace.js';
+import {InformationEntrySplitRule} from './workspaces/information_entry_split_rule.js';
+import {InformationEntryPreferenceProfilePanel} from './workspaces/information_entry_preference_profile_panel.js';
+import {InformationEntryAutomationPolicyPanel} from './workspaces/information_entry_automation_policy_panel.js';
+import {AiPriceSettings} from './workspaces/ai_price_settings.js';
+import {
+  FormalKnowledgeGraphWorkspace,
+  type FormalKnowledgeGraphWorkspaceProps,
+} from './workspaces/formal_knowledge_graph_workspace.js';
+import type {InformationEntrySplitWorkspaceProps} from './workspaces/information_entry_split_workspace.js';
+import type {MaterialsWorkspaceProps} from './workspaces/materials_workspace.js';
+import {ReviewSettings} from './workspaces/review_settings.js';
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 import type {
@@ -8,12 +28,7 @@ import type {
   AiSplitProposalDecisionResponse,
   AiSplitProposalListResponse,
   AiSplitProposalStartResponse,
-  AiTagProposalDecisionResponse,
-  AiTagProposalListResponse,
-  AiTagProposalStartResponse,
   EvidenceSnapshotSummary,
-  InformationEntryAssociationListResponse,
-  InformationEntryAssociationOverrideResponse,
   InformationEntryAssociationPolicyWriteResponse,
   InformationEntryAssociationRebuildResponse,
   InformationEntryExplorationPolicyWriteResponse,
@@ -25,8 +40,6 @@ import type {
   InformationEntryPreferenceProfileResponse,
   InformationEntryPreferenceSuggestionResponse,
   InformationEntryPreferenceTrialResponse,
-  InformationEntryRevisionResponse,
-  InformationEntryTypeReviewResponse,
   InformationEntryRestructureApplyResponse,
   InformationEntryRestructurePreviewResponse,
   InformationEntrySearchResponse,
@@ -66,13 +79,11 @@ import type {
 import type {HealthClient} from './health/health_client.js';
 import type {HealthTransportMode} from './health/health_runtime.js';
 import {useOperationalHealth} from './health/use_operational_health.js';
+import {DocumentWorkspace} from './workspaces/document_workspace.js';
+import type {DocumentWorkspaceSelection} from './workspaces/use_document_workspace.js';
 import {MaterialsWorkspace} from './workspaces/materials_workspace.js';
-import {InformationEntryAssociationsWorkspace} from './workspaces/information_entry_associations_workspace.js';
 import {InformationEntryQueryWorkspace} from './workspaces/information_entry_query_workspace.js';
-import {InformationEntrySplitWorkspace} from './workspaces/information_entry_split_workspace.js';
-import {InformationEntryTagsWorkspace} from './workspaces/information_entry_tags_workspace.js';
 import {WorkflowOverview} from './workspaces/workflow_overview.js';
-import {FormalKnowledgeWorkspace} from './workspaces/formal_knowledge_workspace.js';
 
 export interface AppProps {
   readonly apiClient: M1cApiClient;
@@ -82,6 +93,18 @@ export interface AppProps {
 
 export function App({apiClient, healthClient, transportMode}: AppProps) {
   const health = useOperationalHealth(healthClient);
+  const listSourceReviews = useCallback<
+    M1cApiClient['listInformationEntrySourceReviews']
+  >(
+    (...args) => apiClient.listInformationEntrySourceReviews(...args),
+    [apiClient],
+  );
+  const reviewGraphSources = useCallback<
+    M1cApiClient['reviewInformationEntryGraphSources']
+  >(
+    (...args) => apiClient.reviewInformationEntryGraphSources(...args),
+    [apiClient],
+  );
   const loadSavedQueries = useCallback(
     () => apiClient.loadEntrySavedQueries(),
     [apiClient],
@@ -104,10 +127,13 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
   );
   const [queryContext, setQueryContext] =
     useState<Readonly<EntryQueryContext>>();
-  const [queryGraphCenter, setQueryGraphCenter] =
-    useState<Readonly<{entryId: string; includePrivate: boolean}>>();
-  const [activeSection, setActiveSection] =
-    useState<ProductSection>('overview');
+  const [sourceReviewOpen, setSourceReviewOpen] = useState(false);
+  const [activeSection, setActiveSection] = useReloadNavigation();
+  const [inboxReviewTarget, setInboxReviewTarget] =
+    useState<InboxReviewTarget>();
+  const [documentSelection, setDocumentSelection] = useState<
+    Readonly<DocumentWorkspaceSelection>
+  >({includePrivate: false});
   const [workspace, setWorkspace] = useState<
     Loadable<Readonly<WorkspaceResponse>>
   >({status: 'loading'});
@@ -332,44 +358,6 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
-  const listEntryAutomationWorkQueue = useCallback(
-    (includePrivate: boolean) =>
-      apiClient.listInformationEntryAutomationWorkQueue(includePrivate),
-    [apiClient],
-  );
-
-  const updateEntryAutomationWorkItem = useCallback(
-    (
-      runId: string,
-      claimOrdinal: number,
-      body: Parameters<
-        M1cApiClient['updateInformationEntryAutomationWorkItem']
-      >[2],
-    ) =>
-      apiClient.updateInformationEntryAutomationWorkItem(
-        runId,
-        claimOrdinal,
-        body,
-      ),
-    [apiClient],
-  );
-
-  const executeEntryAutomationWorkItemAction = useCallback(
-    (
-      runId: string,
-      claimOrdinal: number,
-      body: Parameters<
-        M1cApiClient['executeInformationEntryAutomationWorkItemAction']
-      >[2],
-    ) =>
-      apiClient.executeInformationEntryAutomationWorkItemAction(
-        runId,
-        claimOrdinal,
-        body,
-      ),
-    [apiClient],
-  );
-
   useEffect(() => {
     const controller = new AbortController();
     globalThis.queueMicrotask(() => {
@@ -540,26 +528,6 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       apiClient.applyInformationEntryRestructure(body),
     [apiClient],
   );
-  const reviseInformationEntry = useCallback(
-    (
-      entryId: string,
-      body: unknown,
-    ): Promise<M1cHttpResponse<InformationEntryRevisionResponse>> =>
-      apiClient.reviseInformationEntry(entryId, body),
-    [apiClient],
-  );
-
-  const reviewInformationEntryTypes = useCallback(
-    (
-      body: unknown,
-      signal?: AbortSignal,
-    ): Promise<M1cHttpResponse<InformationEntryTypeReviewResponse>> =>
-      apiClient.reviewInformationEntryTypes(
-        body,
-        signal === undefined ? undefined : {signal},
-      ),
-    [apiClient],
-  );
 
   const searchInformationEntries = useCallback(
     (body: unknown): Promise<M1cHttpResponse<InformationEntrySearchResponse>> =>
@@ -590,6 +558,25 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
+  const readEntryTranslation = useCallback(
+    (entryId: string, revision: number, signal: AbortSignal) =>
+      apiClient.readEntryTranslation(entryId, revision, {signal}),
+    [apiClient],
+  );
+  const generateEntryTranslation = useCallback(
+    (
+      entryId: string,
+      revision: number,
+      signal: AbortSignal,
+      expectedTranslatedAt?: string,
+    ) =>
+      apiClient.generateEntryTranslation(entryId, revision, {
+        signal,
+        expectedTranslatedAt,
+      }),
+    [apiClient],
+  );
+
   const synthesizeInformationEntryQuery = useCallback(
     (
       body: unknown,
@@ -604,20 +591,6 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       body: unknown,
     ): Promise<M1cHttpResponse<InformationEntryKnowledgeGraphResponse>> =>
       apiClient.readInformationEntryKnowledgeGraph(body),
-    [apiClient],
-  );
-
-  const listSourceReviews = useCallback(
-    (body: unknown) => apiClient.listInformationEntrySourceReviews(body),
-    [apiClient],
-  );
-  const reviewGraphSources = useCallback(
-    (entryId: string, relatedEntryId: string, body: unknown) =>
-      apiClient.reviewInformationEntryGraphSources(
-        entryId,
-        relatedEntryId,
-        body,
-      ),
     [apiClient],
   );
   const reviseInformationEntryKnowledgeGraphEdge = useCallback(
@@ -670,29 +643,6 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
       return response;
     },
     [apiClient, refreshReviewPreferences],
-  );
-
-  const listInformationEntryAssociations = useCallback(
-    (
-      entryId: string,
-      includePrivate: boolean,
-    ): Promise<M1cHttpResponse<InformationEntryAssociationListResponse>> =>
-      apiClient.listInformationEntryAssociations(entryId, {includePrivate}),
-    [apiClient],
-  );
-
-  const reviseInformationEntryAssociation = useCallback(
-    (
-      entryId: string,
-      relatedEntryId: string,
-      body: unknown,
-    ): Promise<M1cHttpResponse<InformationEntryAssociationOverrideResponse>> =>
-      apiClient.reviseInformationEntryAssociation(
-        entryId,
-        relatedEntryId,
-        body,
-      ),
-    [apiClient],
   );
 
   const listInformationEntryDocuments = useCallback(
@@ -759,39 +709,6 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
   const loadEvidenceSnapshotForSplit = useCallback(
     (snapshotId: string, includePrivate = false) =>
       apiClient.loadEvidenceSnapshot(snapshotId, {includePrivate}),
-    [apiClient],
-  );
-
-  const listAiTagProposals = useCallback(
-    (entryId: string): Promise<M1cHttpResponse<AiTagProposalListResponse>> =>
-      apiClient.listAiTagProposals(entryId),
-    [apiClient],
-  );
-
-  const startAiTagProposal = useCallback(
-    (
-      entryId: string,
-      requestKey: string,
-    ): Promise<M1cHttpResponse<AiTagProposalStartResponse>> =>
-      apiClient.startAiTagProposal(entryId, requestKey),
-    [apiClient],
-  );
-
-  const acceptAiTagProposal = useCallback(
-    (
-      entryId: string,
-      proposalId: string,
-    ): Promise<M1cHttpResponse<AiTagProposalDecisionResponse>> =>
-      apiClient.acceptAiTagProposal(entryId, proposalId),
-    [apiClient],
-  );
-
-  const rejectAiTagProposal = useCallback(
-    (
-      entryId: string,
-      proposalId: string,
-    ): Promise<M1cHttpResponse<AiTagProposalDecisionResponse>> =>
-      apiClient.rejectAiTagProposal(entryId, proposalId),
     [apiClient],
   );
 
@@ -967,256 +884,433 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     }
   }
 
+  function navigate(section: ProductSection) {
+    setSourceReviewOpen(false);
+    setInboxReviewTarget(undefined);
+    globalThis.requestAnimationFrame(() => {
+      globalThis.scrollTo({top: 0});
+    });
+    closeEvidence();
+    if (section !== 'documents') {
+      setDocumentSelection((current) =>
+        current.includePrivate ? {includePrivate: false} : current,
+      );
+    }
+    setActiveSection(
+      ['split', 'tags', 'associations'].includes(section)
+        ? 'documents'
+        : section === 'knowledge'
+          ? 'query'
+          : section,
+    );
+  }
+
+  function reviewInbox(snapshotId?: string) {
+    navigate('import');
+    setInboxReviewTarget(snapshotId ? {snapshotId} : {});
+  }
+
+  function openDocument(snapshotId: string, includePrivate: boolean) {
+    closeEvidence();
+    setDocumentSelection({snapshotId, includePrivate});
+    setActiveSection('documents');
+  }
+
+  const splitServices: InformationEntrySplitWorkspaceProps = {
+    aiEnabled:
+      workspace.status === 'ready' &&
+      workspace.value.capabilities.includes('ai_split'),
+    onAcceptAiSplitProposal: acceptAiSplitProposal,
+    onListAiSplitProposals: listAiSplitProposals,
+    onListDocuments: listInformationEntryDocuments,
+    onLoadEvidenceSnapshot: loadEvidenceSnapshotForSplit,
+    onLoadDocumentWorkingCopy: loadInformationDocumentWorkingCopy,
+    onSaveDocumentWorkingCopy: saveInformationDocumentWorkingCopy,
+    onRestoreDocumentWorkingCopy: restoreInformationDocumentWorkingCopy,
+    onCommitDocumentWorkingCopy: commitInformationDocumentWorkingCopy,
+    onMaterialize: materializeInformationEntries,
+    onMaterializeManual: materializeManualInformationEntries,
+    onLoadSplitRuleProfile: loadInformationEntrySplitRuleProfile,
+    onSaveSplitRuleProfile: saveInformationEntrySplitRuleProfile,
+    onTrialSplitRule: trialInformationEntrySplitRule,
+    onApplySplitRule: applyInformationEntrySplitRule,
+    onPreviewRestructure: previewInformationEntryRestructure,
+    onApplyRestructure: applyInformationEntryRestructure,
+    onRejectAiSplitProposal: rejectAiSplitProposal,
+    onSearch: searchInformationEntries,
+    onStartAiSplitProposal: startAiSplitProposal,
+    onOpenEvidence: (snapshotId, fragmentId, includePrivate) =>
+      void openEvidence(snapshotId, undefined, fragmentId, includePrivate),
+  };
+  const graphServices: FormalKnowledgeGraphWorkspaceProps = {
+    aiAssociationEnabled:
+      workspace.status === 'ready' &&
+      workspace.value.capabilities.includes('ai_associations'),
+    onAcceptAiAssociationProposal: acceptAiAssociationProposal,
+    onListAiAssociationProposals: listAiAssociationProposals,
+    onReadGraph: readInformationEntryKnowledgeGraph,
+    onRejectAiAssociationProposal: rejectAiAssociationProposal,
+    onReviseEdge: reviseInformationEntryKnowledgeGraphEdge,
+    onStartAiAssociationProposal: startAiAssociationProposal,
+    onOpenEvidence: (snapshotId, fragmentId, includePrivate) =>
+      void openEvidence(snapshotId, undefined, fragmentId, includePrivate),
+  };
+  const materialServices: MaterialsWorkspaceProps = {
+    snapshots,
+    selectedSnapshotId: selectedEvidence?.snapshotId,
+    onImport: importDocument,
+    onImportBatchItem: (body) =>
+      importDocument(body, {openEvidence: false, refreshEvidence: false}),
+    onImportBatchCompleted: refreshEvidence,
+    onOpenDocument: openDocument,
+    onOpenEvidence: (snapshotId, target, includePrivate) => {
+      void openEvidence(snapshotId, target, undefined, includePrivate);
+    },
+    onRefresh: () => {
+      void refreshEvidence();
+    },
+    onExport: exportWorkspaceBundle,
+    onRestore: restoreWorkspaceBundle,
+    sourceSubscriptionsEnabled:
+      workspace.status === 'ready' &&
+      workspace.value.capabilities.includes('source_subscriptions'),
+    onListSourceSubscriptions: listSourceSubscriptions,
+    onReplaceSourceSubscriptions: replaceSourceSubscriptions,
+    onRunSourceSubscription: runSourceSubscription,
+  };
+
   const snapshotValues = snapshots.status === 'ready' ? snapshots.value : [];
   return (
-    <ProductAppShell
-      activeSection={activeSection}
-      health={health.state}
-      transportMode={transportMode}
-      workspace={workspace.status === 'ready' ? workspace.value : undefined}
-      onNavigate={(section) => {
-        setQueryGraphCenter(undefined);
-        closeEvidence();
-        setActiveSection(section);
-      }}
-      evidencePanel={
-        <EvidenceRail
-          state={evidencePanel}
-          onClose={closeEvidence}
-          onRetry={(snapshotId) => {
-            const selectedFragmentId =
-              evidencePanel.status === 'error'
-                ? evidencePanel.selectedFragmentId
-                : undefined;
-            const includePrivate =
-              evidencePanel.status === 'error'
-                ? evidencePanel.includePrivate
-                : false;
-            void openEvidence(
-              snapshotId,
-              undefined,
-              selectedFragmentId,
-              includePrivate,
-            );
-          }}
-          onSelectFragment={selectEvidenceFragment}
-        />
-      }
-    >
-      <RuntimeNotice
+    <WorkspaceUiProvider api={apiClient}>
+      <ProductAppShell
+        activeSection={activeSection}
         health={health.state}
-        workspace={workspace}
-        onRetry={() => {
-          health.retry();
-          void refreshWorkspace();
-          void refreshEvidence();
-          void refreshReviewPreferences();
-        }}
-      />
-      {activeSection === 'overview' ? (
-        <WorkflowOverview
-          snapshots={snapshots}
-          workspace={workspace.status === 'ready' ? workspace.value : undefined}
-          onListDocuments={listInformationEntryDocuments}
-          onListProcessingRuns={listProcessingRuns}
-          onCancelProcessingRun={cancelProcessingRun}
-          onNavigate={(section) => {
-            setQueryGraphCenter(undefined);
-            closeEvidence();
-            setActiveSection(section);
+        transportMode={transportMode}
+        workspace={workspace.status === 'ready' ? workspace.value : undefined}
+        onNavigate={navigate}
+        evidencePanel={
+          <EvidenceRail
+            state={evidencePanel}
+            onClose={closeEvidence}
+            onRetry={(snapshotId) => {
+              const selectedFragmentId =
+                evidencePanel.status === 'error'
+                  ? evidencePanel.selectedFragmentId
+                  : undefined;
+              const includePrivate =
+                evidencePanel.status === 'error'
+                  ? evidencePanel.includePrivate
+                  : false;
+              void openEvidence(
+                snapshotId,
+                undefined,
+                selectedFragmentId,
+                includePrivate,
+              );
+            }}
+            onSelectFragment={selectEvidenceFragment}
+            onOpenDocument={openDocument}
+          />
+        }
+      >
+        <RuntimeNotice
+          health={health.state}
+          workspace={workspace}
+          onRetry={() => {
+            health.retry();
+            void refreshWorkspace();
+            void refreshEvidence();
+            void refreshReviewPreferences();
           }}
         />
-      ) : null}
-      {activeSection === 'import' ? (
-        <MaterialsWorkspace
-          snapshots={snapshots}
-          selectedSnapshotId={selectedEvidence?.snapshotId}
-          onImport={importDocument}
-          onImportBatchItem={(body) =>
-            importDocument(body, {
-              openEvidence: false,
-              refreshEvidence: false,
-            })
-          }
-          onImportBatchCompleted={refreshEvidence}
-          onOpenEvidence={(snapshotId, target, includePrivate) =>
-            void openEvidence(snapshotId, target, undefined, includePrivate)
-          }
-          onRefresh={() => void refreshEvidence()}
-          onExport={exportWorkspaceBundle}
-          onRestore={restoreWorkspaceBundle}
-          sourceSubscriptionsEnabled={
-            workspace.status === 'ready' &&
-            workspace.value.capabilities.includes('source_subscriptions')
-          }
-          onListSourceSubscriptions={listSourceSubscriptions}
-          onReplaceSourceSubscriptions={replaceSourceSubscriptions}
-          onRunSourceSubscription={runSourceSubscription}
-        />
-      ) : null}
-      {activeSection === 'split' ? (
-        <InformationEntrySplitWorkspace
-          aiEnabled={
-            workspace.status === 'ready' &&
-            workspace.value.capabilities.includes('ai_split')
-          }
-          onAcceptAiSplitProposal={acceptAiSplitProposal}
-          onListAiSplitProposals={listAiSplitProposals}
-          onListDocuments={listInformationEntryDocuments}
-          onLoadEvidenceSnapshot={loadEvidenceSnapshotForSplit}
-          onLoadDocumentWorkingCopy={loadInformationDocumentWorkingCopy}
-          onSaveDocumentWorkingCopy={saveInformationDocumentWorkingCopy}
-          onRestoreDocumentWorkingCopy={restoreInformationDocumentWorkingCopy}
-          onCommitDocumentWorkingCopy={commitInformationDocumentWorkingCopy}
-          onMaterialize={materializeInformationEntries}
-          onMaterializeManual={materializeManualInformationEntries}
-          onLoadSplitRuleProfile={loadInformationEntrySplitRuleProfile}
-          onSaveSplitRuleProfile={saveInformationEntrySplitRuleProfile}
-          onTrialSplitRule={trialInformationEntrySplitRule}
-          onApplySplitRule={applyInformationEntrySplitRule}
-          onPreviewRestructure={previewInformationEntryRestructure}
-          onApplyRestructure={applyInformationEntryRestructure}
-          onRejectAiSplitProposal={rejectAiSplitProposal}
-          onSearch={searchInformationEntries}
-          onStartAiSplitProposal={startAiSplitProposal}
-          onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
-            void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
-          }
-        />
-      ) : null}
-      {activeSection === 'tags' ? (
-        <InformationEntryTagsWorkspace
-          aiEnabled={
-            workspace.status === 'ready' &&
-            workspace.value.capabilities.includes('ai_tags')
-          }
-          automationEnabled={
-            workspace.status === 'ready' &&
-            workspace.value.capabilities.includes('entry_automation')
-          }
-          reviewPreferences={reviewPreferences}
-          reviewPreferencesOverride={reviewPreferencesOverride}
-          onReviewPreferencesChange={setReviewPreferencesOverride}
-          onAcceptAiTagProposal={acceptAiTagProposal}
-          onAggregateDocumentTags={aggregateInformationDocumentTags}
-          onListAiTagProposals={listAiTagProposals}
-          onListDocuments={listInformationEntryDocuments}
-          onListEntryAutomationExecutions={listEntryAutomationExecutions}
-          onLoadEntryAutomationExecution={loadEntryAutomationExecution}
-          onLoadEntryAutomationPolicy={loadEntryAutomationPolicy}
-          onListEntryAutomationWorkQueue={listEntryAutomationWorkQueue}
-          onUpdateEntryAutomationWorkItem={updateEntryAutomationWorkItem}
-          onExecuteEntryAutomationWorkItemAction={
-            executeEntryAutomationWorkItemAction
-          }
-          onRejectAiTagProposal={rejectAiTagProposal}
-          onRevise={reviseInformationEntry}
-          onReviewTypes={reviewInformationEntryTypes}
-          onReviseDocumentTags={reviseInformationDocumentTags}
-          onSaveEntryAutomationPolicy={saveEntryAutomationPolicy}
-          onSaveReviewPreferences={saveReviewPreferences}
-          entryPreferenceProfile={entryPreferenceProfile}
-          onReloadEntryPreferenceProfile={() => {
-            void refreshEntryPreferenceProfile();
+        <DocumentWorkspace
+          active={activeSection === 'documents'}
+          api={apiClient}
+          selection={documentSelection}
+          onSelectionChange={setDocumentSelection}
+          structureServices={splitServices}
+          documentTags={{
+            onAggregate: aggregateInformationDocumentTags,
+            onRevise: reviseInformationDocumentTags,
           }}
-          onSaveEntryPreferenceProfile={saveEntryPreferenceProfile}
-          onSuggestEntryPreferenceProfile={suggestEntryPreferenceProfile}
-          onTrialEntryPreferenceProfile={trialEntryPreferenceProfile}
-          onTrialEntryAutomationPolicy={trialEntryAutomationPolicy}
-          onExecuteEntryAutomation={executeEntryAutomation}
-          onSearch={searchInformationEntries}
-          onStartAiTagProposal={startAiTagProposal}
+          renderLinks={(entry, includePrivate) => (
+            <FormalKnowledgeGraphWorkspace
+              key={entry.entryId + ':' + String(includePrivate)}
+              {...graphServices}
+              presentation="document"
+              initialCenter={{entryId: entry.entryId, includePrivate}}
+            />
+          )}
           onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
             void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
           }
-        />
-      ) : null}
-      {activeSection === 'associations' ? (
-        <InformationEntryAssociationsWorkspace
-          aiEnabled={
-            workspace.status === 'ready' &&
-            workspace.value.capabilities.includes('ai')
-          }
-          onListAssociations={listInformationEntryAssociations}
-          onRebuildAssociations={rebuildInformationEntryAssociations}
-          onReviseAssociationPolicy={reviseInformationEntryAssociationPolicy}
-          onReviseAssociation={reviseInformationEntryAssociation}
-          onSearch={searchInformationEntries}
-          onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
-            void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
-          }
-        />
-      ) : null}
-      {activeSection === 'query' ? (
-        <InformationEntryQueryWorkspace
-          onPreviewMarkdownExport={previewMarkdownExport}
-          onGenerateMarkdownExport={generateMarkdownExport}
-          initialContext={queryContext}
-          onContextChange={setQueryContext}
-          onLoadSavedQueries={loadSavedQueries}
-          onWriteSavedQuery={writeSavedQuery}
-          onReadQueryContext={readQueryContext}
-          onOpenGraph={(entry) => {
-            closeEvidence();
-            setQueryGraphCenter({
-              entryId: entry.entryId,
-              includePrivate: entry.value.isPrivate,
-            });
-            setActiveSection('knowledge');
+          translationServices={{
+            enabled:
+              workspace.status === 'ready' &&
+              workspace.value.capabilities.includes('ai_entry_translation'),
+            onRead: readEntryTranslation,
+            onGenerate: generateEntryTranslation,
           }}
-          aiQuerySynthesisEnabled={
-            workspace.status === 'ready' &&
-            workspace.value.capabilities.includes('ai_query_synthesis')
-          }
-          semanticSearchEnabled={
-            workspace.status === 'ready' &&
-            workspace.value.capabilities.includes('semantic_entry_search')
-          }
-          snapshots={snapshotValues}
-          reviewPreferences={reviewPreferences}
-          onExplore={exploreInformationEntries}
-          onLoadSearchIndex={loadInformationEntrySearchIndex}
-          onReviseExplorationPolicy={reviseInformationEntryExplorationPolicy}
-          onSearch={searchInformationEntries}
-          onRefreshSearchIndex={refreshInformationEntrySearchIndex}
-          onRebuildSearchIndex={rebuildInformationEntrySearchIndex}
-          onSynthesize={synthesizeInformationEntryQuery}
-          onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
-            void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
-          }
+          review={{
+            reviewPreferences,
+            overridePreferences: reviewPreferencesOverride,
+            onPreferencesChange: setReviewPreferencesOverride,
+            onSavePreferences: saveReviewPreferences,
+          }}
         />
-      ) : null}
-      {activeSection === 'knowledge' ? (
-        <FormalKnowledgeWorkspace
-          onListSourceReviews={listSourceReviews}
-          onReviewSources={reviewGraphSources}
-          onCloseEvidence={closeEvidence}
-          {...(queryGraphCenter === undefined
-            ? {}
-            : {
-                initialCenter: queryGraphCenter,
-                onReturnToQuery: () => {
+        {activeSection === 'settings' ? (
+          <SettingsWorkspace
+            onNavigate={navigate}
+            workflow={
+              <>
+                <h2>处理流程</h2>
+                <p>文档内处理具体内容，这里管理共用规则。</p>
+                <details className="workflow-tool-drawer">
+                  <summary>结构规则</summary>
+                  <InformationEntrySplitRule
+                    snapshotId=""
+                    isPrivate={false}
+                    includePrivate={false}
+                    alreadyMaterialized={false}
+                    onLoad={loadInformationEntrySplitRuleProfile}
+                    onSave={saveInformationEntrySplitRuleProfile}
+                    onTrial={trialInformationEntrySplitRule}
+                    onApply={applyInformationEntrySplitRule}
+                    onCommitted={() => Promise.resolve()}
+                  />
+                </details>
+                <ReviewSettings
+                  preferences={reviewPreferences}
+                  onSave={saveReviewPreferences}
+                  onSaveAssociation={reviseInformationEntryAssociationPolicy}
+                  onRebuild={rebuildInformationEntryAssociations}
+                  onReload={refreshReviewPreferences}
+                />
+                <details className="workflow-tool-drawer">
+                  <summary>偏好规则</summary>
+                  <InformationEntryPreferenceProfilePanel
+                    state={entryPreferenceProfile}
+                    onReload={() => {
+                      void refreshEntryPreferenceProfile();
+                    }}
+                    onSave={saveEntryPreferenceProfile}
+                    onSuggest={suggestEntryPreferenceProfile}
+                    onTrial={trialEntryPreferenceProfile}
+                  />
+                </details>
+                <details className="workflow-tool-drawer">
+                  <summary>自动分流</summary>
+                  <InformationEntryAutomationPolicyPanel
+                    enabled={
+                      workspace.status === 'ready' &&
+                      workspace.value.capabilities.includes('entry_automation')
+                    }
+                    onLoad={loadEntryAutomationPolicy}
+                    onSave={saveEntryAutomationPolicy}
+                    onTrial={trialEntryAutomationPolicy}
+                    onExecute={executeEntryAutomation}
+                    onListRuns={listEntryAutomationExecutions}
+                    onLoadRun={loadEntryAutomationExecution}
+                  />
+                </details>
+              </>
+            }
+            ai={
+              <>
+                <AiPriceSettings />
+                <AiWorkflowPanel
+                  documents={snapshotValues}
+                  onOpenDocument={(id) => {
+                    openDocument(id, false);
+                  }}
+                />
+                <details className="workflow-tool-drawer">
+                  <summary>单项模型能力与接入说明</summary>
+                  <section className="ai-connection-settings">
+                    <h2>AI 接入</h2>
+                    <p>
+                      可配置 OpenAI 或 DeepSeek
+                      服务。每项能力独立启用，未配置时可以继续阅读、人工整理与文字查询。
+                    </p>
+                    <dl>
+                      {[
+                        ['ai_split', '拆分建议'],
+                        ['ai_tags', '标签建议'],
+                        ['ai_associations', '联系建议'],
+                        ['ai_entry_translation', '按需翻译'],
+                        ['ai_query_synthesis', '查询综合'],
+                      ].map(([key, label]) => (
+                        <div key={key}>
+                          <dt>{label}</dt>
+                          <dd>
+                            {key !== undefined &&
+                            workspace.status === 'ready' &&
+                            workspace.value.capabilities.includes(key)
+                              ? '已启用'
+                              : '未启用'}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <h3>连接配置</h3>
+                    <ol>
+                      <li>
+                        在现有外部运行环境文件中设置{' '}
+                        <code>STRUIINFO_OPENAI_MODEL</code> 或{' '}
+                        <code>STRUIINFO_DEEPSEEK_MODEL</code>
+                        ，选择一种服务并设置模型名称。
+                      </li>
+                      <li>
+                        通过服务器环境 <code>OPENAI_API_KEY</code> 或{' '}
+                        <code>OPENAI_API_KEY_FILE</code> 引用 OpenAI
+                        密钥；DeepSeek 使用 <code>DEEPSEEK_API_KEY</code> 或{' '}
+                        <code>DEEPSEEK_API_KEY_FILE</code>
+                        。直接值与文件各选其一。
+                      </li>
+                      <li>重启当前实例后，点击下方按钮检查能力状态。</li>
+                    </ol>
+                    <p>
+                      密钥由服务器读取；页面设置不存储密钥。模型只处理明确选择或已启用策略授权的公开资料，隐私条目不会发送。
+                    </p>
+                    <button
+                      className="secondary-action"
+                      type="button"
+                      onClick={() => {
+                        void refreshWorkspace();
+                      }}
+                    >
+                      刷新接入状态
+                    </button>
+                  </section>
+                </details>
+              </>
+            }
+            maintenance={
+              <MaterialsWorkspace
+                {...materialServices}
+                presentation="maintenance"
+              />
+            }
+          />
+        ) : null}
+        {activeSection === 'overview' ? (
+          <WorkflowOverview
+            snapshots={snapshots}
+            workspace={
+              workspace.status === 'ready' ? workspace.value : undefined
+            }
+            onListDocuments={listInformationEntryDocuments}
+            onListProcessingRuns={listProcessingRuns}
+            onCancelProcessingRun={cancelProcessingRun}
+            onNavigate={navigate}
+            onReviewInbox={reviewInbox}
+            onOpenDocument={(id) => {
+              openDocument(id, false);
+            }}
+          />
+        ) : null}
+        {activeSection === 'import' ? (
+          <IntakeWorkspace
+            {...materialServices}
+            onImport={(body) => importDocument(body, {openEvidence: false})}
+            api={apiClient}
+            reviewTarget={inboxReviewTarget}
+          />
+        ) : null}
+        <ReportWorkspace
+          active={activeSection === 'reports'}
+          onOpenSource={(snapshotId) => {
+            openDocument(snapshotId, false);
+          }}
+        />
+        {activeSection === 'query' && sourceReviewOpen ? (
+          <div className="query-source-review">
+            <WorkspaceToolPanel
+              title="关系来源核对"
+              open
+              onClose={() => {
+                setSourceReviewOpen(false);
+                closeEvidence();
+              }}
+            >
+              <InformationEntrySourceReviewWorkspace
+                onList={listSourceReviews}
+                onReview={reviewGraphSources}
+                onOpenEvidence={graphServices.onOpenEvidence}
+                onCloseEvidence={closeEvidence}
+                onBack={() => {
+                  setSourceReviewOpen(false);
                   closeEvidence();
-                  setQueryGraphCenter(undefined);
-                  setActiveSection('query');
-                },
-              })}
-          aiAssociationEnabled={
-            workspace.status === 'ready' &&
-            workspace.value.capabilities.includes('ai_associations')
-          }
-          onAcceptAiAssociationProposal={acceptAiAssociationProposal}
-          onListAiAssociationProposals={listAiAssociationProposals}
-          onReadGraph={readInformationEntryKnowledgeGraph}
-          onRejectAiAssociationProposal={rejectAiAssociationProposal}
-          onReviseEdge={reviseInformationEntryKnowledgeGraphEdge}
-          onStartAiAssociationProposal={startAiAssociationProposal}
-          onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
-            void openEvidence(snapshotId, undefined, fragmentId, includePrivate)
-          }
-        />
-      ) : null}
-    </ProductAppShell>
+                }}
+              />
+            </WorkspaceToolPanel>
+          </div>
+        ) : null}
+        {activeSection === 'query' ? (
+          <InformationEntryQueryWorkspace
+            renderGraph={(entry) => (
+              <div className="reading-graph">
+                <button
+                  className="text-action"
+                  onClick={() => {
+                    setSourceReviewOpen(true);
+                  }}
+                >
+                  来源复核
+                </button>
+                <FormalKnowledgeGraphWorkspace
+                  {...graphServices}
+                  presentation="reading"
+                  initialCenter={{
+                    entryId: entry.entryId,
+                    includePrivate: entry.value.isPrivate,
+                  }}
+                />
+              </div>
+            )}
+            onPreviewMarkdownExport={previewMarkdownExport}
+            onGenerateMarkdownExport={generateMarkdownExport}
+            initialContext={queryContext}
+            onContextChange={setQueryContext}
+            onLoadSavedQueries={loadSavedQueries}
+            onWriteSavedQuery={writeSavedQuery}
+            onReadQueryContext={readQueryContext}
+            aiQuerySynthesisEnabled={
+              workspace.status === 'ready' &&
+              workspace.value.capabilities.includes('ai_query_synthesis')
+            }
+            semanticSearchEnabled={
+              workspace.status === 'ready' &&
+              workspace.value.capabilities.includes('semantic_entry_search')
+            }
+            snapshots={snapshotValues}
+            reviewPreferences={reviewPreferences}
+            onExplore={exploreInformationEntries}
+            onLoadSearchIndex={loadInformationEntrySearchIndex}
+            onReviseExplorationPolicy={reviseInformationEntryExplorationPolicy}
+            onSearch={searchInformationEntries}
+            onRefreshSearchIndex={refreshInformationEntrySearchIndex}
+            onRebuildSearchIndex={rebuildInformationEntrySearchIndex}
+            translationServices={{
+              enabled:
+                workspace.status === 'ready' &&
+                workspace.value.capabilities.includes('ai_entry_translation'),
+              onRead: readEntryTranslation,
+              onGenerate: generateEntryTranslation,
+            }}
+            onSynthesize={synthesizeInformationEntryQuery}
+            onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
+              void openEvidence(
+                snapshotId,
+                undefined,
+                fragmentId,
+                includePrivate,
+              )
+            }
+          />
+        ) : null}
+      </ProductAppShell>
+    </WorkspaceUiProvider>
   );
 }
 

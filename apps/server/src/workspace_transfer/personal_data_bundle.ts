@@ -1,4 +1,12 @@
 import {
+  DEFAULT_AI_PRICE_POLICY,
+  aiPricePolicySchema,
+} from '../modules/processing/ai_price_policy.js';
+import {
+  DEFAULT_WORKSPACE_UI_PREFERENCES,
+  decodeWorkspaceUiPreferences,
+} from '../storage/workspace_ui_preferences.js';
+import {
   DEFAULT_ENTRY_SAVED_QUERIES,
   decodeEntrySavedQueries,
 } from '../modules/entries/information_entry_saved_queries.js';
@@ -173,6 +181,15 @@ function decodeIdentity(
 
 function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
   if (!isRecord(value)) fail();
+  const price = aiPricePolicySchema.safeParse(
+    value.aiPricePolicy ?? DEFAULT_AI_PRICE_POLICY,
+  );
+  if (!price.success) fail();
+  const uiPreferences =
+    value.uiPreferences === undefined
+      ? DEFAULT_WORKSPACE_UI_PREFERENCES
+      : decodeWorkspaceUiPreferences(value.uiPreferences);
+  if (uiPreferences === undefined) fail();
   const savedQueries =
     value.entrySavedQueries === undefined
       ? DEFAULT_ENTRY_SAVED_QUERIES
@@ -249,6 +266,8 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     entrySplitRuleProfile,
     entryClassificationProfile,
     savedQueries,
+    uiPreferences,
+    price.data,
   );
 }
 

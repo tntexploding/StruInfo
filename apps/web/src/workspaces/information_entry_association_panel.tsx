@@ -1,3 +1,4 @@
+import {readingTitle, sourceShortName} from '../components/reading_text.js';
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 import type {
@@ -13,6 +14,7 @@ import {
 } from './association_policy_panel.js';
 import type {InformationEntryServices} from './information_entry_components.js';
 import {describeInformationEntryFailure} from './information_entry_shared.js';
+import {formatRuleSimilarity} from './information_entry_score.js';
 import {createLatestRequestTracker} from './latest_request.js';
 
 type AssociationViewState =
@@ -245,13 +247,15 @@ export function InformationEntryAssociationPanel({
       <section className="association-pair-editor" aria-label="联系编辑">
         <article>
           <span>起点</span>
-          <strong>{entry.value.titlePath || '未命名条目'}</strong>
+          <strong>{readingTitle(entry.value.titlePath)}</strong>
         </article>
         <div aria-hidden="true">↔</div>
         <article>
           <span>终点</span>
           <strong>
-            {targetEntry?.value.titlePath ?? '从右侧选择一个条目'}
+            {targetEntry === undefined
+              ? '从上方或推荐联系中选择条目'
+              : readingTitle(targetEntry.value.titlePath)}
           </strong>
         </article>
         <div className="association-pair-editor__actions">
@@ -349,7 +353,11 @@ export function InformationEntryAssociationPanel({
             <small>先为多个条目设置内容、类型和领域标签，再重建联系。</small>
           </div>
         ) : (
-          <ul className="entry-association-list">
+          <ul
+            className="entry-association-list"
+            aria-label="推荐联系"
+            tabIndex={0}
+          >
             {view.response.associations.map((association) => {
               const related = association.relatedEntry;
               const overrideRevision = association.override?.revision ?? 0;
@@ -362,11 +370,12 @@ export function InformationEntryAssociationPanel({
                         <span className="entry-association-score">
                           {association.isBlocked
                             ? '已屏蔽'
-                            : `${scorePercentage(association.effectiveScore)}%`}
+                            : formatRuleSimilarity(association.projection)}
                         </span>
-                        <h3>{related.value.titlePath || '未命名条目'}</h3>
+                        <h3>{readingTitle(related.value.titlePath)}</h3>
                         <small>
-                          {related.sourceKey} · v{related.revision.toString()}
+                          {sourceShortName(related)} · v
+                          {related.revision.toString()}
                           {related.value.isPrivate ? ' · 私密' : ''}
                         </small>
                       </div>
@@ -387,44 +396,52 @@ export function InformationEntryAssociationPanel({
                     <p className="entry-association-excerpt">
                       {excerpt(related.value.body)}
                     </p>
-                    <dl className="entry-association-metrics">
-                      <div>
-                        <dt>内容</dt>
-                        <dd>
-                          {scorePercentage(
-                            association.projection?.contentSimilarity ?? 0,
-                          )}
-                          %
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>类型</dt>
-                        <dd>
-                          {scorePercentage(
-                            association.projection?.typeSimilarity ?? 0,
-                          )}
-                          %
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>领域</dt>
-                        <dd>
-                          {scorePercentage(
-                            association.projection?.domainSimilarity ?? 0,
-                          )}
-                          %
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>自动匹配分</dt>
-                        <dd>
-                          {scorePercentage(
-                            association.projection?.baseScore ?? 0,
-                          )}
-                          %
-                        </dd>
-                      </div>
-                    </dl>
+                    {association.projection === undefined ? null : (
+                      <dl className="entry-association-metrics">
+                        <div>
+                          <dt>内容</dt>
+                          <dd>
+                            {scorePercentage(
+                              association.projection.contentSimilarity,
+                            )}
+                            %
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>类型</dt>
+                          <dd>
+                            {scorePercentage(
+                              association.projection.typeSimilarity,
+                            )}
+                            %
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>领域</dt>
+                          <dd>
+                            {scorePercentage(
+                              association.projection.domainSimilarity,
+                            )}
+                            %
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>规则相似度</dt>
+                          <dd>
+                            {scorePercentage(association.projection.baseScore)}%
+                          </dd>
+                        </div>
+                        {association.effectiveScore ===
+                        association.projection.baseScore ? null : (
+                          <div>
+                            <dt>调整后推荐分</dt>
+                            <dd>
+                              {scorePercentage(association.effectiveScore)}%
+                            </dd>
+                          </div>
+                        )}
+                      </dl>
+                    )}
                     <div
                       className="entry-association-basis"
                       aria-label="推荐原因"
@@ -437,11 +454,14 @@ export function InformationEntryAssociationPanel({
                         ),
                       )}
                       {association.override === undefined ? null : (
-                        <span data-manual="true">
-                          人工：
-                          {associationActionLabel(
-                            association.override.value.action,
-                          )}
+                        <span
+                          data-manual={
+                            association.override.value.graph?.origin !== 'ai'
+                          }
+                        >
+                          {association.override.value.graph?.origin === 'ai'
+                            ? 'AI 建立'
+                            : `人工：${associationActionLabel(association.override.value.action)}`}
                         </span>
                       )}
                     </div>
@@ -524,7 +544,8 @@ export function InformationEntryAssociationPanel({
         )}
       </div>
       {view.status === 'ready' ? (
-        <section className="association-policy-dock" aria-label="联系权重">
+        <details className="association-policy-dock workflow-tool-drawer">
+          <summary>联系权重设置</summary>
           <AssociationPolicyPanel
             key={view.response.policy.revision}
             policy={view.response.policy}
@@ -533,7 +554,7 @@ export function InformationEntryAssociationPanel({
               void savePolicy(draft);
             }}
           />
-        </section>
+        </details>
       ) : null}
     </section>
   );

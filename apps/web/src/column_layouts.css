@@ -1,0 +1,137 @@
+/* Independent dividers occupy the existing gaps, never a content column. */
+.column-resizer {
+  display: none;
+  position: absolute;
+  z-index: 4;
+  inset-block: 0;
+  inline-size: 14px;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  border-radius: 7px;
+}
+.column-resizer span {
+  position: absolute;
+  inset-inline-start: 5px;
+  inset-block: 35%;
+  inline-size: 4px;
+  border-radius: 4px;
+  background: var(--si-color-border-default);
+}
+.column-resizer:hover,
+.column-resizer:focus-visible {
+  background: color-mix(in srgb, var(--si-color-signal) 12%, transparent);
+  outline: 2px solid var(--si-color-signal);
+  outline-offset: -2px;
+}
+.column-resizer:focus-visible span,
+.column-resizer:hover span {
+  background: var(--si-color-signal);
+}
+.document-workbench {
+  position: relative;
+}
+@media (min-width: 48rem) {
+  .document-workbench {
+    grid-template-columns: var(--workspace-start-width, 280px) minmax(0, 1fr);
+  }
+  .document-workbench > .column-resizer--start {
+    display: block;
+    inset-inline-start: var(--workspace-start-width, 280px);
+  }
+}
+@media (min-width: 80rem) {
+  .document-workbench {
+    grid-template-columns:
+      var(--workspace-start-width, 280px) minmax(0, 1fr)
+      var(--workspace-end-width, 320px);
+  }
+  .document-workbench > .column-resizer--end {
+    display: block;
+    inset-inline-end: var(--workspace-end-width, 320px);
+  }
+}
+@media (min-width: 64rem) {
+  .materials-workspace.inbox-workspace {
+    grid-template-columns: minmax(0, 1fr) var(--workspace-end-width, 400px);
+  }
+  .inbox-workspace > .column-resizer--end {
+    display: block;
+    inset-inline-end: var(--workspace-end-width, 400px);
+    inset-block-start: 5rem;
+  }
+}
+/* A side tool owns its own scroll area and cannot inherit full-page form positioning. */
+.inbox-workspace .intake-console {
+  position: relative;
+  inset: auto;
+  background: transparent;
+}
+.inbox-workspace .intake-console::after {
+  display: none;
+}
+.inbox-workspace .workspace-tool-panel__content {
+  container-type: inline-size;
+}
+.inbox-workspace
+  :is(.import-form, .git-source-fields, .import-optional-settings__body) {
+  min-inline-size: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+.inbox-workspace
+  :is(.import-form, .git-source-fields, .import-optional-settings__body)
+  > * {
+  min-inline-size: 0;
+  grid-column: 1;
+  grid-row: auto;
+}
+.inbox-workspace .import-form :is(input, select, textarea) {
+  max-inline-size: 100%;
+}
+.inbox-workspace .privacy-choice input {
+  flex-shrink: 0;
+}
+.inbox-workspace .form-commit {
+  position: static;
+  flex-wrap: wrap;
+}
+.inbox-workspace .form-commit p {
+  flex: 1 1 12rem;
+}
+.inbox-workspace .import-form textarea {
+  min-block-size: 8rem;
+  max-block-size: 22rem;
+}
+@container (min-width: 32rem) {
+  .inbox-workspace :is(.git-source-fields, .import-optional-settings__body) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .inbox-workspace
+    :is(.git-source-fields, .import-optional-settings__body)
+    > .field {
+    grid-column: auto;
+  }
+  .inbox-workspace
+    :is(.git-source-fields, .import-optional-settings__body)
+    > :is(.field--wide, .field--full) {
+    grid-column: 1 / -1;
+  }
+}
+:where(
+  .document-library-list__scroll,
+  .document-source-reader,
+  .inbox-workspace .record-list,
+  .workspace-tool-panel__content
+) {
+  scrollbar-width: auto;
+  scrollbar-color: var(--si-color-border-default) transparent;
+}
+:where(
+  .document-library-list__scroll,
+  .document-source-reader,
+  .inbox-workspace .record-list,
+  .workspace-tool-panel__content
+)::-webkit-scrollbar {
+  inline-size: 12px;
+  block-size: 12px;
+}

@@ -153,6 +153,87 @@ describe('workspace bundle contract', () => {
     ).toThrow(expect.objectContaining({code: 'secret_material_forbidden'}));
   });
 
+  it('round-trips article examples containing an angle-bracket credential placeholder', () => {
+    const codec: WorkspaceBundleSectionCodec = {
+      type: 'synthetic.article',
+      version: 1,
+      encode: (value) => value,
+      decode: (value) => value,
+    };
+    const article = {
+      body: 'Example header: Authorization: Bearer <demo credential>.',
+    };
+    const bytes = writeWorkspaceBundle(
+      {
+        workspaceId: WORKSPACE_ID,
+        exportedAt: EXPORTED_AT,
+        sections: [{type: codec.type, version: 1, value: article}],
+        blobReferences: [],
+      },
+      [codec],
+    );
+    expect(readWorkspaceBundle(bytes, [codec]).sections[0]?.value).toEqual(
+      article,
+    );
+  });
+
+  it('round-trips ordinary prose using bearer as a noun', () => {
+    const codec: WorkspaceBundleSectionCodec = {
+      type: 'synthetic.article',
+      version: 1,
+      encode: (value) => value,
+      decode: (value) => value,
+    };
+    const article = {
+      body: 'A fictional character is the bearer of a wooden badge.',
+    };
+    const bytes = writeWorkspaceBundle(
+      {
+        workspaceId: WORKSPACE_ID,
+        exportedAt: EXPORTED_AT,
+        sections: [{type: codec.type, version: 1, value: article}],
+        blobReferences: [],
+      },
+      [codec],
+    );
+    expect(readWorkspaceBundle(bytes, [codec]).sections[0]?.value).toEqual(
+      article,
+    );
+  });
+
+  it.each([
+    'Authorization: Bearer synthetic-credential_01.abc~+/==',
+    'Nested text: Bearer synthetic-credential',
+    'Bearer of',
+    'Authorization: Bearer of',
+    'Authorization: Bearer of some description',
+    'Proxy-Authorization: Bearer of some description',
+    '-----BEGIN PRIVATE KEY----- synthetic -----END PRIVATE KEY-----',
+  ])('still rejects credential syntax inside article text: %s', (body) => {
+    const codec: WorkspaceBundleSectionCodec = {
+      type: SYNTHETIC_SECTION_TYPE,
+      version: 1,
+      encode: (value) => value,
+      decode: (value) => value,
+    };
+    expect(() =>
+      writeWorkspaceBundle(
+        {
+          workspaceId: WORKSPACE_ID,
+          exportedAt: EXPORTED_AT,
+          sections: [{type: codec.type, version: 1, value: {body}}],
+          blobReferences: [],
+        },
+        [codec],
+      ),
+    ).toThrow(expect.objectContaining({code: 'secret_material_forbidden'}));
+    expect(() =>
+      readWorkspaceBundle(encodeCanonicalJson(createEnvelope({body}), 4096), [
+        codec,
+      ]),
+    ).toThrow(expect.objectContaining({code: 'secret_material_forbidden'}));
+  });
+
   it('rejects credential-bearing URLs during export and import', () => {
     const unsafeCodec: WorkspaceBundleSectionCodec = {
       type: 'synthetic.unsafe-url',

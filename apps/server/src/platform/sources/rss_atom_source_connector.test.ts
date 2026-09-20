@@ -106,6 +106,54 @@ describe('RssAtomSourceConnector', () => {
     );
   });
 
+  it.each([false, true])(
+    'preserves RSS fields alongside Dublin Core metadata (extension first: %s)',
+    async (extensionFirst) => {
+      const primary =
+        '<title><![CDATA[合成会议记录]]></title><description><![CDATA[<p>完整的合成正文与上下文。</p>]]></description>';
+      const extension =
+        '<dc:title>Metadata title</dc:title><dc:description>Metadata summary</dc:description>';
+      const feed =
+        '<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><item><guid>synthetic-namespace</guid>' +
+        (extensionFirst ? extension + primary : primary + extension) +
+        '<link>https://example.invalid/article</link></item></channel></rss>';
+      const connector = connectorWith(
+        () => Promise.resolve(xmlResponse(feed, 'application/rss+xml')),
+        '203.0.113.10',
+      );
+      const result = await connector.read(request());
+      if (result.status !== 'changed') throw new Error('expected document');
+      const document = result.documents[0];
+      const text = new TextDecoder().decode(document?.sourceUtf8);
+      expect(text).toContain('# 合成会议记录');
+      expect(text).toContain('完整的合成正文与上下文。');
+      expect(text).not.toContain('Metadata');
+      expect(new TextDecoder().decode(document?.rawSourceBytes)).toBe(feed);
+      await expect(
+        connector.read(request(result.cursor)),
+      ).resolves.toMatchObject({status: 'unchanged'});
+    },
+  );
+
+  it('preserves prefixed Atom titles, links and content', async () => {
+    const feed =
+      '<a:feed xmlns:a="http://www.w3.org/2005/Atom"><a:entry><a:id>synthetic-prefixed</a:id><a:title type="html">First &lt;em&gt;middle&lt;/em&gt; last</a:title><a:link href="https://example.invalid/prefixed"/><a:content type="html">&lt;p&gt;Synthetic complete body.&lt;/p&gt;</a:content></a:entry></a:feed>';
+    const result = await connectorWith(
+      () => Promise.resolve(xmlResponse(feed, 'application/atom+xml')),
+      '203.0.113.10',
+    ).read(request());
+    if (result.status !== 'changed') throw new Error('expected document');
+    expect(result.documents[0]?.canonicalUri).toBe(
+      'https://example.invalid/prefixed',
+    );
+    expect(new TextDecoder().decode(result.documents[0]?.sourceUtf8)).toContain(
+      '# First middle last',
+    );
+    expect(new TextDecoder().decode(result.documents[0]?.sourceUtf8)).toContain(
+      'Synthetic complete body.',
+    );
+  });
+
   it('fails closed for local targets, declarations and malformed config', async () => {
     const fetcher = vi.fn<typeof fetch>();
     const local = connectorWith(fetcher, '127.0.0.1');
@@ -180,6 +228,136 @@ describe('RssAtomSourceConnector', () => {
     await expect(bounded.read(request(first.cursor))).resolves.toEqual({
       status: 'unchanged',
       cursor: first.cursor,
+    });
+  });
+
+  it.each([
+    '<rss version="2.0"><channel><title>Synthetic feed</title></channel></rss>',
+    atomFeed([]),
+  ])(
+    'keeps the previous item window across a valid empty feed',
+    async (empty) => {
+      const populated = atomFeed([atomEntry('synthetic-1', 'First', 'Alpha')]);
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(xmlResponse(populated, 'application/atom+xml'))
+        .mockResolvedValueOnce(xmlResponse(empty, 'application/xml'))
+        .mockResolvedValueOnce(
+          xmlResponse(
+            populated.replace('Synthetic', 'Changed feed title'),
+            'application/atom+xml',
+          ),
+        );
+      const connector = connectorWith(fetcher, '203.0.113.15');
+      const first = await connector.read(request());
+      if (first.status !== 'changed') throw new Error('expected initial batch');
+      const second = await connector.read(request(first.cursor));
+      expect(second.status).toBe('unchanged');
+      const third = await connector.read(request(second.cursor));
+      expect(third.status).toBe('unchanged');
+      await expect(
+        connectorWith(
+          () => Promise.resolve(xmlResponse(empty, 'application/xml')),
+          '203.0.113.15',
+        ).read(request()),
+      ).resolves.toMatchObject({status: 'unchanged'});
+    },
+  );
+
+  it('projects CDATA and Atom text constructs into plain ordered titles', async () => {
+    const feed = [
+      '<rss version="2.0"><channel><item><guid>synthetic-cdata</guid>',
+      '<title><![CDATA[Alpha <em>Beta</em> &amp; Gamma]]></title>',
+      '<description>Body</description></item></channel></rss>',
+    ].join('');
+    const atom = atomFeed([
+      '<entry><id>synthetic-xhtml</id><title type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml">Alpha <em>Beta</em> Gamma</div></title><content>Body</content></entry>',
+      '<entry><id>synthetic-html</id><title type="html">Alpha &lt;em&gt;Beta&lt;/em&gt; &amp;amp; Gamma</title><content>Body</content></entry>',
+      '<entry><id>synthetic-text</id><title type="text">Literal &lt;em&gt; &amp;amp; text</title><content>Body</content></entry>',
+    ]);
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(xmlResponse(feed, 'application/rss+xml'))
+      .mockResolvedValueOnce(xmlResponse(atom, 'application/atom+xml'));
+    const connector = connectorWith(fetcher, '203.0.113.16');
+    const rss = await connector.read(request());
+    const atomResult = await connector.read(request());
+    if (rss.status !== 'changed' || atomResult.status !== 'changed') {
+      throw new Error('expected projected titles');
+    }
+    expect(new TextDecoder().decode(rss.documents[0]?.sourceUtf8)).toContain(
+      '# Alpha Beta & Gamma',
+    );
+    expect(
+      atomResult.documents.map(
+        (document) =>
+          new TextDecoder().decode(document.sourceUtf8).split('\n')[0],
+      ),
+    ).toEqual([
+      '# Alpha Beta Gamma',
+      '# Alpha Beta & Gamma',
+      '# Literal \\<em\\> &amp; text',
+    ]);
+    expect(rss.documents[0]?.rawSourceBytes).toEqual(
+      new TextEncoder().encode(feed),
+    );
+  });
+
+  it('keeps the request deadline active while the response body is streaming', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
+      const controller = new AbortController();
+      setTimeout(() => {
+        controller.abort();
+      }, milliseconds);
+      return controller.signal;
+    });
+    let requestSignal: AbortSignal | null | undefined;
+    const fetcher = vi.fn<typeof fetch>().mockImplementation((_input, init) => {
+      requestSignal = init?.signal;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('<rss>'));
+          requestSignal?.addEventListener(
+            'abort',
+            () => {
+              controller.error(requestSignal?.reason);
+            },
+            {once: true},
+          );
+        },
+      });
+      return Promise.resolve(
+        new Response(body, {headers: {'content-type': 'application/rss+xml'}}),
+      );
+    });
+    try {
+      const pending = connectorWith(fetcher, '203.0.113.17').read(request());
+      const outcome = pending.catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(19_999);
+      expect(requestSignal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(requestSignal?.aborted).toBe(true);
+      await expect(outcome).resolves.toMatchObject({
+        code: 'connector_unavailable',
+      });
+    } finally {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    '<rss><channel>',
+    '<unrelated><title>Not a feed</title></unrelated>',
+    '<rss><channel><item /></channel></rss>',
+  ])('rejects malformed or unsupported feed content', async (feed) => {
+    const connector = connectorWith(
+      () => Promise.resolve(xmlResponse(feed, 'application/xml')),
+      '203.0.113.18',
+    );
+    await expect(connector.read(request())).rejects.toMatchObject({
+      code: 'connector_result_invalid',
     });
   });
 

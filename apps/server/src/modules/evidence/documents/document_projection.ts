@@ -143,7 +143,9 @@ function projectHtml(
   }
   const document = parse(html);
   const root =
+    findExplicitArticleBody(document) ??
     findFirstElement(document, 'article') ??
+    findHeadingContentContainer(document) ??
     findFirstElement(document, 'main') ??
     findFirstElement(document, 'body') ??
     document;
@@ -259,9 +261,19 @@ class PdfTextExtractionDomMatrix {
 }
 
 function renderHtmlBlocks(node: HtmlNode, blocks: string[]): void {
+  if (isTextNode(node)) {
+    const text = normalizeInlineText(node.value);
+    if (text !== '') blocks.push(escapeMarkdown(text));
+    return;
+  }
   if (isHtmlElement(node)) {
     const tagName = node.tagName.toLowerCase();
-    if (SKIPPED_HTML_ELEMENTS.has(tagName) || isHiddenElement(node)) return;
+    if (
+      SKIPPED_HTML_ELEMENTS.has(tagName) ||
+      isHiddenElement(node) ||
+      isShareWidget(node)
+    )
+      return;
     if (/^h[1-6]$/u.test(tagName)) {
       const value = normalizeInlineText(descendantText(node));
       if (value !== '') {
@@ -271,7 +283,7 @@ function renderHtmlBlocks(node: HtmlNode, blocks: string[]): void {
       }
       return;
     }
-    if (tagName === 'p' || tagName === 'address') {
+    if (tagName === 'p' || tagName === 'address' || tagName === 'figcaption') {
       pushInlineBlock(blocks, node);
       return;
     }
@@ -290,6 +302,14 @@ function renderHtmlBlocks(node: HtmlNode, blocks: string[]): void {
       if (value !== '') blocks.push(`\`\`\`text\n${value}\n\`\`\``);
       return;
     }
+    if (tagName === 'table' || tagName === 'figure') {
+      const parts: string[] = [];
+      for (const child of childNodes(node)) renderHtmlBlocks(child, parts);
+      // A row, caption or chart credit is not an independent reading item.
+      // One newline retains cells (including empty ones) and their ordering.
+      if (parts.length) blocks.push(parts.join('\n'));
+      return;
+    }
     if (tagName === 'tr') {
       const cells = childNodes(node)
         .filter(
@@ -297,10 +317,11 @@ function renderHtmlBlocks(node: HtmlNode, blocks: string[]): void {
             isHtmlElement(child) &&
             (child.tagName === 'th' || child.tagName === 'td'),
         )
-        .map((cell) => normalizeInlineText(descendantText(cell)))
-        .filter((value) => value !== '');
+        .map((cell) => inlineMarkdown(cell).trim());
       if (cells.length > 0) {
-        blocks.push(`| ${cells.map(escapeTableCell).join(' | ')} |`);
+        blocks.push(
+          `| ${cells.map((cell) => cell.replace(/\|/gu, '\\|')).join(' | ')} |`,
+        );
       }
       return;
     }
@@ -323,19 +344,31 @@ function inlineMarkdown(node: HtmlNode): string {
     return escapeMarkdown(normalizeInlineTextFragment(node.value));
   if (!isHtmlElement(node) || SKIPPED_HTML_ELEMENTS.has(node.tagName))
     return '';
-  if (isHiddenElement(node)) return '';
+  if (isHiddenElement(node) || isShareWidget(node)) return '';
   if (node.tagName === 'br') return '\n';
   if (node.tagName === 'img') {
-    const alt = attributeValue(node, 'alt');
-    return alt === undefined || alt.trim() === ''
-      ? ''
-      : `图片：${escapeMarkdown(normalizeInlineText(alt))}`;
+    const alt = normalizeInlineText(attributeValue(node, 'alt') ?? '');
+    const source = safeImageReference(
+      attributeValue(node, 'src') ?? attributeValue(node, 'data-src'),
+    );
+    return source === undefined
+      ? alt === ''
+        ? ''
+        : `图片：${escapeMarkdown(alt)}`
+      : `![${escapeMarkdown(alt || '查看原图')}](${escapeMarkdownDestination(source)})`;
   }
   const value = childNodes(node).map(inlineMarkdown).join('');
   if (node.tagName === 'code' && value.trim() !== '') {
     return `\`${value.trim()}\``;
   }
   if (node.tagName === 'a') {
+    // The reader exposes images as explicit links; do not create nested links.
+    if (
+      childNodes(node).some(
+        (child) => isHtmlElement(child) && child.tagName === 'img',
+      )
+    )
+      return value;
     const href = attributeValue(node, 'href');
     const label = value.trim();
     if (href !== undefined && href.trim() !== '' && label !== '') {
@@ -343,6 +376,24 @@ function inlineMarkdown(node: HtmlNode): string {
     }
   }
   return value;
+}
+
+function safeImageReference(value: string | undefined): string | undefined {
+  if (value === undefined || value.trim() === '') return undefined;
+  const source = value.trim();
+  try {
+    // Relative references resolve against the original document when read.
+    const parsed = new URL(source, 'https://document.invalid/');
+    if (
+      !['http:', 'https:'].includes(parsed.protocol) ||
+      parsed.username ||
+      parsed.password
+    )
+      return undefined;
+    return source;
+  } catch {
+    return undefined;
+  }
 }
 
 function pdfTextLines(items: readonly unknown[]): string[] {
@@ -407,6 +458,7 @@ function findFirstElement(
   node: HtmlNode,
   tagName: string,
 ): HtmlElement | undefined {
+  if (isHtmlElement(node) && isHiddenElement(node)) return undefined;
   if (isHtmlElement(node) && node.tagName.toLowerCase() === tagName)
     return node;
   for (const child of childNodes(node)) {
@@ -416,11 +468,159 @@ function findFirstElement(
   return undefined;
 }
 
+/** Prefer an explicitly marked reading body over an outer article with tag menus. */
+function findExplicitArticleBody(document: HtmlNode): HtmlElement | undefined {
+  const candidates: HtmlElement[] = [];
+  const visit = (node: HtmlNode) => {
+    if (isHtmlElement(node)) {
+      if (isHiddenElement(node) || SKIPPED_HTML_ELEMENTS.has(node.tagName))
+        return;
+      const markers = [
+        attributeValue(node, 'id') ?? '',
+        attributeValue(node, 'class') ?? '',
+      ]
+        .join(' ')
+        .replace(/([a-z])([A-Z])/gu, '$1-$2')
+        .replace(/[_-]+/gu, '-')
+        .toLowerCase();
+      const itemprop = attributeValue(node, 'itemprop') ?? '';
+      if (
+        (/(?:^|\s)articleBody(?:$|\s)/u.test(itemprop) ||
+          /(?:^|[\s_-])(?:article|post|entry|story)[_-](?:body|content)(?:$|[\s_-])/u.test(
+            markers,
+          )) &&
+        findFirstElement(node, 'p')
+      )
+        candidates.push(node);
+    }
+    for (const child of childNodes(node)) visit(child);
+  };
+  visit(document);
+  const leaves = candidates.filter(
+    (candidate) =>
+      !candidates.some((other) => {
+        if (other === candidate) return false;
+        let parent = other.parentNode;
+        while (parent && isHtmlElement(parent)) {
+          if (parent === candidate) return true;
+          parent = parent.parentNode;
+        }
+        return false;
+      }),
+  );
+  if (leaves.length === 1) return leaves[0];
+  // An article can place its introduction, figures and later sections in
+  // separate reading bodies. Keep their nearest explicit common container.
+  // Several independent articles must still fall back to the complete page.
+  return [...candidates]
+    .reverse()
+    .find(
+      (candidate) =>
+        leaves.length > 1 &&
+        leaves.every((leaf) => isDescendantOf(leaf, candidate)) &&
+        countVisibleHeadings(candidate) <= 1,
+    );
+}
+
+function isDescendantOf(node: HtmlNode, ancestor: HtmlNode): boolean {
+  let parent = 'parentNode' in node ? node.parentNode : null;
+  while (parent) {
+    if (parent === ancestor) return true;
+    parent = 'parentNode' in parent ? parent.parentNode : null;
+  }
+  return false;
+}
+
+function countVisibleHeadings(node: HtmlNode): number {
+  if (
+    isHtmlElement(node) &&
+    (isHiddenElement(node) ||
+      SKIPPED_HTML_ELEMENTS.has(node.tagName) ||
+      node.tagName === 'nav')
+  )
+    return 0;
+  return (
+    (isHtmlElement(node) && node.tagName === 'h1' ? 1 : 0) +
+    childNodes(node).reduce(
+      (count, child) => count + countVisibleHeadings(child),
+      0,
+    )
+  );
+}
+
+/** One marked article container may coexist with site-banner headings. */
+function findHeadingContentContainer(
+  document: HtmlNode,
+): HtmlElement | undefined {
+  const headings: HtmlElement[] = [];
+  const visit = (node: HtmlNode) => {
+    if (
+      isHtmlElement(node) &&
+      (isHiddenElement(node) ||
+        SKIPPED_HTML_ELEMENTS.has(node.tagName) ||
+        node.tagName === 'nav')
+    )
+      return;
+    if (isHtmlElement(node) && node.tagName === 'h1') headings.push(node);
+    for (const child of childNodes(node)) visit(child);
+  };
+  visit(document);
+  const headingCounts = new Map<HtmlNode, number>();
+  for (const heading of headings) {
+    let parent = heading.parentNode;
+    while (parent && isHtmlElement(parent)) {
+      headingCounts.set(parent, (headingCounts.get(parent) ?? 0) + 1);
+      parent = parent.parentNode;
+    }
+  }
+  const candidates = new Set<HtmlElement>();
+  for (const heading of headings) {
+    let parent = heading.parentNode;
+    while (
+      parent &&
+      isHtmlElement(parent) &&
+      !['body', 'html'].includes(parent.tagName)
+    ) {
+      const markers = [
+        attributeValue(parent, 'id') ?? '',
+        attributeValue(parent, 'class') ?? '',
+      ].join(' ');
+      if (
+        headingCounts.get(parent) === 1 &&
+        /(?:^|[\s_-])(?:article|post|entry|story|body|content)(?:$|[\s_-])/u.test(
+          markers,
+        ) &&
+        findFirstElement(parent, 'p')
+      ) {
+        candidates.add(parent);
+        break;
+      }
+      parent = parent.parentNode;
+    }
+  }
+  return candidates.size === 1 ? [...candidates][0] : undefined;
+}
+
 function descendantText(node: HtmlNode): string {
   if (isTextNode(node)) return node.value;
   if (isHtmlElement(node) && SKIPPED_HTML_ELEMENTS.has(node.tagName)) return '';
   if (isHtmlElement(node) && isHiddenElement(node)) return '';
   return childNodes(node).map(descendantText).join(' ');
+}
+
+/** Skip recognizable sharing controls, never arbitrary prose containing “share”. */
+function isShareWidget(element: HtmlElement): boolean {
+  const tokens = [
+    attributeValue(element, 'class') ?? '',
+    attributeValue(element, 'id') ?? '',
+  ]
+    .join(' ')
+    .split(/\s+/u);
+  return tokens.some((token) =>
+    /^(?:social[-_]share(?:[-_]buttons?)?|share[-_](?:buttons?|tools?|links?|widget)|sharing[-_](?:tools?|buttons?)|addtoany(?:[-_]share[-_]save)?|a2a_kit|sharedaddy|wp-block-jetpack-sharing-buttons)$/iu.test(
+      token,
+    ),
+  );
 }
 
 function isHiddenElement(element: HtmlElement): boolean {
@@ -461,10 +661,6 @@ function normalizeBlocks(blocks: readonly string[]): string {
 
 function escapeMarkdown(value: string): string {
   return value.replace(/[\\`*_[\]<>]/gu, '\\$&');
-}
-
-function escapeTableCell(value: string): string {
-  return escapeMarkdown(value).replace(/\|/gu, '\\|');
 }
 
 function escapeMarkdownDestination(value: string): string {

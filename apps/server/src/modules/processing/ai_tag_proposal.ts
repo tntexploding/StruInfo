@@ -5,6 +5,8 @@ import type {
 } from '../entries/index.js';
 
 export type AiTagProposalProviderErrorCode =
+  | 'ai_operations_paused'
+  | 'ai_price_window_closed'
   | 'ai_provider_timeout'
   | 'ai_provider_unavailable'
   | 'ai_provider_rejected'
@@ -32,7 +34,8 @@ export interface AiTagProposalProviderResult {
 }
 
 export interface AiTagProposalProviderPort {
-  readonly providerKey: 'openai-responses-v1';
+  readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   readonly model: string;
   readonly promptVersion: string;
 

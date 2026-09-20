@@ -226,18 +226,16 @@ describe('M1F-2 query result tools', () => {
     );
 
     expect(markup).toContain('查询条目');
-    expect(markup).toContain('输入关键词并调整右侧条件');
+    expect(markup).toContain('输入关键词，按需展开筛选');
     expect(markup).toContain('从结果列表选择一个条目');
-    expect(markup).toContain('在中间查看正文与来源');
+    expect(markup).toContain('阅读正文并查看来源');
     expect(markup).toContain('role="status"');
     expect(markup).toContain('正在搜索…');
     expect(markup).toContain('搜索与显示设置');
     expect(markup).toContain('结果操作');
     expect(markup).toContain('结果比较');
     expect(markup).toContain('先选择一条查询结果');
-    expect(markup).toContain(
-      '<h2 id="entry-query-synthesis-title">AI 回答</h2>',
-    );
+    expect(markup).toContain('向资料提问');
     expect(markup).toContain('AI 未启用');
     expect(markup).toContain('探索推荐');
     expect(markup).toContain('不会改变搜索结果');

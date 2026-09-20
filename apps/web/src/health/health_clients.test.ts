@@ -3,11 +3,11 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {createFetchHealthClient} from './fetch_health_client.js';
 import {
   HealthConfigurationError,
-  HealthContractError,
   type HealthFetch,
   HealthNetworkError,
   HealthResponseError,
 } from './health_client.js';
+import {HealthContractError} from './health_contract.js';
 import {createHealthRuntime} from './health_runtime.js';
 import {
   NOT_READY_HEALTH_FIXTURE,

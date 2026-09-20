@@ -8,7 +8,7 @@ export default defineConfig({
       'packages/**/src/**/*.test.{ts,tsx}',
       'tools/**/*.test.ts',
     ],
-    exclude: ['tests/integration/**', 'tests/e2e/**'],
+    exclude: ['**/node_modules/**', 'tests/integration/**', 'tests/e2e/**'],
     clearMocks: true,
     restoreMocks: true,
     unstubEnvs: true,

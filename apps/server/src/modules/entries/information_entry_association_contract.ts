@@ -1,7 +1,3 @@
-import type {
-  InformationEntrySourceReview,
-  InformationEntrySourceReviewRevisions,
-} from './information_entry_source_review.js';
 import type {CurrentInformationEntry} from './information_entry_contract.js';
 
 export const INFORMATION_ENTRY_ASSOCIATION_ACTIONS = [
@@ -61,6 +57,22 @@ export type InformationEntryGraphVerificationStatus =
   (typeof INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES)[number];
 export type InformationEntryGraphEdgeVerificationStatus =
   InformationEntryGraphVerificationStatus | 'calculated';
+
+export interface InformationEntrySourceReviewRevisions {
+  readonly entryLowRevision: number;
+  readonly entryHighRevision: number;
+}
+export interface InformationEntrySourceReview {
+  readonly status: InformationEntryGraphVerificationStatus;
+  readonly storedStatus: InformationEntryGraphVerificationStatus | 'calculated';
+  readonly reason:
+    | 'not_reviewed'
+    | 'owner_requested'
+    | 'unbound'
+    | 'entry_changed'
+    | 'current';
+  readonly reviewedRevisions?: Readonly<InformationEntrySourceReviewRevisions>;
+}
 
 export interface InformationEntryGraphRelationValue {
   readonly origin: InformationEntryGraphOrigin;

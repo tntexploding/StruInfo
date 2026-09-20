@@ -1,4 +1,9 @@
 import {
+  DEFAULT_AI_PRICE_POLICY,
+  aiPricePolicySchema,
+  type AiPricePolicy,
+} from '../modules/processing/ai_price_policy.js';
+import {
   DEFAULT_ENTRY_SAVED_QUERIES,
   type EntrySavedQueries,
 } from '../modules/entries/information_entry_saved_queries.js';
@@ -18,6 +23,11 @@ import {
   cloneEntryTypeLearningState,
   DEFAULT_ENTRY_TYPE_LEARNING_STATE,
 } from '../modules/entries/information_entry_type_learning.js';
+
+import {
+  DEFAULT_WORKSPACE_UI_PREFERENCES,
+  type WorkspaceUiPreferences,
+} from './workspace_ui_preferences.js';
 
 export const REVIEW_PREFERENCES_FORMAT = 'struinfo.review-preferences';
 export const REVIEW_PREFERENCES_VERSION = 1;
@@ -172,6 +182,7 @@ export type ReviewJsonApiAuthentication =
 interface ReviewSourceSubscriptionBase {
   readonly subscriptionId: string;
   readonly label: string;
+  readonly description?: string;
   /** Enables periodic checks. Explicit run-now remains available when false. */
   readonly enabled: boolean;
   readonly sourceAlias: string;
@@ -325,6 +336,8 @@ export interface ReviewPreferences {
   readonly entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>;
   readonly entryClassificationProfile?: Readonly<EntryClassificationProfile>;
   readonly entrySavedQueries?: Readonly<EntrySavedQueries>;
+  readonly uiPreferences?: Readonly<WorkspaceUiPreferences>;
+  readonly aiPricePolicy?: Readonly<AiPricePolicy>;
 }
 
 export interface ReviewPreferencesStore {
@@ -348,6 +361,8 @@ export interface ReviewPreferencesStore {
     entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>,
     entryClassificationProfile?: Readonly<EntryClassificationProfile>,
     entrySavedQueries?: Readonly<EntrySavedQueries>,
+    uiPreferences?: Readonly<WorkspaceUiPreferences>,
+    aiPricePolicy?: Readonly<AiPricePolicy>,
   ): Promise<Readonly<ReviewPreferences>>;
   update?<T>(
     workspaceId: string,
@@ -381,6 +396,8 @@ export interface ReviewPreferencesPatch {
   readonly entrySplitRuleProfile?: Readonly<EntrySplitRuleProfile>;
   readonly entryClassificationProfile?: Readonly<EntryClassificationProfile>;
   readonly entrySavedQueries?: Readonly<EntrySavedQueries>;
+  readonly uiPreferences?: Readonly<WorkspaceUiPreferences>;
+  readonly aiPricePolicy?: Readonly<AiPricePolicy>;
 }
 
 export function patchReviewPreferences(
@@ -420,6 +437,10 @@ export function patchReviewPreferences(
     patch.entrySavedQueries ??
       current.entrySavedQueries ??
       DEFAULT_ENTRY_SAVED_QUERIES,
+    patch.uiPreferences ??
+      current.uiPreferences ??
+      DEFAULT_WORKSPACE_UI_PREFERENCES,
+    patch.aiPricePolicy ?? current.aiPricePolicy ?? DEFAULT_AI_PRICE_POLICY,
   );
 }
 
@@ -455,6 +476,8 @@ export async function updateReviewPreferences<T>(
           update.next.entrySplitRuleProfile,
           update.next.entryClassificationProfile,
           update.next.entrySavedQueries,
+          update.next.uiPreferences,
+          update.next.aiPricePolicy,
         );
   return Object.freeze({preferences, result: update.result});
 }
@@ -756,6 +779,8 @@ export function createReviewPreferences(
   entrySplitRuleProfile: Readonly<EntrySplitRuleProfile> = DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
   entryClassificationProfile: Readonly<EntryClassificationProfile> = DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
   entrySavedQueries: Readonly<EntrySavedQueries> = DEFAULT_ENTRY_SAVED_QUERIES,
+  uiPreferences: Readonly<WorkspaceUiPreferences> = DEFAULT_WORKSPACE_UI_PREFERENCES,
+  aiPricePolicy: Readonly<AiPricePolicy> = DEFAULT_AI_PRICE_POLICY,
 ): Readonly<ReviewPreferences> {
   const advanceActions =
     entryAutomationPolicy.advanceActions ??
@@ -769,6 +794,8 @@ export function createReviewPreferences(
     workspaceId,
     quickTags: Object.freeze([...quickTags]),
     entrySavedQueries,
+    uiPreferences,
+    aiPricePolicy: Object.freeze(aiPricePolicySchema.parse(aiPricePolicy)),
     automaticKeywords: Object.freeze({
       enabled: automaticKeywords.enabled,
       includeLinkDomains: automaticKeywords.includeLinkDomains,
@@ -1039,6 +1066,9 @@ function decodeSourceSubscription(
     typeof value.subscriptionId !== 'string' ||
     !CANONICAL_UUID.test(value.subscriptionId) ||
     typeof value.label !== 'string' ||
+    (value.description !== undefined &&
+      (typeof value.description !== 'string' ||
+        value.description.length > 500)) ||
     (value.enabled !== true && value.enabled !== false) ||
     typeof value.sourceAlias !== 'string' ||
     (value.isPrivate !== true && value.isPrivate !== false) ||
@@ -1065,6 +1095,9 @@ function decodeSourceSubscription(
   const common = Object.freeze({
     subscriptionId: value.subscriptionId,
     label,
+    ...(typeof value.description === 'string' && value.description.trim()
+      ? {description: value.description.trim()}
+      : {}),
     enabled: value.enabled,
     sourceAlias,
     isPrivate: value.isPrivate,

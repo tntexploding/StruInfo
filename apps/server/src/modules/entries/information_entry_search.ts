@@ -1,4 +1,10 @@
+import {
+  prepareEntrySearchAliases,
+  type ConfirmedEntryAlias,
+} from './information_entry_search_aliases.js';
 import {createHash} from 'node:crypto';
+
+import type {EntryTranslation} from './information_entry_translation.js';
 
 import type {
   CurrentInformationEntry,
@@ -49,8 +55,11 @@ export function searchCurrentInformationEntries(
       indexVersion: string;
     }>
   > = new Map(),
+  translations: ReadonlyMap<string, Readonly<EntryTranslation>> = new Map(),
+  aliases: readonly Readonly<ConfirmedEntryAlias>[] = [],
 ): Readonly<InformationEntrySearchResult> {
-  const querySha256 = informationEntryQuerySha256(request);
+  const querySha256 = informationEntryQuerySha256(request, aliases);
+  const expanded = prepareEntrySearchAliases(request, aliases);
   if (
     request.after !== undefined &&
     request.after.querySha256 !== querySha256
@@ -76,7 +85,11 @@ export function searchCurrentInformationEntries(
   const textMode = request.textMode ?? 'substring';
   const textFields = canonicalTextSearchFields(request.textFields);
   const matches = visibleEntries.flatMap((entry) => {
-    const filterReasons = structuralFilterReasons(entry, request);
+    const filterReasons = structuralFilterReasons(
+      entry,
+      request,
+      expanded.contentKeyword,
+    );
     if (filterReasons === undefined) return [];
     const association = associationMatches?.get(entry.entryId);
     if (associationMatches !== undefined && association === undefined)
@@ -86,7 +99,27 @@ export function searchCurrentInformationEntries(
       query,
       textMode,
       textFields,
+      translations.get(entry.entryId),
+      expanded.text,
     );
+    const aliasMatches = entry.value.contentKeywords
+      .flatMap((keyword) => {
+        const matched = keyword.normalizedValue;
+        return [
+          ...(expanded.text.includes(matched)
+            ? [{query: request.text ?? '', tag: keyword.displayValue}]
+            : []),
+          ...(expanded.contentKeyword.includes(matched)
+            ? [{query: request.contentKeyword ?? '', tag: keyword.displayValue}]
+            : []),
+        ];
+      })
+      .filter(
+        (value, index, items) =>
+          items.findIndex(
+            (item) => item.query === value.query && item.tag === value.tag,
+          ) === index,
+      );
     const semanticMatch = semanticMatches.get(entry.entryId);
     if (
       query !== '' &&
@@ -106,6 +139,9 @@ export function searchCurrentInformationEntries(
     return [
       Object.freeze({
         entry,
+        ...(aliasMatches.length
+          ? {aliasMatches: Object.freeze(aliasMatches)}
+          : {}),
         matchReasons: textMatch?.reasons ?? Object.freeze([]),
         ...(textMatch === undefined
           ? {}
@@ -145,9 +181,14 @@ export function searchCurrentInformationEntries(
 
 export function informationEntryQuerySha256(
   request: Readonly<InformationEntrySearchRequest>,
+  aliases: readonly Readonly<ConfirmedEntryAlias>[] = [],
 ): string {
+  const expanded = prepareEntrySearchAliases(request, aliases);
   const projection = {
-    schemaVersion: 'struinfo.information-entry-search.v2',
+    ...(expanded.text.length || expanded.contentKeyword.length
+      ? {confirmedAliases: expanded}
+      : {}),
+    schemaVersion: 'struinfo.information-entry-search.v3',
     ...(request.retrievalMode === undefined ||
     request.retrievalMode === 'lexical'
       ? {}
@@ -179,13 +220,16 @@ export function informationEntryQuerySha256(
 function structuralFilterReasons(
   entry: Readonly<CurrentInformationEntry>,
   request: Readonly<InformationEntrySearchRequest>,
+  aliases: readonly string[],
 ): InformationEntryFilterReason[] | undefined {
   const reasons: InformationEntryFilterReason[] = [];
   if (request.contentKeyword !== undefined) {
     const expected = informationEntrySearchKey(request.contentKeyword);
     if (
       !entry.value.contentKeywords.some(
-        (keyword) => keyword.normalizedValue === expected,
+        (keyword) =>
+          keyword.normalizedValue === expected ||
+          aliases.includes(keyword.normalizedValue),
       )
     ) {
       return undefined;
@@ -272,6 +316,8 @@ function matchInformationEntryText(
   query: string,
   mode: EntryTextSearchMode,
   fields: readonly EntryTextSearchField[],
+  translation: Readonly<EntryTranslation> | undefined,
+  aliases: readonly string[],
 ): Readonly<InformationEntryTextMatchEvaluation> | undefined {
   if (query === '') return undefined;
   const selected = new Set(fields);
@@ -287,13 +333,34 @@ function matchInformationEntryText(
     score = Math.max(score, candidateScore);
   };
 
+  const currentTranslation =
+    translation !== undefined &&
+    !entry.value.isPrivate &&
+    translation.entryId === entry.entryId &&
+    translation.sourceRevision === entry.revision &&
+    translation.sourceRevisionId === entry.revisionId
+      ? translation
+      : undefined;
+
   if (selected.has('title')) {
     addReason('title', [entry.value.titlePath]);
+    if (currentTranslation !== undefined)
+      addReason('translation_title', [currentTranslation.title]);
   }
   if (selected.has('body')) {
     addReason('body', [entry.value.body]);
+    if (currentTranslation !== undefined)
+      addReason('translation_body', [currentTranslation.body]);
   }
   if (selected.has('tags')) {
+    if (
+      entry.value.contentKeywords.some((keyword) =>
+        aliases.includes(keyword.normalizedValue),
+      )
+    ) {
+      reasons.push('content_keyword_alias');
+      score = Math.max(score, 10_000);
+    }
     addReason(
       'content_keyword',
       entry.value.contentKeywords.map((keyword) => keyword.normalizedValue),
@@ -580,8 +647,10 @@ function compareSearchItems(
   const leftTextScore = left.retrievalScore ?? left.textMatch?.score ?? 0;
   const rightTextScore = right.retrievalScore ?? right.textMatch?.score ?? 0;
   if (leftTextScore !== rightTextScore) return rightTextScore - leftTextScore;
-  if (left.matchReasons.length !== right.matchReasons.length) {
-    return right.matchReasons.length - left.matchReasons.length;
+  const leftReasonCount = matchedFieldCount(left);
+  const rightReasonCount = matchedFieldCount(right);
+  if (leftReasonCount !== rightReasonCount) {
+    return rightReasonCount - leftReasonCount;
   }
   const leftScore = left.association?.effectiveScore ?? 0;
   const rightScore = right.association?.effectiveScore ?? 0;
@@ -604,8 +673,9 @@ function compareSearchItemToCursor(
   if (depth !== cursor.associationDepth) return depth - cursor.associationDepth;
   const textScore = item.retrievalScore ?? item.textMatch?.score ?? 0;
   if (textScore !== cursor.textScore) return cursor.textScore - textScore;
-  if (item.matchReasons.length !== cursor.matchReasonCount) {
-    return cursor.matchReasonCount - item.matchReasons.length;
+  const reasonCount = matchedFieldCount(item);
+  if (reasonCount !== cursor.matchReasonCount) {
+    return cursor.matchReasonCount - reasonCount;
   }
   const score = item.association?.effectiveScore ?? 0;
   if (score !== cursor.associationScore) return cursor.associationScore - score;
@@ -626,12 +696,27 @@ function searchCursorFor(
     querySha256,
     associationDepth: item.association?.depth ?? 0,
     textScore: item.retrievalScore ?? item.textMatch?.score ?? 0,
-    matchReasonCount: item.matchReasons.length,
+    matchReasonCount: matchedFieldCount(item),
     associationScore: item.association?.effectiveScore ?? 0,
     capturedAt: item.entry.capturedAt,
     documentOrder: item.entry.value.documentOrder,
     entryId: item.entry.entryId,
   });
+}
+
+/** A second language explains the same field, without a duplicate ranking boost. */
+function matchedFieldCount(item: Readonly<InformationEntrySearchItem>): number {
+  return new Set(
+    item.matchReasons.map((reason) =>
+      reason === 'translation_title'
+        ? 'title'
+        : reason === 'translation_body'
+          ? 'body'
+          : reason === 'content_keyword_alias'
+            ? 'content_keyword'
+            : reason,
+    ),
+  ).size;
 }
 
 function effectiveRetrievalScore(

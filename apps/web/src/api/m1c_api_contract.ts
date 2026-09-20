@@ -97,6 +97,7 @@ export type ProcessingRunCancelResponse =
 interface SourceSubscriptionWriteBase {
   readonly subscriptionId: string;
   readonly label: string;
+  readonly description?: string;
   readonly enabled: boolean;
   readonly sourceAlias: string;
   readonly isPrivate: boolean;
@@ -1129,7 +1130,14 @@ export type InformationEntryRevisionResponse =
   | DomainFailure;
 
 export type InformationEntryMatchReason =
-  'title' | 'body' | 'content_keyword' | 'type_keyword' | 'domain_keyword';
+  | 'title'
+  | 'body'
+  | 'translation_title'
+  | 'translation_body'
+  | 'content_keyword_alias'
+  | 'content_keyword'
+  | 'type_keyword'
+  | 'domain_keyword';
 
 export type InformationEntryFilterReason =
   | 'content_keyword'
@@ -1189,6 +1197,7 @@ export type InformationEntrySearchResponse =
       items: readonly Readonly<{
         entry: Readonly<InformationEntry>;
         matchReasons: readonly InformationEntryMatchReason[];
+        aliasMatches?: readonly Readonly<{query: string; tag: string}>[];
         textMatch?: Readonly<{
           mode: EntryTextSearchMode;
           score: number;
@@ -1333,7 +1342,7 @@ export type InformationEntryQuerySynthesisResponse =
       status: 'ok';
       requestId: string;
       querySha256: string;
-      providerKey: 'openai-responses-v1';
+      providerKey: 'openai-responses-v1' | 'deepseek-responses-v1';
       model: string;
       promptVersion: string;
       answer: string;
@@ -1497,6 +1506,7 @@ export type InformationEntryKnowledgeGraphResponse =
       candidates: readonly Readonly<{
         entry: Readonly<InformationEntry>;
         matchReasons: readonly InformationEntryMatchReason[];
+        aliasMatches?: readonly Readonly<{query: string; tag: string}>[];
         textMatch?: Readonly<{
           mode: EntryTextSearchMode;
           score: number;
@@ -1674,3 +1684,23 @@ export type EntryMarkdownExportResponse =
       file: Readonly<{fileName: string; byteLength: number}>;
     }>
   | Readonly<{status: 'rejected'; issue: Readonly<{code: string}>}>;
+
+export interface EntryTranslation {
+  readonly entryId: string;
+  readonly sourceRevision: number;
+  readonly sourceRevisionId: string;
+  readonly targetLanguage: 'zh-CN';
+  readonly title: string;
+  readonly body: string;
+  readonly providerKey:
+    'openai-responses-v1' | 'deepseek-responses-v1' | 'provided-translation-v1';
+  readonly model: string;
+  readonly promptVersion: string;
+  readonly translatedAt: string;
+}
+export type EntryTranslationResponse =
+  | Readonly<{status: 'ok'; translation: Readonly<EntryTranslation> | null}>
+  | Readonly<{
+      status: 'rejected' | 'failed' | 'invalid';
+      issue: Readonly<{code: string}>;
+    }>;

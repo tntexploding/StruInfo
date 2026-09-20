@@ -38,14 +38,20 @@ Update the canonical document instead of creating a new numbered copy for
 ordinary revisions. Git records small-version history; `docs/archive/` is only
 for major superseded directions.
 
-## Maintenance phase
+## Current development scope
 
-Since 2026-09-05, the accepted product scope is complete and feature development
-is paused. Prioritize reproducible data, privacy and availability defects,
-security fixes and necessary runtime compatibility updates. New capabilities
-require a concrete use case and an explicit owner decision; the roadmap
-candidate pool and frozen M2-P4R are not an active task queue. Follow
-[the maintenance handoff](docs/maintenance-handoff.md).
+The current source version is v0.3.0; v0.2.0 remains an upgrade baseline. On 2026-09-12 the owner
+explicitly selected internal AI automation and an external Agent interface as
+the next development goal, starting with a repository structure audit and
+confirmed dead-code cleanup. Follow the delivery order in
+[the roadmap](docs/roadmap.md). Other candidates and frozen M2-P4R remain paused.
+
+ADR 0075 permits bounded document tasks; ADR 0076 extends them through a
+default-off saved new-material policy and independent automate grants. Standalone AI proposals keep their explicit acceptance.
+Agent annotations use independent grants and typed external-agent provenance. New callers must share business use cases,
+privacy and concurrency checks instead of copying HTTP orchestration or writing
+directly to storage. Continue to use
+[the maintenance handoff](docs/maintenance-handoff.md) for the running instance.
 
 ## Workflow
 

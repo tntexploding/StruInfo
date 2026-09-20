@@ -212,6 +212,7 @@ export function InformationEntryTypeReviewPanel({
           <nav
             className="type-review-workbench__queue"
             aria-label="类型纠错条目"
+            tabIndex={0}
           >
             {items.map((entry, index) => (
               <button
@@ -419,7 +420,7 @@ function TypeCorrectionEditor({
   }
 
   return (
-    <article className="type-correction-editor">
+    <article className="type-correction-editor" tabIndex={0}>
       <header>
         <div>
           <h3>{entry.value.titlePath || '未命名条目'}</h3>

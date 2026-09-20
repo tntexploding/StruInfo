@@ -242,6 +242,29 @@ record of why that unissued harness never blocked product work.
   change. Do not migrate the OS, delete base packages or add ignore rules merely
   to produce a green check.
 
+### DH-014: Existing inactive multipart dependency advisories
+
+- Resolved 2026-09-15: the owner-requested CI investigation updated the exact
+  Multer override to 2.3.0. Production audit reports no known vulnerabilities;
+  license and SPDX updates are recorded in the
+  [security repair](dependencies/evidence/maintenance-security-2026-09-15.md).
+  The following paragraphs retain the original pre-repair assessment.
+
+- Source: ADR 0075 runtime dependency scan on 2026-09-12
+- Owner: Platform
+- Status: DEFERRED_HARDENING
+- Scope: Existing Nest platform-express dependency multer@2.2.0
+- Evidence: GHSA-wc9g-mqfw-jrwm, GHSA-qfvm-cv95-jqjf,
+  GHSA-qvfw-j98x-7q72 and GHSA-535w-7cp7-47q4; audit reports
+  3 high and 1 low advisories. The added MCP closure has no reported advisory.
+- Current product impact: No active source imports Multer or installs Nest
+  FileInterceptor/FilesInterceptor/AnyFilesInterceptor. Upload and Agent routes
+  use bounded JSON, and the MCP transport uses stdio. These multipart-specific
+  triggers are not reachable through supported routes.
+- Revisit when: A multipart route is proposed or the Nest dependency closure is
+  updated. Do not enable multipart with this version; evaluate the maintained
+  patched dependency and its exact license closure before that change.
+
 ## Entry Template
 
 ### DH-NNN: Short Title

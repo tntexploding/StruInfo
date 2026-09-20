@@ -7,8 +7,6 @@ import type {
 } from './evidence_contract.js';
 
 export const EVIDENCE_SNAPSHOT_PAGE_LIMIT = 200;
-/** @deprecated Use EVIDENCE_SNAPSHOT_PAGE_LIMIT for bounded public pages. */
-export const EVIDENCE_SNAPSHOT_LIST_LIMIT = EVIDENCE_SNAPSHOT_PAGE_LIMIT;
 
 export interface EvidenceSnapshotPageCursor {
   readonly capturedAt: string;

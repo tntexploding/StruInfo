@@ -1,6 +1,9 @@
 import type {EvidenceSnapshot} from '../api/m1c_api_contract.js';
 
 export type ProductSection =
+  | 'reports'
+  | 'settings'
+  | 'documents'
   | 'overview'
   | 'import'
   | 'split'

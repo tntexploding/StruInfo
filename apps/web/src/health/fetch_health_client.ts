@@ -1,6 +1,5 @@
 import {
   HealthConfigurationError,
-  HealthContractError,
   type HealthClient,
   type HealthFetch,
   HealthNetworkError,
@@ -8,6 +7,7 @@ import {
 } from './health_client.js';
 import {
   HEALTH_READINESS_PATH,
+  HealthContractError,
   parseHealthReadiness,
 } from './health_contract.js';
 

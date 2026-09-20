@@ -1,4 +1,6 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {WorkspaceActionRail} from '../components/workspace_action_rail.js';
+import {readingTitle, sourceShortName} from '../components/reading_text.js';
+import {useCallback, useEffect, useId, useMemo, useRef, useState} from 'react';
 
 import type {CSSProperties, KeyboardEvent} from 'react';
 
@@ -19,7 +21,10 @@ import {ActionNotice} from '../components/action_notice.js';
 import type {ActionFeedback} from '../components/product_types.js';
 import {describeInformationEntryFailure} from './information_entry_shared.js';
 import {InformationEntryAiAssociations} from './information_entry_ai_associations.js';
-import {formatBasisPointPercentage} from './information_entry_score.js';
+import {
+  formatBasisPointPercentage,
+  formatRuleSimilarity,
+} from './information_entry_score.js';
 import {createLatestRequestTracker} from './latest_request.js';
 
 type ReadyGraphResponse = Extract<
@@ -60,6 +65,7 @@ const SEMANTIC_KIND_OPTIONS: readonly Readonly<{
 ]);
 
 export interface FormalKnowledgeGraphWorkspaceProps {
+  readonly presentation?: 'document' | 'reading';
   readonly initialCenter?: Readonly<{entryId: string; includePrivate: boolean}>;
   readonly onReturnToQuery?: () => void;
   readonly onOpenSourceReview?: () => void;
@@ -101,6 +107,7 @@ export interface FormalKnowledgeGraphWorkspaceProps {
 }
 
 export function FormalKnowledgeGraphWorkspace({
+  presentation,
   initialCenter,
   onReturnToQuery,
   onOpenSourceReview,
@@ -113,12 +120,19 @@ export function FormalKnowledgeGraphWorkspace({
   onReviseEdge,
   onStartAiAssociationProposal,
 }: FormalKnowledgeGraphWorkspaceProps) {
+  const inspector = useRef<HTMLElement>(null);
   const [queryDraft, setQueryDraft] = useState('');
   const [activeQuery, setActiveQuery] = useState('');
   const [privacyScope, setPrivacyScope] = useState<PrivacyScope>(
     initialCenter?.includePrivate === true ? 'include_private' : 'public',
   );
-  const [viewMode, setViewMode] = useState<ViewMode>('graph');
+  const [viewMode, setViewMode] = useState<ViewMode>(() =>
+    presentation === 'document' ||
+    (typeof matchMedia === 'function' &&
+      matchMedia('(max-width: 47.9375rem)').matches)
+      ? 'list'
+      : 'graph',
+  );
   const [state, setState] = useState<GraphState>({status: 'loading'});
   const [selectedNodeId, setSelectedNodeId] = useState<string>();
   const [selectedEdgeKey, setSelectedEdgeKey] = useState<string>();
@@ -404,11 +418,16 @@ export function FormalKnowledgeGraphWorkspace({
   }
 
   return (
-    <div className="workspace-view formal-knowledge-workspace">
+    <div
+      className="workspace-view formal-knowledge-workspace"
+      data-presentation={presentation}
+    >
       <header className="workflow-page-heading">
         <div>
-          <h1>知识</h1>
-          {onOpenSourceReview === undefined ? null : (
+          <h1>专题</h1>
+        </div>
+        <div className="entry-command-actions">
+          {onOpenSourceReview === undefined || graph !== null ? null : (
             <button
               type="button"
               className="secondary-action"
@@ -429,16 +448,16 @@ export function FormalKnowledgeGraphWorkspace({
         </div>
       </header>
 
-      <aside className="workflow-mode-summary" aria-label="知识页操作指南">
-        <strong>查看知识</strong>
-        <span>1. 从右侧选择中心条目</span>
+      <details className="workflow-mode-summary" aria-label="知识页操作指南">
+        <summary>操作指南 · 查看知识</summary>
+        <span>1. 从上方选择中心条目</span>
         <span>2. 在中间查看关系图谱</span>
         <span>3. 在底部检查并编辑关系</span>
-      </aside>
+      </details>
 
       <section className="knowledge-command-panel" aria-label="选择知识中心">
         <form className="knowledge-search-form" onSubmit={submitSearch}>
-          <label className="field field--wide">
+          <label className="field">
             <span>搜索中心条目</span>
             <input
               type="search"
@@ -463,7 +482,7 @@ export function FormalKnowledgeGraphWorkspace({
             </select>
           </label>
           <button className="primary-action" type="submit">
-            设为知识中心
+            探索这个话题
           </button>
         </form>
         <div className="knowledge-view-switch" aria-label="知识展示方式">
@@ -547,15 +566,51 @@ export function FormalKnowledgeGraphWorkspace({
 
               <aside
                 className="knowledge-inspector"
+                ref={inspector}
                 aria-label="知识详情与关系编辑"
+                tabIndex={0}
               >
+                {presentation === 'document' ? null : (
+                  <WorkspaceActionRail
+                    page="topics"
+                    actions={[
+                      {
+                        id: 'details',
+                        label: '条目详情',
+                        onClick: () => {
+                          inspector.current
+                            ?.querySelector('.knowledge-node-inspector')
+                            ?.scrollIntoView({block: 'nearest'});
+                        },
+                      },
+                      {
+                        id: 'relations',
+                        label: '关系编辑',
+                        onClick: () => {
+                          inspector.current
+                            ?.querySelector('.knowledge-create-relation')
+                            ?.scrollIntoView({block: 'nearest'});
+                        },
+                      },
+                      {
+                        id: 'sources',
+                        label: '来源复核',
+                        disabled: onOpenSourceReview === undefined,
+                        onClick: () => {
+                          onOpenSourceReview?.();
+                        },
+                      },
+                    ]}
+                  />
+                )}
                 <NodeInspector
                   entry={selectedNode ?? graph.center}
                   onOpenEvidence={onOpenEvidence}
                   onRecenter={(entryId) => void readGraph(entryId)}
                   isCenter={
+                    presentation === 'document' ||
                     (selectedNode ?? graph.center).entryId ===
-                    graph.center.entryId
+                      graph.center.entryId
                   }
                 />
                 {selectedEdge === undefined ? null : (
@@ -652,12 +707,13 @@ function CandidateStrip({
             key={entry.entryId}
             type="button"
             aria-pressed={entry.entryId === activeEntryId}
+            title={entryTitle(entry)}
             onClick={() => {
               onSelect(entry.entryId);
             }}
           >
             <span>{(index + 1).toString().padStart(2, '0')}</span>
-            {entryTitle(entry)}
+            <strong>{entryTitle(entry)}</strong>
           </button>
         ))}
       </div>
@@ -713,6 +769,7 @@ export function InformationEntryRadialGraph({
   const [hoveredEdgeKey, setHoveredEdgeKey] = useState<string>();
   const [focusedEdgeKey, setFocusedEdgeKey] = useState<string>();
   const graphRef = useRef<HTMLDivElement>(null);
+  const markerId = useId();
   const connections = edges.flatMap((edge, index) => {
     const relatedId = otherEndpoint(edge, center.entryId);
     const related = nodesById.get(relatedId);
@@ -737,12 +794,10 @@ export function InformationEntryRadialGraph({
       return;
 
     const centerGraph = () => {
-      if (scrollport.scrollWidth <= scrollport.clientWidth) {
-        scrollport.scrollLeft = 0;
-        return;
-      }
       scrollport.scrollLeft =
-        (scrollport.scrollWidth - scrollport.clientWidth) / 2;
+        Math.max(0, scrollport.scrollWidth - scrollport.clientWidth) / 2;
+      scrollport.scrollTop =
+        Math.max(0, scrollport.scrollHeight - scrollport.clientHeight) / 2;
     };
 
     centerGraph();
@@ -757,6 +812,7 @@ export function InformationEntryRadialGraph({
   return (
     <div
       className="knowledge-graph"
+      data-compact={connections.length <= 2}
       role="group"
       aria-label="条目关系图"
       ref={graphRef}
@@ -771,7 +827,7 @@ export function InformationEntryRadialGraph({
         >
           <defs>
             <marker
-              id="knowledge-arrow"
+              id={markerId}
               viewBox="0 0 10 10"
               refX="8"
               refY="5"
@@ -784,7 +840,7 @@ export function InformationEntryRadialGraph({
           </defs>
           {connections.map(({edge, key, line}) => {
             const explanation = describeGraphEdge(edge);
-            const marker = graphEdgeMarkers(edge, center.entryId);
+            const marker = graphEdgeMarkers(edge, center.entryId, markerId);
             return (
               <g
                 className="knowledge-radial-edge"
@@ -792,7 +848,7 @@ export function InformationEntryRadialGraph({
                 data-selected={selectedEdgeKey === key}
                 role="button"
                 tabIndex={0}
-                aria-label={`${displayEdgeLabel(edge)}，${directionLabel(edge, center.entryId)}。${explanation}。联系强度 ${formatBasisPointPercentage(edge.effectiveScore)}，${originLabel(edge.origin)}。`}
+                aria-label={`${displayEdgeLabel(edge)}，${directionLabel(edge, center.entryId)}。${explanation}。${graphEdgeStatus(edge)}，${formatRuleSimilarity(edge.projection)}。`}
                 aria-pressed={selectedEdgeKey === key}
                 key={key}
                 onClick={() => {
@@ -865,7 +921,7 @@ export function InformationEntryRadialGraph({
       </button>
       {edges.length === 0 ? (
         <p className="knowledge-empty-neighborhood">
-          当前中心还没有可见关系。可在右侧搜索另一个条目并创建关系。
+          当前中心还没有可见关系。可在下方搜索另一个条目并创建关系。
         </p>
       ) : (
         <>
@@ -875,6 +931,7 @@ export function InformationEntryRadialGraph({
               type="button"
               data-knowledge-graph-related="true"
               style={graphNodeStyle(point)}
+              title={entryTitle(related)}
               aria-pressed={selectedNodeId === related.entryId}
               key={key}
               onClick={() => {
@@ -885,11 +942,9 @@ export function InformationEntryRadialGraph({
               }}
             >
               <small>
-                {displayEdgeLabel(edge)} ·{' '}
-                {formatBasisPointPercentage(edge.effectiveScore)}
+                {displayEdgeLabel(edge)} · {graphEdgeMetric(edge)}
               </small>
               <strong>{entryTitle(related)}</strong>
-              <span>{entrySummary(related)}</span>
             </button>
           ))}
           {connections.map(({edge, key, point}) =>
@@ -906,8 +961,8 @@ export function InformationEntryRadialGraph({
                 </strong>
                 <span>{describeGraphEdge(edge)}</span>
                 <small>
-                  {formatBasisPointPercentage(edge.effectiveScore)} ·{' '}
-                  {originLabel(edge.origin)}
+                  {graphEdgeStatus(edge)} ·{' '}
+                  {formatRuleSimilarity(edge.projection)}
                 </small>
               </div>
             ) : null,
@@ -940,7 +995,7 @@ function RelationListView({
       {edges.length === 0 ? (
         <p>当前没有可见关系。</p>
       ) : (
-        <ol>
+        <ol aria-label="当前中心的关系" tabIndex={0}>
           {edges.map((edge) => {
             const relatedId = otherEndpoint(edge, center.entryId);
             const related = nodesById.get(relatedId);
@@ -966,9 +1021,7 @@ function RelationListView({
                   }}
                 >
                   <strong>{entryTitle(related)}</strong>
-                  <small>
-                    {formatBasisPointPercentage(edge.effectiveScore)} 联系
-                  </small>
+                  <small>{graphEdgeMetric(edge)}</small>
                 </button>
               </li>
             );
@@ -1002,7 +1055,7 @@ function NodeInspector({
       <dl>
         <div>
           <dt>来源</dt>
-          <dd>{entry.sourceKey}</dd>
+          <dd>{sourceShortName(entry)}</dd>
         </div>
         <div>
           <dt>范围</dt>
@@ -1105,12 +1158,20 @@ function EdgeInspector({
       ) : edge.sourceReview?.reason === 'unbound' ? (
         <p role="status">这次来源核验未绑定条目版本，需要重新复核。</p>
       ) : null}
-      {edge.projection === undefined ? null : (
+      {edge.projection === undefined ? (
+        <p>未计算规则相似度</p>
+      ) : (
         <dl className="knowledge-edge-metrics">
           <div>
-            <dt>综合</dt>
-            <dd>{score(edge.effectiveScore)}</dd>
+            <dt>规则相似度</dt>
+            <dd>{score(edge.projection.baseScore)}</dd>
           </div>
+          {edge.effectiveScore === edge.projection.baseScore ? null : (
+            <div>
+              <dt>调整后推荐分</dt>
+              <dd>{score(edge.effectiveScore)}</dd>
+            </div>
+          )}
           <div>
             <dt>内容</dt>
             <dd>{score(edge.projection.contentSimilarity)}</dd>
@@ -1514,10 +1575,13 @@ function directionGlyph(
 }
 
 function radialGraphPoint(index: number, total: number): KnowledgeGraphPoint {
-  const angle = -Math.PI / 2 + (Math.PI * 2 * index) / Math.max(total, 1);
+  const leftCount = Math.ceil(total / 2);
+  const left = index < leftCount;
+  const count = left ? leftCount : total - leftCount;
+  const row = left ? index : index - leftCount;
   return {
-    x: KNOWLEDGE_GRAPH_CENTER.x + Math.cos(angle) * 400,
-    y: KNOWLEDGE_GRAPH_CENTER.y + Math.sin(angle) * 250,
+    x: left ? 140 : 860,
+    y: ((row + 0.5) / Math.max(count, 1)) * KNOWLEDGE_GRAPH_HEIGHT,
   };
 }
 
@@ -1577,8 +1641,9 @@ function graphTooltipStyle(
 function graphEdgeMarkers(
   edge: Readonly<InformationEntryGraphEdge>,
   centerEntryId: string,
+  markerId: string,
 ): Readonly<{start?: string; end?: string}> {
-  const marker = 'url(#knowledge-arrow)';
+  const marker = `url(#${markerId})`;
   if (edge.direction === 'symmetric') return {start: marker, end: marker};
   return directionLabel(edge, centerEntryId).startsWith('中心')
     ? {end: marker}
@@ -1608,7 +1673,7 @@ function describeGraphEdge(edge: Readonly<InformationEntryGraphEdge>): string {
   }
   if (note !== '') return note;
   if (calculatedReason !== '') return calculatedReason;
-  if (edge.origin === 'ai_assisted') return 'AI 提议后由用户保存';
+  if (edge.origin === 'ai_assisted') return 'AI 建立，未填写补充说明';
   if (edge.origin === 'user_created') return '由用户创建，未填写补充说明';
   if (edge.origin === 'user_edited') return '由用户调整，未填写补充说明';
   return '根据条目相似度自动建立';
@@ -1628,8 +1693,20 @@ function associationBasisLabel(
 function originLabel(origin: InformationEntryGraphEdge['origin']): string {
   if (origin === 'user_created') return '用户创建';
   if (origin === 'user_edited') return '用户编辑';
-  if (origin === 'ai_assisted') return 'AI 辅助';
+  if (origin === 'ai_assisted') return 'AI 建立';
   return '自动计算';
+}
+
+function graphEdgeStatus(edge: Readonly<InformationEntryGraphEdge>): string {
+  return edge.verificationStatus === 'calculated'
+    ? originLabel(edge.origin)
+    : `${originLabel(edge.origin)} · ${verificationLabel(edge.verificationStatus)}`;
+}
+
+function graphEdgeMetric(edge: Readonly<InformationEntryGraphEdge>): string {
+  return edge.projection === undefined
+    ? graphEdgeStatus(edge)
+    : formatRuleSimilarity(edge.projection);
 }
 
 function displayEdgeLabel(edge: Readonly<InformationEntryGraphEdge>): string {
@@ -1667,7 +1744,7 @@ function edgeKey(edge: Readonly<InformationEntryGraphEdge>): string {
 }
 
 function entryTitle(entry: Readonly<InformationEntry>): string {
-  return entry.value.titlePath.trim() || '未命名条目';
+  return readingTitle(entry.value.titlePath);
 }
 
 function entrySummary(entry: Readonly<InformationEntry>): string {
