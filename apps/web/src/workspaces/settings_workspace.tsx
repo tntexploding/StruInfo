@@ -3,9 +3,7 @@ import {WorkspaceActionRail} from '../components/workspace_action_rail.js';
 import {useWorkspaceUi} from '../components/use_workspace_ui.js';
 import {
   WORKSPACE_SIDEBAR_ACTIONS,
-  WORKSPACE_PAGE_LABELS,
   SIDEBAR_ACTION_LABELS,
-  type WorkspacePage,
   type WorkspaceUiPreferences,
 } from '../api/workspace_ui_preferences.js';
 import type {ProductSection} from '../components/product_types.js';
@@ -14,7 +12,6 @@ export function SettingsWorkspace({
   workflow,
   ai,
   maintenance,
-  onNavigate,
 }: {
   readonly workflow: ReactNode;
   readonly ai: ReactNode;
@@ -54,38 +51,6 @@ export function SettingsWorkspace({
           </div>
           <div hidden={section !== 'workflow'}>
             {visited.has('workflow') ? workflow : null}
-            <details className="workflow-tool-drawer">
-              <summary>批量处理与高级工具</summary>
-              <div className="entry-command-actions">
-                <button
-                  type="button"
-                  className="secondary-action"
-                  onClick={() => {
-                    onNavigate('split');
-                  }}
-                >
-                  批量结构工具
-                </button>
-                <button
-                  type="button"
-                  className="secondary-action"
-                  onClick={() => {
-                    onNavigate('tags');
-                  }}
-                >
-                  批量标签与待处理队列
-                </button>
-                <button
-                  type="button"
-                  className="secondary-action"
-                  onClick={() => {
-                    onNavigate('associations');
-                  }}
-                >
-                  联系维护
-                </button>
-              </div>
-            </details>
           </div>
           <div hidden={section !== 'ai'}>{visited.has('ai') ? ai : null}</div>
           <div hidden={section !== 'maintenance'}>
@@ -101,7 +66,9 @@ function InterfaceSettings() {
   return (
     <section className="interface-settings">
       <h2>页面与外观</h2>
-      <p>选择各页侧栏常用按钮并调整顺序。隐藏的功能仍可从“更多操作”进入。</p>
+      <p>
+        设置默认外观。各工作区直接围绕文档阅读与操作，布局宽度在使用时调整。
+      </p>
       {!ui.ready ? (
         <p>正在使用默认布局；读取成功后可以保存个人设置。</p>
       ) : (
@@ -125,23 +92,6 @@ function InterfaceSettingsForm({
   const ui = useWorkspaceUi();
   const [draft, setDraft] = useState(initial);
   const [busy, setBusy] = useState(false);
-  function update(page: WorkspacePage, actions: readonly string[]) {
-    setDraft((current) => ({
-      ...current,
-      sidebars: {...current.sidebars, [page]: actions},
-    }));
-  }
-  function move(page: WorkspacePage, id: string, delta: number) {
-    const values = [...draft.sidebars[page]],
-      index = values.indexOf(id),
-      next = index + delta;
-    if (index < 0 || next < 0 || next >= values.length) return;
-    const other = values[next];
-    if (other === undefined) return;
-    values[index] = other;
-    values[next] = id;
-    update(page, values);
-  }
   return (
     <form
       onSubmit={(event) => {
@@ -189,78 +139,9 @@ function InterfaceSettingsForm({
           恢复默认草稿
         </button>
       </div>
-      <div className="sidebar-preferences">
-        {(Object.keys(WORKSPACE_SIDEBAR_ACTIONS) as WorkspacePage[]).map(
-          (page) => {
-            const values = draft.sidebars[page],
-              all = [
-                ...values,
-                ...WORKSPACE_SIDEBAR_ACTIONS[page].filter(
-                  (id) => !values.includes(id),
-                ),
-              ];
-            return (
-              <fieldset key={page}>
-                <legend>{WORKSPACE_PAGE_LABELS[page]}</legend>
-                {all.map((id) => (
-                  <div className="sidebar-preference-row" key={id}>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={values.includes(id)}
-                        onChange={(event) => {
-                          update(
-                            page,
-                            event.currentTarget.checked
-                              ? [...values, id]
-                              : values.filter((v) => v !== id),
-                          );
-                        }}
-                      />
-                      {SIDEBAR_ACTION_LABELS[id]}
-                    </label>
-                    <button
-                      type="button"
-                      className="text-action"
-                      aria-label={
-                        WORKSPACE_PAGE_LABELS[page] +
-                        (SIDEBAR_ACTION_LABELS[id] ?? id) +
-                        '上移'
-                      }
-                      disabled={
-                        !values.includes(id) || values.indexOf(id) === 0
-                      }
-                      onClick={() => {
-                        move(page, id, -1);
-                      }}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      className="text-action"
-                      aria-label={
-                        WORKSPACE_PAGE_LABELS[page] +
-                        (SIDEBAR_ACTION_LABELS[id] ?? id) +
-                        '下移'
-                      }
-                      disabled={
-                        !values.includes(id) ||
-                        values.indexOf(id) === values.length - 1
-                      }
-                      onClick={() => {
-                        move(page, id, 1);
-                      }}
-                    >
-                      ↓
-                    </button>
-                  </div>
-                ))}
-              </fieldset>
-            );
-          },
-        )}
-      </div>
+      <p>
+        文档入口、工作台和报告的栏目宽度可直接拖动调整，并保存在当前浏览器。主要操作固定在正文下方，避免按钮位置随着配置变化。
+      </p>
       <p className="workflow-boundary-note">
         设置保存在当前外部工作区，并随个人数据包迁移。不会保存隐私可见范围。
       </p>

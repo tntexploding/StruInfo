@@ -1,3 +1,6 @@
+import type {InboxReviewTarget} from './inbox_review_state.js';
+import {useResizableColumns} from '../components/resizable_columns.js';
+import {InboxReceipts} from './inbox_receipts.js';
 import {DocumentIntakePanel} from './document_intake_panel.js';
 import {
   aiWorkflowCommand,
@@ -60,7 +63,8 @@ type LocalFileState =
 export interface MaterialsWorkspaceProps {
   readonly onOpenDocument?:
     ((snapshotId: string, includePrivate: boolean) => void) | undefined;
-  readonly presentation?: 'inbox' | 'maintenance';
+  readonly presentation?: 'inbox' | 'maintenance' | 'capture';
+  readonly reviewTarget?: InboxReviewTarget | undefined;
   readonly activity?: ReactNode;
   readonly onImport: (body: unknown) => Promise<ActionFeedback>;
   readonly onImportBatchItem?: (body: unknown) => Promise<ActionFeedback>;
@@ -91,6 +95,7 @@ export interface MaterialsWorkspaceProps {
 
 export function MaterialsWorkspace({
   presentation,
+  reviewTarget,
   onOpenDocument,
   activity,
   onImport,
@@ -107,6 +112,11 @@ export function MaterialsWorkspace({
   onReplaceSourceSubscriptions,
   onRunSourceSubscription,
 }: MaterialsWorkspaceProps) {
+  const {
+    root: columnsRef,
+    style: columnsStyle,
+    separator: columnSeparator,
+  } = useResizableColumns('inbox');
   const [inboxTool, setInboxTool] = useState<string>();
   const [visitedTools, setVisitedTools] = useState<ReadonlySet<string>>(
     new Set(),
@@ -114,6 +124,9 @@ export function MaterialsWorkspace({
   const toolReturn = useRef<HTMLElement | null>(null);
   const inbox = presentation === 'inbox';
   const maintenance = presentation === 'maintenance';
+  const capture = presentation === 'capture';
+  const [intakeReady, setIntakeReady] = useState(false);
+  const [intakeError, setIntakeError] = useState('');
   const [intakeRecords, setIntakeRecords] = useState<IntakeRecord[]>([]);
   const [reviewSnapshot, setReviewSnapshot] =
     useState<EvidenceSnapshotSummary>();
@@ -125,10 +138,16 @@ export function MaterialsWorkspace({
       const result = await aiWorkflowCommand<{records: IntakeRecord[]}>(
         'intake_status',
       );
-      if (current === intakeGeneration.current && Array.isArray(result.records))
+      if (!Array.isArray(result.records))
+        throw new Error('invalid_intake_response');
+      if (current === intakeGeneration.current) {
         setIntakeRecords(result.records);
+        setIntakeReady(true);
+        setIntakeError('');
+      }
     } catch {
-      /* The review panel presents load failures with a retry action. */
+      if (current === intakeGeneration.current)
+        setIntakeError('接收状态读取失败，请重试。');
     }
   }, [inbox]);
   useEffect(() => {
@@ -414,16 +433,26 @@ export function MaterialsWorkspace({
 
   return (
     <div
-      className={`workspace-view materials-workspace${inbox ? ' inbox-workspace' : ''}${maintenance ? ' materials-maintenance' : ''}`}
+      ref={columnsRef}
+      style={inbox ? columnsStyle : undefined}
+      className={`workspace-view materials-workspace${inbox ? ' inbox-workspace' : ''}${maintenance ? ' materials-maintenance' : ''}${capture ? ' capture-only' : ''}`}
     >
+      {inbox ? columnSeparator('end', '调整收件箱工具宽度') : null}
       <header className="workflow-page-heading">
         <div>
           <h1>{inbox ? '收件箱' : maintenance ? '数据备份与恢复' : '导入'}</h1>
           {inbox ? (
-            <p>在这里接收新材料。选中文档，进入资料库继续阅读与整理。</p>
+            <p>新订阅资料先在这里选择。接受后进入资料库，拒绝的资料可恢复。</p>
           ) : null}
         </div>
-        <button className="secondary-action" type="button" onClick={onRefresh}>
+        <button
+          className="secondary-action"
+          type="button"
+          onClick={() => {
+            onRefresh();
+            void loadIntake();
+          }}
+        >
           刷新材料列表
         </button>
       </header>
@@ -907,30 +936,60 @@ export function MaterialsWorkspace({
                 />
                 查看隐私文档
               </label>
-              <span className="record-count">{snapshots.value.length} 条</span>
+              <span className="record-count">
+                {inbox
+                  ? intakeRecords
+                      .filter((record) => record.value.receipt === 'pending')
+                      .length.toString() + ' 份待接受'
+                  : snapshots.value.length.toString() + ' 条'}
+              </span>
             </div>
           ) : null}
         </header>
-        <SnapshotList
-          snapshots={snapshots}
-          selectedSnapshotId={selectedSnapshotId}
-          onOpenEvidence={onOpenEvidence}
-          onOpenDocument={onOpenDocument}
-          onStartImport={() => {
-            if (inbox) openInboxTool('import');
-            importHeading.current?.focus();
-          }}
-          showPrivateDocuments={showPrivateDocuments}
-          intakeRecords={intakeRecords}
-          {...(inbox
-            ? {
-                onReview: (snapshot: EvidenceSnapshotSummary) => {
-                  setReviewSnapshot(snapshot);
-                  openInboxTool('review');
-                },
-              }
-            : {})}
-        />
+        {inbox ? (
+          <InboxReceipts
+            reviewTarget={reviewTarget}
+            snapshots={snapshots}
+            records={intakeRecords}
+            ready={intakeReady}
+            error={intakeError}
+            showPrivate={showPrivateDocuments}
+            onReload={() => {
+              void loadIntake();
+            }}
+            onChanged={async (records) => {
+              setIntakeRecords((current) => [
+                ...records,
+                ...current.filter(
+                  (row) =>
+                    !records.some(
+                      (record) => record.snapshotId === row.snapshotId,
+                    ),
+                ),
+              ]);
+              await loadIntake();
+              onRefresh();
+            }}
+            onRead={onOpenEvidence}
+            onOpenDocument={onOpenDocument}
+            onReview={(snapshot) => {
+              setReviewSnapshot(snapshot);
+              openInboxTool('review');
+            }}
+          />
+        ) : (
+          <SnapshotList
+            snapshots={snapshots}
+            selectedSnapshotId={selectedSnapshotId}
+            onOpenEvidence={onOpenEvidence}
+            onOpenDocument={onOpenDocument}
+            onStartImport={() => {
+              importHeading.current?.focus();
+            }}
+            showPrivateDocuments={showPrivateDocuments}
+            intakeRecords={intakeRecords}
+          />
+        )}
       </section>
 
       {inbox && reviewSnapshot ? (
@@ -950,7 +1009,15 @@ export function MaterialsWorkspace({
                   onRefresh();
                 }}
                 onOpenDocument={(id) => {
-                  onOpenDocument?.(id, false);
+                  const record = intakeRecords.find(
+                    (row) => row.snapshotId === reviewSnapshot.snapshotId,
+                  );
+                  if (
+                    record?.value.receipt &&
+                    record.value.receipt !== 'accepted'
+                  )
+                    onOpenEvidence(id);
+                  else onOpenDocument?.(id, false);
                 }}
               />
             ) : null}
@@ -1117,7 +1184,10 @@ function SnapshotList({
   const [intakeFilter, setIntakeFilter] = useState('');
   const intakeFor = (id: string) =>
     intakeRecords.find(
-      (r) => r.snapshotId === id || r.value.preparedSnapshotId === id,
+      (r) =>
+        r.snapshotId === id ||
+        r.value.preparedSnapshotId === id ||
+        r.value.previousPreparedSnapshotIds?.includes(id),
     );
   const [requestedPage, setRequestedPage] = useState(0);
   const query = filter.trim().toLowerCase();

@@ -330,6 +330,7 @@ export function InformationEntryResults({
           {state.response.items.map(
             ({
               association,
+              aliasMatches,
               entry,
               filterReasons,
               matchReasons,
@@ -367,6 +368,14 @@ export function InformationEntryResults({
                             {scorePercentage(textMatch.score)}/100
                           </>
                         )}
+                      </em>
+                    ) : null}
+                    {aliasMatches?.length ? (
+                      <em className="entry-result-list__matches">
+                        确认别名：
+                        {aliasMatches
+                          .map(({query, tag}) => `${query} → ${tag}`)
+                          .join(' / ')}
                       </em>
                     ) : null}
                     {semanticMatch === undefined ? null : (
@@ -543,8 +552,10 @@ function matchReasonLabel(value: string): string {
       return '中文译文标题';
     case 'translation_body':
       return '中文译文正文';
+    case 'content_keyword_alias':
+      return '确认别名（标签）';
     case 'content_keyword':
-      return '内容词';
+      return '原标签';
     case 'type_keyword':
       return '类型';
     case 'domain_keyword':

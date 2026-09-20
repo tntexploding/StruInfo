@@ -2,10 +2,10 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "StruInfo-v0.2.0-npm-closure",
-  "documentNamespace": "https://struinfo.invalid/spdx/releases/v0.2.0/npm-closure",
+  "name": "StruInfo-v0.3.0-npm-closure",
+  "documentNamespace": "https://struinfo.invalid/spdx/releases/v0.3.0/npm-closure",
   "creationInfo": {
-    "created": "2026-09-05T00:00:00Z",
+    "created": "2026-09-20T00:00:00Z",
     "creators": [
       "Tool: StruInfo M0-S Maintenance audit-npm-closure.mjs",
       "Tool: M0-S-FOUNDATION-MAINT-001 exact-closure materialization",
@@ -24,14 +24,14 @@
     {
       "SPDXID": "SPDXRef-RootPackage",
       "name": "struinfo",
-      "versionInfo": "0.2.0",
+      "versionInfo": "0.3.0",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
       "licenseDeclared": "MIT",
       "copyrightText": "NOASSERTION",
       "primaryPackagePurpose": "APPLICATION",
-      "comment": "Dependency inventory for the v0.2.0 maintenance release. UI-READING-20260908 reuses the already included mdast-util-from-markdown 2.0.3 runtime closure in apps/web in addition to apps/server; no package identities or integrity values change. Container operating-system packages are reported separately by the runtime image scan."
+      "comment": "Dependency inventory for the v0.3.0 document workflow release. The admitted lockfile and dependency identities are unchanged from the prior source baseline. UI-READING-20260908 reuses the already included mdast-util-from-markdown 2.0.3 runtime closure in apps/web in addition to apps/server; no package identities or integrity values change. Container operating-system packages are reported separately by the runtime image scan."
     },
     {
       "SPDXID": "SPDXRef-Package-2c8152c2f849b2d0",

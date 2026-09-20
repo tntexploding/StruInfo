@@ -1,3 +1,4 @@
+import {receiptTaskStatus} from './use_inbox_ai_review.js';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {
   aiWorkflowCommand,
@@ -25,6 +26,7 @@ export function DocumentIntakePanel({
 }) {
   const [record, setRecord] = useState<IntakeRecord>();
   const [task, setTask] = useState<AiTask>();
+  const [receiptTask, setReceiptTask] = useState<AiTask>();
   const [ready, setReady] = useState(false);
   const [reason, setReason] = useState('');
   const [message, setMessage] = useState('');
@@ -42,12 +44,22 @@ export function DocumentIntakePanel({
       const row = intake.records.find(
         (r) =>
           r.snapshotId === snapshotId ||
-          r.value.preparedSnapshotId === snapshotId,
+          r.value.preparedSnapshotId === snapshotId ||
+          r.value.previousPreparedSnapshotIds?.includes(snapshotId),
       );
       setRecord(row);
       setTask(
         tasks.find(
-          (t) => t.request.snapshotId === (row?.snapshotId ?? snapshotId),
+          (t) =>
+            t.request.kind === 'document' &&
+            t.request.snapshotId === (row?.snapshotId ?? snapshotId),
+        ),
+      );
+      setReceiptTask(
+        tasks.find(
+          (t) =>
+            ['intake', 'document'].includes(t.request.kind) &&
+            t.request.snapshotId === (row?.snapshotId ?? snapshotId),
         ),
       );
       setReady(true);
@@ -62,7 +74,11 @@ export function DocumentIntakePanel({
     const timer = globalThis.setTimeout(() => {
       void load();
     }, 0);
+    const interval = globalThis.setInterval(() => {
+      if (document.visibilityState === 'visible') void load();
+    }, 5000);
     return () => {
+      globalThis.clearInterval(interval);
       invalidate();
       globalThis.clearTimeout(timer);
     };
@@ -84,9 +100,39 @@ export function DocumentIntakePanel({
   }
   const root = record?.snapshotId ?? snapshotId;
   const decision = record?.value.decision ?? 'pending';
+  const awaitingReceipt = Boolean(
+    record?.value.receipt && record.value.receipt !== 'accepted',
+  );
+  const bodySource =
+    record?.value.bodySource ??
+    (record?.value.preparedSnapshotId ? 'web_article' : 'received');
+  const bodyLocked =
+    busy ||
+    !ready ||
+    decision === 'blocked' ||
+    Boolean(
+      task &&
+      (['queued', 'running'].includes(task.state.status) ||
+        task.state.steps.some((step) => step.kind === 'split')),
+    );
+  function selectBody(source: 'received' | 'web_article', refresh = false) {
+    void act(
+      'intake_prepare',
+      {
+        snapshotId: root,
+        selection: {source, refresh, expectedVersion: record?.version ?? 0},
+      },
+      '正文已准备，请核对状态后继续审核。',
+    );
+  }
   return (
     <section className="ai-workflow-panel" aria-busy={busy}>
       <h3>{title}</h3>
+      {awaitingReceipt ? (
+        <p>
+          这份资料仍在文档入口，可人工接受或交给 AI 审核；通过后继续整理入库。
+        </p>
+      ) : null}
       <p>
         <strong>{ready ? INTAKE_LABELS[decision] : '正在读取…'}</strong>
         {record?.value.origin === 'manual'
@@ -134,6 +180,67 @@ export function DocumentIntakePanel({
           </button>
         ) : null}
       </div>
+      <p>
+        用于整理的正文：
+        {bodySource === 'received' ? '接收原文 / RSS' : '网页正文'}
+      </p>
+      <div
+        className="entry-command-actions"
+        role="group"
+        aria-label="选择整理正文"
+      >
+        <button
+          type="button"
+          className="secondary-action"
+          disabled={
+            bodyLocked || (bodySource === 'received' && decision !== 'held')
+          }
+          onClick={() => {
+            selectBody('received');
+          }}
+        >
+          改用接收原文
+        </button>
+        {record?.value.preparedSnapshotId ? (
+          <button
+            type="button"
+            className="secondary-action"
+            disabled={
+              bodyLocked ||
+              (bodySource === 'web_article' && decision !== 'held')
+            }
+            onClick={() => {
+              selectBody('web_article');
+            }}
+          >
+            改用网页正文
+          </button>
+        ) : null}
+      </div>
+      <p className="workflow-boundary-note">
+        切换正文后重新审核；不会人工放行，也不会自动启动任务。已有原文与抓取记录保留。
+      </p>
+      {record?.value.previousPreparedSnapshotIds?.length ? (
+        <details>
+          <summary>
+            过往网页抓取 · {record.value.previousPreparedSnapshotIds.length}
+          </summary>
+          <div className="entry-command-actions">
+            {record.value.previousPreparedSnapshotIds.map((id, index) => (
+              <button
+                key={id}
+                type="button"
+                className="text-action"
+                onClick={() => {
+                  onOpenDocument(id);
+                }}
+              >
+                阅读第 {index + 1} 次抓取
+              </button>
+            ))}
+          </div>
+        </details>
+      ) : null}
       <label className="field">
         <span>人工决定的原因（选填）</span>
         <textarea
@@ -212,22 +319,17 @@ export function DocumentIntakePanel({
         <button
           type="button"
           className="secondary-action"
-          disabled={
-            busy ||
-            !ready ||
-            decision === 'blocked' ||
-            decision === 'held' ||
-            Boolean(record?.value.preparedSnapshotId)
-          }
+          disabled={bodyLocked}
           onClick={() => {
-            void act(
-              'intake_prepare',
-              {snapshotId: root},
-              '全文获取已完成，请查看接收状态。',
+            selectBody(
+              'web_article',
+              Boolean(record?.value.preparedSnapshotId),
             );
           }}
         >
-          获取网页正文
+          {record?.value.preparedSnapshotId
+            ? '重新获取网页正文'
+            : '获取网页正文'}
         </button>
         {task && !['succeeded', 'cancelled'].includes(task.state.status) ? (
           <button
@@ -235,6 +337,7 @@ export function DocumentIntakePanel({
             className="primary-action"
             disabled={
               busy ||
+              awaitingReceipt ||
               !['failed', 'paused'].includes(task.state.status) ||
               decision === 'blocked' ||
               decision === 'held'
@@ -262,6 +365,7 @@ export function DocumentIntakePanel({
               !ready ||
               decision === 'blocked' ||
               decision === 'held' ||
+              awaitingReceipt ||
               task?.state.status === 'succeeded'
             }
             onClick={() => {
@@ -313,6 +417,64 @@ export function DocumentIntakePanel({
             ? ' · ' + aiError(new Error(task.state.errorCode))
             : ''}
         </p>
+      ) : null}
+      {receiptTask ? (
+        <section aria-label="AI 接收审核任务">
+          <h4>AI 接收审核</h4>
+          <p>
+            {receiptTaskStatus(receiptTask)} · {receiptTask.state.calls}{' '}
+            次调用尝试
+          </p>
+          {receiptTask.state.errorCode ? (
+            <p>{aiError(new Error(receiptTask.state.errorCode))}</p>
+          ) : null}
+          {!['succeeded', 'cancelled'].includes(receiptTask.state.status) ? (
+            <div className="entry-command-actions">
+              <button
+                type="button"
+                className="secondary-action"
+                disabled={busy}
+                onClick={() => {
+                  void act(
+                    'task_control',
+                    {
+                      taskId: receiptTask.taskId,
+                      expectedVersion: receiptTask.version,
+                      action: ['failed', 'paused'].includes(
+                        receiptTask.state.status,
+                      )
+                        ? 'resume'
+                        : 'pause',
+                    },
+                    '接收审核任务已更新。',
+                  );
+                }}
+              >
+                {['failed', 'paused'].includes(receiptTask.state.status)
+                  ? '继续接收审核'
+                  : '暂停接收审核'}
+              </button>
+              <button
+                type="button"
+                className="text-action"
+                disabled={busy}
+                onClick={() => {
+                  void act(
+                    'task_control',
+                    {
+                      taskId: receiptTask.taskId,
+                      expectedVersion: receiptTask.version,
+                      action: 'cancel',
+                    },
+                    '接收审核已取消。',
+                  );
+                }}
+              >
+                取消接收审核
+              </button>
+            </div>
+          ) : null}
+        </section>
       ) : null}
       <p role="status">{message}</p>
     </section>

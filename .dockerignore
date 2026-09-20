@@ -27,3 +27,6 @@ backups
 apps/server/test_support
 tests
 tools
+
+.playwright-cli
+参考.png

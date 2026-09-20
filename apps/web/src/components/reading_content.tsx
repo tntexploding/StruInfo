@@ -9,6 +9,14 @@ import {
   type MarkdownNode,
 } from './reading_text.js';
 
+export interface ReadingBoundary {
+  readonly offset: number;
+  readonly label: string;
+  readonly separator?: boolean;
+  readonly annotation?: ReactNode;
+}
+const NO_BOUNDARIES: readonly ReadingBoundary[] = [];
+
 export function ReadingContent({
   text,
   baseUri,
@@ -17,6 +25,8 @@ export function ReadingContent({
   scrollLabel,
   scrollMemory,
   active = true,
+  boundaries = NO_BOUNDARIES,
+  leadingContent,
 }: {
   readonly text: string;
   readonly baseUri?: string | undefined;
@@ -24,6 +34,8 @@ export function ReadingContent({
   readonly lang?: string | undefined;
   readonly scrollLabel?: string | undefined;
   readonly active?: boolean;
+  readonly boundaries?: readonly ReadingBoundary[];
+  readonly leadingContent?: ReactNode;
   readonly scrollMemory?:
     | Readonly<{key: string; positions: RefObject<Map<string, number>>}>
     | undefined;
@@ -45,10 +57,88 @@ export function ReadingContent({
     if (node.type === 'definition')
       definitions.set(node.identifier.toLowerCase(), node.url);
   }
-  const render = (node: MarkdownNode): ReactNode => {
-    const children = node.children?.map((child, index) => (
-      <Fragment key={index}>{render(child)}</Fragment>
-    ));
+  const marker = (boundary: ReadingBoundary) => (
+    <Fragment key={boundary.offset}>
+      {boundary.separator !== false ? (
+        <span
+          className="reading-split-boundary"
+          role="separator"
+          aria-label={'拆分边界：' + boundary.label}
+        >
+          <span aria-hidden="true">{boundary.label}</span>
+        </span>
+      ) : null}
+      {boundary.annotation ? (
+        <span className="reading-split-annotation">{boundary.annotation}</span>
+      ) : null}
+    </Fragment>
+  );
+  const renderNodes = (
+    nodes: readonly MarkdownNode[],
+    marks: readonly ReadingBoundary[],
+  ): ReactNode => {
+    let remaining = marks;
+    const result: ReactNode[] = [];
+    for (const [index, node] of nodes.entries()) {
+      const start = node.position?.start.offset ?? 0;
+      const end = node.position?.end.offset ?? start;
+      const before = remaining.filter((m) => m.offset <= start);
+      const inside = remaining.filter(
+        (m) => m.offset > start && m.offset < end,
+      );
+      remaining = remaining.filter((m) => m.offset >= end && m.offset > start);
+      result.push(
+        <Fragment key={index}>
+          {node.type === 'listItem' ? (
+            render(node, inside, before)
+          ) : (
+            <>
+              {before.map(marker)}
+              {render(node, inside)}
+            </>
+          )}
+        </Fragment>,
+      );
+    }
+    return (
+      <>
+        {result}
+        {remaining.map(marker)}
+      </>
+    );
+  };
+  const render = (
+    node: MarkdownNode,
+    marks: readonly ReadingBoundary[],
+    leading: readonly ReadingBoundary[] = NO_BOUNDARIES,
+  ): ReactNode => {
+    const children = node.children
+      ? renderNodes(node.children, marks)
+      : undefined;
+    // A cut within a raw Markdown leaf stays at its exact source offset, including escaped text.
+    if (
+      !node.children &&
+      marks.length &&
+      node.position?.start.offset !== undefined &&
+      node.position.end.offset !== undefined
+    ) {
+      const start = node.position.start.offset;
+      const end = node.position.end.offset;
+      const parts: ReactNode[] = [];
+      let cursor = start;
+      for (const point of marks) {
+        parts.push(text.slice(cursor, point.offset), marker(point));
+        cursor = point.offset;
+      }
+      parts.push(text.slice(cursor, end));
+      return node.type === 'code' ? (
+        <pre>
+          <code>{parts}</code>
+        </pre>
+      ) : (
+        <>{parts}</>
+      );
+    }
     switch (node.type) {
       case 'text':
         return node.value;
@@ -80,7 +170,12 @@ export function ReadingContent({
           <ul>{children}</ul>
         );
       case 'listItem':
-        return <li>{children}</li>;
+        return (
+          <li>
+            {leading.map(marker)}
+            {children}
+          </li>
+        );
       case 'break':
         return <br />;
       case 'thematicBreak':
@@ -130,13 +225,20 @@ export function ReadingContent({
       tabIndex={scrollLabel === undefined ? undefined : 0}
       data-scrollable={scrollLabel !== undefined}
     >
-      {document.children.map((node, index) =>
-        index === 0 &&
-        node.type === 'heading' &&
-        omitLeadingTitle !== undefined &&
-        plainText(node).trim() === readingTitle(omitLeadingTitle) ? null : (
-          <Fragment key={index}>{render(node)}</Fragment>
+      {leadingContent ? (
+        <div className="reading-content__lead">{leadingContent}</div>
+      ) : null}
+      {renderNodes(
+        document.children.filter(
+          (node, index) =>
+            !(
+              index === 0 &&
+              node.type === 'heading' &&
+              omitLeadingTitle !== undefined &&
+              plainText(node).trim() === readingTitle(omitLeadingTitle)
+            ),
         ),
+        boundaries,
       )}
     </div>
   );

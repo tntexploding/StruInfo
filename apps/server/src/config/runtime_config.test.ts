@@ -202,7 +202,7 @@ describe('parseRuntimeConfig', () => {
     });
     expect(embeddingOnly.aiProposalProvider).toBeUndefined();
     expect(embeddingOnly.embeddingProvider).toEqual({
-      providerKey: 'openai-embeddings-v1',
+      providerKey: 'openai-embeddings-v2',
       model: 'text-embedding-synthetic',
       apiKey: 'synthetic-openai-key',
       maximumBatchSize: 32,

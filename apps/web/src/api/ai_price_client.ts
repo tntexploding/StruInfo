@@ -1,5 +1,5 @@
 export interface AiPriceStatus {
-  policy: {revision: number; enabled: boolean};
+  policy: {revision: number; enabled: boolean; operationsAllowed?: boolean};
   rule: string;
   timeZone: 'Asia/Shanghai';
   provider: string | null;
@@ -10,7 +10,7 @@ export interface AiPriceStatus {
   nextAllowedAt: string | null;
 }
 export async function aiPriceCommand(
-  operation: 'ai_price_status' | 'ai_price_save',
+  operation: 'ai_price_status' | 'ai_price_save' | 'ai_operations_save',
   input: object = {},
 ): Promise<AiPriceStatus> {
   const response = await fetch('/api/v1/ai-price/commands', {
@@ -29,6 +29,8 @@ export async function aiPriceCommand(
     !Number.isSafeInteger(policy.revision) ||
     policy.revision < 0 ||
     typeof policy.enabled !== 'boolean' ||
+    (policy.operationsAllowed !== undefined &&
+      typeof policy.operationsAllowed !== 'boolean') ||
     typeof result.blocked !== 'boolean' ||
     typeof result.applicable !== 'boolean' ||
     typeof result.peak !== 'boolean' ||
@@ -45,7 +47,11 @@ export async function aiPriceCommand(
     );
   }
   return {
-    policy: {revision: policy.revision, enabled: policy.enabled},
+    policy: {
+      revision: policy.revision,
+      enabled: policy.enabled,
+      operationsAllowed: policy.operationsAllowed !== false,
+    },
     rule: result.rule,
     timeZone: result.timeZone,
     provider: result.provider,

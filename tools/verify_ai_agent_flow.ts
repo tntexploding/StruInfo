@@ -3,6 +3,11 @@ import {ReportCommands} from '../apps/server/src/application/report_commands.js'
 import {reportRequestSchema} from '../apps/server/src/application/report_contract.js';
 import {PostgresReportRepository} from '../apps/server/src/platform/database/postgresql/postgres_report_repository.js';
 import assert from 'node:assert/strict';
+import {
+  DocumentPublicationService,
+  publishedEntryRepository,
+  unpublishedSnapshots,
+} from '../apps/server/src/application/document_publication.js';
 import {DocumentIntakeService} from '../apps/server/src/application/document_intake_service.js';
 import {PostgresDocumentIntakeRepository} from '../apps/server/src/platform/database/postgresql/postgres_document_intake_repository.js';
 import {PostgresM1cDomainTransferRepository} from '../apps/server/src/platform/database/postgresql/postgres_workspace_transfer_repository.js';
@@ -268,7 +273,60 @@ try {
   });
   mark('source scope, catalog CAS and private sibling preservation');
 
+  const receiptRepository = new PostgresDocumentIntakeRepository(runtime, w);
+  let receiptCalls = 0;
+  const receiptIntelligence = {
+    model: 'synthetic-model',
+    reviewIntake: () => {
+      receiptCalls++;
+      return Promise.resolve({
+        decision: 'admit' as const,
+        completeness: 'complete' as const,
+        contentKind: 'article' as const,
+        reason: 'Synthetic complete material.',
+      });
+    },
+    planRecall: () =>
+      Promise.reject(new Error('Receipt review must not recall')),
+  };
+  const receiptIntake = new DocumentIntakeService({
+    provider: receiptIntelligence,
+    workspaceId: w,
+    repository: receiptRepository,
+    evidence: repo.evidenceRead,
+    capture: repo.evidence,
+    blobStore,
+    readWeb: () =>
+      Promise.reject(new Error('Synthetic receipt must not fetch')),
+    assertBodyChangeAllowed: async (ids) => {
+      assert(
+        !(await repo.informationEntries.loadCurrentEntries(w, false)).some(
+          (entry) => ids.includes(entry.snapshotId),
+        ),
+      );
+    },
+  });
+  const taskRepo = new PostgresAgentTaskRepository(runtime);
+  const publication = new DocumentPublicationService(
+    w,
+    receiptRepository,
+    receiptIntake,
+    repo.informationEntries,
+    () => taskRepo.listPublicationTasks(w),
+  );
+  const knowledgeEntries = publishedEntryRepository(
+    repo.informationEntries,
+    async (entries) =>
+      unpublishedSnapshots(
+        await receiptRepository.list(),
+        await taskRepo.listPublicationTasks(w),
+        entries,
+      ),
+  );
   const common = {
+    publication,
+    intelligence: receiptIntelligence,
+    intake: receiptIntake,
     workspaceId: w,
     evidence: repo.evidenceRead,
     entries: repo.informationEntries,
@@ -337,7 +395,6 @@ try {
       },
     },
   });
-  const taskRepo = new PostgresAgentTaskRepository(runtime);
   const tasks = new AgentTaskService(
     w,
     taskRepo,
@@ -357,6 +414,7 @@ try {
           maxEntries: policy.settings.maxEntries,
           maxRelations: policy.settings.maxRelations,
           maxModelCalls: policy.settings.maxModelCalls,
+          intake: policy.settings.intake ?? {fetchFullText: true},
         }),
       read: (id) => tasks.read(auto, id),
       resume: (t) => tasks.control(auto, t.taskId, t.version, 'resume'),
@@ -369,6 +427,8 @@ try {
     ...ingestionSettingsSchema.parse({}),
     enabled: true,
     manualUploads: true,
+    paused: true,
+    intake: {fetchFullText: false},
     model: metadata.model,
     subscriptionIds: [sub],
     maxEntries: 12,
@@ -385,6 +445,51 @@ try {
     imported.runId,
   );
   await ingestion.poll();
+  assert.equal(providerCalls, 0);
+  assert.equal((await queue.read(snapshotId))?.taskId, undefined);
+  assert.equal(
+    (await receiptRepository.read(snapshotId))?.value.receipt,
+    'pending',
+  );
+  assert.equal((await queue.list(true, 25)).length, 1);
+  const receiptTask = await tasks.start(owner, 'receipt-only', {
+    kind: 'intake',
+    snapshotId,
+    expectedVersion: 1,
+    intake: {fetchFullText: false},
+  });
+  await settled(tasks);
+  assert.equal(
+    (await tasks.read(owner, receiptTask.taskId)).state.status,
+    'succeeded',
+  );
+  assert.equal(receiptCalls, 1);
+  assert.equal(
+    (await receiptRepository.read(snapshotId))?.value.deferProcessing,
+    true,
+  );
+  assert.equal(
+    (await repo.informationEntries.loadCurrentEntries(w, false)).filter(
+      (e) => e.snapshotId === snapshotId,
+    ).length,
+    0,
+  );
+  await ingestion.poll();
+  assert.equal(providerCalls, 0);
+  assert.equal((await queue.read(snapshotId))?.taskId, undefined);
+  assert.equal((await queue.list(true, 25)).length, 0);
+  const decision = await receiptIntake.receive(
+    [{snapshotId, expectedVersion: 3}],
+    'accept',
+  );
+  assert.equal(decision.failed.length, 0);
+  assert.equal(decision.records[0]?.value.decision, 'admitted');
+  assert.equal(decision.records[0].value.deferProcessing, undefined);
+  await ingestion.savePolicy(owner, policy.revision, {
+    ...policy.settings,
+    paused: false,
+  });
+  await ingestion.poll();
   await settled(tasks);
   await ingestion.poll();
   const completed = await queue.read(snapshotId);
@@ -393,6 +498,16 @@ try {
     await repo.informationEntries.loadCurrentEntries(w, false)
   ).filter((e) => e.snapshotId === snapshotId);
   assert(entries.length >= 2);
+  assert.equal(
+    (await receiptRepository.read(snapshotId))?.value.publication?.origin,
+    'internal_ai',
+  );
+  assert.equal(
+    (await knowledgeEntries.loadCurrentEntries(w, false)).filter(
+      (e) => e.snapshotId === snapshotId,
+    ).length,
+    entries.length,
+  );
   assert(
     entries.every(
       (e) =>
@@ -414,7 +529,7 @@ try {
   assert.equal(unchanged.outcome, 'unchanged');
   assert.equal((await queue.list(false, 100)).length, 1);
   mark(
-    'subscription → durable queue → split → tags → relations; replay and actual call accounting',
+    'subscription → inbox pending → legacy receipt-only AI acceptance → owner processing choice → durable queue → split → tags → relations → publication; replay and actual call accounting',
   );
 
   failSplit = true;
@@ -441,8 +556,17 @@ try {
   await settled(tasks);
   await ingestion.poll();
   assert.equal((await queue.read(failure.snapshotId))?.status, 'completed');
+  assert.equal(
+    (await receiptRepository.read(failure.snapshotId))?.value.receipt,
+    'accepted',
+  );
+  assert.equal(
+    (await receiptRepository.read(failure.snapshotId))?.value.publication
+      ?.origin,
+    'internal_ai',
+  );
   mark(
-    'provider failure retains capture; explicit retry reuses durable task and completes',
+    'new pending receipt runs unified AI review; provider failure retains capture; explicit retry reuses the task and publishes',
   );
 
   const saved = await queue.policy();
@@ -457,6 +581,8 @@ try {
   );
   services.push(externalTasks);
   const useCases = {
+    knowledgeEntries,
+    documentIntakeRepository: receiptRepository,
     blobStore,
     evidenceReadRepository: repo.evidenceRead,
     informationEntryRepository: repo.informationEntries,
@@ -472,6 +598,7 @@ try {
     relations: new RelationUseCases(agent, useCases),
     tasks: externalTasks,
     capture,
+    publication,
   });
   const external = await capture.importText(agent, {
     requestKey: 'external',
@@ -515,6 +642,15 @@ try {
       })),
     },
   };
+  assert.equal(
+    (
+      await receiptIntake.receive(
+        [{snapshotId: external.snapshotId, expectedVersion: 1}],
+        'accept',
+      )
+    ).failed.length,
+    0,
+  );
   const externalRun = await externalTasks.start(
     agent,
     'external-split',
@@ -573,6 +709,18 @@ try {
     (await externalTasks.read(agent, linkTask.taskId)).state.calls,
     0,
   );
+  await assert.rejects(
+    () => commands.execute('entry_read', {entryId: first.entryId}),
+    {code: 'information_entry_not_found'},
+  );
+  await commands.execute('document_publish', {
+    snapshotId: external.snapshotId,
+    expectedEntries: (
+      await repo.informationEntries.loadCurrentEntries(w, false)
+    )
+      .filter((entry) => entry.snapshotId === external.snapshotId)
+      .map((entry) => ({entryId: entry.entryId, revision: entry.revision})),
+  });
   assert(
     await commands.execute('entries_search', {
       text: 'synthetic',
@@ -592,6 +740,15 @@ try {
     markdown: sourceText,
   });
   assert('snapshotId' in invalid);
+  assert.equal(
+    (
+      await receiptIntake.receive(
+        [{snapshotId: invalid.snapshotId, expectedVersion: 1}],
+        'accept',
+      )
+    ).failed.length,
+    0,
+  );
   const bad = await externalTasks.start(agent, 'invalid-partition', {
     kind: 'split',
     snapshotId: invalid.snapshotId,
@@ -688,6 +845,14 @@ try {
     capture: repo.evidence,
     blobStore,
     provider: syntheticIntelligence,
+    assertBodyChangeAllowed: async (ids) => {
+      assert.equal(
+        (await repo.informationEntries.loadCurrentEntries(w, true)).some(
+          (entry) => ids.includes(entry.snapshotId),
+        ),
+        false,
+      );
+    },
     readWeb: () => {
       fullFetches++;
       return Promise.resolve({
@@ -743,6 +908,42 @@ try {
       )
     ).status,
     'created',
+  );
+  const preparationPolicy = {
+    fetchFullText: true,
+    blockedKinds: [],
+    preferredTopics: [],
+    excludedTopics: [],
+  };
+  const firstCapture = await intake.prepare(intakeSource, preparationPolicy);
+  assert(firstCapture?.value.preparedSnapshotId);
+  const receivedChoice = await intake.prepare(intakeSource, preparationPolicy, {
+    source: 'received',
+    refresh: false,
+    expectedVersion: firstCapture.version,
+  });
+  assert.equal(receivedChoice?.value.bodySource, 'received');
+  assert.equal(receivedChoice.value.decision, 'pending');
+  const refreshedCapture = await intake.prepare(
+    intakeSource,
+    preparationPolicy,
+    {
+      source: 'web_article',
+      refresh: true,
+      expectedVersion: receivedChoice.version,
+    },
+  );
+  assert(refreshedCapture?.value.preparedSnapshotId);
+  assert.notEqual(
+    refreshedCapture.value.preparedSnapshotId,
+    firstCapture.value.preparedSnapshotId,
+  );
+  assert.deepEqual(refreshedCapture.value.previousPreparedSnapshotIds, [
+    firstCapture.value.preparedSnapshotId,
+  ]);
+  assert.equal(
+    await intake.guard(firstCapture.value.preparedSnapshotId),
+    'intake_body_not_selected',
   );
   const intakeTasks = new AgentTaskService(
     w,
@@ -800,11 +1001,13 @@ try {
     preferredTopics: [],
     excludedTopics: [],
   });
-  assert.equal(fullFetches, 1);
+  assert.equal(fullFetches, 2);
+  assert.equal((await taskRepo.listForSnapshots(w, [intakeSource])).length, 1);
+  assert.equal((await taskRepo.listForSnapshots(w, [privateId])).length, 0);
   const reports = new ReportService({
     workspaceId: w,
     repository: new PostgresReportRepository(runtime, w),
-    entries: repo.informationEntries,
+    entries: knowledgeEntries,
     evidence: repo.evidenceRead,
     intake,
     provider: {
@@ -911,7 +1114,17 @@ try {
     runtime,
     restoredWorkspace,
   );
+  assert.equal((await restored.read(snapshotId))?.value.receipt, 'accepted');
+  const restoredReceiptTask = await new PostgresAgentTaskRepository(
+    runtime,
+  ).read(restoredWorkspace, receiptTask.taskId);
+  assert.equal(restoredReceiptTask?.request.kind, 'intake');
+  assert.equal(restoredReceiptTask.state.steps[0]?.outcome, 'accepted');
   assert.equal((await restored.read(intakeSource))?.value.decision, 'blocked');
+  assert.deepEqual(
+    (await restored.read(intakeSource))?.value.previousPreparedSnapshotIds,
+    [firstCapture.value.preparedSnapshotId],
+  );
   assert.equal(
     (await restored.read(intakeSource))?.value.preparedSnapshotId,
     prepared,

@@ -22,6 +22,7 @@ export type DocumentWorkspaceApi = Pick<
   | 'searchInformationEntries'
   | 'materializeInformationEntries'
   | 'reviseInformationEntry'
+  | 'listInformationEntryAssociations'
 >;
 
 type EntryPage = Extract<InformationEntrySearchResponse, {status: 'ok'}>;
@@ -47,12 +48,7 @@ export function useDocumentWorkspace({
     useState<ScopedLoad<Readonly<EvidenceSnapshot>>>();
   const [entryLoad, setEntryLoad] = useState<ScopedLoad<Readonly<EntryPage>>>();
   const [pagination, setPagination] = useState<
-    Readonly<
-      Record<
-        string,
-        readonly (Readonly<InformationEntrySearchCursor> | undefined)[]
-      >
-    >
+    Readonly<Record<string, number>>
   >({});
   const privateScope = selection.includePrivate;
   const documentScope = String(privateScope);
@@ -63,7 +59,9 @@ export function useDocumentWorkspace({
       ? selection.snapshotId === undefined
         ? documents.value[0]
         : documents.value.find(
-            (document) => document.snapshotId === selection.snapshotId,
+            (document) =>
+              document.snapshotId === selection.snapshotId ||
+              document.derivedFromSnapshotId === selection.snapshotId,
           )
       : undefined;
   const snapshotId = selectedDocument?.snapshotId;
@@ -72,13 +70,33 @@ export function useDocumentWorkspace({
     paginationScope +
     ':' +
     (snapshotRefreshes[snapshotId ?? ''] ?? 0).toString();
-  const cursors = pagination[paginationScope] ?? [undefined];
-  const pageIndex = cursors.length - 1;
-  const cursor = cursors[pageIndex];
-  const entryScope = `${contentScope}:${pageIndex.toString()}`;
+  const entryScope = contentScope;
   const source =
     sourceLoad?.scope === contentScope ? sourceLoad.state : LOADING;
-  const entries = entryLoad?.scope === entryScope ? entryLoad.state : LOADING;
+  const allEntries =
+    entryLoad?.scope === entryScope ? entryLoad.state : LOADING;
+  const pageIndex = Math.min(
+    pagination[paginationScope] ?? 0,
+    allEntries.status === 'ready'
+      ? Math.max(0, Math.ceil(allEntries.value.items.length / 20) - 1)
+      : 0,
+  );
+  const entries = useMemo(
+    () =>
+      allEntries.status === 'ready'
+        ? {
+            status: 'ready' as const,
+            value: {
+              ...allEntries.value,
+              items: allEntries.value.items.slice(
+                pageIndex * 20,
+                (pageIndex + 1) * 20,
+              ),
+            },
+          }
+        : allEntries,
+    [allEntries, pageIndex],
+  );
 
   useEffect(() => {
     if (!active) return;
@@ -161,50 +179,72 @@ export function useDocumentWorkspace({
   useEffect(() => {
     if (!active || snapshotId === undefined) return;
     const request = new AbortController();
-    void api
-      .searchInformationEntries(
-        {
-          snapshotId,
-          includePrivate: privateScope,
-          limit: 20,
-          ...(cursor === undefined ? {} : {after: cursor}),
-        },
-        {signal: request.signal},
-      )
-      .then((response) => {
+    // Source boundaries and document annotations must include every Entry, not only the visible page.
+    void (async () => {
+      let after: Readonly<InformationEntrySearchCursor> | undefined;
+      const items: EntryPage['items'][number][] = [];
+      const seen = new Set<string>();
+      let result: Readonly<EntryPage> | undefined;
+      do {
+        const response = await api.searchInformationEntries(
+          {
+            snapshotId,
+            workbench: true,
+            includePrivate: privateScope,
+            limit: 100,
+            ...(after === undefined ? {} : {after}),
+          },
+          {signal: request.signal},
+        );
         if (request.signal.aborted) return;
         const body = response.body;
-        const valid =
-          body.status === 'ok' &&
-          body.items.every(
+        if (
+          body.status !== 'ok' ||
+          body.items.some(
             ({entry}) =>
-              entry.snapshotId === snapshotId &&
-              (privateScope || !entry.value.isPrivate),
-          );
+              entry.snapshotId !== snapshotId ||
+              (!privateScope && entry.value.isPrivate),
+          )
+        )
+          throw new Error('entry_scope_changed');
+        items.push(...body.items);
+        result = body;
+        after = body.nextCursor;
+        if (after) {
+          const key = JSON.stringify(after);
+          if (seen.has(key)) throw new Error('entry_cursor_repeated');
+          seen.add(key);
+        }
+      } while (after);
+      {
         setEntryLoad({
           scope: entryScope,
-          state: valid
-            ? {status: 'ready', value: body}
-            : {
-                status: 'error',
-                message: '条目读取失败或范围已变化，请刷新后重试。',
-              },
-        });
-      })
-      .catch(() => {
-        if (!request.signal.aborted)
-          setEntryLoad({
-            scope: entryScope,
-            state: {
-              status: 'error',
-              message: '条目暂时无法读取，原文仍可查看。',
+          state: {
+            status: 'ready',
+            value: {
+              ...result,
+              items: items.sort(
+                (a, b) =>
+                  a.entry.value.documentOrder - b.entry.value.documentOrder,
+              ),
             },
-          });
-      });
+          },
+        });
+      }
+    })().catch(() => {
+      if (!request.signal.aborted)
+        setEntryLoad({
+          scope: entryScope,
+          state: {
+            status: 'error',
+            message: '条目暂时无法读取，原文仍可查看。',
+          },
+        });
+    });
     return () => {
       request.abort();
     };
-  }, [active, api, cursor, entryScope, privateScope, snapshotId]);
+  }, [active, api, entryScope, privateScope, snapshotId]);
 
   const refresh = useCallback((targetSnapshotId: string) => {
     setRefreshVersion((version) => version + 1);
@@ -213,20 +253,37 @@ export function useDocumentWorkspace({
       [targetSnapshotId]: (current[targetSnapshotId] ?? 0) + 1,
     }));
   }, []);
+  const hasNextPage =
+    allEntries.status === 'ready' &&
+    (pageIndex + 1) * 20 < allEntries.value.items.length;
   const nextPage = () => {
-    if (entries.status === 'ready' && entries.value.nextCursor !== undefined)
+    if (hasNextPage)
       setPagination((current) => ({
         ...current,
-        [paginationScope]: [...cursors, entries.value.nextCursor],
+        [paginationScope]: pageIndex + 1,
       }));
   };
   const previousPage = () => {
     if (pageIndex > 0)
       setPagination((current) => ({
         ...current,
-        [paginationScope]: cursors.slice(0, -1),
+        [paginationScope]: pageIndex - 1,
       }));
   };
+  const locateEntry = useCallback(
+    (entryId: string) => {
+      if (allEntries.status !== 'ready') return;
+      const position = allEntries.value.items.findIndex(
+        ({entry}) => entry.entryId === entryId,
+      );
+      if (position >= 0)
+        setPagination((current) => ({
+          ...current,
+          [paginationScope]: Math.floor(position / 20),
+        }));
+    },
+    [allEntries, paginationScope],
+  );
   const updateEntry: DocumentWorkspaceApi['reviseInformationEntry'] = async (
     ...args
   ) => {
@@ -275,10 +332,13 @@ export function useDocumentWorkspace({
     selectedDocument,
     source,
     entries,
+    allEntries,
+    hasNextPage,
     snapshotTitle,
     pageIndex,
     nextPage,
     previousPage,
+    locateEntry,
     refresh,
     updateEntry,
   };

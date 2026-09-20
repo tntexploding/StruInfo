@@ -1,5 +1,5 @@
 import {createPortal} from 'react-dom';
-import type {RefObject} from 'react';
+import type {ReactNode, RefObject} from 'react';
 import {ReadingContent} from '../components/reading_content.js';
 import {readingTitle} from '../components/reading_text.js';
 import type {InformationEntry} from '../api/m1c_api_contract.js';
@@ -16,9 +16,13 @@ export function InformationEntryTranslation({
   active = true,
   controlsContainer,
   descriptiveLabels = false,
+  allowRedo = false,
+  leadingContent,
 }: {
   readonly controlsContainer?: HTMLElement | null;
   readonly descriptiveLabels?: boolean;
+  readonly allowRedo?: boolean;
+  readonly leadingContent?: ReactNode;
   readonly entry: Readonly<InformationEntry>;
   readonly services: Readonly<EntryTranslationServices>;
   readonly preferTranslation?: boolean;
@@ -54,7 +58,10 @@ export function InformationEntryTranslation({
         >
           {descriptiveLabels ? '查看译文' : '中文译文'}
         </button>
-        {state.translation !== undefined ? null : (
+        {state.translation !== undefined &&
+        (!allowRedo ||
+          state.translation.providerKey ===
+            'provided-translation-v1') ? null : (
           <button
             type="button"
             className="secondary-action"
@@ -65,10 +72,14 @@ export function InformationEntryTranslation({
               state.busy !== undefined
             }
             onClick={() => {
-              void state.generate();
+              void state.generate(state.translation !== undefined);
             }}
           >
-            {state.busy === 'generating' ? '正在翻译…' : '生成中文译文'}
+            {state.busy === 'generating'
+              ? '正在翻译…'
+              : state.translation
+                ? 'AI 重做译文'
+                : '生成中文译文'}
           </button>
         )}
       </div>
@@ -122,6 +133,7 @@ export function InformationEntryTranslation({
             <h3 lang="zh-CN">{readingTitle(state.translation.title)}</h3>
           )}
           <ReadingContent
+            leadingContent={leadingContent}
             active={active}
             scrollMemory={
               scrollPositions === undefined
@@ -144,6 +156,7 @@ export function InformationEntryTranslation({
         </>
       ) : (
         <ReadingContent
+          leadingContent={leadingContent}
           active={active}
           scrollMemory={
             scrollPositions === undefined

@@ -293,7 +293,8 @@ export function ReportEditor({
         </fieldset>
       ))}
       {!report.state.items.length &&
-      items.length < report.state.request.maxItems ? (
+      (report.state.request.maxItems === 0 ||
+        items.length < report.state.request.maxItems) ? (
         <button
           className="secondary-action"
           type="button"

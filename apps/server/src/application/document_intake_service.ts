@@ -13,10 +13,14 @@ import type {
   IntakePolicy,
   IntakeRecord,
   IntakeRecordValue,
+  IntakePreparation,
 } from './document_intake_contract.js';
 import {
   intakeAssessmentSchema,
   intakePolicySchema,
+  intakePreparationSchema,
+  intakeSnapshotIds,
+  intakeTargetSnapshot,
 } from './document_intake_contract.js';
 import {
   OperationError,
@@ -32,6 +36,21 @@ const pending: IntakeRecordValue = {
   preparation: 'received',
 };
 
+/** These thresholds choose text to review; only a model/owner can admit it. */
+function readableParagraphSizes(text: string): number[] {
+  return text
+    .split(/\n\s*\n/u)
+    .filter((p) => !/^\s*#/u.test(p) && !/^\s*!?\[[^\]]+\]\(https?:/u.test(p))
+    .map((p) => p.match(/[\p{L}\p{N}]/gu)?.length ?? 0);
+}
+function substantialReceivedBody(text: string): boolean {
+  const sizes = readableParagraphSizes(text);
+  return (
+    sizes.filter((n) => n >= 100).length >= 2 &&
+    sizes.reduce((a, b) => a + b, 0) >= 800
+  );
+}
+
 /** Evidence capture and current routing decisions are deliberately separate. */
 export class DocumentIntakeService {
   public constructor(
@@ -46,6 +65,9 @@ export class DocumentIntakeService {
         url: string,
       ) => Promise<Readonly<SourceConnectorReadResult>>;
       provider?: DocumentIntelligenceProvider;
+      assertBodyChangeAllowed: (
+        snapshotIds: readonly string[],
+      ) => Promise<void>;
     },
   ) {}
 
@@ -67,11 +89,8 @@ export class DocumentIntakeService {
         .filter((s) => !s.isPrivate)
         .map((s) => s.snapshotId),
     );
-    return (await this.deps.repository.list()).filter(
-      (r) =>
-        visible.has(r.snapshotId) &&
-        (!r.value.preparedSnapshotId ||
-          visible.has(r.value.preparedSnapshotId)),
+    return (await this.deps.repository.list()).filter((r) =>
+      intakeSnapshotIds(r).every((id) => visible.has(id)),
     );
   }
 
@@ -79,17 +98,101 @@ export class DocumentIntakeService {
     await this.publicSnapshot(snapshotId);
     return (
       (await this.deps.repository.read(snapshotId)) ??
-      (await this.list()).find((r) => r.value.preparedSnapshotId === snapshotId)
+      (await this.list()).find((r) => intakeSnapshotIds(r).includes(snapshotId))
     );
   }
 
-  public async guard(snapshotId: string): Promise<string | undefined> {
+  public async guard(
+    snapshotId: string,
+    allowIntakeRoot = false,
+    allowPendingReceipt = false,
+  ): Promise<string | undefined> {
     const record = await this.record(snapshotId);
+    if (record?.value.receipt === 'pending' && !allowPendingReceipt)
+      return 'intake_receipt_pending';
+    if (record?.value.receipt === 'rejected') return 'intake_receipt_rejected';
     return record?.value.decision === 'blocked'
       ? 'intake_blocked'
       : record?.value.decision === 'held'
         ? 'intake_held'
-        : undefined;
+        : record &&
+            !(allowIntakeRoot && snapshotId === record.snapshotId) &&
+            intakeTargetSnapshot(record) !== snapshotId
+          ? 'intake_body_not_selected'
+          : undefined;
+  }
+
+  /** Each selected version is checked independently; successful decisions survive retries. */
+  public async receive(
+    items: readonly {snapshotId: string; expectedVersion: number}[],
+    action: 'accept' | 'reject' | 'reset',
+  ) {
+    const records: IntakeRecord[] = [];
+    const failed: {snapshotId: string; code: string}[] = [];
+    for (const item of items) {
+      try {
+        const record = await this.record(item.snapshotId);
+        const root = record?.snapshotId ?? item.snapshotId;
+        await this.deps.repository.withLock(root, async () => {
+          const current = await this.record(root);
+          if ((current?.version ?? 0) !== item.expectedVersion)
+            throw new OperationError('conflict', 'stale_intake_version');
+          if (action !== 'accept' || !current?.value.receipt)
+            await this.deps.assertBodyChangeAllowed(
+              current ? intakeSnapshotIds(current) : [root],
+            );
+          const value: IntakeRecordValue = {
+            ...(current?.value ?? pending),
+            receipt:
+              action === 'accept'
+                ? 'accepted'
+                : action === 'reject'
+                  ? 'rejected'
+                  : 'pending',
+          };
+          value.receiptOrigin = 'manual';
+          delete value.receiptTaskId;
+          delete value.deferProcessing;
+          if (action === 'reset') {
+            value.decision = 'pending';
+            value.origin = 'system';
+            delete value.assessment;
+            delete value.policy;
+            delete value.model;
+          }
+          if (action === 'accept') {
+            value.decision = 'admitted';
+            value.origin = 'manual';
+            if (current?.value.receipt !== 'accepted' && !value.publication)
+              value.publication = {
+                origin: 'manual',
+                confirmedAt: new Date().toISOString(),
+                entries: [],
+              };
+          }
+          if (
+            !(await this.deps.repository.save(
+              root,
+              item.expectedVersion,
+              value,
+            ))
+          )
+            throw new OperationError('conflict', 'stale_intake_version');
+          records.push(
+            requireOperationValue(await this.deps.repository.read(root)),
+          );
+        });
+      } catch (error) {
+        failed.push({
+          snapshotId: item.snapshotId,
+          code:
+            error instanceof OperationError
+              ? error.code
+              : 'intake_receipt_failed',
+        });
+      }
+    }
+    return {records, failed};
   }
 
   public async control(
@@ -125,15 +228,59 @@ export class DocumentIntakeService {
   }
 
   /** Reuses a linked capture; a retry after a crash never silently replaces it. */
-  public async prepare(snapshotId: string, input: IntakePolicy) {
+  public async prepare(
+    snapshotId: string,
+    input: IntakePolicy,
+    selection?: IntakePreparation,
+  ) {
     const policy = intakePolicySchema.parse(input);
-    const snapshot = await this.publicSnapshot(snapshotId);
-    return this.deps.repository.withLock(snapshotId, async () => {
-      const current = await this.record(snapshotId);
+    const options = selection
+      ? intakePreparationSchema.parse(selection)
+      : undefined;
+    const root = (await this.record(snapshotId))?.snapshotId ?? snapshotId;
+    const snapshot = await this.publicSnapshot(root);
+    return this.deps.repository.withLock(root, async () => {
+      const current = await this.record(root);
+      if (options) {
+        if ((current?.version ?? 0) !== options.expectedVersion)
+          throw new OperationError('conflict', 'stale_intake_version');
+        if (current?.value.decision === 'blocked')
+          throw new OperationError('rejected', 'intake_blocked');
+        await this.deps.assertBodyChangeAllowed(
+          current ? intakeSnapshotIds(current) : [root],
+        );
+        if (
+          options.source === 'received' ||
+          (current?.value.preparedSnapshotId && !options.refresh)
+        ) {
+          if (options.source === 'web_article')
+            await this.publicSnapshot(
+              requireOperationValue(current?.value.preparedSnapshotId),
+            );
+          const value = this.pendingBody(
+            current,
+            options.source,
+            '正文选择已更新，等待重新审核。',
+          );
+          if (
+            !(await this.deps.repository.save(
+              root,
+              options.expectedVersion,
+              value,
+            ))
+          )
+            throw new OperationError('conflict', 'stale_intake_version');
+          return this.record(root);
+        }
+        if ((current?.value.previousPreparedSnapshotIds?.length ?? 0) >= 16)
+          throw new OperationError('rejected', 'intake_capture_history_limit');
+      }
       if (
+        !options &&
         current &&
         (current.value.origin === 'manual' ||
           current.value.decision === 'held' ||
+          current.value.bodySource === 'received' ||
           current.value.preparedSnapshotId)
       )
         return current;
@@ -141,14 +288,42 @@ export class DocumentIntakeService {
         !policy.fetchFullText ||
         !snapshot.canonicalUri ||
         snapshot.resourceKind !== 'remote_document'
-      )
+      ) {
+        if (options)
+          throw new OperationError('rejected', 'intake_fulltext_unavailable');
         return current;
-      const key = 'intake-fulltext:' + snapshotId;
+      }
+      const received = await this.sourceText(root);
+      const key =
+        'intake-fulltext:' +
+        root +
+        (options?.refresh
+          ? ':refresh:' + options.expectedVersion.toString()
+          : '');
       const preparedId = deriveProcessingRunId(
         this.deps.workspaceId,
         key + ':snapshot',
       );
       try {
+        if (
+          !options &&
+          received.syndicated &&
+          substantialReceivedBody(received.text)
+        ) {
+          if (
+            !(await this.deps.repository.save(
+              root,
+              current?.version ?? 0,
+              this.pendingBody(
+                current,
+                'received',
+                '订阅原文已有可读正文，优先使用原文等待审核。',
+              ),
+            ))
+          )
+            throw new OperationError('conflict', 'stale_intake_version');
+          return await this.record(root);
+        }
         const previous = await this.deps.evidence.loadSnapshot(
           this.deps.workspaceId,
           preparedId,
@@ -159,10 +334,7 @@ export class DocumentIntakeService {
             'private_model_transfer_forbidden',
           );
         if (!previous) {
-          const fetched = await this.deps.readWeb(
-            snapshotId,
-            snapshot.canonicalUri,
-          );
+          const fetched = await this.deps.readWeb(root, snapshot.canonicalUri);
           if (fetched.status !== 'changed' || fetched.documents.length !== 1)
             throw new OperationError('rejected', 'intake_fulltext_unavailable');
           const doc = requireOperationValue(fetched.documents[0]);
@@ -182,7 +354,12 @@ export class DocumentIntakeService {
                 workspaceId: this.deps.workspaceId,
                 resourceId,
                 resourceKind: 'remote_document',
-                sourceKey: snapshot.sourceKey + ' · 网页正文',
+                sourceKey:
+                  snapshot.sourceKey +
+                  ' · 网页正文' +
+                  (options?.refresh
+                    ? ' · 重新获取 ' + options.expectedVersion.toString()
+                    : ''),
                 canonicalUri: snapshot.canonicalUri,
               },
               snapshot: {
@@ -207,30 +384,147 @@ export class DocumentIntakeService {
           if (result.status !== 'created' && result.status !== 'existing')
             throw new OperationError('rejected', 'intake_capture_failed');
         }
-        await this.deps.repository.save(snapshotId, current?.version ?? 0, {
-          ...pending,
-          reason: '网页正文已获取，等待审核。',
-          preparedSnapshotId: preparedId,
-          preparation: 'web_article',
-        });
+        // A source switch chooses evidence to review, never an admission decision.
+        const bodySource = options
+          ? 'web_article'
+          : await this.preferredBody(root, preparedId);
+        if (options)
+          await this.deps.assertBodyChangeAllowed(
+            current ? intakeSnapshotIds(current) : [root],
+          );
+        const history = [...(current?.value.previousPreparedSnapshotIds ?? [])];
+        if (
+          current?.value.preparedSnapshotId &&
+          current.value.preparedSnapshotId !== preparedId
+        )
+          history.push(current.value.preparedSnapshotId);
+        const saved = await this.deps.repository.save(
+          root,
+          current?.version ?? 0,
+          {
+            ...this.pendingBody(
+              current,
+              bodySource,
+              bodySource === 'received'
+                ? '网页正文不足，改用已接收正文等待审核。'
+                : '网页正文已获取，等待审核。',
+            ),
+            preparedSnapshotId: preparedId,
+            ...(history.length ? {previousPreparedSnapshotIds: history} : {}),
+          },
+        );
+        if (!saved)
+          throw new OperationError('conflict', 'stale_intake_version');
       } catch (error) {
-        if (error instanceof OperationError && error.kind === 'forbidden')
+        if (
+          error instanceof OperationError &&
+          (error.kind === 'forbidden' || error.kind === 'conflict')
+        )
           throw error;
-        // Keep feed evidence visible, but do not quietly process a failed full-text fetch.
-        await this.deps.repository.save(snapshotId, current?.version ?? 0, {
-          ...(current?.value ?? pending),
-          decision: 'held',
-          origin: 'system',
-          reason: '网页正文获取失败，请检查原文；可重试或人工放行。',
-        });
+        // Automatic preparation can still review received prose. An explicit web
+        // selection must not silently switch, and neither path admits material.
+        const canReviewReceived =
+          !options &&
+          readableParagraphSizes(received.text).reduce((a, b) => a + b, 0) >=
+            80;
+        const value: IntakeRecordValue = canReviewReceived
+          ? this.pendingBody(
+              current,
+              'received',
+              '网页正文获取失败，改用已接收正文等待审核；完整性仍需判断。',
+            )
+          : {
+              ...(current?.value ?? pending),
+              decision: 'held',
+              origin: 'system',
+              reason:
+                '网页正文获取失败，现有正文不足或已指定网页正文；请核对原文后重试。',
+            };
+        if (
+          !(await this.deps.repository.save(root, current?.version ?? 0, value))
+        )
+          throw new OperationError('conflict', 'stale_intake_version');
       }
-      return this.record(snapshotId);
+      return this.record(root);
     });
   }
 
-  public async review(snapshotId: string, input: IntakePolicy) {
+  private pendingBody(
+    current: IntakeRecord | undefined,
+    source: 'received' | 'web_article',
+    reason: string,
+  ): IntakeRecordValue {
+    const value: IntakeRecordValue = {
+      ...(current?.value ?? pending),
+      decision: 'pending',
+      origin: 'system',
+      reason,
+      bodySource: source,
+      preparation: source,
+    };
+    delete value.assessment;
+    delete value.policy;
+    delete value.model;
+    return value;
+  }
+
+  private async sourceText(snapshotId: string) {
+    const snapshot = await this.publicSnapshot(snapshotId);
+    const evidence = await materializeEvidenceSnapshot(
+      snapshot,
+      this.deps.blobStore,
+    );
+    const text = evidence.structures[0]?.normalizedText ?? '';
+    const mediaType = snapshot.mediaType?.split(';')[0]?.trim().toLowerCase();
+    const feed =
+      snapshot.resourceKind === 'remote_document' &&
+      [
+        'application/rss+xml',
+        'application/atom+xml',
+        'application/xml',
+        'text/xml',
+      ].includes(mediaType ?? '');
+    // Strip only the connector's exact trailing return link for this source.
+    // Stored evidence and genuine links within the publisher's body stay intact.
+    const uri = snapshot.canonicalUri
+      ?.replace(/\s/gu, '%20')
+      .replace(/\)/gu, '%29');
+    const footer = uri ? '\n\n[查看原始条目](' + uri + ')' : undefined;
+    const syndicated =
+      feed && footer !== undefined && text.trimEnd().endsWith(footer);
+    return {
+      syndicated,
+      text:
+        syndicated && footer
+          ? text.trimEnd().slice(0, -footer.length).trimEnd()
+          : text,
+    };
+  }
+
+  private async preferredBody(
+    receivedId: string,
+    webId: string,
+  ): Promise<'received' | 'web_article'> {
+    const [received, web] = await Promise.all([
+      this.sourceText(receivedId),
+      this.sourceText(webId),
+    ]);
+    // Recover an obviously short web projection, without claiming completeness.
+    return substantialReceivedBody(received.text) &&
+      readableParagraphSizes(web.text).reduce((a, b) => a + b, 0) < 200
+      ? 'received'
+      : 'web_article';
+  }
+
+  public async review(
+    snapshotId: string,
+    input: IntakePolicy,
+    receiptOnly = false,
+  ) {
     const policy = intakePolicySchema.parse(input);
     const current = await this.record(snapshotId);
+    if (receiptOnly && current?.value.receipt !== 'pending')
+      throw new OperationError('conflict', 'intake_receipt_not_pending');
     if (
       current?.value.origin === 'manual' ||
       current?.value.decision === 'held'
@@ -243,16 +537,12 @@ export class DocumentIntakeService {
       return current;
     if (!this.deps.provider)
       throw new OperationError('rejected', 'ai_not_configured');
-    const snapshot = await this.publicSnapshot(
-      current?.value.preparedSnapshotId ?? snapshotId,
-    );
-    const evidence = await materializeEvidenceSnapshot(
-      snapshot,
-      this.deps.blobStore,
+    const source = await this.sourceText(
+      current ? intakeTargetSnapshot(current) : snapshotId,
     );
     const assessment = intakeAssessmentSchema.parse(
       await this.deps.provider.reviewIntake({
-        text: evidence.structures[0]?.normalizedText ?? '',
+        text: source.text,
         preparation: current?.value.preparation ?? 'received',
         policy,
       }),
@@ -261,7 +551,7 @@ export class DocumentIntakeService {
       assessment.decision === 'admit' &&
       assessment.completeness === 'complete' &&
       !policy.blockedKinds.includes(assessment.contentKind);
-    await this.deps.repository.save(
+    const saved = await this.deps.repository.save(
       current?.snapshotId ?? snapshotId,
       current?.version ?? 0,
       {
@@ -275,7 +565,68 @@ export class DocumentIntakeService {
       },
     );
     // A concurrent manual decision wins over the result of an in-flight model call.
-    return this.record(snapshotId);
+    const result = await this.record(snapshotId);
+    if (
+      receiptOnly &&
+      (!saved || result?.version !== (current?.version ?? 0) + 1)
+    )
+      throw new OperationError('conflict', 'stale_intake_version');
+    return result;
+  }
+
+  public async receiptReviewReady(snapshotId: string, expectedVersion: number) {
+    const record = await this.record(snapshotId);
+    if (record?.snapshotId !== snapshotId || record.version !== expectedVersion)
+      throw new OperationError('conflict', 'stale_intake_version');
+    if (record.value.receipt !== 'pending')
+      throw new OperationError('rejected', 'intake_receipt_not_pending');
+    if (record.value.decision === 'blocked')
+      throw new OperationError('rejected', 'intake_blocked');
+    await this.deps.assertBodyChangeAllowed(intakeSnapshotIds(record));
+  }
+
+  /** Review and receipt acceptance are separate so pause/cancel is rechecked after the call. */
+  public async acceptReviewedReceipt(
+    snapshotId: string,
+    taskId: string,
+    expectedVersion: number,
+    continueProcessing = false,
+  ) {
+    return this.deps.repository.withLock(snapshotId, async () => {
+      const current = requireOperationValue(await this.record(snapshotId));
+      if (
+        current.value.receipt === 'accepted' &&
+        current.value.receiptTaskId === taskId
+      )
+        return 'accepted' as const;
+      if (current.version !== expectedVersion)
+        throw new OperationError('conflict', 'stale_intake_version');
+      if (current.value.receipt !== 'pending')
+        throw new OperationError('conflict', 'intake_receipt_not_pending');
+      if (
+        current.value.decision !== 'admitted' ||
+        current.value.origin !== 'model' ||
+        current.value.assessment?.decision !== 'admit' ||
+        current.value.assessment.completeness !== 'complete'
+      )
+        return 'held' as const;
+      if (
+        !(await this.deps.repository.save(snapshotId, expectedVersion, {
+          ...current.value,
+          receipt: 'accepted',
+          receiptOrigin: 'model',
+          receiptTaskId: taskId,
+          deferProcessing: !continueProcessing,
+          publication: {
+            origin: 'internal_ai',
+            confirmedAt: new Date().toISOString(),
+            entries: [],
+          },
+        }))
+      )
+        throw new OperationError('conflict', 'stale_intake_version');
+      return 'accepted' as const;
+    });
   }
 
   public async needsReview(snapshotId: string, policy: IntakePolicy) {

@@ -407,3 +407,21 @@ ADR 0071 adds local matching over valid cached translations while retaining one 
 - [ADR 0076: Policy-authorized processing of new material](0076-policy-authorized-new-material-processing.md)
 
 - [ADR 0077: Complete the bounded AI and Agent workflow](0077-complete-ai-and-agent-workflow.md)
+
+- [ADR 0078: Optional DeepSeek Responses Provider](0078-deepseek-responses-provider.md)
+
+- [ADR 0079: Context-preserving document processing](0079-context-preserving-document-processing.md)
+
+- [ADR 0080: Intake quality and multilingual relation recall](0080-intake-quality-and-multilingual-relation-recall.md)
+
+- [ADR 0081: Reviewable daily and weekly reports](0081-reviewable-daily-weekly-reports.md)
+
+- [ADR 0082: DeepSeek off-peak model dispatch](0082-deepseek-off-peak-model-dispatch.md)
+
+- [ADR 0083: Event-first report selection and reading hierarchy](0083-event-first-report-editorial-quality.md)
+
+- [0084 — Document-centred workspaces](0084-document-centred-workspaces.md)
+
+- [ADR 0085: Document-centred processing and publication](0085-document-publication-lifecycle.md)
+
+- [ADR 0086: Explicit Batch Document Recovery](0086-batch-document-recovery.md)

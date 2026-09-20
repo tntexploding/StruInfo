@@ -75,11 +75,23 @@ export function ReportCreateForm({
     <div className="report-create">
       <header>
         <p className="report-eyebrow">01 / 选材</p>
-        <h2>从这一期的材料开始</h2>
+        <h2>创建报告</h2>
         <p>
           只收录已放行并已入库的公开条目。完整文章保留上下文，同一来源的重复记录会合并。
         </p>
       </header>
+      <label className="field">
+        内容方式
+        <select
+          value={request.composition ?? 'ai'}
+          onChange={(e) => {
+            update({composition: e.target.value as 'ai' | 'collection'});
+          }}
+        >
+          <option value="ai">AI 梳理与总结</option>
+          <option value="collection">检索结果摘录 · 不调用 AI</option>
+        </select>
+      </label>
       <div className="report-form-grid">
         <label className="field">
           报告类型
@@ -92,6 +104,8 @@ export function ReportCreateForm({
           >
             <option value="daily">日报</option>
             <option value="weekly">周报</option>
+            <option value="monthly">月报</option>
+            <option value="topic">专题 · 所有时间</option>
           </select>
         </label>
         <label className="field">
@@ -127,7 +141,8 @@ export function ReportCreateForm({
               update({maxItems: Number(e.target.value)});
             }}
           >
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+            <option value={0}>不限制条目数量</option>
+            {[1, 3, 6, 8, 12, 20, 40, 80].map((n) => (
               <option key={n} value={n}>
                 {n} 条
               </option>
@@ -136,9 +151,13 @@ export function ReportCreateForm({
         </label>
       </div>
       <p className="report-muted">
-        {request.kind === 'weekly'
-          ? '周报覆盖所选日期所在的周一至周日，并重新梳理一周材料。'
-          : '日报覆盖所选日期的完整一天。'}
+        {request.kind === 'topic'
+          ? '专题选材覆盖全部已放行内容，请填写话题或来源。'
+          : request.kind === 'monthly'
+            ? '月报覆盖所选日期所在的整月。'
+            : request.kind === 'weekly'
+              ? '周报覆盖所选日期所在的周一至周日，并重新梳理一周材料。'
+              : '日报覆盖所选日期的完整一天。'}
         {request.timeField === 'published'
           ? '缺少发布日期的材料不会入选。'
           : '以首次接收快照的日期为准。'}
@@ -198,10 +217,10 @@ export function ReportCreateForm({
           </label>
         </div>
         <p className="report-muted">
-          筛选使用文字匹配；每次规划或摘要均计一次调用，继续生成也计入同一额度。创建草稿不会调用模型。
+          筛选使用文字匹配；每次规划或摘要均计一次调用，继续生成也计入同一额度。加入生成队列后会按这些限制调用模型。
         </p>
       </details>
-      <div className="report-actions">
+      <div className="report-actions report-create-actions">
         <button
           className="secondary-action"
           type="button"
@@ -228,25 +247,33 @@ export function ReportCreateForm({
             );
           }}
         >
-          新建{request.kind === 'weekly' ? '周报' : '日报'}
+          {request.composition === 'collection'
+            ? '生成检索摘录'
+            : '加入 AI 生成队列'}
           {selectedCount > 0 ? ` · ${String(selectedCount)} 条材料` : ''}
         </button>
       </div>
-      <p className="report-muted">预览并选定材料后新建草稿，不会调用模型。</p>
+      <p className="report-muted">
+        预览后创建。AI
+        报告将加入生成队列，遵守额度与价格时段；模型未配置时保留草稿。不限制条目时仍保留调用额度，每次最多选取
+        512 条材料。
+      </p>
       {error ? <p role="alert">{error}</p> : null}
       {preview ? (
         <section className="report-candidates" aria-label="选材预览">
           <h3>
-            {preview.period.from}
-            {request.kind === 'weekly' ? ' — ' + preview.period.to : ''}
+            {request.kind === 'topic' ? '全部时间' : preview.period.from}
+            {request.kind === 'weekly' || request.kind === 'monthly'
+              ? ' — ' + preview.period.to
+              : ''}
           </h3>
           <p>
             {preview.totalEligible} 条符合条件 · 已排除 {preview.duplicateCount}{' '}
-            条重复记录{preview.totalEligible > 40 ? ' · 展示前 40 条' : ''}
+            条重复记录
           </p>
           {!preview.sources.length ? (
             <p className="report-empty">
-              本周期暂无可用材料。可调整日期，或先在收件箱审核、入库。
+              本周期暂无可用材料。可调整日期，或先在文档入口接受，再到工作台整理入库。
             </p>
           ) : (
             preview.sources.map((source) => (

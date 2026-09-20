@@ -268,7 +268,12 @@ function renderHtmlBlocks(node: HtmlNode, blocks: string[]): void {
   }
   if (isHtmlElement(node)) {
     const tagName = node.tagName.toLowerCase();
-    if (SKIPPED_HTML_ELEMENTS.has(tagName) || isHiddenElement(node)) return;
+    if (
+      SKIPPED_HTML_ELEMENTS.has(tagName) ||
+      isHiddenElement(node) ||
+      isShareWidget(node)
+    )
+      return;
     if (/^h[1-6]$/u.test(tagName)) {
       const value = normalizeInlineText(descendantText(node));
       if (value !== '') {
@@ -297,6 +302,14 @@ function renderHtmlBlocks(node: HtmlNode, blocks: string[]): void {
       if (value !== '') blocks.push(`\`\`\`text\n${value}\n\`\`\``);
       return;
     }
+    if (tagName === 'table' || tagName === 'figure') {
+      const parts: string[] = [];
+      for (const child of childNodes(node)) renderHtmlBlocks(child, parts);
+      // A row, caption or chart credit is not an independent reading item.
+      // One newline retains cells (including empty ones) and their ordering.
+      if (parts.length) blocks.push(parts.join('\n'));
+      return;
+    }
     if (tagName === 'tr') {
       const cells = childNodes(node)
         .filter(
@@ -304,10 +317,11 @@ function renderHtmlBlocks(node: HtmlNode, blocks: string[]): void {
             isHtmlElement(child) &&
             (child.tagName === 'th' || child.tagName === 'td'),
         )
-        .map((cell) => normalizeInlineText(descendantText(cell)))
-        .filter((value) => value !== '');
+        .map((cell) => inlineMarkdown(cell).trim());
       if (cells.length > 0) {
-        blocks.push(`| ${cells.map(escapeTableCell).join(' | ')} |`);
+        blocks.push(
+          `| ${cells.map((cell) => cell.replace(/\|/gu, '\\|')).join(' | ')} |`,
+        );
       }
       return;
     }
@@ -330,7 +344,7 @@ function inlineMarkdown(node: HtmlNode): string {
     return escapeMarkdown(normalizeInlineTextFragment(node.value));
   if (!isHtmlElement(node) || SKIPPED_HTML_ELEMENTS.has(node.tagName))
     return '';
-  if (isHiddenElement(node)) return '';
+  if (isHiddenElement(node) || isShareWidget(node)) return '';
   if (node.tagName === 'br') return '\n';
   if (node.tagName === 'img') {
     const alt = normalizeInlineText(attributeValue(node, 'alt') ?? '');
@@ -464,7 +478,11 @@ function findExplicitArticleBody(document: HtmlNode): HtmlElement | undefined {
       const markers = [
         attributeValue(node, 'id') ?? '',
         attributeValue(node, 'class') ?? '',
-      ].join(' ');
+      ]
+        .join(' ')
+        .replace(/([a-z])([A-Z])/gu, '$1-$2')
+        .replace(/[_-]+/gu, '-')
+        .toLowerCase();
       const itemprop = attributeValue(node, 'itemprop') ?? '';
       if (
         (/(?:^|\s)articleBody(?:$|\s)/u.test(itemprop) ||
@@ -490,7 +508,44 @@ function findExplicitArticleBody(document: HtmlNode): HtmlElement | undefined {
         return false;
       }),
   );
-  return leaves.length === 1 ? leaves[0] : undefined;
+  if (leaves.length === 1) return leaves[0];
+  // An article can place its introduction, figures and later sections in
+  // separate reading bodies. Keep their nearest explicit common container.
+  // Several independent articles must still fall back to the complete page.
+  return [...candidates]
+    .reverse()
+    .find(
+      (candidate) =>
+        leaves.length > 1 &&
+        leaves.every((leaf) => isDescendantOf(leaf, candidate)) &&
+        countVisibleHeadings(candidate) <= 1,
+    );
+}
+
+function isDescendantOf(node: HtmlNode, ancestor: HtmlNode): boolean {
+  let parent = 'parentNode' in node ? node.parentNode : null;
+  while (parent) {
+    if (parent === ancestor) return true;
+    parent = 'parentNode' in parent ? parent.parentNode : null;
+  }
+  return false;
+}
+
+function countVisibleHeadings(node: HtmlNode): number {
+  if (
+    isHtmlElement(node) &&
+    (isHiddenElement(node) ||
+      SKIPPED_HTML_ELEMENTS.has(node.tagName) ||
+      node.tagName === 'nav')
+  )
+    return 0;
+  return (
+    (isHtmlElement(node) && node.tagName === 'h1' ? 1 : 0) +
+    childNodes(node).reduce(
+      (count, child) => count + countVisibleHeadings(child),
+      0,
+    )
+  );
 }
 
 /** One marked article container may coexist with site-banner headings. */
@@ -553,6 +608,21 @@ function descendantText(node: HtmlNode): string {
   return childNodes(node).map(descendantText).join(' ');
 }
 
+/** Skip recognizable sharing controls, never arbitrary prose containing “share”. */
+function isShareWidget(element: HtmlElement): boolean {
+  const tokens = [
+    attributeValue(element, 'class') ?? '',
+    attributeValue(element, 'id') ?? '',
+  ]
+    .join(' ')
+    .split(/\s+/u);
+  return tokens.some((token) =>
+    /^(?:social[-_]share(?:[-_]buttons?)?|share[-_](?:buttons?|tools?|links?|widget)|sharing[-_](?:tools?|buttons?)|addtoany(?:[-_]share[-_]save)?|a2a_kit|sharedaddy|wp-block-jetpack-sharing-buttons)$/iu.test(
+      token,
+    ),
+  );
+}
+
 function isHiddenElement(element: HtmlElement): boolean {
   return (
     attributeValue(element, 'hidden') !== undefined ||
@@ -591,10 +661,6 @@ function normalizeBlocks(blocks: readonly string[]): string {
 
 function escapeMarkdown(value: string): string {
   return value.replace(/[\\`*_[\]<>]/gu, '\\$&');
-}
-
-function escapeTableCell(value: string): string {
-  return escapeMarkdown(value).replace(/\|/gu, '\\|');
 }
 
 function escapeMarkdownDestination(value: string): string {

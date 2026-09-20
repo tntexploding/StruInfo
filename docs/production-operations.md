@@ -4,7 +4,7 @@
 - 最近更新：2026-09-05（维护基线、升级与实际运行交接）
 - 决策：[ADR 0045](adr/0045-operational-production-baseline.md)、[ADR 0046](adr/0046-codex-operated-bulk-ingestion.md)、[ADR 0053](adr/0053-real-scale-capacity-classification-and-query-follow-up.md)、[ADR 0062](adr/0062-production-release-identity-and-live-deployment-baseline.md)、[ADR 0063](adr/0063-backup-recoverability-and-retention-preview.md)、[ADR 0064](adr/0064-operational-health-capacity-and-alerting.md)、[ADR 0065](adr/0065-production-flow-release-regression.md)
 
-本轮维护阶段的执行清单与结果见[维护交接](maintenance-handoff.md)。当前维护版本为 `v0.2.0`；
+本轮维护阶段的执行清单与结果见[维护交接](maintenance-handoff.md)。当前源码版本为 `v0.3.0`，升级差异见 [v0.3.0 更新说明](releases/v0.3.0.md)；
 后文 `v0.1.0` 数字属于历史发行证据。常规运行保持 `all` 单实例，维护写操作与备份/恢复
 使用停写窗口；不要把角色启动脚本的存在解释为已支持多个独立进程并发修改同一偏好文件。
 

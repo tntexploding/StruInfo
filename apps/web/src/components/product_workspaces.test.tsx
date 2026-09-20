@@ -71,7 +71,7 @@ describe('M1D product workspaces', () => {
     expect(markup).toContain('role="alert"');
   });
 
-  it('renders the five content workspaces without claiming AI capability', () => {
+  it('renders the four document-centred workspaces without claiming AI capability', () => {
     const markup = renderToStaticMarkup(
       <ProductAppShell
         activeSection="overview"
@@ -90,12 +90,12 @@ describe('M1D product workspaces', () => {
     );
 
     expect(markup).toContain('总览');
-    expect(markup).toContain('收件箱');
-    expect(markup).toContain('资料库');
-    expect(markup).toContain('专题');
-    expect(markup).toContain('查询');
+    expect(markup).toContain('文档入口');
+    expect(markup).toContain('工作台');
+    expect(markup).toContain('报告');
+    expect(markup).toContain('数据阅览');
     expect(markup).toContain('设置');
-    expect(markup.indexOf('专题')).toBeLessThan(markup.indexOf('查询'));
+    expect(markup.indexOf('工作台')).toBeLessThan(markup.indexOf('数据阅览'));
     expect(markup).not.toContain('M1D / FLOW');
     expect(markup).toContain('<dd>未启用</dd>');
     expect(markup).not.toContain('TRACEABLE CORE · MANUAL AUTHORITY');
@@ -168,6 +168,7 @@ describe('M1D product workspaces', () => {
   it('renders real workspace metrics and a truthful AI workflow state', () => {
     const markup = renderToStaticMarkup(
       <WorkflowOverview
+        onReviewInbox={() => undefined}
         snapshots={{status: 'ready', value: [REVIEW_EVIDENCE]}}
         workspace={{
           status: 'ok',

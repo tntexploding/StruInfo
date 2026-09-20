@@ -1,7 +1,14 @@
+import {
+  DocumentPublicationService,
+  publishedEntryRepository,
+  unpublishedSnapshots,
+} from '../application/document_publication.js';
+import {InboxPreviewService} from '../application/inbox_preview_service.js';
 import {ReportService} from '../application/report_service.js';
 import {PostgresReportRepository} from '../platform/database/postgresql/postgres_report_repository.js';
 import {ResponsesReportProvider} from '../platform/ai/responses_report_provider.js';
 import {DocumentIntakeService} from '../application/document_intake_service.js';
+import {OperationError} from '../application/operation_error.js';
 import {PostgresDocumentIntakeRepository} from '../platform/database/postgresql/postgres_document_intake_repository.js';
 import {ResponsesDocumentIntelligenceProvider} from '../platform/ai/responses_document_intelligence_provider.js';
 import {AgentCaptureService} from '../application/agent_capture_service.js';
@@ -220,9 +227,28 @@ export async function startRoleRuntime(
             modelFetch,
           ),
         });
+  const confirmedEntryAliases = async () =>
+    (await storage.reviewPreferences.load(config.workspaceId)).vocabulary
+      ?.aliases ?? [];
+  const agentTaskRepository = new PostgresAgentTaskRepository(database.pool);
+  const documentIntakeRepository = new PostgresDocumentIntakeRepository(
+    database.pool,
+    config.workspaceId,
+  );
+  const knowledgeEntries = publishedEntryRepository(
+    repositories.informationEntries,
+    async (entries) => {
+      const [records, tasks] = await Promise.all([
+        documentIntakeRepository.list(),
+        agentTaskRepository.listPublicationTasks(config.workspaceId),
+      ]);
+      return unpublishedSnapshots(records, tasks, entries);
+    },
+  );
   const informationEntryRetrieval = new InformationEntryRetrievalService({
+    aliases: confirmedEntryAliases,
     workspaceId: config.workspaceId,
-    entries: repositories.informationEntries,
+    entries: knowledgeEntries,
     associations: repositories.informationEntryAssociations,
     index: repositories.informationEntrySearchIndex,
     translations: repositories.entryTranslations,
@@ -239,7 +265,7 @@ export async function startRoleRuntime(
       ? undefined
       : new InformationEntryQuerySynthesisService({
           workspaceId: config.workspaceId,
-          entries: repositories.informationEntries,
+          entries: knowledgeEntries,
           associations: repositories.informationEntryAssociations,
           retrieval: informationEntryRetrieval,
           provider: new ResponsesInformationEntryQuerySynthesisProvider(
@@ -282,15 +308,39 @@ export async function startRoleRuntime(
       )
     : undefined;
   const intakeWeb = new WebSourceConnector();
+
   const intake = new DocumentIntakeService({
     workspaceId: config.workspaceId,
-    repository: new PostgresDocumentIntakeRepository(
-      database.pool,
-      config.workspaceId,
-    ),
+    repository: documentIntakeRepository,
     evidence: repositories.evidenceRead,
     capture: repositories.evidence,
     blobStore: storage.blobStore,
+    assertBodyChangeAllowed: async (snapshotIds) => {
+      const [entries, tasks] = await Promise.all([
+        repositories.informationEntries.loadCurrentEntries(
+          config.workspaceId,
+          true,
+        ),
+        agentTaskRepository.listForSnapshots(config.workspaceId, snapshotIds),
+      ]);
+      if (entries.some((entry) => snapshotIds.includes(entry.snapshotId)))
+        throw new OperationError('conflict', 'intake_body_already_processed');
+      const linked = tasks.filter(
+        (task) =>
+          task.request.kind === 'document' &&
+          snapshotIds.includes(task.request.snapshotId),
+      );
+      if (
+        linked.some((task) => ['queued', 'running'].includes(task.state.status))
+      )
+        throw new OperationError('conflict', 'intake_task_active');
+      if (
+        linked.some((task) =>
+          task.state.steps.some((step) => step.kind === 'split'),
+        )
+      )
+        throw new OperationError('conflict', 'intake_body_already_processed');
+    },
     readWeb: (snapshotId, pageUrl) =>
       intakeWeb.read({
         subscriptionId: snapshotId,
@@ -298,13 +348,39 @@ export async function startRoleRuntime(
       }),
     ...(intelligence ? {provider: intelligence} : {}),
   });
+  const publication = new DocumentPublicationService(
+    config.workspaceId,
+    documentIntakeRepository,
+    intake,
+    repositories.informationEntries,
+    () => agentTaskRepository.listPublicationTasks(config.workspaceId),
+  );
+  const inbox = new InboxPreviewService({
+    workspaceId: config.workspaceId,
+    evidence: repositories.evidenceRead,
+    blobStore: storage.blobStore,
+    repository: documentIntakeRepository,
+    origin: async (id) => (await ingestionRepository.read(id))?.origin,
+    sources: async () => (await sourceSubscriptions.list()).subscriptions,
+    checkModelCall: () => aiPrice.assertAllowed(),
+    ...(intelligence ? {provider: intelligence} : {}),
+    ...(config.aiProposalProvider
+      ? {
+          translationProvider: new ResponsesEntryTranslationProvider(
+            config.aiProposalProvider,
+            modelFetch,
+          ),
+        }
+      : {}),
+  });
   const reports = new ReportService({
     workspaceId: config.workspaceId,
     repository: new PostgresReportRepository(database.pool, config.workspaceId),
-    entries: repositories.informationEntries,
+    entries: knowledgeEntries,
     evidence: repositories.evidenceRead,
     intake,
     checkModelCall: () => aiPrice.assertAllowed(),
+    checkOperations: () => aiPrice.assertOperationsAllowed(),
     ...(config.aiProposalProvider
       ? {
           provider: new ResponsesReportProvider(
@@ -316,13 +392,13 @@ export async function startRoleRuntime(
   });
   const agentTasks = new AgentTaskService(
     config.workspaceId,
-    new PostgresAgentTaskRepository(database.pool),
+    agentTaskRepository,
     new AgentTaskActions({
+      publication,
+      knowledgeEntries,
       intake,
       ...(intelligence ? {intelligence} : {}),
-      aliases: async () =>
-        (await storage.reviewPreferences.load(config.workspaceId)).vocabulary
-          ?.aliases ?? [],
+      aliases: confirmedEntryAliases,
       workspaceId: config.workspaceId,
       blobStore: storage.blobStore,
       splitProcessing: repositories.processingRuns,
@@ -338,12 +414,22 @@ export async function startRoleRuntime(
     (task) => ingestion.guard(task),
     {
       check: () => aiPrice.assertAllowed(),
-      canResume: (task) =>
+      checkOperations: () => aiPrice.assertOperationsAllowed(),
+      canResume: async (task) =>
         task.actorKind !== 'external_agent' ||
         (config.agentInterface?.identity === task.actorId &&
           config.agentInterface.processDocuments &&
+          ((task.request.kind !== 'intake' &&
+            !(
+              task.request.kind === 'document' &&
+              task.request.intake &&
+              (await intake.record(task.request.snapshotId))?.value.receipt ===
+                'pending'
+            )) ||
+            config.agentInterface.automate) &&
           (!(
-            task.request.kind === 'document' &&
+            (task.request.kind === 'document' ||
+              task.request.kind === 'intake') &&
             task.request.intake?.fetchFullText
           ) ||
             config.agentInterface.capture)),
@@ -366,8 +452,14 @@ export async function startRoleRuntime(
     evidence: repositories.evidence,
     evidenceForSubscription: (subscriptionId) =>
       captureRepository({kind: 'subscription', subscriptionId}),
-    ownsAutomaticSnapshot: async (snapshotId) =>
-      Boolean(await ingestionRepository.read(snapshotId)),
+    ownsAutomaticSnapshot: async (snapshotId) => {
+      const record = await documentIntakeRepository.read(snapshotId);
+      return (
+        Boolean(await ingestionRepository.read(snapshotId)) ||
+        record?.value.deferProcessing === true ||
+        ['pending', 'rejected'].includes(record?.value.receipt ?? '')
+      );
+    },
     evidenceRead: repositories.evidenceRead,
     entries: repositories.informationEntries,
     automationExecutions: repositories.entryAutomationExecutions,
@@ -390,10 +482,10 @@ export async function startRoleRuntime(
           maxEntries: policy.settings.maxEntries,
           maxRelations: policy.settings.maxRelations,
           maxModelCalls: policy.settings.maxModelCalls,
-          ...(policy.settings.intake ? {intake: policy.settings.intake} : {}),
-          ...(policy.settings.maxRelationCandidates !== undefined
-            ? {maxRelationCandidates: policy.settings.maxRelationCandidates}
-            : {}),
+          intake: policy.settings.intake ?? {fetchFullText: true},
+          maxRelationCandidates:
+            policy.settings.maxRelationCandidates ??
+            policy.settings.maxRelations,
         }),
       read: (taskId) => agentTasks.read(automationAuthority, taskId),
       resume: (task) =>
@@ -449,6 +541,7 @@ export async function startRoleRuntime(
   const api =
     config.role === 'api' || config.role === 'all'
       ? new M1cApiService({
+          documentIntakeRepository,
           workspaceId: config.workspaceId,
           blobStore: storage.blobStore,
           reviewPreferences: storage.reviewPreferences,
@@ -456,6 +549,8 @@ export async function startRoleRuntime(
           manualImportEvidenceRepository: captureRepository({kind: 'upload'}),
           evidenceReadRepository: repositories.evidenceRead,
           informationEntryRepository: repositories.informationEntries,
+          knowledgeEntries,
+          stageDocument: (id) => publication.stage(id, 'manual'),
           informationDocumentWorkingCopyRepository:
             repositories.informationDocumentWorkingCopies,
           informationDocumentTagRepository:
@@ -490,6 +585,9 @@ export async function startRoleRuntime(
         })
       : undefined;
   const commandDependencies = {
+    stageDocument: (id: string) => publication.stage(id, 'external_agent'),
+    knowledgeEntries,
+    documentIntakeRepository,
     blobStore: storage.blobStore,
     evidenceReadRepository: repositories.evidenceRead,
     informationEntryRepository: repositories.informationEntries,
@@ -499,6 +597,7 @@ export async function startRoleRuntime(
     informationEntryAssociationRepository:
       repositories.informationEntryAssociations,
     informationEntryRetrieval,
+    entryAliases: confirmedEntryAliases,
     reviewPreferences: storage.reviewPreferences,
     entryTranslationSearch: repositories.entryTranslations,
   };
@@ -514,10 +613,12 @@ export async function startRoleRuntime(
       entries: new EntryUseCases(authority, commandDependencies),
       relations: new RelationUseCases(authority, commandDependencies),
       tasks: agentTasks,
+      publication,
       aiPrice,
       reports,
       capture,
       intake,
+      inbox,
       runtimeStatus: {
         ...(config.aiProposalProvider
           ? {model: config.aiProposalProvider.model}

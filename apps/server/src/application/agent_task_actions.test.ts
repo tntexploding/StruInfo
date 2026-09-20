@@ -344,3 +344,128 @@ describe('Agent actions reuse actual proposal acceptance', () => {
     expect(provider.start).not.toHaveBeenCalled();
   });
 });
+
+describe('recovery checkpoint validation', () => {
+  it('keeps matching completed tags but rejects later manual revisions', async () => {
+    const f = fixture();
+    f.edit();
+    const task = {
+      ...f.task,
+      request: {
+        kind: 'document',
+        snapshotId: S,
+        maxEntries: 12,
+        maxRelations: 0,
+        maxModelCalls: 24,
+      },
+      state: {
+        status: 'failed',
+        calls: 24,
+        phase: 'recall',
+        steps: [
+          {kind: 'split', targetId: S, complete: true, attempt: 1},
+          {
+            kind: 'tags',
+            targetId: E,
+            expectedRevision: 1,
+            complete: true,
+            attempt: 1,
+          },
+        ],
+      },
+    } as AgentTask;
+    const actions = new AgentTaskActions(f.dependencies);
+    await expect(actions.validateRecovery(task)).resolves.toBeUndefined();
+    f.edit();
+    await expect(actions.validateRecovery(task)).rejects.toMatchObject({
+      code: 'document_changed_after_tags',
+    });
+  });
+});
+
+it('batches recall only for unchanged public entries and reads the collection once', async () => {
+  const f = fixture();
+  const second = {
+    ...f.current,
+    entryId: '00000000-0000-4000-8000-000000000010',
+  };
+  const hidden = {
+    ...f.current,
+    entryId: '00000000-0000-4000-8000-000000000011',
+    value: {...f.current.value, isPrivate: true},
+  };
+  const load = vi.fn(() => Promise.resolve([f.current, second, hidden]));
+  const plan = {concepts: [{term: 'Synthetic', variants: ['合成']}]};
+  const planRecalls = vi.fn(() => Promise.resolve([plan, plan]));
+  const intelligence = {
+    model: 'synthetic-model',
+    reviewIntake: vi.fn(),
+    planRecall: vi.fn(() => Promise.resolve(plan)),
+    planRecalls,
+  };
+  const actions = new AgentTaskActions({
+    ...f.dependencies,
+    entries: {...f.dependencies.entries, loadCurrentEntries: load},
+    intelligence,
+  });
+  const steps: AgentTaskStep[] = [f.current, second].map((e) => ({
+    kind: 'recall',
+    targetId: e.entryId,
+    expectedRevision: e.revision,
+    attempt: 0,
+    complete: false,
+  }));
+  const first = requireOperationValue(steps[0]);
+  const task = {
+    ...f.task,
+    state: {status: 'running', phase: 'recall', calls: 4, steps},
+  } as AgentTask;
+  expect(await actions.recallGroup(task, first)).toEqual(steps);
+  expect(load).toHaveBeenCalledTimes(1);
+  expect(await actions.recallGroupPlans(steps)).toEqual([plan, plan]);
+  expect(planRecalls).toHaveBeenCalledTimes(1);
+  expect(load).toHaveBeenCalledTimes(2);
+  f.edit();
+  await expect(actions.recallGroupPlans(steps)).rejects.toMatchObject({
+    code: 'stale_entry_revision',
+  });
+  await expect(
+    actions.recallGroupPlans([{...first, targetId: hidden.entryId}]),
+  ).rejects.toMatchObject({code: 'public_entry_not_found'});
+  expect(planRecalls).toHaveBeenCalledTimes(1);
+});
+
+it('keeps long recall inputs in separate calls instead of overflowing a batch', async () => {
+  const f = fixture();
+  const entries = [0, 1].map((n) => ({
+    ...f.current,
+    entryId: `00000000-0000-4000-8000-${String(20 + n).padStart(12, '0')}`,
+    value: {...f.current.value, body: 'x'.repeat(70_000)},
+  }));
+  const actions = new AgentTaskActions({
+    ...f.dependencies,
+    entries: {
+      ...f.dependencies.entries,
+      loadCurrentEntries: () => Promise.resolve(entries),
+    },
+    intelligence: {
+      model: 'synthetic-model',
+      reviewIntake: vi.fn(),
+      planRecall: vi.fn(),
+      planRecalls: vi.fn(),
+    },
+  });
+  const steps: AgentTaskStep[] = entries.map((e) => ({
+    kind: 'recall',
+    targetId: e.entryId,
+    expectedRevision: e.revision,
+    attempt: 0,
+    complete: false,
+  }));
+  const first = requireOperationValue(steps[0]);
+  const task = {
+    ...f.task,
+    state: {status: 'running', phase: 'recall', calls: 4, steps},
+  } as AgentTask;
+  expect(await actions.recallGroup(task, first)).toEqual([first]);
+});

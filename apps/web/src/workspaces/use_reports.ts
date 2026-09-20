@@ -1,3 +1,4 @@
+import {printReport} from './report_print.js';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {
   reportCommand,
@@ -53,6 +54,18 @@ export function useReports(active: boolean) {
       live = false;
     };
   }, [active]);
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible')
+        void refreshList().catch((e: unknown) => {
+          setError(reportError(e));
+        });
+    }, 5000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [active, refreshList]);
   const run = useCallback(async (action: () => Promise<void>) => {
     if (locked.current) return false;
     locked.current = true;
@@ -113,6 +126,21 @@ export function useReports(active: boolean) {
       generation.current++;
       selection.current = result.report.reportId;
       setValue(result);
+      if (
+        request.composition !== 'collection' &&
+        result.model &&
+        result.report.state.status === 'draft'
+      ) {
+        try {
+          const started = await reportCommand<ReportView>('report_generate', {
+            reportId: result.report.reportId,
+            expectedVersion: result.report.version,
+          });
+          setValue(started);
+        } catch (e) {
+          setError(reportError(e));
+        }
+      }
       // The durable creation succeeds even when the secondary history refresh fails.
       await refreshList().catch(() => undefined);
     });
@@ -137,7 +165,9 @@ export function useReports(active: boolean) {
     if (!active || !value || busy) return;
     const waitingForPrice =
       value.report.state.status === 'queued' &&
-      value.report.state.errorCode === 'ai_price_window_closed';
+      ['ai_price_window_closed', 'ai_operations_paused'].includes(
+        value.report.state.errorCode ?? '',
+      );
     if (!value.active && !waitingForPrice) return;
     let live = true;
     const id = value.report.reportId,
@@ -197,6 +227,10 @@ export function useReports(active: boolean) {
     refresh,
     create,
     exportReport,
+    exportPdf: () =>
+      run(async () => {
+        if (value) await printReport(value.report.reportId);
+      }),
     generate: () => change('report_generate'),
     cancel: () => change('report_cancel'),
     save: (

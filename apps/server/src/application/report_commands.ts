@@ -11,7 +11,7 @@ const versioned = {
 };
 export const reportReadCommandSchemas = {
   report_preview: reportRequestSchema,
-  reports_list: z.object({}).strict(),
+  reports_list: z.object({prioritizeActive: z.boolean().optional()}).strict(),
   report_read: selected,
   report_export: selected,
 };
@@ -43,8 +43,10 @@ export class ReportCommands {
           parse(reportReadCommandSchemas.report_preview, input),
         );
       case 'reports_list':
-        parse(reportReadCommandSchemas.reports_list, input);
-        return this.reports.list(this.authority);
+        return this.reports.list(
+          this.authority,
+          parse(reportReadCommandSchemas.reports_list, input).prioritizeActive,
+        );
       case 'report_read':
         return this.reports.read(
           this.authority,

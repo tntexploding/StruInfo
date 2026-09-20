@@ -119,3 +119,35 @@ describe('DeepSeek price timing', () => {
     expect(network).toHaveBeenCalledTimes(2);
   });
 });
+
+it('keeps owner permission independent of price settings, persists it, and rejects stale or delegated writes', async () => {
+  const f = fixture(),
+    owner = ExecutionAuthority.owner(W);
+  await f.service.save(owner, {revision: 0, operationsAllowed: false}, true);
+  await expect(f.service.assertAllowed()).rejects.toMatchObject({
+    code: 'ai_operations_paused',
+  });
+  await f.service.save(owner, {revision: 1, enabled: true});
+  const status = await new AiPriceService(
+    W,
+    f.store,
+    'openai-responses-v1',
+  ).status();
+  expect(status.policy.operationsAllowed).toBe(false);
+  await expect(
+    f.service.save(owner, {revision: 1, operationsAllowed: true}, true),
+  ).rejects.toMatchObject({code: 'stale_ai_price_policy'});
+  await expect(
+    f.service.save(
+      ExecutionAuthority.agent(W, 'synthetic', ['models.use']),
+      {revision: 2, operationsAllowed: true},
+      true,
+    ),
+  ).rejects.toMatchObject({code: 'ai_price_owner_required'});
+  await f.service.save(owner, {revision: 2, operationsAllowed: true}, true);
+  f.clock('2026-09-14T01:00:00Z');
+  await expect(f.service.assertAllowed()).rejects.toMatchObject({
+    code: AI_PRICE_WAIT,
+  });
+  expect((await f.service.status()).policy.enabled).toBe(true);
+});

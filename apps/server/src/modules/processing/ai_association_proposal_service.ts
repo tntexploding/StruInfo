@@ -521,7 +521,8 @@ function providerErrorCode(
   if (
     error instanceof Error &&
     'code' in error &&
-    (error.code === 'ai_price_window_closed' ||
+    (error.code === 'ai_operations_paused' ||
+      error.code === 'ai_price_window_closed' ||
       error.code === 'ai_provider_timeout' ||
       error.code === 'ai_provider_unavailable' ||
       error.code === 'ai_provider_rejected' ||

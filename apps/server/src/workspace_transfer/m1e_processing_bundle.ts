@@ -881,7 +881,13 @@ function normalizeRow(
       const state = intakeRecordValueSchema.parse(JSON.parse(row.state_text));
       if (
         (state.preparedSnapshotId ?? null) !== row.prepared_snapshot_id ||
-        state.preparedSnapshotId === row.snapshot_id
+        state.preparedSnapshotId === row.snapshot_id ||
+        (state.bodySource === 'web_article' && !state.preparedSnapshotId) ||
+        (state.previousPreparedSnapshotIds ?? []).some(
+          (id) => id === row.snapshot_id || id === state.preparedSnapshotId,
+        ) ||
+        new Set(state.previousPreparedSnapshotIds ?? []).size !==
+          (state.previousPreparedSnapshotIds?.length ?? 0)
       )
         fail();
     } catch {

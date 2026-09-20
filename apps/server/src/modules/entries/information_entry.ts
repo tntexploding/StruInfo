@@ -29,7 +29,7 @@ export const MANUAL_ENTRY_RESTRUCTURE_RULE_VERSION =
 export const CONFIGURABLE_ENTRY_SPLIT_RULE_VERSION =
   'struinfo.entry-split.configurable-group.v1';
 export const ENTRY_MANUAL_ORIGIN_VERSION = 'manual-entry-editor.v1';
-export const MAXIMUM_ENTRY_BODY_CODE_POINTS = 200_000;
+export const MAXIMUM_ENTRY_BODY_CODE_POINTS = 320_000;
 export const MAXIMUM_CONTENT_KEYWORDS = 32;
 
 export interface MaterializedEvidenceFragment {
@@ -408,9 +408,25 @@ function prepareGroupedInformationEntries(
         ? left.codePointRange.start - right.codePointRange.start
         : left.fragmentId.localeCompare(right.fragmentId),
     );
-  const selected = options.commonMark
-    ? aiSplitEvidenceFragments(snapshot)
-    : sections;
+  const whole =
+    options.commonMark &&
+    groups.length === 1 &&
+    groups[0]?.fragmentIds.length === 1
+      ? structure.fragments.find(
+          (f) =>
+            f.fragmentId === groups[0]?.fragmentIds[0] &&
+            f.nodeKind === 'document' &&
+            f.codePointRange.start === 0 &&
+            f.codePointRange.end ===
+              Array.from(structure.normalizedText ?? '').length &&
+            f.selectedText === structure.normalizedText,
+        )
+      : undefined;
+  const selected = whole
+    ? [whole]
+    : options.commonMark
+      ? aiSplitEvidenceFragments(snapshot)
+      : sections;
   const expectedIds = selected.map((fragment) => fragment.fragmentId);
   const actualIds = groups.flatMap((group) => group.fragmentIds);
   if (

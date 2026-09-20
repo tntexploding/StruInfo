@@ -1,3 +1,4 @@
+import type {ConfirmedEntryAlias} from '../modules/entries/information_entry_search_aliases.js';
 import {
   ENTRY_TEXT_SEARCH_FIELDS,
   deriveInformationEntryRevisionId,
@@ -56,12 +57,17 @@ export interface EntryRevisionRequest {
   readonly annotation: Readonly<ManualEntryAnnotationInput>;
 }
 export interface EntryUseCasesDependencies {
+  readonly stageDocument?: (snapshotId: string) => Promise<void>;
+  readonly knowledgeEntries?: InformationEntryRepositoryPort;
   readonly blobStore: BlobStore;
   readonly evidenceReadRepository: EvidenceReadRepositoryPort;
   readonly informationEntryRepository: InformationEntryRepositoryPort;
   readonly informationEntryAssociationRepository: InformationEntryAssociationRepositoryPort;
   readonly informationEntryRetrieval?: InformationEntryRetrievalServicePort;
   readonly entryTranslationSearch?: EntryTranslationSearchRepositoryPort;
+  readonly entryAliases?: () => Promise<
+    readonly Readonly<ConfirmedEntryAlias>[]
+  >;
 }
 
 export class EntryUseCases {
@@ -78,7 +84,11 @@ export class EntryUseCases {
     this.#authority.require('entries.search');
     assertOperationId(entryId, 'entryId');
     const entry = (
-      await this.#loadCurrentInformationEntriesByIds([entryId], false)
+      await (this.#dependencies.knowledgeEntries?.loadCurrentEntriesByIds?.(
+        this.#authority.workspaceId,
+        false,
+        [entryId],
+      ) ?? this.#loadCurrentInformationEntriesByIds([entryId], false))
     ).find((e) => !e.value.isPrivate);
     if (!entry)
       throw new OperationError('not_found', 'information_entry_not_found');
@@ -104,6 +114,10 @@ export class EntryUseCases {
         'invalid_request',
         'annotation',
       );
+    if (current.revision !== input.expectedRevision)
+      throw new OperationError('conflict', 'stale_entry_revision');
+    if (!current.value.isPrivate)
+      await this.#dependencies.stageDocument?.(current.snapshotId);
     const outcome =
       await this.#dependencies.informationEntryRepository.reviseEntry({
         workspaceId: this.#authority.workspaceId,
@@ -156,11 +170,12 @@ export class EntryUseCases {
         }),
       };
     }
+    const aliases = (await this.#dependencies.entryAliases?.()) ?? [];
     const [entries, associationSnapshot, translations] = await Promise.all([
-      this.#dependencies.informationEntryRepository.loadCurrentEntries(
-        this.#authority.workspaceId,
-        request.includePrivate,
-      ),
+      (
+        this.#dependencies.knowledgeEntries ??
+        this.#dependencies.informationEntryRepository
+      ).loadCurrentEntries(this.#authority.workspaceId, request.includePrivate),
       request.association === undefined
         ? Promise.resolve({projections: [], overrides: []})
         : this.#dependencies.informationEntryAssociationRepository.loadAssociationSnapshot(
@@ -179,11 +194,13 @@ export class EntryUseCases {
       associationSnapshot,
       undefined,
       translations,
+      aliases,
     );
     const privateDocuments = await this.#searchPrivateDocuments(
       request,
       entries,
       associationSnapshot,
+      aliases,
     );
     return {
       status: 'ok' as const,
@@ -211,6 +228,7 @@ export class EntryUseCases {
     request: Readonly<InformationEntrySearchRequest>,
     entries: readonly Readonly<CurrentInformationEntry>[],
     associationSnapshot: Readonly<InformationEntryAssociationRepositorySnapshot>,
+    aliases: readonly Readonly<ConfirmedEntryAlias>[],
   ): Promise<Readonly<PrivateDocumentSearchResult>> {
     if (!request.includePrivate) {
       return Object.freeze({totalCount: 0, items: Object.freeze([])});
@@ -244,6 +262,9 @@ export class EntryUseCases {
             limit: Math.max(1, entries.length),
           },
           associationSnapshot,
+          undefined,
+          undefined,
+          aliases,
         ).items
       : Object.freeze([]);
     const structuralEntryMatchCounts = entryMatchCountsBySnapshot(
@@ -262,6 +283,9 @@ export class EntryUseCases {
               limit: Math.max(1, entries.length),
             },
             associationSnapshot,
+            undefined,
+            undefined,
+            aliases,
           ).items
         : Object.freeze([]);
     const tagEntryMatchesBySnapshot = new Map<

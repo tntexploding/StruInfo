@@ -65,7 +65,7 @@ const SEMANTIC_KIND_OPTIONS: readonly Readonly<{
 ]);
 
 export interface FormalKnowledgeGraphWorkspaceProps {
-  readonly presentation?: 'document';
+  readonly presentation?: 'document' | 'reading';
   readonly initialCenter?: Readonly<{entryId: string; includePrivate: boolean}>;
   readonly onReturnToQuery?: () => void;
   readonly onOpenSourceReview?: () => void;

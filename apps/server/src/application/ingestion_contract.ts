@@ -1,5 +1,9 @@
+import {MAXIMUM_AI_SPLIT_ENTRIES} from '../modules/processing/ai_split_proposal.js';
 import {z} from 'zod';
-import {intakePolicySchema} from './document_intake_contract.js';
+import {
+  intakePolicySchema,
+  type IntakeRecordValue,
+} from './document_intake_contract.js';
 import type {AgentTask} from './agent_task_contract.js';
 
 export const INGESTION_ACTOR_ID = 'new-materials-policy';
@@ -10,7 +14,12 @@ export const ingestionSettingsSchema = z
     subscriptionIds: z.array(z.uuid()).max(128).default([]),
     manualUploads: z.boolean().default(false),
     model: z.string().trim().max(160).default(''),
-    maxEntries: z.number().int().min(1).max(24).default(12),
+    maxEntries: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAXIMUM_AI_SPLIT_ENTRIES)
+      .default(12),
     maxRelations: z.number().int().min(0).max(8).default(4),
     maxModelCalls: z.number().int().min(1).max(64).default(24),
     intake: intakePolicySchema.optional(),
@@ -28,9 +37,9 @@ export interface IngestionPolicy {
   }>;
   readonly settings: IngestionSettings;
 }
-export type IngestionOrigin =
-  | Readonly<{kind: 'upload'}>
-  | Readonly<{kind: 'subscription'; subscriptionId: string}>;
+export type IngestionOrigin = Readonly<
+  NonNullable<IntakeRecordValue['captureOrigin']>
+>;
 export type IngestionStatus =
   'pending' | 'running' | 'paused' | 'attention' | 'completed' | 'taken_over';
 export interface IngestionItem {

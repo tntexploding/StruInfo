@@ -1,4 +1,5 @@
-import {isAiPriceWait} from '../../modules/processing/ai_price_policy.js';
+import {entryTagSubject} from './entry_tag_subject.js';
+import {isAiDispatchWait} from '../../modules/processing/ai_price_policy.js';
 import {
   responsesEndpoint,
   responsesOptions,
@@ -23,7 +24,7 @@ import {
   RESPONSE_METADATA_INSTRUCTIONS,
 } from './responses_metadata.js';
 
-export const OPENAI_TAG_PROMPT_VERSION = 'struinfo.openai-entry-tags.v3';
+export const OPENAI_TAG_PROMPT_VERSION = 'struinfo.openai-entry-tags.v5';
 
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 const TYPE_VALUES = [...ENTRY_TYPE_KEYWORDS];
@@ -73,7 +74,7 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
         signal: AbortSignal.timeout(this.#config.timeoutMs),
       });
     } catch (error) {
-      if (isAiPriceWait(error)) throw error;
+      if (isAiDispatchWait(error)) throw error;
       const name = error instanceof Error ? error.name : '';
       throw new AiTagProposalProviderError(
         name === 'AbortError' || name === 'TimeoutError'
@@ -118,6 +119,7 @@ function createRequest(
   config: Readonly<AiProposalProviderConfig>,
   entry: Readonly<CurrentInformationEntry>,
 ): Readonly<Record<string, unknown>> {
+  const subject = entryTagSubject(entry);
   return Object.freeze({
     model: config.model,
     ...responsesOptions(config),
@@ -128,16 +130,19 @@ function createRequest(
       'Return only the requested JSON schema. Do not quote or summarize sensitive details.',
       'Choose 3-12 concise content keywords. Merge capitalization-only duplicates.',
       'Use the central article subject. Ignore site navigation, recommended reading, publisher boilerplate and incidental examples. Publisher names are not topical tags unless the article studies the publisher.',
+      'When documentContext is present, it is a collection preface, not this item. Classify titlePath and body only; do not import other stories, the digest title or the publication date from documentContext. Existing labels are hints, not evidence.',
+      'Preserve useful specific entities, models and concepts supported by this item. Do not merge related but distinct entities or force tags into a smaller fixed count.',
+      'A bibliography preserves provenance, not a separate topical catalog. Do not create tags for names or subjects appearing only in references; ground tags in the article itself.',
       'Choose exactly one type and 1-3 ordered domains (primary first).',
       'Use customName only when keyword is other; otherwise return null.',
       RESPONSE_METADATA_INSTRUCTIONS,
     ].join(' '),
     input: JSON.stringify({
-      titlePath: entry.value.titlePath,
-      body: entry.value.body,
-      existingContentKeywords: entry.value.contentKeywords.map(
-        (keyword) => keyword.displayValue,
-      ),
+      ...subject,
+      existingContentKeywords: (subject.documentContext
+        ? []
+        : entry.value.contentKeywords
+      ).map((keyword) => keyword.displayValue),
       existingType: entry.value.typeKeyword ?? null,
       existingDomains: entry.value.domains.map((domain) => ({
         keyword: domain.keyword,

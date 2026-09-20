@@ -4,22 +4,23 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u);
 const boundedTerms = z.array(z.string().trim().min(1).max(100)).max(16);
 export const reportRequestSchema = z
   .object({
-    kind: z.enum(['daily', 'weekly']),
+    kind: z.enum(['daily', 'weekly', 'monthly', 'topic']),
+    composition: z.enum(['ai', 'collection']).optional(),
     date,
     timeZone: z.string().trim().min(1).max(80),
     timeField: z.enum(['received', 'published']).default('received'),
     topics: boundedTerms.default([]),
     sources: boundedTerms.default([]),
-    excludedEntryIds: z.array(z.uuid()).max(100).default([]),
-    selectedEntryIds: z.array(z.uuid()).max(40).optional(),
-    maxItems: z.number().int().min(1).max(8).default(6),
+    excludedEntryIds: z.array(z.uuid()).max(512).default([]),
+    selectedEntryIds: z.array(z.uuid()).max(512).optional(),
+    maxItems: z.number().int().min(0).max(512).default(6),
     maxModelCalls: z.number().int().min(2).max(20).default(12),
   })
   .strict();
 export type ReportRequest = z.infer<typeof reportRequestSchema>;
 export const reportSourceSchema = z
   .object({
-    handle: z.number().int().min(1).max(40),
+    handle: z.number().int().min(1).max(512),
     entryId: z.uuid(),
     revision: z.number().int().positive(),
     snapshotId: z.uuid(),
@@ -37,7 +38,7 @@ export const reportSourceSchema = z
   })
   .strict();
 export type ReportSource = z.infer<typeof reportSourceSchema>;
-const handles = z.array(z.number().int().min(1).max(40)).min(1).max(40);
+const handles = z.array(z.number().int().min(1).max(512)).min(1).max(512);
 export const reportGroupSchema = z
   .object({
     title: z.string().trim().min(1).max(160),
@@ -48,7 +49,7 @@ export const reportPlanSchema = z
   .object({
     groups: z
       .array(reportGroupSchema.extend({recommended: z.boolean()}))
-      .max(40),
+      .max(512),
   })
   .strict();
 export const reportStorySchema = z
@@ -85,11 +86,11 @@ export const reportStateSchema = z
       .strict(),
     title: z.string().trim().min(1).max(200),
     period: z.object({from: date, to: date}).strict(),
-    sources: z.array(reportSourceSchema).max(40),
+    sources: z.array(reportSourceSchema).max(512),
     totalEligible: z.number().int().nonnegative(),
     duplicateCount: z.number().int().nonnegative(),
-    items: z.array(reportItemSchema).max(8),
-    otherGroups: z.array(reportGroupSchema).max(40).optional(),
+    items: z.array(reportItemSchema).max(512),
+    otherGroups: z.array(reportGroupSchema).max(512).optional(),
     planned: z.boolean(),
     status: z.enum([
       'draft',
@@ -100,7 +101,7 @@ export const reportStateSchema = z
       'failed',
       'cancelled',
     ]),
-    origin: z.enum(['internal_model', 'manual']).optional(),
+    origin: z.enum(['internal_model', 'manual', 'search_results']).optional(),
     model: z.string().max(160).optional(),
     calls: z.number().int().min(0).max(20),
     errorCode: z
@@ -120,7 +121,7 @@ export interface ReportRecord {
 }
 export interface ReportRepository {
   read(reportId: string): Promise<ReportRecord | undefined>;
-  list(): Promise<readonly ReportRecord[]>;
+  list(prioritizeActive?: boolean): Promise<readonly ReportRecord[]>;
   listPriceDeferred?(): Promise<readonly ReportRecord[]>;
   save(
     reportId: string,
@@ -168,7 +169,7 @@ export const reportEditSchema = z
         z.object({included: z.boolean(), story: reportStorySchema}).strict(),
       )
       .min(1)
-      .max(8),
+      .max(512),
     reviewed: z.boolean().default(false),
   })
   .strict();

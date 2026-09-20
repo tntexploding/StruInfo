@@ -61,3 +61,42 @@ describe('durable task repository', () => {
     ).rejects.toThrow();
   });
 });
+
+it('filters selected document history in SQL before limiting recent tasks', async () => {
+  const query = vi.fn(() => Promise.resolve({rows: [], rowCount: 0}));
+  const repository = new PostgresAgentTaskRepository({
+    query,
+  } as unknown as PostgresPoolBoundary);
+  await repository.list(W, [T]);
+  expect(query).toHaveBeenCalledWith(
+    expect.stringContaining(
+      "request_text::jsonb->>'snapshotId'=ANY($2::text[])",
+    ),
+    [W, [T]],
+  );
+  expect(query).toHaveBeenCalledWith(
+    expect.stringMatching(
+      /WHERE workspace_id=\$1.*snapshotId.*ORDER BY.*LIMIT 100/u,
+    ),
+    [W, [T]],
+  );
+});
+
+it('keeps unfinished overview tasks ahead of newer history before the page limit', async () => {
+  const query = vi.fn(() => Promise.resolve({rows: [], rowCount: 0}));
+  const repository = new PostgresAgentTaskRepository({
+    query,
+  } as unknown as PostgresPoolBoundary);
+  await repository.list(W, undefined, true);
+  expect(query).toHaveBeenCalledWith(
+    expect.stringMatching(
+      /WHERE workspace_id=\$1 ORDER BY CASE.*'running' THEN 0.*'paused' THEN 2.*LIMIT 100/u,
+    ),
+    [W],
+  );
+  await repository.list(W);
+  expect(query).toHaveBeenLastCalledWith(
+    expect.stringContaining('ORDER BY created_at DESC,task_id DESC LIMIT 100'),
+    [W],
+  );
+});

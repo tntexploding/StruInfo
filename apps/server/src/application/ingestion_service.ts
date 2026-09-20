@@ -1,3 +1,4 @@
+import {intakePolicySchema} from './document_intake_contract.js';
 import {
   ingestionScopeMatches,
   ingestionSettingsSchema,
@@ -188,7 +189,13 @@ export class IngestionService {
         (current.settings.maxRelationCandidates ??
           current.settings.maxRelations) ||
       JSON.stringify(task.request.intake) !==
-        JSON.stringify(current.settings.intake)
+        JSON.stringify(
+          task.request.intake
+            ? intakePolicySchema.parse(
+                current.settings.intake ?? {fetchFullText: true},
+              )
+            : current.settings.intake,
+        )
     )
       return 'ingestion_budget_changed';
     return undefined;
@@ -240,7 +247,9 @@ export class IngestionService {
       } else if (task.runtimeStatus !== 'running') {
         // The model price scheduler owns these waits; they are not failed intake.
         if (
-          task.state.errorCode === 'ai_price_window_closed' &&
+          ['ai_price_window_closed', 'ai_operations_paused'].includes(
+            task.state.errorCode ?? '',
+          ) &&
           !task.pauseRequested
         )
           return;

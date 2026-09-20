@@ -1,4 +1,8 @@
 import {
+  prepareEntrySearchAliases,
+  type ConfirmedEntryAlias,
+} from './information_entry_search_aliases.js';
+import {
   loadCachedEntrySearchTranslations,
   type EntryTranslation,
   type EntryTranslationSearchRepositoryPort,
@@ -15,6 +19,7 @@ import {searchCurrentInformationEntries} from './information_entry_search.js';
 import {
   cosineSimilarityBasisPoints,
   isUsableInformationEntryEmbedding,
+  hasCurrentInformationEntryEmbeddingInput,
   prepareInformationEntrySearchProjection,
   tokenizeInformationEntryText,
   withInformationEntryEmbedding,
@@ -43,6 +48,7 @@ export interface InformationEntryRetrievalServiceDependencies {
   readonly index: InformationEntrySearchIndexRepositoryPort;
   readonly embeddingProvider?: InformationEntryEmbeddingProviderPort;
   readonly translations?: EntryTranslationSearchRepositoryPort;
+  readonly aliases?: () => Promise<readonly Readonly<ConfirmedEntryAlias>[]>;
 }
 
 export class InformationEntryRetrievalService implements InformationEntryRetrievalServicePort {
@@ -72,6 +78,8 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
       request,
       this.#dependencies.translations,
     );
+    const aliases = (await this.#dependencies.aliases?.()) ?? [];
+    const expanded = prepareEntrySearchAliases(request, aliases);
     if (mode === 'lexical') {
       const browsePage = await this.#loadPlainBrowsePage(request);
       if (browsePage !== undefined) {
@@ -81,10 +89,10 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
         );
         return Object.freeze({...result, totalCount: browsePage.totalCount});
       }
-      const accelerated = await this.#loadAcceleratedLexicalEntries(
-        request,
-        translations,
-      );
+      const accelerated =
+        expanded.text.length || expanded.contentKeyword.length
+          ? undefined
+          : await this.#loadAcceleratedLexicalEntries(request, translations);
       const [entries, associations] = await Promise.all([
         accelerated === undefined
           ? this.#dependencies.entries.loadCurrentEntries(
@@ -105,6 +113,7 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
         associations,
         undefined,
         translations,
+        aliases,
       );
     }
     const [entries, associations] = await Promise.all([
@@ -173,6 +182,7 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
       associations,
       semanticMatches,
       translations,
+      aliases,
     );
   }
 
@@ -495,7 +505,8 @@ function currentEmbeddedProjections(
         entry.revisionId === projection.entryRevisionId &&
         projection.embeddingProvider === provider.providerKey &&
         projection.embeddingModel === provider.model &&
-        isUsableInformationEntryEmbedding(projection.embedding)
+        isUsableInformationEntryEmbedding(projection.embedding) &&
+        hasCurrentInformationEntryEmbeddingInput(entry, projection)
         ? [[projection.entryId, projection.embedding] as const]
         : [];
     }),
@@ -517,19 +528,14 @@ function indexStatus(
   });
   const embedded =
     provider === undefined
-      ? []
-      : currentProjections.filter(
-          (projection) =>
-            projection.embeddingProvider === provider.providerKey &&
-            projection.embeddingModel === provider.model &&
-            isUsableInformationEntryEmbedding(projection.embedding),
-        );
+      ? 0
+      : currentEmbeddedProjections(entries, index, provider).size;
   return Object.freeze({
     indexVersion: INFORMATION_ENTRY_SEARCH_INDEX_VERSION,
     tokenizerVersion: INFORMATION_ENTRY_TERM_TOKENIZER_VERSION,
     publicEntryCount: entries.length,
     currentProjectionCount: currentProjections.length,
-    embeddedProjectionCount: embedded.length,
+    embeddedProjectionCount: embedded,
     staleProjectionCount: Math.max(
       0,
       index.projections.length - currentProjections.length,
@@ -539,7 +545,7 @@ function indexStatus(
     semanticSearchReady:
       provider !== undefined &&
       entries.length > 0 &&
-      embedded.length === entries.length,
+      embedded === entries.length,
     ...(provider === undefined
       ? {}
       : {

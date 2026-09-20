@@ -24,6 +24,23 @@ const SNAPSHOT_ID = '33333333-3333-4333-8333-333333333333';
 const STRUCTURE_ID = '44444444-4444-4444-8444-444444444444';
 
 describe('InformationEntry', () => {
+  it('keeps a genuinely long coherent article whole with all bibliography text', () => {
+    const text =
+      '# Synthetic monograph\n\n' +
+      'Connected argument with supporting evidence. '.repeat(5300) +
+      '\n\n## Bibliography\n\nSynthetic full reference.';
+    const snapshot = commonMarkSnapshot(false, text);
+    const fragments = aiSplitEvidenceFragments(snapshot);
+    const rows = prepareAiSplitInformationEntries(snapshot, [
+      {
+        titlePath: 'Synthetic monograph',
+        fragmentIds: fragments.map((f) => f.fragmentId),
+      },
+    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0]?.value.body).toBe(text);
+    expect(rows?.[0]?.value.chunkMode).toBe('whole');
+  });
   it.each([
     {
       name: 'disjoint headings and paragraphs',
@@ -252,9 +269,9 @@ describe('InformationEntry', () => {
       },
       {fragments: [document]},
       {
-        normalizedText: 'x'.repeat(200_001),
+        normalizedText: 'x'.repeat(320_001),
         fragments: [
-          fragment(document.fragmentId, 'document', 0, 'x'.repeat(200_001)),
+          fragment(document.fragmentId, 'document', 0, 'x'.repeat(320_001)),
         ],
       },
     ];

@@ -1,5 +1,11 @@
+import type {DocumentPublicationService} from './document_publication.js';
+import {MAXIMUM_AI_SPLIT_ENTRIES} from '../modules/processing/ai_split_proposal.js';
 import type {DocumentIntakeService} from './document_intake_service.js';
 import type {DocumentIntelligenceProvider} from './document_intake_contract.js';
+import {
+  intakeSnapshotIds,
+  intakeTargetSnapshot,
+} from './document_intake_contract.js';
 import {
   recallRelationCandidates,
   type RecallAlias,
@@ -11,6 +17,7 @@ import {
   prepareInformationEntryGraphRelation,
 } from '../modules/entries/index.js';
 import {requireOperationValue} from './operation_error.js';
+import {materializeEvidenceSnapshot} from '../modules/evidence/index.js';
 import type {EvidenceReadRepositoryPort} from '../modules/evidence/index.js';
 import type {
   CurrentInformationEntry,
@@ -38,6 +45,8 @@ import type {
 import {OperationError} from './operation_error.js';
 
 export interface AgentTaskActionsDependencies {
+  readonly publication?: DocumentPublicationService;
+  readonly knowledgeEntries?: InformationEntryRepositoryPort;
   readonly workspaceId: string;
   readonly intake?: DocumentIntakeService;
   readonly intelligence?: DocumentIntelligenceProvider;
@@ -59,11 +68,41 @@ export class AgentTaskActions {
   public get model() {
     return this.deps.split?.model;
   }
+  public get intakeModel() {
+    return this.deps.intelligence?.model;
+  }
+  public async reviewCheckpointCurrent(task: AgentTask, version: number) {
+    if (task.request.kind !== 'document') return true;
+    const record = await this.deps.intake?.record(task.request.snapshotId);
+    return (
+      record?.version === version ||
+      (record?.value.receipt === 'accepted' &&
+        record.value.receiptTaskId === task.taskId)
+    );
+  }
+  public async requiresReceiptAcceptance(request: AgentTaskRequest) {
+    return (
+      request.kind === 'document' &&
+      Boolean(request.intake) &&
+      (await this.deps.intake?.record(request.snapshotId))?.value.receipt ===
+        'pending'
+    );
+  }
   public async preflight(request: AgentTaskRequest) {
+    if (request.kind === 'intake') {
+      if (!this.deps.intelligence || !this.deps.intake)
+        throw new OperationError('rejected', 'ai_not_configured');
+      await this.deps.intake.receiptReviewReady(
+        request.snapshotId,
+        request.expectedVersion,
+      );
+      return;
+    }
     if (request.kind === 'document' || request.kind === 'split') {
       if (
         request.kind === 'document' &&
-        (!this.deps.split || !this.deps.tags || !this.deps.relations)
+        (!this.deps.tags ||
+          (!request.reprocess && (!this.deps.split || !this.deps.relations)))
       )
         throw new OperationError('rejected', 'ai_not_configured');
       const snapshot = await this.deps.evidence.loadSnapshot(
@@ -77,7 +116,31 @@ export class AgentTaskActions {
           'forbidden',
           'private_model_transfer_forbidden',
         );
+      const record = await this.deps.intake?.record(request.snapshotId);
+      const receipt = record?.value.receipt;
       if (
+        request.kind === 'document' &&
+        request.expectedReceiptVersion !== undefined &&
+        record?.version !== request.expectedReceiptVersion
+      )
+        throw new OperationError('conflict', 'stale_intake_version');
+      if (
+        receipt &&
+        receipt !== 'accepted' &&
+        !(
+          receipt === 'pending' &&
+          request.kind === 'document' &&
+          request.intake
+        )
+      )
+        throw new OperationError(
+          'rejected',
+          receipt === 'pending'
+            ? 'intake_receipt_pending'
+            : 'intake_receipt_rejected',
+        );
+      if (
+        !(request.kind === 'document' && request.reprocess === 'tags') &&
         (await this.entries()).some((e) => e.snapshotId === request.snapshotId)
       )
         throw new OperationError('conflict', 'snapshot_already_materialized');
@@ -131,8 +194,36 @@ export class AgentTaskActions {
     }
   }
   public async guard(task: AgentTask) {
-    if (task.request.kind !== 'document' || !this.deps.intake) return undefined;
-    const documentGuard = await this.deps.intake.guard(task.request.snapshotId);
+    if (task.request.kind === 'intake') {
+      const record = await requireOperationValue(this.deps.intake).record(
+        task.request.snapshotId,
+      );
+      if (
+        record?.value.receipt === 'accepted' &&
+        record.value.receiptTaskId === task.taskId
+      )
+        return undefined;
+      if (record?.value.receipt !== 'pending')
+        return 'intake_receipt_not_pending';
+      if (record.value.decision === 'blocked') return 'intake_blocked';
+      const reviewedVersion = task.state.steps[0]?.receiptVersion;
+      return reviewedVersion !== undefined && reviewedVersion !== record.version
+        ? 'stale_intake_version'
+        : undefined;
+    }
+    if (
+      !['document', 'split'].includes(task.request.kind) ||
+      !('snapshotId' in task.request) ||
+      !this.deps.intake
+    )
+      return undefined;
+    const documentGuard = await this.deps.intake.guard(
+      task.request.snapshotId,
+      task.request.kind === 'document' && Boolean(task.request.intake),
+      task.request.kind === 'document' &&
+        task.state.phase === 'intake' &&
+        Boolean(task.request.intake),
+    );
     if (documentGuard) return documentGuard;
     const step = task.state.steps.find((candidate) => !candidate.complete);
     if (step?.kind === 'relation') {
@@ -148,7 +239,10 @@ export class AgentTaskActions {
     return undefined;
   }
   public async prepareIntake(task: AgentTask) {
-    if (task.request.kind !== 'document' || !task.request.intake)
+    if (
+      (task.request.kind !== 'document' && task.request.kind !== 'intake') ||
+      !task.request.intake
+    )
       throw new OperationError('rejected', 'task_state_incomplete');
     return requireOperationValue(this.deps.intake).needsReview(
       task.request.snapshotId,
@@ -156,12 +250,114 @@ export class AgentTaskActions {
     );
   }
   public async reviewIntake(task: AgentTask) {
-    if (task.request.kind !== 'document' || !task.request.intake)
+    if (
+      (task.request.kind !== 'document' && task.request.kind !== 'intake') ||
+      !task.request.intake
+    )
       throw new OperationError('rejected', 'task_state_incomplete');
-    return requireOperationValue(this.deps.intake).review(
+    const record = await requireOperationValue(this.deps.intake).review(
       task.request.snapshotId,
       task.request.intake,
+      task.request.kind === 'intake' ||
+        (await this.requiresReceiptAcceptance(task.request)),
     );
+    return record?.version;
+  }
+  public async receiptVersion(task: AgentTask) {
+    if (task.request.kind !== 'intake')
+      throw new OperationError('rejected', 'task_state_incomplete');
+    return requireOperationValue(
+      await requireOperationValue(this.deps.intake).record(
+        task.request.snapshotId,
+      ),
+    ).version;
+  }
+  public async acceptReceipt(task: AgentTask, version: number) {
+    if (task.request.kind !== 'intake')
+      throw new OperationError('rejected', 'task_state_incomplete');
+    return requireOperationValue(this.deps.intake).acceptReviewedReceipt(
+      task.request.snapshotId,
+      task.taskId,
+      version,
+    );
+  }
+  public async finishDocumentIntake(task: AgentTask, reviewedVersion?: number) {
+    if (task.request.kind !== 'document') return;
+    const intake = requireOperationValue(this.deps.intake);
+    const record = await intake.record(task.request.snapshotId);
+    if (
+      record?.value.receipt === 'pending' &&
+      record.value.decision === 'admitted'
+    )
+      await intake.acceptReviewedReceipt(
+        record.snapshotId,
+        task.taskId,
+        reviewedVersion ?? record.version,
+        true,
+      );
+    await this.intakeTarget(task);
+  }
+  public async publish(task: AgentTask) {
+    await this.deps.publication?.completeTask(task);
+  }
+  public async validateRecovery(task: AgentTask) {
+    if (task.request.kind !== 'document')
+      throw new OperationError('rejected', 'invalid_task_request');
+    const guard = await this.guard(task);
+    if (guard) throw new OperationError('rejected', guard);
+    const record = await this.deps.intake?.record(task.request.snapshotId);
+    if (record?.value.publication?.draft)
+      throw new OperationError(
+        'conflict',
+        'document_manual_confirmation_required',
+      );
+    const split = task.state.steps.find((step) => step.kind === 'split');
+    if (record && split && intakeTargetSnapshot(record) !== split.targetId)
+      throw new OperationError('conflict', 'intake_body_not_selected');
+    if (!split?.complete) return;
+    const entries = (await this.entries()).filter(
+      (entry) => entry.snapshotId === split.targetId,
+    );
+    const tags = task.state.steps.filter((step) => step.kind === 'tags');
+    if (!tags.length) {
+      await this.tagSteps(task);
+      return;
+    }
+    if (
+      entries.length !== tags.length ||
+      entries.some(
+        (entry) =>
+          !tags.some(
+            (step) =>
+              step.targetId === entry.entryId &&
+              entry.revision ===
+                (step.expectedRevision ?? 0) + (step.complete ? 1 : 0),
+          ),
+      )
+    )
+      throw new OperationError('conflict', 'document_changed_after_tags');
+  }
+  public async validateCompletion(task: AgentTask) {
+    if (task.request.kind !== 'document') return;
+    const entries = (await this.entries()).filter(
+      (entry) => entry.snapshotId === this.documentTarget(task),
+    );
+    const tags = task.state.steps.filter(
+      (step) => step.kind === 'tags' && step.complete,
+    );
+    if (
+      !entries.length ||
+      entries.length !== tags.length ||
+      entries.some(
+        (entry) =>
+          !tags.some(
+            (step) =>
+              step.targetId === entry.entryId &&
+              entry.revision === (step.expectedRevision ?? 0) + 1,
+          ),
+      )
+    )
+      throw new OperationError('conflict', 'document_changed_after_tags');
   }
   public async intakeTarget(task: AgentTask) {
     if (task.request.kind !== 'document')
@@ -174,7 +370,7 @@ export class AgentTaskActions {
         'rejected',
         record?.value.decision === 'blocked' ? 'intake_blocked' : 'intake_held',
       );
-    return record.value.preparedSnapshotId ?? task.request.snapshotId;
+    return intakeTargetSnapshot(record);
   }
   public async recallSteps(task: AgentTask): Promise<AgentTaskStep[]> {
     if (
@@ -199,6 +395,90 @@ export class AgentTaskActions {
           };
         }),
     );
+  }
+  public async recallGroup(
+    task: AgentTask,
+    first: AgentTaskStep,
+  ): Promise<AgentTaskStep[]> {
+    if (!this.deps.intelligence?.planRecalls) return [first];
+    const candidates = task.state.steps.filter(
+      (s) =>
+        s.kind === 'recall' && !s.complete && !s.recallPlan && s.attempt < 3,
+    );
+    const group: AgentTaskStep[] = [];
+    const entries = new Map(
+      (await this.entries()).map((entry) => [entry.entryId, entry]),
+    );
+    let length = 0;
+    for (const step of candidates.slice(0, 4)) {
+      const entry = entries.get(step.targetId);
+      if (!entry)
+        throw new OperationError('not_found', 'public_entry_not_found');
+      if (entry.revision !== step.expectedRevision)
+        throw new OperationError('conflict', 'stale_entry_revision');
+      const size = Array.from(
+        JSON.stringify({
+          title: entry.value.titlePath,
+          body: entry.value.body,
+          keywords: entry.value.contentKeywords,
+        }),
+      ).length;
+      if (group.length && length + size > 120_000) break;
+      group.push(step);
+      length += size;
+    }
+    return group.length && group[0]?.targetId === first.targetId
+      ? group
+      : [first];
+  }
+  public async recallGroupPlans(steps: readonly AgentTaskStep[]) {
+    if (steps.length === 1)
+      return [await this.recall(requireOperationValue(steps[0]))];
+    const entries = new Map(
+      (await this.entries()).map((entry) => [entry.entryId, entry]),
+    );
+    const inputs = steps.map((step) => {
+      const entry = entries.get(step.targetId);
+      if (!entry)
+        throw new OperationError('not_found', 'public_entry_not_found');
+      if (entry.revision !== step.expectedRevision)
+        throw new OperationError('conflict', 'stale_entry_revision');
+      return {
+        title: entry.value.titlePath,
+        body: entry.value.body,
+        keywords: entry.value.contentKeywords.map((k) => k.displayValue),
+      };
+    });
+    const intelligence = requireOperationValue(this.deps.intelligence);
+    if (!intelligence.planRecalls)
+      throw new OperationError('rejected', 'recall_batch_unavailable');
+    return intelligence.planRecalls(inputs);
+  }
+  public async recallCallEstimate(proposal: ProcessingProposal) {
+    const count = proposal.splitPayload?.entries.length ?? 0;
+    if (
+      !this.deps.intelligence?.planRecalls ||
+      !this.deps.blobStore ||
+      !proposal.targetSnapshotId
+    )
+      return count;
+    const source = await this.deps.evidence.loadSnapshot(
+      this.deps.workspaceId,
+      proposal.targetSnapshotId,
+    );
+    if (!source || source.isPrivate)
+      throw new OperationError('not_found', 'public_snapshot_not_found');
+    const snapshot = await materializeEvidenceSnapshot(
+      source,
+      this.deps.blobStore,
+    );
+    // Short collections fit a four-item request including metadata. For long
+    // sources reserve the conservative per-entry bound before materialization.
+    return Array.from(
+      JSON.stringify(snapshot.structures[0]?.normalizedText ?? ''),
+    ).length <= 100_000
+      ? Math.ceil(count / 4)
+      : count;
   }
   public async recall(step: AgentTaskStep) {
     const entry = await this.entry(step.targetId);
@@ -308,9 +588,13 @@ export class AgentTaskActions {
         !['document', 'split'].includes(task.request.kind) ||
         !proposal.splitPayload ||
         proposal.splitPayload.entries.length >
-          (task.request.kind === 'document' ? task.request.maxEntries : 24)
+          (task.request.kind === 'document'
+            ? task.request.maxEntries
+            : MAXIMUM_AI_SPLIT_ENTRIES)
       )
         throw new OperationError('rejected', 'entry_budget_exceeded');
+      if (task.request.kind === 'split')
+        await this.deps.publication?.stage(step.targetId);
       await requireOperationValue(services.split).accept(
         step.targetId,
         proposal.proposalId,
@@ -324,6 +608,10 @@ export class AgentTaskActions {
           requireOperationValue(step.expectedRevision) + 1
       )
         throw new OperationError('conflict', 'stale_entry_revision');
+      if (task.request.kind === 'tags' && proposal.status !== 'accepted')
+        await this.deps.publication?.stage(
+          (await this.entry(step.targetId)).snapshotId,
+        );
       await requireOperationValue(services.tags).accept(
         step.targetId,
         proposal.proposalId,
@@ -341,6 +629,10 @@ export class AgentTaskActions {
           (lowFirst ? step.expectedRelatedRevision : step.expectedRevision)
       )
         throw new OperationError('conflict', 'stale_relation_revision');
+      if (task.request.kind === 'relation' && proposal.status !== 'accepted')
+        await this.deps.publication?.stage(
+          (await this.entry(step.targetId)).snapshotId,
+        );
       await requireOperationValue(services.relations).accept(
         step.targetId,
         requireOperationValue(step.relatedEntryId),
@@ -357,11 +649,12 @@ export class AgentTaskActions {
     if (
       !entries.length ||
       entries.length > task.request.maxEntries ||
-      entries.some(
-        (e) =>
-          e.revision !== 1 ||
-          e.value.splitRuleVersion !== 'struinfo.entry-split.ai-group.v1',
-      )
+      (!task.request.reprocess &&
+        entries.some(
+          (e) =>
+            e.revision !== 1 ||
+            e.value.splitRuleVersion !== 'struinfo.entry-split.ai-group.v1',
+        ))
     )
       throw new OperationError('conflict', 'document_structure_changed');
     return entries.map((e) => ({
@@ -375,10 +668,21 @@ export class AgentTaskActions {
   public async relationSteps(task: AgentTask): Promise<AgentTaskStep[]> {
     if (task.request.kind !== 'document') return [];
     const request = task.request;
-    const all = await this.entries();
-    const selected = all.filter(
+    const raw = await this.entries();
+    const selected = raw.filter(
       (e) => e.snapshotId === this.documentTarget(task),
     );
+    const published = this.deps.knowledgeEntries
+      ? await this.deps.knowledgeEntries.loadCurrentEntries(
+          this.deps.workspaceId,
+          false,
+        )
+      : raw;
+    const all = [
+      ...new Map(
+        [...published, ...selected].map((entry) => [entry.entryId, entry]),
+      ).values(),
+    ];
     const tagged = task.state.steps.filter(
       (step) => step.kind === 'tags' && step.complete,
     );
@@ -413,16 +717,10 @@ export class AgentTaskActions {
       const records = (await this.deps.intake?.list()) ?? [];
       const excludedSnapshots = new Set(
         records.flatMap((r) =>
-          r.value.decision === 'held' || r.value.decision === 'blocked'
-            ? [
-                r.snapshotId,
-                ...(r.value.preparedSnapshotId
-                  ? [r.value.preparedSnapshotId]
-                  : []),
-              ]
-            : r.value.preparedSnapshotId
-              ? [r.snapshotId]
-              : [],
+          intakeSnapshotIds(r).filter(
+            (id) =>
+              r.value.decision !== 'admitted' || id !== intakeTargetSnapshot(r),
+          ),
         ),
       );
       const excluded = new Set(
@@ -523,6 +821,8 @@ export class AgentTaskActions {
   }
   private services(task: AgentTask) {
     const request = task.request;
+    if (request.kind === 'intake')
+      throw new OperationError('rejected', 'task_state_incomplete');
     if (request.kind === 'document')
       return {
         split: this.deps.split,

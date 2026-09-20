@@ -1,3 +1,5 @@
+import type {InformationEntryRepositoryPort} from '../modules/entries/information_entry_repository.js';
+import {searchCurrentInformationEntries} from '../modules/entries/information_entry_search.js';
 import {Buffer} from 'node:buffer';
 import {DocumentUseCases} from '../application/document_use_cases.js';
 import {
@@ -171,7 +173,12 @@ const CANONICAL_UUID =
 import type {EntryMarkdownExportResult} from '../modules/entries/information_entry_markdown_export.js';
 import type {EntryMarkdownExportServicePort} from '../modules/entries/information_entry_markdown_export_service.js';
 
+import type {DocumentIntakeRepository} from '../application/document_intake_contract.js';
+
 export interface M1cApiServiceDependencies {
+  readonly stageDocument?: (snapshotId: string) => Promise<void>;
+  readonly knowledgeEntries?: InformationEntryRepositoryPort;
+  readonly documentIntakeRepository?: DocumentIntakeRepository;
   readonly entryMarkdownExports?: EntryMarkdownExportServicePort;
   readonly workspaceId: string;
   readonly blobStore: BlobStore;
@@ -427,7 +434,12 @@ export class M1cApiService implements M1cApiServicePort {
     this.#dependencies = dependencies;
     const authority = ExecutionAuthority.owner(dependencies.workspaceId);
     this.#documents = new DocumentUseCases(authority, dependencies);
-    this.#entries = new EntryUseCases(authority, dependencies);
+    this.#entries = new EntryUseCases(authority, {
+      ...dependencies,
+      entryAliases: async () =>
+        (await dependencies.reviewPreferences.load(dependencies.workspaceId))
+          .vocabulary?.aliases ?? [],
+    });
     this.#relations = new RelationUseCases(authority, dependencies);
     this.#processing = new ProcessingUseCases(authority, dependencies);
   }
@@ -2351,6 +2363,8 @@ export class M1cApiService implements M1cApiServicePort {
         preparation.resultingEntries,
         loaded.currentDocumentTags,
       );
+      if (!preparation.resultingEntries.some((entry) => entry.value.isPrivate))
+        await this.#dependencies.stageDocument?.(preparation.snapshotId);
       const outcome = await repository.applyEntryRestructure({
         workspaceId: this.#dependencies.workspaceId,
         snapshotId: preparation.snapshotId,
@@ -2543,6 +2557,28 @@ export class M1cApiService implements M1cApiServicePort {
     const request = decodeEntrySearchBody(body);
     if (request === undefined) return inputFailure('body');
     try {
+      if (
+        typeof body === 'object' &&
+        body !== null &&
+        'workbench' in body &&
+        body.workbench === true
+      ) {
+        if (
+          !request.snapshotId ||
+          (request.retrievalMode && request.retrievalMode !== 'lexical')
+        )
+          return inputFailure('body');
+        const entries =
+          await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+            this.#dependencies.workspaceId,
+            request.includePrivate,
+          );
+        return httpResult(200, {
+          status: 'ok',
+          ...searchCurrentInformationEntries(entries, request),
+          privateDocuments: {totalCount: 0, items: []},
+        });
+      }
       return httpResult(200, await this.#entries.search(request));
     } catch (error) {
       if (error instanceof OperationError) return operationFailure(error);
@@ -2640,7 +2676,10 @@ export class M1cApiService implements M1cApiServicePort {
     if (request === undefined) return inputFailure('body');
     try {
       const [entries, associationSnapshot, policy] = await Promise.all([
-        this.#dependencies.informationEntryRepository.loadCurrentEntries(
+        (
+          this.#dependencies.knowledgeEntries ??
+          this.#dependencies.informationEntryRepository
+        ).loadCurrentEntries(
           this.#dependencies.workspaceId,
           request.includePrivate,
         ),
@@ -2729,17 +2768,31 @@ export class M1cApiService implements M1cApiServicePort {
   ): Promise<M1cHttpResult> {
     if (
       !isRecord(body) ||
-      Object.keys(body).join(',') !== 'expectedRevision' ||
+      Object.keys(body).some(
+        (key) => !['expectedRevision', 'expectedTranslatedAt'].includes(key),
+      ) ||
+      (body.expectedTranslatedAt !== undefined &&
+        (typeof body.expectedTranslatedAt !== 'string' ||
+          !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/u.test(
+            body.expectedTranslatedAt,
+          ) ||
+          !Number.isFinite(Date.parse(body.expectedTranslatedAt)))) ||
       typeof body.expectedRevision !== 'number'
     )
       return inputFailure('body');
-    return this.#entryTranslation(entryId, body.expectedRevision, true);
+    return this.#entryTranslation(
+      entryId,
+      body.expectedRevision,
+      true,
+      body.expectedTranslatedAt,
+    );
   }
 
   async #entryTranslation(
     entryId: string,
     revision: number,
     generate: boolean,
+    expectedTranslatedAt?: string,
   ): Promise<M1cHttpResult> {
     if (!CANONICAL_UUID.test(entryId)) return inputFailure('path.entryId');
     if (
@@ -2756,7 +2809,7 @@ export class M1cApiService implements M1cApiServicePort {
       });
     try {
       const translation = await (generate
-        ? service.generate(entryId, revision)
+        ? service.generate(entryId, revision, expectedTranslatedAt)
         : service.read(entryId, revision));
       return httpResult(200, {status: 'ok', translation: translation ?? null});
     } catch (error) {
@@ -2808,7 +2861,18 @@ export class M1cApiService implements M1cApiServicePort {
     const input = decodeInformationEntryKnowledgeGraphRequest(body);
     if (input === undefined) return inputFailure('body');
     try {
-      return httpResult(200, await this.#relations.readGraph(input));
+      return httpResult(
+        200,
+        await new RelationUseCases(
+          ExecutionAuthority.owner(this.#dependencies.workspaceId),
+          {
+            ...this.#dependencies,
+            informationEntryRepository:
+              this.#dependencies.knowledgeEntries ??
+              this.#dependencies.informationEntryRepository,
+          },
+        ).readGraph(input),
+      );
     } catch (error) {
       if (error instanceof OperationError) return operationFailure(error);
       return repositoryFailure();
@@ -3372,6 +3436,8 @@ export class M1cApiService implements M1cApiServicePort {
           ? prepareAggregatedInformationDocumentTags(aggregationInput)
           : prepareManualInformationDocumentTags(aggregationInput, input.tags);
       if (value === undefined) return inputFailure('body.tags');
+      if (!snapshot.isPrivate)
+        await this.#dependencies.stageDocument?.(snapshotId);
       const outcome =
         await this.#dependencies.informationDocumentTagRepository.writeDocumentTags(
           {
@@ -3589,6 +3655,8 @@ export class M1cApiService implements M1cApiServicePort {
     const service = this.#dependencies.aiSplitProposals;
     if (service === undefined) return aiProviderNotConfigured();
     try {
+      if (decision === 'accepted')
+        await this.#dependencies.stageDocument?.(snapshotId);
       const result =
         decision === 'accepted'
           ? await service.accept(snapshotId, proposalId)
@@ -3673,6 +3741,15 @@ export class M1cApiService implements M1cApiServicePort {
     const service = this.#dependencies.aiTagProposals;
     if (service === undefined) return aiProviderNotConfigured();
     try {
+      if (decision === 'accepted' && this.#dependencies.stageDocument) {
+        const entry = (
+          await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+            this.#dependencies.workspaceId,
+            false,
+          )
+        ).find((entry) => entry.entryId === entryId);
+        if (entry) await this.#dependencies.stageDocument(entry.snapshotId);
+      }
       const result =
         decision === 'accepted'
           ? await service.accept(entryId, proposalId)
@@ -3788,6 +3865,15 @@ export class M1cApiService implements M1cApiServicePort {
     const service = this.#dependencies.aiAssociationProposals;
     if (service === undefined) return aiProviderNotConfigured();
     try {
+      if (decision === 'accepted' && this.#dependencies.stageDocument) {
+        const entry = (
+          await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+            this.#dependencies.workspaceId,
+            false,
+          )
+        ).find((entry) => entry.entryId === entryId);
+        if (entry) await this.#dependencies.stageDocument(entry.snapshotId);
+      }
       const result =
         decision === 'accepted'
           ? await service.accept(entryId, relatedEntryId, proposalId)
@@ -4477,7 +4563,14 @@ function decodeInformationEntryQuerySynthesisBody(
 ): Readonly<InformationEntryQuerySynthesisRequest> | undefined {
   if (
     !isRecord(body) ||
-    Object.keys(body).length !== 3 ||
+    Object.keys(body).some(
+      (key) =>
+        !['requestId', 'question', 'query', 'retrieveForQuestion'].includes(
+          key,
+        ),
+    ) ||
+    (body.retrieveForQuestion !== undefined &&
+      typeof body.retrieveForQuestion !== 'boolean') ||
     !Object.hasOwn(body, 'requestId') ||
     !Object.hasOwn(body, 'question') ||
     !Object.hasOwn(body, 'query') ||
@@ -4498,7 +4591,12 @@ function decodeInformationEntryQuerySynthesisBody(
   if (question === undefined || question === null || query === undefined) {
     return undefined;
   }
-  return Object.freeze({requestId: body.requestId, question, query});
+  return Object.freeze({
+    requestId: body.requestId,
+    question,
+    query,
+    ...(body.retrieveForQuestion === true ? {retrieveForQuestion: true} : {}),
+  });
 }
 
 function querySynthesisRequestsPrivateScope(body: unknown): boolean {

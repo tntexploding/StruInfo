@@ -1,3 +1,9 @@
+import {DocumentQueue, documentQueueApplySchema} from './document_queue.js';
+import {
+  documentPublishSchema,
+  type DocumentPublicationService,
+} from './document_publication.js';
+import type {InboxPreviewService} from './inbox_preview_service.js';
 import type {AiPriceService} from './ai_price_service.js';
 import {
   ReportCommands,
@@ -17,7 +23,10 @@ import {
 } from './agent_capture_service.js';
 import {z} from 'zod';
 import type {DocumentIntakeService} from './document_intake_service.js';
-import {intakePolicySchema} from './document_intake_contract.js';
+import {
+  intakePolicySchema,
+  intakePreparationSchema,
+} from './document_intake_contract.js';
 import {
   ingestionSettingsSchema,
   ingestionStatusQuerySchema,
@@ -50,6 +59,22 @@ const cursor = z
     entryId: id,
   })
   .strict();
+const inboxOwnerSchemas = {
+  intake_origins: z
+    .object({
+      snapshotIds: z.array(id).min(1).max(100),
+      includePrivate: z.boolean().default(false),
+    })
+    .strict(),
+  intake_previews: z
+    .object({
+      snapshotIds: z.array(id).min(1).max(20),
+      includePrivate: z.boolean().default(false),
+    })
+    .strict(),
+  intake_translate: z.object({snapshotId: id}).strict(),
+  intake_summarize: z.object({snapshotId: id}).strict(),
+};
 export const agentCommandSchemas = {
   ...reportReadCommandSchemas,
   system_status: z.object({}).strict(),
@@ -71,6 +96,24 @@ export const agentCommandSchemas = {
     .strict(),
 
   intake_status: z.object({}).strict(),
+  intake_receive: z
+    .object({
+      processAccepted: z.boolean().optional(),
+      items: z
+        .array(
+          z
+            .object({snapshotId: id, expectedVersion: z.number().int().min(0)})
+            .strict(),
+        )
+        .min(1)
+        .max(100)
+        .refine(
+          (items) =>
+            new Set(items.map((item) => item.snapshotId)).size === items.length,
+        ),
+      action: z.enum(['accept', 'reject', 'reset']),
+    })
+    .strict(),
   intake_control: z
     .object({
       snapshotId: id,
@@ -79,7 +122,9 @@ export const agentCommandSchemas = {
       reason: z.string().trim().min(1).max(500),
     })
     .strict(),
-  intake_prepare: z.object({snapshotId: id}).strict(),
+  intake_prepare: z
+    .object({snapshotId: id, selection: intakePreparationSchema.optional()})
+    .strict(),
   ingestion_status: ingestionStatusQuerySchema,
   ingestion_policy_save: z
     .object({
@@ -106,6 +151,7 @@ export const agentCommandSchemas = {
     })
     .strict(),
   document_read: z.object({snapshotId: id}).strict(),
+  document_publish: documentPublishSchema,
   entries_search: z
     .object({
       text: z.string().max(ENTRY_SEARCH_TEXT_LIMIT).default(''),
@@ -139,7 +185,12 @@ export const agentCommandSchemas = {
     })
     .strict(),
   relations_read: z.object({entryId: id}).strict(),
-  tasks_list: z.object({}).strict(),
+  tasks_list: z
+    .object({
+      snapshotIds: z.array(id).min(1).max(50).optional(),
+      prioritizeActive: z.boolean().optional(),
+    })
+    .strict(),
   task_read: z.object({taskId: id}).strict(),
   task_start: z
     .object({
@@ -152,11 +203,13 @@ export const agentCommandSchemas = {
       taskId: id,
       expectedVersion: z.number().int().min(1),
       action: z.enum(['pause', 'resume', 'cancel']),
+      regenerateSplit: z.boolean().optional(),
     })
     .strict(),
 };
 export type AgentCommandName = keyof typeof agentCommandSchemas;
 export interface AgentCommandDependencies {
+  readonly publication?: DocumentPublicationService;
   readonly aiPrice?: AiPriceService;
   readonly reports?: ReportService;
   readonly capture?: AgentCaptureService;
@@ -168,6 +221,7 @@ export interface AgentCommandDependencies {
   }>;
   readonly ingestion?: IngestionService;
   readonly intake?: DocumentIntakeService;
+  readonly inbox?: InboxPreviewService;
   readonly subscriptions?: () => Promise<unknown>;
   readonly documents: DocumentUseCases;
   readonly entries: EntryUseCases;
@@ -210,6 +264,10 @@ export class AgentCommands {
         if (!this.deps.aiPrice)
           throw new OperationError('rejected', 'ai_price_unavailable');
         return this.deps.aiPrice.status();
+      case 'ai_operations_save':
+        if (!this.deps.aiPrice)
+          throw new OperationError('rejected', 'ai_price_unavailable');
+        return this.deps.aiPrice.save(this.authority, input, true);
       case 'ai_price_save':
         if (!this.deps.aiPrice)
           throw new OperationError('rejected', 'ai_price_unavailable');
@@ -260,10 +318,127 @@ export class AgentCommands {
         );
       }
 
+      case 'intake_origins': {
+        if (this.authority.identity.kind !== 'owner')
+          throw new OperationError('forbidden', 'operation_not_authorized');
+        const request = parse(inboxOwnerSchemas.intake_origins, input);
+        this.authority.require('documents.read', request.includePrivate);
+        if (!this.deps.inbox)
+          throw new OperationError('rejected', 'intake_unavailable');
+        return this.deps.inbox.origins(
+          request.snapshotIds,
+          request.includePrivate,
+        );
+      }
+      case 'intake_previews': {
+        if (this.authority.identity.kind !== 'owner')
+          throw new OperationError('forbidden', 'operation_not_authorized');
+        const inputValue = parse(inboxOwnerSchemas.intake_previews, input);
+        this.authority.require('documents.read', inputValue.includePrivate);
+        if (!this.deps.inbox)
+          throw new OperationError('rejected', 'intake_unavailable');
+        return this.deps.inbox.preview(
+          inputValue.snapshotIds,
+          inputValue.includePrivate,
+        );
+      }
+      case 'intake_translate': {
+        if (this.authority.identity.kind !== 'owner')
+          throw new OperationError('forbidden', 'operation_not_authorized');
+        this.authority.require('models.use');
+        this.authority.require('documents.read');
+        if (!this.deps.inbox)
+          throw new OperationError('rejected', 'intake_unavailable');
+        return this.deps.inbox.translate(
+          parse(inboxOwnerSchemas.intake_translate, input).snapshotId,
+        );
+      }
+      case 'intake_summarize': {
+        if (this.authority.identity.kind !== 'owner')
+          throw new OperationError('forbidden', 'operation_not_authorized');
+        this.authority.require('models.use');
+        if (!this.deps.inbox)
+          throw new OperationError('rejected', 'intake_unavailable');
+        return this.deps.inbox.summarize(
+          parse(inboxOwnerSchemas.intake_summarize, input).snapshotId,
+        );
+      }
       case 'intake_status':
         parse(agentCommandSchemas.intake_status, input);
         this.authority.require('documents.read');
         return {records: await this.intake().list()};
+      case 'intake_receive': {
+        const request = parse(agentCommandSchemas.intake_receive, input);
+        this.authority.require('ingestion.manage');
+        if (request.processAccepted && request.action === 'accept') {
+          this.authority.require('models.use');
+          this.authority.require('tasks.control');
+        }
+        const received = await this.intake().receive(
+          request.items,
+          request.action,
+        );
+        const queued: string[] = [],
+          queueFailed: {snapshotId: string; code: string}[] = [];
+        if (request.processAccepted && request.action === 'accept') {
+          const status = await this.ingestion().status(this.authority, {
+            limit: 1,
+          });
+          for (const record of received.records) {
+            try {
+              if (!status.modelConfigured)
+                throw new OperationError('rejected', 'ai_not_configured');
+              const prior = (
+                await this.deps.tasks.list(this.authority, [record.snapshotId])
+              ).find(
+                (task) =>
+                  task.request.kind === 'document' &&
+                  !task.request.reprocess &&
+                  task.state.status !== 'cancelled',
+              );
+              const task = prior
+                ? ['paused', 'failed'].includes(prior.state.status)
+                  ? await this.deps.tasks.control(
+                      this.authority,
+                      prior.taskId,
+                      prior.version,
+                      'resume',
+                    )
+                  : prior
+                : await this.deps.tasks.start(
+                    this.authority,
+                    'accepted-' +
+                      record.snapshotId +
+                      '-' +
+                      record.version.toString(),
+                    {
+                      kind: 'document',
+                      snapshotId: record.snapshotId,
+                      maxEntries: status.policy.settings.maxEntries,
+                      maxRelations: status.policy.settings.maxRelations,
+                      maxModelCalls: status.policy.settings.maxModelCalls,
+                      intake: status.policy.settings.intake ?? {
+                        fetchFullText: true,
+                      },
+                      maxRelationCandidates:
+                        status.policy.settings.maxRelationCandidates ??
+                        status.policy.settings.maxRelations,
+                    },
+                  );
+              queued.push(task.taskId);
+            } catch (error) {
+              queueFailed.push({
+                snapshotId: record.snapshotId,
+                code:
+                  error instanceof OperationError
+                    ? error.code
+                    : 'task_start_failed',
+              });
+            }
+          }
+        }
+        return {...received, queued, queueFailed};
+      }
       case 'intake_control': {
         const request = parse(agentCommandSchemas.intake_control, input);
         this.authority.require('ingestion.manage');
@@ -276,11 +451,14 @@ export class AgentCommands {
       }
       case 'intake_prepare': {
         const request = parse(agentCommandSchemas.intake_prepare, input);
-        this.authority.require('sources.capture');
+        if (request.selection) this.authority.require('ingestion.manage');
+        if (request.selection?.source !== 'received')
+          this.authority.require('sources.capture');
         return (
           (await this.intake().prepare(
             request.snapshotId,
             intakePolicySchema.parse({fetchFullText: true}),
+            request.selection,
           )) ?? null
         );
       }
@@ -352,6 +530,14 @@ export class AgentCommands {
             : {}),
         };
       }
+      case 'document_publish': {
+        if (!this.deps.publication)
+          throw new OperationError('rejected', 'publication_unavailable');
+        return this.deps.publication.confirm(
+          this.authority,
+          parse(documentPublishSchema, input),
+        );
+      }
       case 'document_read':
         return this.deps.documents.read(
           parse(agentCommandSchemas.document_read, input).snapshotId,
@@ -370,9 +556,21 @@ export class AgentCommands {
         return this.deps.relations.list(
           parse(agentCommandSchemas.relations_read, input).entryId,
         );
-      case 'tasks_list':
-        parse(agentCommandSchemas.tasks_list, input);
-        return this.deps.tasks.list(this.authority);
+      case 'document_queue_status':
+        parse(agentCommandSchemas.system_status, input);
+        return new DocumentQueue(this.authority, this.deps).status();
+      case 'document_queue_apply':
+        return new DocumentQueue(this.authority, this.deps).apply(
+          parse(documentQueueApplySchema, input),
+        );
+      case 'tasks_list': {
+        const query = parse(agentCommandSchemas.tasks_list, input);
+        return this.deps.tasks.list(
+          this.authority,
+          query.snapshotIds,
+          query.prioritizeActive,
+        );
+      }
       case 'task_read':
         return this.deps.tasks.read(
           this.authority,
@@ -393,6 +591,7 @@ export class AgentCommands {
           request.taskId,
           request.expectedVersion,
           request.action,
+          request.regenerateSplit,
         );
       }
       default:

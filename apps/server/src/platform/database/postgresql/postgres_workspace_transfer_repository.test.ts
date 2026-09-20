@@ -30,64 +30,67 @@ const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 const CREATED_AT = '2040-01-02T03:04:05.000Z';
 
 describe('PostgresM1cDomainTransferRepository', () => {
-  it('restores price-deferred reports dormant without changing spent calls or the archive', async () => {
-    const {pool, statements, parameters} = createPool(() => rows([]));
-    const empty = createEmptyM1cWorkspaceTransferSnapshot(
-      WORKSPACE_ID,
-      CREATED_AT,
-    );
-    const state = reportStateSchema.parse({
-      request: {kind: 'daily', date: '2040-01-02', timeZone: 'UTC'},
-      actor: {kind: 'owner', id: 'synthetic-owner'},
-      title: 'Synthetic report',
-      period: {from: '2040-01-02', to: '2040-01-02'},
-      sources: [],
-      totalEligible: 0,
-      duplicateCount: 0,
-      items: [],
-      planned: false,
-      status: 'queued',
-      calls: 2,
-      errorCode: 'ai_price_window_closed',
-      model: 'synthetic-model',
-    });
-    const report = {
-      workspace_id: WORKSPACE_ID,
-      report_id: WORKSPACE_ID,
-      state_text: JSON.stringify(state),
-      current_version: 3,
-      created_at: CREATED_AT,
-      updated_at: CREATED_AT,
-    };
-    await new PostgresM1cDomainTransferRepository(pool).restoreEmptyWorkspace(
-      WORKSPACE_ID,
-      {
-        ...empty,
-        processing: {
-          ...empty.processing,
-          tables: empty.processing.tables.map((t) =>
-            t.name === 'processing_report' ? {...t, rows: [report]} : t,
-          ),
+  it.each(['ai_price_window_closed', 'ai_operations_paused'])(
+    'restores %s reports dormant without changing spent calls or the archive',
+    async (errorCode) => {
+      const {pool, statements, parameters} = createPool(() => rows([]));
+      const empty = createEmptyM1cWorkspaceTransferSnapshot(
+        WORKSPACE_ID,
+        CREATED_AT,
+      );
+      const state = reportStateSchema.parse({
+        request: {kind: 'daily', date: '2040-01-02', timeZone: 'UTC'},
+        actor: {kind: 'owner', id: 'synthetic-owner'},
+        title: 'Synthetic report',
+        period: {from: '2040-01-02', to: '2040-01-02'},
+        sources: [],
+        totalEligible: 0,
+        duplicateCount: 0,
+        items: [],
+        planned: false,
+        status: 'queued',
+        calls: 2,
+        errorCode,
+        model: 'synthetic-model',
+      });
+      const report = {
+        workspace_id: WORKSPACE_ID,
+        report_id: WORKSPACE_ID,
+        state_text: JSON.stringify(state),
+        current_version: 3,
+        created_at: CREATED_AT,
+        updated_at: CREATED_AT,
+      };
+      await new PostgresM1cDomainTransferRepository(pool).restoreEmptyWorkspace(
+        WORKSPACE_ID,
+        {
+          ...empty,
+          processing: {
+            ...empty.processing,
+            tables: empty.processing.tables.map((t) =>
+              t.name === 'processing_report' ? {...t, rows: [report]} : t,
+            ),
+          },
         },
-      },
-    );
-    const index = statements.findIndex((s) =>
-      s.startsWith('INSERT INTO struinfo.processing_report'),
-    );
-    const [restored] = JSON.parse(String(parameters[index]?.[0])) as {
-      state_text: string;
-      current_version: number;
-    }[];
-    expect(restored?.current_version).toBe(4);
-    expect(JSON.parse(restored?.state_text ?? '{}')).toMatchObject({
-      status: 'failed',
-      calls: 2,
-      errorCode: 'ai_price_resume_required',
-    });
-    expect(JSON.parse(report.state_text) as unknown).toMatchObject({
-      errorCode: 'ai_price_window_closed',
-    });
-  });
+      );
+      const index = statements.findIndex((s) =>
+        s.startsWith('INSERT INTO struinfo.processing_report'),
+      );
+      const [restored] = JSON.parse(String(parameters[index]?.[0])) as {
+        state_text: string;
+        current_version: number;
+      }[];
+      expect(restored?.current_version).toBe(4);
+      expect(JSON.parse(restored?.state_text ?? '{}')).toMatchObject({
+        status: 'failed',
+        calls: 2,
+        errorCode: 'ai_price_resume_required',
+      });
+      expect(JSON.parse(report.state_text) as unknown).toMatchObject({
+        errorCode,
+      });
+    },
+  );
   it('restores unattended policy paused with a fresh version while leaving archived authority intact', async () => {
     const {pool, statements, parameters} = createPool(() => rows([]));
     const empty = createEmptyM1cWorkspaceTransferSnapshot(

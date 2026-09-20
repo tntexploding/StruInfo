@@ -1,5 +1,6 @@
 import type {CurrentInformationEntry} from '../modules/entries/index.js';
 import type {IntakeRecord} from './document_intake_contract.js';
+import {intakeTargetSnapshot} from './document_intake_contract.js';
 import type {EvidenceSnapshotSummary} from '../modules/evidence/evidence_read_repository.js';
 import type {ReportRequest, ReportSource} from './report_contract.js';
 import {OperationError} from './operation_error.js';
@@ -16,10 +17,16 @@ export function reportPeriod(request: ReportRequest) {
   } catch {
     throw new OperationError('invalid_input', 'invalid_report_timezone');
   }
+  if (request.kind === 'topic') return {from: '0001-01-01', to: '9999-12-31'};
+  if (request.kind === 'monthly') day.setUTCDate(1);
   if (request.kind === 'weekly')
     day.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7));
   const from = day.toISOString().slice(0, 10);
   if (request.kind === 'weekly') day.setUTCDate(day.getUTCDate() + 6);
+  if (request.kind === 'monthly') {
+    day.setUTCMonth(day.getUTCMonth() + 1);
+    day.setUTCDate(0);
+  }
   return {from, to: day.toISOString().slice(0, 10)};
 }
 
@@ -40,7 +47,7 @@ export function selectReportSources(
   const admission = new Map(
     records
       .filter((r) => r.value.decision === 'admitted')
-      .map((r) => [r.value.preparedSnapshotId ?? r.snapshotId, r]),
+      .map((r) => [intakeTargetSnapshot(r), r]),
   );
   const eligible = entries.filter((e) => {
     const intake = admission.get(e.snapshotId);
@@ -169,18 +176,18 @@ export function selectReportSources(
       b.source.date.localeCompare(a.source.date) ||
       a.entry.entryId.localeCompare(b.entry.entryId),
   );
+  const selected = candidates.filter(
+    (c) =>
+      !request.selectedEntryIds ||
+      request.selectedEntryIds.includes(c.entry.entryId),
+  );
+  if (selected.length > 512)
+    throw new OperationError('rejected', 'report_source_limit_exceeded');
   return {
     period,
     totalEligible: candidates.length,
     duplicateCount,
-    sources: candidates
-      .filter(
-        (c) =>
-          !request.selectedEntryIds ||
-          request.selectedEntryIds.includes(c.entry.entryId),
-      )
-      .slice(0, 40)
-      .map((c, i) => ({...c.source, handle: i + 1})),
+    sources: selected.map((c, i) => ({...c.source, handle: i + 1})),
   };
 }
 function fold(value: string) {

@@ -1,7 +1,4 @@
-import {
-  isAiPriceWait,
-  AI_PRICE_WAIT,
-} from '../../modules/processing/ai_price_policy.js';
+import {isAiDispatchWait} from '../../modules/processing/ai_price_policy.js';
 import {
   responsesEndpoint,
   responsesOptions,
@@ -112,7 +109,7 @@ export class ResponsesEntryTranslationProvider implements EntryTranslationProvid
         new TextDecoder('utf-8', {fatal: true}).decode(bytes),
       );
     } catch (error) {
-      if (isAiPriceWait(error)) throw new EntryTranslationError(AI_PRICE_WAIT);
+      if (isAiDispatchWait(error)) throw new EntryTranslationError(error.code);
       if (error instanceof EntryTranslationError) throw error;
       if (signal.aborted)
         throw new EntryTranslationError('ai_provider_timeout');

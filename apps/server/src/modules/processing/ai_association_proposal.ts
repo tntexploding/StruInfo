@@ -2,6 +2,7 @@ import type {CurrentInformationEntry} from '../entries/index.js';
 import type {ProcessingRun} from './processing_contract.js';
 
 export type AiAssociationProposalProviderErrorCode =
+  | 'ai_operations_paused'
   | 'ai_price_window_closed'
   | 'ai_provider_timeout'
   | 'ai_provider_unavailable'

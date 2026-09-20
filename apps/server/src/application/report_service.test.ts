@@ -1,5 +1,6 @@
 import {
   AiPriceWindowClosedError,
+  AiOperationsPausedError,
   AI_PRICE_WAIT,
 } from '../modules/processing/ai_price_policy.js';
 import {requireOperationValue} from './operation_error.js';
@@ -198,6 +199,22 @@ describe('report material selection', () => {
       calls: 1,
     });
     expect(f.provider.summarize).not.toHaveBeenCalled();
+  });
+  it('uses the selected received body and excludes earlier web captures from reports', () => {
+    const received = entry(10),
+      web = {...entry(11), snapshotId: id(998)},
+      old = {...entry(12), snapshotId: id(997)};
+    const intake = admit(received);
+    intake.value.preparedSnapshotId = web.snapshotId;
+    intake.value.bodySource = 'received';
+    intake.value.previousPreparedSnapshotIds = [old.snapshotId];
+    const result = selectReportSources(
+      request,
+      [received, web, old],
+      [intake],
+      [{snapshotId: received.snapshotId, capturedAt: '2040-01-02T00:00:00Z'}],
+    );
+    expect(result.sources.map((s) => s.entryId)).toEqual([received.entryId]);
   });
   it('retains original receipt dates for prepared documents and does not invent publication dates', () => {
     const e = {...entry(10)};
@@ -735,5 +752,97 @@ describe('reviewable report workflow', () => {
       status: 'ready',
       calls: 4,
     });
+  });
+});
+
+it('reads report activity without starting work and hides newly private material', async () => {
+  const f = fixture();
+  const r = (await f.service.create(owner, 'overview-status', request)).report;
+  f.rows.set(r.reportId, {
+    ...r,
+    state: {...r.state, status: 'queued', errorCode: AI_PRICE_WAIT},
+  });
+  const result = await new ReportCommands(owner, f.service).execute(
+    'reports_list',
+    {prioritizeActive: true},
+  );
+  expect(result).toMatchObject({
+    reports: [
+      {
+        status: 'queued',
+        active: false,
+        errorCode: AI_PRICE_WAIT,
+        planned: false,
+        completedItemCount: 0,
+      },
+    ],
+  });
+  expect(f.provider.plan).not.toHaveBeenCalled();
+  f.entries[0] = {
+    ...requireOperationValue(f.entries[0]),
+    value: {...requireOperationValue(f.entries[0]).value, isPrivate: true},
+  };
+  expect((await f.service.list(owner, true)).reports).toEqual([]);
+});
+
+it('global stop saves an in-flight report plan and waits before further summaries', async () => {
+  let allowed = true;
+  const check = async () => {
+    await Promise.resolve();
+    if (!allowed) throw new AiOperationsPausedError();
+  };
+  const f = fixture(true, check);
+  const service = new ReportService({...f.deps, checkOperations: check});
+  const plan = requireOperationValue(f.provider.plan.getMockImplementation());
+  f.provider.plan.mockImplementationOnce(async (input) => {
+    const result = await plan(input);
+    allowed = false;
+    return result;
+  });
+  const report = (await service.create(owner, 'global-report', request)).report;
+  await service.generate(owner, report.reportId, report.version);
+  expect((await f.done(report.reportId, service)).state).toMatchObject({
+    planned: true,
+    status: 'queued',
+    errorCode: 'ai_operations_paused',
+    calls: 1,
+  });
+  await service.pollPriceDeferred();
+  expect(f.provider.summarize).not.toHaveBeenCalled();
+  allowed = true;
+  await service.pollPriceDeferred();
+  expect((await f.done(report.reportId, service)).state.status).toBe('ready');
+  expect(f.provider.plan).toHaveBeenCalledTimes(1);
+});
+
+describe('document journey reports', () => {
+  it('uses complete calendar months, including leap years, and all-time topic selection', () => {
+    expect(
+      reportPeriod({...request, kind: 'monthly', date: '2040-02-18'}),
+    ).toEqual({from: '2040-02-01', to: '2040-02-29'});
+    expect(reportPeriod({...request, kind: 'topic'})).toEqual({
+      from: '0001-01-01',
+      to: '9999-12-31',
+    });
+  });
+  it('creates a cited search collection without model calls and exports it', async () => {
+    const f = fixture();
+    const result = await f.service.create(owner, 'collection-without-ai', {
+      ...request,
+      composition: 'collection',
+      maxItems: 0,
+    });
+    expect(result.report.state).toMatchObject({
+      status: 'ready',
+      origin: 'search_results',
+      calls: 0,
+    });
+    expect(result.report.state.items.length).toBe(
+      result.report.state.sources.length,
+    );
+    const output = await f.service.export(owner, result.report.reportId);
+    expect(output.markdown).toContain('检索摘录');
+    expect(f.provider.plan).not.toHaveBeenCalled();
+    expect(f.provider.summarize).not.toHaveBeenCalled();
   });
 });

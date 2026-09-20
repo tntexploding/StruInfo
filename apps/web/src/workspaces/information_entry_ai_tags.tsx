@@ -289,6 +289,8 @@ function failureFeedback(code: string): ActionFeedback {
   const known: Readonly<Record<string, string>> = Object.freeze({
     ai_private_entry_forbidden: '隐私条目不会发送给 模型服务。',
     ai_provider_not_configured: '当前服务未启用 模型服务。',
+    ai_operations_paused:
+      '内置 AI 后续操作已禁止；可在总览允许继续，已有结果保留。',
     ai_price_window_closed:
       '当前为 DeepSeek 高峰时段，请在低价时段重试。恢复时间见设置 → AI 接入。',
     ai_provider_timeout: '模型服务 请求超时，条目没有变化。',

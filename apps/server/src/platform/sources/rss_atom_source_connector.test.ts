@@ -106,6 +106,54 @@ describe('RssAtomSourceConnector', () => {
     );
   });
 
+  it.each([false, true])(
+    'preserves RSS fields alongside Dublin Core metadata (extension first: %s)',
+    async (extensionFirst) => {
+      const primary =
+        '<title><![CDATA[合成会议记录]]></title><description><![CDATA[<p>完整的合成正文与上下文。</p>]]></description>';
+      const extension =
+        '<dc:title>Metadata title</dc:title><dc:description>Metadata summary</dc:description>';
+      const feed =
+        '<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/"><channel><item><guid>synthetic-namespace</guid>' +
+        (extensionFirst ? extension + primary : primary + extension) +
+        '<link>https://example.invalid/article</link></item></channel></rss>';
+      const connector = connectorWith(
+        () => Promise.resolve(xmlResponse(feed, 'application/rss+xml')),
+        '203.0.113.10',
+      );
+      const result = await connector.read(request());
+      if (result.status !== 'changed') throw new Error('expected document');
+      const document = result.documents[0];
+      const text = new TextDecoder().decode(document?.sourceUtf8);
+      expect(text).toContain('# 合成会议记录');
+      expect(text).toContain('完整的合成正文与上下文。');
+      expect(text).not.toContain('Metadata');
+      expect(new TextDecoder().decode(document?.rawSourceBytes)).toBe(feed);
+      await expect(
+        connector.read(request(result.cursor)),
+      ).resolves.toMatchObject({status: 'unchanged'});
+    },
+  );
+
+  it('preserves prefixed Atom titles, links and content', async () => {
+    const feed =
+      '<a:feed xmlns:a="http://www.w3.org/2005/Atom"><a:entry><a:id>synthetic-prefixed</a:id><a:title type="html">First &lt;em&gt;middle&lt;/em&gt; last</a:title><a:link href="https://example.invalid/prefixed"/><a:content type="html">&lt;p&gt;Synthetic complete body.&lt;/p&gt;</a:content></a:entry></a:feed>';
+    const result = await connectorWith(
+      () => Promise.resolve(xmlResponse(feed, 'application/atom+xml')),
+      '203.0.113.10',
+    ).read(request());
+    if (result.status !== 'changed') throw new Error('expected document');
+    expect(result.documents[0]?.canonicalUri).toBe(
+      'https://example.invalid/prefixed',
+    );
+    expect(new TextDecoder().decode(result.documents[0]?.sourceUtf8)).toContain(
+      '# First middle last',
+    );
+    expect(new TextDecoder().decode(result.documents[0]?.sourceUtf8)).toContain(
+      'Synthetic complete body.',
+    );
+  });
+
   it('fails closed for local targets, declarations and malformed config', async () => {
     const fetcher = vi.fn<typeof fetch>();
     const local = connectorWith(fetcher, '127.0.0.1');

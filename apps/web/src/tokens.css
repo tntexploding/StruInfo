@@ -6,7 +6,10 @@
   --si-color-surface-1: light-dark(#ffffff, #293840);
   --si-color-surface-2: light-dark(#f2f5f5, #22323a);
   --si-color-surface-raised: light-dark(#ffffff, #35464f);
-  --si-color-surface-ai: light-dark(#eeeaf6, #2d304b);
+  --si-color-surface-ai: light-dark(#f5eee8, #302c2a);
+  --si-color-ai: light-dark(#805838, #d7b495);
+  --si-color-ai-ink: light-dark(#ffffff, #292422);
+  --si-color-ai-border: light-dark(#c0a993, #806d5d);
 
   --si-color-text-primary: light-dark(#24343c, #e8eff1);
   --si-color-text-secondary: light-dark(#52636c, #b4c5cd);

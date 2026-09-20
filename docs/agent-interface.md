@@ -1,5 +1,20 @@
 # AI 自动处理与外部 Agent 接口
 
+## 统一文档处理与入库（2026-09-19，ADR 0085）
+
+文档为连续任务的核心：审核接收 → 拆分 → 标签与联系 → 确认入库。
+文档入口提交的 AI 审核默认走完整任务；人工接受可同时送入处理队列。
+处理中保存断点，工作台可读可编辑；未完成、被拒收或当前版本未确认的文档不进入查询、RAG、图谱或新报告选材。
+AI 全流程成功后确认入库；人工修改公开文档后通过“确认入库”提交当前全部条目版本。
+外部 Agent 使用同一确认边界，独立拆分/标注任务不自动发布。
+
+总览 AI 小框仅显示总控、当前状态和处理数字；右侧任务队列显示逐篇阶段、发起者、等待原因、恢复/暂停/取消与文档跳转。
+内部模型请求串行执行，发出前再次检查全局许可和价格窗口。
+失败保留进度、尝试次数及调用预算；人工暂停和历史失败不会因为部署而自动继续。
+既有无人值守开关、来源范围、私密边界及 Agent 授权保持不变。
+未受任务管理的历史资料保持可读；从本次开始手动修改或重新处理时进入确认规则。
+无需数据库迁移或新依赖，发布确认记录在既有接收 JSON 中。
+
 ## Reports (ADR 0081)
 
 MCP and the authenticated Agent HTTP gateway expose `report_preview`, `reports_list`, `report_read`, and `report_export`. Preview requires `entries.search`; other reads require both `entries.search` and `processing.read`. All inputs and citations remain limited to admitted public Entries. `report_export` returns a filename and Markdown; it does not send messages or write an external file. The current local owner may create, generate, cancel and edit via `/api/v1/reports/commands`. Existing Agent grants remain unchanged and external report writes are unavailable. See [report workflow and input fields](daily-weekly-reports.md).
@@ -108,7 +123,7 @@ typeKeyword/typeCustomName、domainKeyword/domainCustomName、captured/published
 1. `document_import` 提交 requestKey、title、markdown（UTF-8 最多 1 MiB），返回 snapshotId。
    请求键绑定执行身份；重试复用同一键，内容不同必须换键。
 2. `document_sections` 取得稳定 ordinal/text。让 Agent 把全部 ordinal 按原顺序无遗漏、
-   无重叠地组成最多 24 组，每组提交 titlePath、startOrdinal、endOrdinal。
+   无重叠地组成最多 64 组，输入最多 128 个证据块（序号 0–127），每组提交 titlePath、startOrdinal、endOrdinal。任务请求仍受 32 KiB 总字节限制，标题应简洁。
 3. `task_start` 提交如下结构；返回持久 taskId 后用 task_read 查询状态。
 4. `entry_read` 读取当前版本，提交 kind=tags 的 entryId、expectedRevision 和
    result（summary、contentKeywords、typeKeyword、domains）。
@@ -173,3 +188,30 @@ corepack pnpm exec tsx tools/verify_ai_agent_flow.ts 12355 struinfo_ai_smoke str
 脚本应用全部迁移、复用真实运行权限脚本，并用受限账号检查订阅入队、拆分、标签、
 联系、失败重试、外部独立处理、版本冲突与隐私拒绝。模型响应为注入的合成结果，
 不会连接模型服务。报告、测试偏好与 Blob 保存在指定目录；完成后停止专用临时容器。
+
+## 按文档读取处理记录
+
+`tasks_list` 保留空参数的最近 100 条读取，可选传入 `snapshotIds`（1–50 个 Snapshot ID）。文档范围在数据库最近记录限制之前应用；工作区与调用身份可见性不变。资料库用此读取展示所选旧文档的任务，不从全局最近列表缺失推断未处理。返回的 `runtimeStatus` 区分实际运行、空闲与待恢复；该读取不会恢复任务或调用模型。
+
+收件箱批量选择：`intake_receive` 接收 `items: [{snapshotId, expectedVersion}]`（1–100 份且不重复）和 `action: accept | reject | reset`，需独立 automate 授权。返回成功 `records` 与逐份 `failed`，失败项不得视为已接受。该操作只修改公开资料的收件选择，不改变 AI 审核结果或开启自动策略。`intake_status` 返回可选 `value.receipt`，缺省表示兼容历史资料；`documents_list` 不列出待接受和已拒绝资料，原文仍可按 ID 读取。
+
+### 独立 AI 接收审核
+
+`task_start` 新增 `kind: "intake"`：提交公开待接受资料的 `snapshotId`、当前接收 `expectedVersion`、`intake` 规则和 `maxModelCalls`（1–3，默认 3）。需要 process 与 automate grants；获取网页正文另需 capture。通过既有任务接口读取、暂停、取消与恢复。仅完整且获准的资料会被接受，任务到此停止；暂缓资料保留待接受，原文保留。不会开启全局策略或扩大现有 grants。
+
+## Owner batch document queue
+
+The local owner task endpoint additionally admits `document_queue_status` and
+`document_queue_apply`. These operations require owner identity; no external
+Agent grant or MCP tool is added. Apply accepts `action` (`resume`, `restart`,
+`start`, `cancel`) and up to 32 distinct `items` with `snapshotId`, `expectedVersion` and
+`taskId` when recovering or cancelling. It returns per-document `queued`,
+`cancelled` and `failed` results. Cancellation needs no model access, stops
+future steps and preserves receipt choices, evidence and completed results.
+Candidates include failed, paused and active work even when content or receipt
+gates prevent resuming; terminal and superseded tasks are excluded. Each selected
+task is checked against the owner-reviewed version, including partial conflicts.
+Restart creates a linked round only for exhausted failed document tasks, keeps
+completed checkpoints and the previous consumed-call count, and disables the
+old task. It never overwrites changed Entry revisions or manual publication
+drafts. New JSON fields are optional; no database migration is required.

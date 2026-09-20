@@ -19,7 +19,7 @@ export interface AiProposalProviderConfig {
 }
 
 export interface EmbeddingProviderConfig {
-  readonly providerKey: 'openai-embeddings-v1';
+  readonly providerKey: 'openai-embeddings-v2';
   readonly model: string;
   readonly apiKey: string;
   readonly maximumBatchSize: 32;
@@ -204,7 +204,7 @@ function parseEmbeddingProvider(
     );
   }
   return Object.freeze({
-    providerKey: 'openai-embeddings-v1' as const,
+    providerKey: 'openai-embeddings-v2' as const,
     model,
     apiKey,
     maximumBatchSize: 32 as const,

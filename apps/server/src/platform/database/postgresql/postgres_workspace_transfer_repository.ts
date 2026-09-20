@@ -210,7 +210,12 @@ async function restoreInTransaction(
                   string,
                   unknown
                 >;
-                if (state.errorCode !== 'ai_price_window_closed') return row;
+                if (
+                  !['ai_price_window_closed', 'ai_operations_paused'].includes(
+                    String(state.errorCode),
+                  )
+                )
+                  return row;
                 return {
                   ...row,
                   current_version: Number(row.current_version) + 1,

@@ -14,7 +14,10 @@ describe('StruInfo MCP protocol', () => {
     await client.connect(b);
     try {
       const tools = await client.listTools();
-      expect(tools.tools).toHaveLength(26);
+      expect(tools.tools).toHaveLength(28);
+      expect(
+        tools.tools.find((tool) => tool.name === 'intake_receive')?.annotations,
+      ).toMatchObject({readOnlyHint: false, openWorldHint: false});
       expect(
         tools.tools.find((t) => t.name === 'entries_search')?.annotations
           ?.readOnlyHint,

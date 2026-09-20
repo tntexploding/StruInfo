@@ -92,6 +92,44 @@ export class PostgresEntryTranslationRepository
     );
   }
 
+  public replaceIfCurrent(
+    workspaceId: string,
+    translation: Readonly<EntryTranslation>,
+    expectedTranslatedAt: string,
+  ): Promise<boolean> {
+    return runPostgresTransaction(
+      this.pool,
+      'read_committed',
+      async (client) => {
+        await acquireWorkspaceWriteLock(client, canonicalUuid(workspaceId));
+        const result = await client.query(
+          `UPDATE struinfo.information_entry_translation t SET
+        title=$5,body=$6,provider_key=$7,model=$8,prompt_version=$9,translated_at=$10::timestamptz
+        FROM struinfo.information_entry e
+        WHERE t.workspace_id=$1 AND t.entry_id=$2 AND t.target_language='zh-CN'
+        AND e.workspace_id=t.workspace_id AND e.entry_id=t.entry_id
+        AND e.current_revision=$3 AND e.current_revision_id=$4
+        AND e.is_current_structure AND NOT e.is_private
+        AND t.source_revision=$3 AND t.source_revision_id=$4
+        AND t.translated_at=$11::timestamptz AND t.provider_key <> 'provided-translation-v1'`,
+          [
+            canonicalUuid(workspaceId),
+            canonicalUuid(translation.entryId),
+            integer(translation.sourceRevision),
+            canonicalUuid(translation.sourceRevisionId),
+            translation.title,
+            translation.body,
+            translation.providerKey,
+            translation.model,
+            translation.promptVersion,
+            translation.translatedAt,
+            expectedTranslatedAt,
+          ],
+        );
+        return result.rowCount === 1;
+      },
+    );
+  }
   public saveIfCurrent(
     workspaceId: string,
     translation: Readonly<EntryTranslation>,

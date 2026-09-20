@@ -3,6 +3,7 @@ import {describe, expect, it} from 'vitest';
 import {ReadingContent} from './reading_content.js';
 import {
   readingTitle,
+  compactDocumentTitle,
   sourceDisplayName,
   sourceShortName,
 } from './reading_text.js';
@@ -51,5 +52,74 @@ describe('safe article reading', () => {
     expect(sourceDisplayName({sourceKey: 'Manual document'})).toBe(
       'Manual document',
     );
+  });
+});
+
+describe('source split boundaries', () => {
+  it('marks real block boundaries while retaining formatting and reference links', () => {
+    const text =
+      '# Title\n\nFirst **bold** paragraph.\n\n## Next\n\nSecond [reference][r].\n\n[r]: https://example.invalid/reference';
+    const markup = renderToStaticMarkup(
+      <ReadingContent
+        text={text}
+        boundaries={[{offset: text.indexOf('## Next'), label: '第 2 条'}]}
+      />,
+    );
+    expect(markup.match(/role="separator"/g)).toHaveLength(1);
+    expect(markup).toContain('<strong>bold</strong>');
+    expect(markup).toContain('href="https://example.invalid/reference"');
+    expect(markup.indexOf('role="separator"')).toBeGreaterThan(
+      markup.indexOf('paragraph.'),
+    );
+    expect(markup.indexOf('role="separator"')).toBeLessThan(
+      markup.indexOf('<h4>Next'),
+    );
+  });
+  it('marks an exact Unicode cut inside a paragraph and inside a list item', () => {
+    const text = 'A😀Z\n\n- First\n- Second';
+    const markup = renderToStaticMarkup(
+      <ReadingContent
+        text={text}
+        boundaries={[
+          {offset: 3, label: '第二段'},
+          {offset: text.indexOf('- Second'), label: '第三段'},
+        ]}
+      />,
+    );
+    expect(markup.match(/role="separator"/g)).toHaveLength(2);
+    expect(markup).toContain('<p>A😀<span');
+    expect(markup).toContain('</span>Z</p>');
+    expect(markup).toContain('<li><span class="reading-split-boundary"');
+    expect(markup).toContain('<p>Second</p></li>');
+  });
+  it('does not invent a boundary for a whole document', () => {
+    expect(
+      renderToStaticMarkup(
+        <ReadingContent text="One complete article." boundaries={[]} />,
+      ),
+    ).not.toContain('role="separator"');
+  });
+});
+
+describe('compact document headings', () => {
+  it('keeps normal titles intact', () => {
+    expect(compactDocumentTitle('Synthetic complete title')).toBe(
+      'Synthetic complete title',
+    );
+  });
+  it('uses a complete briefing heading without retaining its long appended body', () => {
+    const heading = '【合成资料每日速递（01月01日）】';
+    expect(compactDocumentTitle(heading + ' 合成摘要条目。'.repeat(40))).toBe(
+      heading,
+    );
+  });
+  it('does not mistake a short category prefix for the whole title', () => {
+    const value = '【测试】' + '合成标题文字'.repeat(20);
+    expect(compactDocumentTitle(value)).toBe(
+      Array.from(value).slice(0, 80).join('') + '…',
+    );
+  });
+  it('shortens other oversized headings at a Unicode scalar boundary', () => {
+    expect(compactDocumentTitle('😀'.repeat(90))).toBe('😀'.repeat(80) + '…');
   });
 });

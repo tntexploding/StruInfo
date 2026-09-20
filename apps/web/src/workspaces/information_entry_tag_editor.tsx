@@ -225,7 +225,7 @@ export function InformationDocumentPanel({
             />
           </label>
           <button className="primary-action" type="submit" disabled={busy}>
-            保存当前标签
+            确认文档标签
           </button>
         </form>
       ) : null}
@@ -536,7 +536,7 @@ export function InformationEntryEditor({
               {saving
                 ? '正在保存…'
                 : presentation === 'workbench'
-                  ? '保存标注'
+                  ? '确认标签并入库'
                   : '保存并继续'}
             </button>
             <button

@@ -25,6 +25,23 @@ export async function recordIngestionCapture(
   origin: IngestionOrigin,
 ) {
   if (capture.resource.isPrivate) return;
+  // Persist the inbox choice in the same transaction as the new source evidence,
+  // including when model automation is disabled. Duplicate captures never reset it.
+  await client.query(
+    'INSERT INTO struinfo.processing_document_intake (workspace_id,snapshot_id,state_text) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
+    [
+      capture.workspaceId,
+      capture.snapshot.snapshotId,
+      JSON.stringify({
+        captureOrigin: origin,
+        receipt: 'pending',
+        decision: 'pending',
+        origin: 'system',
+        reason: '',
+        preparation: 'received',
+      }),
+    ],
+  );
   const result = await client.query(
     'SELECT current_version,settings_text,authorized_by_kind,authorized_by_id FROM struinfo.processing_ingestion_policy WHERE workspace_id=$1',
     [capture.workspaceId],
@@ -133,6 +150,10 @@ export class PostgresIngestionRepository implements IngestionRepository {
     const result = await this.pool.query(
       `SELECT i.*, (SELECT r.source_key FROM struinfo.snapshot s JOIN struinfo.resource r USING(workspace_id,resource_id) WHERE s.workspace_id=i.workspace_id AND s.snapshot_id=i.snapshot_id) AS source_label FROM struinfo.processing_ingestion_item i WHERE workspace_id=$1
       AND ($2::boolean = false OR status IN ('pending','running'))
+      AND ($2::boolean = false OR i.task_id IS NOT NULL OR NOT EXISTS (
+        SELECT 1 FROM struinfo.processing_document_intake d WHERE d.workspace_id=i.workspace_id AND d.snapshot_id=i.snapshot_id
+        AND (d.state_text::jsonb->>'receipt' = 'rejected'
+          OR d.state_text::jsonb->>'deferProcessing' = 'true')))
       AND ($4::timestamptz IS NULL OR (created_at,snapshot_id) < ($4::timestamptz,$5::uuid))
       AND ($6::text IS NULL OR status=$6)
       ORDER BY created_at ${activeOnly ? 'ASC' : 'DESC'},snapshot_id ${activeOnly ? 'ASC' : 'DESC'} LIMIT $3`,
