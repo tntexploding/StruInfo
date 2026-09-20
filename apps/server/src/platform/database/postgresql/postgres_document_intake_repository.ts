@@ -1,5 +1,7 @@
 import {
   intakeRecordValueSchema,
+  inboxSummarySchema,
+  type InboxSummary,
   type DocumentIntakeRepository,
   type IntakeRecord,
   type IntakeRecordValue,
@@ -45,10 +47,39 @@ export class PostgresDocumentIntakeRepository implements DocumentIntakeRepositor
             args,
           )
         : await this.pool.query(
-            'UPDATE struinfo.processing_document_intake SET prepared_snapshot_id=$3,state_text=$4,current_version=current_version+1,updated_at=CURRENT_TIMESTAMP WHERE workspace_id=$1 AND snapshot_id=$2 AND current_version=$5',
+            `UPDATE struinfo.processing_document_intake SET prepared_snapshot_id=$3,
+              state_text=($4::jsonb || CASE WHEN state_text::jsonb ? 'inboxSummary'
+                THEN jsonb_build_object('inboxSummary',state_text::jsonb->'inboxSummary')
+                ELSE '{}'::jsonb END)::text,
+              current_version=current_version+1,updated_at=CURRENT_TIMESTAMP
+              WHERE workspace_id=$1 AND snapshot_id=$2 AND current_version=$5`,
             [...args, expectedVersion],
           );
     return result.rowCount === 1;
+  }
+  /** Cached prose is independent of admission/receipt CAS and never changes a decision. */
+  public async saveInboxSummary(snapshotId: string, summary: InboxSummary) {
+    const value = inboxSummarySchema.parse(summary);
+    await this.pool.query(
+      `INSERT INTO struinfo.processing_document_intake
+        (workspace_id,snapshot_id,state_text) VALUES ($1,$2,$3)
+       ON CONFLICT (workspace_id,snapshot_id) DO UPDATE SET
+        state_text=(processing_document_intake.state_text::jsonb ||
+          jsonb_build_object('inboxSummary',COALESCE(
+            processing_document_intake.state_text::jsonb->'inboxSummary',
+            EXCLUDED.state_text::jsonb->'inboxSummary')))::text`,
+      [
+        this.workspaceId,
+        snapshotId,
+        JSON.stringify({
+          decision: 'pending',
+          origin: 'system',
+          reason: '',
+          preparation: 'received',
+          inboxSummary: value,
+        }),
+      ],
+    );
   }
   public async withLock<T>(
     snapshotId: string,

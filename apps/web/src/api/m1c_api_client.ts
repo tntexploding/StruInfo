@@ -348,7 +348,9 @@ export interface M1cApiClient {
   generateEntryTranslation(
     entryId: string,
     revision: number,
-    options?: M1cApiRequestOptions,
+    options?: M1cApiRequestOptions & {
+      expectedTranslatedAt?: string | undefined;
+    },
   ): Promise<M1cHttpResponse<EntryTranslationResponse>>;
   synthesizeInformationEntryQuery(
     body: unknown,
@@ -947,7 +949,12 @@ export function createM1cApiClient(
     generateEntryTranslation: (entryId, revision, options) =>
       post<EntryTranslationResponse>(
         'api/v1/entries/' + encodeURIComponent(entryId) + '/translation',
-        {expectedRevision: revision},
+        {
+          expectedRevision: revision,
+          ...(options?.expectedTranslatedAt
+            ? {expectedTranslatedAt: options.expectedTranslatedAt}
+            : {}),
+        },
         options,
       ),
     synthesizeInformationEntryQuery: (body, options) =>

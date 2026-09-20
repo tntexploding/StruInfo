@@ -71,7 +71,7 @@ export function agentHttpMiddleware(options: AgentHttpOptions) {
       owner &&
       !(
         price
-          ? ['ai_price_status', 'ai_price_save']
+          ? ['ai_price_status', 'ai_price_save', 'ai_operations_save']
           : reports
             ? REPORT_OPERATIONS
             : ingestion
@@ -79,7 +79,12 @@ export function agentHttpMiddleware(options: AgentHttpOptions) {
                   'system_status',
                   'ingestion_status',
                   'intake_status',
+                  'intake_previews',
+                  'intake_origins',
+                  'intake_summarize',
+                  'intake_translate',
                   'intake_control',
+                  'intake_receive',
                   'intake_prepare',
                   'ingestion_policy_save',
                   'ingestion_item_control',
@@ -88,8 +93,11 @@ export function agentHttpMiddleware(options: AgentHttpOptions) {
               : [
                   'system_status',
                   'tasks_list',
+                  'document_queue_status',
+                  'document_queue_apply',
                   'task_read',
                   'task_start',
+                  'document_publish',
                   'task_control',
                 ]
       ).includes(body.operation)

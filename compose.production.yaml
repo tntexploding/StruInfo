@@ -1,7 +1,7 @@
 name: struinfo
 
 x-struinfo-common: &struinfo-common
-  image: ${STRUIINFO_IMAGE:-struinfo:0.2.0}
+  image: ${STRUIINFO_IMAGE:-struinfo:0.3.0}
   build:
     context: .
     dockerfile: Dockerfile

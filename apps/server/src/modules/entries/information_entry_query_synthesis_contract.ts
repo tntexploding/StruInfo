@@ -19,6 +19,7 @@ export type InformationEntryQuerySynthesisEvidenceStatus =
   (typeof INFORMATION_ENTRY_QUERY_SYNTHESIS_EVIDENCE_STATUSES)[number];
 
 export type AiQuerySynthesisProviderErrorCode =
+  | 'ai_operations_paused'
   | 'ai_price_window_closed'
   | 'ai_provider_timeout'
   | 'ai_provider_unavailable'
@@ -77,6 +78,7 @@ export interface InformationEntryQuerySynthesisProviderPort {
 export interface InformationEntryQuerySynthesisRequest {
   readonly requestId: string;
   readonly question: string;
+  readonly retrieveForQuestion?: boolean;
   readonly query: Readonly<InformationEntrySearchRequest>;
 }
 

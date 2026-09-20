@@ -1,3 +1,7 @@
+import {
+  MAXIMUM_AI_SPLIT_ENTRIES,
+  MAXIMUM_AI_SPLIT_FRAGMENTS,
+} from '../modules/processing/ai_split_proposal.js';
 import {z} from 'zod';
 import {
   intakePolicySchema,
@@ -38,61 +42,90 @@ export const agentRelationResultSchema = z
     direction: z.enum(['symmetric', 'low_to_high', 'high_to_low']),
   })
   .strict();
-export const agentTaskRequestSchema = z.discriminatedUnion('kind', [
-  z
-    .object({
-      kind: z.literal('split'),
-      snapshotId: id,
-      result: z
-        .object({
-          summary: z.string().trim().min(1).max(240),
-          groups: z
-            .array(
-              z
-                .object({
-                  titlePath: z.string().trim().min(1).max(240),
-                  startOrdinal: z.number().int().min(0).max(63),
-                  endOrdinal: z.number().int().min(0).max(63),
-                })
-                .strict(),
-            )
-            .min(1)
-            .max(24),
-        })
-        .strict(),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal('document'),
-      snapshotId: id,
-      maxEntries: z.number().int().min(1).max(24).default(12),
-      maxRelations: z.number().int().min(0).max(8).default(4),
-      maxModelCalls: z.number().int().min(1).max(64).default(24),
-      intake: intakePolicySchema.optional(),
-      maxRelationCandidates: z.number().int().min(0).max(24).optional(),
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal('tags'),
-      entryId: id,
-      expectedRevision: version,
-      result: agentTagResultSchema,
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal('relation'),
-      entryId: id,
-      relatedEntryId: id,
-      expectedRevision: version,
-      expectedRelatedRevision: version,
-      expectedOverrideRevision: z.number().int().min(0).max(2147483646),
-      result: agentRelationResultSchema,
-    })
-    .strict(),
-]);
+export const agentTaskRequestSchema = z
+  .discriminatedUnion('kind', [
+    z
+      .object({
+        kind: z.literal('intake'),
+        snapshotId: id,
+        expectedVersion: version,
+        intake: intakePolicySchema,
+        maxModelCalls: z.number().int().min(1).max(3).default(3),
+      })
+      .strict(),
+    z
+      .object({
+        kind: z.literal('split'),
+        snapshotId: id,
+        result: z
+          .object({
+            summary: z.string().trim().min(1).max(240),
+            groups: z
+              .array(
+                z
+                  .object({
+                    titlePath: z.string().trim().min(1).max(240),
+                    startOrdinal: z
+                      .number()
+                      .int()
+                      .min(0)
+                      .max(MAXIMUM_AI_SPLIT_FRAGMENTS - 1),
+                    endOrdinal: z
+                      .number()
+                      .int()
+                      .min(0)
+                      .max(MAXIMUM_AI_SPLIT_FRAGMENTS - 1),
+                  })
+                  .strict(),
+              )
+              .min(1)
+              .max(MAXIMUM_AI_SPLIT_ENTRIES),
+          })
+          .strict(),
+      })
+      .strict(),
+    z
+      .object({
+        kind: z.literal('document'),
+        reprocess: z.literal('tags').optional(),
+        expectedReceiptVersion: version.optional(),
+        snapshotId: id,
+        maxEntries: z
+          .number()
+          .int()
+          .min(1)
+          .max(MAXIMUM_AI_SPLIT_ENTRIES)
+          .default(12),
+        maxRelations: z.number().int().min(0).max(8).default(4),
+        maxModelCalls: z.number().int().min(1).max(64).default(24),
+        intake: intakePolicySchema.optional(),
+        maxRelationCandidates: z.number().int().min(0).max(24).optional(),
+      })
+      .strict(),
+    z
+      .object({
+        kind: z.literal('tags'),
+        entryId: id,
+        expectedRevision: version,
+        result: agentTagResultSchema,
+      })
+      .strict(),
+    z
+      .object({
+        kind: z.literal('relation'),
+        entryId: id,
+        relatedEntryId: id,
+        expectedRevision: version,
+        expectedRelatedRevision: version,
+        expectedOverrideRevision: z.number().int().min(0).max(2147483646),
+        result: agentRelationResultSchema,
+      })
+      .strict(),
+  ])
+  .refine(
+    (request) => Buffer.byteLength(JSON.stringify(request), 'utf8') <= 32_768,
+    {message: 'Task request exceeds the 32 KiB storage limit.'},
+  );
 export type AgentTaskRequest = z.infer<typeof agentTaskRequestSchema>;
 export const agentTaskStepSchema = z
   .object({
@@ -104,9 +137,13 @@ export const agentTaskStepSchema = z
     expectedOverrideRevision: z.number().int().min(0).optional(),
     attempt: z.number().int().min(0).max(64),
     runId: id.optional(),
+    previousRunIds: z.array(id).max(3).optional(),
     proposalId: id.optional(),
     complete: z.boolean(),
-    outcome: z.enum(['no_relation', 'edge_budget_reached']).optional(),
+    outcome: z
+      .enum(['no_relation', 'edge_budget_reached', 'accepted', 'held'])
+      .optional(),
+    receiptVersion: version.optional(),
     recallPlan: relationRecallPlanSchema.optional(),
     candidateReasons: z.array(z.string().max(240)).max(12).optional(),
   })
@@ -123,15 +160,28 @@ export const agentTaskStateSchema = z
       'cancelled',
     ]),
     calls: z.number().int().min(0).max(64),
+    supersededBy: id.optional(),
+    recovery: z
+      .object({
+        previousTaskId: id,
+        firstStartedAt: z.iso.datetime(),
+        previousCalls: z.number().int().min(0),
+      })
+      .strict()
+      .optional(),
     phase: z.enum([
       'intake',
       'split',
       'tags',
       'recall',
       'relations',
+      'publish',
       'complete',
     ]),
-    steps: z.array(agentTaskStepSchema).max(80),
+    // Intake and split, then tags/recall per Entry and up to 24 relation candidates.
+    steps: z
+      .array(agentTaskStepSchema)
+      .max(2 + 2 * MAXIMUM_AI_SPLIT_ENTRIES + 24),
     errorCode: z
       .string()
       .regex(/^[a-z][a-z0-9_]{0,119}$/u)
@@ -158,7 +208,12 @@ export interface AgentTask {
 export interface AgentTaskRepository {
   create(task: AgentTask): Promise<boolean>;
   read(workspaceId: string, taskId: string): Promise<AgentTask | undefined>;
-  list(workspaceId: string): Promise<readonly AgentTask[]>;
+  list(
+    workspaceId: string,
+    snapshotIds?: readonly string[],
+    prioritizeActive?: boolean,
+  ): Promise<readonly AgentTask[]>;
+  listPublicationTasks?(workspaceId: string): Promise<readonly AgentTask[]>;
   listPriceDeferred?(workspaceId: string): Promise<readonly AgentTask[]>;
   saveState(
     workspaceId: string,

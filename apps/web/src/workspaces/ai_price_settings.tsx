@@ -37,7 +37,10 @@ export function AiPriceSettings({
     setBusy(true);
     setMessage('');
     try {
-      const result = await client('ai_price_save', {...status.policy, enabled});
+      const result = await client('ai_price_save', {
+        revision: status.policy.revision,
+        enabled,
+      });
       setStatus(result);
       setEnabled(result.policy.enabled);
       setMessage('已保存。后续模型请求使用此设置。');

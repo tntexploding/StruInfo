@@ -24,6 +24,7 @@ export interface EntryTranslation extends EntryTranslationText {
 }
 
 export type EntryTranslationErrorCode =
+  | 'ai_operations_paused'
   | 'ai_price_window_closed'
   | 'translation_entry_unavailable'
   | 'translation_source_stale'
@@ -59,6 +60,12 @@ export interface EntryTranslationRepositoryPort {
     entryId: string,
     revision: number,
   ): Promise<Readonly<EntryTranslation> | undefined>;
+  /** Explicit AI redo uses the previously displayed translation timestamp as its CAS token. */
+  replaceIfCurrent?(
+    workspaceId: string,
+    translation: Readonly<EntryTranslation>,
+    expectedTranslatedAt: string,
+  ): Promise<boolean>;
   /** Revalidates public/current source identity atomically with the write. */
   saveIfCurrent(
     workspaceId: string,
@@ -110,6 +117,7 @@ export interface EntryTranslationServicePort {
   generate(
     entryId: string,
     expectedRevision: number,
+    expectedTranslatedAt?: string,
   ): Promise<Readonly<EntryTranslation>>;
 }
 
@@ -191,12 +199,13 @@ export class EntryTranslationService implements EntryTranslationServicePort {
   public async generate(
     entryId: string,
     expectedRevision: number,
+    expectedTranslatedAt?: string,
   ): Promise<Readonly<EntryTranslation>> {
     const source = await this.#source(entryId, expectedRevision);
-    const key = `${entryId}:${source.revisionId}`;
+    const key = `${entryId}:${source.revisionId}:${expectedTranslatedAt ?? 'cached'}`;
     const pending = this.#pending.get(key);
     if (pending !== undefined) return pending;
-    const operation = this.#generate(source);
+    const operation = this.#generate(source, expectedTranslatedAt);
     this.#pending.set(key, operation);
     try {
       return await operation;
@@ -224,6 +233,7 @@ export class EntryTranslationService implements EntryTranslationServicePort {
 
   async #generate(
     source: Readonly<CurrentInformationEntry>,
+    expectedTranslatedAt?: string,
   ): Promise<Readonly<EntryTranslation>> {
     const {workspaceId, repository, provider} = this.#dependencies;
     const cached = await repository.load(
@@ -231,7 +241,15 @@ export class EntryTranslationService implements EntryTranslationServicePort {
       source.entryId,
       source.revision,
     );
-    if (cached?.sourceRevisionId === source.revisionId) return cached;
+    if (expectedTranslatedAt) {
+      if (cached?.translatedAt !== expectedTranslatedAt)
+        throw new EntryTranslationError('translation_source_stale');
+      if (
+        cached.providerKey === 'provided-translation-v1' ||
+        !repository.replaceIfCurrent
+      )
+        throw new EntryTranslationError('translation_already_exists');
+    } else if (cached?.sourceRevisionId === source.revisionId) return cached;
     if (provider === undefined)
       throw new EntryTranslationError('ai_provider_not_configured');
     if (
@@ -259,10 +277,28 @@ export class EntryTranslationService implements EntryTranslationServicePort {
       providerKey: provider.providerKey,
       model: provider.model,
       promptVersion: provider.promptVersion,
-      translatedAt: this.#dependencies.now?.() ?? new Date().toISOString(),
+      translatedAt: expectedTranslatedAt
+        ? new Date(
+            Math.max(
+              Date.parse(
+                this.#dependencies.now?.() ?? new Date().toISOString(),
+              ),
+              Date.parse(expectedTranslatedAt) + 1,
+            ),
+          ).toISOString()
+        : (this.#dependencies.now?.() ?? new Date().toISOString()),
     });
     // A concurrent supplied translation may have completed first; preserve it.
-    await repository.saveIfCurrent(workspaceId, translation);
+    if (expectedTranslatedAt) {
+      if (
+        !(await repository.replaceIfCurrent?.(
+          workspaceId,
+          translation,
+          expectedTranslatedAt,
+        ))
+      )
+        throw new EntryTranslationError('translation_source_stale');
+    } else await repository.saveIfCurrent(workspaceId, translation);
     // Read through the same privacy/version filter, including a change just after settlement.
     const saved = await repository.load(
       workspaceId,

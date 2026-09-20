@@ -1,4 +1,4 @@
-import {isAiPriceWait} from '../../modules/processing/ai_price_policy.js';
+import {isAiDispatchWait} from '../../modules/processing/ai_price_policy.js';
 import {
   responsesEndpoint,
   responsesOptions,
@@ -63,7 +63,7 @@ export class ResponsesEntryAssociationProvider implements AiAssociationProposalP
         signal: AbortSignal.timeout(this.#config.timeoutMs),
       });
     } catch (error) {
-      if (isAiPriceWait(error)) throw error;
+      if (isAiDispatchWait(error)) throw error;
       const name = error instanceof Error ? error.name : '';
       throw new AiAssociationProposalProviderError(
         name === 'AbortError' || name === 'TimeoutError'

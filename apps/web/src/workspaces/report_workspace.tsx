@@ -6,13 +6,18 @@ import {
   type ReportSource,
   type ReportView,
 } from '../api/report_client.js';
-import {FloatingToolPanel} from '../components/floating_tool_panel.js';
+import {TwoPane} from '../components/two_pane.js';
 import {useReports} from './use_reports.js';
 import {ReportCreateForm} from './report_create_form.js';
 import {ReportEditor} from './report_editor.js';
 import {ReportEditWorkbench} from './report_edit_workbench.js';
 import '../reports.css';
-
+const REPORT_KIND = {
+  daily: '日报',
+  weekly: '周报',
+  monthly: '月报',
+  topic: '专题',
+};
 export function ReportWorkspace({
   active,
   onOpenSource,
@@ -21,271 +26,208 @@ export function ReportWorkspace({
   onOpenSource: (snapshotId: string) => void;
 }) {
   const reports = useReports(active);
-  const [creating, setCreating] = useState(true);
   const [editingReport, setEditingReport] = useState<ReportRecord>();
   const [editorOpen, setEditorOpen] = useState(false);
-  const [formKey, setFormKey] = useState(0);
   const view = reports.value,
-    report = view?.report,
-    state = report?.state;
+    state = view?.report.state;
   const editing = Boolean(editingReport);
-  const stale = Boolean(view?.staleSources.length);
-  const pending =
-    state && ['draft', 'failed', 'queued', 'running'].includes(state.status);
-  const editable =
-    state &&
-    !view?.active &&
-    !['queued', 'running', 'cancelled'].includes(state.status) &&
-    !stale;
-  const ready =
+  const ready = Boolean(
     state &&
     ['ready', 'reviewed'].includes(state.status) &&
-    state.items.some((i) => i.included);
+    state.items.some((i) => i.included),
+  );
+  const stale = Boolean(view?.staleSources.length);
+  const pending = Boolean(
+    state && ['draft', 'failed', 'queued', 'running'].includes(state.status),
+  );
   return (
     <section
-      className="workspace-view report-workspace"
+      className="workspace-view journey-workspace report-workspace report-journey"
       hidden={!active}
-      aria-label="日报与周报"
+      aria-label="报告"
     >
-      <header className="workflow-page-heading report-page-heading">
+      <header className="workflow-page-heading">
         <div>
           <h1>报告</h1>
-          <p>从已放行的材料中整理日报与周报，每条摘要都有出处。</p>
+          <p>确定主题与范围，在右侧查看生成队列和过往报告。</p>
         </div>
-        <div className="report-actions">
-          <FloatingToolPanel
-            title={'报告历史 · ' + String(reports.list?.reports.length ?? '—')}
-            preferredWidth={368}
-          >
-            <div className="report-history">
-              <div className="report-history-list">
-                {reports.list ? (
-                  reports.list.reports.length ? (
-                    reports.list.reports.map((r) => (
-                      <button
-                        type="button"
-                        className="report-history-item"
-                        key={r.reportId}
-                        disabled={reports.busy || editing}
-                        aria-current={
-                          !creating && report?.reportId === r.reportId
-                            ? 'true'
-                            : undefined
-                        }
-                        onClick={(event) => {
-                          event.currentTarget
-                            .closest<HTMLElement>('[popover]')
-                            ?.hidePopover();
-                          setCreating(false);
-                          void reports.open(r.reportId);
-                        }}
-                      >
-                        <span>
-                          {r.kind === 'daily' ? '日报' : '周报'} ·{' '}
-                          {r.period.from}
-                        </span>
-                        <strong>{r.title}</strong>
-                        <small>
-                          {REPORT_STATUS[r.status]} · {r.itemCount} 条
-                          {r.stale ? ' · 来源已更新' : ''}
-                        </small>
-                      </button>
-                    ))
-                  ) : (
-                    <p className="report-muted">
-                      还没有报告。选一段时间，创建第一份草稿。
-                    </p>
-                  )
-                ) : (
-                  <p role="status">正在读取报告历史…</p>
-                )}
-              </div>
-              <p className="report-muted">最近 100 份 · 保存在当前工作区</p>
-              {editing ? (
-                <p className="report-muted">保存或放弃本次编辑后可切换报告。</p>
-              ) : null}
-            </div>
-          </FloatingToolPanel>
-          <button
-            className="secondary-action"
-            type="button"
-            disabled={reports.busy || editing}
-            onClick={() => void reports.refresh()}
-          >
-            刷新报告
-          </button>
-          {!creating ? (
-            <button
-              type="button"
-              className="primary-action"
-              disabled={reports.busy || editing}
-              onClick={() => {
-                reports.clear();
-                setCreating(true);
-                setFormKey((n) => n + 1);
-              }}
-            >
-              新建报告
-            </button>
-          ) : null}
-        </div>
-      </header>
-      {reports.error ? (
-        <p className="report-notice" role="alert">
-          {reports.error}
-        </p>
-      ) : null}
-      {editing && !view && !reports.busy ? (
         <button
           className="secondary-action"
-          type="button"
-          onClick={() => {
-            setEditingReport(undefined);
-            setEditorOpen(false);
-            reports.clearError();
-          }}
+          disabled={reports.busy}
+          onClick={() => void reports.refresh()}
         >
-          放弃本次编辑
+          刷新任务
         </button>
+      </header>
+      {reports.error && !editorOpen ? (
+        <p role="alert">{reports.error}</p>
       ) : null}
-      <div className="report-layout">
-        <article
-          className="report-paper"
-          aria-label={creating ? '新建报告' : '报告正文'}
-        >
-          <div className="report-reading-content">
-            {reports.list?.model === null ? (
-              <p className="report-notice">
+      <TwoPane
+        name="reports"
+        left={
+          <div className="report-configuration">
+            {reports.list && !reports.list.model ? (
+              <p className="field-help">
                 模型尚未启用。选材、手动编写和导出仍可使用。
               </p>
             ) : null}
-            {creating ? (
-              <ReportCreateForm
-                key={formKey}
-                busy={reports.busy}
-                onOpenSource={onOpenSource}
-                onCreate={async (request, key) => {
-                  const success = await reports.create(request, key);
-                  if (success) setCreating(false);
-                  return success;
-                }}
-              />
-            ) : report && state ? (
-              <>
-                <header className="report-title">
-                  <p className="report-eyebrow">
-                    {state.request.kind === 'daily' ? '日报' : '周报'} /{' '}
-                    {REPORT_STATUS[state.status]}
-                  </p>
-                  <h2>{state.title}</h2>
-                  <p className="report-muted">
-                    {state.period.from} — {state.period.to} ·{' '}
-                    {state.request.timeZone} · 按
-                    {state.request.timeField === 'received' ? '接收' : '发布'}
-                    日期
-                  </p>
-                  <div
-                    className="report-actions report-reading-actions"
-                    role="group"
-                    aria-label="报告操作"
-                  >
-                    {pending ? (
-                      <button
-                        type="button"
-                        className="primary-action"
-                        disabled={
-                          reports.busy ||
-                          view.active ||
-                          !view.model ||
-                          stale ||
-                          state.calls >= state.request.maxModelCalls ||
-                          editing
-                        }
-                        onClick={() => void reports.generate()}
-                      >
-                        {state.calls ? '继续生成' : '生成草稿'}
-                      </button>
-                    ) : null}
-                    <button
-                      className="secondary-action"
-                      type="button"
-                      disabled={reports.busy || (!editing && !editable)}
-                      onClick={() => {
-                        if (!editingReport) setEditingReport(report);
-                        setEditorOpen(true);
-                      }}
-                    >
-                      {editing
-                        ? '继续编辑'
-                        : state.items.length
-                          ? '核对与编辑'
-                          : '手动编写'}
-                    </button>
-                    <button
-                      className="secondary-action"
-                      type="button"
-                      disabled={reports.busy || !ready || stale || editing}
-                      onClick={() => void reports.exportReport()}
-                    >
-                      导出 Markdown
-                    </button>
-                    {pending ? (
-                      <button
-                        className="secondary-action"
-                        type="button"
-                        disabled={reports.busy || editing}
-                        onClick={() => void reports.cancel()}
-                      >
-                        取消生成
-                      </button>
-                    ) : null}
-                  </div>
-                  {editing ? (
-                    <p className="report-muted" role="status">
-                      本次编辑已保留，点击“继续编辑”回到工作台。保存或放弃后可切换报告。
-                    </p>
-                  ) : ready ? (
-                    <p className="report-muted">
-                      {state.status === 'reviewed'
-                        ? '已人工核对，可导出使用。'
-                        : '草稿仍待核对，导出文件会注明此状态。'}
-                    </p>
-                  ) : null}
-                </header>
-                <ReportBody view={view} onOpenSource={onOpenSource} />
-                <details className="report-options">
-                  <summary>
-                    生成记录 · {state.calls} / {state.request.maxModelCalls}{' '}
-                    次调用
-                  </summary>
-                  <p className="report-muted">
-                    {state.model ?? reports.list?.model ?? '模型未配置'} ·{' '}
-                    {REPORT_STATUS[state.status]}
-                  </p>
-                </details>
-              </>
-            ) : (
-              <p className="report-empty" role="status">
-                {reports.busy
-                  ? '正在读取报告…'
-                  : '打开报告历史，或创建新一期。'}
+            <ReportCreateForm
+              busy={reports.busy || editing}
+              onOpenSource={onOpenSource}
+              onCreate={reports.create}
+            />
+            <div className="report-publication">
+              <h3>本地导出</h3>
+              <p>
+                打开右侧已生成的报告后，导出 Markdown 或通过打印保存为
+                PDF。当前未接推送渠道。
               </p>
-            )}
+            </div>
           </div>
-        </article>
-      </div>
+        }
+      >
+        <div className="report-queue-heading">
+          <h2>报告任务与历史</h2>
+          <span>{reports.list?.reports.length ?? '—'} 份</span>
+        </div>
+        <div className="report-queue">
+          {!reports.list ? (
+            <p role="status">正在读取报告…</p>
+          ) : reports.list.reports.length === 0 ? (
+            <div className="journey-empty">
+              <h2>第一份报告从左侧开始</h2>
+              <p>预览材料后创建。任务进度和生成内容会出现在这里。</p>
+            </div>
+          ) : (
+            reports.list.reports.map((record) => {
+              const expanded = view?.report.reportId === record.reportId;
+              return (
+                <section
+                  className="report-queue-item"
+                  data-expanded={expanded}
+                  key={record.reportId}
+                >
+                  <button
+                    className="report-queue-title"
+                    aria-expanded={expanded}
+                    disabled={reports.busy || editing}
+                    onClick={() => {
+                      if (expanded) reports.clear();
+                      else void reports.open(record.reportId);
+                    }}
+                  >
+                    <span className="report-queue-kind">
+                      {REPORT_KIND[record.kind]}
+                    </span>
+                    <span>
+                      <strong>{record.title}</strong>
+                      <small>
+                        {record.kind === 'topic'
+                          ? '专题材料'
+                          : record.period.from + ' — ' + record.period.to}
+                      </small>
+                    </span>
+                    <span
+                      className="report-queue-status"
+                      data-status={record.status}
+                    >
+                      {REPORT_STATUS[record.status]}
+                      {record.active
+                        ? ' · ' +
+                          String(record.completedItemCount ?? 0) +
+                          '/' +
+                          (record.itemCount
+                            ? String(record.itemCount)
+                            : '待规划')
+                        : ''}
+                    </span>
+                    <span aria-hidden="true">{expanded ? '−' : '+'}</span>
+                  </button>
+                  {expanded && state ? (
+                    <div className="report-queue-body">
+                      <div className="report-actions">
+                        {pending ? (
+                          <button
+                            className="primary-action"
+                            disabled={
+                              reports.busy ||
+                              view.active ||
+                              !view.model ||
+                              stale ||
+                              state.calls >= state.request.maxModelCalls ||
+                              editing
+                            }
+                            onClick={() => void reports.generate()}
+                          >
+                            {state.calls ? '继续生成' : '开始 AI 生成'}
+                          </button>
+                        ) : null}
+                        <button
+                          className="secondary-action"
+                          disabled={
+                            reports.busy ||
+                            view.active ||
+                            ['queued', 'running', 'cancelled'].includes(
+                              state.status,
+                            ) ||
+                            stale
+                          }
+                          onClick={() => {
+                            if (!editingReport) setEditingReport(view.report);
+                            setEditorOpen(true);
+                          }}
+                        >
+                          {editingReport ? '继续编辑草稿' : '核对与编辑'}
+                        </button>
+                        <button
+                          className="secondary-action"
+                          disabled={reports.busy || !ready || stale || editing}
+                          onClick={() => void reports.exportReport()}
+                        >
+                          导出 Markdown
+                        </button>
+                        <button
+                          className="secondary-action"
+                          disabled={reports.busy || !ready || stale || editing}
+                          onClick={() => void reports.exportPdf()}
+                        >
+                          导出 PDF
+                        </button>
+                        {pending ? (
+                          <button
+                            className="text-action"
+                            disabled={reports.busy || editing}
+                            onClick={() => void reports.cancel()}
+                          >
+                            取消生成
+                          </button>
+                        ) : null}
+                      </div>
+                      <ReportBody view={view} onOpenSource={onOpenSource} />
+                      <p className="report-muted">
+                        {state.model ??
+                          (state.origin === 'search_results'
+                            ? '检索摘录，无模型调用'
+                            : '模型未配置')}{' '}
+                        · 已用 {state.calls} / {state.request.maxModelCalls}{' '}
+                        次调用
+                      </p>
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })
+          )}
+        </div>
+      </TwoPane>
       {editingReport ? (
         <ReportEditWorkbench
-          open={active && editorOpen && Boolean(view)}
+          open={active && editorOpen}
           onCollapse={() => {
             setEditorOpen(false);
           }}
         >
-          {reports.error ? (
-            <p className="report-notice" role="alert">
-              {reports.error}
-            </p>
-          ) : null}
+          {reports.error ? <p role="alert">{reports.error}</p> : null}
           <ReportEditor
             key={editingReport.reportId}
             report={editingReport}
@@ -293,8 +235,8 @@ export function ReportWorkspace({
             onOpenSource={onOpenSource}
             onSave={(edit) => reports.save(edit, editingReport)}
             onClose={() => {
-              setEditorOpen(false);
               setEditingReport(undefined);
+              setEditorOpen(false);
               reports.clearError();
             }}
           />
@@ -331,8 +273,9 @@ function ReportBody({
           {state.items.filter((i) => i.draft).length} /{' '}
           {state.items.length || '待规划'} 条 · 已调用 {state.calls} 次
         </p>
-      ) : state.errorCode !== 'ai_price_window_closed' &&
-        ['queued', 'running'].includes(state.status) ? (
+      ) : !['ai_price_window_closed', 'ai_operations_paused'].includes(
+          state.errorCode ?? '',
+        ) && ['queued', 'running'].includes(state.status) ? (
         <p className="report-notice">
           生成已中断。点击“继续生成”完成剩余内容。
         </p>
@@ -360,7 +303,9 @@ function ReportBody({
                     : item.edited
                       ? '人工编辑'
                       : story
-                        ? 'AI 草稿'
+                        ? state.origin === 'search_results'
+                          ? '检索摘录'
+                          : 'AI 草稿'
                         : '待生成'}
                 </span>
               </div>

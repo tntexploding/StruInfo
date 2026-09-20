@@ -1,4 +1,7 @@
-import {useState} from 'react';
+import type {AiTask, IntakeRecord} from '../api/ai_workflow_client.js';
+import {processingForDocument} from './document_processing_state.js';
+import {useInboxPreviews} from './use_inbox_previews.js';
+import {useState, type ReactNode} from 'react';
 
 import type {InformationEntryDocumentView} from '../api/m1c_api_contract.js';
 import type {Loadable} from '../components/product_types.js';
@@ -9,22 +12,64 @@ export function DocumentWorkspaceList({
   selectedId,
   onSelect,
   onRetry,
+  renderProcessing,
+  processing,
 }: {
+  readonly processing?: {tasks: AiTask[]; records: IntakeRecord[]} | undefined;
   readonly state: Loadable<readonly Readonly<InformationEntryDocumentView>[]>;
   readonly selectedId?: string | undefined;
   readonly onSelect: (snapshotId: string) => void;
   readonly onRetry: () => void;
+  readonly renderProcessing?: (
+    document: Readonly<InformationEntryDocumentView>,
+  ) => ReactNode;
 }) {
   const [filter, setFilter] = useState('');
   const [page, setPage] = useState(0);
+  const [status, setStatus] = useState('all');
+  const [sort, setSort] = useState('newest');
   const documents = state.status === 'ready' ? state.value : [];
-  const matching = documents.filter((document) =>
-    `${sourceDisplayName(document)} ${document.canonicalUri ?? ''}`
-      .toLocaleLowerCase()
-      .includes(filter.toLocaleLowerCase().trim()),
-  );
+  const matching = documents
+    .filter((document) => {
+      const p = processing
+        ? processingForDocument(
+            document.snapshotId,
+            processing.tasks,
+            processing.records,
+          )
+        : undefined;
+      return (
+        (status === 'all' ||
+          (status === 'accepted'
+            ? !p?.intake || p.intake.value.receipt === 'accepted'
+            : status === 'unprocessed'
+              ? document.entryCount === 0
+              : status === 'completed'
+                ? p?.task?.state.status === 'succeeded'
+                : ['queued', 'running', 'paused'].includes(
+                    p?.task?.state.status ?? '',
+                  ))) &&
+        `${sourceDisplayName(document)} ${document.canonicalUri ?? ''}`
+          .toLocaleLowerCase()
+          .includes(filter.toLocaleLowerCase().trim())
+      );
+    })
+    .sort((a, b) =>
+      sort === 'source'
+        ? sourceDisplayName(a).localeCompare(sourceDisplayName(b), 'zh-CN')
+        : sort === 'oldest'
+          ? a.capturedAt.localeCompare(b.capturedAt)
+          : b.capturedAt.localeCompare(a.capturedAt),
+    );
   const pages = Math.max(1, Math.ceil(matching.length / 20));
   const currentPage = Math.min(page, pages - 1);
+  const previews = useInboxPreviews(
+    matching
+      .slice(currentPage * 20, (currentPage + 1) * 20)
+      .map((d) => d.snapshotId),
+    false,
+    false,
+  );
   return (
     <section
       className="document-library-list"
@@ -50,6 +95,39 @@ export function DocumentWorkspaceList({
           }}
         />
       </label>
+      <div className="document-list-filters">
+        <select
+          aria-label="文档处理状态"
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            setPage(0);
+          }}
+        >
+          <option value="all">全部文档</option>
+          <option value="accepted">已接受</option>
+          <option value="unprocessed">尚无条目</option>
+          <option value="queued">AI 队列中</option>
+          <option value="completed">AI 处理完成</option>
+        </select>
+        <select
+          aria-label="文档排序"
+          value={sort}
+          onChange={(e) => {
+            setSort(e.target.value);
+            setPage(0);
+          }}
+        >
+          <option value="newest">最新在前</option>
+          <option value="oldest">最早在前</option>
+          <option value="source">按来源</option>
+        </select>
+        {status === 'unprocessed' ? (
+          <p className="document-list-filter-hint">
+            按当前原文是否生成条目筛选，不代表 AI 排队数量；处理正文可能另存。
+          </p>
+        ) : null}
+      </div>
       {state.status === 'loading' ? <p role="status">正在读取文档…</p> : null}
       {state.status === 'error' ? (
         <div role="alert">
@@ -89,12 +167,19 @@ export function DocumentWorkspaceList({
                     {new Date(document.capturedAt).toLocaleDateString('zh-CN')}
                     {document.isPrivate === true ? ' · 私密' : ''}
                   </span>
-                  <strong>{sourceDisplayName(document)}</strong>
+                  <strong>
+                    {previews.previews.get(document.snapshotId)?.title ??
+                      sourceDisplayName(document)}
+                  </strong>
+                  <span className="document-library-item__meta">
+                    {previews.previews.get(document.snapshotId)?.source.name}
+                  </span>
                   <span className="document-library-item__meta">
                     {document.entryCount === 0
                       ? '原文已接收 · 尚无条目'
                       : `${document.entryCount.toString()} 个条目 · ${document.annotatedEntryCount.toString()} 个已标注`}
                   </span>
+                  {renderProcessing?.(document)}
                   {document.snapshotId === selectedId ? (
                     <span className="document-library-item__selected">
                       正在查看

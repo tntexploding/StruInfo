@@ -27,6 +27,7 @@ export const captureTextSchema = z
 const common = {
   subscriptionId: z.uuid(),
   label: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(500).optional(),
   sourceAlias: z.string().trim().min(1).max(500),
   enabled: z.boolean().default(false),
   intervalMinutes: z.number().int().min(15).max(10080).default(60),

@@ -231,6 +231,9 @@ export function SourceSubscriptionPanel({
     const common = {
       subscriptionId: subscription.subscriptionId,
       label: subscription.label,
+      ...(subscription.description
+        ? {description: subscription.description}
+        : {}),
       enabled: subscription.enabled,
       sourceAlias: subscription.sourceAlias,
       isPrivate: subscription.isPrivate,
@@ -514,6 +517,20 @@ export function SourceSubscriptionPanel({
                             onChange={(event) => {
                               updateDraft(subscription.subscriptionId, {
                                 label: event.currentTarget.value,
+                              });
+                            }}
+                          />
+                        </label>
+                        <label className="field field--wide">
+                          <span>用途与内容说明</span>
+                          <textarea
+                            maxLength={500}
+                            rows={3}
+                            placeholder="这个来源主要发布什么，你为什么关注它"
+                            value={subscription.description ?? ''}
+                            onChange={(event) => {
+                              updateDraft(subscription.subscriptionId, {
+                                description: event.currentTarget.value,
                               });
                             }}
                           />

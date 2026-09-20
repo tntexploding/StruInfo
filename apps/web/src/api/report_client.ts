@@ -1,5 +1,6 @@
 export interface ReportRequest {
-  kind: 'daily' | 'weekly';
+  kind: 'daily' | 'weekly' | 'monthly' | 'topic';
+  composition?: 'ai' | 'collection';
   date: string;
   timeZone: string;
   timeField: 'received' | 'published';
@@ -62,6 +63,7 @@ export interface ReportRecord {
   state: ReportPreview & {
     request: ReportRequest;
     title: string;
+    origin?: 'internal_model' | 'manual' | 'search_results';
     status: ReportStatus;
     calls: number;
     model?: string;
@@ -91,6 +93,11 @@ export interface ReportSummary {
   status: ReportStatus;
   itemCount: number;
   stale: boolean;
+  active?: boolean;
+  errorCode?: string;
+  planned?: boolean;
+  completedItemCount?: number;
+  updatedAt?: string;
 }
 export interface ReportList {
   reports: ReportSummary[];
@@ -133,6 +140,9 @@ export async function reportCommand<T>(
 export function reportError(error: unknown) {
   const code = error instanceof Error ? error.message : '';
   const messages: Record<string, string> = {
+    report_source_limit_exceeded:
+      '本次符合条件的材料超过 512 条，尚未创建报告。请缩小时间、专题或来源范围后重试；没有截断材料。',
+    report_popup_blocked: '请允许此站点打开打印窗口，然后重新导出 PDF。',
     no_report_sources:
       '本周期没有符合条件的已放行条目。请调整日期或筛选，或先在收件箱完成审核与入库。',
     ai_not_configured: '尚未配置模型，可以先手动编写报告。',
@@ -158,6 +168,8 @@ export function reportError(error: unknown) {
     report_model_changed:
       '模型配置已改变，请手动完成本报告，或重新选材创建报告。',
     ai_provider_unavailable: '模型服务暂不可用，可稍后继续。',
+    ai_operations_paused:
+      '内置 AI 后续操作已禁止；可在总览允许继续，已有结果保留。',
     ai_price_window_closed:
       '等待 DeepSeek 低价时段，届时自动继续生成。可在设置 → AI 接入查看恢复时间。',
     ai_price_resume_required: '此报告由数据包恢复，请确认后手动继续生成。',

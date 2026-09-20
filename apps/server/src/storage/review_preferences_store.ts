@@ -182,6 +182,7 @@ export type ReviewJsonApiAuthentication =
 interface ReviewSourceSubscriptionBase {
   readonly subscriptionId: string;
   readonly label: string;
+  readonly description?: string;
   /** Enables periodic checks. Explicit run-now remains available when false. */
   readonly enabled: boolean;
   readonly sourceAlias: string;
@@ -1065,6 +1066,9 @@ function decodeSourceSubscription(
     typeof value.subscriptionId !== 'string' ||
     !CANONICAL_UUID.test(value.subscriptionId) ||
     typeof value.label !== 'string' ||
+    (value.description !== undefined &&
+      (typeof value.description !== 'string' ||
+        value.description.length > 500)) ||
     (value.enabled !== true && value.enabled !== false) ||
     typeof value.sourceAlias !== 'string' ||
     (value.isPrivate !== true && value.isPrivate !== false) ||
@@ -1091,6 +1095,9 @@ function decodeSourceSubscription(
   const common = Object.freeze({
     subscriptionId: value.subscriptionId,
     label,
+    ...(typeof value.description === 'string' && value.description.trim()
+      ? {description: value.description.trim()}
+      : {}),
     enabled: value.enabled,
     sourceAlias,
     isPrivate: value.isPrivate,

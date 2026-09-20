@@ -1,8 +1,8 @@
 import {describe, expect, it, vi} from 'vitest';
 import {priceAwareFetch} from './price_aware_fetch.js';
 import {
-  AI_PRICE_WAIT,
   AiPriceWindowClosedError,
+  AiOperationsPausedError,
 } from '../../modules/processing/ai_price_policy.js';
 import type {CurrentInformationEntry} from '../../modules/entries/index.js';
 import {intakePolicySchema} from '../../application/document_intake_contract.js';
@@ -109,24 +109,27 @@ const operations: Record<string, (fetcher: typeof fetch) => Promise<unknown>> =
         sources: [{handle: 1, title: 'Synthetic', text: 'Synthetic body'}],
       }),
   };
-describe('every Responses operation obeys the same price gate', () => {
-  it.each(Object.keys(operations))(
-    '%s does not dispatch and preserves the wait signal',
-    async (name) => {
-      const network = vi.fn<typeof fetch>();
-      const fetcher = priceAwareFetch(
-        {
-          assertAllowed: async () => {
-            await Promise.resolve();
-            throw new AiPriceWindowClosedError();
+describe.each([AiPriceWindowClosedError, AiOperationsPausedError])(
+  'every Responses operation obeys %s',
+  (WaitError) => {
+    it.each(Object.keys(operations))(
+      '%s does not dispatch and preserves the wait signal',
+      async (name) => {
+        const network = vi.fn<typeof fetch>();
+        const fetcher = priceAwareFetch(
+          {
+            assertAllowed: async () => {
+              await Promise.resolve();
+              throw new WaitError();
+            },
           },
-        },
-        network,
-      );
-      await expect(operations[name]?.(fetcher)).rejects.toMatchObject({
-        code: AI_PRICE_WAIT,
-      });
-      expect(network).not.toHaveBeenCalled();
-    },
-  );
-});
+          network,
+        );
+        await expect(operations[name]?.(fetcher)).rejects.toMatchObject({
+          code: new WaitError().code,
+        });
+        expect(network).not.toHaveBeenCalled();
+      },
+    );
+  },
+);

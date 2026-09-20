@@ -1,10 +1,14 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {DocumentPublicationButton} from './document_publication_button.js';
+import {InformationDocumentWorkingCopy} from './information_document_working_copy.js';
+import {DocumentAiActions} from './document_ai_actions.js';
+import {TwoPane} from '../components/two_pane.js';
+import {InlineStructureEditor} from './inline_structure_editor.js';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type {ComponentProps, ReactNode} from 'react';
 
-import {WorkspaceActionRail} from '../components/workspace_action_rail.js';
 import {WorkspaceToolPanel} from '../components/workspace_tool_panel.js';
 import {EvidenceRail} from '../components/evidence_rail.js';
-import {DocumentStructureTools} from './document_structure_tools.js';
+import type {ManualSplitDraftGroup} from './information_entry_manual_split_model.js';
 import type {InformationEntrySplitWorkspaceProps} from './information_entry_split_workspace.js';
 import type {InformationEntry} from '../api/m1c_api_contract.js';
 import {ActionNotice} from '../components/action_notice.js';
@@ -16,6 +20,19 @@ import {
 } from '../components/reading_text.js';
 import type {ActionFeedback} from '../components/product_types.js';
 import {DocumentWorkspaceList} from './document_workspace_list.js';
+import {
+  DocumentProcessingStrip,
+  DocumentProcessingDetails,
+} from './document_processing.js';
+import {
+  processingForDocument,
+  type ProcessingStageId,
+} from './document_processing_state.js';
+import {useDocumentProcessing} from './use_document_processing.js';
+import {DocumentAnnotations} from './document_annotations.js';
+import {DocumentEntryTags} from './document_tag_overview.js';
+import {DocumentTitle} from './document_title.js';
+import {documentSourceBoundaries} from './document_source_boundaries.js';
 import {
   InformationDocumentPanel,
   InformationEntryEditor,
@@ -46,10 +63,6 @@ export interface DocumentWorkspaceProps {
     entry: Readonly<InformationEntry>,
     includePrivate: boolean,
   ) => ReactNode;
-  readonly renderTagTools?: (
-    entry: Readonly<InformationEntry>,
-    onChanged: () => Promise<void>,
-  ) => ReactNode;
   readonly translationServices: Readonly<EntryTranslationServices>;
   readonly review: Pick<
     EditorProps,
@@ -69,13 +82,17 @@ export function DocumentWorkspace({
   onOpenEvidence,
   structureServices,
   renderLinks,
-  renderTagTools,
   translationServices,
   review,
 }: DocumentWorkspaceProps) {
   const scrollPositions = useRef(new Map<string, number>());
   const returnTarget = useRef<HTMLElement | null>(null);
   const [tool, setTool] = useState<string>();
+  const [editingStructure, setEditingStructure] = useState(false);
+  const [structureDrafts, setStructureDrafts] = useState<
+    ReadonlyMap<string, readonly ManualSplitDraftGroup[]>
+  >(new Map());
+  const [processingStage, setProcessingStage] = useState<ProcessingStageId>();
   const [openedTools, setOpenedTools] = useState<ReadonlySet<string>>(
     new Set(),
   );
@@ -84,15 +101,20 @@ export function DocumentWorkspace({
     (selection.snapshotId ?? '') + ':' + String(selection.includePrivate);
   const toolKey = toolScope + ':' + (tool ?? '');
   const toolOpen = tool !== undefined && openedTools.has(toolKey);
-  function openTool(value: string) {
-    returnTarget.current =
-      globalThis.document.activeElement instanceof HTMLElement
-        ? globalThis.document.activeElement
-        : null;
-    setTool(value);
-    setOpenedTools((current) => new Set([...current, toolScope + ':' + value]));
-  }
-  function closeTool() {
+  const openTool = useCallback(
+    (value: string) => {
+      returnTarget.current =
+        globalThis.document.activeElement instanceof HTMLElement
+          ? globalThis.document.activeElement
+          : null;
+      setTool(value);
+      setOpenedTools(
+        (current) => new Set([...current, toolScope + ':' + value]),
+      );
+    },
+    [toolScope],
+  );
+  const closeTool = useCallback(() => {
     setTool(undefined);
     globalThis.requestAnimationFrame(() => {
       const target = returnTarget.current;
@@ -100,14 +122,27 @@ export function DocumentWorkspace({
       else
         globalThis.document
           .querySelector<HTMLButtonElement>(
-            '.document-tool-area .workspace-action-rail button:not(:disabled)',
+            '.document-tool-area .journey-floating-bar button:not(:disabled)',
           )
           ?.focus();
     });
-  }
+  }, []);
   const controller = useDocumentWorkspace({active, api, selection});
   const document = controller.selectedDocument;
   const documentId = document?.snapshotId ?? '';
+  const processing = useDocumentProcessing(
+    active && document !== undefined && !document.isPrivate,
+    document?.isPrivate ? '' : documentId,
+    controller.refresh,
+  );
+  const processingValue =
+    processing.view && document && !document.isPrivate
+      ? processingForDocument(
+          documentId,
+          processing.view.tasks,
+          processing.view.records,
+        )
+      : undefined;
   useEffect(() => {
     if (active && selection.snapshotId === undefined && documentId !== '')
       onSelectionChange({...selection, snapshotId: documentId});
@@ -126,9 +161,21 @@ export function DocumentWorkspace({
   const [materializing, setMaterializing] = useState(false);
   const entries =
     controller.entries.status === 'ready' ? controller.entries.value.items : [];
+  const allEntries = useMemo(
+    () =>
+      controller.allEntries.status === 'ready'
+        ? controller.allEntries.value.items.map((item) => item.entry)
+        : [],
+    [controller.allEntries],
+  );
   const selectedEntry =
     entries.find(({entry}) => entry.entryId === selectedEntries[documentId])
       ?.entry ?? entries[0]?.entry;
+  const {locateEntry} = controller;
+  useEffect(() => {
+    const id = selectedEntries[documentId];
+    if (id) locateEntry(id);
+  }, [documentId, selectedEntries, locateEntry]);
   const feedbackScope =
     documentId +
     ':' +
@@ -142,8 +189,7 @@ export function DocumentWorkspace({
       value === undefined ? undefined : {scope: feedbackScope, value},
     );
   };
-  const mode =
-    modes[documentId] ?? (document?.entryCount === 1 ? 'entries' : 'source');
+  const mode = modes[documentId] ?? 'source';
   const retainedDraftKey =
     selectedEntry === undefined
       ? undefined
@@ -180,9 +226,12 @@ export function DocumentWorkspace({
     },
     [editorKey],
   );
-  const setMode = (value: 'source' | 'entries') => {
-    setModes((current) => ({...current, [documentId]: value}));
-  };
+  const setMode = useCallback(
+    (value: 'source' | 'entries') => {
+      setModes((current) => ({...current, [documentId]: value}));
+    },
+    [documentId],
+  );
 
   async function materialize() {
     if (
@@ -230,16 +279,69 @@ export function DocumentWorkspace({
     }
   }
 
+  const documentAnnotations = document ? (
+    <>
+      <DocumentAnnotations
+        document={document}
+        entries={allEntries}
+        focusedEntry={mode === 'entries' ? selectedEntry : undefined}
+        onSelectEntry={(entryId) => {
+          controller.locateEntry(entryId);
+          setSelectedEntries((current) => ({
+            ...current,
+            [documentId]: entryId,
+          }));
+          setMode('entries');
+          setTool(undefined);
+        }}
+        loading={controller.allEntries.status === 'loading'}
+        error={
+          controller.allEntries.status === 'error'
+            ? controller.allEntries.message
+            : undefined
+        }
+        active={active}
+        includePrivate={selection.includePrivate}
+        api={api}
+        onOpenDocument={(snapshotId, entryId) => {
+          setTool(undefined);
+          setSelectedEntries((current) => ({
+            ...current,
+            [snapshotId]: entryId,
+          }));
+          setModes((current) => ({...current, [snapshotId]: 'entries'}));
+          onSelectionChange({...selection, snapshotId});
+        }}
+        onEditTags={() => {
+          openTool('tags');
+        }}
+      />
+      {!document.isPrivate ? (
+        <DocumentProcessingStrip
+          value={processingValue}
+          error={processing.error}
+          onRefresh={() => {
+            void processing.refresh();
+          }}
+          onOpen={(stage) => {
+            setProcessingStage(stage);
+            openTool('processing');
+          }}
+        />
+      ) : null}
+      <ActionNotice feedback={feedback} />
+    </>
+  ) : null;
   return (
     <div
-      className="workspace-view document-workspace"
+      className="workspace-view document-workspace journey-workspace"
       data-workflow-page="documents"
       hidden={!active}
     >
       <header className="workflow-page-heading">
         <div>
-          <h1>资料库</h1>
-          <p>从一份文档开始，阅读与整理留在同一处。</p>
+          <h1>工作台</h1>
+          <p>阅读全文，调整分段、标签和联系，确认后用于查询与报告。</p>
         </div>
         <div className="document-workspace__actions">
           <button
@@ -247,6 +349,7 @@ export function DocumentWorkspace({
             className="secondary-action"
             onClick={() => {
               controller.refresh(documentId);
+              void processing.refresh();
             }}
             disabled={materializing}
           >
@@ -266,296 +369,505 @@ export function DocumentWorkspace({
         />
         本次查看包含隐私文档
       </label>
-      <div className="document-workbench">
-        <DocumentWorkspaceList
-          state={controller.documents}
-          selectedId={document?.snapshotId}
-          onRetry={() => {
-            controller.refresh(documentId);
-          }}
-          onSelect={(snapshotId) => {
-            setFeedback(undefined);
-            setTool(undefined);
-            onSelectionChange({...selection, snapshotId});
-          }}
-        />
-        <section
-          className="document-paper"
-          aria-label="文档工作台"
-          aria-busy={controller.documents.status === 'loading'}
-        >
-          <header className="document-paper__identity">
-            <div>
-              <p className="document-paper__eyebrow">
-                {document?.isPrivate === true ? '私密文档' : '来源文档'}
-                {document === undefined
-                  ? ''
-                  : ` · ${document.entryCount.toString()} 个条目`}
-              </p>
-              <h2>{title}</h2>
-            </div>
-          </header>
-          {document === undefined ? (
-            <div className="document-paper__empty" role="status">
-              <p>
-                {controller.documents.status === 'loading'
-                  ? '正在读取可见文档…'
-                  : selection.snapshotId === undefined
-                    ? '导入文档后，在左侧选择材料即可开始。'
-                    : '所选文档不在当前可见范围，请重新选择文档或明确开启隐私范围。'}
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="document-paper__toolbar">
-                <div
-                  className="reading-segments"
-                  role="group"
-                  aria-label="文档阅读范围"
+      <TwoPane
+        name="workbench"
+        left={
+          <DocumentWorkspaceList
+            state={controller.documents}
+            processing={processing.listView}
+            renderProcessing={(item) => {
+              if (!processing.listView || item.isPrivate) return null;
+              const value = processingForDocument(
+                item.snapshotId,
+                processing.listView.tasks,
+                processing.listView.records,
+              );
+              return value.task || value.intake ? (
+                <span
+                  className="document-library-item__processing"
+                  data-tone={value.tone}
                 >
-                  <button
-                    type="button"
-                    aria-pressed={mode === 'source'}
-                    onClick={() => {
-                      setMode('source');
-                    }}
+                  {value.historical ? '历史正文' : value.label}
+                </span>
+              ) : null;
+            }}
+            selectedId={document?.snapshotId}
+            onRetry={() => {
+              controller.refresh(documentId);
+            }}
+            onSelect={(snapshotId) => {
+              setFeedback(undefined);
+              setTool(undefined);
+              setEditingStructure(false);
+              onSelectionChange({...selection, snapshotId});
+            }}
+          />
+        }
+      >
+        {editingStructure &&
+        document &&
+        controller.source.status === 'ready' ? (
+          <InlineStructureEditor
+            key={documentId}
+            document={document}
+            snapshot={controller.source.value}
+            includePrivate={selection.includePrivate}
+            services={structureServices}
+            initialDraft={structureDrafts.get(documentId)}
+            onDraftChange={(groups) => {
+              setStructureDrafts((previous) =>
+                new Map(previous).set(documentId, groups),
+              );
+            }}
+            onClose={() => {
+              setStructureDrafts((previous) => {
+                const next = new Map(previous);
+                next.delete(documentId);
+                return next;
+              });
+              setEditingStructure(false);
+            }}
+            onConfirmed={() => {
+              setStructureDrafts((previous) => {
+                const next = new Map(previous);
+                next.delete(documentId);
+                return next;
+              });
+              setEditingStructure(false);
+              controller.refresh(documentId);
+            }}
+          />
+        ) : (
+          <section
+            className="document-paper"
+            aria-label="文档工作台"
+            aria-busy={controller.documents.status === 'loading'}
+          >
+            <header className="document-paper__identity">
+              <div>
+                <p className="document-paper__eyebrow">
+                  {document?.isPrivate === true ? '私密文档' : '来源文档'}
+                  {document === undefined
+                    ? ''
+                    : ` · ${document.entryCount.toString()} 个条目`}
+                </p>
+                <DocumentTitle
+                  key={documentId + String(selection.includePrivate) + title}
+                  title={title}
+                />
+              </div>
+            </header>
+            {document === undefined ? (
+              <div className="document-paper__empty" role="status">
+                <p>
+                  {controller.documents.status === 'loading'
+                    ? '正在读取可见文档…'
+                    : selection.snapshotId === undefined
+                      ? '导入文档后，在左侧选择材料即可开始。'
+                      : '所选文档不在当前可见范围，请重新选择文档或明确开启隐私范围。'}
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="document-paper__toolbar">
+                  <div
+                    className="reading-segments"
+                    role="group"
+                    aria-label="文档阅读范围"
                   >
-                    全文原文
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={mode === 'entries'}
-                    onClick={() => {
-                      setMode('entries');
-                    }}
-                  >
-                    条目 · {document.entryCount}
-                  </button>
+                    <button
+                      type="button"
+                      aria-pressed={mode === 'source'}
+                      onClick={() => {
+                        setMode('source');
+                      }}
+                    >
+                      全文原文
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={mode === 'entries'}
+                      onClick={() => {
+                        setMode('entries');
+                      }}
+                    >
+                      条目 · {document.entryCount}
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <ActionNotice feedback={feedback} />
-              <div
-                className="document-paper__source"
-                hidden={mode !== 'source'}
-              >
-                {controller.source.status === 'loading' ? (
-                  <p role="status">正在打开全文…</p>
-                ) : null}
-                {controller.source.status === 'error' ? (
-                  <div role="alert">
-                    <p>{controller.source.message}</p>
-                    <button
-                      className="secondary-action"
-                      type="button"
-                      onClick={() => {
-                        controller.refresh(documentId);
-                      }}
-                    >
-                      重试全文
-                    </button>
-                  </div>
-                ) : null}
-                {controller.source.status === 'ready'
-                  ? controller.source.value.structures.map((structure) => (
-                      <ReadingContent
-                        key={structure.structureId}
-                        active={active && mode === 'source'}
-                        scrollMemory={{
-                          key: documentId + ':' + structure.structureId,
-                          positions: scrollPositions,
-                        }}
-                        text={structure.normalizedText}
-                        baseUri={document.canonicalUri}
-                        omitLeadingTitle={title}
-                        scrollLabel="文档全文"
-                      />
-                    ))
+                {(
+                  mode === 'source'
+                    ? controller.source.status !== 'ready' ||
+                      controller.source.value.structures.length === 0
+                    : selectedEntry === undefined
+                )
+                  ? documentAnnotations
                   : null}
-                {safeReadingLink(document.canonicalUri) === undefined ? null : (
-                  <a
-                    href={safeReadingLink(document.canonicalUri)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    referrerPolicy="no-referrer"
-                  >
-                    打开原网页
-                  </a>
-                )}
-              </div>
-              <div
-                className="document-paper__entries"
-                hidden={mode !== 'entries'}
-              >
-                {controller.entries.status === 'loading' ? (
-                  <p role="status">正在读取文档条目…</p>
-                ) : null}
-                {controller.entries.status === 'error' ? (
-                  <div role="alert">
-                    <p>{controller.entries.message}</p>
-                    <button
-                      className="secondary-action"
-                      type="button"
-                      onClick={() => {
-                        controller.refresh(documentId);
-                      }}
-                    >
-                      重试条目
-                    </button>
-                  </div>
-                ) : null}
-                {controller.entries.status === 'ready' &&
-                entries.length === 0 ? (
-                  <div className="document-paper__empty">
-                    <h3>原文已经保存</h3>
-                    <p>创建条目后，可以标注和按需阅读中文译文。</p>
-                    <div className="document-workspace__actions">
+                <div
+                  className="document-paper__source"
+                  hidden={mode !== 'source'}
+                >
+                  {controller.source.status === 'loading' ? (
+                    <p role="status">正在打开全文…</p>
+                  ) : null}
+                  {controller.source.status === 'error' ? (
+                    <div role="alert">
+                      <p>{controller.source.message}</p>
                       <button
-                        type="button"
-                        className="primary-action"
-                        disabled={
-                          materializing || document.workingCopy !== undefined
-                        }
-                        onClick={() => void materialize()}
-                      >
-                        {materializing ? '正在生成…' : '按现有规则生成条目'}
-                      </button>
-                      <button
-                        type="button"
                         className="secondary-action"
+                        type="button"
                         onClick={() => {
-                          setMode('source');
+                          controller.refresh(documentId);
                         }}
                       >
-                        继续阅读原文
+                        重试全文
                       </button>
                     </div>
-                    {document.workingCopy === undefined ? null : (
-                      <p>这份文档有工作副本，请在“调整结构”中继续处理。</p>
-                    )}
-                  </div>
-                ) : null}
-                {selectedEntry === undefined ? null : (
-                  <>
-                    <div
-                      className="document-entry-picker"
-                      hidden={document.entryCount === 1}
+                  ) : null}
+                  {controller.source.status === 'ready'
+                    ? controller.source.value.structures.map(
+                        (structure, index) => (
+                          <ReadingContent
+                            key={structure.structureId}
+                            leadingContent={
+                              mode === 'source' && index === 0
+                                ? documentAnnotations
+                                : undefined
+                            }
+                            active={active && mode === 'source'}
+                            scrollMemory={{
+                              key: documentId + ':' + structure.structureId,
+                              positions: scrollPositions,
+                            }}
+                            text={structure.normalizedText}
+                            boundaries={documentSourceBoundaries(
+                              structure,
+                              allEntries,
+                              (entry) =>
+                                entry.value.contentKeywords.length ? (
+                                  <DocumentEntryTags entry={entry} />
+                                ) : null,
+                            )}
+                            baseUri={document.canonicalUri}
+                            omitLeadingTitle={title}
+                            scrollLabel="文档全文"
+                          />
+                        ),
+                      )
+                    : null}
+                  {safeReadingLink(document.canonicalUri) ===
+                  undefined ? null : (
+                    <a
+                      href={safeReadingLink(document.canonicalUri)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      referrerPolicy="no-referrer"
                     >
-                      <label className="field">
-                        <span>当前条目</span>
-                        <select
-                          value={selectedEntry.entryId}
-                          onChange={(event) => {
-                            setTool(undefined);
-                            setFeedback(undefined);
-                            const value = event.currentTarget.value;
-                            setSelectedEntries((current) => ({
-                              ...current,
-                              [documentId]: value,
-                            }));
-                          }}
-                        >
-                          {entries.map(({entry}) => (
-                            <option key={entry.entryId} value={entry.entryId}>
-                              {entry.value.documentOrder + 1}.{' '}
-                              {readingTitle(entry.value.titlePath)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      打开原网页
+                    </a>
+                  )}
+                </div>
+                <div
+                  className="document-paper__entries"
+                  hidden={mode !== 'entries'}
+                >
+                  {controller.entries.status === 'loading' ? (
+                    <p role="status">正在读取文档条目…</p>
+                  ) : null}
+                  {controller.entries.status === 'error' ? (
+                    <div role="alert">
+                      <p>{controller.entries.message}</p>
+                      <button
+                        className="secondary-action"
+                        type="button"
+                        onClick={() => {
+                          controller.refresh(documentId);
+                        }}
+                      >
+                        重试条目
+                      </button>
+                    </div>
+                  ) : null}
+                  {controller.entries.status === 'ready' &&
+                  entries.length === 0 ? (
+                    <div className="document-paper__empty">
+                      <h3>原文已经保存</h3>
+                      <p>创建条目后，可以标注和按需阅读中文译文。</p>
                       <div className="document-workspace__actions">
                         <button
                           type="button"
-                          className="secondary-action"
-                          disabled={controller.pageIndex === 0}
-                          onClick={() => {
-                            setTool(undefined);
-                            controller.previousPage();
-                          }}
+                          className="primary-action"
+                          disabled={
+                            materializing || document.workingCopy !== undefined
+                          }
+                          onClick={() => void materialize()}
                         >
-                          前一组
+                          {materializing ? '正在生成…' : '按现有规则生成条目'}
                         </button>
-                        <span>第 {controller.pageIndex + 1} 组</span>
                         <button
                           type="button"
                           className="secondary-action"
-                          disabled={
-                            controller.entries.status !== 'ready' ||
-                            controller.entries.value.nextCursor === undefined
-                          }
                           onClick={() => {
-                            setTool(undefined);
-                            controller.nextPage();
+                            setMode('source');
                           }}
                         >
-                          后一组
+                          继续阅读原文
                         </button>
                       </div>
+                      {document.workingCopy === undefined ? null : (
+                        <p>这份文档有工作副本，请在“调整结构”中继续处理。</p>
+                      )}
                     </div>
-                    <div className="document-entry-body">
-                      <div className="document-entry-reading">
-                        <h3>{readingTitle(selectedEntry.value.titlePath)}</h3>
-                        <InformationEntryTranslation
-                          key={`${selectedEntry.entryId}:${selectedEntry.revision.toString()}:${String(selection.includePrivate)}`}
-                          entry={selectedEntry}
-                          services={translationServices}
-                          active={active && mode === 'entries'}
-                          scrollPositions={scrollPositions}
-                        />
+                  ) : null}
+                  {selectedEntry === undefined ? null : (
+                    <>
+                      <div
+                        className="document-entry-picker"
+                        hidden={document.entryCount === 1}
+                      >
+                        <label className="field">
+                          <span>当前条目</span>
+                          <select
+                            value={selectedEntry.entryId}
+                            onChange={(event) => {
+                              setTool(undefined);
+                              setFeedback(undefined);
+                              const value = event.currentTarget.value;
+                              setSelectedEntries((current) => ({
+                                ...current,
+                                [documentId]: value,
+                              }));
+                            }}
+                          >
+                            {entries.map(({entry}) => (
+                              <option key={entry.entryId} value={entry.entryId}>
+                                {entry.value.documentOrder + 1}.{' '}
+                                {readingTitle(entry.value.titlePath)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <div className="document-workspace__actions">
+                          <button
+                            type="button"
+                            className="secondary-action"
+                            disabled={controller.pageIndex === 0}
+                            onClick={() => {
+                              setTool(undefined);
+                              controller.previousPage();
+                            }}
+                          >
+                            前一组
+                          </button>
+                          <span>第 {controller.pageIndex + 1} 组</span>
+                          <button
+                            type="button"
+                            className="secondary-action"
+                            disabled={!controller.hasNextPage}
+                            onClick={() => {
+                              setTool(undefined);
+                              controller.nextPage();
+                            }}
+                          >
+                            后一组
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </>
-          )}
-        </section>
+                      <div className="document-entry-body">
+                        <div className="document-entry-reading">
+                          <h3>{readingTitle(selectedEntry.value.titlePath)}</h3>
+                          <InformationEntryTranslation
+                            key={`${selectedEntry.entryId}:${selectedEntry.revision.toString()}:${String(selection.includePrivate)}`}
+                            leadingContent={
+                              mode === 'entries'
+                                ? documentAnnotations
+                                : undefined
+                            }
+                            entry={selectedEntry}
+                            services={translationServices}
+                            active={active && mode === 'entries'}
+                            scrollPositions={scrollPositions}
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </section>
+        )}
         <div className="document-tool-area">
-          <WorkspaceActionRail
-            page="documents"
-            active={toolOpen ? tool : undefined}
-            connected
-            actions={[
-              {
-                id: 'source',
-                label: '来源详情',
-                disabled: document === undefined,
-                onClick: () => {
-                  openTool('source');
-                },
-              },
-              {
-                id: 'structure',
-                label: '调整结构',
-                disabled: document === undefined,
-                onClick: () => {
-                  openTool('structure');
-                },
-              },
-              {
-                id: 'tags',
-                label: '添加标签',
-                disabled: document === undefined,
-                onClick: () => {
-                  if (selectedEntry !== undefined) setMode('entries');
+          <footer className="journey-floating-bar" hidden={editingStructure}>
+            <div className="journey-action-group">
+              <button
+                className="secondary-action"
+                disabled={!document}
+                onClick={() => {
+                  setTool(undefined);
+                  if (document?.workingCopy) openTool('working-copy');
+                  else setEditingStructure(true);
+                }}
+              >
+                {structureDrafts.has(documentId) ? '继续分段草稿' : '修改分段'}
+              </button>
+              <button
+                className="secondary-action"
+                disabled={!document}
+                onClick={() => {
                   openTool('tags');
-                },
-              },
-              {
-                id: 'links',
-                label: '建立联系',
-                disabled: document === undefined,
-                onClick: () => {
-                  if (selectedEntry !== undefined) setMode('entries');
+                }}
+              >
+                编辑标签
+              </button>
+              <button
+                className="secondary-action"
+                disabled={!selectedEntry}
+                onClick={() => {
                   openTool('links');
-                },
-              },
-            ]}
-          >
-            <p>按需整理即可，标签与联系不必逐步完成。</p>
-          </WorkspaceActionRail>
+                }}
+              >
+                建立联系
+              </button>
+              <button
+                className="text-action"
+                disabled={!document}
+                onClick={() => {
+                  openTool('source');
+                }}
+              >
+                来源与证据
+              </button>
+            </div>
+            <div className="journey-action-group journey-ai-actions">
+              {document && !document.isPrivate ? (
+                <DocumentPublicationButton
+                  key={
+                    documentId +
+                    allEntries.map((entry) => entry.revision).join('-')
+                  }
+                  snapshotId={documentId}
+                  entries={
+                    controller.allEntries.status === 'ready'
+                      ? controller.allEntries.value.items.map(
+                          (item) => item.entry,
+                        )
+                      : []
+                  }
+                  onPublished={() => {
+                    void processing.refresh();
+                  }}
+                />
+              ) : null}
+              <button
+                className="secondary-action"
+                disabled={!document || document.isPrivate}
+                onClick={() => {
+                  setProcessingStage(undefined);
+                  openTool('processing');
+                }}
+              >
+                AI 处理
+              </button>
+              <button
+                className="secondary-action"
+                disabled={!selectedEntry || selectedEntry.value.isPrivate}
+                onClick={() => {
+                  setMode('entries');
+                  openTool('ai');
+                }}
+              >
+                AI 标签与翻译
+              </button>
+            </div>
+          </footer>
+          {selectedEntry && openedTools.has(toolScope + ':ai') ? (
+            <WorkspaceToolPanel
+              title="AI 标签与翻译"
+              open={toolOpen && tool === 'ai'}
+              onClose={closeTool}
+            >
+              <DocumentAiActions
+                snapshotId={documentId}
+                entryCount={document?.entryCount ?? 0}
+                onStarted={() => {
+                  void processing.refresh();
+                }}
+              />
+              <InformationEntryTranslation
+                allowRedo
+                entry={selectedEntry}
+                services={translationServices}
+              />
+            </WorkspaceToolPanel>
+          ) : null}
+          {document?.workingCopy &&
+          openedTools.has(toolScope + ':working-copy') ? (
+            <WorkspaceToolPanel
+              title="处理已有全文草稿"
+              open={toolOpen && tool === 'working-copy'}
+              onClose={closeTool}
+            >
+              <InformationDocumentWorkingCopy
+                snapshotId={document.snapshotId}
+                isPrivate={Boolean(document.isPrivate)}
+                includePrivate={selection.includePrivate}
+                alreadyMaterialized={document.entryCount > 0}
+                onLoad={structureServices.onLoadDocumentWorkingCopy}
+                onSave={structureServices.onSaveDocumentWorkingCopy}
+                onRestore={structureServices.onRestoreDocumentWorkingCopy}
+                onCommit={structureServices.onCommitDocumentWorkingCopy}
+                onCommitted={(snapshotId) => {
+                  controller.refresh(snapshotId);
+                  closeTool();
+                  return Promise.resolve();
+                }}
+              />
+            </WorkspaceToolPanel>
+          ) : null}
+          {document && openedTools.has(toolScope + ':processing') ? (
+            <WorkspaceToolPanel
+              title="AI 处理详情"
+              open={toolOpen && tool === 'processing'}
+              onClose={closeTool}
+            >
+              {!document.isPrivate ? (
+                <DocumentAiActions
+                  snapshotId={documentId}
+                  entryCount={document.entryCount}
+                  onStarted={() => {
+                    void processing.refresh();
+                  }}
+                />
+              ) : null}
+              {processing.error ? (
+                <p role="status">{processing.error}</p>
+              ) : processingValue ? (
+                <DocumentProcessingDetails
+                  value={processingValue}
+                  snapshotId={documentId}
+                  stage={processingStage}
+                  onOpenDocument={(snapshotId) => {
+                    setTool(undefined);
+                    onSelectionChange({...selection, snapshotId});
+                  }}
+                  onReadEntries={() => {
+                    setMode('entries');
+                    closeTool();
+                  }}
+                  onOpenTool={(id) => {
+                    setMode('entries');
+                    openTool(id);
+                  }}
+                />
+              ) : (
+                <p role="status">正在读取处理记录…</p>
+              )}
+            </WorkspaceToolPanel>
+          ) : null}
           {document === undefined
             ? null
-            : (['source', 'structure', 'tags', 'links'] as const).map((id) =>
+            : (['source', 'tags', 'links'] as const).map((id) =>
                 !openedTools.has(toolScope + ':' + id) ? null : (
                   <WorkspaceToolPanel
                     key={toolScope + ':' + id}
@@ -594,19 +906,6 @@ export function DocumentWorkspace({
                           controller.refresh(documentId);
                         }}
                         onSelectFragment={setFragmentId}
-                      />
-                    ) : null}
-                    {id === 'structure' ? (
-                      <DocumentStructureTools
-                        document={document}
-                        includePrivate={selection.includePrivate}
-                        services={structureServices}
-                        onChanged={(snapshotId) => {
-                          controller.refresh(snapshotId);
-                          if (snapshotId !== documentId)
-                            onSelectionChange({...selection, snapshotId});
-                          return Promise.resolve();
-                        }}
                       />
                     ) : null}
                     {id === 'tags' ? (
@@ -699,10 +998,6 @@ export function DocumentWorkspace({
                             presentation="workbench"
                           />
                         </div>
-                        {renderTagTools?.(selectedEntry, () => {
-                          controller.refresh(documentId);
-                          return Promise.resolve();
-                        })}
                       </>
                     ) : null}
                     {id === 'links' && selectedEntry !== undefined
@@ -712,16 +1007,18 @@ export function DocumentWorkspace({
                     selectedEntry === undefined ? (
                       <div className="document-paper__empty">
                         <p>
-                          这份文档还没有条目。先在结构工具中生成条目，再添加标签或联系。
+                          这份文档还没有确认分段。可以整篇保留，确认后再添加标签和联系。
                         </p>
                         <button
                           className="secondary-action"
                           type="button"
                           onClick={() => {
-                            openTool('structure');
+                            setTool(undefined);
+                            if (document.workingCopy) openTool('working-copy');
+                            else setEditingStructure(true);
                           }}
                         >
-                          打开结构工具
+                          编辑分段
                         </button>
                       </div>
                     ) : null}
@@ -729,7 +1026,7 @@ export function DocumentWorkspace({
                 ),
               )}
         </div>
-      </div>
+      </TwoPane>
     </div>
   );
 }

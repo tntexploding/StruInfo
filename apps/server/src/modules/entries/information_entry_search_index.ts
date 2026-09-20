@@ -62,27 +62,21 @@ export function prepareInformationEntrySearchProjection(
   if (entry.value.isPrivate) {
     throw new Error('Private Entries cannot enter the derived search index.');
   }
-  const tagText = [
+  const tags = [
     ...entry.value.contentKeywords.map((keyword) => keyword.displayValue),
     ...(entry.value.typeKeyword === undefined
       ? []
       : [entry.value.typeCustomName ?? entry.value.typeKeyword]),
     ...entry.value.domains.map((domain) => domain.customName ?? domain.keyword),
-  ].join(' ');
+  ];
+  const tagText = tags.join(' ');
   const fields = Object.freeze({
     title: entry.value.titlePath,
     body: entry.value.body,
     tags: tagText,
   });
   const postings = createPostings(entry.entryId, fields);
-  const input = truncateUtf8(
-    [
-      `标题\n${entry.value.titlePath}`,
-      `正文\n${entry.value.body}`,
-      `标签\n${tagText}`,
-    ].join('\n\n'),
-    INFORMATION_ENTRY_EMBEDDING_INPUT_MAXIMUM_UTF8_BYTES,
-  );
+  const input = informationEntryEmbeddingInput(entry);
   return Object.freeze({
     entry,
     input,
@@ -97,6 +91,55 @@ export function prepareInformationEntrySearchProjection(
     }),
     postings,
   });
+}
+
+export function informationEntryEmbeddingInput(
+  entry: Readonly<CurrentInformationEntry>,
+): string {
+  if (entry.value.isPrivate)
+    throw new Error('Private Entries cannot enter the derived search index.');
+  const tags = [
+    ...entry.value.contentKeywords.map((keyword) => keyword.displayValue),
+    ...(entry.value.typeKeyword === undefined
+      ? []
+      : [entry.value.typeCustomName ?? entry.value.typeKeyword]),
+    ...entry.value.domains.map((domain) => domain.customName ?? domain.keyword),
+  ];
+  const tagText = tags.join(' ');
+  // Reserve metadata before body text. Ordinary labels remain complete; when
+  // metadata alone is extreme, retain a preview of EVERY tag rather than dropping
+  // later tags. Full labels still enter postings and cited RAG evidence.
+  const tagBudget = 5_400;
+  const embeddedTags =
+    Buffer.byteLength(tagText, 'utf8') <= tagBudget
+      ? tagText
+      : tags
+          .map(
+            (tag) =>
+              truncateUtf8(tag, Math.floor(tagBudget / tags.length) - 4) + '…',
+          )
+          .join(' ');
+  const metadata = `标题\n${truncateUtf8(entry.value.titlePath, 1_000)}\n\n标签\n${embeddedTags}\n\n正文\n`;
+  const input =
+    metadata +
+    truncateUtf8(
+      entry.value.body,
+      INFORMATION_ENTRY_EMBEDDING_INPUT_MAXIMUM_UTF8_BYTES -
+        Buffer.byteLength(metadata, 'utf8'),
+    );
+
+  return input;
+}
+
+export function hasCurrentInformationEntryEmbeddingInput(
+  entry: Readonly<CurrentInformationEntry>,
+  projection: Readonly<InformationEntrySearchProjection>,
+): boolean {
+  return (
+    createHash('sha256')
+      .update(informationEntryEmbeddingInput(entry), 'utf8')
+      .digest('hex') === projection.projectionSha256
+  );
 }
 
 export function withInformationEntryEmbedding(
@@ -147,7 +190,7 @@ function createPostings(
   fields: Readonly<Record<InformationEntrySearchIndexField, string>>,
 ): readonly Readonly<InformationEntryTermPosting>[] {
   const postings: InformationEntryTermPosting[] = [];
-  for (const field of ['title', 'body', 'tags'] as const) {
+  for (const field of ['tags', 'title', 'body'] as const) {
     const counts = new Map<string, number>();
     for (const term of tokenizeInformationEntryText(fields[field])) {
       counts.set(term, (counts.get(term) ?? 0) + 1);

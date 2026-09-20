@@ -7,7 +7,8 @@ export const OPENAI_EMBEDDINGS_ENDPOINT =
 const MAXIMUM_RESPONSE_BYTES = 8 * 1024 * 1024;
 
 export class OpenAiInformationEntryEmbeddingProvider implements InformationEntryEmbeddingProviderPort {
-  public readonly providerKey = 'openai-embeddings-v1' as const;
+  // v2 binds vectors to metadata-first Entry inputs; explicit refresh can retire v1 in batches.
+  public readonly providerKey = 'openai-embeddings-v2' as const;
   public readonly model: string;
   readonly #config: Readonly<EmbeddingProviderConfig>;
   readonly #fetch: OpenAiFetch;

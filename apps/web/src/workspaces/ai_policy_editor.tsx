@@ -186,7 +186,7 @@ export function AiPolicyEditor({
           {(
             [
               ['maxDocumentsPerDay', '每日新文档', 1, 100],
-              ['maxEntries', '每篇最多条目', 1, 24],
+              ['maxEntries', '每篇最多条目', 1, 64],
               ['maxRelations', '每篇最多联系', 0, 8],
               ['maxModelCalls', '每篇调用尝试', 1, 64],
             ] as const

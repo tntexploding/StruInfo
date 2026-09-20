@@ -1,6 +1,12 @@
 import {fromMarkdown} from 'mdast-util-from-markdown';
 
 export interface MarkdownNode {
+  readonly position?:
+    | Readonly<{
+        start: Readonly<{offset?: number | undefined}>;
+        end: Readonly<{offset?: number | undefined}>;
+      }>
+    | undefined;
   readonly type: string;
   readonly children?: readonly MarkdownNode[];
   readonly value?: string;
@@ -14,6 +20,16 @@ export interface MarkdownNode {
 
 export function readingTitle(value: string): string {
   return plainText(fromMarkdown(value)).trim() || '未命名条目';
+}
+
+/** A display-only title; the source heading stays intact. */
+export function compactDocumentTitle(value: string): string {
+  const characters = Array.from(value);
+  if (characters.length <= 80) return value;
+  // Briefings sometimes put their full contents after a complete leading heading.
+  const heading = /^【[^】\n]{10,78}】/u.exec(value)?.[0];
+  if (heading !== undefined) return heading;
+  return characters.slice(0, 80).join('').trimEnd() + '…';
 }
 
 export function sourceDisplayName(source: {

@@ -1,11 +1,13 @@
 import {
   AI_PRICE_WAIT,
-  isAiPriceWait,
+  AI_OPERATIONS_PAUSED,
+  isAiDispatchWait,
 } from '../modules/processing/ai_price_policy.js';
 import type {InformationEntryRepositoryPort} from '../modules/entries/index.js';
 import type {EvidenceReadRepositoryPort} from '../modules/evidence/index.js';
 import {deriveProcessingRunId} from '../modules/processing/processing_identity.js';
 import type {DocumentIntakeService} from './document_intake_service.js';
+import {intakeTargetSnapshot} from './document_intake_contract.js';
 import type {ExecutionAuthority} from './execution_authority.js';
 import {OperationError} from './operation_error.js';
 import {
@@ -35,6 +37,7 @@ export class ReportService {
       intake: Pick<DocumentIntakeService, 'list'>;
       provider?: ReportProvider;
       checkModelCall?: () => Promise<void>;
+      checkOperations?: () => Promise<void>;
     },
   ) {}
 
@@ -68,8 +71,7 @@ export class ReportService {
       if (
         entry?.snapshotId !== source.snapshotId ||
         record?.value.decision !== 'admitted' ||
-        (record.value.preparedSnapshotId ?? record.snapshotId) !==
-          source.snapshotId
+        intakeTargetSnapshot(record) !== source.snapshotId
       )
         throw new OperationError('forbidden', 'report_sources_unavailable');
       if (entry.revision !== source.revision) stale.push(source.entryId);
@@ -116,15 +118,57 @@ export class ReportService {
       request,
       actor: {kind: 'owner', id: authority.identity.id},
       title:
-        (request.kind === 'daily' ? '日报 · ' : '周报 · ') +
-        selected.period.from +
-        (request.kind === 'weekly' ? ' — ' + selected.period.to : ''),
+        request.kind === 'topic'
+          ? '专题 · ' +
+            (
+              request.topics.join('、') ||
+              request.sources.join('、') ||
+              request.date
+            ).slice(0, 140)
+          : {daily: '日报 · ', weekly: '周报 · ', monthly: '月报 · '}[
+              request.kind
+            ] +
+            selected.period.from +
+            (request.kind === 'weekly' || request.kind === 'monthly'
+              ? ' — ' + selected.period.to
+              : ''),
       ...selected,
       items: [],
       planned: false,
       status: 'draft',
       calls: 0,
     };
+    if (request.composition === 'collection') {
+      const selectedSources = request.maxItems
+        ? selected.sources.slice(0, request.maxItems)
+        : selected.sources;
+      state.items = selectedSources.map((source) => ({
+        group: {title: source.title.slice(0, 160), sources: [source.handle]},
+        included: true,
+        draft: {
+          title: source.title.slice(0, 160),
+          points: [
+            {
+              text:
+                source.excerpt.slice(0, 550) +
+                (source.excerpt.length > 550
+                  ? '…（原文摘录，完整内容见出处）'
+                  : ''),
+              sources: [source.handle],
+            },
+          ],
+        },
+      }));
+      state.otherGroups = selected.sources
+        .slice(selectedSources.length)
+        .map((source) => ({
+          title: source.title.slice(0, 160),
+          sources: [source.handle],
+        }));
+      state.planned = true;
+      state.origin = 'search_results';
+      state.status = 'ready';
+    }
     validateReportState(state);
     if (!(await this.deps.repository.save(reportId, 0, state))) {
       const concurrent = await this.get(reportId);
@@ -133,12 +177,13 @@ export class ReportService {
     }
     return this.read(authority, reportId);
   }
-  public async list(authority: ExecutionAuthority) {
+  public async list(authority: ExecutionAuthority, prioritizeActive = false) {
     authority.require('processing.read');
     authority.require('entries.search');
-    const [rows, data] = await Promise.all([
-      this.deps.repository.list(),
-      this.current(),
+    const rows = await this.deps.repository.list(prioritizeActive);
+    // Overview polling only needs the sources of the returned reports.
+    const data = await this.current([
+      ...new Set(rows.flatMap((r) => r.state.sources.map((s) => s.entryId))),
     ]);
     const reports = [];
     for (const r of rows) {
@@ -155,6 +200,11 @@ export class ReportService {
           updatedAt: r.updatedAt,
           itemCount: r.state.items.filter((i) => i.included).length,
           stale: stale.length > 0,
+          active: this.#running.has(r.reportId),
+          errorCode: r.state.errorCode,
+          planned: r.state.planned,
+          completedItemCount: r.state.items.filter((i) => i.draft ?? i.edited)
+            .length,
         });
       } catch (error) {
         if (
@@ -226,7 +276,11 @@ export class ReportService {
       ...report.state,
       status: 'cancelled' as const,
     };
-    if (cancelled.errorCode === AI_PRICE_WAIT) delete cancelled.errorCode;
+    if (
+      cancelled.errorCode === AI_PRICE_WAIT ||
+      cancelled.errorCode === AI_OPERATIONS_PAUSED
+    )
+      delete cancelled.errorCode;
     await this.save(reportId, report.version, cancelled);
     return this.read(authority, reportId);
   }
@@ -243,7 +297,10 @@ export class ReportService {
     )
       throw new OperationError('conflict', 'report_not_editable');
     const edit = reportEditSchema.parse(input);
-    if (edit.items.length > report.state.request.maxItems)
+    if (
+      report.state.request.maxItems > 0 &&
+      edit.items.length > report.state.request.maxItems
+    )
       throw new OperationError('invalid_input', 'report_item_limit');
     const items = edit.items.map((item, index) => {
       const sources = [
@@ -374,6 +431,7 @@ export class ReportService {
           delete state.errorCode;
           if (!provider || provider.model !== state.model)
             throw new OperationError('rejected', 'report_model_changed');
+          await this.deps.checkOperations?.();
           if (state.planned && state.items.every((i) => i.draft)) {
             await this.save(id, record.version, {...state, status: 'ready'});
             return;
@@ -416,7 +474,11 @@ export class ReportService {
             state.items = [];
             state.otherGroups = [];
             for (const {recommended, ...group} of plan.groups) {
-              if (recommended && state.items.length < state.request.maxItems)
+              if (
+                recommended &&
+                (state.request.maxItems === 0 ||
+                  state.items.length < state.request.maxItems)
+              )
                 state.items.push({group, included: true});
               else state.otherGroups.push(group);
             }
@@ -474,11 +536,11 @@ export class ReportService {
           !['running', 'queued'].includes(latest.state.status)
         )
           return;
-        if (isAiPriceWait(error)) {
+        if (isAiDispatchWait(error)) {
           await this.save(id, latest.version, {
             ...latest.state,
             status: 'queued',
-            errorCode: AI_PRICE_WAIT,
+            errorCode: error.code,
             calls: latest.state.calls - (unsentCall ? 1 : 0),
           });
           return;
@@ -503,7 +565,7 @@ export class ReportService {
     try {
       await this.deps.checkModelCall();
     } catch (error) {
-      if (isAiPriceWait(error)) return;
+      if (isAiDispatchWait(error)) return;
       throw error;
     }
     const reports = this.deps.repository.listPriceDeferred
@@ -513,7 +575,8 @@ export class ReportService {
       if (this.#running.size >= 8) break;
       if (
         report.state.status === 'queued' &&
-        report.state.errorCode === AI_PRICE_WAIT
+        (report.state.errorCode === AI_PRICE_WAIT ||
+          report.state.errorCode === AI_OPERATIONS_PAUSED)
       )
         this.launch(report.reportId);
     }

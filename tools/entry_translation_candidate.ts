@@ -100,6 +100,30 @@ export async function verifyEntryTranslationCandidate(
     )?.[0],
     source,
   );
+  const regenerated = await service.generate(
+    source.entryId,
+    source.revision,
+    translated.translatedAt,
+  );
+  strictEqual(calls, 2);
+  ok(regenerated.translatedAt !== translated.translatedAt);
+  deepStrictEqual(
+    await service.read(source.entryId, source.revision),
+    regenerated,
+  );
+  await rejects(
+    service.generate(source.entryId, source.revision, translated.translatedAt),
+    {code: 'translation_source_stale'},
+  );
+  strictEqual(calls, 2);
+  strictEqual(
+    await repositories.entryTranslations.replaceIfCurrent?.(
+      workspaceId,
+      translated,
+      translated.translatedAt,
+    ),
+    false,
+  );
   const nextId = randomUUID();
   await pool.query(
     'UPDATE struinfo.information_entry SET current_revision = current_revision + 1, current_revision_id = $3 WHERE workspace_id = $1 AND entry_id = $2',
@@ -116,7 +140,7 @@ export async function verifyEntryTranslationCandidate(
   strictEqual((await search()).totalCount, 0);
   const updated = await service.generate(source.entryId, source.revision + 1);
   strictEqual(updated.sourceRevisionId, nextId);
-  strictEqual(calls, 2);
+  strictEqual(calls, 3);
   strictEqual((await search()).totalCount, 1);
   await pool.query(
     'UPDATE struinfo.information_entry SET is_private = true WHERE workspace_id = $1 AND entry_id = $2',
@@ -137,6 +161,14 @@ export async function verifyEntryTranslationCandidate(
   deepStrictEqual(
     await repositories.entryTranslations.loadCurrentTranslations(workspaceId),
     [],
+  );
+  strictEqual(
+    await repositories.entryTranslations.replaceIfCurrent?.(
+      workspaceId,
+      updated,
+      updated.translatedAt,
+    ),
+    false,
   );
   strictEqual((await search(workspaceId, true)).totalCount, 0);
   await rejects(service.generate(source.entryId, source.revision + 1), {
@@ -282,7 +314,7 @@ export async function verifyEntryTranslationCandidate(
   strictEqual(restoredSearch.totalCount, 1);
   strictEqual(restoredSearch.items[0]?.entry.workspaceId, restoredWorkspace);
   strictEqual(restoredSearch.items[0].entry.entryId, source.entryId);
-  strictEqual(calls, 2);
+  strictEqual(calls, 3);
   return Object.freeze({
     providedTranslationImportedAndRestored: true,
     currentCacheOverwriteRejected: true,

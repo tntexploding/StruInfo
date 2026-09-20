@@ -5,6 +5,7 @@ import type {
 } from '../entries/index.js';
 
 export type AiTagProposalProviderErrorCode =
+  | 'ai_operations_paused'
   | 'ai_price_window_closed'
   | 'ai_provider_timeout'
   | 'ai_provider_unavailable'

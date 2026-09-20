@@ -60,6 +60,8 @@ export type GraphEdgeWriteRequest = Readonly<
     }
 >;
 export interface RelationUseCasesDependencies {
+  readonly knowledgeEntries?: InformationEntryRepositoryPort;
+  readonly stageDocument?: (snapshotId: string) => Promise<void>;
   readonly informationEntryRepository: InformationEntryRepositoryPort;
   readonly informationEntryAssociationRepository: InformationEntryAssociationRepositoryPort;
   readonly informationEntryRetrieval?: InformationEntryRetrievalServicePort;
@@ -201,7 +203,24 @@ export class RelationUseCases {
       ),
       this.#loadInformationEntryAssociationPolicy(),
     ]);
-    const {entries, snapshot} = neighborhood;
+    const {snapshot} = neighborhood;
+    let entries = neighborhood.entries;
+    if (this.#dependencies.knowledgeEntries) {
+      const published =
+        await this.#dependencies.knowledgeEntries.loadCurrentEntries(
+          this.#authority.workspaceId,
+          includePrivate,
+        );
+      const ids = new Set(published.map((entry) => entry.entryId));
+      // An explicit document workbench may inspect its own draft relationships.
+      const selectedSnapshot = entries.find(
+        (entry) => entry.entryId === entryId,
+      )?.snapshotId;
+      entries = entries.filter(
+        (entry) =>
+          ids.has(entry.entryId) || entry.snapshotId === selectedSnapshot,
+      );
+    }
     if (!entries.some((entry) => entry.entryId === entryId)) {
       throw new OperationError('not_found', 'information_entry_not_found');
     }
@@ -318,6 +337,11 @@ export class RelationUseCases {
         input.operation === 'block',
       );
     }
+    if ((current?.revision ?? 0) !== input.expectedRevision)
+      throw new OperationError('conflict', 'stale_association_revision');
+    const edited = entries.find((entry) => entry.entryId === entryId);
+    if (edited && !edited.value.isPrivate)
+      await this.#dependencies.stageDocument?.(edited.snapshotId);
     const outcome =
       await this.#dependencies.informationEntryAssociationRepository.writeAssociationOverride(
         {

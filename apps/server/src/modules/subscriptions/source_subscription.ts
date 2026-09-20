@@ -60,6 +60,7 @@ const WEB_CONNECTOR_ID = 'builtin.web.v1';
 interface SourceSubscriptionWriteBase {
   readonly subscriptionId: string;
   readonly label: string;
+  readonly description?: string;
   readonly enabled: boolean;
   readonly sourceAlias: string;
   readonly isPrivate: boolean;
@@ -1345,6 +1346,7 @@ function sameSubscriptionConfigurations(
       return (
         current.subscriptionId === candidate.subscriptionId &&
         current.label === candidate.label &&
+        current.description === candidate.description &&
         current.enabled === candidate.enabled &&
         current.intervalMinutes === candidate.intervalMinutes &&
         sourceConfigurationIdentity(current) ===

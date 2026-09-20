@@ -19,6 +19,136 @@ const RESOURCE_ID = '22222222-2222-4222-8222-222222222222';
 const SNAPSHOT_ID = '33333333-3333-4333-8333-333333333333';
 
 describe('complete InformationEntry search', () => {
+  it('expands only confirmed whole-tag equivalents with original labels, field scope and privacy intact', () => {
+    const originals = [
+      currentEntry('00000000-0000-4000-8000-000000000001', {
+        contentKeywords: ['无线网络'],
+      }),
+      currentEntry('00000000-0000-4000-8000-000000000002', {
+        contentKeywords: ['Wi-Fi'],
+        isPrivate: true,
+      }),
+      currentEntry('00000000-0000-4000-8000-000000000003', {
+        contentKeywords: ['Wi-Fi 7'],
+      }),
+    ];
+    const aliases = [
+      {source: 'WiFi', canonical: 'Wi-Fi'},
+      {source: 'Wi-Fi', canonical: '无线网络'},
+    ];
+    const find = (request: Partial<InformationEntrySearchRequest>) =>
+      searchCurrentInformationEntries(
+        originals,
+        {includePrivate: false, limit: 10, ...request},
+        undefined,
+        undefined,
+        undefined,
+        aliases,
+      );
+    expect(find({contentKeyword: 'WiFi'}).items).toMatchObject([
+      {
+        entry: {entryId: originals[0]?.entryId},
+        aliasMatches: [{query: 'WiFi', tag: '无线网络'}],
+      },
+    ]);
+    expect(
+      find({text: 'WiFi', textFields: ['tags'], textMode: 'exact'}).items[0],
+    ).toMatchObject({
+      matchReasons: ['content_keyword_alias'],
+      textMatch: {score: 10_000},
+    });
+    expect(find({text: 'WiFi', textFields: ['body']}).totalCount).toBe(0);
+    expect(find({text: 'WiF', textMode: 'exact'}).totalCount).toBe(0);
+    expect(
+      find({contentKeyword: 'WiFi', includePrivate: true}).totalCount,
+    ).toBe(2);
+    expect(
+      find({
+        contentKeyword: 'WiFi',
+        includePrivate: true,
+        onlyPrivate: true,
+      }).items.map((item) => item.entry.entryId),
+    ).toEqual([originals[1]?.entryId]);
+    expect(originals[0]?.value.contentKeywords[0]?.displayValue).toBe(
+      '无线网络',
+    );
+  });
+
+  it('binds pagination to the effective confirmed alias group without depending on unrelated alias order', () => {
+    const entries = [1, 2, 3].map((n) =>
+      currentEntry(`00000000-0000-4000-8000-${String(n).padStart(12, '0')}`, {
+        documentOrder: n,
+        contentKeywords: [n === 3 ? 'Network C' : 'Network B'],
+      }),
+    );
+    const aliases = [{source: 'Network A', canonical: 'Network B'}];
+    const request = {
+      contentKeyword: 'Network A',
+      includePrivate: false,
+      limit: 1,
+    };
+    const first = searchCurrentInformationEntries(
+      entries,
+      request,
+      undefined,
+      undefined,
+      undefined,
+      aliases,
+    );
+    expect(first.totalCount).toBe(2);
+    expect(first.nextCursor).toBeDefined();
+    if (first.nextCursor === undefined)
+      throw new Error('missing synthetic cursor');
+    const secondRequest = {...request, after: first.nextCursor};
+    const second = searchCurrentInformationEntries(
+      entries,
+      secondRequest,
+      undefined,
+      undefined,
+      undefined,
+      [{source: 'Unrelated', canonical: 'Other'}, ...aliases],
+    );
+    expect(second.items[0]?.entry.entryId).toBe(entries[1]?.entryId);
+    for (const changed of [
+      [],
+      [...aliases, {source: 'Network B', canonical: 'Network C'}],
+    ]) {
+      expect(() =>
+        searchCurrentInformationEntries(
+          entries,
+          secondRequest,
+          undefined,
+          undefined,
+          undefined,
+          changed,
+        ),
+      ).toThrow(InformationEntrySearchCursorError);
+    }
+  });
+
+  it('does not grant a second field-ranking boost when a confirmed alias and the original tag both match', () => {
+    const source = currentEntry('00000000-0000-4000-8000-000000000001', {
+      contentKeywords: ['Network A', 'Network B'],
+    });
+    const duplicate = {
+      ...source,
+      entryId: '00000000-0000-4000-8000-000000000002',
+    };
+    const result = searchCurrentInformationEntries(
+      [source, duplicate],
+      {text: 'Network A', includePrivate: false, limit: 1},
+      undefined,
+      undefined,
+      undefined,
+      [{source: 'Network A', canonical: 'Network B'}],
+    );
+    expect(result.items[0]?.matchReasons).toEqual([
+      'content_keyword_alias',
+      'content_keyword',
+    ]);
+    expect(result.nextCursor?.matchReasonCount).toBe(1);
+  });
+
   it.each([
     ['exact', '合成标题甲', 10_000],
     ['substring', '标题', 9_000],

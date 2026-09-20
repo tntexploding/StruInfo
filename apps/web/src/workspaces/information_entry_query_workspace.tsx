@@ -1,4 +1,3 @@
-import {useWorkspaceUi} from '../components/use_workspace_ui.js';
 import {FloatingToolPanel} from '../components/floating_tool_panel.js';
 import {sourceDisplayName} from '../components/reading_text.js';
 import {InformationEntryTranslation} from './information_entry_translation.js';
@@ -12,7 +11,7 @@ import {
   type EntryMarkdownExportServices,
 } from './information_entry_markdown_export.js';
 import {InformationEntryRestoredSelection} from './information_entry_restored_selection.js';
-import {useEffect, useState, type SyntheticEvent} from 'react';
+import {useEffect, useState, type ReactNode, type SyntheticEvent} from 'react';
 
 import {
   type EntryQueryContext,
@@ -63,6 +62,7 @@ export interface InformationEntryQueryWorkspaceProps
     >,
     Partial<EntrySavedQueryServices>,
     Partial<EntryMarkdownExportServices> {
+  readonly renderGraph?: (entry: Readonly<InformationEntry>) => ReactNode;
   readonly initialContext?: Readonly<EntryQueryContext> | undefined;
   readonly onContextChange?: (context: Readonly<EntryQueryContext>) => void;
   readonly onOpenGraph?: (entry: Readonly<InformationEntry>) => void;
@@ -78,6 +78,7 @@ export interface InformationEntryQueryWorkspaceProps
 }
 
 export function InformationEntryQueryWorkspace({
+  renderGraph,
   onPreviewMarkdownExport,
   onGenerateMarkdownExport,
   initialContext,
@@ -100,6 +101,8 @@ export function InformationEntryQueryWorkspace({
   reviewPreferences,
   snapshots,
 }: InformationEntryQueryWorkspaceProps) {
+  const [readingMode, setReadingMode] = useState<'search' | 'ask'>('search');
+  const [showGraph, setShowGraph] = useState(false);
   const controller = useInformationEntryController({
     ...(initialContext === undefined
       ? {}
@@ -197,10 +200,33 @@ export function InformationEntryQueryWorkspace({
     >
       <header className="workflow-page-heading">
         <div>
-          <h1>查询</h1>
+          <h1>数据阅览</h1>
+          <p>检索已确认的内容，沿联系阅读，或向 AI 提问并核对引用。</p>
         </div>
       </header>
 
+      <div
+        className="reading-segments reading-mode-switch"
+        role="group"
+        aria-label="阅览方式"
+      >
+        <button
+          aria-pressed={readingMode === 'search'}
+          onClick={() => {
+            setReadingMode('search');
+          }}
+        >
+          搜索与关系图
+        </button>
+        <button
+          aria-pressed={readingMode === 'ask'}
+          onClick={() => {
+            setReadingMode('ask');
+          }}
+        >
+          向资料提问
+        </button>
+      </div>
       <details className="workflow-mode-summary" aria-label="查询页操作指南">
         <summary>操作指南 · 查询条目</summary>
         <span>1. 输入关键词，按需展开筛选</span>
@@ -276,7 +302,29 @@ export function InformationEntryQueryWorkspace({
           </div>
         </div>
       )}
-      <div className="query-studio-grid">
+      <section
+        className="reading-answer-workspace"
+        hidden={readingMode !== 'ask'}
+      >
+        <InformationEntryQuerySynthesis
+          retrieveForQuestion
+          enabled={aiQuerySynthesisEnabled}
+          retrievalMode={
+            semanticSearchEnabled && semanticIndexReady ? 'hybrid' : 'lexical'
+          }
+          includePrivate={controller.includePrivate}
+          onlyPrivate={controller.onlyPrivate}
+          resultCount={
+            controller.view.status === 'ready'
+              ? controller.view.response.totalCount
+              : 0
+          }
+          searchRequest={controller.searchRequest}
+          onOpenEvidence={onOpenEvidence}
+          onSynthesize={onSynthesize}
+        />
+      </section>
+      <div className="query-studio-grid" hidden={readingMode !== 'search'}>
         <form
           className="query-studio-form"
           role="search"
@@ -319,7 +367,7 @@ export function InformationEntryQueryWorkspace({
                   className="secondary-action"
                   onClick={() => {
                     if (controller.selectedEntry !== undefined)
-                      onOpenGraph(controller.selectedEntry);
+                      setShowGraph(true);
                   }}
                 >
                   {controller.selectedEntry.value.isPrivate
@@ -435,6 +483,18 @@ export function InformationEntryQueryWorkspace({
                 />
                 <div className="entry-command-actions">
                   <button
+                    className="primary-action"
+                    type="button"
+                    onClick={(event) => {
+                      event.currentTarget
+                        .closest<HTMLElement>('[popover]')
+                        ?.hidePopover();
+                      void controller.executeSearch();
+                    }}
+                  >
+                    应用筛选并搜索
+                  </button>
+                  <button
                     className="secondary-action"
                     type="button"
                     onClick={controller.clearSearchFilters}
@@ -486,35 +546,64 @@ export function InformationEntryQueryWorkspace({
               {...(onOpenGraph === undefined ? {} : {onOpenGraph})}
             />
           )}
-          <InformationEntryQueryResults
-            key={comparisonScopeKey}
-            comparisonScopeKey={comparisonScopeKey}
-            {...(onPreviewMarkdownExport === undefined
-              ? {}
-              : {onPreviewMarkdownExport})}
-            {...(onGenerateMarkdownExport === undefined
-              ? {}
-              : {onGenerateMarkdownExport})}
-            controller={controller}
-            selectedItem={selectedItem}
-            onAssociationToggle={(enabled) => {
-              if (enabled) {
-                setSelectedAssociationAnchor();
-              } else {
-                clearAssociationAnchor();
-              }
-            }}
-            onOpenEvidence={onOpenEvidence}
-            onExplore={onExplore}
-            onReviseExplorationPolicy={onReviseExplorationPolicy}
-            reviewPreferences={reviewPreferences}
-            onReplaceAssociationAnchor={setSelectedAssociationAnchor}
-            {...(translationServices === undefined
-              ? {}
-              : {translationServices})}
-            aiQuerySynthesisEnabled={aiQuerySynthesisEnabled}
-            onSynthesize={onSynthesize}
-          />
+          <div className="reading-result-switch">
+            <button
+              className="secondary-action"
+              aria-pressed={!showGraph}
+              onClick={() => {
+                setShowGraph(false);
+              }}
+            >
+              阅读正文
+            </button>
+            <button
+              className="secondary-action"
+              disabled={!selectedItem}
+              aria-pressed={showGraph}
+              onClick={() => {
+                setShowGraph(true);
+              }}
+            >
+              联系星图
+            </button>
+          </div>
+          {showGraph && selectedItem && renderGraph ? (
+            <div
+              className="reading-graph-frame"
+              key={comparisonScopeKey + selectedItem.entry.entryId}
+            >
+              {renderGraph(selectedItem.entry)}
+            </div>
+          ) : null}
+          <div className="reading-results-view" hidden={showGraph}>
+            <InformationEntryQueryResults
+              key={comparisonScopeKey}
+              comparisonScopeKey={comparisonScopeKey}
+              {...(onPreviewMarkdownExport === undefined
+                ? {}
+                : {onPreviewMarkdownExport})}
+              {...(onGenerateMarkdownExport === undefined
+                ? {}
+                : {onGenerateMarkdownExport})}
+              controller={controller}
+              selectedItem={selectedItem}
+              onAssociationToggle={(enabled) => {
+                if (enabled) {
+                  setSelectedAssociationAnchor();
+                } else {
+                  clearAssociationAnchor();
+                }
+              }}
+              onOpenEvidence={onOpenEvidence}
+              onExplore={onExplore}
+              onReviseExplorationPolicy={onReviseExplorationPolicy}
+              reviewPreferences={reviewPreferences}
+              onReplaceAssociationAnchor={setSelectedAssociationAnchor}
+              {...(translationServices === undefined
+                ? {}
+                : {translationServices})}
+            />
+          </div>
         </section>
       </div>
     </div>
@@ -522,6 +611,7 @@ export function InformationEntryQueryWorkspace({
 }
 
 function InformationEntryQueryResults({
+  graphContent,
   onPreviewMarkdownExport,
   onGenerateMarkdownExport,
   comparisonScopeKey,
@@ -533,10 +623,9 @@ function InformationEntryQueryResults({
   onReviseExplorationPolicy,
   onReplaceAssociationAnchor,
   reviewPreferences,
-  aiQuerySynthesisEnabled,
   translationServices,
-  onSynthesize,
 }: {
+  readonly graphContent?: ReactNode;
   readonly onPreviewMarkdownExport?: EntryMarkdownExportServices['onPreviewMarkdownExport'];
   readonly onGenerateMarkdownExport?: EntryMarkdownExportServices['onGenerateMarkdownExport'];
   readonly comparisonScopeKey: string;
@@ -548,11 +637,8 @@ function InformationEntryQueryResults({
   readonly onReviseExplorationPolicy: InformationEntryServices['onReviseExplorationPolicy'];
   readonly onReplaceAssociationAnchor: () => void;
   readonly reviewPreferences: Loadable<Readonly<ReviewPreferencesResponse>>;
-  readonly aiQuerySynthesisEnabled: boolean;
   readonly translationServices?: Readonly<EntryTranslationServices>;
-  readonly onSynthesize: InformationEntryQuerySynthesisAction;
 }) {
-  const {preferences: uiPreferences} = useWorkspaceUi();
   const [languageControls, setLanguageControls] =
     useState<HTMLDivElement | null>(null);
   const [comparisonState, setComparisonState] = useState(
@@ -577,168 +663,134 @@ function InformationEntryQueryResults({
       : `${comparisonScopeKey}:${controller.pageIndex.toString()}:${controller.view.status}`;
 
   const renderSidebarSection = (id: string) => (
-    <div
+    <FloatingToolPanel
       key={id}
-      className="query-sidebar-section"
-      style={{
-        order: uiPreferences.sidebars.query.includes(id)
-          ? uiPreferences.sidebars.query.indexOf(id)
-          : 10 + ['language', 'export', 'tools'].indexOf(id),
-      }}
+      title={
+        {language: '阅读设置', export: '资料清单与导出', tools: '更多工具'}[
+          id
+        ] ?? id
+      }
+      preferredWidth={600}
     >
-      <details
-        open={
-          id === 'language' && uiPreferences.sidebars.query.includes(id)
-            ? true
-            : undefined
-        }
-        className="workflow-tool-drawer"
-      >
-        <summary>
-          {
-            {
-              language: '阅读设置',
-              export: '资料清单与导出',
-              tools: '更多工具',
-            }[id]
-          }
-        </summary>
-        {id === 'language' ? (
-          <>
-            <div ref={setLanguageControls} />
-            {controller.selectedEntry === undefined ? (
-              <p>选择条目后切换阅读语言。</p>
-            ) : (
-              <button
-                type="button"
-                className="text-action"
-                onClick={() => {
-                  const entry = controller.selectedEntry;
-                  if (entry !== undefined)
-                    onOpenEvidence(
-                      entry.snapshotId,
-                      entry.value.fragmentIds[0],
-                      entry.value.isPrivate,
-                    );
-                }}
-              >
-                出处与文档
-              </button>
-            )}
-          </>
-        ) : null}
-        {id === 'export' ? (
-          <>
-            {' '}
-            {onPreviewMarkdownExport === undefined ||
-            onGenerateMarkdownExport === undefined ? null : (
-              <InformationEntryMarkdownExport
-                embedded
-                selectedEntry={selectedItem?.entry}
-                privacyScope={
-                  controller.onlyPrivate
-                    ? 'private_only'
-                    : controller.includePrivate
-                      ? 'include_private'
-                      : 'public'
-                }
-                onPreviewMarkdownExport={onPreviewMarkdownExport}
-                onGenerateMarkdownExport={onGenerateMarkdownExport}
-              />
-            )}
-          </>
-        ) : null}
-        {id === 'tools' ? (
-          <>
-            {' '}
-            <details
-              className="workflow-tool-drawer query-result-tools-drawer"
-              open
-              data-embedded="true"
+      {id === 'language' ? (
+        <>
+          <div ref={setLanguageControls} />
+          {controller.selectedEntry === undefined ? (
+            <p>选择条目后切换阅读语言。</p>
+          ) : (
+            <button
+              type="button"
+              className="text-action"
+              onClick={() => {
+                const entry = controller.selectedEntry;
+                if (entry !== undefined)
+                  onOpenEvidence(
+                    entry.snapshotId,
+                    entry.value.fragmentIds[0],
+                    entry.value.isPrivate,
+                  );
+              }}
             >
-              <summary>更多结果工具</summary>
-              <div className="query-result-tools-drawer__body">
-                <InformationEntryQueryTools
-                  association={controller.advancedFilters.association}
-                  comparisonCount={comparisonItems.length}
-                  comparisonFull={comparisonItems.length >= 2}
-                  selectedItem={selectedItem}
-                  selectedIsCompared={selectedIsCompared}
-                  onAssociationToggle={onAssociationToggle}
-                  onReplaceAssociationAnchor={onReplaceAssociationAnchor}
-                  onToggleComparison={() => {
-                    if (selectedItem === undefined) return;
-                    setComparisonState((current) =>
-                      toggleInformationEntryComparison(
-                        current,
-                        comparisonScopeKey,
-                        selectedItem,
-                      ),
-                    );
-                  }}
-                  onClearComparisons={() => {
-                    setComparisonState(
-                      clearInformationEntryComparisons(comparisonScopeKey),
-                    );
-                  }}
-                />
+              出处与文档
+            </button>
+          )}
+        </>
+      ) : null}
+      {id === 'export' ? (
+        <>
+          {' '}
+          {onPreviewMarkdownExport === undefined ||
+          onGenerateMarkdownExport === undefined ? null : (
+            <InformationEntryMarkdownExport
+              embedded
+              selectedEntry={selectedItem?.entry}
+              privacyScope={
+                controller.onlyPrivate
+                  ? 'private_only'
+                  : controller.includePrivate
+                    ? 'include_private'
+                    : 'public'
+              }
+              onPreviewMarkdownExport={onPreviewMarkdownExport}
+              onGenerateMarkdownExport={onGenerateMarkdownExport}
+            />
+          )}
+        </>
+      ) : null}
+      {id === 'tools' ? (
+        <>
+          {' '}
+          <details
+            className="workflow-tool-drawer query-result-tools-drawer"
+            open
+            data-embedded="true"
+          >
+            <summary>更多结果工具</summary>
+            <div className="query-result-tools-drawer__body">
+              <InformationEntryQueryTools
+                association={controller.advancedFilters.association}
+                comparisonCount={comparisonItems.length}
+                comparisonFull={comparisonItems.length >= 2}
+                selectedItem={selectedItem}
+                selectedIsCompared={selectedIsCompared}
+                onAssociationToggle={onAssociationToggle}
+                onReplaceAssociationAnchor={onReplaceAssociationAnchor}
+                onToggleComparison={() => {
+                  if (selectedItem === undefined) return;
+                  setComparisonState((current) =>
+                    toggleInformationEntryComparison(
+                      current,
+                      comparisonScopeKey,
+                      selectedItem,
+                    ),
+                  );
+                }}
+                onClearComparisons={() => {
+                  setComparisonState(
+                    clearInformationEntryComparisons(comparisonScopeKey),
+                  );
+                }}
+              />
 
-                <InformationEntryExploration
-                  key={explorationPolicyIdentity(reviewPreferences)}
-                  scopeKey={
-                    explorationScopeKey +
-                    ':' +
-                    (selectedItem?.entry.entryId ?? 'none')
-                  }
-                  includePrivate={controller.includePrivate}
-                  onlyPrivate={controller.onlyPrivate}
-                  pageItems={
-                    controller.view.status === 'ready'
-                      ? controller.view.response.items
-                      : Object.freeze([])
-                  }
-                  reviewPreferences={reviewPreferences}
-                  selectedItem={selectedItem}
-                  onExplore={onExplore}
-                  onOpenEvidence={onOpenEvidence}
-                  onReviseExplorationPolicy={onReviseExplorationPolicy}
-                />
+              <InformationEntryExploration
+                key={explorationPolicyIdentity(reviewPreferences)}
+                scopeKey={
+                  explorationScopeKey +
+                  ':' +
+                  (selectedItem?.entry.entryId ?? 'none')
+                }
+                includePrivate={controller.includePrivate}
+                onlyPrivate={controller.onlyPrivate}
+                pageItems={
+                  controller.view.status === 'ready'
+                    ? controller.view.response.items
+                    : Object.freeze([])
+                }
+                reviewPreferences={reviewPreferences}
+                selectedItem={selectedItem}
+                onExplore={onExplore}
+                onOpenEvidence={onOpenEvidence}
+                onReviseExplorationPolicy={onReviseExplorationPolicy}
+              />
 
-                <InformationEntryQuerySynthesis
-                  key={comparisonScopeKey}
-                  enabled={aiQuerySynthesisEnabled}
-                  retrievalMode={controller.retrievalMode}
-                  includePrivate={controller.includePrivate}
-                  onlyPrivate={controller.onlyPrivate}
-                  resultCount={
-                    controller.view.status === 'ready'
-                      ? controller.view.response.totalCount
-                      : 0
-                  }
-                  searchRequest={controller.searchRequest}
-                  onOpenEvidence={onOpenEvidence}
-                  onSynthesize={onSynthesize}
-                />
-
-                <InformationEntryQueryComparison
-                  items={comparisonItems}
-                  onOpenEvidence={onOpenEvidence}
-                  onRemove={(entryId) => {
-                    setComparisonState((current) =>
-                      removeInformationEntryComparison(
-                        current,
-                        comparisonScopeKey,
-                        entryId,
-                      ),
-                    );
-                  }}
-                />
-              </div>
-            </details>
-          </>
-        ) : null}
-      </details>
-    </div>
+              <InformationEntryQueryComparison
+                items={comparisonItems}
+                onOpenEvidence={onOpenEvidence}
+                onRemove={(entryId) => {
+                  setComparisonState((current) =>
+                    removeInformationEntryComparison(
+                      current,
+                      comparisonScopeKey,
+                      entryId,
+                    ),
+                  );
+                }}
+              />
+            </div>
+          </details>
+        </>
+      ) : null}
+    </FloatingToolPanel>
   );
 
   return (
@@ -758,48 +810,39 @@ function InformationEntryQueryResults({
           controller.showNextPage();
         }}
       >
-        {controller.selectedEntry === undefined ? undefined : (
-          <InformationEntryReadOnlyDetail
-            entry={controller.selectedEntry}
-            variant="query"
-            hideSourceAction
-            bodyContent={
-              translationServices === undefined ? undefined : (
-                <InformationEntryTranslation
-                  preferTranslation
-                  controlsContainer={languageControls}
-                  descriptiveLabels
-                  key={
-                    comparisonScopeKey +
-                    ':' +
-                    controller.selectedEntry.entryId +
-                    ':' +
-                    controller.selectedEntry.revisionId +
-                    ':' +
-                    String(controller.selectedEntry.value.isPrivate)
-                  }
-                  entry={controller.selectedEntry}
-                  services={translationServices}
-                />
-              )
-            }
-            onOpenEvidence={onOpenEvidence}
-          />
-        )}
+        {graphContent ??
+          (controller.selectedEntry === undefined ? undefined : (
+            <InformationEntryReadOnlyDetail
+              entry={controller.selectedEntry}
+              variant="query"
+              hideSourceAction
+              bodyContent={
+                translationServices === undefined ? undefined : (
+                  <InformationEntryTranslation
+                    preferTranslation
+                    controlsContainer={languageControls}
+                    descriptiveLabels
+                    key={
+                      comparisonScopeKey +
+                      ':' +
+                      controller.selectedEntry.entryId +
+                      ':' +
+                      controller.selectedEntry.revisionId +
+                      ':' +
+                      String(controller.selectedEntry.value.isPrivate)
+                    }
+                    entry={controller.selectedEntry}
+                    services={translationServices}
+                  />
+                )
+              }
+              onOpenEvidence={onOpenEvidence}
+            />
+          ))}
       </InformationEntryResults>
 
       <aside className="query-reading-sidebar" aria-label="阅读与资料工具">
-        {uiPreferences.sidebars.query.map(renderSidebarSection)}
-        {['language', 'export', 'tools'].some(
-          (id) => !uiPreferences.sidebars.query.includes(id),
-        ) ? (
-          <details className="workflow-tool-drawer query-sidebar-more">
-            <summary>更多操作</summary>
-            {['language', 'export', 'tools']
-              .filter((id) => !uiPreferences.sidebars.query.includes(id))
-              .map(renderSidebarSection)}
-          </details>
-        ) : null}
+        {['language', 'export', 'tools'].map(renderSidebarSection)}
       </aside>
     </div>
   );

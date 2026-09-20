@@ -16,39 +16,26 @@ const NAVIGATION: readonly Readonly<{
   {
     section: 'import',
     index: '01',
-    label: '收件箱',
+    label: '文档入口',
     icon: 'M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5',
   },
   {
     section: 'documents',
     index: '02',
-    label: '资料库',
+    label: '工作台',
     icon: 'M5 3h10l4 4v14H5z M14 3v5h5 M8 12h8 M8 16h6',
   },
   {
-    section: 'knowledge',
-    index: '03',
-    label: '专题',
-    icon: 'M12 4l7 5v8l-7 4-7-4V9z M5 9l7 4 7-4 M12 13v8',
-  },
-  {
     section: 'query',
-    index: '04',
-    label: '查询',
+    index: '03',
+    label: '数据阅览',
     icon: 'M10.5 3a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15 M16 16l5 5',
   },
   {
     section: 'reports',
-    index: '05',
+    index: '04',
     label: '报告',
     icon: 'M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5',
-  },
-  {
-    section: 'settings',
-    index: '06',
-    label: '设置',
-    icon: 'M4 7h16 M4 17h16 M8 4v6 M16 14v6',
-    groupStart: true,
   },
 ];
 
@@ -74,8 +61,10 @@ export function ProductAppShell({
   const effectiveSection = ['split', 'tags', 'associations'].includes(
     activeSection,
   )
-    ? 'settings'
-    : activeSection;
+    ? 'documents'
+    : activeSection === 'knowledge'
+      ? 'query'
+      : activeSection;
   const [themeOverride, setThemeOverride] = useState<{
     revision: number;
     theme: string;
@@ -164,7 +153,17 @@ export function ProductAppShell({
               ))}
             </ol>
           </nav>
-          <p className="primary-rail__hint">阅读 · 整理 · 再发现</p>
+          <button
+            type="button"
+            className="primary-navigation__item primary-rail__settings"
+            aria-current={effectiveSection === 'settings' ? 'page' : undefined}
+            onClick={() => {
+              onNavigate('settings');
+            }}
+          >
+            <span aria-hidden="true">⚙</span>
+            <strong>设置</strong>
+          </button>
         </aside>
 
         <header className="product-command-bar">

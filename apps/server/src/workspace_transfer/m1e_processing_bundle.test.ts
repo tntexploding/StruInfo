@@ -70,6 +70,36 @@ describe('M1E processing Bundle section', () => {
         (t) => t.name === 'processing_document_intake',
       )?.rows,
     ).toEqual([row]);
+    const web = '22222222-2222-4222-8222-222222222222',
+      old = '33333333-3333-4333-8333-333333333333';
+    const state = {
+      decision: 'pending',
+      origin: 'system',
+      reason: 'Synthetic source selection',
+      preparation: 'received',
+      bodySource: 'received',
+      preparedSnapshotId: web,
+      previousPreparedSnapshotIds: [old],
+      captureOrigin: {kind: 'subscription', subscriptionId: WORKSPACE_ID},
+    };
+    const selected = source({
+      prepared_snapshot_id: web,
+      state_text: JSON.stringify(state),
+    });
+    expect(normalizeM1eProcessingSnapshot(selected)).toEqual(selected);
+    for (const history of [[old, old], [web], [WORKSPACE_ID]]) {
+      expect(() =>
+        normalizeM1eProcessingSnapshot(
+          source({
+            prepared_snapshot_id: web,
+            state_text: JSON.stringify({
+              ...state,
+              previousPreparedSnapshotIds: history,
+            }),
+          }),
+        ),
+      ).toThrow();
+    }
     expect(() =>
       normalizeM1eProcessingSnapshot(
         source({state_text: '{"arbitrary":"value"}'}),

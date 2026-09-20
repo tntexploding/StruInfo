@@ -97,6 +97,7 @@ export type ProcessingRunCancelResponse =
 interface SourceSubscriptionWriteBase {
   readonly subscriptionId: string;
   readonly label: string;
+  readonly description?: string;
   readonly enabled: boolean;
   readonly sourceAlias: string;
   readonly isPrivate: boolean;
@@ -1133,6 +1134,7 @@ export type InformationEntryMatchReason =
   | 'body'
   | 'translation_title'
   | 'translation_body'
+  | 'content_keyword_alias'
   | 'content_keyword'
   | 'type_keyword'
   | 'domain_keyword';
@@ -1195,6 +1197,7 @@ export type InformationEntrySearchResponse =
       items: readonly Readonly<{
         entry: Readonly<InformationEntry>;
         matchReasons: readonly InformationEntryMatchReason[];
+        aliasMatches?: readonly Readonly<{query: string; tag: string}>[];
         textMatch?: Readonly<{
           mode: EntryTextSearchMode;
           score: number;
@@ -1503,6 +1506,7 @@ export type InformationEntryKnowledgeGraphResponse =
       candidates: readonly Readonly<{
         entry: Readonly<InformationEntry>;
         matchReasons: readonly InformationEntryMatchReason[];
+        aliasMatches?: readonly Readonly<{query: string; tag: string}>[];
         textMatch?: Readonly<{
           mode: EntryTextSearchMode;
           score: number;

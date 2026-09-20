@@ -75,6 +75,109 @@ describe.each([
     expect(String(request.input)).toContain('Synthetic public body');
   });
 
+  it('separates a digest preface from the first numbered news item without mutating evidence', async () => {
+    const source = entry();
+    const body =
+      '# Synthetic digest: orbital cameras; marine sensors\n\nToday we cover unrelated news.\n\n## 1. Orbital camera released\n\nThe camera records infrared spectra.';
+    const selected = {
+      ...source,
+      value: {
+        ...source.value,
+        titlePath: 'Synthetic opening and camera',
+        body,
+        contentKeywords: [
+          {
+            displayValue: 'marine sensors',
+            normalizedValue: 'marine sensors',
+            origin: 'ai' as const,
+            originVersion: 'synthetic-old',
+          },
+        ],
+      },
+    };
+    const fetcher = vi.fn<OpenAiFetch>(() =>
+      Promise.resolve(
+        responseEnvelope({
+          summary: '合成标签',
+          contentKeywords: ['Orbital camera', 'Infrared spectra'],
+          type: {keyword: 'knowledge_explanation', customName: null},
+          domains: [{keyword: 'engineering_computing', customName: null}],
+        }),
+      ),
+    );
+    await new ResponsesEntryTagProvider(CONFIG, fetcher).proposeTags(selected);
+    const sentBody = fetcher.mock.calls[0]?.[1]?.body;
+    if (typeof sentBody !== 'string')
+      throw new Error('missing synthetic request');
+    const request = JSON.parse(sentBody) as {
+      input: string;
+    };
+    const input = JSON.parse(request.input) as {
+      titlePath: string;
+      body: string;
+      documentContext: {preface: string};
+      existingContentKeywords: string[];
+    };
+    expect(input.titlePath).toBe('Orbital camera released');
+    expect(input.body).toBe(
+      '## 1. Orbital camera released\n\nThe camera records infrared spectra.',
+    );
+    expect(input.documentContext.preface).toContain('marine sensors');
+    expect(input.existingContentKeywords).toEqual([]);
+    expect(selected.value.body).toBe(body);
+    expect(selected.value.contentKeywords[0]?.displayValue).toBe(
+      'marine sensors',
+    );
+  });
+
+  it.each([
+    {
+      chunkMode: 'whole' as const,
+      body: '# Synthetic guide\n\nContext matters.\n\n## 1. Measure\n\nInstruction.',
+    },
+    {
+      chunkMode: 'split' as const,
+      body: '# Synthetic guide\n\n## 1. Measure\n\nInstruction.\n\n## 2. Compare\n\nDependent instruction.',
+    },
+    {
+      chunkMode: 'split' as const,
+      body: '# Synthetic guide\n\n```md\n## 1. An example heading\n```\n\nActual discussion.',
+    },
+    {
+      chunkMode: 'split' as const,
+      body: '# Synthetic article\n\nEssential context.\n\n## Discussion\n\nCoherent prose.',
+    },
+  ])(
+    'retains complete context when a single digest item is not established: $chunkMode $body',
+    async (value) => {
+      const selected = {...entry(), value: {...entry().value, ...value}};
+      const fetcher = vi.fn<OpenAiFetch>(() =>
+        Promise.resolve(
+          responseEnvelope({
+            summary: '合成标签',
+            contentKeywords: ['Synthetic'],
+            type: {keyword: 'knowledge_explanation', customName: null},
+            domains: [{keyword: 'engineering_computing', customName: null}],
+          }),
+        ),
+      );
+      await new ResponsesEntryTagProvider(CONFIG, fetcher).proposeTags(
+        selected,
+      );
+      const sentBody = fetcher.mock.calls[0]?.[1]?.body;
+      if (typeof sentBody !== 'string')
+        throw new Error('missing synthetic request');
+      const request = JSON.parse(sentBody) as {
+        input: string;
+      };
+      expect(JSON.parse(request.input)).toMatchObject({
+        body: value.body,
+        titlePath: selected.value.titlePath,
+      });
+      expect(JSON.parse(request.input)).not.toHaveProperty('documentContext');
+    },
+  );
+
   it('rejects private Entries before calling the Provider', async () => {
     const fetchImplementation = vi.fn<OpenAiFetch>();
     const provider = new ResponsesEntryTagProvider(CONFIG, fetchImplementation);

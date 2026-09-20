@@ -17,6 +17,7 @@ export interface EntryTranslationServices {
     entryId: string,
     revision: number,
     signal: AbortSignal,
+    expectedTranslatedAt?: string,
   ) => Promise<M1cHttpResponse<EntryTranslationResponse>>;
 }
 
@@ -75,7 +76,7 @@ export function useEntryTranslation(
     readVersion,
   ]);
 
-  async function generate() {
+  async function generate(redo = false) {
     if (
       !services.enabled ||
       entry.value.isPrivate ||
@@ -84,6 +85,7 @@ export function useEntryTranslation(
       return;
     const controller = new AbortController();
     request.current = controller;
+
     setBusy('generating');
     setMessage('');
     try {
@@ -91,6 +93,7 @@ export function useEntryTranslation(
         entry.entryId,
         entry.revision,
         controller.signal,
+        redo ? translation?.translatedAt : undefined,
       );
       if (controller.signal.aborted) return;
       if (response.body.status !== 'ok') {
@@ -142,6 +145,8 @@ function translationErrorMessage(code: string): string {
       return '标题与正文超过 24,000 字符，本次无法翻译。原文仍可阅读。';
     case 'ai_provider_not_configured':
       return '翻译服务尚未启用，原文仍可阅读。';
+    case 'ai_operations_paused':
+      return '内置 AI 后续操作已禁止；可在总览允许继续，已有结果保留。';
     case 'ai_price_window_closed':
       return '当前为 DeepSeek 高峰时段，请在低价时段重新翻译。恢复时间见设置 → AI 接入。';
     case 'ai_provider_timeout':

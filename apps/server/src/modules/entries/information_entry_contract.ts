@@ -191,6 +191,7 @@ export type InformationEntryMatchReason =
   | 'body'
   | 'translation_title'
   | 'translation_body'
+  | 'content_keyword_alias'
   | 'content_keyword'
   | 'type_keyword'
   | 'domain_keyword';
@@ -236,6 +237,7 @@ export interface InformationEntrySearchCursor {
 export interface InformationEntrySearchItem {
   readonly entry: Readonly<CurrentInformationEntry>;
   readonly matchReasons: readonly InformationEntryMatchReason[];
+  readonly aliasMatches?: readonly Readonly<{query: string; tag: string}>[];
   readonly textMatch?: Readonly<{
     mode: EntryTextSearchMode;
     score: number;

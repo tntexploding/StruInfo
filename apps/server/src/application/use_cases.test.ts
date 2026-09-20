@@ -1,3 +1,7 @@
+import type {
+  DocumentIntakeRepository,
+  IntakeRecord,
+} from './document_intake_contract.js';
 import {createHash} from 'node:crypto';
 import {describe, expect, it, vi} from 'vitest';
 import type {
@@ -228,6 +232,61 @@ describe('shared application use cases without HTTP', () => {
     expect(fixture.loadSnapshot).not.toHaveBeenCalled();
     expect(fixture.loadEntries).not.toHaveBeenCalled();
     expect(fixture.loadRuns).not.toHaveBeenCalled();
+  });
+
+  it('keeps confirmed alias matching consistent in explicitly opted-in private queries', async () => {
+    const fixture = createFixture(true);
+    await new DocumentUseCases(OWNER, fixture.dependencies).materialize({
+      snapshotId: SNAPSHOT,
+      includePrivate: true,
+      mode: 'deterministic',
+    });
+    const source = (
+      await fixture.dependencies.informationEntryRepository.loadCurrentEntries(
+        WORKSPACE,
+        true,
+      )
+    )[0];
+    if (!source) throw new Error('missing synthetic entry');
+    const selected = {
+      ...source,
+      value: {
+        ...source.value,
+        contentKeywords: [
+          {
+            displayValue: '合成词',
+            normalizedValue: '合成词',
+            origin: 'manual' as const,
+            originVersion: 'synthetic',
+          },
+        ],
+      },
+    };
+    const service = new EntryUseCases(OWNER, {
+      ...fixture.dependencies,
+      informationEntryRepository: {
+        ...fixture.dependencies.informationEntryRepository,
+        loadCurrentEntries: () => Promise.resolve([selected]),
+      },
+      entryAliases: () =>
+        Promise.resolve([{source: 'Synthetic alias', canonical: '合成词'}]),
+    });
+    const result = await service.search({
+      contentKeyword: 'Synthetic alias',
+      includePrivate: true,
+      limit: 10,
+    });
+    expect(result.items[0]?.aliasMatches).toEqual([
+      {query: 'Synthetic alias', tag: '合成词'},
+    ]);
+    expect(result.privateDocuments.totalCount).toBe(1);
+    const hidden = await service.search({
+      contentKeyword: 'Synthetic alias',
+      includePrivate: false,
+      limit: 10,
+    });
+    expect(hidden.totalCount).toBe(0);
+    expect(hidden.privateDocuments.totalCount).toBe(0);
   });
 
   it('preserves the separate private-document channel and per-call privacy opt-in for delegated reads', async () => {
@@ -627,3 +686,91 @@ function createFixture(isPrivate = false) {
     },
   };
 }
+
+it('keeps pending and rejected receipts out of the library while preserving source reads and legacy documents', async () => {
+  const fixture = createFixture();
+  let intake: IntakeRecord[] = [];
+  const documents = new DocumentUseCases(OWNER, {
+    ...fixture.dependencies,
+    documentIntakeRepository: {
+      list: () => Promise.resolve(intake),
+      read: () => Promise.resolve(intake[0]),
+      save: () => Promise.reject(new Error('Unexpected receipt write')),
+      withLock: () =>
+        Promise.reject(new Error('Unexpected receipt write lock')),
+    } satisfies DocumentIntakeRepository,
+  });
+  expect((await documents.list()).totalCount).toBe(1);
+  for (const receipt of ['pending', 'rejected'] as const) {
+    intake = [
+      {
+        snapshotId: SNAPSHOT,
+        version: 1,
+        updatedAt: '2040-01-01T00:00:00Z',
+        value: {
+          receipt,
+          decision: 'pending',
+          origin: 'system',
+          reason: '',
+          preparation: 'received',
+        },
+      },
+    ];
+    expect((await documents.list()).totalCount).toBe(0);
+    expect((await documents.read(SNAPSHOT)).snapshot.snapshotId).toBe(SNAPSHOT);
+    await expect(
+      documents.materialize({
+        snapshotId: SNAPSHOT,
+        includePrivate: false,
+        mode: 'deterministic',
+      }),
+    ).rejects.toMatchObject({
+      code:
+        receipt === 'pending'
+          ? 'intake_receipt_pending'
+          : 'intake_receipt_rejected',
+    });
+  }
+  const accepted = intake[0];
+  if (!accepted) throw new Error('Synthetic receipt missing');
+  accepted.value.receipt = 'accepted';
+  expect((await documents.list()).totalCount).toBe(1);
+});
+
+it('keeps edits in the document workbench and excludes draft neighbours from published relations', async () => {
+  const f = createFixture(),
+    stageDocument = vi.fn(() => Promise.resolve());
+  const created = await new DocumentUseCases(OWNER, {
+    ...f.dependencies,
+    stageDocument,
+  }).materialize({
+    snapshotId: SNAPSHOT,
+    includePrivate: false,
+    mode: 'deterministic',
+  });
+  const first = created.entries[0];
+  if (!first) throw new Error('Missing synthetic entry');
+  expect(stageDocument).toHaveBeenCalledWith(SNAPSHOT);
+  const second = {...first, entryId: RELATED, snapshotId: RUN};
+  f.seed([first, second]);
+  const deps = {
+    ...f.dependencies,
+    stageDocument,
+    knowledgeEntries: {
+      ...f.dependencies.informationEntryRepository,
+      loadCurrentEntries: () => Promise.resolve([first]),
+    },
+  };
+  const relations = new RelationUseCases(OWNER, deps);
+  await relations.reviseEdge(second.entryId, first.entryId, EDIT);
+  expect(stageDocument).toHaveBeenLastCalledWith(RUN);
+  const write = f.writeEdge.mock.calls[0]?.[0];
+  if (!write) throw new Error('Missing synthetic relationship');
+  deps.informationEntryAssociationRepository.loadAssociationSnapshot = () =>
+    Promise.resolve({
+      projections: [],
+      overrides: [{...write, revision: 1, updatedAt: '2040-01-01T00:00:00Z'}],
+    });
+  expect((await relations.list(first.entryId)).totalCount).toBe(0);
+  expect((await relations.list(second.entryId)).totalCount).toBe(1);
+});

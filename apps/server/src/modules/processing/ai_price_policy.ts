@@ -6,6 +6,7 @@ export const aiPricePolicySchema = z
   .object({
     revision: z.number().int().min(0).max(2147483646),
     enabled: z.boolean(),
+    operationsAllowed: z.boolean().optional(),
   })
   .strict();
 export type AiPricePolicy = z.infer<typeof aiPricePolicySchema>;
@@ -21,9 +22,20 @@ export class AiPriceWindowClosedError extends Error {
     super(AI_PRICE_WAIT);
   }
 }
-export function isAiPriceWait(error: unknown): boolean {
+export const AI_OPERATIONS_PAUSED = 'ai_operations_paused' as const;
+export class AiOperationsPausedError extends Error {
+  public readonly code = AI_OPERATIONS_PAUSED;
+  public constructor() {
+    super(AI_OPERATIONS_PAUSED);
+  }
+}
+export function isAiDispatchWait(
+  error: unknown,
+): error is Error & {code: typeof AI_PRICE_WAIT | typeof AI_OPERATIONS_PAUSED} {
   return (
-    error instanceof Error && 'code' in error && error.code === AI_PRICE_WAIT
+    error instanceof Error &&
+    'code' in error &&
+    (error.code === AI_PRICE_WAIT || error.code === AI_OPERATIONS_PAUSED)
   );
 }
 

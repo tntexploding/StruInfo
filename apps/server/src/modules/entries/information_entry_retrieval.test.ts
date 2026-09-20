@@ -18,6 +18,91 @@ import {
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('InformationEntryRetrievalService', () => {
+  it('keeps alias-only candidates when an accelerated index would return no literal matches', async () => {
+    const fixture = harness(false);
+    const source = currentEntry(
+      '22222222-2222-4222-8222-222222222221',
+      'Synthetic network',
+      'A public fact.',
+    );
+    const entries = [
+      {
+        ...source,
+        value: {
+          ...source.value,
+          contentKeywords: [
+            {
+              displayValue: '无线网络',
+              normalizedValue: '无线网络',
+              origin: 'manual' as const,
+              originVersion: 'synthetic',
+            },
+          ],
+        },
+      },
+    ];
+    const findCandidates = vi.fn(() => Promise.resolve([] as string[]));
+    const aliases = vi.fn(() =>
+      Promise.resolve([{source: 'WiFi', canonical: '无线网络'}]),
+    );
+    const service = new InformationEntryRetrievalService({
+      workspaceId: WORKSPACE_ID,
+      entries: {
+        ...fixture.entryRepository,
+        loadCurrentEntries: () => Promise.resolve(entries),
+        loadCurrentEntriesByIds: () => Promise.resolve([]),
+      },
+      associations: fixture.associationRepository,
+      index: {
+        ...fixture.indexRepository,
+        findLexicalCandidateEntryIds: findCandidates,
+      },
+      aliases,
+    });
+    const result = await service.search({
+      text: 'WiFi',
+      textFields: ['tags'],
+      includePrivate: false,
+      limit: 10,
+    });
+    expect(result.items[0]?.entry).toBe(entries[0]);
+    expect(result.items[0]?.aliasMatches).toEqual([
+      {query: 'WiFi', tag: '无线网络'},
+    ]);
+    expect(findCandidates).not.toHaveBeenCalled();
+    expect(aliases).toHaveBeenCalledTimes(1);
+    expect(fixture.embed).not.toHaveBeenCalled();
+  });
+
+  it('requires an explicit rebuild before treating old embedding input hashes as current', async () => {
+    const fixture = harness(true);
+    await fixture.service.rebuild();
+    const current = fixture.snapshot;
+    fixture.replaceSnapshot({
+      ...current,
+      projections: current.projections.map((projection) => ({
+        ...projection,
+        projectionSha256: '0'.repeat(64),
+      })),
+    });
+    expect(await fixture.service.status()).toMatchObject({
+      semanticSearchReady: false,
+      embeddedProjectionCount: 0,
+    });
+    fixture.embed.mockClear();
+    await expect(
+      fixture.service.search({
+        text: 'Alpha',
+        retrievalMode: 'semantic',
+        includePrivate: false,
+        limit: 10,
+      }),
+    ).rejects.toMatchObject({code: 'semantic_search_index_not_ready'});
+    expect(fixture.embed).not.toHaveBeenCalled();
+    await fixture.service.rebuild();
+    expect((await fixture.service.status()).semanticSearchReady).toBe(true);
+  });
+
   it('adds cached translation candidates to a ready original index without a rebuild or full Entry load', async () => {
     const fixture = harness(false);
     const source = fixture.entries[0];

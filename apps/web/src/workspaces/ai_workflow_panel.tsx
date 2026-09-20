@@ -416,13 +416,15 @@ export function AiWorkflowPanel({
                   <li key={task.taskId}>
                     <div className="ai-item-text">
                       <strong>
-                        {task.request.kind === 'document'
-                          ? '整篇自动处理'
-                          : task.request.kind === 'split'
-                            ? '外部拆分'
-                            : task.request.kind === 'tags'
-                              ? '外部标签'
-                              : '外部联系'}{' '}
+                        {task.request.kind === 'intake'
+                          ? 'AI 接收审核'
+                          : task.request.kind === 'document'
+                            ? '整篇自动处理'
+                            : task.request.kind === 'split'
+                              ? '外部拆分'
+                              : task.request.kind === 'tags'
+                                ? '外部标签'
+                                : '外部联系'}{' '}
                         · {task.taskId.slice(0, 8)}
                       </strong>
                       <span>
@@ -493,8 +495,10 @@ export function AiWorkflowPanel({
                                 expectedVersion: task.version,
                                 action:
                                   (task.pauseRequested ||
-                                    task.state.errorCode !==
-                                      'ai_price_window_closed') &&
+                                    ![
+                                      'ai_price_window_closed',
+                                      'ai_operations_paused',
+                                    ].includes(task.state.errorCode ?? '')) &&
                                   ['paused', 'failed'].includes(
                                     task.state.status,
                                   )
@@ -506,8 +510,10 @@ export function AiWorkflowPanel({
                           }}
                         >
                           {(task.pauseRequested ||
-                            task.state.errorCode !==
-                              'ai_price_window_closed') &&
+                            ![
+                              'ai_price_window_closed',
+                              'ai_operations_paused',
+                            ].includes(task.state.errorCode ?? '')) &&
                           ['paused', 'failed'].includes(task.state.status)
                             ? '继续任务'
                             : '暂停任务'}

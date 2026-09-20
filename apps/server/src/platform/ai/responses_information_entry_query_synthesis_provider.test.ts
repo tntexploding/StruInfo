@@ -71,6 +71,10 @@ describe.each([
         ? {effort: 'none'}
         : undefined,
     );
+    expect(String(request.instructions)).toContain(
+      'navigation metadata, not factual evidence',
+    );
+    expect(String(request.instructions)).toContain('body excerpt');
     expect(String(request.input)).toContain('E01');
     expect(String(request.input)).toContain('合成公开正文');
     expect(String(request.input)).not.toContain(

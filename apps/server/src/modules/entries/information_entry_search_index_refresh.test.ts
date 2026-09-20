@@ -45,6 +45,20 @@ describe('incremental Entry index maintenance', () => {
     expect(fixture.snapshot.projections).toHaveLength(3);
   });
 
+  it('refreshes the previous embedding profile in finite windows without loading the full corpus', async () => {
+    const fixture = harness();
+    await fixture.service().refresh(32);
+    fixture.replaceProfile('synthetic-previous-profile');
+    fixture.embed.mockClear();
+    const result = await fixture.service().refresh(1);
+    expect(result.progress).toMatchObject({
+      loadedEntryCount: 1,
+      embeddingInputCount: 1,
+      remainingEntryCount: 2,
+    });
+    expect(fixture.loadAll).not.toHaveBeenCalled();
+  });
+
   it('refreshes only changed input and reuses a vector when a revision has the same input', async () => {
     const fixture = harness();
     await fixture.service().refresh(32);
@@ -407,6 +421,15 @@ function harness() {
     loadByIds,
     embed,
     retired,
+    replaceProfile(provider: string) {
+      snapshot = {
+        ...snapshot,
+        projections: snapshot.projections.map((projection) => ({
+          ...projection,
+          embeddingProvider: provider,
+        })),
+      };
+    },
     get snapshot() {
       return snapshot;
     },

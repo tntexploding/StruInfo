@@ -20,16 +20,20 @@ export class PostgresReportRepository implements ReportRepository {
     );
     return result.rows[0] ? decode(result.rows[0]) : undefined;
   }
-  public async list() {
+  public async list(prioritizeActive = false) {
     const result = await this.pool.query(
-      'SELECT * FROM struinfo.processing_report WHERE workspace_id=$1 ORDER BY updated_at DESC,report_id LIMIT 100',
+      'SELECT * FROM struinfo.processing_report WHERE workspace_id=$1 ORDER BY ' +
+        (prioritizeActive
+          ? "CASE state_text::jsonb->>'status' WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'failed' THEN 2 ELSE 3 END,"
+          : '') +
+        'updated_at DESC,report_id LIMIT 100',
       [this.workspaceId],
     );
     return result.rows.map(decode);
   }
   public async listPriceDeferred() {
     const result = await this.pool.query(
-      "SELECT * FROM struinfo.processing_report WHERE workspace_id=$1 AND state_text::jsonb->>'status'='queued' AND state_text::jsonb->>'errorCode'='ai_price_window_closed' ORDER BY updated_at,report_id LIMIT 8",
+      "SELECT * FROM struinfo.processing_report WHERE workspace_id=$1 AND state_text::jsonb->>'status'='queued' AND state_text::jsonb->>'errorCode' IN ('ai_price_window_closed','ai_operations_paused') ORDER BY updated_at,report_id LIMIT 8",
       [this.workspaceId],
     );
     return result.rows.map(decode);

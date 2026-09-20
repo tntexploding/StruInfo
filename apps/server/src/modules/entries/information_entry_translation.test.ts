@@ -62,6 +62,20 @@ function fixture(enabled = true) {
             : undefined,
         ),
     ),
+    replaceIfCurrent: vi.fn<
+      NonNullable<EntryTranslationRepositoryPort['replaceIfCurrent']>
+    >((_workspace, translation, expected) => {
+      if (
+        !current ||
+        current.value.isPrivate ||
+        current.revisionId !== translation.sourceRevisionId ||
+        saved?.translatedAt !== expected ||
+        saved.providerKey === 'provided-translation-v1'
+      )
+        return Promise.resolve(false);
+      saved = translation;
+      return Promise.resolve(true);
+    }),
     saveIfCurrent: vi.fn<EntryTranslationRepositoryPort['saveIfCurrent']>(
       (_workspace, translation) => {
         if (
@@ -285,4 +299,44 @@ describe('on-demand Entry translation', () => {
       );
     }
   });
+});
+
+it('explicit AI translation redo requires the displayed cache and preserves manual supplied translations', async () => {
+  const f = fixture();
+  const first = await f.service.generate(ID, 1);
+  f.translate.mockResolvedValue({...TEXT, body: '重新生成的合成译文。'});
+  const second = await f.service.generate(ID, 1, first.translatedAt);
+  expect(second.body).toBe('重新生成的合成译文。');
+  expect(second.translatedAt).not.toBe(first.translatedAt);
+  await expect(
+    f.service.generate(ID, 1, first.translatedAt),
+  ).rejects.toMatchObject({code: 'translation_source_stale'});
+  expect(f.translate).toHaveBeenCalledTimes(2);
+  const manual = fixture();
+  const supplied = await manual.service.importProvided(
+    ID,
+    1,
+    ENTRY.revisionId,
+    TEXT,
+  );
+  await expect(
+    manual.service.generate(ID, 1, supplied.translatedAt),
+  ).rejects.toMatchObject({code: 'translation_already_exists'});
+  expect(manual.translate).not.toHaveBeenCalled();
+});
+it('a concurrent source revision prevents a redo from replacing the old translation', async () => {
+  const f = fixture();
+  const first = await f.service.generate(ID, 1);
+  f.translate.mockImplementation(() => {
+    f.change({
+      ...ENTRY,
+      revision: 2,
+      revisionId: '77777777-7777-4777-8777-777777777777',
+    });
+    return Promise.resolve(TEXT);
+  });
+  await expect(
+    f.service.generate(ID, 1, first.translatedAt),
+  ).rejects.toMatchObject({code: 'translation_source_stale'});
+  expect(f.saved()).toEqual(first);
 });

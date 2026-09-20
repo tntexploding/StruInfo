@@ -7,7 +7,7 @@ import {
 import type {OpenAiFetch} from './responses_entry_tag_provider.js';
 
 const CONFIG = Object.freeze({
-  providerKey: 'openai-embeddings-v1' as const,
+  providerKey: 'openai-embeddings-v2' as const,
   model: 'text-embedding-synthetic',
   apiKey: 'synthetic-api-key',
   maximumBatchSize: 32 as const,

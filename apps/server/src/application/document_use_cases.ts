@@ -15,6 +15,11 @@ import {
   materializeEvidenceSnapshot,
   type EvidenceReadRepositoryPort,
 } from '../modules/evidence/index.js';
+import type {DocumentIntakeRepository} from './document_intake_contract.js';
+import {
+  intakeSnapshotIds,
+  intakeTargetSnapshot,
+} from './document_intake_contract.js';
 import type {BlobStore} from '../storage/blob_store.js';
 
 import type {ExecutionAuthority} from './execution_authority.js';
@@ -31,6 +36,8 @@ export type DocumentSplitRequest = Readonly<{
       }>
   );
 export interface DocumentUseCasesDependencies {
+  readonly stageDocument?: (snapshotId: string) => Promise<void>;
+  readonly documentIntakeRepository?: DocumentIntakeRepository;
   readonly blobStore: BlobStore;
   readonly evidenceReadRepository: EvidenceReadRepositoryPort;
   readonly informationEntryRepository: InformationEntryEmptySnapshotRepositoryPort;
@@ -69,6 +76,12 @@ export class DocumentUseCases {
     }
     return {
       status: 'ok' as const,
+      entries: (
+        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#authority.workspaceId,
+          includePrivate,
+        )
+      ).filter((entry) => entry.snapshotId === snapshotId),
       snapshot: await materializeEvidenceSnapshot(
         snapshot,
         this.#dependencies.blobStore,
@@ -82,25 +95,27 @@ export class DocumentUseCases {
       sections: providerSections(orderedSectionFragments(snapshot)),
     };
   }
-  public async list(includePrivate = false) {
+  public async list(includePrivate = false, includeInbox = false) {
     this.#authority.require('documents.read', includePrivate);
 
-    const [snapshots, entries, currentTags, workingCopies] = await Promise.all([
-      this.#dependencies.evidenceReadRepository.listSnapshots(
-        this.#authority.workspaceId,
-      ),
-      this.#dependencies.informationEntryRepository.loadCurrentEntries(
-        this.#authority.workspaceId,
-        includePrivate,
-      ),
-      this.#dependencies.informationDocumentTagRepository.loadCurrentDocumentTags(
-        this.#authority.workspaceId,
-        includePrivate,
-      ),
-      this.#dependencies.informationDocumentWorkingCopyRepository.list(
-        this.#authority.workspaceId,
-      ),
-    ]);
+    const [snapshots, entries, currentTags, workingCopies, intake] =
+      await Promise.all([
+        this.#dependencies.evidenceReadRepository.listSnapshots(
+          this.#authority.workspaceId,
+        ),
+        this.#dependencies.informationEntryRepository.loadCurrentEntries(
+          this.#authority.workspaceId,
+          includePrivate,
+        ),
+        this.#dependencies.informationDocumentTagRepository.loadCurrentDocumentTags(
+          this.#authority.workspaceId,
+          includePrivate,
+        ),
+        this.#dependencies.informationDocumentWorkingCopyRepository.list(
+          this.#authority.workspaceId,
+        ),
+        this.#dependencies.documentIntakeRepository?.list() ?? [],
+      ]);
     const workingCopyBySource = new Map(
       workingCopies.map((workingCopy) => [
         workingCopy.sourceSnapshotId,
@@ -119,7 +134,27 @@ export class DocumentUseCases {
             ],
       ),
     );
+    const inboxOnly = new Set(
+      intake
+        .filter(
+          (record) =>
+            record.value.receipt && record.value.receipt !== 'accepted',
+        )
+        .flatMap(intakeSnapshotIds),
+    );
+    const evidenceCopies = new Set(
+      intake.flatMap((record) =>
+        intakeSnapshotIds(record).filter(
+          (id) => id !== intakeTargetSnapshot(record),
+        ),
+      ),
+    );
+    const receivedByBody = new Map(
+      intake.map((record) => [intakeTargetSnapshot(record), record.snapshotId]),
+    );
     const documents = snapshots
+      .filter((snapshot) => !evidenceCopies.has(snapshot.snapshotId))
+      .filter((snapshot) => includeInbox || !inboxOnly.has(snapshot.snapshotId))
       .filter((snapshot) => includePrivate || snapshot.isPrivate !== true)
       .map((snapshot): Readonly<InformationEntryDocumentView> => {
         const documentEntries = entries.filter(
@@ -132,7 +167,10 @@ export class DocumentUseCases {
           throw new Error('Document tag source identity mismatch.');
         }
         const workingCopy = workingCopyBySource.get(snapshot.snapshotId);
-        const derivedFromSnapshotId = sourceByDerived.get(snapshot.snapshotId);
+        const origin = receivedByBody.get(snapshot.snapshotId);
+        const derivedFromSnapshotId =
+          sourceByDerived.get(snapshot.snapshotId) ??
+          (origin !== snapshot.snapshotId ? origin : undefined);
         return Object.freeze({
           ...snapshot,
           entryCount: documentEntries.length,
@@ -168,6 +206,16 @@ export class DocumentUseCases {
       (snapshot.isPrivate === true && !input.includePrivate)
     )
       throw new OperationError('not_found', 'snapshot_not_found');
+    const receipt = (
+      await this.#dependencies.documentIntakeRepository?.read(input.snapshotId)
+    )?.value.receipt;
+    if (receipt && receipt !== 'accepted')
+      throw new OperationError(
+        'rejected',
+        receipt === 'pending'
+          ? 'intake_receipt_pending'
+          : 'intake_receipt_rejected',
+      );
     const materialized = await materializeEvidenceSnapshot(
       snapshot,
       this.#dependencies.blobStore,
@@ -183,6 +231,8 @@ export class DocumentUseCases {
           ? 'entry_sections_not_found'
           : 'manual_split_invalid',
       );
+    if (!snapshot.isPrivate)
+      await this.#dependencies.stageDocument?.(input.snapshotId);
     const persisted =
       await this.#dependencies.informationEntryRepository.materializeEntriesIfSnapshotEmpty(
         entries,

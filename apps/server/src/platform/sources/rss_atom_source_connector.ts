@@ -328,7 +328,7 @@ function parseFeed(
     parsed = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: '@_',
-      removeNSPrefix: true,
+      removeNSPrefix: false,
       parseTagValue: false,
       parseAttributeValue: false,
       trimValues: false,
@@ -341,6 +341,7 @@ function parseFeed(
       isArray: (tagName) =>
         tagName === 'item' || tagName === 'entry' || tagName === 'link',
     }).parse(feedText) as unknown;
+    parsed = normalizeFeedNamespaces(parsed);
   } catch {
     throw new SourceConnectorError('connector_result_invalid');
   }
@@ -354,6 +355,30 @@ function parseFeed(
     return parseAtomItems(parsed.feed, feedUrl);
   }
   throw new SourceConnectorError('connector_result_invalid');
+}
+
+// RSS fields take precedence over similarly named extension metadata, even
+// when the extension appears first. Strip prefixes only after that choice.
+function normalizeFeedNamespaces(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeFeedNamespaces);
+  if (!isRecord(value)) return value;
+  const fields: Record<string, unknown> = Object.create(null) as Record<
+    string,
+    unknown
+  >;
+  for (const [key, field] of Object.entries(value)) {
+    const name = key.startsWith('@_')
+      ? key
+      : key.slice(key.lastIndexOf(':') + 1);
+    if (
+      (name !== key && Object.hasOwn(value, name)) ||
+      Object.hasOwn(fields, name)
+    ) {
+      continue;
+    }
+    fields[name] = normalizeFeedNamespaces(field);
+  }
+  return fields;
 }
 
 function parseRssItems(

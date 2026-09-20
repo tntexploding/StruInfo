@@ -40,7 +40,7 @@ for major superseded directions.
 
 ## Current development scope
 
-The v0.2.0 maintenance baseline remains supported. On 2026-09-12 the owner
+The current source version is v0.3.0; v0.2.0 remains an upgrade baseline. On 2026-09-12 the owner
 explicitly selected internal AI automation and an external Agent interface as
 the next development goal, starting with a repository structure audit and
 confirmed dead-code cleanup. Follow the delivery order in

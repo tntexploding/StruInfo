@@ -33,7 +33,8 @@ export function validateReportState(state: ReportState) {
   const all = new Set(state.sources.map((s) => s.handle));
   if (
     all.size !== state.sources.length ||
-    state.items.length > state.request.maxItems ||
+    (state.request.maxItems > 0 &&
+      state.items.length > state.request.maxItems) ||
     state.calls > state.request.maxModelCalls
   )
     throw new OperationError('invalid_input', 'invalid_report_state');
@@ -115,7 +116,11 @@ export function renderReportMarkdown(report: ReportRecord) {
       '来源：' +
         sources.map((id) => '[' + String(id) + ']').join(' ') +
         ' · ' +
-        (item.edited ? '人工编辑' : 'AI 草稿') +
+        (item.edited
+          ? '人工编辑'
+          : state.origin === 'search_results'
+            ? '检索摘录'
+            : 'AI 草稿') +
         '。',
       '',
     );

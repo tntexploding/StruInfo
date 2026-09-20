@@ -90,7 +90,20 @@ describe('PostgreSQL ingestion adapter', () => {
       );
       const capture = createSyntheticEvidenceCapture();
       await recordIngestionCapture(client, capture, origin as IngestionOrigin);
-      const inserted = client.calls.find((c) => c.sql.startsWith('INSERT'));
+      const inserted = client.calls.find((c) =>
+        c.sql.startsWith('INSERT INTO struinfo.processing_ingestion_item'),
+      );
+      const receipt = client.calls.find((c) =>
+        c.sql.startsWith('INSERT INTO struinfo.processing_document_intake'),
+      );
+      expect(Boolean(receipt)).toBe(true);
+      if (receipt)
+        expect(JSON.parse(String(receipt.parameters[2]))).toMatchObject({
+          captureOrigin: origin,
+          receipt: 'pending',
+          decision: 'pending',
+          origin: 'system',
+        });
       expect(Boolean(inserted)).toBe(writes);
       if (writes)
         expect(inserted?.parameters).toEqual([
@@ -170,6 +183,9 @@ describe('PostgreSQL ingestion adapter', () => {
       10,
       {createdAt: '2040-01-01T00:00:00.000Z', snapshotId: SUB},
       'attention',
+    );
+    expect(client.calls.at(-1)?.sql).toContain(
+      "d.state_text::jsonb->>'receipt' = 'rejected'",
     );
     expect(client.calls.at(-1)?.sql).toContain(
       'created_at DESC,snapshot_id DESC',

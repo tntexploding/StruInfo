@@ -59,7 +59,10 @@ export function useInformationEntryQuerySynthesis({
   );
 
   const execute = useCallback(
-    async (query: Readonly<Record<string, unknown>>) => {
+    async (
+      query: Readonly<Record<string, unknown>>,
+      retrieveForQuestion = false,
+    ) => {
       const normalizedQuestion = question.trim();
       if (
         normalizedQuestion.length === 0 ||
@@ -77,9 +80,15 @@ export function useInformationEntryQuerySynthesis({
       activeController.current = controller;
       activeRequestId.current = requestId;
       setState({status: 'loading'});
+
       try {
         const response = await onSynthesize(
-          {requestId, question: normalizedQuestion, query},
+          {
+            requestId,
+            question: normalizedQuestion,
+            query,
+            ...(retrieveForQuestion ? {retrieveForQuestion: true} : {}),
+          },
           controller.signal,
         );
         if (
@@ -139,17 +148,19 @@ function describeSynthesisFailure(value: unknown): string {
     typeof value.issue.code === 'string'
   ) {
     const labels: Readonly<Record<string, string>> = Object.freeze({
-      ai_provider_not_configured: 'OpenAI 未配置；本地查询不受影响。',
+      ai_provider_not_configured: '模型服务 未配置；本地查询不受影响。',
+      ai_operations_paused:
+        '内置 AI 后续操作已禁止；可在总览允许继续，已有结果保留。',
       ai_price_window_closed:
         '当前为 DeepSeek 高峰时段，请在低价时段重新综合。恢复时间见设置 → AI 接入。',
       ai_query_private_scope_forbidden:
-        '隐私查询不能发送给 OpenAI；请切换到“仅公开结果”。',
+        '隐私查询不能发送给 模型服务；请切换到“仅公开结果”。',
       ai_query_no_evidence: '当前公开查询没有可供回答的内容。',
-      ai_provider_timeout: 'OpenAI 响应超时；可以稍后重试。',
-      ai_provider_unavailable: 'OpenAI 当前不可达；可以稍后重试。',
-      ai_provider_rejected: 'OpenAI 拒绝了本次请求；没有保存任何回答。',
+      ai_provider_timeout: '模型服务 响应超时；可以稍后重试。',
+      ai_provider_unavailable: '模型服务 当前不可达；可以稍后重试。',
+      ai_provider_rejected: '模型服务 拒绝了本次请求；没有保存任何回答。',
       ai_provider_invalid_response:
-        'OpenAI 返回的内容格式不正确；该回答已被丢弃。',
+        '模型服务 返回的内容格式不正确；该回答已被丢弃。',
     });
     return labels[value.issue.code] ?? `AI 综合失败：${value.issue.code}`;
   }

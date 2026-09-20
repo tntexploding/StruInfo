@@ -13,6 +13,7 @@ import {
 
 export interface InformationEntryQuerySynthesisProps {
   readonly enabled: boolean;
+  readonly retrieveForQuestion?: boolean;
   readonly retrievalMode?: EntryRetrievalMode;
   readonly includePrivate: boolean;
   readonly onlyPrivate: boolean;
@@ -24,6 +25,7 @@ export interface InformationEntryQuerySynthesisProps {
 
 export function InformationEntryQuerySynthesis({
   enabled,
+  retrieveForQuestion = false,
   retrievalMode,
   includePrivate,
   onlyPrivate,
@@ -38,14 +40,20 @@ export function InformationEntryQuerySynthesis({
   const canSubmit =
     enabled &&
     !privateScope &&
-    resultCount > 0 &&
+    (retrieveForQuestion || resultCount > 0) &&
     synthesis.question.trim().length > 0 &&
     synthesis.questionCodePoints <= 600 &&
     synthesis.state.status !== 'loading';
 
   function submit(event: SyntheticEvent<HTMLFormElement>): void {
     event.preventDefault();
-    if (canSubmit) void synthesis.execute(searchRequest);
+    if (canSubmit)
+      void synthesis.execute(
+        retrieveForQuestion
+          ? {includePrivate: false, retrievalMode: retrievalMode ?? 'lexical'}
+          : searchRequest,
+        retrieveForQuestion,
+      );
   }
 
   return (
@@ -60,7 +68,9 @@ export function InformationEntryQuerySynthesis({
       </header>
 
       <p className="entry-query-synthesis__disclosure" id="ai-disclosure">
-        点击回答后，你的问题和最多 8 条公开结果会发送给
+        {retrieveForQuestion
+          ? '先按问题检索资料，再将最相关的最多 8 条公开结果与问题发送给'
+          : '点击回答后，你的问题和最多 8 条公开结果会发送给'}
         模型服务。隐私内容不会发送，回答也不会保存。
       </p>
 
@@ -79,9 +89,20 @@ export function InformationEntryQuerySynthesis({
         </p>
       ) : null}
 
+      {retrieveForQuestion ? (
+        <p className="entry-query-synthesis__notice">
+          {ragMode
+            ? '按内容相似度检索后回答。'
+            : '按问题中的词语和标签检索；更明确的主题能帮助找到相关材料。'}
+        </p>
+      ) : null}
       <form className="entry-query-synthesis__form" onSubmit={submit}>
         <label className="field">
-          <span>希望 AI 根据这些搜索结果回答什么？</span>
+          <span>
+            {retrieveForQuestion
+              ? '向知识库提问'
+              : '希望 AI 根据这些搜索结果回答什么？'}
+          </span>
           <textarea
             rows={3}
             value={synthesis.question}
@@ -89,7 +110,11 @@ export function InformationEntryQuerySynthesis({
             onChange={(event) => {
               synthesis.setQuestion(event.currentTarget.value);
             }}
-            placeholder="例如：这些结果共同说明了哪些方法与限制？"
+            placeholder={
+              retrieveForQuestion
+                ? '例如：这些材料对储能技术的进展与限制有何说明？'
+                : '例如：这些结果共同说明了哪些方法与限制？'
+            }
           />
         </label>
         <div className="entry-query-synthesis__form-actions">
@@ -103,7 +128,7 @@ export function InformationEntryQuerySynthesis({
           >
             {synthesis.state.status === 'loading'
               ? '正在综合…'
-              : ragMode
+              : ragMode || retrieveForQuestion
                 ? '使用知识库回答'
                 : '根据当前结果回答'}
           </button>

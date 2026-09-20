@@ -34,17 +34,44 @@ export class PostgresAgentTaskRepository implements AgentTaskRepository {
     );
     return result.rows[0] === undefined ? undefined : decode(result.rows[0]);
   }
-  public async list(workspaceId: string) {
+  public async list(
+    workspaceId: string,
+    snapshotIds?: readonly string[],
+    prioritizeActive = false,
+  ) {
     const result = await this.pool.query(
-      'SELECT * FROM struinfo.processing_agent_task WHERE workspace_id=$1 ORDER BY created_at DESC,task_id DESC LIMIT 100',
+      'SELECT * FROM struinfo.processing_agent_task WHERE workspace_id=$1' +
+        (snapshotIds === undefined
+          ? ''
+          : " AND request_text::jsonb->>'snapshotId'=ANY($2::text[])") +
+        (prioritizeActive
+          ? " ORDER BY CASE state_text::jsonb->>'status' WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 WHEN 'failed' THEN 3 ELSE 4 END,updated_at DESC,task_id DESC LIMIT 100"
+          : ' ORDER BY created_at DESC,task_id DESC LIMIT 100'),
+      snapshotIds === undefined ? [workspaceId] : [workspaceId, snapshotIds],
+    );
+    return result.rows.map(decode);
+  }
+  public async listPublicationTasks(workspaceId: string) {
+    const result = await this.pool.query(
+      "SELECT DISTINCT ON (request_text::jsonb->>'snapshotId',COALESCE(request_text::jsonb->>'reprocess','')) * FROM struinfo.processing_agent_task WHERE workspace_id=$1 AND request_text::jsonb->>'kind'='document' ORDER BY request_text::jsonb->>'snapshotId',COALESCE(request_text::jsonb->>'reprocess',''),created_at DESC,task_id DESC",
       [workspaceId],
     );
     return result.rows.map(decode);
   }
   public async listPriceDeferred(workspaceId: string) {
     const result = await this.pool.query(
-      "SELECT * FROM struinfo.processing_agent_task WHERE workspace_id=$1 AND NOT pause_requested AND NOT cancel_requested AND state_text::jsonb->>'status'='paused' AND state_text::jsonb->>'errorCode'='ai_price_window_closed' ORDER BY updated_at,task_id LIMIT 32",
+      "SELECT * FROM struinfo.processing_agent_task WHERE workspace_id=$1 AND NOT pause_requested AND NOT cancel_requested AND state_text::jsonb->>'status'='paused' AND state_text::jsonb->>'errorCode' IN ('ai_price_window_closed','ai_operations_paused') ORDER BY updated_at,task_id LIMIT 32",
       [workspaceId],
+    );
+    return result.rows.map(decode);
+  }
+  public async listForSnapshots(
+    workspaceId: string,
+    snapshotIds: readonly string[],
+  ) {
+    const result = await this.pool.query(
+      "SELECT * FROM struinfo.processing_agent_task WHERE workspace_id=$1 AND request_text::jsonb->>'kind'='document' AND request_text::jsonb->>'snapshotId'=ANY($2::text[])",
+      [workspaceId, snapshotIds],
     );
     return result.rows.map(decode);
   }
