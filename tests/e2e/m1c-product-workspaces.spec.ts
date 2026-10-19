@@ -1099,13 +1099,18 @@ async function openQuerySettings(page: Page, name = '筛选与匹配方式') {
   if (readingSections.includes(name))
     await openQuerySettings(page, '阅读与导出');
   const trigger = page.getByRole('button', {name, exact: true});
-  if ((await trigger.evaluate((el) => el.tagName)) === 'SUMMARY') {
-    if (
-      !(await trigger.evaluate((el) => el.parentElement?.hasAttribute('open')))
-    )
-      await trigger.click();
-  } else if ((await trigger.getAttribute('aria-expanded')) !== 'true')
-    await trigger.click();
+  // Native visibility changes before the queued toggle event updates React.
+  // In particular, the debounce test freezes the clock while reopening tools.
+  const expanded = await trigger.evaluate((element) => {
+    if (element.tagName === 'SUMMARY')
+      return element.parentElement?.hasAttribute('open') === true;
+    const panelId = element.getAttribute('aria-controls');
+    return (
+      panelId !== null &&
+      document.getElementById(panelId)?.matches(':popover-open') === true
+    );
+  });
+  if (!expanded) await trigger.click();
 }
 
 test('keeps floating reading controls from resizing the document', async ({
