@@ -7,7 +7,7 @@ import {verifySourceReviewCandidate} from './source_review_candidate.js';
 import {createHash, randomBytes, randomUUID} from 'node:crypto';
 import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import {arch, platform, tmpdir} from 'node:os';
-import {join, resolve} from 'node:path';
+import {basename, dirname, join, resolve} from 'node:path';
 import {performance} from 'node:perf_hooks';
 
 import {
@@ -1138,10 +1138,17 @@ async function removeContainer(containerName: string): Promise<boolean> {
   return removed.exitCode === 0;
 }
 
-async function removeTemporaryDataRoot(dataRoot: string): Promise<boolean> {
+export async function removeTemporaryDataRoot(
+  dataRoot: string,
+): Promise<boolean> {
   const parent = resolve(tmpdir());
   const target = resolve(dataRoot);
-  if (!target.startsWith(`${parent}\\struinfo-m2-p0d-`)) return false;
+  if (
+    dirname(target) !== parent ||
+    !/^struinfo-m2-p0d-[A-Za-z0-9]{6}$/u.test(basename(target))
+  ) {
+    return false;
+  }
   try {
     await rm(target, {recursive: true, force: true});
     return true;
