@@ -148,7 +148,7 @@ function translationErrorMessage(code: string): string {
     case 'ai_operations_paused':
       return '内置 AI 后续操作已禁止；可在总览允许继续，已有结果保留。';
     case 'ai_price_window_closed':
-      return '当前为 DeepSeek 高峰时段，请在低价时段重新翻译。恢复时间见设置 → AI 接入。';
+      return '当前为 DeepSeek 高峰时段，请在低价时段重新翻译。恢复时间见设置 → AI 设置。';
     case 'ai_provider_timeout':
       return '翻译超时，未保存不完整译文。可稍后重试。';
     case 'ai_provider_invalid_response':

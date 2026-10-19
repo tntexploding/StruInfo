@@ -1,0 +1,29 @@
+.source-description-field {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.source-description-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem 0.9rem;
+}
+.source-description-actions button {
+  flex: 0 0 auto;
+  width: auto;
+}
+.source-description-actions small {
+  color: var(--si-color-text-muted);
+}
+.source-description-suggestion {
+  border: 1px solid var(--si-color-ai-border);
+  border-radius: var(--si-radius-control);
+  background: var(--si-color-surface-ai);
+  padding: 0.8rem 1rem;
+}
+.source-description-suggestion p {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  margin: 0.4rem 0 0.7rem;
+}

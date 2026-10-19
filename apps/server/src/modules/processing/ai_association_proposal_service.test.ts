@@ -36,6 +36,49 @@ const PROJECTION = Object.freeze({
 });
 
 describe('AiAssociationProposalService', () => {
+  it('preserves the first proposal and reuses a separately persisted verification', async () => {
+    const fixture = createFixture(false);
+    await fixture.service.start(ENTRY_LOW_ID, ENTRY_HIGH_ID, 'first');
+    const [original] = await fixture.service.listForPair(
+      ENTRY_LOW_ID,
+      ENTRY_HIGH_ID,
+    );
+    if (!original) throw new Error('missing synthetic proposal');
+    const reviewed = await fixture.service.review(
+      ENTRY_LOW_ID,
+      ENTRY_HIGH_ID,
+      original.proposalId,
+      'verify',
+    );
+    const reused = await fixture.service.review(
+      ENTRY_LOW_ID,
+      ENTRY_HIGH_ID,
+      original.proposalId,
+      'verify',
+    );
+    expect(reused.run.runId).toBe(reviewed.run.runId);
+    expect(reviewed.run.runId).not.toBe(original.runId);
+    expect(fixture.reviewAssociation).toHaveBeenCalledTimes(1);
+    expect(fixture.proposeAssociation).toHaveBeenCalledTimes(1);
+    expect(
+      await fixture.service.listForPair(ENTRY_LOW_ID, ENTRY_HIGH_ID),
+    ).toHaveLength(2);
+    expect(fixture.writeAssociationOverride).not.toHaveBeenCalled();
+    await fixture.service.reject(
+      ENTRY_LOW_ID,
+      ENTRY_HIGH_ID,
+      original.proposalId,
+    );
+    await expect(
+      fixture.service.review(
+        ENTRY_LOW_ID,
+        ENTRY_HIGH_ID,
+        original.proposalId,
+        'after-owner-rejection',
+      ),
+    ).rejects.toMatchObject({code: 'ai_proposal_invalid'});
+    expect(fixture.reviewAssociation).toHaveBeenCalledTimes(1);
+  });
   it('persists a no-relation result without a proposal or graph write and reuses it on retry', async () => {
     const fixture = createFixture(false);
     fixture.proposeAssociation.mockResolvedValue({
@@ -315,11 +358,21 @@ function createFixture(privateHigh: boolean) {
       }),
     ),
   );
+  const reviewAssociation = vi.fn<
+    NonNullable<AiAssociationProposalProviderPort['reviewAssociation']>
+  >(() =>
+    Promise.resolve({
+      summary: 'Independent synthetic evidence.',
+      relationLabel: '补充说明',
+      direction: 'low_to_high' as const,
+    }),
+  );
   const provider = {
     providerKey: 'openai-responses-v1' as const,
     model: 'gpt-5-mini',
     promptVersion: 'struinfo.openai-entry-association.v1',
     proposeAssociation,
+    reviewAssociation,
   } satisfies AiAssociationProposalProviderPort;
   const service = new AiAssociationProposalService({
     workspaceId: WORKSPACE_ID,
@@ -332,6 +385,7 @@ function createFixture(privateHigh: boolean) {
   return {
     service,
     runs,
+    reviewAssociation,
     proposeAssociation,
     writeAssociationOverride,
     get currentOverride() {

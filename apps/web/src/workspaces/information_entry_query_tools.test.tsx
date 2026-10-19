@@ -238,7 +238,7 @@ describe('M1F-2 query result tools', () => {
     expect(markup).toContain('向资料提问');
     expect(markup).toContain('AI 未启用');
     expect(markup).toContain('探索推荐');
-    expect(markup).toContain('不会改变搜索结果');
+    expect(markup).toContain('搜索结果保留');
     expect(markup).toContain('启用独立探索');
     expect(markup).toContain('当前页探索份额');
     expect(markup).toContain('邻域扩展');

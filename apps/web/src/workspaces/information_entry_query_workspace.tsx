@@ -1,3 +1,4 @@
+import {createPortal} from 'react-dom';
 import {FloatingToolPanel} from '../components/floating_tool_panel.js';
 import {sourceDisplayName} from '../components/reading_text.js';
 import {InformationEntryTranslation} from './information_entry_translation.js';
@@ -103,6 +104,8 @@ export function InformationEntryQueryWorkspace({
 }: InformationEntryQueryWorkspaceProps) {
   const [readingMode, setReadingMode] = useState<'search' | 'ask'>('search');
   const [showGraph, setShowGraph] = useState(false);
+  const [toolbarContainer, setToolbarContainer] =
+    useState<HTMLDivElement | null>(null);
   const controller = useInformationEntryController({
     ...(initialContext === undefined
       ? {}
@@ -193,6 +196,34 @@ export function InformationEntryQueryWorkspace({
     controller.setAdvancedFilters(Object.freeze(next));
   }
 
+  const displayControls = (
+    <div
+      className="reading-segments reading-result-switch"
+      role="group"
+      aria-label="结果显示"
+    >
+      <button
+        type="button"
+        aria-pressed={!showGraph}
+        onClick={() => {
+          setShowGraph(false);
+        }}
+      >
+        阅读正文
+      </button>
+      <button
+        type="button"
+        disabled={!selectedItem}
+        aria-pressed={showGraph}
+        onClick={() => {
+          setShowGraph(true);
+        }}
+      >
+        联系星图
+      </button>
+    </div>
+  );
+
   return (
     <div
       className="workspace-view entry-workspace workflow-stage-workspace"
@@ -201,32 +232,32 @@ export function InformationEntryQueryWorkspace({
       <header className="workflow-page-heading">
         <div>
           <h1>数据阅览</h1>
-          <p>检索已确认的内容，沿联系阅读，或向 AI 提问并核对引用。</p>
+          <p>搜索已入库的资料、查看联系，或向 AI 提问并核对出处。</p>
+        </div>
+        <div
+          className="reading-segments reading-mode-switch"
+          role="group"
+          aria-label="阅览方式"
+        >
+          <button
+            aria-pressed={readingMode === 'search'}
+            onClick={() => {
+              setReadingMode('search');
+            }}
+          >
+            搜索与关系图
+          </button>
+          <button
+            aria-pressed={readingMode === 'ask'}
+            onClick={() => {
+              setReadingMode('ask');
+            }}
+          >
+            向资料提问
+          </button>
         </div>
       </header>
 
-      <div
-        className="reading-segments reading-mode-switch"
-        role="group"
-        aria-label="阅览方式"
-      >
-        <button
-          aria-pressed={readingMode === 'search'}
-          onClick={() => {
-            setReadingMode('search');
-          }}
-        >
-          搜索与关系图
-        </button>
-        <button
-          aria-pressed={readingMode === 'ask'}
-          onClick={() => {
-            setReadingMode('ask');
-          }}
-        >
-          向资料提问
-        </button>
-      </div>
       <details className="workflow-mode-summary" aria-label="查询页操作指南">
         <summary>操作指南 · 查询条目</summary>
         <span>1. 输入关键词，按需展开筛选</span>
@@ -237,7 +268,7 @@ export function InformationEntryQueryWorkspace({
       {pendingContext === undefined ? null : (
         <section className="query-context-notice" aria-label="重新选择隐私范围">
           <strong>此查询包含隐私范围</strong>
-          <p>打开前请选择本次可见范围。保存查询不会自动显示隐私内容。</p>
+          <p>打开前请选择本次可见范围。隐私内容需要单独勾选。</p>
           <div className="entry-command-actions">
             <button
               type="button"
@@ -325,73 +356,54 @@ export function InformationEntryQueryWorkspace({
         />
       </section>
       <div className="query-studio-grid" hidden={readingMode !== 'search'}>
-        <form
-          className="query-studio-form"
-          role="search"
-          onSubmit={submitSearch}
-        >
-          <section className="query-studio-search" aria-label="主搜索">
-            <label className="field entry-search-query">
-              <span className="query-search-label">
-                搜索信息条目{' '}
-                <span className="record-count" role="status" aria-live="polite">
-                  {controller.searchDirty
-                    ? '条件已更改'
-                    : controller.view.status === 'ready'
-                      ? controller.includePrivate
-                        ? `${controller.view.response.totalCount.toString()} 条 · ${controller.view.response.privateDocuments.totalCount.toString()} 份完整隐私文档`
-                        : `${controller.view.response.totalCount.toString()} 条`
-                      : controller.view.status === 'loading'
-                        ? '正在搜索…'
-                        : '搜索失败'}
+        <div className="query-studio-toolbar">
+          <form
+            className="query-studio-form"
+            role="search"
+            onSubmit={submitSearch}
+          >
+            <section className="query-studio-search" aria-label="主搜索">
+              <label className="field entry-search-query">
+                <span className="query-search-label">
+                  搜索信息条目{' '}
+                  <span
+                    className="record-count"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {controller.searchDirty
+                      ? '条件已更改'
+                      : controller.view.status === 'ready'
+                        ? controller.includePrivate
+                          ? `${controller.view.response.totalCount.toString()} 条 · ${controller.view.response.privateDocuments.totalCount.toString()} 份完整隐私文档`
+                          : `${controller.view.response.totalCount.toString()} 条`
+                        : controller.view.status === 'loading'
+                          ? '正在搜索…'
+                          : '搜索失败'}
+                  </span>
                 </span>
-              </span>
-              <input
-                type="search"
-                value={controller.query}
-                onChange={(event) => {
-                  controller.setQuery(event.currentTarget.value);
-                }}
-                placeholder="输入标题、正文或标签；留空浏览全部条目"
-              />
-            </label>
-            <button className="primary-action entry-query-action" type="submit">
-              搜索
-            </button>{' '}
-            {controller.selectedEntry === undefined ||
-            controller.searchDirty ||
-            onOpenGraph === undefined ? null : (
-              <div className="entry-command-actions">
-                <button
-                  type="button"
-                  className="secondary-action"
-                  onClick={() => {
-                    if (controller.selectedEntry !== undefined)
-                      setShowGraph(true);
+                <input
+                  type="search"
+                  value={controller.query}
+                  onChange={(event) => {
+                    controller.setQuery(event.currentTarget.value);
                   }}
-                >
-                  {controller.selectedEntry.value.isPrivate
-                    ? '含隐私在图谱中查看'
-                    : '在图谱中查看'}
-                </button>
-              </div>
-            )}
-          </section>
-          <aside className="query-studio-settings" aria-label="搜索与显示设置">
-            {onLoadSavedQueries === undefined ||
-            onWriteSavedQuery === undefined ? null : (
-              <InformationEntrySavedQueries
-                context={{
-                  query: currentQuery,
-                  ...(currentSelection === undefined
-                    ? {}
-                    : {selectedEntryId: currentSelection}),
-                }}
-                onLoad={onLoadSavedQueries}
-                onWrite={onWriteSavedQuery}
-                onOpen={openContext}
-              />
-            )}
+                  placeholder="输入标题、正文或标签；留空浏览全部条目"
+                />
+              </label>
+              <button
+                className="primary-action entry-query-action"
+                type="submit"
+              >
+                搜索
+              </button>{' '}
+            </section>
+          </form>
+          <aside
+            className="query-studio-settings workspace-page-actions ef-glass"
+            aria-label="搜索与显示设置"
+            data-floating-tool-group
+          >
             <FloatingToolPanel
               className="query-filter-drawer"
               title="筛选与匹配方式"
@@ -504,22 +516,48 @@ export function InformationEntryQueryWorkspace({
                 </div>
               </div>
             </FloatingToolPanel>
-            <FloatingToolPanel title="索引维护">
-              {onLoadSearchIndex === undefined ||
-              onRebuildSearchIndex === undefined ? null : (
-                <InformationEntrySearchIndexPanel
-                  semanticEnabled={semanticSearchEnabled}
-                  onLoad={onLoadSearchIndex}
-                  onReadyChange={setSemanticIndexReady}
-                  {...(onRefreshSearchIndex === undefined
-                    ? {}
-                    : {onRefresh: onRefreshSearchIndex})}
-                  onRebuild={onRebuildSearchIndex}
+            <FloatingToolPanel
+              title="查询管理"
+              className="query-management"
+              preferredWidth={600}
+            >
+              <p className="field-help">保存常用的查询条件，或检查搜索索引。</p>
+              {onLoadSavedQueries === undefined ||
+              onWriteSavedQuery === undefined ? null : (
+                <InformationEntrySavedQueries
+                  embedded
+                  context={{
+                    query: currentQuery,
+                    ...(currentSelection === undefined
+                      ? {}
+                      : {selectedEntryId: currentSelection}),
+                  }}
+                  onLoad={onLoadSavedQueries}
+                  onWrite={onWriteSavedQuery}
+                  onOpen={openContext}
                 />
               )}
+              <FloatingToolPanel embedded title="索引维护">
+                {onLoadSearchIndex === undefined ||
+                onRebuildSearchIndex === undefined ? null : (
+                  <InformationEntrySearchIndexPanel
+                    semanticEnabled={semanticSearchEnabled}
+                    onLoad={onLoadSearchIndex}
+                    onReadyChange={setSemanticIndexReady}
+                    {...(onRefreshSearchIndex === undefined
+                      ? {}
+                      : {onRefresh: onRefreshSearchIndex})}
+                    onRebuild={onRebuildSearchIndex}
+                  />
+                )}
+              </FloatingToolPanel>
             </FloatingToolPanel>
+            <div
+              className="query-reading-tools-slot"
+              ref={setToolbarContainer}
+            />
           </aside>
-        </form>
+        </div>
 
         <section className="query-studio-results">
           {controller.view.status === 'ready' && controller.includePrivate ? (
@@ -546,27 +584,7 @@ export function InformationEntryQueryWorkspace({
               {...(onOpenGraph === undefined ? {} : {onOpenGraph})}
             />
           )}
-          <div className="reading-result-switch">
-            <button
-              className="secondary-action"
-              aria-pressed={!showGraph}
-              onClick={() => {
-                setShowGraph(false);
-              }}
-            >
-              阅读正文
-            </button>
-            <button
-              className="secondary-action"
-              disabled={!selectedItem}
-              aria-pressed={showGraph}
-              onClick={() => {
-                setShowGraph(true);
-              }}
-            >
-              联系星图
-            </button>
-          </div>
+
           {showGraph && selectedItem && renderGraph ? (
             <div
               className="reading-graph-frame"
@@ -579,6 +597,8 @@ export function InformationEntryQueryWorkspace({
             <InformationEntryQueryResults
               key={comparisonScopeKey}
               comparisonScopeKey={comparisonScopeKey}
+              toolbarContainer={toolbarContainer}
+              displayControls={displayControls}
               {...(onPreviewMarkdownExport === undefined
                 ? {}
                 : {onPreviewMarkdownExport})}
@@ -612,6 +632,8 @@ export function InformationEntryQueryWorkspace({
 
 function InformationEntryQueryResults({
   graphContent,
+  displayControls,
+  toolbarContainer,
   onPreviewMarkdownExport,
   onGenerateMarkdownExport,
   comparisonScopeKey,
@@ -626,6 +648,8 @@ function InformationEntryQueryResults({
   translationServices,
 }: {
   readonly graphContent?: ReactNode;
+  readonly displayControls: ReactNode;
+  readonly toolbarContainer: HTMLElement | null;
   readonly onPreviewMarkdownExport?: EntryMarkdownExportServices['onPreviewMarkdownExport'];
   readonly onGenerateMarkdownExport?: EntryMarkdownExportServices['onGenerateMarkdownExport'];
   readonly comparisonScopeKey: string;
@@ -664,9 +688,10 @@ function InformationEntryQueryResults({
 
   const renderSidebarSection = (id: string) => (
     <FloatingToolPanel
+      embedded
       key={id}
       title={
-        {language: '阅读设置', export: '资料清单与导出', tools: '更多工具'}[
+        {language: '阅读设置', export: '资料清单与导出', tools: '比较与探索'}[
           id
         ] ?? id
       }
@@ -793,10 +818,20 @@ function InformationEntryQueryResults({
     </FloatingToolPanel>
   );
 
+  const readingTools = (
+    <aside className="query-reading-sidebar" aria-label="阅读与资料工具">
+      <FloatingToolPanel title="阅读与导出" preferredWidth={600}>
+        {displayControls}
+        {['language', 'export', 'tools'].map(renderSidebarSection)}
+      </FloatingToolPanel>
+    </aside>
+  );
+
   return (
     <div className="query-reading-layout">
       <InformationEntryResults
         ariaLabel="条目查询结果"
+        layoutName="query"
         emptyDescription="当前查询没有匹配条目；可清除部分筛选后重试。"
         state={controller.view}
         selectedEntryId={controller.selectedEntryId}
@@ -841,9 +876,9 @@ function InformationEntryQueryResults({
           ))}
       </InformationEntryResults>
 
-      <aside className="query-reading-sidebar" aria-label="阅读与资料工具">
-        {['language', 'export', 'tools'].map(renderSidebarSection)}
-      </aside>
+      {toolbarContainer === null
+        ? readingTools
+        : createPortal(readingTools, toolbarContainer)}
     </div>
   );
 }

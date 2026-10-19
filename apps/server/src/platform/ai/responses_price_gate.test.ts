@@ -3,6 +3,7 @@ import {priceAwareFetch} from './price_aware_fetch.js';
 import {
   AiPriceWindowClosedError,
   AiOperationsPausedError,
+  AiBudgetWaitError,
 } from '../../modules/processing/ai_price_policy.js';
 import type {CurrentInformationEntry} from '../../modules/entries/index.js';
 import {intakePolicySchema} from '../../application/document_intake_contract.js';
@@ -47,6 +48,11 @@ const operations: Record<string, (fetcher: typeof fetch) => Promise<unknown>> =
   {
     tags: (fetcher) =>
       new ResponsesEntryTagProvider(config, fetcher).proposeTags(entry),
+    tagBatch: (fetcher) =>
+      new ResponsesEntryTagProvider(config, fetcher).proposeTagsBatch([
+        entry,
+        {...entry, entryId: entry.resourceId},
+      ]),
     split: (fetcher) =>
       new ResponsesEntrySplitProvider(config, fetcher).proposeSplit([
         {ordinal: 0, text: 'Synthetic'},
@@ -109,27 +115,28 @@ const operations: Record<string, (fetcher: typeof fetch) => Promise<unknown>> =
         sources: [{handle: 1, title: 'Synthetic', text: 'Synthetic body'}],
       }),
   };
-describe.each([AiPriceWindowClosedError, AiOperationsPausedError])(
-  'every Responses operation obeys %s',
-  (WaitError) => {
-    it.each(Object.keys(operations))(
-      '%s does not dispatch and preserves the wait signal',
-      async (name) => {
-        const network = vi.fn<typeof fetch>();
-        const fetcher = priceAwareFetch(
-          {
-            assertAllowed: async () => {
-              await Promise.resolve();
-              throw new WaitError();
-            },
+describe.each([
+  AiPriceWindowClosedError,
+  AiOperationsPausedError,
+  AiBudgetWaitError,
+])('every Responses operation obeys %s', (WaitError) => {
+  it.each(Object.keys(operations))(
+    '%s does not dispatch and preserves the wait signal',
+    async (name) => {
+      const network = vi.fn<typeof fetch>();
+      const fetcher = priceAwareFetch(
+        {
+          assertAllowed: async () => {
+            await Promise.resolve();
+            throw new WaitError();
           },
-          network,
-        );
-        await expect(operations[name]?.(fetcher)).rejects.toMatchObject({
-          code: new WaitError().code,
-        });
-        expect(network).not.toHaveBeenCalled();
-      },
-    );
-  },
-);
+        },
+        network,
+      );
+      await expect(operations[name]?.(fetcher)).rejects.toMatchObject({
+        code: new WaitError().code,
+      });
+      expect(network).not.toHaveBeenCalled();
+    },
+  );
+});

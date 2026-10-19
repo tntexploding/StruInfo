@@ -11,11 +11,13 @@ export function FloatingToolPanel({
   title,
   className = '',
   preferredWidth = 640,
+  embedded = false,
   children,
 }: {
   readonly title: string;
   readonly className?: string;
   readonly preferredWidth?: number;
+  readonly embedded?: boolean;
   readonly children: ReactNode;
 }) {
   const id = useId();
@@ -28,6 +30,9 @@ export function FloatingToolPanel({
     const surface = panel.current;
     if (button === null || surface === null) return;
     const anchor = button.getBoundingClientRect();
+    // Keep every row of a wrapped toolbar available while a tool is open.
+    const group = button.closest('[data-floating-tool-group]');
+    const verticalAnchor = group?.getBoundingClientRect() ?? anchor;
     const viewport = window.visualViewport;
     const margin = 12;
     const gap = 8;
@@ -39,12 +44,12 @@ export function FloatingToolPanel({
       Math.max(anchor.width, preferredWidth),
       right - left,
     );
-    const below = bottom - anchor.bottom - gap;
-    const above = anchor.top - gap - top;
+    const below = bottom - verticalAnchor.bottom - gap;
+    const above = verticalAnchor.top - gap - top;
     const upwards = below < 240 && above > below;
     const edge = upwards
-      ? Math.min(anchor.top - gap, bottom)
-      : Math.max(anchor.bottom + gap, top);
+      ? Math.min(verticalAnchor.top - gap, bottom)
+      : Math.max(verticalAnchor.bottom + gap, top);
     Object.assign(surface.style, {
       width: width.toString() + 'px',
       left:
@@ -60,7 +65,11 @@ export function FloatingToolPanel({
     if (!open) return;
     positionPanel();
     const observer = new ResizeObserver(positionPanel);
-    if (trigger.current !== null) observer.observe(trigger.current);
+    if (trigger.current !== null) {
+      observer.observe(trigger.current);
+      const group = trigger.current.closest('[data-floating-tool-group]');
+      if (group !== null) observer.observe(group);
+    }
     window.addEventListener('resize', positionPanel);
     window.addEventListener('scroll', positionPanel, true);
     const viewport = window.visualViewport;
@@ -74,6 +83,15 @@ export function FloatingToolPanel({
       viewport?.removeEventListener('scroll', positionPanel);
     };
   }, [open, positionPanel]);
+
+  if (embedded) {
+    return (
+      <details className={`floating-tool-section ${className}`}>
+        <summary role="button">{title}</summary>
+        <div className="floating-tool-section__body">{children}</div>
+      </details>
+    );
+  }
 
   return (
     <div className={`floating-tool-panel ${className}`}>

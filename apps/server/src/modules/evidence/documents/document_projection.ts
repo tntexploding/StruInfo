@@ -6,6 +6,9 @@ import type {getDocument as getPdfJsDocument} from 'pdfjs-dist/legacy/build/pdf.
 import {MARKDOWN_BUDGETS} from '../markdown/markdown_contract.js';
 
 export const STRUCTURED_DOCUMENT_MAX_RAW_BYTES = 1_048_576;
+// Public pages can carry large scripts while their extracted reading text is small.
+// The Markdown output and PDF budgets remain independent.
+export const STRUCTURED_HTML_MAX_RAW_BYTES = 8 * 1024 * 1024;
 export const STRUCTURED_DOCUMENT_MAX_PAGES = 500;
 
 export const STRUCTURED_DOCUMENT_FORMATS = ['html', 'pdf'] as const;
@@ -95,7 +98,12 @@ export async function projectStructuredDocument(
   if (sourceBytes.byteLength === 0) {
     return reject('document_empty', 'sourceBase64');
   }
-  if (sourceBytes.byteLength > STRUCTURED_DOCUMENT_MAX_RAW_BYTES) {
+  if (
+    sourceBytes.byteLength >
+    (format === 'html'
+      ? STRUCTURED_HTML_MAX_RAW_BYTES
+      : STRUCTURED_DOCUMENT_MAX_RAW_BYTES)
+  ) {
     return reject('document_too_large', 'sourceBase64', 'source_bytes');
   }
   const normalizedPreface = normalizePreface(sourcePreface);
@@ -473,7 +481,11 @@ function findExplicitArticleBody(document: HtmlNode): HtmlElement | undefined {
   const candidates: HtmlElement[] = [];
   const visit = (node: HtmlNode) => {
     if (isHtmlElement(node)) {
-      if (isHiddenElement(node) || SKIPPED_HTML_ELEMENTS.has(node.tagName))
+      if (
+        isHiddenElement(node) ||
+        SKIPPED_HTML_ELEMENTS.has(node.tagName) ||
+        ['aside', 'nav'].includes(node.tagName)
+      )
         return;
       const markers = [
         attributeValue(node, 'id') ?? '',
@@ -486,7 +498,7 @@ function findExplicitArticleBody(document: HtmlNode): HtmlElement | undefined {
       const itemprop = attributeValue(node, 'itemprop') ?? '';
       if (
         (/(?:^|\s)articleBody(?:$|\s)/u.test(itemprop) ||
-          /(?:^|[\s_-])(?:article|post|entry|story)[_-](?:body|content)(?:$|[\s_-])/u.test(
+          /(?:^|[\s_-])(?:article|post|entry|story)[_-](?:body|content|cnt)(?:$|[\s_-])/u.test(
             markers,
           )) &&
         findFirstElement(node, 'p')

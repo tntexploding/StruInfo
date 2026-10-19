@@ -139,8 +139,31 @@
   border-block-start: 1px solid var(--si-color-border-subtle);
 }
 .ai-activity__item {
-  padding-block: 0.75rem;
+  padding: 0.75rem;
+  margin-block: 0.375rem;
+  border: 1px solid transparent;
+  border-radius: 0.875rem;
   min-inline-size: 0;
+}
+.ai-activity__item[data-actor='automation'] {
+  background: var(--si-color-surface-ai);
+  border-color: var(--si-color-ai-border);
+  border-inline-start: 3px solid var(--si-color-ai);
+}
+.ai-task-origin {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.375rem;
+  background: color-mix(
+    in srgb,
+    var(--si-color-ai) 12%,
+    var(--si-color-surface-ai)
+  );
+  color: var(--si-color-ai);
+  font-size: 0.75rem;
+  font-weight: 650;
 }
 .ai-activity__item-meta {
   gap: 0.625rem;
@@ -148,7 +171,20 @@
   font-size: 0.75rem;
 }
 .ai-activity__item-meta [data-state='working'] {
+  color: var(--si-color-info-text);
+}
+.ai-activity__item-meta [data-state='done'] {
   color: var(--si-color-success-text);
+}
+.ai-activity__item-meta [data-state='queued'],
+.ai-activity__item-meta [data-state='price'],
+.ai-activity__item-meta [data-state='paused'] {
+  color: var(--si-color-warning);
+}
+.ai-activity__item-meta > [data-state] {
+  border: 1px solid currentColor;
+  border-radius: 0.375rem;
+  padding: 0.125rem 0.375rem;
 }
 .ai-activity__item-link {
   display: block;
@@ -160,13 +196,16 @@
   padding: 0;
   background: none;
   border: 0;
-  color: var(--si-color-ai);
+  color: var(--si-color-text-primary);
   font-weight: 650;
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
 .ai-activity__item-link:hover {
   text-decoration: underline;
+}
+.ai-activity__item[data-actor='automation'] .ai-activity__item-link {
+  color: var(--si-color-ai);
 }
 .ai-activity__recent {
   margin-block-start: 1rem;
@@ -589,7 +628,7 @@
 }
 .ai-activity__review-hint,
 .ai-activity__item-meta [data-state='review'] {
-  color: var(--si-color-warning);
+  color: var(--si-color-topic-text);
   font-size: 0.8125rem;
 }
 .ai-activity__item-meta [data-state='failed'] {

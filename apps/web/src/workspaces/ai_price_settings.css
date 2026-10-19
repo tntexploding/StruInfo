@@ -37,3 +37,22 @@
 .ai-price-settings > [role='status']:empty {
   display: none;
 }
+
+.ai-execution-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: 1.25rem;
+}
+.ai-execution-fields label {
+  display: grid;
+  gap: 0.5rem;
+  align-content: start;
+}
+.ai-execution-fields select {
+  width: 100%;
+  max-width: 24rem;
+}
+.ai-execution-fields small {
+  color: var(--si-color-text-muted);
+  font-weight: normal;
+}

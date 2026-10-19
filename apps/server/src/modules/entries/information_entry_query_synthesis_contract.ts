@@ -20,10 +20,13 @@ export type InformationEntryQuerySynthesisEvidenceStatus =
 
 export type AiQuerySynthesisProviderErrorCode =
   | 'ai_operations_paused'
+  | 'ai_batch_budget_paused'
   | 'ai_price_window_closed'
   | 'ai_provider_timeout'
   | 'ai_provider_unavailable'
   | 'ai_provider_rejected'
+  | 'ai_provider_incomplete_response'
+  | 'ai_query_invalid_citations'
   | 'ai_provider_invalid_response';
 
 export class AiQuerySynthesisProviderError extends Error {

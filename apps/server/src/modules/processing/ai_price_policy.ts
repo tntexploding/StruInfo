@@ -7,6 +7,8 @@ export const aiPricePolicySchema = z
     revision: z.number().int().min(0).max(2147483646),
     enabled: z.boolean(),
     operationsAllowed: z.boolean().optional(),
+    maxConcurrentRequests: z.number().int().min(1).max(4).optional(),
+    automaticRetryLimit: z.number().int().min(0).max(2).optional(),
   })
   .strict();
 export type AiPricePolicy = z.infer<typeof aiPricePolicySchema>;
@@ -29,14 +31,25 @@ export class AiOperationsPausedError extends Error {
     super(AI_OPERATIONS_PAUSED);
   }
 }
-export function isAiDispatchWait(
-  error: unknown,
-): error is Error & {code: typeof AI_PRICE_WAIT | typeof AI_OPERATIONS_PAUSED} {
+export function isAiDispatchWait(error: unknown): error is Error & {
+  code:
+    typeof AI_PRICE_WAIT | typeof AI_OPERATIONS_PAUSED | typeof AI_BUDGET_WAIT;
+} {
   return (
     error instanceof Error &&
     'code' in error &&
-    (error.code === AI_PRICE_WAIT || error.code === AI_OPERATIONS_PAUSED)
+    (error.code === AI_PRICE_WAIT ||
+      error.code === AI_OPERATIONS_PAUSED ||
+      error.code === AI_BUDGET_WAIT)
   );
+}
+
+export const AI_BUDGET_WAIT = 'ai_batch_budget_paused' as const;
+export class AiBudgetWaitError extends Error {
+  public readonly code = AI_BUDGET_WAIT;
+  public constructor() {
+    super(AI_BUDGET_WAIT);
+  }
 }
 
 export function aiPriceWindow(

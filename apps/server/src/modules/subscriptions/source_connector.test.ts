@@ -3,6 +3,8 @@ import {describe, expect, it, vi} from 'vitest';
 import type {ImportMarkdownEvidenceInput} from '../evidence/index.js';
 import {
   importSourceConnectorDocuments,
+  MAX_SOURCE_CONNECTOR_DOCUMENT_BYTES,
+  MAX_SOURCE_CONNECTOR_RAW_BYTES,
   SourceConnectorRegistry,
   type SourceConnectorError,
   type SourceConnectorReadResult,
@@ -79,6 +81,50 @@ describe('SourceConnectorRegistry', () => {
       result.status === 'changed' && Object.isFrozen(result.documents),
     ).toBe(true);
   });
+
+  it.each([
+    [MAX_SOURCE_CONNECTOR_DOCUMENT_BYTES, MAX_SOURCE_CONNECTOR_RAW_BYTES, true],
+    [MAX_SOURCE_CONNECTOR_DOCUMENT_BYTES + 1, 100, false],
+    [100, MAX_SOURCE_CONNECTOR_RAW_BYTES + 1, false],
+  ] as const)(
+    'bounds projection (%s) separately from raw bytes (%s)',
+    async (projectionSize, rawSize, allowed) => {
+      const registry = new SourceConnectorRegistry([
+        {
+          connectorId: 'builtin.rss.v1',
+          read: () =>
+            Promise.resolve({
+              status: 'changed',
+              cursor: 'synthetic-cursor',
+              documents: [
+                {
+                  externalId: 'synthetic-item',
+                  version: '1',
+                  canonicalUri: 'https://example.invalid/item',
+                  mediaType: 'application/rss+xml',
+                  profile: 'commonmark-v1',
+                  sourceUtf8: new Uint8Array(projectionSize).fill(120),
+                  rawSourceBytes: new Uint8Array(rawSize).fill(120),
+                },
+              ],
+            }),
+        },
+      ]);
+      const read = registry.read('builtin.rss.v1', {
+        subscriptionId: SUBSCRIPTION_ID,
+        configuration: {},
+      });
+      if (!allowed) {
+        await expect(read).rejects.toMatchObject({code: 'connector_too_large'});
+        return;
+      }
+      const result = await read;
+      if (result.status !== 'changed')
+        throw new Error('expected changed result');
+      expect(result.documents[0]?.sourceUtf8.byteLength).toBe(projectionSize);
+      expect(result.documents[0]?.rawSourceBytes?.byteLength).toBe(rawSize);
+    },
+  );
 
   it('fails closed for missing, duplicate, oversized or malformed adapters', async () => {
     expect(

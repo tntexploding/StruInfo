@@ -456,8 +456,8 @@ export function InformationEntryPreferenceProfilePanel({
           </ol>
         )}
 
-        <details className="entry-preference-profile__new-rule">
-          <summary>手动新增规则</summary>
+        <section className="entry-preference-profile__new-rule">
+          <h3>手动新增规则</h3>
           <div className="entry-preference-new-rule-grid">
             <SelectField
               label="评分维度"
@@ -529,7 +529,7 @@ export function InformationEntryPreferenceProfilePanel({
               加入草稿
             </button>
           </div>
-        </details>
+        </section>
       </div>
 
       <div className="entry-preference-profile__actions">
@@ -628,7 +628,7 @@ function ProfileHeading() {
     <header className="entry-preference-profile__heading">
       <div>
         <h2 id="entry-preference-profile-title">偏好规则</h2>
-        <p>规则保存在个人配置中，只提供评分建议，不会自动修改条目。</p>
+        <p>规则用于生成评分建议，保存在个人设置中。条目由你确认修改。</p>
       </div>
     </header>
   );
@@ -918,7 +918,7 @@ function TrialResults({state}: {readonly state: TrialState}) {
     );
   }
   if (state.status === 'loading') {
-    return <p role="status">正在计算规则匹配，不会修改条目…</p>;
+    return <p role="status">正在计算规则匹配…</p>;
   }
   if (state.status === 'error') {
     return <p role="alert">{state.message}</p>;

@@ -70,6 +70,7 @@ export interface AiTask {
   state: {
     status: string;
     supersededBy?: string;
+    automaticRetry?: {limit: number; used: number; notBefore?: string};
     recovery?: {
       previousTaskId: string;
       firstStartedAt: string;
@@ -92,6 +93,7 @@ export interface AiTask {
 }
 export interface AiQueueItem {
   snapshotId: string;
+  createdAt?: string;
   sourceLabel?: string;
   version: number;
   status: string;
@@ -134,8 +136,11 @@ export const aiWorkflowCommand: AiWorkflowClient = async <T>(
   input: unknown = {},
 ) => {
   const path =
+    operation.startsWith('history_') ||
     operation.startsWith('ingestion_') ||
     operation.startsWith('intake_') ||
+    operation.startsWith('source_quality_') ||
+    operation === 'source_description_generate' ||
     operation === 'subscriptions_list'
       ? '/api/v1/ingestion/commands'
       : '/api/v1/ai-tasks/commands';
@@ -163,12 +168,13 @@ export const aiWorkflowCommand: AiWorkflowClient = async <T>(
 export function aiError(error: unknown): string {
   const code = error instanceof Error ? error.message : '';
   const messages: Record<string, string> = {
+    source_quality_changed: '来源或审核记录已改变，请刷新后重新决定。',
+    source_quality_unavailable: '来源复核暂不可用，请刷新后重试。',
     stale_ingestion_policy:
       '策略已被其他操作修改。草稿已保留，请重新读取后再保存。',
     stale_ingestion_item: '文档处理状态已更新，请刷新后重试。',
     intake_receipt_pending: '本篇仍在收件箱待接受，请先接受资料。',
-    intake_receipt_not_pending:
-      '接收决定已改变。AI 不会覆盖新决定，请刷新核对。',
+    intake_receipt_not_pending: '接收决定已更新，请刷新后核对。',
     intake_receipt_rejected: '本篇已拒绝，可在收件箱恢复为待接受。',
     intake_receipt_failed: '接收决定保存失败，请刷新后重试。',
     intake_blocked: '本篇已拒收，后续自动处理停止；可在收件箱恢复。',
@@ -193,8 +199,7 @@ export function aiError(error: unknown): string {
     document_queue_changed: '文档或任务状态已改变，请重新选择。',
     task_superseded: '旧任务已由新一轮接续，请操作最新任务。',
     task_restart_not_required: '本任务仍可从断点继续，或需先处理文档冲突。',
-    document_changed_after_tags:
-      '文档条目已被修改，请在工作台核对并确认，批量操作不会覆盖。',
+    document_changed_after_tags: '文档已有修改，请先到工作台核对并确认。',
     stale_task_version: '任务已更新，请刷新后重试。',
     snapshot_already_materialized:
       '这份文档已经有条目，请在资料库中整理现有结构。',
@@ -206,6 +211,8 @@ export function aiError(error: unknown): string {
     stale_ai_price_policy: 'AI 控制已在其他页面修改，请等待状态刷新后重试。',
     ai_operations_paused:
       '内置 AI 后续操作已禁止；可在总览允许继续，已有结果保留。',
+    ai_batch_budget_paused:
+      '本批 AI 调用已暂停，请先核对批次预算或模型账户，恢复批次后再从断点继续；原文和已完成步骤保留。',
     ai_price_window_closed:
       '等待 DeepSeek 低价时段，届时自动续跑；未消耗调用预算。',
     ai_price_resume_required: '此任务由数据包恢复，请确认后手动继续。',

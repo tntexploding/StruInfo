@@ -70,6 +70,7 @@
 .journey-divider {
   cursor: col-resize;
   touch-action: none;
+  user-select: none;
   position: relative;
   border-radius: 6px;
 }
@@ -712,8 +713,8 @@
 }
 .reading-result-switch {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 8px;
 }
 [data-workflow-page='query'] .query-reading-layout {
   display: flex;
@@ -726,6 +727,10 @@
   flex: 1;
   min-height: 0;
   grid-template-columns: minmax(240px, 26%) minmax(0, 1fr);
+}
+[data-workflow-page='query'] .entry-workbench--resizable {
+  gap: 0;
+  align-items: stretch;
 }
 [data-workflow-page='query'] .query-reading-sidebar {
   display: flex;
@@ -906,6 +911,7 @@
   [data-workflow-page='query'] .query-reading-layout > .entry-workbench {
     display: flex;
     flex-direction: column;
+    gap: 12px;
   }
   .report-queue-title {
     flex-wrap: wrap;
@@ -1020,10 +1026,61 @@
   align-items: stretch;
   width: 100%;
 }
+[data-workflow-page='query'] .query-studio-toolbar {
+  display: grid;
+  grid-template-columns: minmax(18rem, 1fr) minmax(0, 40rem);
+  align-items: start;
+  gap: 1rem;
+  flex: none;
+}
 [data-workflow-page='query'] .query-studio-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 10px;
+  min-width: 0;
+}
+[data-workflow-page='query'] .query-studio-settings {
+  grid-area: auto;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+[data-workflow-page='query'] .query-reading-tools-slot {
+  display: contents;
+}
+[data-workflow-page='query'] .query-studio-toolbar .query-reading-sidebar {
+  max-inline-size: 100%;
+  order: 0;
+  align-self: auto;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+@media (max-width: 1200px) {
+  [data-workflow-page='query'] .query-studio-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.75rem;
+  }
+}
+@media (max-width: 600px) {
+  [data-workflow-page='query'] .query-studio-toolbar {
+    gap: 0.5rem;
+  }
+  [data-workflow-page='query'] .query-studio-search {
+    padding: 0.5rem 0.75rem;
+  }
+  [data-workflow-page='query'] .query-studio-settings,
+  [data-workflow-page='query'] .query-studio-toolbar .query-reading-sidebar {
+    justify-content: flex-start;
+  }
+  [data-workflow-page='query'] .query-studio-search .entry-search-query {
+    min-inline-size: 0;
+  }
+  [data-workflow-page='query'] .query-studio-toolbar button {
+    padding-inline: 0.75rem;
+    font-size: 0.8125rem;
+    min-block-size: 2.75rem;
+  }
+  [data-workflow-page='query'] .floating-tool-panel__trigger {
+    gap: 0.5rem;
+  }
 }
 [data-workflow-page='query'] .query-studio-search,
 [data-workflow-page='query'] .query-studio-results {

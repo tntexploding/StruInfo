@@ -3,6 +3,7 @@ export const MAXIMUM_AI_SPLIT_FRAGMENTS = 128;
 
 export type AiSplitProposalProviderErrorCode =
   | 'ai_operations_paused'
+  | 'ai_batch_budget_paused'
   | 'ai_price_window_closed'
   | 'ai_split_input_unsupported'
   | 'ai_provider_timeout'

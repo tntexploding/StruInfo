@@ -1,3 +1,4 @@
+import {documentProcessingInstructions} from '../../modules/processing/document_processing_standard.js';
 import {
   responsesEndpoint,
   responsesPromptVersion,
@@ -66,6 +67,9 @@ describe.each([
       max_output_tokens: 800,
     });
     expect(request).not.toHaveProperty('tools');
+    expect(String(request.instructions)).toContain(
+      documentProcessingInstructions('tags'),
+    );
     expect(provider.providerKey).toBe(CONFIG.providerKey);
     expect(request.reasoning).toEqual(
       CONFIG.providerKey === 'deepseek-responses-v1'
@@ -188,6 +192,37 @@ describe.each([
     expect(fetchImplementation).not.toHaveBeenCalled();
   });
 
+  it('does not send publication appendices or their stale topic labels for tagging', async () => {
+    const original = entry();
+    const selected = {
+      ...original,
+      value: {
+        ...original.value,
+        body: 'A complete queue mechanism.\n\n# Colophon\n\nUpcoming books and subscription channels.',
+      },
+    };
+    const fetcher = vi.fn<OpenAiFetch>(() =>
+      Promise.resolve(
+        responseEnvelope({
+          summary: 'Queue mechanism.',
+          contentKeywords: ['Queue'],
+          type: {keyword: 'knowledge_explanation', customName: null},
+          domains: [{keyword: 'engineering_computing', customName: null}],
+        }),
+      ),
+    );
+    await new ResponsesEntryTagProvider(CONFIG, fetcher).proposeTags(selected);
+    const body = fetcher.mock.calls[0]?.[1]?.body;
+    if (typeof body !== 'string') throw new Error('missing request');
+    const request = JSON.parse(body) as {input: string};
+    expect(JSON.parse(request.input)).toMatchObject({
+      body: 'A complete queue mechanism.\n\n',
+      existingContentKeywords: [],
+    });
+    expect(request.input).not.toContain('Upcoming books');
+    expect(selected.value.body).toContain('Upcoming books');
+  });
+
   it('fails closed on duplicate normalized keywords and invalid envelopes', async () => {
     const duplicateProvider = new ResponsesEntryTagProvider(CONFIG, () =>
       Promise.resolve(
@@ -230,6 +265,178 @@ function responseEnvelope(payload: unknown): Response {
     {status: 200, headers: {'content-type': 'application/json'}},
   );
 }
+
+function batchEntries() {
+  return [0, 1, 2, 3].map((index) => ({
+    ...entry(),
+    entryId: `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
+    revision: index + 1,
+    value: {
+      ...entry().value,
+      titlePath: `Subject ${index.toString()}`,
+      body: `Evidence for subject ${index.toString()}.`,
+    },
+  }));
+}
+function batchOutput() {
+  return {
+    items: batchEntries().map((selected, index) => ({
+      entryId: selected.entryId,
+      expectedRevision: selected.revision,
+      tags: {
+        summary: 'Synthetic independent classification',
+        contentKeywords: ['Concept ' + index.toString()],
+        type: {keyword: 'knowledge_explanation', customName: null},
+        domains: [{keyword: 'engineering_computing', customName: null}],
+      },
+    })),
+  };
+}
+it('classifies four independent entries in one request and binds reordered results by identity', async () => {
+  const output = batchOutput();
+  output.items.reverse();
+  const fetcher = vi.fn<OpenAiFetch>(() =>
+    Promise.resolve(responseEnvelope(output)),
+  );
+  const results = await new ResponsesEntryTagProvider(
+    BASE_CONFIG,
+    fetcher,
+  ).proposeTagsBatch(batchEntries());
+  expect(
+    results.find((result) => result.entryId === batchEntries()[0]?.entryId)
+      ?.result.contentKeywords,
+  ).toEqual(['Concept 0']);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  const body = fetcher.mock.calls[0]?.[1]?.body;
+  if (typeof body !== 'string') throw new Error('missing request');
+  const request = JSON.parse(body) as {
+    input: string;
+    max_output_tokens: number;
+    instructions: string;
+  };
+  expect(JSON.parse(request.input)).toMatchObject({
+    items: batchEntries().map((item) => ({
+      entryId: item.entryId,
+      expectedRevision: item.revision,
+      body: item.value.body,
+    })),
+  });
+  expect(request.max_output_tokens).toBe(4128);
+  expect(request.instructions).toContain(
+    documentProcessingInstructions('tags'),
+  );
+});
+it.each(['missing', 'duplicate', 'foreign', 'stale', 'invalid-tags'] as const)(
+  'rejects the entire tag batch for %s',
+  async (problem) => {
+    const output = batchOutput();
+    const first = output.items[0];
+    const second = output.items[1];
+    if (!first || !second) throw new Error('fixture');
+    if (problem === 'missing') output.items.pop();
+    if (problem === 'duplicate') output.items[1] = first;
+    if (problem === 'foreign') first.entryId = 'unknown';
+    if (problem === 'stale') first.expectedRevision++;
+    if (problem === 'invalid-tags') second.tags.contentKeywords = [];
+    const fetcher = vi.fn<OpenAiFetch>(() =>
+      Promise.resolve(responseEnvelope(output)),
+    );
+    await expect(
+      new ResponsesEntryTagProvider(BASE_CONFIG, fetcher).proposeTagsBatch(
+        batchEntries(),
+      ),
+    ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  },
+);
+
+it('accepts a complete fenced tag batch but keeps identity checks after normalization', async () => {
+  for (const stale of [false, true]) {
+    const output = batchOutput();
+    if (stale && output.items[0]) output.items[0].expectedRevision++;
+    const fetcher = vi.fn<OpenAiFetch>(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: 'completed',
+            output: [
+              {
+                type: 'message',
+                content: [
+                  {
+                    type: 'output_text',
+                    text: '```json\n' + JSON.stringify(output) + '\n```',
+                  },
+                ],
+              },
+            ],
+          }),
+        ),
+      ),
+    );
+    const result = new ResponsesEntryTagProvider(
+      BASE_CONFIG,
+      fetcher,
+    ).proposeTagsBatch(batchEntries());
+    if (stale)
+      await expect(result).rejects.toMatchObject({
+        code: 'ai_provider_invalid_response',
+      });
+    else await expect(result).resolves.toHaveLength(4);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  }
+});
+
+it('does not repair a missing quote in a tag batch or silently retry', async () => {
+  const broken = JSON.stringify(batchOutput()).replace(
+    '"domains":',
+    'domains":',
+  );
+  const fetcher = vi.fn<OpenAiFetch>(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          status: 'completed',
+          output: [
+            {type: 'message', content: [{type: 'output_text', text: broken}]},
+          ],
+        }),
+      ),
+    ),
+  );
+  await expect(
+    new ResponsesEntryTagProvider(BASE_CONFIG, fetcher).proposeTagsBatch(
+      batchEntries(),
+    ),
+  ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+it.each([
+  'private',
+  'duplicate',
+  'too-many',
+  'oversized',
+  'different-document',
+] as const)('does not dispatch an invalid tag batch: %s', async (problem) => {
+  const entries = batchEntries();
+  const first = entries[0];
+  if (!first) throw new Error('fixture');
+  if (problem === 'private')
+    entries[0] = {...first, value: {...first.value, isPrivate: true}};
+  if (problem === 'duplicate') entries[1] = first;
+  if (problem === 'too-many') entries.push({...first, entryId: 'extra'});
+  if (problem === 'oversized')
+    entries[0] = {...first, value: {...first.value, body: 'x'.repeat(100_000)}};
+  if (problem === 'different-document')
+    entries[0] = {...first, snapshotId: 'other'};
+  const fetcher = vi.fn<OpenAiFetch>();
+  await expect(
+    new ResponsesEntryTagProvider(BASE_CONFIG, fetcher).proposeTagsBatch(
+      entries,
+    ),
+  ).rejects.toMatchObject({code: 'ai_provider_rejected'});
+  expect(fetcher).not.toHaveBeenCalled();
+});
 
 function entry(isPrivate = false): Readonly<CurrentInformationEntry> {
   return Object.freeze({

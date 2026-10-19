@@ -1,6 +1,15 @@
 name: Maintenance security
 
 on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '**/package.json'
+      - '.github/workflows/maintenance-security.yml'
   workflow_dispatch:
   schedule:
     - cron: '17 2 * * 1'
@@ -9,11 +18,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: maintenance-security
+  group: maintenance-security-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   production-dependencies:
+    name: Runtime and build dependencies
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -27,8 +37,8 @@ jobs:
         run: |
           corepack enable
           pnpm install --frozen-lockfile --ignore-scripts
-      - name: Audit production dependencies
-        run: pnpm audit --prod --audit-level low
+      - name: Audit runtime and build dependencies
+        run: pnpm audit --audit-level low
 
   runtime-image:
     runs-on: ubuntu-latest
@@ -39,6 +49,11 @@ jobs:
           persist-credentials: false
       - name: Build the same runtime image
         run: docker build --tag struinfo:maintenance-scan .
+      - name: Check runtime compatibility without network or write access
+        run: |
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --mount "type=bind,src=$PWD/tools/runtime_image_smoke.mjs,dst=/runtime-smoke.mjs,readonly" \
+            struinfo:maintenance-scan node /runtime-smoke.mjs
       - name: Verify the pinned scanner archive
         shell: bash
         run: |

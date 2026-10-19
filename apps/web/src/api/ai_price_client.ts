@@ -1,5 +1,11 @@
 export interface AiPriceStatus {
-  policy: {revision: number; enabled: boolean; operationsAllowed?: boolean};
+  policy: {
+    revision: number;
+    enabled: boolean;
+    operationsAllowed?: boolean;
+    maxConcurrentRequests?: number;
+    automaticRetryLimit?: number;
+  };
   rule: string;
   timeZone: 'Asia/Shanghai';
   provider: string | null;
@@ -10,7 +16,11 @@ export interface AiPriceStatus {
   nextAllowedAt: string | null;
 }
 export async function aiPriceCommand(
-  operation: 'ai_price_status' | 'ai_price_save' | 'ai_operations_save',
+  operation:
+    | 'ai_price_status'
+    | 'ai_price_save'
+    | 'ai_operations_save'
+    | 'ai_execution_save',
   input: object = {},
 ): Promise<AiPriceStatus> {
   const response = await fetch('/api/v1/ai-price/commands', {
@@ -31,6 +41,10 @@ export async function aiPriceCommand(
     typeof policy.enabled !== 'boolean' ||
     (policy.operationsAllowed !== undefined &&
       typeof policy.operationsAllowed !== 'boolean') ||
+    (policy.maxConcurrentRequests !== undefined &&
+      !validInteger(policy.maxConcurrentRequests, 1, 4)) ||
+    (policy.automaticRetryLimit !== undefined &&
+      !validInteger(policy.automaticRetryLimit, 0, 2)) ||
     typeof result.blocked !== 'boolean' ||
     typeof result.applicable !== 'boolean' ||
     typeof result.peak !== 'boolean' ||
@@ -51,6 +65,14 @@ export async function aiPriceCommand(
       revision: policy.revision,
       enabled: policy.enabled,
       operationsAllowed: policy.operationsAllowed !== false,
+      maxConcurrentRequests:
+        typeof policy.maxConcurrentRequests === 'number'
+          ? policy.maxConcurrentRequests
+          : 1,
+      automaticRetryLimit:
+        typeof policy.automaticRetryLimit === 'number'
+          ? policy.automaticRetryLimit
+          : 0,
     },
     rule: result.rule,
     timeZone: result.timeZone,
@@ -69,4 +91,17 @@ function record(value: unknown): Record<string, unknown> | undefined {
 }
 function validDate(value: unknown): value is string {
   return typeof value === 'string' && Number.isFinite(Date.parse(value));
+}
+
+function validInteger(
+  value: unknown,
+  min: number,
+  max: number,
+): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= min &&
+    value <= max
+  );
 }

@@ -14,7 +14,15 @@ describe('StruInfo MCP protocol', () => {
     await client.connect(b);
     try {
       const tools = await client.listTools();
-      expect(tools.tools).toHaveLength(28);
+      expect(tools.tools).toHaveLength(29);
+      expect(
+        tools.tools.find((tool) => tool.name === 'processing_standard')
+          ?.annotations,
+      ).toMatchObject({
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      });
       expect(
         tools.tools.find((tool) => tool.name === 'intake_receive')?.annotations,
       ).toMatchObject({readOnlyHint: false, openWorldHint: false});
@@ -46,6 +54,20 @@ describe('StruInfo MCP protocol', () => {
         ).isError,
       ).toBe(true);
       expect(call).not.toHaveBeenCalled();
+      expect(
+        (
+          await client.callTool({
+            name: 'processing_standard',
+            arguments: {stage: 'unsupported'},
+          })
+        ).isError,
+      ).toBe(true);
+      expect(call).not.toHaveBeenCalled();
+      await client.callTool({
+        name: 'processing_standard',
+        arguments: {stage: 'tags'},
+      });
+      expect(call).toHaveBeenCalledWith('processing_standard', {stage: 'tags'});
       for (const name of [
         'intake_prepare',
         'document_import',

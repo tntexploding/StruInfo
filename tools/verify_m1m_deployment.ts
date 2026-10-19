@@ -41,12 +41,12 @@ export function validateM1mDeploymentSources(
   ]);
 
   requireAll(sources.dockerfile, [
-    'FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS build',
-    'FROM node:24-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS runtime',
+    'FROM node:24-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS build',
+    'FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS runtime',
     'RUN --network=none pnpm run build',
     'RUN --network=none pnpm --offline --config.trust-lockfile=true --config.inject-workspace-packages=true --filter @struinfo/server deploy --prod --no-optional /runtime-server',
     'COPY --from=build --chown=10001:10001 /workspace/LICENSE /opt/struinfo/LICENSE',
-    'ARG STRUIINFO_VERSION=0.3.0',
+    'ARG STRUIINFO_VERSION=0.4.0',
     'org.opencontainers.image.version="${STRUIINFO_VERSION}"',
     'rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v1.22.22',
     'rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg',
@@ -188,7 +188,7 @@ function validateRootStartScripts(source: string): void {
   }
   if (
     decoded.license !== 'MIT' ||
-    decoded.version !== '0.3.0' ||
+    decoded.version !== '0.4.0' ||
     !Array.isArray(decoded.files) ||
     !decoded.files.includes('LICENSE')
   ) {

@@ -161,25 +161,6 @@
 .document-tool-area .document-draft-note {
   padding: 0.5rem 0;
 }
-.document-structure-tools {
-  display: grid;
-  gap: 0.875rem;
-}
-.document-structure-tools
-  :where(
-    .manual-split-workbench,
-    .entry-manual-split__workspace,
-    .entry-restructure__workspace,
-    .entry-restructure-preview,
-    .entry-split-rule__fields,
-    .document-working-copy-grid
-  ) {
-  grid-template-columns: minmax(0, 1fr);
-}
-.document-structure-tools
-  :where(.manual-split-groups, .entry-restructure-groups) {
-  max-block-size: 20rem;
-}
 .evidence-rail.evidence-rail--embedded {
   position: static;
   inline-size: 100%;
@@ -751,37 +732,6 @@
 }
 
 /* Reused editors inherit the width of their tool column, including intrinsic grids. */
-.document-structure-tools,
-.document-structure-tools
-  :is(
-    .entry-manual-split,
-    .entry-manual-split__groups,
-    .entry-manual-split__groups > li,
-    .entry-manual-split__group,
-    .entry-manual-split__fragments,
-    .entry-manual-split__fragments > div,
-    .entry-manual-split__piece,
-    .entry-restructure__impact
-  ) {
-  grid-template-columns: minmax(0, 1fr);
-  min-inline-size: 0;
-}
-.document-structure-tools
-  :is(
-    header,
-    .entry-manual-split__toolbar,
-    .entry-manual-split__piece-actions
-  ) {
-  flex-wrap: wrap;
-}
-.document-structure-tools :is(p, ol, li, dl, pre) {
-  min-inline-size: 0;
-  max-inline-size: 100%;
-  overflow-wrap: anywhere;
-}
-.document-structure-tools .entry-restructure__metrics {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
 .formal-knowledge-workspace[data-presentation='document']
   .knowledge-relation-list
   :is(header, li) {
@@ -849,10 +799,6 @@
     block-size: 100%;
     min-block-size: 40rem;
   }
-}
-
-.document-structure-tools .split-rule-layout {
-  grid-template-columns: minmax(0, 1fr);
 }
 .query-reading-layout .entry-result-list {
   border-radius: 0.875rem;
@@ -932,7 +878,7 @@
     overflow: auto;
     overscroll-behavior: contain;
   }
-  .query-studio-results > :not(.query-reading-layout) {
+  .query-studio-results > :not(.query-reading-layout, .reading-graph-frame) {
     flex: none;
   }
   .query-reading-layout {

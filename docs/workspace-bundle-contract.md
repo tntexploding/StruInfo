@@ -14,7 +14,7 @@
   [ADR 0027](adr/0027-recoverable-entry-automation-routing-execution.md)、
   [ADR 0030](adr/0030-entry-automation-owner-work-queue.md)、
   [ADR 0031](adr/0031-subscription-deterministic-entry-routing-chain.md)、
-  [ADR 0032](adr/0032-deterministic-entry-advance-actions.md)、
+  [ADR 0032](adr/0032-deterministic-entry-tag-and-association-actions.md)、
   [ADR 0033](adr/0033-post-materialization-entry-restructuring.md)、
   [ADR 0053](adr/0053-real-scale-capacity-classification-and-query-follow-up.md)
 - 信封 Schema：[`workspace-bundle.v1.schema.json`](../packages/contracts/json-schema/workspace-bundle.v1.schema.json)

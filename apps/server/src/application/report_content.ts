@@ -162,7 +162,7 @@ export function renderReportMarkdown(report: ReportRecord) {
       '',
     );
   }
-  lines.push('摘要基于所列材料，不代表独立事实核验。');
+  lines.push('摘要依据所列材料整理，事实请结合原文核对。');
   return lines.join('\n') + '\n';
 }
 function sourceDates(source: ReportSource, state: ReportState) {

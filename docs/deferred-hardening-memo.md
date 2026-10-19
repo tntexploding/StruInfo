@@ -118,7 +118,7 @@ record of why that unissued harness never blocked product work.
 
 - Source: M1D-3 selected-workspace PostgreSQL 18 smoke
 - Owner: Platform
-- Status: Deferred hardening
+- Status: Closed by the current implementation; verified 2026-10-19.
 - Scope: Existing M1D Entry and Document-tag repository snapshot loaders
 - Evidence: `pg@8.22.0` emitted its deprecation warning when pre-existing Entry
   and Document-tag loaders submitted concurrent queries through one checked-out
@@ -128,8 +128,10 @@ record of why that unissued harness never blocked product work.
   Entries and 7 association pairs, and no supported product operation failed or
   returned inconsistent data. This is a future driver-compatibility cleanup, not
   a current main-line blocker.
-- Revisit when: The repository upgrades to pg 9, the warning becomes an error,
-  or measured latency/inconsistency points to these loaders.
+- Resolution: Entry and document-tag loaders now await their queries in order
+  on the checked-out client. The remaining parallel proposal loads acquire
+  separate transactions. The v0.4.0 PostgreSQL smoke reports no same-client
+  query-concurrency deprecation warning.
 
 ### DH-008: Node Engine Admission Was Too Strict
 
@@ -222,6 +224,14 @@ record of why that unissued harness never blocked product work.
 
 ### DH-013: Base-Image Scanner Findings Outside the Current Runtime Path
 
+- v0.4.0 resolution, 2026-10-19: the runtime now uses the official Node 24
+  Alpine image; the Bookworm image is confined to the build stage. Network-off
+  HTML/PDF and MCP checks, non-superuser migration/grants and a fresh application
+  startup pass. The initial Alpine scan has no HIGH/CRITICAL OS findings; the
+  separate build-dependency findings in the full SPDX inventory were patched.
+  CI retains the complete, unsuppressed image scan. See the
+  [current repair](dependencies/evidence/maintenance-security-2026-10-19.md).
+  The following assessment records the former Debian runtime.
 - Classification: DEFERRED_HARDENING.
 - Recorded: 2026-09-05, maintenance v0.2.0.
 - Evidence: the pinned Trivy 0.74.0 scan reports 56 HIGH/CRITICAL package findings
@@ -244,6 +254,10 @@ record of why that unissued harness never blocked product work.
 
 ### DH-014: Existing inactive multipart dependency advisories
 
+- Resolved again for v0.4.0 on 2026-10-19: Multer 2.4.0 fixes the newly
+  reported GHSA-3pph-fpjx-jg34. The production audit is clean; the new version
+  also removes seven unused transitive packages. See the
+  [release security repair](dependencies/evidence/maintenance-security-2026-10-19.md).
 - Resolved 2026-09-15: the owner-requested CI investigation updated the exact
   Multer override to 2.3.0. Production audit reports no known vulnerabilities;
   license and SPDX updates are recorded in the
@@ -264,6 +278,21 @@ record of why that unissued harness never blocked product work.
 - Revisit when: A multipart route is proposed or the Nest dependency closure is
   updated. Do not enable multipart with this version; evaluate the maintained
   patched dependency and its exact license closure before that change.
+
+### DH-015: Retire inactive standalone UI compatibility surfaces
+
+- Source: Owner-requested code consolidation, 2026-10-16.
+- Owner: Frontend.
+- Status: Closed in v0.4.0, 2026-10-19.
+- Scope: Standalone split, tag and association presentation components retained
+  by legacy component tests; the current document workbench uses shared editors.
+- Evidence: The runtime import audit found no path from the current application
+  entrypoint to these standalone views. Their remaining tests still exercise
+  supported manual editing behavior; current service types are now independent.
+- Resolution: Removed the 11 unreachable presentation modules and their obsolete
+  dedicated tests. Shared editing models and public APIs remain. Current workspace
+  assertions and all 71 browser scenarios pass. A fresh import-graph audit reaches
+  every remaining production module from the application entrypoints.
 
 ## Entry Template
 

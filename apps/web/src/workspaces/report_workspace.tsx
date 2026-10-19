@@ -49,15 +49,17 @@ export function ReportWorkspace({
       <header className="workflow-page-heading">
         <div>
           <h1>报告</h1>
-          <p>确定主题与范围，在右侧查看生成队列和过往报告。</p>
+          <p>选择资料生成日报、周报或专题报告，查看进度并导出。</p>
         </div>
-        <button
-          className="secondary-action"
-          disabled={reports.busy}
-          onClick={() => void reports.refresh()}
-        >
-          刷新任务
-        </button>
+        <div className="workspace-page-actions ef-glass">
+          <button
+            className="secondary-action"
+            disabled={reports.busy}
+            onClick={() => void reports.refresh()}
+          >
+            刷新报告
+          </button>
+        </div>
       </header>
       {reports.error && !editorOpen ? (
         <p role="alert">{reports.error}</p>

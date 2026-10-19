@@ -62,7 +62,7 @@ describe.each([
     expect(request).toMatchObject({
       model: CONFIG.model,
       store: false,
-      max_output_tokens: 800,
+      max_output_tokens: 4_096,
     });
     expect(request).not.toHaveProperty('tools');
     expect(provider.providerKey).toBe(CONFIG.providerKey);
@@ -97,7 +97,7 @@ describe.each([
         ),
     );
     await expect(unknown.synthesize('问题', evidence())).rejects.toEqual(
-      new AiQuerySynthesisProviderError('ai_provider_invalid_response'),
+      new AiQuerySynthesisProviderError('ai_query_invalid_citations'),
     );
 
     const uncited = new ResponsesInformationEntryQuerySynthesisProvider(
@@ -113,9 +113,61 @@ describe.each([
         ),
     );
     await expect(uncited.synthesize('问题', evidence())).rejects.toMatchObject({
-      code: 'ai_provider_invalid_response',
+      code: 'ai_query_invalid_citations',
     });
   });
+
+  it('preserves readable paragraphs and lists in a cited answer', async () => {
+    const payload = {
+      answer: '合成结论。\r\n\r\n1. 第一个证据。\r\n2. 第二个证据。',
+      evidenceStatus: 'supported',
+      claims: [
+        {statement: '合成事实：\n\t条件与限制。', evidenceRefs: ['E01']},
+      ],
+      limitations: ['适用范围：\n仅限合成资料。'],
+    };
+    const fetcher = vi.fn<OpenAiFetch>(() =>
+      Promise.resolve(responseEnvelope(payload)),
+    );
+    const provider = new ResponsesInformationEntryQuerySynthesisProvider(
+      CONFIG,
+      fetcher,
+    );
+    await expect(
+      provider.synthesize('请分段回答', evidence()),
+    ).resolves.toEqual({
+      ...payload,
+      answer: payload.answer.replace(/\r\n/g, '\n'),
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['answer', 'statement', 'limitation'])(
+    'still rejects embedded non-reading control characters in %s',
+    async (field) => {
+      const invalid = '合成\u0000内容';
+      const provider = new ResponsesInformationEntryQuerySynthesisProvider(
+        CONFIG,
+        () =>
+          Promise.resolve(
+            responseEnvelope({
+              answer: field === 'answer' ? invalid : '合成答案',
+              evidenceStatus: 'supported',
+              claims: [
+                {
+                  statement: field === 'statement' ? invalid : '合成事实',
+                  evidenceRefs: ['E01'],
+                },
+              ],
+              limitations: [field === 'limitation' ? invalid : '合成限制'],
+            }),
+          ),
+      );
+      await expect(
+        provider.synthesize('问题', evidence()),
+      ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});
+    },
+  );
 
   it('distinguishes timeout and HTTP rejection from malformed output', async () => {
     const timeout = new ResponsesInformationEntryQuerySynthesisProvider(
@@ -156,6 +208,34 @@ describe.each([
     await expect(malformed.synthesize('问题', evidence())).rejects.toEqual(
       new AiQuerySynthesisProviderError('ai_provider_invalid_response'),
     );
+  });
+
+  it('reports a truncated response without accepting its partial JSON or retrying', async () => {
+    const fetcher = vi.fn<OpenAiFetch>(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({
+            status: 'incomplete',
+            incomplete_details: {reason: 'max_output_tokens'},
+            output: [
+              {
+                type: 'message',
+                content: [{type: 'output_text', text: '{"answer":"未完成'}],
+              },
+            ],
+            usage: {output_tokens: 800},
+          }),
+        ),
+      ),
+    );
+    const provider = new ResponsesInformationEntryQuerySynthesisProvider(
+      CONFIG,
+      fetcher,
+    );
+    await expect(provider.synthesize('问题', evidence())).rejects.toMatchObject(
+      {code: 'ai_provider_incomplete_response'},
+    );
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });
 

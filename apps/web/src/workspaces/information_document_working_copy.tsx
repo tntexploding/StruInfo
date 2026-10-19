@@ -268,7 +268,7 @@ export function InformationDocumentWorkingCopy({
       </header>
 
       <p className="information-document-working-copy__boundary">
-        这里修改的是拆分前草稿，不会改动已导入的原文。确认后会另存为新文档。
+        编辑拆分前的草稿。确认后另存为新文档，原文保留。
       </p>
 
       {snapshotId === '' ? (

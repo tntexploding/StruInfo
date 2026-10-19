@@ -39,15 +39,38 @@ jobs:
       - name: Run non-browser and non-container quality gate
         run: pnpm verify
 
+  product-smoke:
+    name: Browser and PostgreSQL smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: true
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.18.0
+      - name: Install the admitted dependency graph
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile --ignore-scripts
+      - name: Exercise workspaces using the runner's installed Chrome
+        run: pnpm test:e2e
+      - name: Exercise migrations, grants, recovery and queries in disposable PostgreSQL
+        run: pnpm performance:m2-p0d -- --smoke
+
   quality-gate:
     name: Quality gate
     if: ${{ always() }}
-    needs: [quality]
+    needs: [quality, product-smoke]
     runs-on: ubuntu-latest
     steps:
       - name: Require the full matrix
         shell: pwsh
         run: |
-          if ('${{ needs.quality.result }}' -ne 'success') {
-            throw 'The Windows and Ubuntu quality matrix did not pass.'
+          if ('${{ needs.quality.result }}' -ne 'success' -or '${{ needs.product-smoke.result }}' -ne 'success') {
+            throw 'The quality matrix or product smoke checks did not pass.'
           }

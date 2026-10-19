@@ -17,7 +17,7 @@ export async function printReport(reportId: string) {
     popup.document.title = result.fileName.replace(/\.md$/u, '');
     const style = popup.document.createElement('style');
     style.textContent =
-      '@page { size:A4; margin:18mm; } body { font:11pt/1.8 "Microsoft YaHei",sans-serif; color:#18242c; background:white; max-width:180mm; margin:24px auto; } h1 {font-size:22pt;line-height:1.4} h2 {font-size:16pt;break-after:avoid} h3 {break-after:avoid} p {orphans:3;widows:3} a {color:#285d74;overflow-wrap:anywhere} .reading-content,.reading-content__body,.reading-content__text {overflow:visible!important;max-height:none!important;height:auto!important;max-width:none!important} img {max-width:100%} pre {white-space:pre-wrap;overflow-wrap:anywhere} button {padding:12px 18px;margin:8px;cursor:pointer} @media print {.print-controls {display:none}}';
+      '@page { size:A4; margin:18mm; } body { font:11pt/1.85 "Noto Serif SC","Source Han Serif SC","SimSun",serif; color:#18242c; background:white; max-width:180mm; margin:24px auto; } h1 {font-size:22pt;line-height:1.4} h2 {font-size:16pt;break-after:avoid} h3 {break-after:avoid} p {orphans:3;widows:3} a {color:#405fa4;overflow-wrap:anywhere} .reading-content,.reading-content__body,.reading-content__text {overflow:visible!important;max-height:none!important;height:auto!important;max-width:none!important} img {max-width:100%} pre {white-space:pre-wrap;overflow-wrap:anywhere} .print-controls {font-family:"Noto Sans SC","Microsoft YaHei UI",sans-serif} button {font-family:inherit;padding:12px 18px;margin:8px;cursor:pointer} @media print {.print-controls {display:none}}';
     popup.document.head.append(style);
     popup.document.body.textContent = '';
     const root = createRoot(popup.document.body);

@@ -16,7 +16,7 @@ export interface InboxPreview {
 function summaryError(error: unknown) {
   const code = error instanceof Error ? error.message : '';
   return code === 'ai_price_window_closed'
-    ? '当前为高价时段；请在低价时段点击重试，不会自动调用。'
+    ? '当前为高价时段，请在低价时段手动重试。'
     : code === 'inbox_summary_empty_source'
       ? '接收原文没有可概括的正文，请查看原文。'
       : code === 'ai_intake_input_too_large'

@@ -16,8 +16,11 @@ import {
 } from './workspace_bundle.js';
 
 export const M1E_PROCESSING_BUNDLE_SECTION_TYPE = 'struinfo.m1e-processing';
-export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 14;
-export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v14';
+export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 15;
+export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v15';
+export const M1E_PROCESSING_VERSION_FOURTEEN_BUNDLE_SECTION_VERSION = 14;
+export const M1E_PROCESSING_VERSION_FOURTEEN_BUNDLE_SCHEMA =
+  'struinfo.m1e-processing.v14';
 export const M1E_PROCESSING_VERSION_THIRTEEN_BUNDLE_SECTION_VERSION = 13;
 export const M1E_PROCESSING_VERSION_THIRTEEN_BUNDLE_SCHEMA =
   'struinfo.m1e-processing.v13';
@@ -176,6 +179,8 @@ export const M1E_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescript
       'entry_ordinal',
       'fragment_ordinal',
       'fragment_id',
+      'start_code_point',
+      'end_code_point',
     ]),
     table('processing_entry_automation_run', [
       'workspace_id',
@@ -364,45 +369,58 @@ export const M1E_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescript
     ]),
   ]);
 
+const VERSION_FOURTEEN_PROCESSING_TABLES = Object.freeze(
+  M1E_PROCESSING_TABLES.map((descriptor) =>
+    descriptor.name === 'processing_split_proposal_entry_fragment'
+      ? table(
+          descriptor.name,
+          descriptor.columns.filter(
+            (column) =>
+              column !== 'start_code_point' && column !== 'end_code_point',
+          ),
+        )
+      : descriptor,
+  ),
+);
 const VERSION_THIRTEEN_PROCESSING_TABLES = Object.freeze(
-  M1E_PROCESSING_TABLES.slice(0, 23),
+  VERSION_FOURTEEN_PROCESSING_TABLES.slice(0, 23),
 );
 const VERSION_TWELVE_PROCESSING_TABLES = Object.freeze(
-  M1E_PROCESSING_TABLES.slice(0, 22),
+  VERSION_FOURTEEN_PROCESSING_TABLES.slice(0, 22),
 );
 const VERSION_ELEVEN_PROCESSING_TABLES = Object.freeze(
-  M1E_PROCESSING_TABLES.slice(0, 20),
+  VERSION_FOURTEEN_PROCESSING_TABLES.slice(0, 20),
 );
 const VERSION_TEN_PROCESSING_TABLES = Object.freeze(
-  M1E_PROCESSING_TABLES.slice(0, 19),
+  VERSION_FOURTEEN_PROCESSING_TABLES.slice(0, 19),
 );
 
 const VERSION_NINE_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
-  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 18));
+  Object.freeze(VERSION_FOURTEEN_PROCESSING_TABLES.slice(0, 18));
 
 const VERSION_EIGHT_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
-  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 16));
+  Object.freeze(VERSION_FOURTEEN_PROCESSING_TABLES.slice(0, 16));
 
 const VERSION_SEVEN_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
-  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 14));
+  Object.freeze(VERSION_FOURTEEN_PROCESSING_TABLES.slice(0, 14));
 
 const VERSION_SIX_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
-  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 13));
+  Object.freeze(VERSION_FOURTEEN_PROCESSING_TABLES.slice(0, 13));
 
 const VERSION_FIVE_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
-  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 12));
+  Object.freeze(VERSION_FOURTEEN_PROCESSING_TABLES.slice(0, 12));
 
 const VERSION_FOUR_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
-  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 10));
+  Object.freeze(VERSION_FOURTEEN_PROCESSING_TABLES.slice(0, 10));
 
 const VERSION_THREE_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
-  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 7));
+  Object.freeze(VERSION_FOURTEEN_PROCESSING_TABLES.slice(0, 7));
 
 const VERSION_TWO_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
-  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 6));
+  Object.freeze(VERSION_FOURTEEN_PROCESSING_TABLES.slice(0, 6));
 
 const LEGACY_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescriptor>[] =
-  Object.freeze(M1E_PROCESSING_TABLES.slice(0, 3));
+  Object.freeze(VERSION_FOURTEEN_PROCESSING_TABLES.slice(0, 3));
 
 export const M1E_PROCESSING_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
   Object.freeze({
@@ -412,6 +430,15 @@ export const M1E_PROCESSING_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     decode: normalizeM1eProcessingSnapshot,
   });
 
+export const M1E_PROCESSING_VERSION_FOURTEEN_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: M1E_PROCESSING_VERSION_FOURTEEN_BUNDLE_SECTION_VERSION,
+    encode: normalizeVersionFourteenSnapshot,
+    decode(payload: JsonValue): unknown {
+      return upgradePreviousSnapshot(normalizeVersionFourteenSnapshot(payload));
+    },
+  });
 export const M1E_PROCESSING_VERSION_THIRTEEN_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
   Object.freeze({
     type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
@@ -550,6 +577,13 @@ export function normalizeM1eProcessingSnapshot(
   ) as M1eProcessingSnapshot;
 }
 
+function normalizeVersionFourteenSnapshot(payload: JsonValue) {
+  return normalizeSnapshot(
+    payload,
+    M1E_PROCESSING_VERSION_FOURTEEN_BUNDLE_SCHEMA,
+    VERSION_FOURTEEN_PROCESSING_TABLES,
+  );
+}
 function normalizeVersionThirteenSnapshot(value: unknown): Readonly<{
   schemaVersion: typeof M1E_PROCESSING_VERSION_THIRTEEN_BUNDLE_SCHEMA;
   tables: readonly Readonly<M1eProcessingTableSnapshot>[];
@@ -771,7 +805,18 @@ function upgradePreviousSnapshot(
   return normalizeM1eProcessingSnapshot({
     schemaVersion: M1E_PROCESSING_BUNDLE_SCHEMA,
     tables: [
-      ...previous.tables,
+      ...previous.tables.map((table) =>
+        table.name === 'processing_split_proposal_entry_fragment'
+          ? {
+              ...table,
+              rows: table.rows.map((row) => ({
+                ...row,
+                start_code_point: null,
+                end_code_point: null,
+              })),
+            }
+          : table,
+      ),
       ...M1E_PROCESSING_TABLES.slice(previous.tables.length).map(
         (descriptor) => ({name: descriptor.name, rows: []}),
       ),
