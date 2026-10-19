@@ -53,6 +53,8 @@ const LOCK_WORKSPACE_OVERRIDES_SQL = sql(
   '  graph_verification_status, graph_note',
   'FROM struinfo.information_entry_association_override',
   'WHERE workspace_id = $1',
+  '  AND entry_low_id IN (SELECT entry_id FROM struinfo.information_entry WHERE workspace_id = $1 AND is_current_structure)',
+  '  AND entry_high_id IN (SELECT entry_id FROM struinfo.information_entry WHERE workspace_id = $1 AND is_current_structure)',
   'ORDER BY entry_low_id, entry_high_id',
   'FOR UPDATE',
 );
@@ -389,8 +391,10 @@ function sameExpectedEntries(
   expected: Readonly<InformationEntryRestructureWrite>['expectedEntries'],
 ): boolean {
   if (rows.length !== expected.length) return false;
-  return rows.every((row, index) => {
-    const value = expected[index];
+  const byId = new Map(expected.map((entry) => [entry.entryId, entry]));
+  if (byId.size !== expected.length) return false;
+  return rows.every((row) => {
+    const value = byId.get(canonicalUuid(row.entry_id));
     if (value === undefined) return false;
     return (
       canonicalUuid(row.entry_id) === value.entryId &&

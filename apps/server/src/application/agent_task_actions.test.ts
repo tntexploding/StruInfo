@@ -1,4 +1,6 @@
 import {requireOperationValue} from './operation_error.js';
+import {createHash} from 'node:crypto';
+import type {AiTagProposalServicePort} from '../modules/processing/ai_tag_proposal_service.js';
 import type {DocumentIntakeService} from './document_intake_service.js';
 import {describe, it, expect, vi} from 'vitest';
 import type {CurrentInformationEntry} from '../modules/entries/index.js';
@@ -19,6 +21,199 @@ import type {
 const W = '00000000-0000-4000-8000-000000000001',
   E = '00000000-0000-4000-8000-000000000002',
   S = '00000000-0000-4000-8000-000000000003';
+
+it('does not apply a verified relation after the owner rejects its original proposal', async () => {
+  const f = fixture();
+  const actions = new AgentTaskActions(f.dependencies);
+  vi.spyOn(actions, 'loadRun').mockResolvedValue({
+    proposals: [{status: 'rejected'}],
+  } as unknown as ProcessingRun);
+  const task = {
+    ...f.task,
+    state: {...f.task.state, relationReviewRequired: true},
+  };
+  const step: AgentTaskStep = {
+    kind: 'relation',
+    targetId: E,
+    relatedEntryId: S,
+    attempt: 1,
+    complete: false,
+    runId: W,
+    reviewRunId: S,
+  };
+  await expect(
+    actions.accept(task, step, {proposalId: E} as ProcessingProposal),
+  ).rejects.toMatchObject({code: 'ai_proposal_invalid'});
+});
+
+function batchTags(): AiTagProposalServicePort {
+  return {
+    providerKey: 'deepseek-responses-v1',
+    model: 'synthetic-model',
+    supportsTagBatch: true,
+    startBatch: vi.fn(),
+    start: vi.fn(),
+    accept: vi.fn(),
+    reject: vi.fn(),
+    listForEntry: vi.fn(),
+  };
+}
+
+it('groups only unfinished tag steps, shrinks retries and keeps a large Entry whole', async () => {
+  const f = fixture();
+  const entries = Array.from({length: 6}, (_, index) => ({
+    ...f.current,
+    entryId: `00000000-0000-4000-8000-${String(80 + index).padStart(12, '0')}`,
+  }));
+  const startBatch = vi.fn();
+  const tags = {...batchTags(), startBatch};
+  const actions = new AgentTaskActions({
+    ...f.dependencies,
+    tags,
+    entries: {
+      ...f.dependencies.entries,
+      loadCurrentEntries: () => Promise.resolve(entries),
+    },
+  });
+  for (const attempt of [0, 1, 2]) {
+    const steps: AgentTaskStep[] = entries.map((entry) => ({
+      kind: 'tags',
+      targetId: entry.entryId,
+      expectedRevision: 1,
+      attempt,
+      complete: false,
+    }));
+    const task = {
+      ...f.task,
+      request: {kind: 'document'},
+      state: {phase: 'tags', calls: 1, steps},
+    } as AgentTask;
+    expect(
+      await actions.tagGroup(task, requireOperationValue(steps[0])),
+    ).toHaveLength(4 / 2 ** attempt);
+    const done = {...requireOperationValue(steps[1]), complete: true};
+    expect(
+      (
+        await actions.tagGroup(
+          {
+            ...task,
+            state: {
+              ...task.state,
+              steps: [requireOperationValue(steps[0]), done, ...steps.slice(2)],
+            },
+          },
+          requireOperationValue(steps[0]),
+        )
+      ).some((step) => step.targetId === done.targetId),
+    ).toBe(false);
+  }
+  const first = requireOperationValue(entries[0]);
+  entries[0] = {...first, value: {...first.value, body: 'x'.repeat(110_000)}};
+  const steps: AgentTaskStep[] = entries.map((entry) => ({
+    kind: 'tags',
+    targetId: entry.entryId,
+    expectedRevision: 1,
+    attempt: 0,
+    complete: false,
+  }));
+  const task = {
+    ...f.task,
+    request: {kind: 'document'},
+    state: {phase: 'tags', calls: 1, steps},
+  } as AgentTask;
+  expect(await actions.tagGroup(task, requireOperationValue(steps[0]))).toEqual(
+    [steps[0]],
+  );
+  entries[0] = {...first, revision: 2};
+  await expect(
+    actions.tagGroup(task, requireOperationValue(steps[0])),
+  ).rejects.toMatchObject({code: 'stale_entry_revision'});
+  expect(startBatch).not.toHaveBeenCalled();
+});
+
+it.each([35, 31])(
+  'estimates tag calls from %i exact split ranges before materialization',
+  async (count) => {
+    const f = fixture();
+    const parts = Array.from(
+      {length: count},
+      (_, index) =>
+        `Complete synthetic subject ${index.toString()} and its evidence.\n`,
+    );
+    const text = parts.join('');
+    const digest = createHash('sha256').update(text).digest('hex');
+    const bytes = new TextEncoder().encode(text);
+    let offset = 0;
+    const entries = parts.map((part, index) => {
+      const startCodePoint = offset;
+      offset += Array.from(part).length;
+      return {
+        titlePath: `Subject ${index.toString()}`,
+        fragmentIds: [E],
+        fragmentRanges: [{startCodePoint, endCodePoint: offset}],
+      };
+    });
+    const snapshot = {
+      workspaceId: W,
+      snapshotId: S,
+      resourceId: S,
+      resourceKind: 'manual_text' as const,
+      sourceKey: 'synthetic:batch-sizing',
+      capturedAt: '2040-01-01T00:00:00Z',
+      fragmentCount: 1,
+      rawSha256: digest,
+      canonicalContentSha256: digest,
+      canonicalizationVersion: 'utf8-lf-v1',
+      structures: [
+        {
+          structureId: S,
+          parserName: 'struinfo-commonmark',
+          parserVersion: '1',
+          textNormalizationVersion: 'utf8-lf-v1',
+          structureSha256: digest,
+          textBlob: {
+            algorithm: 'sha256' as const,
+            digest,
+            byteLength: bytes.length,
+          },
+          fragments: [
+            {
+              fragmentId: E,
+              structureId: S,
+              nodeId: E,
+              nodeKind: 'document' as const,
+              codePointRange: {start: 0, end: offset},
+              selectedTextSha256: digest,
+            },
+          ],
+        },
+      ],
+    };
+    const dependencies = {
+      ...f.dependencies,
+      tags: batchTags(),
+      evidence: {
+        ...f.dependencies.evidence,
+        loadSnapshot: () => Promise.resolve(snapshot),
+      },
+      blobStore: {read: () => Promise.resolve(bytes), put: vi.fn()},
+    };
+    const proposal = {
+      targetSnapshotId: S,
+      splitPayload: {entries},
+    } as unknown as ProcessingProposal;
+    expect(
+      await new AgentTaskActions(dependencies).tagCallEstimate(proposal),
+    ).toBe(Math.ceil(count / 4));
+    expect(
+      await new AgentTaskActions({
+        ...dependencies,
+        tags: {...batchTags(), supportsTagBatch: false},
+      }).tagCallEstimate(proposal),
+    ).toBe(count);
+    expect(f.reviseEntry).not.toHaveBeenCalled();
+  },
+);
 function fixture(isPrivate = false) {
   let current: CurrentInformationEntry = {
     workspaceId: W,
@@ -468,4 +663,65 @@ it('keeps long recall inputs in separate calls instead of overflowing a batch', 
     state: {status: 'running', phase: 'recall', calls: 4, steps},
   } as AgentTask;
   expect(await actions.recallGroup(task, first)).toEqual([first]);
+});
+
+it('shrinks failed recall groups and uses the single-entry contract on the last attempt', async () => {
+  const f = fixture();
+  const entries = [0, 1, 2, 3].map((n) => ({
+    ...f.current,
+    entryId: `00000000-0000-4000-8000-${String(40 + n).padStart(12, '0')}`,
+  }));
+  const plan = {concepts: [{term: 'Synthetic', variants: ['合成']}]};
+  const planRecall = vi.fn(() => Promise.resolve(plan));
+  const planRecalls = vi.fn(() => Promise.resolve([plan, plan]));
+  const actions = new AgentTaskActions({
+    ...f.dependencies,
+    entries: {
+      ...f.dependencies.entries,
+      loadCurrentEntries: () => Promise.resolve(entries),
+    },
+    intelligence: {
+      model: 'synthetic-model',
+      reviewIntake: vi.fn(),
+      planRecall,
+      planRecalls,
+    },
+  });
+  for (const attempt of [0, 1, 2]) {
+    const steps: AgentTaskStep[] = entries.map((entry) => ({
+      kind: 'recall',
+      targetId: entry.entryId,
+      expectedRevision: entry.revision,
+      attempt,
+      complete: false,
+    }));
+    const task = {
+      ...f.task,
+      state: {status: 'running', phase: 'recall', calls: 8, steps},
+    } as AgentTask;
+    const original = structuredClone(task);
+    const group = await actions.recallGroup(
+      task,
+      requireOperationValue(steps[0]),
+    );
+    expect(group).toEqual(steps.slice(0, 4 / 2 ** attempt));
+    expect(task).toEqual(original);
+    if (attempt === 2) {
+      expect(await actions.recallGroupPlans(group)).toEqual([plan]);
+      expect(planRecall).toHaveBeenCalledTimes(1);
+      expect(planRecalls).not.toHaveBeenCalled();
+    }
+    if (attempt === 0) {
+      const mixed = steps.map((step, index) => ({
+        ...step,
+        attempt: index === 1 ? 2 : index === 2 ? 3 : 0,
+      }));
+      expect(
+        await actions.recallGroup(
+          {...task, state: {...task.state, steps: mixed}},
+          requireOperationValue(mixed[0]),
+        ),
+      ).toEqual([mixed[0], mixed[3]]);
+    }
+  }
 });

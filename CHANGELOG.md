@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 - 2026-10-19
+
+- Adds multi-channel historical discovery, source feedback and editable introductions.
+- Consolidates document processing constraints, durable recovery, configurable concurrency and bounded retries.
+- Applies the accepted theme across all workspaces with real-progress overview motion and remembered reading settings.
+- Removes eleven unreachable legacy UI modules and their obsolete tests.
+- Fixes six production dependency advisories and the runtime build failure caused by a removed Debian package revision.
+- Adds browser and disposable PostgreSQL CI checks, main-push security checks, and application-oriented setup documentation.
+- Includes forward migration 000039 and processing bundle v15 with older bundle support.
+
+See [v0.4.0 release notes](docs/releases/v0.4.0.md) for upgrade steps and limits.
+
 ## 0.3.0 - 2026-09-20
 
 - Consolidates document entry, processing, reading and reports into four document-centred workspaces.

@@ -9,7 +9,7 @@ import type {ComponentProps, ReactNode} from 'react';
 import {WorkspaceToolPanel} from '../components/workspace_tool_panel.js';
 import {EvidenceRail} from '../components/evidence_rail.js';
 import type {ManualSplitDraftGroup} from './information_entry_manual_split_model.js';
-import type {InformationEntrySplitWorkspaceProps} from './information_entry_split_workspace.js';
+import type {DocumentStructureServices} from './document_structure_services.js';
 import type {InformationEntry} from '../api/m1c_api_contract.js';
 import {ActionNotice} from '../components/action_notice.js';
 import {ReadingContent} from '../components/reading_content.js';
@@ -58,7 +58,7 @@ export interface DocumentWorkspaceProps {
     selection: Readonly<DocumentWorkspaceSelection>,
   ) => void;
   readonly onOpenEvidence: EditorProps['onOpenEvidence'];
-  readonly structureServices: InformationEntrySplitWorkspaceProps;
+  readonly structureServices: DocumentStructureServices;
   readonly renderLinks: (
     entry: Readonly<InformationEntry>,
     includePrivate: boolean,
@@ -272,7 +272,7 @@ export function DocumentWorkspace({
       setFeedback({
         kind: 'error',
         title: '条目生成请求未完成',
-        detail: '请刷新确认当前结果后重试，重复请求不会重复生成。',
+        detail: '请刷新查看结果。若未完成，可重试。',
       });
     } finally {
       setMaterializing(false);
@@ -316,7 +316,24 @@ export function DocumentWorkspace({
           openTool('tags');
         }}
       />
-      {!document.isPrivate ? (
+      <ActionNotice feedback={feedback} />
+    </>
+  ) : null;
+  const documentIdentity = (
+    <header className="document-paper__identity">
+      <div>
+        <p className="document-paper__eyebrow">
+          {document?.isPrivate === true ? '私密文档' : '来源文档'}
+          {document === undefined
+            ? ''
+            : ` · ${document.entryCount.toString()} 个条目`}
+        </p>
+        <DocumentTitle
+          key={documentId + String(selection.includePrivate) + title}
+          title={title}
+        />
+      </div>
+      {document && !document.isPrivate ? (
         <DocumentProcessingStrip
           value={processingValue}
           error={processing.error}
@@ -329,9 +346,8 @@ export function DocumentWorkspace({
           }}
         />
       ) : null}
-      <ActionNotice feedback={feedback} />
-    </>
-  ) : null;
+    </header>
+  );
   return (
     <div
       className="workspace-view document-workspace journey-workspace"
@@ -341,9 +357,9 @@ export function DocumentWorkspace({
       <header className="workflow-page-heading">
         <div>
           <h1>工作台</h1>
-          <p>阅读全文，调整分段、标签和联系，确认后用于查询与报告。</p>
+          <p>阅读和整理已接受的文档；修改分段、标签与联系后，确认入库。</p>
         </div>
-        <div className="document-workspace__actions">
+        <div className="document-workspace__actions workspace-page-actions ef-glass">
           <button
             type="button"
             className="secondary-action"
@@ -443,20 +459,6 @@ export function DocumentWorkspace({
             aria-label="文档工作台"
             aria-busy={controller.documents.status === 'loading'}
           >
-            <header className="document-paper__identity">
-              <div>
-                <p className="document-paper__eyebrow">
-                  {document?.isPrivate === true ? '私密文档' : '来源文档'}
-                  {document === undefined
-                    ? ''
-                    : ` · ${document.entryCount.toString()} 个条目`}
-                </p>
-                <DocumentTitle
-                  key={documentId + String(selection.includePrivate) + title}
-                  title={title}
-                />
-              </div>
-            </header>
             {document === undefined ? (
               <div className="document-paper__empty" role="status">
                 <p>
@@ -491,18 +493,28 @@ export function DocumentWorkspace({
                         setMode('entries');
                       }}
                     >
-                      条目 · {document.entryCount}
+                      按条目 · {document.entryCount}
                     </button>
                   </div>
+                  <span className="document-view-hint">
+                    {mode === 'source'
+                      ? '连续阅读 · 保留原文结构'
+                      : document.entryCount === 1
+                        ? '整篇保留 · 可标注与翻译'
+                        : '独立条目 · 可逐条标注与翻译'}
+                  </span>
                 </div>
                 {(
                   mode === 'source'
                     ? controller.source.status !== 'ready' ||
                       controller.source.value.structures.length === 0
                     : selectedEntry === undefined
-                )
-                  ? documentAnnotations
-                  : null}
+                ) ? (
+                  <>
+                    {documentIdentity}
+                    {documentAnnotations}
+                  </>
+                ) : null}
                 <div
                   className="document-paper__source"
                   hidden={mode !== 'source'}
@@ -530,9 +542,12 @@ export function DocumentWorkspace({
                           <ReadingContent
                             key={structure.structureId}
                             leadingContent={
-                              mode === 'source' && index === 0
-                                ? documentAnnotations
-                                : undefined
+                              mode === 'source' && index === 0 ? (
+                                <>
+                                  {documentIdentity}
+                                  {documentAnnotations}
+                                </>
+                              ) : undefined
                             }
                             active={active && mode === 'source'}
                             scrollMemory={{
@@ -673,15 +688,35 @@ export function DocumentWorkspace({
                           </button>
                         </div>
                       </div>
-                      <div className="document-entry-body">
+                      <div className="document-entry-body editorial-entry-sheet">
+                        <div className="editorial-entry-kicker">
+                          <span className="editorial-entry-index">
+                            {String(
+                              selectedEntry.value.documentOrder + 1,
+                            ).padStart(2, '0')}
+                          </span>
+                          <span>共 {document.entryCount} 个条目</span>
+                          <button
+                            type="button"
+                            className="text-action"
+                            onClick={() => {
+                              setMode('source');
+                            }}
+                          >
+                            返回全文 ↗
+                          </button>
+                        </div>
                         <div className="document-entry-reading">
                           <h3>{readingTitle(selectedEntry.value.titlePath)}</h3>
                           <InformationEntryTranslation
                             key={`${selectedEntry.entryId}:${selectedEntry.revision.toString()}:${String(selection.includePrivate)}`}
                             leadingContent={
-                              mode === 'entries'
-                                ? documentAnnotations
-                                : undefined
+                              mode === 'entries' ? (
+                                <>
+                                  {documentIdentity}
+                                  {documentAnnotations}
+                                </>
+                              ) : undefined
                             }
                             entry={selectedEntry}
                             services={translationServices}

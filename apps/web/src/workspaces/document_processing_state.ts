@@ -71,7 +71,7 @@ export function processingForDocument(
       reason =
         task.request.kind === 'intake'
           ? '仅完成接收审核；拆分、标签与联系尚未启动。'
-          : '处理记录不等于内容已经人工核查。';
+          : '这里显示 AI 的处理记录。内容可在工作台核对。';
     } else if (task.cancelRequested || task.state.status === 'cancelled') {
       label = 'AI 已取消';
       reason = '已完成的条目和标注保留。';
@@ -85,6 +85,9 @@ export function processingForDocument(
     } else if (task.state.errorCode === 'ai_price_window_closed') {
       label = 'AI 等待低价时段';
       reason = '到允许时段后自动续跑；等待本身不消耗调用额度。';
+    } else if (task.state.errorCode === 'ai_batch_budget_paused') {
+      label = 'AI 等待批次继续';
+      reason = aiError(new Error(task.state.errorCode));
     } else if (task.runtimeStatus === 'interrupted') {
       label = 'AI 待恢复';
       tone = 'attention';

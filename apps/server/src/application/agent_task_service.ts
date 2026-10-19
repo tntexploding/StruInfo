@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {AiWorkQueue} from './ai_work_queue.js';
 import {isNoRelationRun} from '../modules/processing/ai_association_proposal.js';
 import {deriveProcessingRunId} from '../modules/processing/processing_identity.js';
 import {
@@ -26,7 +27,7 @@ export class AgentTaskService {
   readonly #interrupted = new Set<string>();
   readonly #running = new Map<string, Promise<void>>();
   #closing = false;
-  #tail: Promise<void> = Promise.resolve();
+  readonly #queue: AiWorkQueue;
   public constructor(
     private readonly workspaceId: string,
     private readonly repository: AgentTaskRepository,
@@ -38,8 +39,18 @@ export class AgentTaskService {
       check: () => Promise<void>;
       checkOperations?: () => Promise<void>;
       canResume: (task: AgentTask) => boolean | Promise<boolean>;
+      executionSettings?: () => Promise<{
+        maxConcurrentRequests: number;
+        automaticRetryLimit: number;
+      }>;
     },
-  ) {}
+  ) {
+    this.#queue = new AiWorkQueue(
+      async () =>
+        (await this.priceGate?.executionSettings?.())?.maxConcurrentRequests ??
+        1,
+    );
+  }
   public async start(
     authority: ExecutionAuthority,
     requestKey: string,
@@ -132,6 +143,8 @@ export class AgentTaskService {
               complete: false,
             };
     const now = new Date().toISOString();
+    const retryLimit =
+      (await this.priceGate?.executionSettings?.())?.automaticRetryLimit ?? 0;
     const task: AgentTask = {
       workspaceId: this.workspaceId,
       taskId,
@@ -149,6 +162,11 @@ export class AgentTaskService {
             )
           : 'external-agent',
       state: {
+        // Relation verification remains readable for existing checkpoints, but
+        // its semantic trial did not qualify it as a default for new tasks.
+        ...(request.kind === 'document' && retryLimit > 0
+          ? {automaticRetry: {limit: retryLimit, used: 0}}
+          : {}),
         status: 'queued',
         calls: 0,
         phase:
@@ -296,6 +314,9 @@ export class AgentTaskService {
           actorId: authority.identity.id,
           requestKey: 'restart-' + taskId,
           state: {
+            ...(task.state.relationReviewRequired
+              ? {relationReviewRequired: true}
+              : {}),
             status: 'queued',
             calls: 0,
             phase: task.state.phase,
@@ -307,7 +328,15 @@ export class AgentTaskService {
                 (task.state.recovery?.previousCalls ?? 0) + task.state.calls,
             },
             steps: task.state.steps.map((step) =>
-              step.complete ? {...step} : {...step, attempt: 0},
+              step.complete
+                ? {...step}
+                : {
+                    ...step,
+                    attempt: 0,
+                    ...(step.reviewAttempt !== undefined
+                      ? {reviewAttempt: 0}
+                      : {}),
+                  },
             ),
           },
           pauseRequested: false,
@@ -491,7 +520,11 @@ export class AgentTaskService {
             ) {
               await this.actions.validateCompletion(task);
               await this.actions.publish(task);
-              state = {...state, status: 'succeeded', phase: 'complete'};
+              state = {
+                ...clearRetryWait(state),
+                status: 'succeeded',
+                phase: 'complete',
+              };
               await save();
               return;
             }
@@ -564,7 +597,11 @@ export class AgentTaskService {
               await this.actions.validateCompletion(task);
               await this.actions.publish(task);
             }
-            state = {...state, status: 'succeeded', phase: 'complete'};
+            state = {
+              ...clearRetryWait(state),
+              status: 'succeeded',
+              phase: 'complete',
+            };
             await save();
             return;
           }
@@ -649,6 +686,7 @@ export class AgentTaskService {
                 ]),
               );
               unsentAttempt = structuredClone(state);
+              state = clearRetryWait(state);
               step = requireOperationValue(reserved.get(step.targetId));
               state = {
                 ...state,
@@ -785,9 +823,81 @@ export class AgentTaskService {
                 'step_attempt_budget_exhausted',
               );
             const attempt = step.attempt + 1;
+            const tagGroup =
+              task.request.kind === 'document' && step.kind === 'tags'
+                ? await this.actions.tagGroup({...task, state}, step)
+                : [step];
+            if (tagGroup.length > 1) {
+              const taskVersion = task.version;
+              const keys = new Map(
+                tagGroup.map((member) => [
+                  member.targetId,
+                  [
+                    taskId,
+                    state.steps.findIndex(
+                      (candidate) =>
+                        candidate.kind === 'tags' &&
+                        candidate.targetId === member.targetId,
+                    ),
+                    member.attempt + 1,
+                    taskVersion,
+                  ].join('-'),
+                ]),
+              );
+              const reserved = new Map(
+                tagGroup.map((member) => [
+                  member.targetId,
+                  {
+                    ...member,
+                    attempt: member.attempt + 1,
+                    runId: this.actions.runId(
+                      member,
+                      requireOperationValue(keys.get(member.targetId)),
+                    ),
+                  },
+                ]),
+              );
+              unsentAttempt = structuredClone(state);
+              state = {
+                ...clearRetryWait(state),
+                calls: state.calls + 1,
+                steps: state.steps.map((member) =>
+                  member.kind === 'tags'
+                    ? (reserved.get(member.targetId) ?? member)
+                    : member,
+                ),
+              };
+              await save();
+              const results = await this.actions.generateTagGroup(
+                [...reserved.values()],
+                keys,
+              );
+              if (
+                results.length !== tagGroup.length ||
+                results.some(
+                  ({run: generated}, i) =>
+                    generated.runId !==
+                      reserved.get(tagGroup[i]?.targetId ?? '')?.runId ||
+                    !generated.proposals.length,
+                )
+              )
+                throw new OperationError(
+                  'rejected',
+                  safeCode(
+                    results.find(
+                      ({run: generated}) => !generated.proposals.length,
+                    )?.run.errorCode ?? 'proposal_generation_incomplete',
+                  ),
+                );
+              unsentAttempt = undefined;
+              // The next loop loads the saved runs and checks pause/manual state
+              // before accepting each Entry. No extra model call is made.
+              continue;
+            }
             // A price-only deferral can retry without reusing its aborted run identity.
             const key = [taskId, index, attempt, task.version].join('-');
             unsentAttempt = structuredClone(state);
+            state = clearRetryWait(state);
             step = {...step, attempt, runId: this.actions.runId(step, key)};
             state = {
               ...state,
@@ -837,11 +947,93 @@ export class AgentTaskService {
           }
           if (
             task.request.kind === 'document' &&
+            state.relationReviewRequired &&
+            step.kind === 'relation' &&
+            proposal &&
+            proposal.status !== 'accepted'
+          ) {
+            let review = await this.actions.loadRelationReview(step);
+            if (!review?.proposals.length && !isNoRelationRun(review)) {
+              await this.priceGate?.check();
+              if (state.calls >= task.request.maxModelCalls)
+                throw new OperationError(
+                  'rejected',
+                  'model_call_budget_exhausted',
+                );
+              const attempt = (step.reviewAttempt ?? 0) + 1;
+              if (attempt > 3)
+                throw new OperationError(
+                  'rejected',
+                  'step_attempt_budget_exhausted',
+                );
+              const key = [taskId, index, 'review', attempt, task.version].join(
+                '-',
+              );
+              unsentAttempt = structuredClone(state);
+              step = {
+                ...step,
+                reviewAttempt: attempt,
+                reviewRunId: this.actions.reviewRunId(
+                  step,
+                  proposal.proposalId,
+                  key,
+                ),
+              };
+              state = {
+                ...clearRetryWait(state),
+                calls: state.calls + 1,
+                steps: state.steps.map((s, i) => (i === index ? step : s)),
+              };
+              await save();
+              review = await this.actions.reviewRelation(
+                task,
+                step,
+                proposal.proposalId,
+                key,
+              );
+              if (!review.proposals.length && !isNoRelationRun(review))
+                throw new OperationError(
+                  'rejected',
+                  safeCode(
+                    review.errorCode ?? 'proposal_generation_incomplete',
+                  ),
+                );
+              unsentAttempt = undefined;
+            }
+            noRelation = isNoRelationRun(review);
+            proposal = review?.proposals[0];
+            step = {
+              ...step,
+              ...(proposal ? {proposalId: proposal.proposalId} : {}),
+              ...(noRelation ? {outcome: 'no_relation' as const} : {}),
+            };
+            state = {
+              ...state,
+              steps: state.steps.map((s, i) => (i === index ? step : s)),
+            };
+            await save();
+            // Paid verification may finish after a pause or an owner's new decision.
+            task = requireOperationValue(
+              await this.repository.read(this.workspaceId, taskId),
+            );
+            const denied = await this.checkAutomation(task);
+            if (task.pauseRequested || this.stopping() || denied) {
+              state = {
+                ...state,
+                status: task.cancelRequested ? 'cancelled' : 'paused',
+                ...(denied ? {errorCode: denied} : {}),
+              };
+              await save();
+              return;
+            }
+          }
+          if (
+            task.request.kind === 'document' &&
             step.kind === 'split' &&
             proposal?.splitPayload &&
             proposal.status !== 'accepted'
           ) {
-            const entries = proposal.splitPayload.entries.length;
+            const tags = await this.actions.tagCallEstimate(proposal);
             const recalls =
               task.request.maxRelations > 0 &&
               (task.request.maxRelationCandidates ?? 0) > 0
@@ -855,7 +1047,13 @@ export class AgentTaskService {
             // Reserve room for the planned stages before materializing many Entries.
             // This is an estimate without retries; it never raises the frozen budget.
             if (
-              state.calls + entries + recalls + relations >
+              state.calls +
+                tags +
+                recalls +
+                relations +
+                (state.relationReviewRequired
+                  ? Math.min(relations, task.request.maxRelations)
+                  : 0) >
               task.request.maxModelCalls
             )
               throw new OperationError(
@@ -886,7 +1084,11 @@ export class AgentTaskService {
           ...state,
           status:
             error instanceof OperationError &&
-            ['intake_held', 'intake_blocked'].includes(error.code)
+            [
+              'intake_held',
+              'intake_blocked',
+              'ai_relation_review_uncertain',
+            ].includes(error.code)
               ? 'paused'
               : 'failed',
           errorCode: safeCode(
@@ -897,6 +1099,31 @@ export class AgentTaskService {
                 : undefined,
           ),
         };
+        const retry = state.automaticRetry;
+        const retryLimit =
+          (await this.priceGate?.executionSettings?.())?.automaticRetryLimit ??
+          0;
+        if (
+          task.request.kind === 'document' &&
+          state.status === 'failed' &&
+          retry &&
+          retry.used < Math.min(retry.limit, retryLimit) &&
+          retryableModelFailure(state.errorCode) &&
+          state.calls < task.request.maxModelCalls &&
+          !state.steps.some((s) => !s.complete && s.attempt >= 3)
+        ) {
+          state = {
+            ...state,
+            status: 'paused',
+            automaticRetry: {
+              ...retry,
+              used: retry.used + 1,
+              notBefore: new Date(
+                Date.now() + 60000 * 2 ** retry.used,
+              ).toISOString(),
+            },
+          };
+        }
         await save();
       }
     });
@@ -915,7 +1142,7 @@ export class AgentTaskService {
   private stopping() {
     return this.#closing;
   }
-  /** Only dispatch-deferred requests resume automatically; manual pauses and failed tasks do not. */
+  /** Resume dispatch waits and explicitly budgeted retries; manual pauses stay held. */
   public async pollPriceDeferred() {
     if (this.#closing || !this.priceGate) return;
     try {
@@ -927,8 +1154,37 @@ export class AgentTaskService {
     const tasks = this.repository.listPriceDeferred
       ? await this.repository.listPriceDeferred(this.workspaceId)
       : await this.repository.list(this.workspaceId);
-    for (const task of tasks) {
+    const retries = this.repository.listRetryDeferred
+      ? await this.repository.listRetryDeferred(this.workspaceId)
+      : await this.repository.list(this.workspaceId);
+    const settings = await this.priceGate.executionSettings?.();
+    for (const task of new Map(
+      [...tasks, ...retries].map((t) => [t.taskId, t]),
+    ).values()) {
       if (this.#running.size >= 32) break;
+      const retry = task.state.automaticRetry;
+      if (
+        task.request.kind === 'document' &&
+        task.state.status === 'paused' &&
+        retry?.notBefore &&
+        (retryableModelFailure(task.state.errorCode) ||
+          task.state.errorCode === AI_PRICE_WAIT ||
+          task.state.errorCode === AI_OPERATIONS_PAUSED) &&
+        Date.parse(retry.notBefore) <= Date.now() &&
+        retry.used <=
+          Math.min(retry.limit, settings?.automaticRetryLimit ?? 0) &&
+        !task.pauseRequested &&
+        !task.cancelRequested &&
+        !task.state.supersededBy &&
+        task.state.calls < task.request.maxModelCalls &&
+        (await this.priceGate.canResume(task))
+      ) {
+        this.launch(task.taskId, true);
+        continue;
+      }
+      if (retry?.notBefore) {
+        continue;
+      }
       if (
         (task.request.kind === 'document' || task.request.kind === 'intake') &&
         task.state.status === 'paused' &&
@@ -965,19 +1221,32 @@ export class AgentTaskService {
     this.#closing = true;
     await Promise.all(this.#running.values());
   }
-  private launch(taskId: string) {
+  private launch(taskId: string, automaticRetry = false) {
     if (this.#closing) throw new OperationError('rejected', 'service_stopping');
     if (this.#running.has(taskId)) return;
     // Failures in persistence leave a resumable durable task; never leak raw errors.
     this.#interrupted.delete(taskId);
-    const running = this.#tail
-      .then(() => this.execute(taskId))
+    const running = this.#queue
+      .run(async () => {
+        if (automaticRetry) {
+          const current = await this.repository.read(this.workspaceId, taskId);
+          const settings = await this.priceGate?.executionSettings?.();
+          if (
+            !current?.state.automaticRetry?.notBefore ||
+            current.pauseRequested ||
+            current.cancelRequested ||
+            current.state.automaticRetry.used >
+              (settings?.automaticRetryLimit ?? 0)
+          )
+            return;
+        }
+        await this.execute(taskId);
+      })
       .catch(() => {
         this.#interrupted.add(taskId);
       })
       .finally(() => this.#running.delete(taskId));
     this.#running.set(taskId, running);
-    this.#tail = running;
   }
   private authorize(authority: ExecutionAuthority, write = true) {
     if (authority.workspaceId !== this.workspaceId)
@@ -1017,6 +1286,29 @@ export function taskNeedsRestart(task: AgentTask): boolean {
   return (
     retryable &&
     (task.state.calls >= task.request.maxModelCalls ||
-      task.state.steps.some((step) => !step.complete && step.attempt >= 3))
+      task.state.steps.some(
+        (step) =>
+          !step.complete &&
+          (step.attempt >= 3 || (step.reviewAttempt ?? 0) >= 3),
+      ))
   );
+}
+
+function retryableModelFailure(code: string | undefined): boolean {
+  return [
+    'ai_provider_timeout',
+    'ai_provider_unavailable',
+    'ai_provider_invalid_response',
+    'ai_provider_invalid_envelope',
+    'ai_provider_invalid_json',
+    'ai_provider_invalid_schema',
+    'proposal_generation_incomplete',
+  ].includes(code ?? '');
+}
+
+function clearRetryWait(state: AgentTaskState): AgentTaskState {
+  if (!state.automaticRetry?.notBefore) return state;
+  const automaticRetry = {...state.automaticRetry};
+  delete automaticRetry.notBefore;
+  return {...state, automaticRetry};
 }

@@ -26,7 +26,7 @@ describe('InformationEntryQuerySynthesis', () => {
     );
     expect(markup).toContain('AI 未启用');
     expect(markup).toContain('本地查询仍可使用');
-    expect(markup).toContain('隐私内容不会发送');
+    expect(markup).toContain('仅使用公开资料');
     expect(markup).toContain('disabled');
     expect(markup).not.toContain('maxlength=');
   });
@@ -44,7 +44,7 @@ describe('InformationEntryQuerySynthesis', () => {
       />,
     );
 
-    expect(markup).toContain('查看隐私内容不等于允许外发');
+    expect(markup).toContain('AI 回答只使用公开资料');
     expect(markup).toContain('disabled');
   });
 

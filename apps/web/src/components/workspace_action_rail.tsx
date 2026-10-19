@@ -13,12 +13,14 @@ export function WorkspaceActionRail({
   actions,
   active,
   connected = false,
+  presentation = 'actions',
   children,
 }: {
   readonly page: WorkspacePage;
   readonly actions: readonly WorkspaceAction[];
   readonly active?: string | undefined;
   readonly connected?: boolean;
+  readonly presentation?: 'actions' | 'selection';
   readonly children?: ReactNode;
 }) {
   const {preferences} = useWorkspaceUi();
@@ -30,7 +32,11 @@ export function WorkspaceActionRail({
   const button = (action: WorkspaceAction) => (
     <button
       type="button"
-      className="secondary-action"
+      className={
+        presentation === 'selection'
+          ? 'workspace-selection__item'
+          : 'secondary-action'
+      }
       aria-pressed={active === action.id}
       disabled={action.disabled}
       onClick={action.onClick}
@@ -39,7 +45,14 @@ export function WorkspaceActionRail({
     </button>
   );
   return (
-    <aside className="workspace-action-rail" aria-label="页面工具">
+    <aside
+      className={
+        presentation === 'selection'
+          ? 'workspace-action-rail workspace-selection'
+          : 'workspace-action-rail'
+      }
+      aria-label={presentation === 'selection' ? '设置分类' : '页面工具'}
+    >
       <ol data-connected={connected}>
         {visible.map((action) => (
           <li key={action.id}>{button(action)}</li>

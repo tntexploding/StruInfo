@@ -71,6 +71,17 @@ describe('document processing presentation', () => {
       processingForDocument('unrelated', [task], [intake]).task,
     ).toBeUndefined();
   });
+  it('shows a batch budget wait without promising automatic or global-control resumption', () => {
+    const view = processingForDocument(
+      'source',
+      [{...task, state: {...task.state, errorCode: 'ai_batch_budget_paused'}}],
+      [],
+    );
+    expect(view.label).toBe('AI 等待批次继续');
+    expect(view.reason).toContain('模型账户');
+    expect(view.reason).toContain('恢复批次后');
+    expect(view.stages.every((s) => s.state !== 'done')).toBe(true);
+  });
   it('does not claim AI work for manually blocked or manually annotated material', () => {
     const record = {
       ...intake,

@@ -1,4 +1,8 @@
 import type {DocumentPublicationService} from './document_publication.js';
+import {
+  tagBatchEntrySize,
+  tagBatchPrefix,
+} from '../modules/processing/ai_tag_batch.js';
 import {MAXIMUM_AI_SPLIT_ENTRIES} from '../modules/processing/ai_split_proposal.js';
 import type {DocumentIntakeService} from './document_intake_service.js';
 import type {DocumentIntelligenceProvider} from './document_intake_contract.js';
@@ -14,6 +18,7 @@ import type {BlobStore} from '../storage/blob_store.js';
 import {AiSplitProposalService} from '../modules/processing/ai_split_proposal_service.js';
 import {
   prepareAiEntryTagRevision,
+  prepareAiSplitInformationEntries,
   prepareInformationEntryGraphRelation,
 } from '../modules/entries/index.js';
 import {requireOperationValue} from './operation_error.js';
@@ -70,6 +75,45 @@ export class AgentTaskActions {
   }
   public get intakeModel() {
     return this.deps.intelligence?.model;
+  }
+  public reviewRunId(step: AgentTaskStep, proposalId: string, key: string) {
+    return deriveProcessingRunId(
+      this.deps.workspaceId,
+      [
+        'ai-association-review',
+        ...[step.targetId, requireOperationValue(step.relatedEntryId)].sort(),
+        proposalId,
+        key,
+      ].join(':'),
+    );
+  }
+  public loadRelationReview(step: AgentTaskStep) {
+    return step.reviewRunId
+      ? this.deps.associationProcessing.loadRun(
+          this.deps.workspaceId,
+          step.reviewRunId,
+        )
+      : Promise.resolve(undefined);
+  }
+  public async reviewRelation(
+    task: AgentTask,
+    step: AgentTaskStep,
+    proposalId: string,
+    key: string,
+  ) {
+    const relatedId = requireOperationValue(step.relatedEntryId);
+    if (
+      (await this.entry(step.targetId)).revision !== step.expectedRevision ||
+      (await this.entry(relatedId)).revision !== step.expectedRelatedRevision ||
+      (await this.overrideRevision(step.targetId, relatedId)) !==
+        step.expectedOverrideRevision
+    )
+      throw new OperationError('conflict', 'stale_relation_revision');
+    const service = requireOperationValue(this.services(task).relations);
+    if (!service.supportsReview || !service.review)
+      throw new OperationError('rejected', 'relation_review_unavailable');
+    return (await service.review(step.targetId, relatedId, proposalId, key))
+      .run;
   }
   public async reviewCheckpointCurrent(task: AgentTask, version: number) {
     if (task.request.kind !== 'document') return true;
@@ -396,6 +440,92 @@ export class AgentTaskActions {
         }),
     );
   }
+  public async tagGroup(
+    task: AgentTask,
+    first: AgentTaskStep,
+  ): Promise<AgentTaskStep[]> {
+    if (
+      task.request.kind !== 'document' ||
+      !this.deps.tags?.supportsTagBatch ||
+      !this.deps.tags.startBatch
+    )
+      return [first];
+    const candidates: {step: AgentTaskStep; entry: CurrentInformationEntry}[] =
+      [];
+    const entries = new Map(
+      (await this.entries()).map((entry) => [entry.entryId, entry]),
+    );
+    const maximum = first.attempt === 0 ? 4 : first.attempt === 1 ? 2 : 1;
+    for (const step of task.state.steps) {
+      if (
+        step.kind !== 'tags' ||
+        step.complete ||
+        step.attempt !== first.attempt ||
+        step.attempt >= 3
+      )
+        continue;
+      if ((await this.loadRun(step))?.proposals.length) continue;
+      const entry = entries.get(step.targetId);
+      if (!entry)
+        throw new OperationError('not_found', 'public_entry_not_found');
+      if (entry.revision !== step.expectedRevision)
+        throw new OperationError('conflict', 'stale_entry_revision');
+      candidates.push({step, entry});
+      if (candidates.length >= maximum) break;
+    }
+    const group = tagBatchPrefix(
+      candidates,
+      ({entry}) => tagBatchEntrySize(entry),
+      maximum,
+    ).map(({step}) => step);
+    return group[0]?.targetId === first.targetId ? group : [first];
+  }
+  public async generateTagGroup(
+    steps: readonly AgentTaskStep[],
+    keys: ReadonlyMap<string, string>,
+  ) {
+    const tags = requireOperationValue(this.deps.tags);
+    if (!tags.supportsTagBatch || !tags.startBatch)
+      throw new OperationError('rejected', 'tag_batch_unavailable');
+    return tags.startBatch(
+      steps.map((step) => ({
+        entryId: step.targetId,
+        expectedRevision: requireOperationValue(step.expectedRevision),
+        requestKey: requireOperationValue(keys.get(step.targetId)),
+      })),
+    );
+  }
+  public async tagCallEstimate(proposal: ProcessingProposal) {
+    const payload = proposal.splitPayload;
+    const count = payload?.entries.length ?? 0;
+    if (
+      !this.deps.tags?.supportsTagBatch ||
+      !this.deps.tags.startBatch ||
+      !this.deps.blobStore ||
+      !proposal.targetSnapshotId ||
+      !payload
+    )
+      return count;
+    const source = await this.deps.evidence.loadSnapshot(
+      this.deps.workspaceId,
+      proposal.targetSnapshotId,
+    );
+    if (!source || source.isPrivate)
+      throw new OperationError('not_found', 'public_snapshot_not_found');
+    const snapshot = await materializeEvidenceSnapshot(
+      source,
+      this.deps.blobStore,
+    );
+    const entries = prepareAiSplitInformationEntries(snapshot, payload.entries);
+    if (!entries) throw new OperationError('rejected', 'ai_proposal_invalid');
+    let offset = 0;
+    let calls = 0;
+    while (offset < entries.length) {
+      offset += tagBatchPrefix(entries.slice(offset), tagBatchEntrySize).length;
+      calls++;
+    }
+    return calls;
+  }
   public async recallGroup(
     task: AgentTask,
     first: AgentTaskStep,
@@ -403,14 +533,22 @@ export class AgentTaskActions {
     if (!this.deps.intelligence?.planRecalls) return [first];
     const candidates = task.state.steps.filter(
       (s) =>
-        s.kind === 'recall' && !s.complete && !s.recallPlan && s.attempt < 3,
+        s.kind === 'recall' &&
+        !s.complete &&
+        !s.recallPlan &&
+        s.attempt < 3 &&
+        s.attempt === first.attempt,
     );
     const group: AgentTaskStep[] = [];
     const entries = new Map(
       (await this.entries()).map((entry) => [entry.entryId, entry]),
     );
     let length = 0;
-    for (const step of candidates.slice(0, 4)) {
+    // Retry a smaller response after a failed batch, without renewing attempts
+    // or the document's call allowance. The last attempt uses the single-entry
+    // provider contract instead of repeating the same complex batch response.
+    const batchSize = first.attempt === 0 ? 4 : first.attempt === 1 ? 2 : 1;
+    for (const step of candidates.slice(0, batchSize)) {
       const entry = entries.get(step.targetId);
       if (!entry)
         throw new OperationError('not_found', 'public_entry_not_found');
@@ -617,6 +755,11 @@ export class AgentTaskActions {
         proposal.proposalId,
       );
     } else {
+      if (task.state.relationReviewRequired && step.reviewRunId) {
+        const original = (await this.loadRun(step))?.proposals[0];
+        if (!original || original.status === 'rejected')
+          throw new OperationError('conflict', 'ai_proposal_invalid');
+      }
       const payload = proposal.associationPayload;
       const lowFirst =
         step.targetId < requireOperationValue(step.relatedEntryId);
@@ -643,9 +786,9 @@ export class AgentTaskActions {
   public async tagSteps(task: AgentTask): Promise<AgentTaskStep[]> {
     if (task.request.kind !== 'document') return [];
     const snapshotId = this.documentTarget(task);
-    const entries = (await this.entries()).filter(
-      (e) => e.snapshotId === snapshotId,
-    );
+    const entries = (await this.entries())
+      .filter((e) => e.snapshotId === snapshotId)
+      .sort((a, b) => a.value.documentOrder - b.value.documentOrder);
     if (
       !entries.length ||
       entries.length > task.request.maxEntries ||

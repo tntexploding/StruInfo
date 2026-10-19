@@ -3481,6 +3481,38 @@ describe('M1E provider-neutral processing API', () => {
       }),
     ).resolves.toMatchObject({statusCode: 200, body: {status: 'applied'}});
     expect(replace).toHaveBeenLastCalledWith(1, [pluginSubscription]);
+    for (const candidate of [
+      subscription,
+      rssSubscription,
+      jsonSubscription,
+      webSubscription,
+      pluginSubscription,
+    ]) {
+      const described = {...candidate, description: 'Synthetic source scope.'};
+      await expect(
+        service.replaceSourceSubscriptions({
+          expectedRevision: 1,
+          subscriptions: [described],
+        }),
+      ).resolves.toMatchObject({statusCode: 200});
+      expect(replace).toHaveBeenLastCalledWith(1, [
+        {kind: 'github_markdown', ...described},
+      ]);
+    }
+    replace.mockClear();
+    for (const invalid of [
+      {...rssSubscription, description: 42},
+      {...rssSubscription, description: 'x'.repeat(501)},
+      {...rssSubscription, description: 'Synthetic', unknownField: true},
+    ]) {
+      await expect(
+        service.replaceSourceSubscriptions({
+          expectedRevision: 1,
+          subscriptions: [invalid],
+        }),
+      ).resolves.toMatchObject({statusCode: 422});
+    }
+    expect(replace).not.toHaveBeenCalled();
     await expect(
       service.replaceSourceSubscriptions({
         expectedRevision: 1,

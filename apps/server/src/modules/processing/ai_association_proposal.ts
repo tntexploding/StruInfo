@@ -3,10 +3,12 @@ import type {ProcessingRun} from './processing_contract.js';
 
 export type AiAssociationProposalProviderErrorCode =
   | 'ai_operations_paused'
+  | 'ai_batch_budget_paused'
   | 'ai_price_window_closed'
   | 'ai_provider_timeout'
   | 'ai_provider_unavailable'
   | 'ai_provider_rejected'
+  | 'ai_relation_review_uncertain'
   | 'ai_provider_invalid_response';
 
 export class AiAssociationProposalProviderError extends Error {
@@ -48,6 +50,15 @@ export interface AiAssociationProposalProviderPort {
     'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   readonly model: string;
   readonly promptVersion: string;
+
+  reviewAssociation?(
+    entryLow: Readonly<CurrentInformationEntry>,
+    entryHigh: Readonly<CurrentInformationEntry>,
+    candidate: Readonly<{
+      relationLabel: string;
+      direction: 'symmetric' | 'low_to_high' | 'high_to_low';
+    }>,
+  ): Promise<Readonly<AiAssociationProposalProviderResult>>;
 
   proposeAssociation(
     entryLow: Readonly<CurrentInformationEntry>,

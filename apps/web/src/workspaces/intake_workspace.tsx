@@ -1,3 +1,5 @@
+import {FloatingToolPanel} from '../components/floating_tool_panel.js';
+import {SourceHistoryWorkspace} from './source_history_workspace.js';
 import {DocumentIntakePanel} from './document_intake_panel.js';
 import {useRememberedDisclosure} from '../components/use_remembered_disclosure.js';
 import {useEffect, useRef, useState} from 'react';
@@ -45,6 +47,7 @@ export function IntakeWorkspace({
 }: MaterialsWorkspaceProps & {
   api: Pick<M1cApiClient, 'loadEvidenceSnapshot'>;
 }) {
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [includePrivate, setIncludePrivate] = useState(false);
   const {sources, origins, byId, received, error, ready, reload} =
     useIntakeDirectory(props, includePrivate);
@@ -54,12 +57,14 @@ export function IntakeWorkspace({
   const [translatedDocument, setTranslatedDocument] = useState<string>();
   const [translating, setTranslating] = useState(false);
   const translationLock = useRef(false);
-  const [sourceId, setSourceId] = useState('all');
+  const [sourceId, setSourceId] = useState(
+    props.reviewTarget?.subscriptionId ?? 'all',
+  );
   const [selectedId, setSelectedId] = useState(
     props.reviewTarget?.snapshotId ?? '',
   );
   const [filter, setFilter] = useState(
-    props.reviewTarget?.snapshotId
+    props.reviewTarget?.snapshotId || props.reviewTarget?.subscriptionId
       ? 'all'
       : props.reviewTarget
         ? 'review'
@@ -347,6 +352,69 @@ export function IntakeWorkspace({
       setTranslating(false);
     }
   }
+  const documentHeading = selected ? (
+    <div className="intake-document-meta">
+      <h2>
+        {preview.previews.get(selected.snapshotId)?.title ??
+          historyPreview.previews.get(selected.snapshotId)?.title ??
+          sourceDisplayName(selected)}
+      </h2>
+      <p>
+        来源：{sourceName(selected.snapshotId)}
+        {preview.previews.get(selected.snapshotId)?.source.kind
+          ? ' · ' +
+            (KINDS[
+              preview.previews.get(selected.snapshotId)?.source.kind ?? ''
+            ] ?? '订阅资料')
+          : ''}
+        {' · 接收于 '}
+        {new Date(selected.capturedAt).toLocaleString('zh-CN')}
+        {safeReadingLink(selected.canonicalUri) ? (
+          <>
+            {' '}
+            ·{' '}
+            <a
+              href={safeReadingLink(selected.canonicalUri)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              原网页
+            </a>
+          </>
+        ) : null}
+      </p>
+      {selectedTask ? (
+        <p className="intake-ai-status">{receiptTaskStatus(selectedTask)}</p>
+      ) : null}
+      {selectedRecord &&
+      ['held', 'blocked'].includes(selectedRecord.value.decision) ? (
+        <p className="intake-held-reason">
+          需要核对：{selectedRecord.value.reason}
+        </p>
+      ) : null}
+      {preview.previews.get(selected.snapshotId)?.summary ? (
+        <p className="intake-summary">
+          AI 摘要 · {preview.previews.get(selected.snapshotId)?.summary?.text}
+        </p>
+      ) : null}
+    </div>
+  ) : null;
+  if (historyOpen)
+    return (
+      <SourceHistoryWorkspace
+        sources={sources}
+        initialSource={sourceId}
+        onClose={() => {
+          setHistoryOpen(false);
+          void reload();
+          props.onRefresh();
+        }}
+        onImported={() => {
+          void reload();
+          props.onRefresh();
+        }}
+      />
+    );
   return (
     <section
       className="workspace-view journey-workspace intake-journey"
@@ -355,245 +423,205 @@ export function IntakeWorkspace({
       <header className="workflow-page-heading">
         <div>
           <h1>文档入口</h1>
-          <p>从来源开始阅读，决定哪些资料进入工作台。</p>
+          <p>查看订阅新文章或放入文件，审核后送入工作台。</p>
         </div>
-        <button
-          className="secondary-action"
-          onClick={() => {
-            void reload();
-            props.onRefresh();
-          }}
-        >
-          刷新接收
-        </button>
+        <div className="journey-action-group workspace-page-actions ef-glass">
+          <button
+            className="secondary-action"
+            onClick={() => {
+              setHistoryOpen(true);
+            }}
+          >
+            补收往期
+          </button>
+          <button
+            className="secondary-action"
+            onClick={() => {
+              void reload();
+              props.onRefresh();
+            }}
+          >
+            刷新列表
+          </button>
+        </div>
       </header>
       {error ? <p role="alert">{error}</p> : null}
       <TwoPane
         name="intake"
         left={
-          <>
-            <div className="journey-list-heading">
-              <h2>来源</h2>
-              <button
-                className="text-action"
-                onClick={() => {
-                  setTool('sources');
-                }}
-              >
-                管理订阅
-              </button>
-            </div>
-            <div className="journey-source-search">
-              <input
-                aria-label="筛选来源"
-                placeholder="查找来源"
-                value={sourceFilter}
-                onChange={(e) => {
-                  setSourceFilter(e.target.value);
-                }}
-              />
-              <select
-                aria-label="来源排序"
-                value={sort}
-                onChange={(e) => {
-                  setSort(e.target.value);
-                }}
-              >
-                <option value="pending">待审优先</option>
-                <option value="active">活跃订阅优先</option>
-                <option value="name">来源名称</option>
-              </select>
-            </div>
-            <label className="journey-private-choice">
-              <input
-                type="checkbox"
-                checked={includePrivate}
-                onChange={(e) => {
-                  setIncludePrivate(e.target.checked);
-                  setChecked(new Set());
-                  setSelectedId('');
-                  setTranslatedDocument(undefined);
-                }}
-              />
-              本次显示隐私文档
-            </label>
-            <div className="journey-source-list">
-              <section
-                className="journey-source-card"
-                data-selected={sourceId === 'all'}
-              >
+          <div className="editorial-intake-collection">
+            <FloatingToolPanel title="选择来源" preferredWidth={420}>
+              <div className="journey-list-heading">
+                <h2>来源</h2>
                 <button
-                  className="journey-source-title"
-                  aria-pressed={sourceId === 'all'}
+                  className="text-action"
                   onClick={() => {
-                    chooseSource('all');
+                    setTool('sources');
                   }}
                 >
-                  <strong>全部来源</strong>
-                  <span>{allPending} 待审</span>
+                  管理订阅
                 </button>
-              </section>
-              <section
-                className="journey-source-card journey-manual-source"
-                data-pending={manualPending > 0}
-                data-selected={sourceId === 'manual'}
-              >
-                <button
-                  className="journey-source-title"
-                  aria-label="手动放入文档"
-                  aria-pressed={sourceId === 'manual'}
-                  onClick={() => {
-                    chooseSource('manual');
+              </div>
+              <div className="journey-source-search">
+                <input
+                  aria-label="筛选来源"
+                  placeholder="查找来源"
+                  value={sourceFilter}
+                  onChange={(e) => {
+                    setSourceFilter(e.target.value);
                   }}
-                >
-                  <strong>手动放入文档</strong>
-                  <span>
-                    {manualPending
-                      ? String(manualPending) + ' 待审'
-                      : '本地输入'}
-                  </span>
-                </button>
-                {sourceId === 'manual' ? (
-                  <div className="journey-source-detail">
-                    <p>
-                      粘贴文字或上传文件。放入的文档在这里审核，接受后进入工作台。
-                    </p>
-                    {sourceHistory}
-                  </div>
-                ) : null}
-              </section>
-              {ready && otherDocuments.length > 0 ? (
-                <section
-                  className="journey-source-card"
-                  data-selected={sourceId === 'other'}
-                  data-pending={otherPending > 0}
-                >
-                  <button
-                    className="journey-source-title"
-                    aria-pressed={sourceId === 'other'}
-                    onClick={() => {
-                      chooseSource('other');
-                    }}
-                  >
-                    <strong>其他接收来源</strong>
-                    <span>
-                      {otherPending
-                        ? String(otherPending) + ' 待审'
-                        : String(otherDocuments.length) + ' 份'}
-                    </span>
-                  </button>
-                  {sourceId === 'other' ? (
-                    <div className="journey-source-detail">
-                      <p>
-                        这些资料保留了原始来源，但未匹配到当前订阅。它们不属于手动放入的文档。
-                      </p>
-                      {sourceHistory}
-                    </div>
-                  ) : null}
-                </section>
-              ) : null}
-              {listedSources.map((s) => (
-                <section
-                  className="journey-source-card"
-                  key={s.subscriptionId}
-                  data-pending={s.count > 0}
-                  data-selected={sourceId === s.subscriptionId}
-                >
-                  <button
-                    className="journey-source-title"
-                    aria-expanded={sourceId === s.subscriptionId}
-                    onClick={() => {
-                      chooseSource(
-                        sourceId === s.subscriptionId
-                          ? 'all'
-                          : s.subscriptionId,
-                      );
-                    }}
-                  >
-                    <strong>{s.label}</strong>
-                    <span className="journey-source-badges">
-                      <span
-                        className="journey-source-status"
-                        data-state={s.enabled ? 'active' : 'paused'}
-                      >
-                        {s.enabled ? '已订阅' : '已暂停'}
-                      </span>
-                      {s.count > 0 ? <span>{s.count} 待审</span> : null}
-                    </span>
-                  </button>
-                  {sourceId === s.subscriptionId ? (
-                    <div className="journey-source-detail">
-                      <p>
-                        {KINDS[s.kind] ?? s.kind} ·{' '}
-                        {s.enabled
-                          ? '每 ' + String(s.intervalMinutes) + ' 分钟检查'
-                          : '接收已暂停'}
-                      </p>
-                      <p>
-                        {'description' in s &&
-                        typeof s.description === 'string' &&
-                        s.description
-                          ? s.description
-                          : '尚未填写内容说明。可在管理订阅中补充；以下是实际收到的文章。'}
-                      </p>
-                      {sourceHistory}
-                    </div>
-                  ) : null}
-                </section>
-              ))}
-            </div>
-          </>
-        }
-      >
-        {tool ? (
-          <div className="journey-full-tool">
-            <header>
-              <h2>
-                {tool === 'capture'
-                  ? '手动放入文档'
-                  : tool === 'review'
-                    ? '接收详情'
-                    : '订阅管理'}
-              </h2>
-              <button
-                className="secondary-action"
-                onClick={() => {
-                  setTool(undefined);
-                  if (tool === 'capture') setFilter('all');
-                  void reload();
-                }}
-              >
-                {tool === 'capture'
-                  ? '查看已放入文档（' + String(manualDocuments.length) + '）'
-                  : '返回待审文章'}
-              </button>
-            </header>
-            {tool === 'capture' ? (
-              <MaterialsWorkspace {...props} presentation="capture" />
-            ) : tool === 'review' && reviewDocument ? (
-              <section aria-label="接收审核与拦截">
-                <DocumentIntakePanel
-                  key={reviewDocument.snapshotId}
-                  snapshotId={reviewDocument.snapshotId}
-                  title={reviewDocument.title}
-                  onChanged={() => {
-                    void reload();
-                    props.onRefresh();
-                  }}
-                  onOpenDocument={props.onOpenEvidence}
                 />
-              </section>
-            ) : (
-              <SourceSubscriptionPanel
-                enabled={props.sourceSubscriptionsEnabled}
-                onList={props.onListSourceSubscriptions}
-                onReplace={props.onReplaceSourceSubscriptions}
-                onRun={props.onRunSourceSubscription}
-              />
-            )}
-          </div>
-        ) : (
-          <>
+                <select
+                  aria-label="来源排序"
+                  value={sort}
+                  onChange={(e) => {
+                    setSort(e.target.value);
+                  }}
+                >
+                  <option value="pending">待审优先</option>
+                  <option value="active">活跃订阅优先</option>
+                  <option value="name">来源名称</option>
+                </select>
+              </div>
+              <label className="journey-private-choice">
+                <input
+                  type="checkbox"
+                  checked={includePrivate}
+                  onChange={(e) => {
+                    setIncludePrivate(e.target.checked);
+                    setChecked(new Set());
+                    setSelectedId('');
+                    setTranslatedDocument(undefined);
+                  }}
+                />
+                本次显示隐私文档
+              </label>
+              <div className="journey-source-list">
+                <section
+                  className="journey-source-card"
+                  data-selected={sourceId === 'all'}
+                >
+                  <button
+                    className="journey-source-title"
+                    aria-pressed={sourceId === 'all'}
+                    onClick={() => {
+                      chooseSource('all');
+                    }}
+                  >
+                    <strong>全部来源</strong>
+                    <span>{allPending} 待审</span>
+                  </button>
+                </section>
+                <section
+                  className="journey-source-card journey-manual-source"
+                  data-pending={manualPending > 0}
+                  data-selected={sourceId === 'manual'}
+                >
+                  <button
+                    className="journey-source-title"
+                    aria-label="手动放入文档"
+                    aria-pressed={sourceId === 'manual'}
+                    onClick={() => {
+                      chooseSource('manual');
+                    }}
+                  >
+                    <strong>手动放入文档</strong>
+                    <span>
+                      {manualPending
+                        ? String(manualPending) + ' 待审'
+                        : '本地输入'}
+                    </span>
+                  </button>
+                  {sourceId === 'manual' ? (
+                    <div className="journey-source-detail">
+                      <p>
+                        粘贴文字或上传文件。放入的文档在这里审核，接受后进入工作台。
+                      </p>
+                      {sourceHistory}
+                    </div>
+                  ) : null}
+                </section>
+                {ready && otherDocuments.length > 0 ? (
+                  <section
+                    className="journey-source-card"
+                    data-selected={sourceId === 'other'}
+                    data-pending={otherPending > 0}
+                  >
+                    <button
+                      className="journey-source-title"
+                      aria-pressed={sourceId === 'other'}
+                      onClick={() => {
+                        chooseSource('other');
+                      }}
+                    >
+                      <strong>其他接收来源</strong>
+                      <span>
+                        {otherPending
+                          ? String(otherPending) + ' 待审'
+                          : String(otherDocuments.length) + ' 份'}
+                      </span>
+                    </button>
+                    {sourceId === 'other' ? (
+                      <div className="journey-source-detail">
+                        <p>
+                          这些资料保留了原始来源，但未匹配到当前订阅。它们不属于手动放入的文档。
+                        </p>
+                        {sourceHistory}
+                      </div>
+                    ) : null}
+                  </section>
+                ) : null}
+                {listedSources.map((s) => (
+                  <section
+                    className="journey-source-card"
+                    key={s.subscriptionId}
+                    data-pending={s.count > 0}
+                    data-selected={sourceId === s.subscriptionId}
+                  >
+                    <button
+                      className="journey-source-title"
+                      aria-expanded={sourceId === s.subscriptionId}
+                      onClick={() => {
+                        chooseSource(
+                          sourceId === s.subscriptionId
+                            ? 'all'
+                            : s.subscriptionId,
+                        );
+                      }}
+                    >
+                      <strong>{s.label}</strong>
+                      <span className="journey-source-badges">
+                        <span
+                          className="journey-source-status"
+                          data-state={s.enabled ? 'active' : 'paused'}
+                        >
+                          {s.enabled ? '已订阅' : '已暂停'}
+                        </span>
+                        {s.count > 0 ? <span>{s.count} 待审</span> : null}
+                      </span>
+                    </button>
+                    {sourceId === s.subscriptionId ? (
+                      <div className="journey-source-detail">
+                        <p>
+                          {KINDS[s.kind] ?? s.kind} ·{' '}
+                          {s.enabled
+                            ? '每 ' + String(s.intervalMinutes) + ' 分钟检查'
+                            : '接收已暂停'}
+                        </p>
+                        <p>
+                          {'description' in s &&
+                          typeof s.description === 'string' &&
+                          s.description
+                            ? s.description
+                            : '尚未填写内容说明。可在管理订阅中补充；以下是实际收到的文章。'}
+                        </p>
+                        {sourceHistory}
+                      </div>
+                    ) : null}
+                  </section>
+                ))}
+              </div>
+            </FloatingToolPanel>
             <header className="intake-reading-header">
               <div>
                 <h2>
@@ -697,73 +725,79 @@ export function IntakeWorkspace({
                 </button>
               </div>
             ) : null}
+          </div>
+        }
+      >
+        {tool ? (
+          <div className="journey-full-tool">
+            <header>
+              <h2>
+                {tool === 'capture'
+                  ? '手动放入文档'
+                  : tool === 'review'
+                    ? '接收详情'
+                    : '订阅管理'}
+              </h2>
+              <button
+                className="secondary-action"
+                onClick={() => {
+                  setTool(undefined);
+                  if (tool === 'capture') setFilter('all');
+                  void reload();
+                }}
+              >
+                {tool === 'capture'
+                  ? '查看已放入文档（' + String(manualDocuments.length) + '）'
+                  : '返回待审文章'}
+              </button>
+            </header>
+            {tool === 'capture' ? (
+              <MaterialsWorkspace {...props} presentation="capture" />
+            ) : tool === 'review' && reviewDocument ? (
+              <section aria-label="接收审核与拦截">
+                <DocumentIntakePanel
+                  key={reviewDocument.snapshotId}
+                  snapshotId={reviewDocument.snapshotId}
+                  title={reviewDocument.title}
+                  onChanged={() => {
+                    void reload();
+                    props.onRefresh();
+                  }}
+                  onOpenDocument={props.onOpenEvidence}
+                />
+              </section>
+            ) : (
+              <SourceSubscriptionPanel
+                enabled={props.sourceSubscriptionsEnabled}
+                onList={props.onListSourceSubscriptions}
+                onReplace={props.onReplaceSourceSubscriptions}
+                onRun={props.onRunSourceSubscription}
+              />
+            )}
+          </div>
+        ) : (
+          <>
             {!ready && !error ? (
               <p role="status">正在读取来源与接收状态…</p>
             ) : null}
             {selected ? (
               <>
-                <div className="intake-document-meta">
-                  <h2>
-                    {preview.previews.get(selected.snapshotId)?.title ??
-                      historyPreview.previews.get(selected.snapshotId)?.title ??
-                      sourceDisplayName(selected)}
-                  </h2>
-                  <p>
-                    来源：{sourceName(selected.snapshotId)}
-                    {preview.previews.get(selected.snapshotId)?.source.kind
-                      ? ' · ' +
-                        (KINDS[
-                          preview.previews.get(selected.snapshotId)?.source
-                            .kind ?? ''
-                        ] ?? '订阅资料')
-                      : ''}
-                    {' · 接收于 '}
-                    {new Date(selected.capturedAt).toLocaleString('zh-CN')}
-                    {safeReadingLink(selected.canonicalUri) ? (
-                      <>
-                        {' '}
-                        ·{' '}
-                        <a
-                          href={safeReadingLink(selected.canonicalUri)}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          原网页
-                        </a>
-                      </>
-                    ) : null}
-                  </p>
-                  {selectedTask ? (
-                    <p className="intake-ai-status">
-                      {receiptTaskStatus(selectedTask)}
-                    </p>
-                  ) : null}
-                  {selectedRecord &&
-                  ['held', 'blocked'].includes(
-                    selectedRecord.value.decision,
-                  ) ? (
-                    <p className="intake-held-reason">
-                      需要核对：{selectedRecord.value.reason}
-                    </p>
-                  ) : null}
-                  {preview.previews.get(selected.snapshotId)?.summary ? (
-                    <p className="intake-summary">
-                      AI 摘要 ·{' '}
-                      {preview.previews.get(selected.snapshotId)?.summary?.text}
-                    </p>
-                  ) : null}
-                </div>
                 <div className="intake-full-reading">
+                  {source?.snapshotId !== selected.snapshotId ||
+                  source.structures.length === 0
+                    ? documentHeading
+                    : null}
                   {source?.snapshotId === selected.snapshotId ? (
                     translatedDocument === selected.snapshotId &&
                     translations.has(selected.snapshotId) ? (
                       <ReadingContent
                         text={translations.get(selected.snapshotId)?.body ?? ''}
                         baseUri={selected.canonicalUri}
+                        leadingContent={documentHeading}
                         scrollLabel="待审文档临时译文"
                       />
                     ) : (
-                      source.structures.map((s) => (
+                      source.structures.map((s, index) => (
                         <ReadingContent
                           key={s.structureId}
                           text={s.normalizedText}
@@ -771,6 +805,9 @@ export function IntakeWorkspace({
                             preview.previews.get(selected.snapshotId)?.title
                           }
                           baseUri={selected.canonicalUri}
+                          leadingContent={
+                            index === 0 ? documentHeading : undefined
+                          }
                           scrollLabel="待审核文档全文"
                         />
                       ))
@@ -985,8 +1022,8 @@ export function IntakeWorkspace({
                 </p>
               </div>
               <p className="intake-dispatch-hint">
-                AI
-                任务按总控许可和价格时段排队，可在总览查看进度。翻译与摘要仅辅助阅读，不会接收文档。
+                AI 任务按 AI
+                开关和价格时段排队，进度见总览。翻译、摘要和接收分别操作。
               </p>
             </footer>
             <div className="journey-feedback" role="status">

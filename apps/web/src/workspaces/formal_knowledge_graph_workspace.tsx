@@ -295,8 +295,8 @@ export function FormalKnowledgeGraphWorkspace({
         title: operation === 'block' ? '关系已隐藏' : '关系已保存',
         detail:
           operation === 'block'
-            ? '该边不会出现在图谱或遍历中，可随时从隐藏关系列表恢复。'
-            : '人工修改已追加保存，后续相似度重算不会覆盖。',
+            ? '已从图谱中隐藏，可在隐藏关系列表恢复。'
+            : '人工修改已保存，重新计算相似度时会保留。',
       });
     } catch {
       if (!graphRequests.current.isCurrent(writeRequestId)) return;

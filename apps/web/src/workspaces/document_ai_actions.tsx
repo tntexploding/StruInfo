@@ -77,7 +77,7 @@ export function DocumentAiActions({
           AI 重做标签
         </button>
       </div>
-      <p>本次操作使用已保存的调用额度和价格时段。原文证据保持不变。</p>
+      <p>使用已保存的调用额度和价格时段，保留原文。</p>
       {message ? <p role="status">{message}</p> : null}
     </div>
   );

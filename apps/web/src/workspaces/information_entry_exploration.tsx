@@ -113,7 +113,7 @@ export function InformationEntryExploration({
       </header>
 
       <p className="entry-exploration__boundary">
-        从当前条目的已有联系中推荐额外条目，不会改变搜索结果。
+        沿当前条目的已有联系推荐其他资料，搜索结果保留。
       </p>
 
       {reviewPreferences.status === 'loading' ? (
@@ -146,7 +146,7 @@ export function InformationEntryExploration({
             />
             <span>
               <strong>启用独立探索</strong>
-              <small>默认关闭；关闭时不会推荐额外条目。</small>
+              <small>开启后推荐其他相关条目。</small>
             </span>
           </label>
           <label className="field">
@@ -318,7 +318,7 @@ function ExplorationCandidates({
           </strong>
           <span>
             {previewLimit === 0
-              ? '当前设置不会推荐额外条目'
+              ? '当前未开启推荐'
               : `本次最多返回 ${previewLimit.toString()} 条`}
           </span>
         </div>

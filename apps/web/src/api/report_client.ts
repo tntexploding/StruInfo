@@ -171,7 +171,7 @@ export function reportError(error: unknown) {
     ai_operations_paused:
       '内置 AI 后续操作已禁止；可在总览允许继续，已有结果保留。',
     ai_price_window_closed:
-      '等待 DeepSeek 低价时段，届时自动继续生成。可在设置 → AI 接入查看恢复时间。',
+      '等待 DeepSeek 低价时段，届时自动继续生成。可在设置 → AI 设置查看恢复时间。',
     ai_price_resume_required: '此报告由数据包恢复，请确认后手动继续生成。',
     ai_provider_timeout: '模型响应超时，已完成内容保留。',
     ai_intake_input_too_large:

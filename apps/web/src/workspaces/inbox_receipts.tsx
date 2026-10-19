@@ -420,7 +420,9 @@ export function InboxReceipts({
             </span>
           </>
         ) : (
-          <span>默认关闭；开启后点击单篇或勾选生成，不会自动接收或整理。</span>
+          <span>
+            开启后，可为单篇或勾选的文章生成摘要。接收与整理需另行操作。
+          </span>
         )}
         {preview.errors.size ? (
           <button

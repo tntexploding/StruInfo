@@ -7,6 +7,7 @@ import {parseFragment, type DefaultTreeAdapterTypes} from 'parse5';
 
 import {projectStructuredDocument} from '../../modules/evidence/index.js';
 import {
+  MAX_SOURCE_CONNECTOR_RAW_BYTES,
   SourceConnectorError,
   type SourceConnectorDocument,
   type SourceConnectorPort,
@@ -17,7 +18,7 @@ import {
 export const RSS_ATOM_SOURCE_CONNECTOR_ID = 'builtin.rss-atom.v1';
 export const RSS_ATOM_MAX_ITEMS_PER_CHECK = 20;
 
-const MAX_FEED_BYTES = 1024 * 1024;
+const MAX_FEED_BYTES = MAX_SOURCE_CONNECTOR_RAW_BYTES;
 const MAX_FEED_URL_CODE_POINTS = 2_000;
 const MAX_HEADER_CODE_POINTS = 500;
 const MAX_ENCODED_CURSOR_CODE_POINTS = 2_048;
@@ -49,7 +50,7 @@ interface RssAtomCursor {
   readonly lastModified?: string;
 }
 
-interface ParsedFeedItem {
+export interface ParsedFeedItem {
   readonly externalId: string;
   readonly version: string;
   readonly token: string;
@@ -313,7 +314,7 @@ function requestHeaders(cursor: Readonly<RssAtomCursor> | undefined): Headers {
   return headers;
 }
 
-function parseFeed(
+export function parseFeed(
   feedText: string,
   feedUrl: string,
 ): readonly ParsedFeedItem[] {
@@ -486,7 +487,7 @@ function buildParsedItem(
   });
 }
 
-async function toConnectorDocument(
+export async function toConnectorDocument(
   item: Readonly<ParsedFeedItem>,
   rawFeedBytes: Uint8Array,
   mediaType: string,
@@ -551,6 +552,11 @@ function admittedItemUri(value: unknown, fallback: string): string {
   if (typeof value !== 'string') return fallback;
   try {
     const parsed = new URL(value.trim(), fallback);
+    if (
+      parsed.protocol === 'http:' &&
+      parsed.hostname === new URL(fallback).hostname
+    )
+      parsed.protocol = 'https:';
     return parsed.protocol === 'https:' &&
       parsed.username === '' &&
       parsed.password === ''
@@ -660,7 +666,7 @@ function optionalHeader(value: unknown): boolean {
   );
 }
 
-async function defaultResolveAddresses(
+export async function defaultResolveAddresses(
   hostname: string,
 ): Promise<readonly string[]> {
   if (isIP(hostname) !== 0) return Object.freeze([hostname]);
@@ -668,7 +674,7 @@ async function defaultResolveAddresses(
   return Object.freeze(records.map((record) => record.address));
 }
 
-function isBlockedHostname(hostname: string): boolean {
+export function isBlockedHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase().replace(/\.$/u, '');
   return (
     normalized === 'localhost' ||
@@ -678,7 +684,7 @@ function isBlockedHostname(hostname: string): boolean {
   );
 }
 
-function isBlockedAddress(address: string): boolean {
+export function isBlockedAddress(address: string): boolean {
   const family = isIP(address);
   if (family === 4) {
     const octets = address.split('.').map(Number);

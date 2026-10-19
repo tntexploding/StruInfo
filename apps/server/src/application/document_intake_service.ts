@@ -29,6 +29,11 @@ import {
   assertOperationVersion,
 } from './operation_error.js';
 
+import {
+  manualIntakeDecision,
+  selectManualIntakeExamples,
+} from './intake_feedback.js';
+
 const pending: IntakeRecordValue = {
   decision: 'pending',
   origin: 'system',
@@ -151,12 +156,21 @@ export class DocumentIntakeService {
                   : 'pending',
           };
           value.receiptOrigin = 'manual';
+          // Confirming the same explicit review must retain its explanation.
+          // A reversal or reset must not reuse the reason for the opposite choice.
+          if (
+            action === 'reset' ||
+            value.origin !== 'manual' ||
+            value.decision !== (action === 'accept' ? 'admitted' : 'blocked')
+          )
+            delete value.manualReviewNote;
           delete value.receiptTaskId;
           delete value.deferProcessing;
           if (action === 'reset') {
             value.decision = 'pending';
             value.origin = 'system';
             delete value.assessment;
+            delete value.appliedManualReviews;
             delete value.policy;
             delete value.model;
           }
@@ -216,9 +230,12 @@ export class DocumentIntakeService {
             : 'pending',
       origin: action === 'reset' ? 'system' : 'manual',
       reason,
+      ...(action !== 'reset' ? {manualReviewNote: reason} : {}),
     };
     if (action === 'reset') {
+      delete value.manualReviewNote;
       delete value.assessment;
+      delete value.appliedManualReviews;
       delete value.policy;
       delete value.model;
     }
@@ -463,6 +480,7 @@ export class DocumentIntakeService {
       preparation: source,
     };
     delete value.assessment;
+    delete value.appliedManualReviews;
     delete value.policy;
     delete value.model;
     return value;
@@ -540,11 +558,39 @@ export class DocumentIntakeService {
     const source = await this.sourceText(
       current ? intakeTargetSnapshot(current) : snapshotId,
     );
+    const examples = selectManualIntakeExamples(
+      await this.list(),
+      await this.deps.evidence.listSnapshots(this.deps.workspaceId),
+      current,
+      current?.snapshotId ?? snapshotId,
+    );
+    const manualReviews = [];
+    const appliedManualReviews = [];
+    for (const {record} of examples) {
+      const decision = manualIntakeDecision(record);
+      if (!decision) continue;
+      const body = await this.sourceText(intakeTargetSnapshot(record));
+      manualReviews.push({
+        decision,
+        excerpt: Array.from(body.text).slice(0, 900).join(''),
+        ...(record.value.manualReviewNote
+          ? {ownerReason: record.value.manualReviewNote}
+          : {}),
+        ...(record.value.assessment
+          ? {previousAiAssessment: record.value.assessment}
+          : {}),
+      });
+      appliedManualReviews.push({
+        snapshotId: record.snapshotId,
+        version: record.version,
+      });
+    }
     const assessment = intakeAssessmentSchema.parse(
       await this.deps.provider.reviewIntake({
         text: source.text,
         preparation: current?.value.preparation ?? 'received',
         policy,
+        ...(manualReviews.length ? {manualReviews} : {}),
       }),
     );
     const admitted =
@@ -562,6 +608,7 @@ export class DocumentIntakeService {
         assessment,
         policy,
         model: this.deps.provider.model,
+        appliedManualReviews,
       },
     );
     // A concurrent manual decision wins over the result of an in-flight model call.

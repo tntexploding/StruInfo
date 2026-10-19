@@ -71,6 +71,14 @@ const waiting = () =>
     },
   });
 describe('overview AI activity', () => {
+  it('keeps budget waits out of document review and automatic price resumption', () => {
+    const paused = waiting();
+    paused.state.errorCode = 'ai_batch_budget_paused';
+    const items = activityItems(data([paused]), []);
+    expect(items[0]?.state).toBe('paused');
+    expect(items[0]?.detail).toContain('模型账户');
+    expect(items[0]?.detail).not.toContain('自动继续');
+  });
   it('does not mistake the execution queue for a working model', () => {
     const d = data([task()]);
     const summary = activitySummary(d, activityItems(d, []));
@@ -510,3 +518,31 @@ it.each(['paused', 'failed'] as const)(
     expect(activityItems(d, [])[0]?.state).not.toBe('queued');
   },
 );
+
+it('shows scheduled checkpoint recovery as queued, and disabled retry as paused', () => {
+  const d = data([
+    task({
+      runtimeStatus: 'idle',
+      request: {kind: 'document', snapshotId: 'synthetic-document'},
+      state: {
+        status: 'paused',
+        phase: 'tags',
+        calls: 2,
+        steps: [],
+        errorCode: 'ai_provider_timeout',
+        automaticRetry: {limit: 2, used: 1, notBefore: '2040-01-02T04:00:00Z'},
+      },
+    }),
+  ]);
+  if (!d.price) throw new Error('missing fixture price');
+  d.price.policy.automaticRetryLimit = 2;
+  const item = activityItems(d, [])[0];
+  expect(item?.state).toBe('queued');
+  expect(item?.detail).toContain('自动断点重试 1/2');
+  expect(item?.detail).toContain('低价时段');
+  d.price.policy.automaticRetryLimit = 0;
+  expect(activityItems(d, [])[0]).toMatchObject({
+    state: 'paused',
+    detail: '自动重试已关闭，等待手动继续',
+  });
+});

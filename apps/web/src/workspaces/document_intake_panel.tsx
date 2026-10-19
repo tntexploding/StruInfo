@@ -218,7 +218,7 @@ export function DocumentIntakePanel({
         ) : null}
       </div>
       <p className="workflow-boundary-note">
-        切换正文后重新审核；不会人工放行，也不会自动启动任务。已有原文与抓取记录保留。
+        切换后请重新审核正文。原文和抓取记录保留，任务需手动启动。
       </p>
       {record?.value.previousPreparedSnapshotIds?.length ? (
         <details>

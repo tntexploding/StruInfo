@@ -4,7 +4,7 @@ import type {
   InformationEntryDocumentView,
   InformationEntryRestructureImpact,
 } from '../api/m1c_api_contract.js';
-import type {InformationEntrySplitWorkspaceProps} from './information_entry_split_workspace.js';
+import type {DocumentStructureServices} from './document_structure_services.js';
 import {ReadingContent} from '../components/reading_content.js';
 import {
   createManualSplitDraft,
@@ -32,7 +32,7 @@ export function InlineStructureEditor({
   includePrivate: boolean;
   initialDraft?: readonly ManualSplitDraftGroup[] | undefined;
   onDraftChange: (groups: readonly ManualSplitDraftGroup[]) => void;
-  services: InformationEntrySplitWorkspaceProps;
+  services: DocumentStructureServices;
   onConfirmed: () => void;
   onClose: () => void;
 }) {

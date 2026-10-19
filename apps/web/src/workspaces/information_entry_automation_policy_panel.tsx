@@ -613,7 +613,7 @@ export function InformationEntryAutomationPolicyPanel({
             }}
           />
           <div className="entry-automation-run-action">
-            <p>执行只记录处理去向，不会修改条目、标签、联系或搜索结果。</p>
+            <p>本次记录条目的处理去向，条目内容和搜索结果保持不变。</p>
             <button
               className="primary-action"
               type="button"
@@ -789,7 +789,7 @@ function PolicyEditor({
           }}
         />
         <p className="entry-automation-policy__action-note">
-          两项默认关闭，只处理“建议继续处理”的条目。自动标签会遵守排除词与别名；更新联系不会覆盖人工设置和知识图谱关系。
+          两项默认关闭。开启后处理“建议继续处理”的条目，使用已保存的排除词与别名，保留人工联系和图谱关系。
         </p>
       </div>
 
@@ -1201,7 +1201,7 @@ function ExecutionResults({
   if (state.values.length === 0) {
     return (
       <p className="entry-automation-policy__empty">
-        暂无自动分流运行。试算不会出现在这里。
+        暂无执行记录。这里只显示已执行的分流任务。
       </p>
     );
   }

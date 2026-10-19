@@ -1,3 +1,12 @@
+import {
+  historySchemas,
+  type SourceHistoryService,
+} from './source_history_service.js';
+import type {SourceDescriptionService} from './source_description_service.js';
+import {
+  type SourceQualityService,
+  sourceQualityOwnerSchemas,
+} from './source_quality_service.js';
 import {DocumentQueue, documentQueueApplySchema} from './document_queue.js';
 import {
   documentPublishSchema,
@@ -44,6 +53,11 @@ import type {EntryUseCases} from './entry_use_cases.js';
 import type {RelationUseCases} from './relation_use_cases.js';
 import type {ExecutionAuthority} from './execution_authority.js';
 import {OperationError} from './operation_error.js';
+import {
+  DOCUMENT_PROCESSING_STAGES,
+  DOCUMENT_PROCESSING_STANDARD_VERSION,
+  documentProcessingInstructions,
+} from '../modules/processing/document_processing_standard.js';
 
 const id = z.uuid();
 const cursor = z
@@ -78,6 +92,9 @@ const inboxOwnerSchemas = {
 export const agentCommandSchemas = {
   ...reportReadCommandSchemas,
   system_status: z.object({}).strict(),
+  processing_standard: z
+    .object({stage: z.enum(DOCUMENT_PROCESSING_STAGES).optional()})
+    .strict(),
   document_import: captureTextSchema,
   document_sections: z.object({snapshotId: id}).strict(),
   entry_read: z.object({entryId: id}).strict(),
@@ -207,8 +224,12 @@ export const agentCommandSchemas = {
     })
     .strict(),
 };
+
 export type AgentCommandName = keyof typeof agentCommandSchemas;
 export interface AgentCommandDependencies {
+  readonly sourceDescription?: SourceDescriptionService;
+  readonly sourceHistory?: SourceHistoryService;
+  readonly sourceQuality?: SourceQualityService;
   readonly publication?: DocumentPublicationService;
   readonly aiPrice?: AiPriceService;
   readonly reports?: ReportService;
@@ -249,6 +270,19 @@ export class AgentCommands {
     return this.deps.ingestion;
   }
   public async execute(name: string, input: unknown): Promise<unknown> {
+    if (Object.hasOwn(historySchemas, name)) {
+      if (this.authority.identity.kind !== 'owner')
+        throw new OperationError('forbidden', 'operation_not_authorized');
+      this.authority.require(
+        name === 'history_import' ? 'sources.capture' : 'documents.read',
+      );
+      if (!this.deps.sourceHistory)
+        throw new OperationError('rejected', 'history_unavailable');
+      return this.deps.sourceHistory.execute(
+        name as keyof typeof historySchemas,
+        input,
+      );
+    }
     if (REPORT_OPERATIONS.includes(name)) {
       if (!this.deps.reports)
         throw new OperationError('rejected', 'reports_unavailable');
@@ -258,6 +292,12 @@ export class AgentCommands {
       );
     }
     switch (name) {
+      case 'source_description_generate':
+        if (this.authority.identity.kind !== 'owner')
+          throw new OperationError('forbidden', 'operation_not_authorized');
+        if (!this.deps.sourceDescription)
+          throw new OperationError('rejected', 'ai_not_configured');
+        return this.deps.sourceDescription.generate(this.authority, input);
       case 'ai_price_status':
         parse(agentCommandSchemas.system_status, input);
         this.authority.require('processing.read');
@@ -268,10 +308,23 @@ export class AgentCommands {
         if (!this.deps.aiPrice)
           throw new OperationError('rejected', 'ai_price_unavailable');
         return this.deps.aiPrice.save(this.authority, input, true);
+      case 'ai_execution_save':
+        if (!this.deps.aiPrice)
+          throw new OperationError('rejected', 'ai_price_unavailable');
+        return this.deps.aiPrice.save(this.authority, input, 'execution');
       case 'ai_price_save':
         if (!this.deps.aiPrice)
           throw new OperationError('rejected', 'ai_price_unavailable');
         return this.deps.aiPrice.save(this.authority, input);
+      case 'processing_standard': {
+        this.authority.require('processing.read');
+        const {stage} = parse(agentCommandSchemas.processing_standard, input);
+        return {
+          version: DOCUMENT_PROCESSING_STANDARD_VERSION,
+          stages: stage ? [stage] : [...DOCUMENT_PROCESSING_STAGES],
+          instructions: documentProcessingInstructions(stage),
+        };
+      }
       case 'system_status':
         parse(agentCommandSchemas.system_status, input);
         this.authority.require('processing.read');
@@ -318,6 +371,22 @@ export class AgentCommands {
         );
       }
 
+      case 'source_quality_status':
+      case 'source_quality_control': {
+        if (this.authority.identity.kind !== 'owner')
+          throw new OperationError('forbidden', 'operation_not_authorized');
+        this.authority.require('documents.read');
+        if (!this.deps.sourceQuality)
+          throw new OperationError('rejected', 'source_quality_unavailable');
+        if (name === 'source_quality_status') {
+          parse(sourceQualityOwnerSchemas.source_quality_status, input);
+          return this.deps.sourceQuality.status();
+        }
+        this.authority.require('ingestion.manage');
+        return this.deps.sourceQuality.control(
+          parse(sourceQualityOwnerSchemas.source_quality_control, input),
+        );
+      }
       case 'intake_origins': {
         if (this.authority.identity.kind !== 'owner')
           throw new OperationError('forbidden', 'operation_not_authorized');

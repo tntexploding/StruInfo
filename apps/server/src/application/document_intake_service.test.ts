@@ -6,6 +6,7 @@ import {
   type DocumentIntakeRepository,
   type IntakeRecord,
   type IntakeAssessment,
+  type IntakeReviewInput,
 } from './document_intake_contract.js';
 import type {
   EvidenceReadRepositoryPort,
@@ -92,7 +93,9 @@ function fixture(isPrivate = false, mediaType = 'text/markdown') {
   });
   const provider = {
     model: 'synthetic-model',
-    reviewIntake: vi.fn<() => Promise<IntakeAssessment>>(() =>
+    reviewIntake: vi.fn<
+      (input: IntakeReviewInput) => Promise<IntakeAssessment>
+    >(() =>
       Promise.resolve({
         completeness: 'complete' as const,
         contentKind: 'article' as const,
@@ -114,6 +117,7 @@ function fixture(isPrivate = false, mediaType = 'text/markdown') {
   });
   return {
     snapshot,
+    snapshots,
     service,
     rows,
     repository,
@@ -180,7 +184,11 @@ describe('document intake decisions', () => {
     );
     f.provider.reviewIntake.mockImplementationOnce(async () => {
       await f.service.receive([{snapshotId: S, expectedVersion: 3}], 'reject');
-      return response();
+      return response({
+        text: 'Synthetic current article',
+        preparation: 'received',
+        policy,
+      });
     });
     await expect(f.service.review(S, policy, true)).rejects.toMatchObject({
       code: 'stale_intake_version',
@@ -650,4 +658,87 @@ it('accepts a reviewed receipt into the same continuing document task as unpubli
     publication: {origin: 'internal_ai', entries: []},
   });
   expect(await f.service.guard(S)).toBeUndefined();
+});
+
+it.each(['accept', 'reject'] as const)(
+  'retains the explicit reason when confirming %s, but clears it on reversal',
+  async (action) => {
+    const f = fixture();
+    const previous = requireOperationValue(
+      f.snapshots.find((s) => s.snapshotId === P),
+    );
+    previous.canonicalUri = 'https://example.invalid/previous';
+    await f.service.control(
+      P,
+      0,
+      action === 'accept' ? 'admit' : 'block',
+      'Explicit synthetic reading reason',
+    );
+    await f.service.receive([{snapshotId: P, expectedVersion: 1}], action);
+    await f.service.review(S, policy);
+    expect(f.provider.reviewIntake.mock.calls[0]?.[0].manualReviews).toEqual([
+      {
+        decision: action,
+        excerpt: 'A complete synthetic article about starvine mechanics.',
+        ownerReason: 'Explicit synthetic reading reason',
+      },
+    ]);
+    await f.service.receive(
+      [{snapshotId: P, expectedVersion: 2}],
+      action === 'accept' ? 'reject' : 'accept',
+    );
+    expect(f.rows.get(P)?.value.manualReviewNote).toBeUndefined();
+  },
+);
+
+it('uses explicit public manual decisions as examples without treating old AI reasons as owner reasons', async () => {
+  const f = fixture();
+  const previous = requireOperationValue(
+    f.snapshots.find((s) => s.snapshotId === P),
+  );
+  previous.canonicalUri = 'https://example.invalid/previous';
+  f.rows.set(P, {
+    snapshotId: P,
+    version: 1,
+    updatedAt: '2040-01-01T00:00:00Z',
+    value: {
+      decision: 'held',
+      origin: 'model',
+      preparation: 'received',
+      reason: 'Previous model reason',
+      assessment: {
+        completeness: 'summary',
+        contentKind: 'article',
+        decision: 'hold',
+        reason: 'Old AI assessment',
+      },
+      receipt: 'pending',
+    },
+  });
+  await f.service.receive([{snapshotId: P, expectedVersion: 1}], 'reject');
+  const result = await f.service.review(S, policy);
+  expect(f.provider.reviewIntake.mock.calls[0]?.[0].manualReviews).toEqual([
+    {
+      decision: 'reject',
+      excerpt: 'A complete synthetic article about starvine mechanics.',
+      previousAiAssessment: {
+        completeness: 'summary',
+        contentKind: 'article',
+        decision: 'hold',
+        reason: 'Old AI assessment',
+      },
+    },
+  ]);
+  expect(result?.value.appliedManualReviews).toEqual([
+    {snapshotId: P, version: 2},
+  ]);
+  previous.isPrivate = true;
+  await f.service.receive(
+    [{snapshotId: S, expectedVersion: result?.version ?? 0}],
+    'reset',
+  );
+  await f.service.review(S, policy);
+  expect(
+    f.provider.reviewIntake.mock.calls[1]?.[0].manualReviews,
+  ).toBeUndefined();
 });

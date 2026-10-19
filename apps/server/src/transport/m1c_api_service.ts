@@ -5154,12 +5154,14 @@ function decodeSourceSubscriptionReplace(body: unknown):
   if (
     body.subscriptions.some((subscription) => {
       if (!isRecord(subscription)) return true;
-      const keys = Object.keys(subscription).sort().join('\\u0000');
+      const ownKeys = Object.keys(subscription).filter(
+        (key) => key !== 'description',
+      );
+      const keys = ownKeys.sort().join('\\u0000');
       if (subscription.kind === 'rss_atom') {
         return keys !== rssKeys.join('\\u0000');
       }
       if (subscription.kind === 'json_api') {
-        const ownKeys = Object.keys(subscription);
         return (
           jsonRequiredKeys.some((key) => !Object.hasOwn(subscription, key)) ||
           ownKeys.some((key) => !jsonAllowedKeys.includes(key))
@@ -5193,6 +5195,9 @@ function decodeSourceSubscriptionReplace(body: unknown):
               kind: subscription.kind,
               subscriptionId: subscription.subscriptionId,
               label: subscription.label,
+              ...(subscription.description === undefined
+                ? {}
+                : {description: subscription.description}),
               enabled: subscription.enabled,
               feedUrl: subscription.feedUrl,
               itemLimit: subscription.itemLimit,
@@ -5206,6 +5211,9 @@ function decodeSourceSubscriptionReplace(body: unknown):
                 kind: subscription.kind,
                 subscriptionId: subscription.subscriptionId,
                 label: subscription.label,
+                ...(subscription.description === undefined
+                  ? {}
+                  : {description: subscription.description}),
                 enabled: subscription.enabled,
                 endpointUrl: subscription.endpointUrl,
                 recordsPath: subscription.recordsPath,
@@ -5249,6 +5257,9 @@ function decodeSourceSubscriptionReplace(body: unknown):
                   kind: subscription.kind,
                   subscriptionId: subscription.subscriptionId,
                   label: subscription.label,
+                  ...(subscription.description === undefined
+                    ? {}
+                    : {description: subscription.description}),
                   enabled: subscription.enabled,
                   pageUrl: subscription.pageUrl,
                   additionalPaths: Object.freeze([
@@ -5264,6 +5275,9 @@ function decodeSourceSubscriptionReplace(body: unknown):
                     kind: subscription.kind,
                     subscriptionId: subscription.subscriptionId,
                     label: subscription.label,
+                    ...(subscription.description === undefined
+                      ? {}
+                      : {description: subscription.description}),
                     enabled: subscription.enabled,
                     connectorId: subscription.connectorId,
                     configurationRef: subscription.configurationRef,
@@ -5276,6 +5290,9 @@ function decodeSourceSubscriptionReplace(body: unknown):
                     kind: 'github_markdown' as const,
                     subscriptionId: subscription.subscriptionId,
                     label: subscription.label,
+                    ...(subscription.description === undefined
+                      ? {}
+                      : {description: subscription.description}),
                     enabled: subscription.enabled,
                     repositoryUri: subscription.repositoryUri,
                     repositoryRef: subscription.repositoryRef,

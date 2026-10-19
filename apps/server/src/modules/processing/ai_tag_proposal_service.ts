@@ -1,3 +1,11 @@
+import {isDeepStrictEqual} from 'node:util';
+import {assertProcessingTagProposalPayload} from './processing.js';
+import {
+  MAXIMUM_TAG_BATCH_ENTRIES,
+  MAXIMUM_TAG_BATCH_CHARACTERS,
+  tagBatchEntrySize,
+} from './ai_tag_batch.js';
+
 import {
   deriveInformationEntryRevisionId,
   informationEntrySearchKey,
@@ -56,6 +64,14 @@ export interface AiTagProposalServicePort {
   readonly providerKey:
     'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   readonly model: string;
+  readonly supportsTagBatch?: boolean;
+  startBatch?(
+    requests: readonly Readonly<{
+      entryId: string;
+      expectedRevision: number;
+      requestKey: string;
+    }>[],
+  ): Promise<readonly Readonly<AiTagProposalStartResult>[]>;
 
   listForEntry(
     entryId: string,
@@ -101,6 +117,106 @@ export class AiTagProposalService implements AiTagProposalServicePort {
       entryId,
       20,
     );
+  }
+
+  public get supportsTagBatch() {
+    return typeof this.#dependencies.provider.proposeTagsBatch === 'function';
+  }
+
+  /** Generate once, validate the entire response, then persist ordinary per-entry proposals. */
+  public async startBatch(
+    requests: readonly Readonly<{
+      entryId: string;
+      expectedRevision: number;
+      requestKey: string;
+    }>[],
+  ): Promise<readonly Readonly<AiTagProposalStartResult>[]> {
+    const provider = this.#dependencies.provider;
+    if (
+      !provider.proposeTagsBatch ||
+      requests.length < 2 ||
+      requests.length > MAXIMUM_TAG_BATCH_ENTRIES ||
+      new Set(requests.map((request) => request.entryId)).size !==
+        requests.length
+    )
+      throw new AiTagProposalServiceError('ai_proposal_invalid');
+    const current = new Map(
+      (
+        await this.#dependencies.entries.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          true,
+        )
+      ).map((entry) => [entry.entryId, entry]),
+    );
+    const entries = requests.map((request) => {
+      const entry = current.get(request.entryId);
+      if (!entry) throw new AiTagProposalServiceError('ai_entry_not_found');
+      if (entry.value.isPrivate)
+        throw new AiTagProposalServiceError('ai_private_entry_forbidden');
+      if (entry.revision !== request.expectedRevision)
+        throw new AiTagProposalServiceError('stale_entry_revision');
+      return entry;
+    });
+    if (
+      new Set(entries.map((entry) => entry.snapshotId)).size !== 1 ||
+      entries.reduce((total, entry) => total + tagBatchEntrySize(entry), 0) >
+        MAXIMUM_TAG_BATCH_CHARACTERS
+    )
+      throw new AiTagProposalServiceError('ai_proposal_invalid');
+    const existing = await Promise.all(
+      requests.map((request) =>
+        this.#dependencies.processing.loadRun(
+          this.#dependencies.workspaceId,
+          deriveProcessingRunId(
+            this.#dependencies.workspaceId,
+            `ai-tags:${request.entryId}:${request.requestKey}`,
+          ),
+        ),
+      ),
+    );
+    if (existing.every((run) => run !== undefined))
+      return existing.map((run) => ({outcome: 'existing' as const, run}));
+    // A partially saved batch is resumed through its individual durable runs.
+    if (existing.some((run) => run !== undefined))
+      throw new AiTagProposalServiceError('ai_run_conflict');
+    const results = await provider.proposeTagsBatch(entries);
+    if (
+      results.length !== entries.length ||
+      new Set(results.map((item) => item.entryId)).size !== entries.length
+    )
+      throw new AiTagProposalServiceError('ai_provider_invalid_response');
+    const byId = new Map(results.map((item) => [item.entryId, item]));
+    for (const entry of entries) {
+      const item = byId.get(entry.entryId);
+      if (item?.expectedRevision !== entry.revision)
+        throw new AiTagProposalServiceError('ai_provider_invalid_response');
+      // No proposal from a malformed batch may become eligible for acceptance.
+      const payload = toStoredPayload(entry, provider, item.result);
+      try {
+        assertProcessingTagProposalPayload(payload);
+        entryValueFromProposal(entry, payload);
+      } catch {
+        throw new AiTagProposalServiceError('ai_provider_invalid_response');
+      }
+    }
+    const prepared = new AiTagProposalService({
+      ...this.#dependencies,
+      provider: {
+        providerKey: provider.providerKey,
+        model: provider.model,
+        promptVersion: provider.promptVersion,
+        proposeTags: (entry) => {
+          const item = byId.get(entry.entryId);
+          if (item?.expectedRevision !== entry.revision)
+            throw new AiTagProposalServiceError('stale_entry_revision');
+          return Promise.resolve(item.result);
+        },
+      },
+    });
+    const saved: AiTagProposalStartResult[] = [];
+    for (const request of requests)
+      saved.push(await prepared.start(request.entryId, request.requestKey));
+    return saved;
   }
 
   public async start(
@@ -388,7 +504,7 @@ function isAcceptedTagState(
     return false;
   }
   const expected = entryValueFromProposal(entry, payload);
-  return JSON.stringify(entry.value) === JSON.stringify(expected);
+  return isDeepStrictEqual(entry.value, expected);
 }
 
 function originVersion(
@@ -408,6 +524,7 @@ function providerErrorCode(error: unknown): AiTagProposalServiceErrorCode {
     error instanceof Error &&
     'code' in error &&
     (error.code === 'ai_operations_paused' ||
+      error.code === 'ai_batch_budget_paused' ||
       error.code === 'ai_price_window_closed' ||
       error.code === 'ai_provider_timeout' ||
       error.code === 'ai_provider_unavailable' ||

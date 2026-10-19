@@ -230,7 +230,13 @@ function acceptProviderResult(
   if (
     !INFORMATION_ENTRY_QUERY_SYNTHESIS_EVIDENCE_STATUSES.includes(
       value.evidenceStatus,
-    ) ||
+    )
+  ) {
+    throw new InformationEntryQuerySynthesisServiceError(
+      'ai_provider_invalid_response',
+    );
+  }
+  if (
     (value.evidenceStatus !== 'insufficient' && value.claims.length === 0) ||
     value.claims.some(
       (claim) =>
@@ -240,7 +246,7 @@ function acceptProviderResult(
     )
   ) {
     throw new InformationEntryQuerySynthesisServiceError(
-      'ai_provider_invalid_response',
+      'ai_query_invalid_citations',
     );
   }
   return Object.freeze({

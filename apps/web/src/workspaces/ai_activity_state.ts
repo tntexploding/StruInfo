@@ -43,6 +43,8 @@ export interface AiActivityItem {
   reviewSnapshotId?: string;
   stages?: AiArticleStage[];
   actor?: string;
+  phase?: string;
+  interrupted?: boolean;
   createdAt?: string;
   destination: 'import' | 'settings' | 'reports' | 'documents';
 }
@@ -176,6 +178,28 @@ export function activityItems(
       ) {
         state = 'price';
         detail = '到允许时段后自动继续 · ' + phase;
+      } else if (
+        task.state.status === 'paused' &&
+        task.state.errorCode === 'ai_batch_budget_paused'
+      ) {
+        state = 'paused';
+        detail = aiError(new Error(task.state.errorCode)) + ' · ' + phase;
+      } else if (
+        task.state.status === 'paused' &&
+        task.state.automaticRetry?.notBefore
+      ) {
+        const retry = task.state.automaticRetry;
+        const enabled =
+          (data.price?.policy.automaticRetryLimit ?? 0) >= retry.used;
+        state = enabled ? 'queued' : 'paused';
+        detail = enabled
+          ? `自动断点重试 ${String(retry.used)}/${String(retry.limit)} · 最早 ${beijingTime(task.state.automaticRetry.notBefore)} · ${phase}`
+          : '自动重试已关闭，等待手动继续';
+        if (enabled && data.price?.blocked) detail += ' · 仍需等待低价时段';
+        if (enabled && data.price?.policy.operationsAllowed === false) {
+          state = 'paused';
+          detail = '等待允许 AI 继续 · ' + detail;
+        }
       } else {
         detail = task.state.errorCode
           ? aiError(new Error(task.state.errorCode))
@@ -183,6 +207,8 @@ export function activityItems(
       }
       return {
         id: task.taskId,
+        phase: task.state.phase,
+        interrupted: task.runtimeStatus === 'interrupted',
         actor:
           task.actorKind === 'automation'
             ? '自动任务'
@@ -285,12 +311,60 @@ export function activityItems(
       }
       return {
         id: r.reportId,
-        kind: r.kind === 'daily' ? '日报' : '周报',
+        phase: 'report',
+        kind: {
+          daily: '日报',
+          weekly: '周报',
+          monthly: '月报',
+          topic: '专题报告',
+        }[r.kind],
         title: r.title,
         state,
         detail,
         updatedAt: r.updatedAt ?? '',
         destination: 'reports',
+      };
+    });
+  const scheduled: AiActivityItem[] = data.queue.items
+    .filter(
+      (item) =>
+        item.status === 'pending' &&
+        !data.tasks.some(
+          (task) =>
+            task.taskId === item.taskId ||
+            task.request.snapshotId === item.snapshotId,
+        ) &&
+        !['rejected'].includes(
+          records.get(item.snapshotId)?.value.receipt ?? '',
+        ) &&
+        records.get(item.snapshotId)?.value.decision !== 'blocked',
+    )
+    .map((item) => {
+      const enabled =
+        data.queue.policy.settings.enabled &&
+        !data.queue.policy.settings.paused;
+      const source = sources.get(item.snapshotId);
+      return {
+        id: 'scheduled-' + item.snapshotId,
+        snapshotId: item.snapshotId,
+        title: source
+          ? compactDocumentTitle(sourceDisplayName(source))
+          : (item.sourceLabel ?? '等待接收的文档'),
+        actor: '自动任务',
+        kind: '接收审核',
+        phase: 'intake',
+        destination: 'import',
+        state:
+          !enabled || data.price?.policy.operationsAllowed === false
+            ? 'paused'
+            : data.price?.blocked
+              ? 'price'
+              : 'queued',
+        detail: !enabled
+          ? '自动处理策略已暂停，尚未创建整理任务'
+          : '已由自动策略安排，等待每日额度、价格时段与队列调度',
+        createdAt: item.createdAt ?? '',
+        updatedAt: item.createdAt ?? '',
       };
     });
   const rank: Record<ActivityState, number> = {
@@ -304,7 +378,7 @@ export function activityItems(
     settled: 7,
     done: 8,
   };
-  return [...tasks, ...reviews, ...reports].sort(
+  return [...tasks, ...reviews, ...scheduled, ...reports].sort(
     (a, b) =>
       rank[a.state] - rank[b.state] ||
       (a.state === 'queued'

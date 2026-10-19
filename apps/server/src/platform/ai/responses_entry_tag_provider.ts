@@ -1,4 +1,11 @@
+import {documentProcessingInstructions} from '../../modules/processing/document_processing_standard.js';
+import {parseResponseJson} from './response_json.js';
 import {entryTagSubject} from './entry_tag_subject.js';
+import {
+  MAXIMUM_TAG_BATCH_ENTRIES,
+  MAXIMUM_TAG_BATCH_CHARACTERS,
+  tagBatchEntrySize,
+} from '../../modules/processing/ai_tag_batch.js';
 import {isAiDispatchWait} from '../../modules/processing/ai_price_policy.js';
 import {
   responsesEndpoint,
@@ -24,7 +31,7 @@ import {
   RESPONSE_METADATA_INSTRUCTIONS,
 } from './responses_metadata.js';
 
-export const OPENAI_TAG_PROMPT_VERSION = 'struinfo.openai-entry-tags.v5';
+export const OPENAI_TAG_PROMPT_VERSION = 'struinfo.openai-entry-tags.v10';
 
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 const TYPE_VALUES = [...ENTRY_TYPE_KEYWORDS];
@@ -62,6 +69,118 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
     if (entry.value.isPrivate) {
       throw new AiTagProposalProviderError('ai_provider_rejected');
     }
+    return decodePayload(
+      await this.request(createRequest(this.#config, entry)),
+    );
+  }
+
+  public async proposeTagsBatch(
+    entries: readonly Readonly<CurrentInformationEntry>[],
+  ) {
+    if (
+      !entries.length ||
+      entries.length > MAXIMUM_TAG_BATCH_ENTRIES ||
+      new Set(entries.map((entry) => entry.entryId)).size !== entries.length ||
+      new Set(entries.map((entry) => entry.snapshotId)).size !== 1 ||
+      entries.some((entry) => entry.value.isPrivate) ||
+      entries.reduce((total, entry) => total + tagBatchEntrySize(entry), 0) >
+        MAXIMUM_TAG_BATCH_CHARACTERS
+    )
+      throw new AiTagProposalProviderError('ai_provider_rejected');
+    const requests = entries.map((entry) => createRequest(this.#config, entry));
+    const first = requests[0];
+    if (!first) fail();
+    const input = JSON.stringify({
+      items: entries.map((entry, index) => ({
+        entryId: entry.entryId,
+        expectedRevision: entry.revision,
+        ...(JSON.parse(String(requests[index]?.input)) as Record<
+          string,
+          unknown
+        >),
+      })),
+    });
+    if (Array.from(input).length > MAXIMUM_TAG_BATCH_CHARACTERS)
+      throw new AiTagProposalProviderError('ai_provider_rejected');
+    const payload = await this.request({
+      ...first,
+      max_output_tokens: Math.max(
+        this.#config.maxOutputTokens,
+        entries.length * 1000 + 128,
+      ),
+      instructions: [
+        documentProcessingInstructions('tags'),
+        'Return exactly one JSON object {"items":[{"entryId":"...","expectedRevision":1,"tags":{"summary":"...","contentKeywords":["..."],"type":{"keyword":"...","customName":null},"domains":[{"keyword":"...","customName":null}]}}]}. No fences or extra fields. domains is always an array. Use customName only for other; otherwise null.',
+        'Return every supplied entryId and expectedRevision exactly once. Each tags object describes only that Entry. Never pool keywords across items, borrow a neighbouring item subject, or tag the collection preface or advertisements. Existing tags are hints, not evidence.',
+        RESPONSE_METADATA_INSTRUCTIONS,
+      ].join(' '),
+      input,
+      text: {
+        format: {
+          type: 'json_schema',
+          name: 'struinfo_entry_tag_batch',
+          strict: true,
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['items'],
+            properties: {
+              items: {
+                type: 'array',
+                minItems: entries.length,
+                maxItems: entries.length,
+                items: {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['entryId', 'expectedRevision', 'tags'],
+                  properties: {
+                    entryId: {
+                      type: 'string',
+                      enum: entries.map((entry) => entry.entryId),
+                    },
+                    expectedRevision: {type: 'integer', minimum: 1},
+                    tags: first.text.format.schema,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (
+      !isClosedRecord(payload, ['items']) ||
+      !Array.isArray(payload.items) ||
+      payload.items.length !== entries.length
+    )
+      fail();
+    const seen = new Set<string>();
+    const results = payload.items.map((item: unknown) => {
+      if (
+        !isClosedRecord(item, ['entryId', 'expectedRevision', 'tags']) ||
+        typeof item.entryId !== 'string'
+      )
+        fail();
+      const entry = entries.find((entry) => entry.entryId === item.entryId);
+      if (
+        !entry ||
+        seen.has(entry.entryId) ||
+        item.expectedRevision !== entry.revision
+      )
+        fail();
+      seen.add(entry.entryId);
+      return {
+        entryId: entry.entryId,
+        expectedRevision: entry.revision,
+        result: decodePayload(item.tags),
+      };
+    });
+    return results;
+  }
+
+  private async request(
+    request: Readonly<Record<string, unknown>>,
+  ): Promise<unknown> {
     let response: Response;
     try {
       response = await this.#fetch(responsesEndpoint(this.#config), {
@@ -70,7 +189,7 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
           Authorization: `Bearer ${this.#config.apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(createRequest(this.#config, entry)),
+        body: JSON.stringify(request),
         signal: AbortSignal.timeout(this.#config.timeoutMs),
       });
     } catch (error) {
@@ -107,18 +226,18 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
     const outputText = extractOutputText(envelope);
     let payload: unknown;
     try {
-      payload = JSON.parse(outputText) as unknown;
+      payload = parseResponseJson(outputText);
     } catch {
       throw new AiTagProposalProviderError('ai_provider_invalid_response');
     }
-    return decodePayload(payload);
+    return payload;
   }
 }
 
 function createRequest(
   config: Readonly<AiProposalProviderConfig>,
   entry: Readonly<CurrentInformationEntry>,
-): Readonly<Record<string, unknown>> {
+) {
   const subject = entryTagSubject(entry);
   return Object.freeze({
     model: config.model,
@@ -126,20 +245,16 @@ function createRequest(
     store: false,
     max_output_tokens: config.maxOutputTokens,
     instructions: [
-      'You classify one InformationEntry for a personal knowledge system.',
-      'Return only the requested JSON schema. Do not quote or summarize sensitive details.',
-      'Choose 3-12 concise content keywords. Merge capitalization-only duplicates.',
-      'Use the central article subject. Ignore site navigation, recommended reading, publisher boilerplate and incidental examples. Publisher names are not topical tags unless the article studies the publisher.',
-      'When documentContext is present, it is a collection preface, not this item. Classify titlePath and body only; do not import other stories, the digest title or the publication date from documentContext. Existing labels are hints, not evidence.',
-      'Preserve useful specific entities, models and concepts supported by this item. Do not merge related but distinct entities or force tags into a smaller fixed count.',
-      'A bibliography preserves provenance, not a separate topical catalog. Do not create tags for names or subjects appearing only in references; ground tags in the article itself.',
-      'Choose exactly one type and 1-3 ordered domains (primary first).',
+      documentProcessingInstructions('tags'),
       'Use customName only when keyword is other; otherwise return null.',
+      'Return one JSON object with exactly summary, contentKeywords, type and domains. No Markdown fences, comments, $schema or placeholder fields. domains MUST be an array of objects even for ONE domain; type is one object. Do not put a quotation mark after an array closing bracket.',
+      'Shape example for a synthetic database-index explanation only: {"summary":"解释数据库索引的查找机制","contentKeywords":["数据库索引"],"type":{"keyword":"knowledge_explanation","customName":null},"domains":[{"keyword":"engineering_computing","customName":null}]}. This example shows JSON structure, not tags or taxonomy to copy into unrelated material. Select all values from the current Entry and allowed enums.',
       RESPONSE_METADATA_INSTRUCTIONS,
     ].join(' '),
     input: JSON.stringify({
       ...subject,
-      existingContentKeywords: (subject.documentContext
+      existingContentKeywords: (subject.documentContext ||
+      subject.body !== entry.value.body
         ? []
         : entry.value.contentKeywords
       ).map((keyword) => keyword.displayValue),

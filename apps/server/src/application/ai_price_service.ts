@@ -28,6 +28,13 @@ export class AiPriceService {
       DEFAULT_AI_PRICE_POLICY;
     return aiPriceWindow(policy, this.provider, this.now());
   }
+  public async executionSettings() {
+    const {policy} = await this.status();
+    return {
+      maxConcurrentRequests: policy.maxConcurrentRequests ?? 1,
+      automaticRetryLimit: policy.automaticRetryLimit ?? 0,
+    };
+  }
   public async assertOperationsAllowed() {
     if ((await this.status()).policy.operationsAllowed === false)
       throw new AiOperationsPausedError();
@@ -41,19 +48,27 @@ export class AiPriceService {
   public async save(
     authority: ExecutionAuthority,
     input: unknown,
-    operationsOnly = false,
+    operationsOnly: boolean | 'execution' = false,
   ) {
     if (
       authority.identity.kind !== 'owner' ||
       authority.workspaceId !== this.workspaceId
     )
       throw new OperationError('forbidden', 'ai_price_owner_required');
-    const schema = operationsOnly
-      ? aiPricePolicySchema.pick({revision: true}).extend({
-          operationsAllowed:
-            aiPricePolicySchema.shape.operationsAllowed.unwrap(),
-        })
-      : aiPricePolicySchema.omit({operationsAllowed: true});
+    const schema =
+      operationsOnly === 'execution'
+        ? aiPricePolicySchema.pick({revision: true}).extend({
+            maxConcurrentRequests:
+              aiPricePolicySchema.shape.maxConcurrentRequests.unwrap(),
+            automaticRetryLimit:
+              aiPricePolicySchema.shape.automaticRetryLimit.unwrap(),
+          })
+        : operationsOnly
+          ? aiPricePolicySchema.pick({revision: true}).extend({
+              operationsAllowed:
+                aiPricePolicySchema.shape.operationsAllowed.unwrap(),
+            })
+          : aiPricePolicySchema.pick({revision: true, enabled: true});
     const parsed = schema.safeParse(input);
     if (!parsed.success || parsed.data.revision >= 2147483646)
       throw new OperationError('invalid_input', 'invalid_ai_price_policy');

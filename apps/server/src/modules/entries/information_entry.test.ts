@@ -10,6 +10,7 @@ import type {MaterializedEvidenceSnapshot} from './information_entry.js';
 import type {CurrentInformationEntry} from './information_entry_contract.js';
 import {
   aiSplitEvidenceFragments,
+  prepareAiEntryTagRevision,
   prepareAiSplitInformationEntries,
   informationEntrySearchKey,
   prepareManualEntryRevision,
@@ -24,6 +25,44 @@ const SNAPSHOT_ID = '33333333-3333-4333-8333-333333333333';
 const STRUCTURE_ID = '44444444-4444-4444-8444-444444444444';
 
 describe('InformationEntry', () => {
+  it.each([
+    {typeKeyword: 'argument' as const},
+    {typeKeyword: 'other' as const, typeCustomName: 'Synthetic method'},
+  ])(
+    'replaces an existing custom type during AI retagging: $typeKeyword',
+    (type) => {
+      const base = currentEntry({isPrivate: true});
+      const current = {
+        ...base,
+        value: Object.freeze({
+          ...base.value,
+          typeKeyword: 'other' as const,
+          typeCustomName: 'Synthetic collection',
+          usefulnessScore: 4 as const,
+        }),
+      };
+      const revised = prepareAiEntryTagRevision(current, {
+        ...type,
+        contentKeywords: ['Synthetic'],
+        domains: [{keyword: 'engineering_computing'}],
+        originVersion: 'synthetic:v1',
+      });
+      expect(revised).toMatchObject({
+        typeKeyword: type.typeKeyword,
+        body: current.value.body,
+        fragmentIds: current.value.fragmentIds,
+        isPrivate: true,
+        usefulnessScore: 4,
+      });
+      if (type.typeCustomName === undefined) {
+        expect(revised).not.toHaveProperty('typeCustomName');
+      } else {
+        expect(revised?.typeCustomName).toBe(type.typeCustomName);
+      }
+      expect(current.value.typeCustomName).toBe('Synthetic collection');
+    },
+  );
+
   it('keeps a genuinely long coherent article whole with all bibliography text', () => {
     const text =
       '# Synthetic monograph\n\n' +

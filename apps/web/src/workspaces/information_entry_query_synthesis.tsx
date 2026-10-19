@@ -71,7 +71,7 @@ export function InformationEntryQuerySynthesis({
         {retrieveForQuestion
           ? '先按问题检索资料，再将最相关的最多 8 条公开结果与问题发送给'
           : '点击回答后，你的问题和最多 8 条公开结果会发送给'}
-        模型服务。隐私内容不会发送，回答也不会保存。
+        模型服务。仅使用公开资料，回答保留在当前会话。
       </p>
 
       {!enabled ? (
@@ -81,7 +81,7 @@ export function InformationEntryQuerySynthesis({
         </p>
       ) : privateScope ? (
         <p className="entry-query-synthesis__notice" aria-live="polite">
-          当前包含隐私范围。查看隐私内容不等于允许外发；请切换到“仅公开结果”后再综合。
+          AI 回答只使用公开资料。请切换到“仅公开结果”后重试。
         </p>
       ) : resultCount === 0 ? (
         <p className="entry-query-synthesis__notice" aria-live="polite">
@@ -206,8 +206,7 @@ export function InformationEntryQuerySynthesisAnswer({
 
       <details className="entry-query-synthesis-evidence">
         <summary>
-          查看发送给 模型服务 的 {response.evidence.length.toString()}{' '}
-          条公开内容
+          查看发送给模型服务 的 {response.evidence.length.toString()} 条公开内容
         </summary>
         <ol>
           {response.evidence.map((item) => (

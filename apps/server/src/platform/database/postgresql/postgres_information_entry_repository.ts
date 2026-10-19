@@ -308,7 +308,7 @@ const INSERT_FRAGMENT_RANGE_SQL = sql(
   'WHERE input.workspace_id = $1 AND input.entry_id = $2',
   '  AND input.input_ordinal = $3',
   '  AND $4::integer >= 0',
-  '  AND $5::integer <= char_length(fragment.selected_text)',
+  '  AND $5::integer <= fragment.code_point_end - fragment.code_point_start',
 );
 const INSERT_CONTENT_KEYWORD_SQL = sql(
   'INSERT INTO struinfo.information_entry_content_keyword (',

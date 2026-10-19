@@ -18,6 +18,56 @@ const SUCCESSOR_REVISION_ID = '77777777-7777-4777-8777-777777777777';
 const FRAGMENT_ID = '88888888-8888-4888-8888-888888888888';
 
 describe('PostgresInformationEntryRestructureRepository', () => {
+  it('compares document-order expectations with ID-order database locks by identity', async () => {
+    const pool = createPool((sql) => {
+      if (sql.includes('FROM struinfo.workspace WHERE'))
+        return rows({workspace_id: WORKSPACE_ID});
+      if (sql.includes('snapshot_id = $2') && sql.includes('FOR UPDATE'))
+        return rows(
+          {
+            entry_id: PREDECESSOR_ID,
+            current_revision: 1,
+            current_revision_id: PREDECESSOR_REVISION_ID,
+          },
+          {
+            entry_id: SUCCESSOR_ID,
+            current_revision: 1,
+            current_revision_id: SUCCESSOR_REVISION_ID,
+          },
+        );
+      return rows();
+    });
+    const request = {
+      ...write(),
+      expectedEntries: [
+        {entryId: SUCCESSOR_ID, revision: 1, revisionId: SUCCESSOR_REVISION_ID},
+        {
+          entryId: PREDECESSOR_ID,
+          revision: 1,
+          revisionId: PREDECESSOR_REVISION_ID,
+        },
+      ],
+      successors: [],
+      retiredEntryIds: [],
+      lineage: [],
+    };
+    await expect(
+      new PostgresInformationEntryRestructureRepository(
+        pool,
+      ).applyEntryRestructure(request),
+    ).resolves.toBe('unchanged');
+    await expect(
+      new PostgresInformationEntryRestructureRepository(
+        pool,
+      ).applyEntryRestructure({
+        ...request,
+        expectedEntries: request.expectedEntries.map((e) => ({
+          ...e,
+          revision: 2,
+        })),
+      }),
+    ).resolves.toBe('stale');
+  });
   it('retires the old structure and inserts its successor in one workspace transaction', async () => {
     const statements: {sql: string; parameters?: readonly unknown[]}[] = [];
     const pool = createPool((sql, parameters) => {
@@ -67,6 +117,15 @@ describe('PostgresInformationEntryRestructureRepository', () => {
       ),
     ).toBe(true);
     expect(statements.at(-1)?.sql).toBe('COMMIT');
+    const locked = statements.find((s) =>
+      s.sql.includes('FROM struinfo.information_entry_association_override'),
+    )?.sql;
+    expect(locked).toContain(
+      'AND entry_low_id IN (SELECT entry_id FROM struinfo.information_entry WHERE workspace_id = $1 AND is_current_structure)',
+    );
+    expect(locked).toContain(
+      'AND entry_high_id IN (SELECT entry_id FROM struinfo.information_entry WHERE workspace_id = $1 AND is_current_structure)',
+    );
   });
 
   it('returns stale before writes when the current structure changed', async () => {

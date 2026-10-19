@@ -18,6 +18,8 @@ const MAX_MEDIA_TYPE_CODE_POINTS = 120;
 
 export const MAX_SOURCE_CONNECTOR_DOCUMENTS = 64;
 export const MAX_SOURCE_CONNECTOR_DOCUMENT_BYTES = 1024 * 1024;
+// Batch responses retain exact evidence separately from each article projection.
+export const MAX_SOURCE_CONNECTOR_RAW_BYTES = 8 * 1024 * 1024;
 
 export type SourceConnectorErrorCode =
   | 'connector_duplicate'
@@ -412,7 +414,7 @@ function decodeConnectorDocument(
   if (
     value.sourceUtf8.byteLength > MAX_SOURCE_CONNECTOR_DOCUMENT_BYTES ||
     (value.rawSourceBytes instanceof Uint8Array &&
-      value.rawSourceBytes.byteLength > MAX_SOURCE_CONNECTOR_DOCUMENT_BYTES)
+      value.rawSourceBytes.byteLength > MAX_SOURCE_CONNECTOR_RAW_BYTES)
   ) {
     throw new SourceConnectorError('connector_too_large');
   }

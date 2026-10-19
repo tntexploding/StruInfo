@@ -180,6 +180,10 @@ export type ReviewJsonApiAuthentication =
   Readonly<{kind: 'none'}> | Readonly<{kind: 'bearer_env'; variable: string}>;
 
 interface ReviewSourceSubscriptionBase {
+  readonly qualityReview?: Readonly<{
+    reviewedAt: string;
+    documentKeys: readonly string[];
+  }>;
   readonly subscriptionId: string;
   readonly label: string;
   readonly description?: string;
@@ -1079,6 +1083,15 @@ function decodeSourceSubscription(
     !Number.isSafeInteger(value.intervalMinutes) ||
     value.intervalMinutes < 15 ||
     value.intervalMinutes > 10_080 ||
+    (value.qualityReview !== undefined &&
+      (!isRecord(value.qualityReview) ||
+        typeof value.qualityReview.reviewedAt !== 'string' ||
+        !optionalInstant(value.qualityReview.reviewedAt) ||
+        !Array.isArray(value.qualityReview.documentKeys) ||
+        value.qualityReview.documentKeys.length > 20 ||
+        value.qualityReview.documentKeys.some(
+          (key) => typeof key !== 'string' || !key.length || key.length > 4096,
+        ))) ||
     !optionalInstant(value.lastAttemptAt) ||
     !optionalInstant(value.lastSuccessAt) ||
     (value.lastRunId !== undefined &&
@@ -1093,6 +1106,14 @@ function decodeSourceSubscription(
     return undefined;
   }
   const common = Object.freeze({
+    ...(isRecord(value.qualityReview)
+      ? {
+          qualityReview: {
+            reviewedAt: value.qualityReview.reviewedAt as string,
+            documentKeys: value.qualityReview.documentKeys as string[],
+          },
+        }
+      : {}),
     subscriptionId: value.subscriptionId,
     label,
     ...(typeof value.description === 'string' && value.description.trim()
@@ -1282,6 +1303,16 @@ function decodeSourceSubscription(
 function cloneSourceSubscription(
   subscription: Readonly<ReviewSourceSubscription>,
 ): Readonly<ReviewSourceSubscription> {
+  if (subscription.qualityReview)
+    subscription = {
+      ...subscription,
+      qualityReview: Object.freeze({
+        reviewedAt: subscription.qualityReview.reviewedAt,
+        documentKeys: Object.freeze([
+          ...subscription.qualityReview.documentKeys,
+        ]),
+      }),
+    };
   if (subscription.kind === 'rss_atom') {
     return Object.freeze({
       ...subscription,

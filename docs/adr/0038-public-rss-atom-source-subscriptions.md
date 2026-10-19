@@ -38,13 +38,15 @@ Git 与 RSS/Atom。导入页只显示这两种已接通类型；JSON API、网�
 
 - 只接受无凭据、无 fragment 的公开 HTTPS 单一 Feed URL；
 - 连接前解析主机地址并拒绝 loopback、link-local、私有、组播和明显本地域名；
-- 请求不跟随 redirect，20 秒超时，Feed 最大 1 MiB，只接受 RSS/Atom/XML
+- 请求不跟随 redirect，20 秒超时，Feed 最大 8 MiB（2026-09-26 容量兼容修复），只接受 RSS/Atom/XML
   media type；
 - 拒绝 DTD，使用固定的 XML 嵌套上限，不执行脚本、外部实体或 Feed 指令；
 - 识别 RSS 2.0 item 与 Atom entry，按 Feed 顺序最多读取 20 条；
 - 条目正文中的 HTML 复用既有服务端 HTML → Markdown 语义投影；纯文本直接
   形成 Markdown，正文后只附一个本地可回看的原始条目 HTTPS 引用；
 - 不请求条目链接、图片、附件或任意嵌入资源。
+
+传输声明与实际解压后的流式字节均受 8 MiB 上限约束，Registry 使用相同的原始响应上限；单篇 Markdown 投影仍最多 1 MiB。单次条目数量只限制投影／导入，不减少服务器返回的 Feed 大小。来源说明是可选的外部偏好字段，保存接口保留其内容并继续拒绝未知字段。
 
 精确 Feed 响应字节作为外部内容寻址原始 Blob 留存；每条条目的服务端 Markdown
 投影成为独立 `remote_document` Snapshot。相同 Feed 字节、条目身份和版本继续

@@ -149,9 +149,9 @@ try {
         'SELECT count(*)::integer AS total FROM struinfo_meta.schema_migrations',
       )
     ).rows[0]?.total,
-    38,
+    39,
   );
-  mark('38 migrations replay safely; restricted runtime grants applied');
+  mark('39 migrations replay safely; restricted runtime grants applied');
 
   await mkdir(output, {recursive: true});
   const layout = await initializeLocalDataRoot(output);
@@ -1103,7 +1103,7 @@ try {
   const exported = await transfer.exportWorkspace(w);
   assert.equal(
     exported.processing.schemaVersion,
-    'struinfo.m1e-processing.v14',
+    'struinfo.m1e-processing.v15',
   );
   const restoredWorkspace = randomUUID();
   const relocated = JSON.parse(
@@ -1143,7 +1143,7 @@ try {
     readyReport.state,
   );
   mark(
-    'v14 database export and empty-workspace restore preserve intake links, report drafts and spent budgets; unattended processing stays paused',
+    'v15 database export and empty-workspace restore preserve intake links, report drafts and spent budgets; unattended processing stays paused',
   );
   await writeFile(
     resolve(output, 'report.json'),

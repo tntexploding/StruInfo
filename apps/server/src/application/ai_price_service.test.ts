@@ -151,3 +151,59 @@ it('keeps owner permission independent of price settings, persists it, and rejec
   });
   expect((await f.service.status()).policy.enabled).toBe(true);
 });
+
+it('saves bounded execution settings independently and preserves them through price and permission changes', async () => {
+  const f = fixture(),
+    owner = ExecutionAuthority.owner(W);
+  expect(await f.service.executionSettings()).toEqual({
+    maxConcurrentRequests: 1,
+    automaticRetryLimit: 0,
+  });
+  await f.service.save(
+    owner,
+    {revision: 0, maxConcurrentRequests: 3, automaticRetryLimit: 2},
+    'execution',
+  );
+  await f.service.save(owner, {revision: 1, enabled: true});
+  await f.service.save(owner, {revision: 2, operationsAllowed: false}, true);
+  expect((await f.service.status()).policy).toEqual({
+    revision: 3,
+    enabled: true,
+    operationsAllowed: false,
+    maxConcurrentRequests: 3,
+    automaticRetryLimit: 2,
+  });
+  for (const change of [
+    {maxConcurrentRequests: 0},
+    {maxConcurrentRequests: 5},
+    {automaticRetryLimit: 3},
+    {automaticRetryLimit: -1},
+  ]) {
+    await expect(
+      f.service.save(
+        owner,
+        {
+          revision: 3,
+          maxConcurrentRequests: 1,
+          automaticRetryLimit: 0,
+          ...change,
+        },
+        'execution',
+      ),
+    ).rejects.toMatchObject({code: 'invalid_ai_price_policy'});
+  }
+  await expect(
+    f.service.save(
+      owner,
+      {revision: 2, maxConcurrentRequests: 1, automaticRetryLimit: 0},
+      'execution',
+    ),
+  ).rejects.toMatchObject({code: 'stale_ai_price_policy'});
+  await expect(
+    f.service.save(
+      ExecutionAuthority.agent(W, 'synthetic', ['models.use']),
+      {revision: 3, maxConcurrentRequests: 4, automaticRetryLimit: 2},
+      'execution',
+    ),
+  ).rejects.toMatchObject({code: 'ai_price_owner_required'});
+});

@@ -1,8 +1,77 @@
 import {describe, expect, it} from 'vitest';
 
-import {projectStructuredDocument} from './document_projection.js';
+import {
+  projectStructuredDocument,
+  STRUCTURED_HTML_MAX_RAW_BYTES,
+} from './document_projection.js';
 
 describe('structured document projection', () => {
+  it('admits bounded HTML scaffolding without expanding reading-text or PDF budgets', async () => {
+    const html = new TextEncoder().encode(
+      '<script>' +
+        'x'.repeat(2 * 1024 * 1024) +
+        '</script><article><h1>Synthetic</h1><p>Complete reading text.</p></article>',
+    );
+    const result = await projectStructuredDocument('html', html);
+    expect(result.status).toBe('projected');
+    if (result.status === 'projected')
+      expect(new TextDecoder().decode(result.value.sourceUtf8)).toContain(
+        'Complete reading text.',
+      );
+    expect(await projectStructuredDocument('pdf', html)).toMatchObject({
+      status: 'rejected',
+      code: 'document_too_large',
+    });
+    expect(
+      await projectStructuredDocument(
+        'html',
+        new Uint8Array(STRUCTURED_HTML_MAX_RAW_BYTES + 1),
+      ),
+    ).toMatchObject({
+      status: 'rejected',
+      code: 'document_too_large',
+    });
+    expect(
+      await projectStructuredDocument(
+        'html',
+        new TextEncoder().encode(
+          '<article>' + 'x'.repeat(1_048_577) + '</article>',
+        ),
+      ),
+    ).toMatchObject({
+      status: 'rejected',
+      code: 'projection_too_large',
+    });
+  });
+  it('selects the full marked body after a separate heading and abstract', async () => {
+    const result = await projectStructuredDocument(
+      'html',
+      new TextEncoder().encode(
+        '<main><div class="post-header"><h1>Synthetic study</h1><p>Short abstract.</p></div><div class="post_cnt post_cnt_first_letter"><p>First complete argument.</p><figure><img src="/chart.png" alt="Measurements"><figcaption>Measurement conditions.</figcaption></figure><p>Necessary final conclusion.</p></div><section>Unrelated navigation.</section></main>',
+      ),
+    );
+    if (result.status !== 'projected') throw new Error('expected projection');
+    const text = new TextDecoder().decode(result.value.sourceUtf8);
+    expect(text).toContain('First complete argument.');
+    expect(text).toContain('Measurement conditions.');
+    expect(text).toContain('Necessary final conclusion.');
+    expect(text).not.toContain('Unrelated navigation.');
+  });
+
+  it('does not select a marked podcast sidebar in place of its enclosing article', async () => {
+    const result = await projectStructuredDocument(
+      'html',
+      new TextEncoder().encode(
+        '<main><div class="post__content"><p>The actual opening argument.</p><aside><div class="post__content"><p>Listen to the audio version.</p><audio src="/episode.mp3"></audio></div></aside><p>The complete reasoning continues here.</p><p>Final source-backed conclusion.</p></div></main>',
+      ),
+    );
+    if (result.status !== 'projected') throw new Error('expected projection');
+    const text = new TextDecoder().decode(result.value.sourceUtf8);
+    expect(text).toContain('The actual opening argument.');
+    expect(text).toContain('The complete reasoning continues here.');
+    expect(text).toContain('Final source-backed conclusion.');
+  });
+
   it.each(['postBody', 'post__body', 'story_body'])(
     'keeps all parts and intervening figures within %s',
     async (container) => {

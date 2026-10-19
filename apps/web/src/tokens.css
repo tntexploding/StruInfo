@@ -1,51 +1,57 @@
 :root {
   color-scheme: light dark;
 
-  --si-color-bg-canvas: light-dark(#edf1f2, #172126);
-  --si-color-bg-shell: light-dark(#e8edee, #1d2a31);
-  --si-color-surface-1: light-dark(#ffffff, #293840);
-  --si-color-surface-2: light-dark(#f2f5f5, #22323a);
-  --si-color-surface-raised: light-dark(#ffffff, #35464f);
-  --si-color-surface-ai: light-dark(#f5eee8, #302c2a);
-  --si-color-ai: light-dark(#805838, #d7b495);
-  --si-color-ai-ink: light-dark(#ffffff, #292422);
-  --si-color-ai-border: light-dark(#c0a993, #806d5d);
+  --si-color-bg-canvas: light-dark(#f3f2ef, #161617);
+  --si-color-bg-shell: light-dark(#eae9e5, #1f1f20);
+  --si-color-surface-1: light-dark(#fffefa, #28282a);
+  --si-color-surface-2: light-dark(#f0efeb, #232324);
+  --si-color-surface-raised: light-dark(#ffffff, #353636);
+  --si-color-surface-ai: light-dark(#eaf3f7, #33373b);
+  --si-color-ai: light-dark(#27637c, #9ed3e9);
+  --si-color-ai-ink: light-dark(#ffffff, #14212a);
+  --si-color-ai-border: light-dark(#779caa, #749ba9);
 
-  --si-color-text-primary: light-dark(#24343c, #e8eff1);
-  --si-color-text-secondary: light-dark(#52636c, #b4c5cd);
-  --si-color-text-muted: light-dark(#60717a, #a0b3bd);
-  --si-color-text-disabled: light-dark(#78888f, #7e929d);
+  --si-color-text-primary: light-dark(#292a2b, #eeede7);
+  --si-color-text-secondary: light-dark(#555653, #bcbcba);
+  --si-color-text-muted: light-dark(#656560, #aeaeaa);
+  --si-color-text-disabled: light-dark(#777773, #858580);
 
-  --si-color-border-subtle: light-dark(#d5dfe3, #425660);
-  --si-color-border-default: light-dark(#a5b5bd, #657e8b);
-  --si-color-control-edge: light-dark(#81949e, #899fab);
-  --si-color-signal: light-dark(#285d74, #9bcddd);
-  --si-color-signal-ink: light-dark(#ffffff, #132e3a);
-  --si-color-warning: light-dark(#7b5100, #ebc474);
-  --si-color-danger: light-dark(#b52f37, #f0858b);
-  --si-color-danger-text: light-dark(#a8202d, #ff9ca0);
-  --si-color-topic: light-dark(#6856b8, #b9aaf5);
-  --si-color-topic-text: light-dark(#6046a1, #c4b7fa);
-  --si-color-info: light-dark(#315eb0, #94b7ef);
-  --si-color-info-text: light-dark(#285493, #adc9f2);
-  --si-color-success-text: light-dark(#216647, #9dd7b7);
-  --si-shadow-control: 0 1px 2px light-dark(#213c4914, #00000028);
-  --si-shadow-paper: 0 6px 24px light-dark(#213c490c, #00000024);
+  --si-color-border-subtle: light-dark(#d7d5cf, #504f50);
+  --si-color-border-default: light-dark(#aaa9a2, #70706e);
+  --si-color-control-edge: light-dark(#85857f, #818181);
+  --si-color-signal: light-dark(#805800, #f3cd7b);
+  --si-color-signal-ink: light-dark(#ffffff, #0b1118);
+  --si-color-warning: light-dark(#925023, #f0b38d);
+  --si-color-danger: light-dark(#a53845, #f0a6ac);
+  --si-color-danger-text: var(--si-color-danger);
+  --si-color-topic: light-dark(#984d42, #f4b0a4);
+  --si-color-topic-text: var(--si-color-topic);
+  --si-color-relation: light-dark(#405fa4, #96b4ff);
+  --si-color-info: var(--si-color-ai);
+  --si-color-info-text: var(--si-color-ai);
+  --si-color-success-text: light-dark(#326c40, #a7d6aa);
+  --si-shadow-control: 0 1px 2px light-dark(#292a2b0f, #0000001a);
+  --si-shadow-paper: 0 4px 14px light-dark(#292a2b08, #0000001f);
+  --si-shadow-float: 0 12px 36px light-dark(#292a2b26, #00000050);
 
   --si-font-ui:
     'Noto Sans SC', 'Source Han Sans SC', 'Microsoft YaHei UI', 'PingFang SC',
     system-ui, sans-serif;
   --si-font-display: var(--si-font-ui);
+  --si-font-reading:
+    'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'SimSun', serif;
   --si-font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
 
   --si-text-xs: 0.75rem;
   --si-text-sm: 0.8125rem;
   --si-text-body: 0.875rem;
-  --si-text-control: 1rem;
+  --si-text-control: 0.875rem;
   --si-text-subheading: 1.25rem;
   --si-text-section: 1.25rem;
-  --si-text-reading: clamp(1.25rem, 2vw, 1.625rem);
-  --si-text-title: clamp(1.625rem, 2.5vw, 2rem);
+  --si-text-reading: 1.0625rem;
+  --si-text-title: 1.75rem;
+  --si-reading-line-height: 1.85;
+  --si-reading-measure: 47.5rem;
 
   --si-space-0: 0;
   --si-space-1: 0.125rem;
@@ -74,8 +80,8 @@
   --si-evidence-width: clamp(22.5rem, 30vw, 30rem);
   --si-workbench-height: clamp(32rem, 72svh, 52rem);
 
-  --si-motion-direct: 120ms;
-  --si-motion-reveal: 200ms;
+  --si-motion-direct: 360ms;
+  --si-motion-reveal: 480ms;
   --si-motion-attention: 220ms;
   --si-motion-ease: cubic-bezier(0.22, 0.8, 0.2, 1);
 }
