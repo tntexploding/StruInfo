@@ -222,7 +222,7 @@ function Wait-InstanceReady {
     $healthy = -not $health -or $state.Health.Status -eq 'healthy'
     if ($Database) {
       if ($healthy) {
-        $result = Invoke-InstanceDocker $Config @('exec', $Name, 'pg_isready', '-q')
+        $result = Invoke-InstanceDocker $Config @('exec', $Name, 'pg_isready', '-h', '127.0.0.1', '-q')
         if ($result.ExitCode -eq 0) { return }
       }
     } elseif ($healthy -and (Test-ApplicationReady $Config)) { return }
