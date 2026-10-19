@@ -440,21 +440,27 @@ export function MaterialsWorkspace({
       {inbox ? columnSeparator('end', '调整收件箱工具宽度') : null}
       <header className="workflow-page-heading">
         <div>
-          <h1>{inbox ? '收件箱' : maintenance ? '数据备份与恢复' : '导入'}</h1>
+          {maintenance ? (
+            <h2>数据备份与恢复</h2>
+          ) : (
+            <h1>{inbox ? '收件箱' : '导入'}</h1>
+          )}
           {inbox ? (
             <p>新订阅资料先在这里选择。接受后进入资料库，拒绝的资料可恢复。</p>
           ) : null}
         </div>
-        <button
-          className="secondary-action"
-          type="button"
-          onClick={() => {
-            onRefresh();
-            void loadIntake();
-          }}
-        >
-          刷新材料列表
-        </button>
+        {!maintenance ? (
+          <button
+            className="secondary-action"
+            type="button"
+            onClick={() => {
+              onRefresh();
+              void loadIntake();
+            }}
+          >
+            刷新材料列表
+          </button>
+        ) : null}
       </header>
 
       <details className="workflow-mode-summary" aria-label="导入页操作指南">
@@ -628,9 +634,7 @@ export function MaterialsWorkspace({
                         aria-live="polite"
                       >
                         {localFile.status === 'idle' ? (
-                          <p>
-                            浏览器只读取你明确选择的文件，不会读取目录路径。
-                          </p>
+                          <p>请选择要导入的文件。</p>
                         ) : null}
                         {localFile.status === 'loading' ? (
                           <p role="status">正在读取 {localFile.fileName}…</p>
@@ -872,7 +876,7 @@ export function MaterialsWorkspace({
                           localFile.value.documentFormat === 'pdf'
                           ? 'PDF 文字层将在本地服务导入时按页提取；导入后请在“拆分”页检查和修改。扫描件暂不支持 OCR。'
                           : '选择文件后在这里检查正文；编辑请使用前置文字或后续拆分流程。'
-                        : '粘贴或输入待保存的 Markdown；内容不会写入 Git 或前端包体。'
+                        : '粘贴或输入 Markdown 正文。'
                     }
                   />
                 </label>
@@ -1088,16 +1092,16 @@ export function MaterialsWorkspace({
         </div>
       ) : null}
 
-      <details
-        className="workspace-transfer-section workflow-tool-drawer"
+      <section
+        className="workspace-transfer-section settings-group"
         aria-labelledby="workspace-transfer-title"
       >
-        <summary id="workspace-transfer-title">全部个人数据导入导出</summary>
+        <h2 id="workspace-transfer-title">完整备份</h2>
         <div className="workspace-transfer-grid">
           <article className="workspace-transfer-card">
             <h3>导出全部个人数据</h3>
             <p>
-              导出原始文件、拆分结果、条目、标签、联系、知识图谱和个人设置。导出文件不会写入代码仓库。
+              备份原始文件、分段、条目、标签、联系和个人设置。浏览器中的光效和字号需单独设置。
             </p>
             <button
               className="secondary-action"
@@ -1120,7 +1124,7 @@ export function MaterialsWorkspace({
           >
             <h3>恢复全部个人数据</h3>
             <p>
-              只能恢复到相同且尚未建立数据的工作区。恢复前会检查数据库、原始文件和个人设置；旧版数据包也可以读取。
+              仅支持恢复到同一工作区的空数据库。点击后先检查备份文件，再恢复数据。
             </p>
             <label className="field">
               <span>个人数据文件名</span>
@@ -1151,7 +1155,7 @@ export function MaterialsWorkspace({
           </p>
         ) : null}
         <ActionNotice feedback={transferFeedback} />
-      </details>
+      </section>
     </div>
   );
 }

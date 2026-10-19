@@ -116,6 +116,21 @@ describe('Agent HTTP authentication and dispatch', () => {
     ).toHaveBeenCalledWith(400);
   });
 
+  it.each([
+    ['source_quality_status', '/api/v1/ingestion/commands'],
+    ['source_quality_control', '/api/v1/ingestion/commands'],
+    ['source_description_generate', '/api/v1/ingestion/commands'],
+    ['ai_execution_save', '/api/v1/ai-price/commands'],
+  ])('keeps %s on the owner route', async (operation, path) => {
+    const f = fixture();
+    await f.send(path, undefined, {operation, input: {}});
+    expect(f.owner.execute).toHaveBeenCalledWith(operation, {});
+    expect(
+      (await f.send(path, 'Bearer ' + 'a'.repeat(32), {operation, input: {}}))
+        .status,
+    ).toHaveBeenCalledWith(403);
+  });
+
   it('never dispatches missing or wrong credentials to owner operations', async () => {
     const f = fixture();
     expect(
@@ -133,6 +148,18 @@ describe('Agent HTTP authentication and dispatch', () => {
       (await f.send('/api/v1/ai-tasks/commands', 'Bearer ' + 'a'.repeat(32)))
         .status,
     ).toHaveBeenCalledWith(403);
+  });
+  it('exposes the shared standard through owner and authenticated Agent task routes', async () => {
+    const f = fixture();
+    const body = {operation: 'processing_standard', input: {stage: 'split'}};
+    await f.send('/api/v1/ai-tasks/commands', undefined, body);
+    expect(f.owner.execute).toHaveBeenCalledWith('processing_standard', {
+      stage: 'split',
+    });
+    await f.send('/api/v1/agent/commands', 'Bearer ' + 'a'.repeat(32), body);
+    expect(f.agent.execute).toHaveBeenCalledWith('processing_standard', {
+      stage: 'split',
+    });
   });
   it('preserves safe conflicts and hides raw errors', async () => {
     const f = fixture();

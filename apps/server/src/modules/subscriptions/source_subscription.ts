@@ -234,6 +234,7 @@ export interface SourceSubscriptionServiceDependencies {
 }
 
 interface SourceSubscriptionState {
+  readonly qualityReview?: ReviewSourceSubscription['qualityReview'];
   readonly lastAttemptAt?: string;
   readonly lastRunId?: string;
   readonly lastSuccessAt?: string;
@@ -311,6 +312,9 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
             sourceConfigurationIdentity(previous) ===
               sourceConfigurationIdentity(subscription)
             ? copySourceSubscriptionWithState(subscription, {
+                ...(previous.qualityReview
+                  ? {qualityReview: previous.qualityReview}
+                  : {}),
                 ...(previous.lastAttemptAt === undefined
                   ? {}
                   : {lastAttemptAt: previous.lastAttemptAt}),
@@ -1179,6 +1183,7 @@ function copySourceSubscriptionWithState(
   state: Readonly<SourceSubscriptionState>,
 ): Readonly<ReviewSourceSubscription> {
   const timestamps = {
+    ...(state.qualityReview ? {qualityReview: state.qualityReview} : {}),
     ...(state.lastAttemptAt === undefined
       ? {}
       : {lastAttemptAt: state.lastAttemptAt}),

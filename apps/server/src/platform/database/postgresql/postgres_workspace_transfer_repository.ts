@@ -213,6 +213,10 @@ async function restoreInTransaction(
                 if (
                   !['ai_price_window_closed', 'ai_operations_paused'].includes(
                     String(state.errorCode),
+                  ) &&
+                  !(
+                    state.automaticRetry &&
+                    !['succeeded', 'cancelled'].includes(String(state.status))
                   )
                 )
                   return row;

@@ -65,6 +65,13 @@ export class PostgresAgentTaskRepository implements AgentTaskRepository {
     );
     return result.rows.map(decode);
   }
+  public async listRetryDeferred(workspaceId: string) {
+    const result = await this.pool.query(
+      "SELECT * FROM struinfo.processing_agent_task WHERE workspace_id=$1 AND NOT pause_requested AND NOT cancel_requested AND state_text::jsonb->>'status'='paused' AND state_text::jsonb#>>'{automaticRetry,notBefore}' IS NOT NULL ORDER BY updated_at,task_id LIMIT 32",
+      [workspaceId],
+    );
+    return result.rows.map(decode);
+  }
   public async listForSnapshots(
     workspaceId: string,
     snapshotIds: readonly string[],

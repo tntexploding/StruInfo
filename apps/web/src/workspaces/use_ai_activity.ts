@@ -74,7 +74,10 @@ export function useAiActivity(refreshToken: number) {
           ),
           aiWorkflowCommand<AiTask[]>('tasks_list', {prioritizeActive: true}),
           reportCommand<ReportList>('reports_list', {prioritizeActive: true}),
-          aiWorkflowCommand<AiQueueStatus>('ingestion_status', {limit: 1}),
+          aiWorkflowCommand<AiQueueStatus>('ingestion_status', {
+            limit: 100,
+            status: 'pending',
+          }),
           aiWorkflowCommand<{records: IntakeRecord[]}>('intake_status'),
         ]);
         if (!Array.isArray(intake.records))

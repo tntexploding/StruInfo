@@ -2,10 +2,10 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "StruInfo-v0.3.0-npm-closure",
-  "documentNamespace": "https://struinfo.invalid/spdx/releases/v0.3.0/npm-closure",
+  "name": "StruInfo-v0.4.0-npm-closure",
+  "documentNamespace": "https://struinfo.invalid/spdx/releases/v0.4.0/npm-closure",
   "creationInfo": {
-    "created": "2026-09-20T00:00:00Z",
+    "created": "2026-10-19T00:00:00Z",
     "creators": [
       "Tool: StruInfo M0-S Maintenance audit-npm-closure.mjs",
       "Tool: M0-S-FOUNDATION-MAINT-001 exact-closure materialization",
@@ -13,7 +13,8 @@
       "Tool: StruInfo M1A-MD-DEP-MAINT-001 materialize-dependency-increment.mjs",
       "Tool: StruInfo M1E-5B exact document-import dependency materialization",
       "Tool: StruInfo M1I-2 RSS/Atom exact dependency materialization",
-      "Tool: ADR 0075 MCP dependency and installed-license review"
+      "Tool: ADR 0075 MCP dependency and installed-license review",
+      "Tool: StruInfo v0.4.0 exact security repair reconciliation"
     ],
     "licenseListVersion": "3.27"
   },
@@ -24,14 +25,14 @@
     {
       "SPDXID": "SPDXRef-RootPackage",
       "name": "struinfo",
-      "versionInfo": "0.3.0",
+      "versionInfo": "0.4.0",
       "downloadLocation": "NOASSERTION",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
       "licenseDeclared": "MIT",
       "copyrightText": "NOASSERTION",
       "primaryPackagePurpose": "APPLICATION",
-      "comment": "Dependency inventory for the v0.3.0 document workflow release. The admitted lockfile and dependency identities are unchanged from the prior source baseline. UI-READING-20260908 reuses the already included mdast-util-from-markdown 2.0.3 runtime closure in apps/web in addition to apps/server; no package identities or integrity values change. Container operating-system packages are reported separately by the runtime image scan."
+      "comment": "v0.4.0 application dependency closure; exact security patches, seven obsolete transitive identities removed. OS packages are scanned separately."
     },
     {
       "SPDXID": "SPDXRef-Package-2c8152c2f849b2d0",
@@ -2576,10 +2577,10 @@
       "comment": "Role=development; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-844ce098a06068f6",
+      "SPDXID": "SPDXRef-Package-c80b37910d00f9b8",
       "name": "@vitest/expect",
-      "versionInfo": "4.1.10",
-      "downloadLocation": "https://registry.npmjs.org/@vitest/expect/-/expect-4.1.10.tgz",
+      "versionInfo": "4.1.11",
+      "downloadLocation": "https://registry.npmjs.org/@vitest/expect/-/expect-4.1.11.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -2587,30 +2588,30 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "4B990B73617CA3D052ADD0824A8021586BB3DD26C8350D01AC88AFC10EA43D84"
+          "checksumValue": "503D668851CE760FB60BB2B4681452089D8658A5FBD2B1F626DECE4C1FBCC57F"
         },
         {
           "algorithm": "SHA512",
-          "checksumValue": "62C0A7FAA024D465A340E58512C11C2F680D434CE656642EDD3D37A8FE94CA386D99DB70B5BB88F830129FFEE2401DC71935E4741C0675DCF13E59A2AA5E6F94"
+          "checksumValue": "557DB1E6F3495C44F8ECA005CF011123E29132D4D30925937D230AB16EC9B14B17578A6CABEF9EDC3BD9A6E4C33A91DCC72B620ECEA9DA78556F6B550E289463"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40vitest%2Fexpect@4.1.10"
+          "referenceLocator": "pkg:npm/%40vitest%2Fexpect@4.1.11"
         }
       ],
       "supplier": "Person: GitHub Actions",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
-      "SPDXID": "SPDXRef-Package-3313c01bfdc56e63",
+      "SPDXID": "SPDXRef-Package-eddf0de30a0a75b0",
       "name": "@vitest/mocker",
-      "versionInfo": "4.1.10",
-      "downloadLocation": "https://registry.npmjs.org/@vitest/mocker/-/mocker-4.1.10.tgz",
+      "versionInfo": "4.1.11",
+      "downloadLocation": "https://registry.npmjs.org/@vitest/mocker/-/mocker-4.1.11.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -2618,30 +2619,30 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "2D3F2FB7BC349F7B64183CFE4DD09B577900F269D16B5DFC1D95A6BF2176A4E3"
+          "checksumValue": "5F42C3959636909C506885EF643F4A4E4D024BD7939934465F280C42164EB142"
         },
         {
           "algorithm": "SHA512",
-          "checksumValue": "BF4C5A7B3B7E0CA12629F6B1835DF795DCC00EBC0B19DED97B531F4104D87EFB3C3AA648C1BC72C5A614462BF057BB16CB97EA9F7AC7E6E3AB4A9D3B6E9E383B"
+          "checksumValue": "D972550F9E5DD68E40668BACE42086292EF883FAE23A3F68744B766D0A4255979B947C8776731E165E239745E3536D6CB5FE266E35247B0D9E5D066DEB983909"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40vitest%2Fmocker@4.1.10"
+          "referenceLocator": "pkg:npm/%40vitest%2Fmocker@4.1.11"
         }
       ],
       "supplier": "Person: GitHub Actions",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
-      "SPDXID": "SPDXRef-Package-da6491a385b77a43",
+      "SPDXID": "SPDXRef-Package-fa4f31c9db62fd7b",
       "name": "@vitest/pretty-format",
-      "versionInfo": "4.1.10",
-      "downloadLocation": "https://registry.npmjs.org/@vitest/pretty-format/-/pretty-format-4.1.10.tgz",
+      "versionInfo": "4.1.11",
+      "downloadLocation": "https://registry.npmjs.org/@vitest/pretty-format/-/pretty-format-4.1.11.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -2649,30 +2650,30 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "05B345095839E9C8CABAE7CC2220475C2EE63DD787B635808A164E7EB07E5AAA"
+          "checksumValue": "4EFF485284E6338A567B63BE5F6A74C0B42B9E30E0164A8006D832C26130E51B"
         },
         {
           "algorithm": "SHA512",
-          "checksumValue": "5B51EC8D21F831743D61F9A684B0282187F51D17DE9100869E078881C7A2E8C3F941019651ED20928A5D6506950853BE24324CAC0246C1AE69469369BF2E0FF1"
+          "checksumValue": "CA26733DB1934BD4ABFC9A4597CCC7ADC2240287CD6C557A936D6F22040DFDC63FA3165E5E126FE6C73F3012798C5296996B3EA091F0D145CB66399FF77D7E57"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40vitest%2Fpretty-format@4.1.10"
+          "referenceLocator": "pkg:npm/%40vitest%2Fpretty-format@4.1.11"
         }
       ],
       "supplier": "Person: GitHub Actions",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
-      "SPDXID": "SPDXRef-Package-183d404dcfa5e237",
+      "SPDXID": "SPDXRef-Package-20fe20b1785547fb",
       "name": "@vitest/runner",
-      "versionInfo": "4.1.10",
-      "downloadLocation": "https://registry.npmjs.org/@vitest/runner/-/runner-4.1.10.tgz",
+      "versionInfo": "4.1.11",
+      "downloadLocation": "https://registry.npmjs.org/@vitest/runner/-/runner-4.1.11.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -2680,30 +2681,30 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "97D3F0143C81311288DE38DB418717B1075877B3EE9E485E09360972265205D5"
+          "checksumValue": "335051B85FCE0AD3788C67B84B7949835B5EEEB20B785D8E3741EB396FC23D58"
         },
         {
           "algorithm": "SHA512",
-          "checksumValue": "20A23A929207F8B9A944EA65C8BC0105A09F32039938CB328156BA040443E9A840D38551B8949AE8E6951BB911BD210C0FCEF455DF75AD24B0D1E7A0B56C8B1A"
+          "checksumValue": "2F3B6F52077030D24C2248F78509E7C620B65F2D73371ABDDBC5BFC618C22DA342CEA4D93AE763C1B41FEAFF489ED6463F0D77DA2D8BAB6AE04D16470F724737"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40vitest%2Frunner@4.1.10"
+          "referenceLocator": "pkg:npm/%40vitest%2Frunner@4.1.11"
         }
       ],
       "supplier": "Person: GitHub Actions",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
-      "SPDXID": "SPDXRef-Package-58095741d52774e8",
+      "SPDXID": "SPDXRef-Package-f1ff1cd0895c6e9c",
       "name": "@vitest/snapshot",
-      "versionInfo": "4.1.10",
-      "downloadLocation": "https://registry.npmjs.org/@vitest/snapshot/-/snapshot-4.1.10.tgz",
+      "versionInfo": "4.1.11",
+      "downloadLocation": "https://registry.npmjs.org/@vitest/snapshot/-/snapshot-4.1.11.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -2711,30 +2712,30 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "A98F52CE0C561F58FDCB5663C280DFB7F331766EC890CF9D1F2FB4E81E773EDD"
+          "checksumValue": "6893221F95CCEA0C56DFBCC6E95AE2198FD086E6DE5E11CAF12BAF1CF2B0C605"
         },
         {
           "algorithm": "SHA512",
-          "checksumValue": "C5191F393D6AA53022FD38B86352ED7D1737904BAAC46C39F5E3768CDF6945632D4BF5C37AF7A485C152AAF42A8D434692C7E3309BB763EA09FB86299F639A27"
+          "checksumValue": "A4DEE2927D4E37B87C79EE20200A78033C8AFB306D24FCD56EA3A0BB92C2121E1568955B3D072061060920C1903D755E249AB57E77DACE2B3B6B9A4534F6A1A2"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40vitest%2Fsnapshot@4.1.10"
+          "referenceLocator": "pkg:npm/%40vitest%2Fsnapshot@4.1.11"
         }
       ],
       "supplier": "Person: GitHub Actions",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
-      "SPDXID": "SPDXRef-Package-65932192870e8d96",
+      "SPDXID": "SPDXRef-Package-350cb731ee05fdc9",
       "name": "@vitest/spy",
-      "versionInfo": "4.1.10",
-      "downloadLocation": "https://registry.npmjs.org/@vitest/spy/-/spy-4.1.10.tgz",
+      "versionInfo": "4.1.11",
+      "downloadLocation": "https://registry.npmjs.org/@vitest/spy/-/spy-4.1.11.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -2742,30 +2743,30 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "501D93668229BA27D7A59175DAC6F650D26ED5861C30CEC9F6CEB1BD73E5A893"
+          "checksumValue": "9B15875DA96E769A19B3C9E2C316459528C57B9C20168C5ABAA1CE050B7C8490"
         },
         {
           "algorithm": "SHA512",
-          "checksumValue": "3CB7FF520BE8AB9C0EFDBE2BC18091D61D8F488757CFBC2791014C894A4B76D33B97AA6A545710201107C93D7E97E723EE637001F647CEA5EA0F28EF3AEC1B0F"
+          "checksumValue": "6A935AFE9AD0CB6A827B2C219E2C4E1CF442806361BE0ED3E036A97E5D466A12E9FD1FAE8419B970FC85A0D572AAC35DDA1D672712FA06AA9D22388004BEB460"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40vitest%2Fspy@4.1.10"
+          "referenceLocator": "pkg:npm/%40vitest%2Fspy@4.1.11"
         }
       ],
       "supplier": "Person: GitHub Actions",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
-      "SPDXID": "SPDXRef-Package-e58393d3d38732f7",
+      "SPDXID": "SPDXRef-Package-8cbca9c2c0a666c8",
       "name": "@vitest/utils",
-      "versionInfo": "4.1.10",
-      "downloadLocation": "https://registry.npmjs.org/@vitest/utils/-/utils-4.1.10.tgz",
+      "versionInfo": "4.1.11",
+      "downloadLocation": "https://registry.npmjs.org/@vitest/utils/-/utils-4.1.11.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -2773,24 +2774,24 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "BAEC96B90C182C46BB08114AA7DA40B22E547AD95A4C304DB9E6897AA02271C9"
+          "checksumValue": "AC1150697C2B1B5B14322F3AC85DE74A405228291DE1265F2E453C6DB9544EE6"
         },
         {
           "algorithm": "SHA512",
-          "checksumValue": "7F2F5A9BF1D6C5B686B7F49AC2BA7DD2FB7A63A8D0C1FD515FBEDCCF7BB0A09C0954C962FDED4813044F9CC349EEF29F3D3C28D1D89789F9293EFC07F6FEE718"
+          "checksumValue": "CD30951A9C85B0658186594EC8A953C3FBE7AFA0FDAB1B1F483C9F6F26664F28C7C3937F56EBF31E91E84239B6649CE7E11260C79C38AFB5747ABEBD0A62E03D"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40vitest%2Futils@4.1.10"
+          "referenceLocator": "pkg:npm/%40vitest%2Futils@4.1.11"
         }
       ],
       "supplier": "Person: GitHub Actions",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
       "SPDXID": "SPDXRef-Package-f95b7a83c78ce214",
@@ -3072,10 +3073,10 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-8d760e4ad257be5f",
+      "SPDXID": "SPDXRef-Package-8678db7ff88f0a72",
       "name": "brace-expansion",
-      "versionInfo": "5.0.9",
-      "downloadLocation": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.9.tgz",
+      "versionInfo": "5.0.12",
+      "downloadLocation": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.12.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -3083,24 +3084,24 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "5D06001FDDD25CBEE90C96DB4DC5B7B57711B984C3141E28D10F143DEB52DBAF"
+          "checksumValue": "EF8448EC78F20B692F04FA6D01F39B5AB34C66404BEA3429F5A39C6C9E0BE8B4"
         },
         {
           "algorithm": "SHA512",
-          "checksumValue": "49C43822EBC8105D533253FB66DFAF8C9FFFF7394F6F64837315B13376E4F2CEADE8619D27B28ED5D09C4E274E3C929E3D6DF42C4FF6713EF00B23E1A3DFD6C6"
+          "checksumValue": "628BD0DEBCE168B308AC38CD0CC90D4B4D6D79AF77AA11211B9C72F1FEBE47497E770DCA8BEE6C0A822823DE368AE2D94C75A881692D830543854D3D88D12299"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/brace-expansion@5.0.9"
+          "referenceLocator": "pkg:npm/brace-expansion@5.0.12"
         }
       ],
       "supplier": "Person: juliangruber",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
       "SPDXID": "SPDXRef-Package-9cffd247ee4e3e7e",
@@ -3129,37 +3130,6 @@
         }
       ],
       "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-d08b5e69ef91add4",
-      "name": "buffer-from",
-      "versionInfo": "1.1.2",
-      "downloadLocation": "https://registry.npmjs.org/buffer-from/-/buffer-from-1.1.2.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2016, 2018 Linus Unnebäck | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "9C2B03D59ECA8F463A1927E07273DDAA87785FE3F61626C42B005540E962E343"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "13E5D0091C126DA6A20A1B6FEA4E83C2073E6F1F81B3ABEE2891C7979928C7F05A29B8625F3A903B02B870EDB6C84946A763829A3C15853DC79B18323C69C97D"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/buffer-from@1.1.2"
-        }
-      ],
-      "supplier": "Person: linusu",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
@@ -3380,37 +3350,6 @@
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity admitted by M1A-MD-DEP-MAINT-001; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-0c81b11a9415455c",
-      "name": "concat-stream",
-      "versionInfo": "2.0.0",
-      "downloadLocation": "https://registry.npmjs.org/concat-stream/-/concat-stream-2.0.0.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2013 Max Ogden | The above copyright notice and this permission notice | IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "CC54997A7CE0221915AC863F5A684C0013563861B2ECA63781AE1A8CC01E150C"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "316B9F61D170E7771C1A3080F8E97B5C96290255BAFE9AD2333B8F393467246706CEE84B9F849CAF3EEA7FAA3C6D1399E75E25B5ACDC2052597AF71F6E8D31EC"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/concat-stream@2.0.0"
-        }
-      ],
-      "supplier": "Person: mafintosh",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
       "SPDXID": "SPDXRef-Package-bd8d291d6378508a",
@@ -7505,10 +7444,10 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-ed4bbf16eb92dd73",
+      "SPDXID": "SPDXRef-Package-19445b4b51c04470",
       "name": "multer",
-      "versionInfo": "2.3.0",
-      "downloadLocation": "https://registry.npmjs.org/multer/-/multer-2.3.0.tgz",
+      "versionInfo": "2.4.0",
+      "downloadLocation": "https://registry.npmjs.org/multer/-/multer-2.4.0.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -7516,24 +7455,24 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "A8810897A9443E32DE583BACFA8FD413483B973B5C5DFC09726A5405583C0969"
+          "checksumValue": "9B7237038C2533953C8645B4050FFC5FFDC594C7260DD3988556708C147DD508"
         },
         {
           "algorithm": "SHA512",
-          "checksumValue": "72335B9B7B2DB6CCE065E19F251D76E03FA31447E45C2540B283C19859FD5FB5319834851D6A84D82A048F4BEB992A6E0059EA591D52CDC9BD413B221EBEB45F"
+          "checksumValue": "EDDA9AD197057F36DE7DD4EE224CCE48CBD9582D09EC52EA04E8C9519BC30974A12144562B10324D3D701E19C4E6AD7D73B8CE25FE3721860A8C19995599AF86"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/multer@2.3.0"
+          "referenceLocator": "pkg:npm/multer@2.4.0"
         }
       ],
       "supplier": "Person: ulisesgascon",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
       "SPDXID": "SPDXRef-Package-b20a4df32f5a227e",
@@ -8776,10 +8715,10 @@
       "comment": "Role=development; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-7b128e3d41d39ecb",
+      "SPDXID": "SPDXRef-Package-b94cf93d9a9b565b",
       "name": "proxy-addr",
-      "versionInfo": "2.0.7",
-      "downloadLocation": "https://registry.npmjs.org/proxy-addr/-/proxy-addr-2.0.7.tgz",
+      "versionInfo": "2.0.8",
+      "downloadLocation": "https://registry.npmjs.org/proxy-addr/-/proxy-addr-2.0.8.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -8787,24 +8726,24 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "A0D1B6F34F6D4E733429BA95F7ADB7833C8CEAB916BA574A93F8A8476BEE46D9"
+          "checksumValue": "FFCC8055B78B0852B2889A426AD3A3003B60BC79DF704FACA194157EFA2B2587"
         },
         {
           "algorithm": "SHA512",
-          "checksumValue": "96542C30B4940D43D3E388DDAD4FCEDFBAA59E27E2B433FE670AE699972848AC8B2AFB59C69C95D27DBF6C3FCDE2D040019FE024475953B28CADAA0AD7E5D802"
+          "checksumValue": "E679F1D321B2554718EADF519D6700456B704FD1750FC3BDAEDD3C86D3EF9DDE3D5B522066D98B921BBD59F333423D5C1718C720EE9CA279D43555B993B015C9"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/proxy-addr@2.0.7"
+          "referenceLocator": "pkg:npm/proxy-addr@2.0.8"
         }
       ],
       "supplier": "Person: dougwilson",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
       "SPDXID": "SPDXRef-Package-3fe331f5536b7243",
@@ -8993,37 +8932,6 @@
       "comment": "Role=runtime; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-fc0849dcbb2c65ce",
-      "name": "readable-stream",
-      "versionInfo": "3.6.2",
-      "downloadLocation": "https://registry.npmjs.org/readable-stream/-/readable-stream-3.6.2.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright Node.js contributors. All rights reserved. | The above copyright notice and this permission notice shall be included in | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER | Copyright Joyent, Inc. and other Node contributors. All rights reserved.",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "EDD866C05E318AA9C091763EEBDD4207409B7A7648BE19C5317A96047305AB5D"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "F6EFEC9E20AB6370F959DB04447CC71381B66025EAA06E454C7522082E1221BAFA5DC2D9058D39C9AF442A361E93D3B9C4E0308C6ABED497460404BB43D49CA0"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/readable-stream@3.6.2"
-        }
-      ],
-      "supplier": "Person: matteo.collina",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
       "SPDXID": "SPDXRef-Package-0b12b1e085f0c45d",
       "name": "reflect-metadata",
       "versionInfo": "0.2.2",
@@ -9146,37 +9054,6 @@
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "LIBRARY",
       "comment": "Role=runtime; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-952cf236ee56e7de",
-      "name": "safe-buffer",
-      "versionInfo": "5.2.1",
-      "downloadLocation": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) Feross Aboukhadijeh | The above copyright notice and this permission notice shall be included in | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "5D181804516C4A693A384272A7BD0E42D17E0D4B301CCFBE408669CCAFDCB3E8"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "AE9DD2A34ECA71D9A629B1AF81A37141226BEDB1954959394BD12AD45FA9A5B468EF4F9879A0F1930E4377C34F37E183E9B8E7626D95B8FB825E6A6E62F9825D"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/safe-buffer@5.2.1"
-        }
-      ],
-      "supplier": "Person: feross",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
       "SPDXID": "SPDXRef-Package-2fb14d3728e4ebf3",
@@ -9644,10 +9521,10 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-43b6dddbe93e9eda",
+      "SPDXID": "SPDXRef-Package-d8639530bc0e83b1",
       "name": "source-map-js",
-      "versionInfo": "1.2.1",
-      "downloadLocation": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz",
+      "versionInfo": "1.2.2",
+      "downloadLocation": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.2.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "BSD-3-Clause",
@@ -9655,24 +9532,24 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "F126A6F9FCA487A43219D8CB8C3A955279187A966119D548EB5CD47E999D4853"
+          "checksumValue": "05C8CF8E7C3A6B56CADA7668FE9342B10F4B625EFC92ABA9BA05B9E8FE4D71A3"
         },
         {
           "algorithm": "SHA512",
-          "checksumValue": "51758C2A12CEC1529BEF6F0852D40F5F17D853EBAC7726ED52B2BFF2E184F0240CBEB84EA70BF30C1C23D108522FB31073BBC8B084811BC550F3E203431A5F40"
+          "checksumValue": "2868FFF18E37C77E5A6550EDB7E27898AD61A0B18750B3187D290E0C93508CD0C2DE85B53EA3E8C4CC28D292D4B1633F5041B338DFCDC5E1F2C047CD5CD3F757"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/source-map-js@1.2.1"
+          "referenceLocator": "pkg:npm/source-map-js@1.2.2"
         }
       ],
       "supplier": "Person: 7rulnik",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
       "SPDXID": "SPDXRef-Package-ac1d8053759f4403",
@@ -9828,37 +9705,6 @@
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "Role=transitive; category=CONDITIONAL_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-b7999058a3638060",
-      "name": "string_decoder",
-      "versionInfo": "1.3.0",
-      "downloadLocation": "https://registry.npmjs.org/string_decoder/-/string_decoder-1.3.0.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright Node.js contributors. All rights reserved. | The above copyright notice and this permission notice shall be included in | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER | Copyright Joyent, Inc. and other Node contributors. All rights reserved.",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "7D036900940345E423538371AE45B23BFAF4B454BC398C6BA604063B0597B3AD"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "864457F14D568C915DF0BB03276C90FF0596C5AA2912C0015355DF90CF00FA3D3EF392401A9A6DD7A72BD56860E8A21B6F8A2453A32A97A04E8FEBAEA7FC0A78"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/string_decoder@1.3.0"
-        }
-      ],
-      "supplier": "Person: matteo.collina",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
       "SPDXID": "SPDXRef-Package-1e612c025c4297ca",
@@ -10326,37 +10172,6 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-581fa15593be91b2",
-      "name": "typedarray",
-      "versionInfo": "0.0.6",
-      "downloadLocation": "https://registry.npmjs.org/typedarray/-/typedarray-0.0.6.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2010, Linden Research, Inc. | Copyright (c) 2012, Joshua Bell | The above copyright notice and this permission notice shall be included in | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "3F324B75A9581C4C85CEC25E8CD30831CCAA3C87770CEE2FF4B9167055004108"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "FDA0831066AD1AF67604893E1E62DFE227C2245C2F28535BF7F25E64F32E95F805ADA727F5015C01FE463BC07F9B07948D2A1B952E489F471686AA5FB3FE4F40"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/typedarray@0.0.6"
-        }
-      ],
-      "supplier": "Person: substack",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
       "SPDXID": "SPDXRef-Package-fc8033ed679ad668",
       "name": "typescript-eslint",
       "versionInfo": "8.66.0",
@@ -10636,37 +10451,6 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-a1bd80d6a50b36e3",
-      "name": "util-deprecate",
-      "versionInfo": "1.0.2",
-      "downloadLocation": "https://registry.npmjs.org/util-deprecate/-/util-deprecate-1.0.2.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014 Nathan Rajlich <nathan@tootallnate.net> | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "79A1DE983C1B393180C47456D6B73CAAB278A00EA6E37D5C6675F2DCDEC2A3E5"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "10F0F9AB5B97C85C49A42ACB9C27359C79EADE039AE83641A1C008888D93692080ED5089D5424331A802CC891736C5187C3D5D68AFFF2D3110F318886EB1ED73"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/util-deprecate@1.0.2"
-        }
-      ],
-      "supplier": "Person: tootallnate",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
       "SPDXID": "SPDXRef-Package-d308bd3935a6f293",
       "name": "vary",
       "versionInfo": "1.1.2",
@@ -10729,10 +10513,10 @@
       "comment": "Role=development; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-36ba52520306283b",
+      "SPDXID": "SPDXRef-Package-98cc17fe861c676a",
       "name": "vitest",
-      "versionInfo": "4.1.10",
-      "downloadLocation": "https://registry.npmjs.org/vitest/-/vitest-4.1.10.tgz",
+      "versionInfo": "4.1.11",
+      "downloadLocation": "https://registry.npmjs.org/vitest/-/vitest-4.1.11.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -10740,24 +10524,24 @@
       "checksums": [
         {
           "algorithm": "SHA256",
-          "checksumValue": "0B999A3E14E4BC096026EA61F1229AACE5F2DB2B9895245535BD1F8CFEF8100E"
+          "checksumValue": "81875725211B8C43A30213579456954603D471D022587CE0E6842D44D9ED162B"
         },
         {
           "algorithm": "SHA512",
-          "checksumValue": "47D8D44DEE52E106F41C27784CDAA90BBA0672B32CB0C4465CB5BCD2E6E35AC5BD547E4617CCB56344852D8F406EA4A4EA7B743E73B1E07E16349619D771943F"
+          "checksumValue": "7E1002ACD5D489D21B19206BE4595BB8190EED5582D59C8B9740CEE025360EB42800FC57F3862CC6CF877864298A2E656565754388016534EEE3D985F80E8477"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/vitest@4.1.10"
+          "referenceLocator": "pkg:npm/vitest@4.1.11"
         }
       ],
       "supplier": "Person: GitHub Actions",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=development; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
       "SPDXID": "SPDXRef-Package-5a71f2b741944bf1",
@@ -11280,29 +11064,33 @@
       "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
     },
     {
-      "SPDXID": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "SPDXID": "SPDXRef-Package-057320c925a914c8",
       "name": "@modelcontextprotocol/sdk",
-      "versionInfo": "1.30.0",
-      "downloadLocation": "https://registry.npmjs.org/@modelcontextprotocol/sdk/-/sdk-1.30.0.tgz",
+      "versionInfo": "1.31.0",
+      "downloadLocation": "https://registry.npmjs.org/@modelcontextprotocol/sdk/-/sdk-1.31.0.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
       "licenseDeclared": "MIT",
       "copyrightText": "Copyright (c) 2024 Anthropic, PBC | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
       "checksums": [
         {
+          "algorithm": "SHA256",
+          "checksumValue": "D2FF62B961316C4C4D7B03367EA8F70121839401ADBD7A8AA4175F8E85C87AF0"
+        },
+        {
           "algorithm": "SHA512",
-          "checksumValue": "C4A77C388CE5A8DCDCA9C36E98601AEA0F8F5B69230F9BEBA5C28E9DF95D0143CFDE3EE59EA30FC254D7426F2017E5301FBDB3D25A9A45B8EBF61A86CF47884C"
+          "checksumValue": "52F4CC8273659C804EFF6DA86F645C5460E572F3AC950B3C4F9F7E15319D0342F6EDADFD7DD185FC40C44CDB4354AE03646A70A2696C62945D03C5177152FFA7"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40modelcontextprotocol%2Fsdk@1.30.0"
+          "referenceLocator": "pkg:npm/%40modelcontextprotocol%2Fsdk@1.31.0"
         }
       ],
       "primaryPackagePurpose": "LIBRARY",
-      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
       "SPDXID": "SPDXRef-Package-3081140538322aaf",
@@ -11430,29 +11218,33 @@
       "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
     },
     {
-      "SPDXID": "SPDXRef-Package-f748c22747a9db4b",
+      "SPDXID": "SPDXRef-Package-3c53381d9fa38c39",
       "name": "fast-uri",
-      "versionInfo": "3.1.7",
-      "downloadLocation": "https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.7.tgz",
+      "versionInfo": "3.1.8",
+      "downloadLocation": "https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.8.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "BSD-3-Clause",
       "licenseDeclared": "BSD-3-Clause",
       "copyrightText": "Copyright (c) 2011-2021, Gary Court until https://github.com/garycourt/uri-js/commit/a1acf730b4bba3f1097c9f52e7d9d3aba8cdcaae | Copyright (c) 2021-present The Fastify team <https://github.com/fastify/fastify#team> |     * Redistributions of source code must retain the above copyright",
       "checksums": [
         {
+          "algorithm": "SHA256",
+          "checksumValue": "86BE033B406A7737C0521EDC8FE3E15C7AC0CB6B5E509478CC9539A2EFAA086C"
+        },
+        {
           "algorithm": "SHA512",
-          "checksumValue": "74EBD95738DD65DCFBA6177DBFA8C26F0C6B056DDF2BA9FC45CD02B5D98CE1BBA6CCC9F1CB005886EA61E89F35F51470FE4BBEACB6DE9707CCBA792DBB35551E"
+          "checksumValue": "19932D6544CD4693952040A85F02CD652E7150613E99535B4C1F21FFB4708764C559C05088FCD3832662D39045F543192A42C9BFC5C14494E553BCE0F3E65F32"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/fast-uri@3.1.7"
+          "referenceLocator": "pkg:npm/fast-uri@3.1.8"
         }
       ],
       "primaryPackagePurpose": "LIBRARY",
-      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
       "SPDXID": "SPDXRef-Package-0e4de692bbcc1d83",
@@ -11480,29 +11272,33 @@
       "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
     },
     {
-      "SPDXID": "SPDXRef-Package-35c11e6aabfe847f",
+      "SPDXID": "SPDXRef-Package-d050933585a359f4",
       "name": "ip-address",
-      "versionInfo": "10.7.0",
-      "downloadLocation": "https://registry.npmjs.org/ip-address/-/ip-address-10.7.0.tgz",
+      "versionInfo": "10.7.1",
+      "downloadLocation": "https://registry.npmjs.org/ip-address/-/ip-address-10.7.1.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
       "licenseDeclared": "MIT",
       "copyrightText": "Copyright (C) 2011 by Beau Gunderson | The above copyright notice and this permission notice shall be included in | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
       "checksums": [
         {
+          "algorithm": "SHA256",
+          "checksumValue": "7F99AC7ABDA701AFE1FD1E36DE462236FB4D1EB8C595D7AE0267BBA7D8EE55F8"
+        },
+        {
           "algorithm": "SHA512",
-          "checksumValue": "04616CC897799A95E9DEB2BA8C87400CB360A4950AD639E3CEF605F252BE5720DA6FD2409AA37460E28374FD7B1E580A6F6F9E84F80373C12D9D12DB18200C84"
+          "checksumValue": "E0E500A94F59D62DEF0A74B4E61CC68859C4303A50FBADA9003FCC5503A9F377D8C8D0BC1A5782A9A4B44229100667160AB285894B3F07CCED4518983805EE08"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/ip-address@10.7.0"
+          "referenceLocator": "pkg:npm/ip-address@10.7.1"
         }
       ],
       "primaryPackagePurpose": "LIBRARY",
-      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+      "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
     },
     {
       "SPDXID": "SPDXRef-Package-012a933eb0430cdf",
@@ -11819,7 +11615,7 @@
     {
       "spdxElementId": "SPDXRef-RootPackage",
       "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-36ba52520306283b"
+      "relatedSpdxElement": "SPDXRef-Package-98cc17fe861c676a"
     },
     {
       "spdxElementId": "SPDXRef-RootPackage",
@@ -11857,87 +11653,87 @@
       "relatedSpdxElement": "SPDXRef-Package-0e4de692bbcc1d83"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-4066fb30cdc5308f"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-9c728cf87aba8556"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-3081140538322aaf"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-65e9de41d2cef0ed"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-c7435d8f709189a6"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-50cb51119b3e7a04"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-09407100555afb65"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-20af37513d93868b"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-853506c29d44b710"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-bb2762edfa5081af"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-0e4de692bbcc1d83"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-012a933eb0430cdf"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-eea3575afa9a179d"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-560377ce6df233b2"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-6c791d6d9ec7a011"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-9b517e153c02a74f"
     },
     {
-      "spdxElementId": "SPDXRef-Package-e24cd3f58c4b73ad",
+      "spdxElementId": "SPDXRef-Package-057320c925a914c8",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-4009fd307a1c4ee1"
     },
@@ -11954,7 +11750,7 @@
     {
       "spdxElementId": "SPDXRef-Package-9c728cf87aba8556",
       "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-f748c22747a9db4b"
+      "relatedSpdxElement": "SPDXRef-Package-3c53381d9fa38c39"
     },
     {
       "spdxElementId": "SPDXRef-Package-9c728cf87aba8556",
@@ -11979,7 +11775,7 @@
     {
       "spdxElementId": "SPDXRef-Package-bb2762edfa5081af",
       "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-35c11e6aabfe847f"
+      "relatedSpdxElement": "SPDXRef-Package-d050933585a359f4"
     },
     {
       "spdxElementId": "SPDXRef-Package-bb2762edfa5081af",
@@ -11994,7 +11790,7 @@
     {
       "spdxElementId": "SPDXRef-RootPackage",
       "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-e24cd3f58c4b73ad"
+      "relatedSpdxElement": "SPDXRef-Package-057320c925a914c8"
     },
     {
       "spdxElementId": "SPDXRef-RootPackage",

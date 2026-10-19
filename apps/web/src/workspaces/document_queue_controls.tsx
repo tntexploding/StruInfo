@@ -175,7 +175,7 @@ export function DocumentQueueControls({
             <h2 id="document-queue-dialog-title">{LABELS[action]}</h2>
             <p id="document-queue-dialog-description">
               {action === 'resume'
-                ? '保留已完成步骤、断点和剩余额度。容量超限、正文冲突等需先修正的任务不会列入。'
+                ? '从上次进度继续，使用剩余额度。容量超限或正文冲突的任务需先修正。'
                 : action === 'cancel'
                   ? '只停止所选文档任务的后续步骤；已发出的请求完成后停止。原文、接收决定和已完成结果保留，取消的任务不能直接继续。'
                   : action === 'restart'

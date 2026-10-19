@@ -12,95 +12,6 @@ import {
 } from './ai_activity_state.js';
 
 type Activity = ReturnType<typeof useAiActivity>;
-export function AiActivityPanel({
-  activity,
-  items,
-}: {
-  activity: Activity;
-  items: AiActivityItem[];
-}) {
-  const {data, error, saving, saveError, setOperations} = activity;
-  const summary = data ? activitySummary(data, items) : undefined;
-  const allowed = data?.price?.policy.operationsAllowed !== false;
-  const state = error
-    ? '状态不可用'
-    : !data
-      ? '连接中'
-      : !data.model
-        ? '未连接'
-        : !allowed
-          ? '已暂停'
-          : summary?.working.length
-            ? '工作中'
-            : summary?.waiting.length
-              ? '排队中'
-              : summary?.failed.length
-                ? '有任务故障'
-                : '在线 · 空闲';
-  return (
-    <section
-      className="ai-activity ai-activity--compact"
-      data-expanded="false"
-      data-tone={
-        error
-          ? 'error'
-          : !allowed
-            ? 'paused'
-            : summary?.working.length
-              ? 'working'
-              : 'idle'
-      }
-      aria-labelledby="ai-activity-title"
-    >
-      <header className="ai-activity__header">
-        <h2 id="ai-activity-title">
-          <span className="ai-activity__emblem" aria-hidden="true">
-            AI
-          </span>{' '}
-          AI 工作
-        </h2>
-        <span className="ai-activity__summary" role="status">
-          <span className="ai-activity__dot" aria-hidden="true" />
-          {state}
-        </span>
-      </header>
-      <div className="ai-activity__actions" aria-label="内置 AI 总体许可">
-        <button
-          className="secondary-action"
-          aria-pressed={Boolean(data?.price) && allowed}
-          disabled={saving || error || !data?.price || allowed}
-          onClick={() => void setOperations(true)}
-        >
-          {allowed ? '已允许 AI 操作' : '允许 AI 操作'}
-        </button>
-        <button
-          className="secondary-action"
-          aria-pressed={Boolean(data?.price) && !allowed}
-          disabled={saving || error || !data?.price || !allowed}
-          onClick={() => void setOperations(false)}
-        >
-          {allowed ? '禁止 AI 操作' : '已禁止 AI 操作'}
-        </button>
-        {saving ? <span role="status">保存中…</span> : null}
-        {saveError ? <span role="alert">{saveError}</span> : null}
-      </div>
-      <div className="ai-activity__counts" aria-label="AI 处理统计">
-        <span>
-          <strong>{summary?.working.length ?? '—'}</strong> 处理中
-        </span>
-        <span>
-          <strong>{summary?.waiting.length ?? '—'}</strong> 排队
-        </span>
-        <span>
-          <strong>
-            {summary ? items.filter((i) => i.state === 'done').length : '—'}
-          </strong>{' '}
-          最近完成
-        </span>
-      </div>
-    </section>
-  );
-}
 export function AiTaskQueue({
   children,
   activity,
@@ -108,6 +19,7 @@ export function AiTaskQueue({
   onNavigate,
   onReviewInbox,
   onOpenDocument,
+  embedded = false,
 }: {
   children: ReactNode;
   activity: Activity;
@@ -115,10 +27,12 @@ export function AiTaskQueue({
   onNavigate: (section: ProductSection) => void;
   onReviewInbox: (id?: string) => void;
   onOpenDocument?: ((id: string) => void) | undefined;
+  embedded?: boolean;
 }) {
-  const [expanded, setExpanded] = useRememberedDisclosure(
+  const [rememberedExpanded, setExpanded] = useRememberedDisclosure(
     'overview-task-queue',
   );
+  const expanded = embedded || rememberedExpanded;
   const [historyExpanded, setHistoryExpanded] = useRememberedDisclosure(
     'overview-recent-results',
   );
@@ -148,7 +62,7 @@ export function AiTaskQueue({
       data-expanded={expanded}
       aria-labelledby="ai-task-queue-title"
     >
-      <header>
+      <header hidden={embedded}>
         <h2>
           <button
             className="overview-panel-toggle"
@@ -180,7 +94,12 @@ export function AiTaskQueue({
         hidden={!expanded}
       >
         <div className="ai-queue-schedule">
-          <strong>逐篇处理 · 模型请求并发 1</strong>
+          <strong>
+            模型请求并发上限{' '}
+            {activity.data?.price
+              ? (activity.data.price.policy.maxConcurrentRequests ?? 1)
+              : '—'}
+          </strong>
           <span>
             {summary?.nextAllowedAt
               ? '下次低谷：' + beijingTime(summary.nextAllowedAt)
@@ -230,7 +149,7 @@ export function AiTaskQueue({
     </section>
   );
 }
-function ActivityRow({
+export function ActivityRow({
   item,
   activity,
   onNavigate,
@@ -264,17 +183,28 @@ function ActivityRow({
     }
   }
   return (
-    <div className="ai-activity__item">
+    <div
+      className="ai-activity__item"
+      data-state={item.state}
+      data-actor={item.actor === '自动任务' ? 'automation' : undefined}
+    >
       <div className="ai-activity__item-meta">
         <span>
-          {item.kind} · {item.actor ?? '手动发起'}
+          {item.kind} ·{' '}
+          <span
+            className={item.actor === '自动任务' ? 'ai-task-origin' : undefined}
+          >
+            {item.actor === '自动任务'
+              ? 'AI 自动任务'
+              : (item.actor ?? '手动发起')}
+          </span>
         </span>
         <span data-state={item.state}>{ACTIVITY_LABELS[item.state]}</span>
       </div>
       <button
         className="ai-activity__item-link"
         onClick={() => {
-          if (item.state === 'review')
+          if (item.state === 'review' || item.destination === 'import')
             onReviewInbox(item.reviewSnapshotId ?? item.snapshotId);
           else if (item.snapshotId && onOpenDocument)
             onOpenDocument(item.snapshotId);

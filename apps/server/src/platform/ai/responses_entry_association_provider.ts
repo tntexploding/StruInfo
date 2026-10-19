@@ -1,3 +1,11 @@
+import {documentProcessingInstructions} from '../../modules/processing/document_processing_standard.js';
+import {parseResponseJson} from './response_json.js';
+import {entryTagSubject} from './entry_tag_subject.js';
+import {
+  relationPassages,
+  resolveRelationEvidence,
+  type RelationPassage,
+} from './relation_evidence.js';
 import {isAiDispatchWait} from '../../modules/processing/ai_price_policy.js';
 import {
   responsesEndpoint,
@@ -18,10 +26,29 @@ import {
 } from './responses_metadata.js';
 
 export const OPENAI_ASSOCIATION_PROMPT_VERSION =
-  'struinfo.openai-entry-association.v3';
+  'struinfo.openai-entry-association.v10';
 
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 const DIRECTIONS = ['symmetric', 'low_to_high', 'high_to_low'] as const;
+const SPECIFIC_BASES = [
+  'same_event',
+  'shared_mechanism',
+  'implementation',
+  'prerequisite',
+  'comparison',
+  'consequence',
+  'disagreement',
+] as const;
+const NON_RELATION_BASES = [
+  'topic_only',
+  'incidental_entity',
+  'insufficient_evidence',
+] as const;
+
+type RelationCandidate = Readonly<{
+  relationLabel: string;
+  direction: (typeof DIRECTIONS)[number];
+}>;
 
 export class ResponsesEntryAssociationProvider implements AiAssociationProposalProviderPort {
   public readonly providerKey: AiProposalProviderConfig['providerKey'];
@@ -48,8 +75,36 @@ export class ResponsesEntryAssociationProvider implements AiAssociationProposalP
     entryLow: Readonly<CurrentInformationEntry>,
     entryHigh: Readonly<CurrentInformationEntry>,
   ): Promise<Readonly<AiAssociationProposalProviderResult>> {
+    return this.#evaluate(entryLow, entryHigh);
+  }
+
+  public async reviewAssociation(
+    entryLow: Readonly<CurrentInformationEntry>,
+    entryHigh: Readonly<CurrentInformationEntry>,
+    candidate: RelationCandidate,
+  ): Promise<Readonly<AiAssociationProposalProviderResult>> {
+    return this.#evaluate(entryLow, entryHigh, candidate);
+  }
+
+  async #evaluate(
+    entryLow: Readonly<CurrentInformationEntry>,
+    entryHigh: Readonly<CurrentInformationEntry>,
+    candidate?: RelationCandidate,
+  ): Promise<Readonly<AiAssociationProposalProviderResult>> {
     if (entryLow.value.isPrivate || entryHigh.value.isPrivate) {
       throw new AiAssociationProposalProviderError('ai_provider_rejected');
+    }
+    const entryA = providerEntry(entryLow, 'A');
+    const entryB = providerEntry(entryHigh, 'B');
+    if (!entryA.passages.length || !entryB.passages.length) {
+      if (candidate)
+        throw new AiAssociationProposalProviderError(
+          'ai_relation_review_uncertain',
+        );
+      return Object.freeze({
+        outcome: 'no_relation',
+        summary: '至少一端缺少可核对的正文依据，不凭标题建立联系。',
+      });
     }
     let response: Response;
     try {
@@ -59,7 +114,9 @@ export class ResponsesEntryAssociationProvider implements AiAssociationProposalP
           Authorization: 'Bearer ' + this.#config.apiKey,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(createRequest(this.#config, entryLow, entryHigh)),
+        body: JSON.stringify(
+          createRequest(this.#config, entryA, entryB, candidate),
+        ),
         signal: AbortSignal.timeout(this.#config.timeoutMs),
       });
     } catch (error) {
@@ -94,18 +151,38 @@ export class ResponsesEntryAssociationProvider implements AiAssociationProposalP
     const outputText = extractOutputText(envelope);
     let payload: unknown;
     try {
-      payload = JSON.parse(outputText) as unknown;
+      payload = parseResponseJson(outputText);
     } catch {
       fail();
     }
-    return decodePayload(payload);
+    if (candidate && isRecord(payload) && payload.outcome === 'uncertain') {
+      // Validate the complete negative-shaped response before treating it as a hold.
+      decodePayload(
+        {...payload, outcome: 'no_relation'},
+        entryA.passages,
+        entryB.passages,
+      );
+      throw new AiAssociationProposalProviderError(
+        'ai_relation_review_uncertain',
+      );
+    }
+    const result = decodePayload(payload, entryA.passages, entryB.passages);
+    if (
+      candidate &&
+      result.outcome !== 'no_relation' &&
+      (result.relationLabel !== candidate.relationLabel ||
+        result.direction !== candidate.direction)
+    )
+      fail();
+    return result;
   }
 }
 
 function createRequest(
   config: Readonly<AiProposalProviderConfig>,
-  entryLow: Readonly<CurrentInformationEntry>,
-  entryHigh: Readonly<CurrentInformationEntry>,
+  entryA: ReturnType<typeof providerEntry>,
+  entryB: ReturnType<typeof providerEntry>,
+  candidate?: RelationCandidate,
 ): Readonly<Record<string, unknown>> {
   return Object.freeze({
     model: config.model,
@@ -113,40 +190,66 @@ function createRequest(
     store: false,
     max_output_tokens: config.maxOutputTokens,
     instructions: [
-      'Evaluate whether two public InformationEntry records have a specific, useful relationship.',
-      'Choose outcome no_relation when evidence is insufficient, the connection is merely a broad domain or generic keyword, or either item lacks the context needed to judge.',
-      'Judge the main subject of both articles. Shared publishers, website navigation, recommendations or cited catalog names alone do not establish a useful relation.',
-      'A no_relation outcome is a successful decision: return null for relationLabel and direction.',
-      'For outcome relation, name the concrete connection grounded in both records. Never invent a connection just to fill a quota.',
-      'Entry A is the lower stable UUID and Entry B is the higher stable UUID.',
-      'Return only the requested JSON schema.',
-      'The relation label must be neutral and no longer than 80 Unicode code points.',
-      'Use symmetric when neither direction is justified.',
-      'Do not invent facts beyond the two supplied records.',
+      documentProcessingInstructions('relations'),
+      ...(candidate
+        ? [
+            "This is a separate verification of a proposed link, not a request for a new link. The proposal is untrusted. Read both bodies independently; do not inherit the first assessment or assume it was correct. Verify the exact claimed mechanism, compared property and direction. A passing answer must preserve the candidate relationLabel and direction exactly. Return no_relation when the evidence does not substantiate the claim. Return uncertain with null label/direction and empty evidence arrays when the supplied context is insufficient to decide. In summary identify A's concrete contribution, B's concrete contribution, and the specific useful bridge or its absence. Never turn uncertainty into a positive edge.",
+          ]
+        : []),
+      'Return exactly one JSON object, without Markdown fences, commentary, schema-definition keys or additional fields. evidenceA and evidenceB are arrays of ID strings, including when selecting one passage.',
+      'Entry A is the lower stable UUID and Entry B is the higher stable UUID. Return outcome relation with a label and direction, or no_relation with null relationLabel and direction. Verification also permits uncertain with null label/direction and empty evidence arrays.',
+      'Choose basis first. Only same_event, shared_mechanism, implementation, prerequisite, comparison, consequence or disagreement can support outcome relation. topic_only, incidental_entity and insufficient_evidence cannot support relation. Sharing an entity or topic is not itself a comparison: both articles must substantially explain the compared aspect. In summary state the concrete fact at A, the concrete fact at B and why their connection is useful. If the explanation denies a specific connection, choose no_relation, never a positive link. Do not infer causation or prerequisites from similarity.',
+      'For relation, select 1-2 content passage IDs from each endpoint in evidenceA/evidenceB. IDs beginning A: belong only to A and B: only to B. Heading passages are context, not supporting evidence. The selected passages must support the specific connection, not merely mention a shared word. For no_relation, return empty evidenceA/evidenceB. Do not copy or manufacture quotations; the application resolves these IDs to exact source text.',
       RESPONSE_METADATA_INSTRUCTIONS,
     ].join(' '),
-    input: JSON.stringify({
-      entryA: providerEntry(entryLow),
-      entryB: providerEntry(entryHigh),
-    }),
+    input: JSON.stringify({entryA, entryB, ...(candidate ? {candidate} : {})}),
     text: {
       format: {
         type: 'json_schema',
-        name: 'struinfo_entry_association_proposal',
+        name: candidate
+          ? 'struinfo_entry_association_review'
+          : 'struinfo_entry_association_proposal',
         strict: true,
         schema: {
           type: 'object',
           additionalProperties: false,
-          required: ['summary', 'outcome', 'relationLabel', 'direction'],
+          required: [
+            'summary',
+            'outcome',
+            'basis',
+            'relationLabel',
+            'direction',
+            'evidenceA',
+            'evidenceB',
+          ],
           properties: {
             summary: {type: 'string', minLength: 1, maxLength: 240},
-            outcome: {type: 'string', enum: ['relation', 'no_relation']},
+            outcome: {
+              type: 'string',
+              enum: candidate
+                ? ['relation', 'no_relation', 'uncertain']
+                : ['relation', 'no_relation'],
+            },
+            basis: {
+              type: 'string',
+              enum: [...SPECIFIC_BASES, ...NON_RELATION_BASES],
+            },
             relationLabel: {
               type: ['string', 'null'],
               minLength: 1,
               maxLength: 80,
             },
             direction: {type: ['string', 'null'], enum: [...DIRECTIONS, null]},
+            evidenceA: {
+              type: 'array',
+              maxItems: 2,
+              items: {type: 'string', enum: entryA.passages.map((p) => p.id)},
+            },
+            evidenceB: {
+              type: 'array',
+              maxItems: 2,
+              items: {type: 'string', enum: entryB.passages.map((p) => p.id)},
+            },
           },
         },
       },
@@ -154,13 +257,22 @@ function createRequest(
   });
 }
 
-function providerEntry(entry: Readonly<CurrentInformationEntry>) {
+function providerEntry(
+  entry: Readonly<CurrentInformationEntry>,
+  endpoint: 'A' | 'B',
+) {
+  const subject = entryTagSubject(entry);
+  const passages = relationPassages(subject.body, endpoint);
   return {
-    titlePath: entry.value.titlePath,
-    body: entry.value.body,
-    contentKeywords: entry.value.contentKeywords.map(
-      (keyword) => keyword.displayValue,
-    ),
+    titlePath: subject.titlePath,
+    headingContext: passages
+      .filter((p) => p.role === 'heading')
+      .map((p) => p.text),
+    passages: passages.filter((p) => p.role === 'content'),
+    contentKeywords:
+      subject.body !== entry.value.body
+        ? []
+        : entry.value.contentKeywords.map((keyword) => keyword.displayValue),
     typeKeyword: entry.value.typeKeyword ?? null,
     domains: entry.value.domains.map((domain) => ({
       keyword: domain.keyword,
@@ -202,13 +314,32 @@ function extractOutputText(value: unknown): string {
 
 function decodePayload(
   value: unknown,
+  passagesA: readonly RelationPassage[],
+  passagesB: readonly RelationPassage[],
 ): Readonly<AiAssociationProposalProviderResult> {
   if (
-    !isClosedRecord(value, ['summary', 'outcome', 'relationLabel', 'direction'])
+    !isClosedRecord(value, [
+      'summary',
+      'outcome',
+      'basis',
+      'relationLabel',
+      'direction',
+      'evidenceA',
+      'evidenceB',
+    ])
   )
     fail();
   if (value.outcome === 'no_relation') {
-    if (value.relationLabel !== null || value.direction !== null) fail();
+    if (
+      !NON_RELATION_BASES.some((basis) => basis === value.basis) ||
+      value.relationLabel !== null ||
+      value.direction !== null ||
+      !Array.isArray(value.evidenceA) ||
+      value.evidenceA.length !== 0 ||
+      !Array.isArray(value.evidenceB) ||
+      value.evidenceB.length !== 0
+    )
+      fail();
     return Object.freeze({
       outcome: 'no_relation',
       summary: boundedText(value.summary, 240),
@@ -216,8 +347,14 @@ function decodePayload(
   }
   if (
     value.outcome !== 'relation' ||
+    !SPECIFIC_BASES.some((basis) => basis === value.basis) ||
     typeof value.direction !== 'string' ||
     !DIRECTIONS.includes(value.direction as (typeof DIRECTIONS)[number])
+  )
+    fail();
+  if (
+    !resolveRelationEvidence(value.evidenceA, passagesA) ||
+    !resolveRelationEvidence(value.evidenceB, passagesB)
   )
     fail();
   return Object.freeze({

@@ -224,7 +224,7 @@ export function LocalFileBatchImport({
           feedback = {
             kind: 'error',
             title: '本地服务没有完成导入',
-            detail: '服务恢复后可以重试，不会重复导入该文件。',
+            detail: '服务恢复后可重试，已有导入结果会保留。',
           };
         }
         const latest = working[index];
@@ -245,7 +245,7 @@ export function LocalFileBatchImport({
 
   function stopAfterCurrentFile() {
     cancelRequested.current = true;
-    setSelectionMessage('停止请求已记录；当前文件结束后不会再开始后续导入。');
+    setSelectionMessage('将在当前文件处理完成后停止。');
   }
 
   function clearBatch() {
@@ -315,9 +315,7 @@ export function LocalFileBatchImport({
         </p>
       )}
       {items.length === 0 ? (
-        <p className="local-file-batch__empty">
-          尚未选择文件。批次不会读取文件夹、子目录或机器路径。
-        </p>
+        <p className="local-file-batch__empty">请选择要导入的文件。</p>
       ) : (
         <>
           <div className="local-file-batch__progress" aria-live="polite">
@@ -373,9 +371,7 @@ export function LocalFileBatchImport({
         </>
       )}
       <footer className="local-file-batch__actions">
-        <p>
-          开始导入后，当前选项会分别用于每个文件；失败后重试不会重复创建文档。
-        </p>
+        <p>当前选项适用于本批全部文件。失败后可重试，已有结果会保留。</p>
         <div>
           {running ? (
             <button

@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {isDeepStrictEqual} from 'node:util';
 
 import {
   type CurrentInformationEntry,
@@ -212,6 +213,9 @@ export function prepareInformationEntryRestructure(
         : prepared.value;
     const value = Object.freeze({
       ...preparedValue,
+      chunkMode: preservesExistingStructure
+        ? exact.value.chunkMode
+        : prepared.value.chunkMode,
       splitRuleVersion: preservesExistingStructure
         ? exact.value.splitRuleVersion
         : MANUAL_ENTRY_RESTRUCTURE_RULE_VERSION,
@@ -666,7 +670,7 @@ function sameValue(
   left: Readonly<InformationEntryRevisionValue>,
   right: Readonly<InformationEntryRevisionValue>,
 ): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return isDeepStrictEqual(left, right);
 }
 
 function digest(value: unknown): string {

@@ -152,13 +152,17 @@ function describeSynthesisFailure(value: unknown): string {
       ai_operations_paused:
         '内置 AI 后续操作已禁止；可在总览允许继续，已有结果保留。',
       ai_price_window_closed:
-        '当前为 DeepSeek 高峰时段，请在低价时段重新综合。恢复时间见设置 → AI 接入。',
+        '当前为 DeepSeek 高峰时段，请在低价时段重新综合。恢复时间见设置 → AI 设置。',
       ai_query_private_scope_forbidden:
-        '隐私查询不能发送给 模型服务；请切换到“仅公开结果”。',
+        '隐私查询不能发送给模型服务；请切换到“仅公开结果”。',
       ai_query_no_evidence: '当前公开查询没有可供回答的内容。',
       ai_provider_timeout: '模型服务 响应超时；可以稍后重试。',
       ai_provider_unavailable: '模型服务 当前不可达；可以稍后重试。',
       ai_provider_rejected: '模型服务 拒绝了本次请求；没有保存任何回答。',
+      ai_provider_incomplete_response:
+        'AI 回答尚未完整生成，可能达到输出上限；请缩小问题范围后重试。未展示截断的回答。',
+      ai_query_invalid_citations:
+        'AI 回答缺少有效引用，或引用了本次检索以外的条目；请重试。未展示无法核对的回答。',
       ai_provider_invalid_response:
         '模型服务 返回的内容格式不正确；该回答已被丢弃。',
     });

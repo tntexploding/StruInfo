@@ -64,7 +64,8 @@ export function WebSourceSubscriptionFields({
           }}
         />
         <small>
-          仅公开 HTTPS；不会跟随重定向、发现链接、执行脚本或绕过登录。
+          填写公开 HTTPS
+          页面地址。仅抓取此页，需登录、脚本加载或跳转的页面暂不支持。
         </small>
       </label>
       <label className="field field--wide">

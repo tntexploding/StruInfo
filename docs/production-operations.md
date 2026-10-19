@@ -1,12 +1,7 @@
 # StruInfo 生产运行与维护
 
-- 状态：`v0.1.0` 已发布；所有者确认私人云端 Docker 实例已上线；P5A–D 工程边界已完成，实际生产记录继续外置
-- 最近更新：2026-09-05（维护基线、升级与实际运行交接）
-- 决策：[ADR 0045](adr/0045-operational-production-baseline.md)、[ADR 0046](adr/0046-codex-operated-bulk-ingestion.md)、[ADR 0053](adr/0053-real-scale-capacity-classification-and-query-follow-up.md)、[ADR 0062](adr/0062-production-release-identity-and-live-deployment-baseline.md)、[ADR 0063](adr/0063-backup-recoverability-and-retention-preview.md)、[ADR 0064](adr/0064-operational-health-capacity-and-alerting.md)、[ADR 0065](adr/0065-production-flow-release-regression.md)
-
-本轮维护阶段的执行清单与结果见[维护交接](maintenance-handoff.md)。当前源码版本为 `v0.3.0`，升级差异见 [v0.3.0 更新说明](releases/v0.3.0.md)；
-后文 `v0.1.0` 数字属于历史发行证据。常规运行保持 `all` 单实例，维护写操作与备份/恢复
-使用停写窗口；不要把角色启动脚本的存在解释为已支持多个独立进程并发修改同一偏好文件。
+当前源码版本为 **v0.4.0**。首次使用先看[安装指南](getting-started.md)，升级步骤见 [v0.4.0 更新说明](releases/v0.4.0.md)。
+常规运行使用 `all` 单实例；迁移、备份和恢复使用停写窗口。后文历史阶段记录保留其原始日期，实际实例记录保存在仓库外。
 
 ## 1. 适用范围
 
@@ -41,7 +36,7 @@
 
 ## 3. 首次部署和升级顺序
 
-Dockerfile 已把 Node 24 bookworm-slim 固定到不可变多架构 digest。首次依赖安装可由受控构建主机访问包注册表并执行仓库供应链策略；随后的源码构建和生产依赖组装均关闭网络，只从同一构建阶段已经验证的共享冻结锁文件与本地 pnpm store 裁剪精确版本。离线 deploy 仅信任这份刚验证的锁文件，不解析新版本，并排除应用未使用的可选平台适配包；运行容器不需要访问包注册表。先构建镜像并解析配置：
+Dockerfile 将构建阶段固定为 Node 24 Bookworm Slim、运行阶段固定为 Node 24 Alpine，均使用不可变 digest。运行包只有 JavaScript 依赖，不携带构建阶段的原生二进制。首次依赖安装可由受控构建主机访问包注册表并执行仓库供应链策略；随后的源码构建和生产依赖组装均关闭网络，只从同一构建阶段已经验证的共享冻结锁文件与本地 pnpm store 裁剪精确版本。离线 deploy 仅信任这份刚验证的锁文件，不解析新版本，并排除应用未使用的可选平台适配包；运行容器不需要访问包注册表。先构建镜像并解析配置：
 
 ```powershell
 docker compose -f compose.production.yaml build
@@ -367,7 +362,7 @@ corepack pnpm run performance:m2-p0d -- --smoke
 corepack pnpm run performance:m2-p0d -- --full
 ```
 
-工具创建随机命名的 disposable 容器、随机本地端口和临时外部数据根，执行 30 份迁移、queue
+工具创建随机命名的 disposable 容器、随机本地端口和临时外部数据根，执行当前全部迁移、queue
 准备、runtime grant、合成 Evidence 导入、P0A/P0B 故障恢复及 P0C 裁决，然后独立核对数据库
 计数，并对当前读取快路径与完整路径执行同一合成数据上的结果对照。报告 v4 保留读取返回行数、耗时和采样 RSS，并增加增量索引恢复、单项更新、向量复用、失败重试、并发/隐私保护和完整修复的实际装载量与合成 Provider 输入数量。附加验证耗时单独记录，计数之后的扰动只作用于合成当前态。
 成功或失败都必须移除容器和临时数据根；报告不得包含 URL、密码、正文或宿主个人路径。
@@ -568,7 +563,7 @@ exact no-op 重放、两次受控故障恢复、15,000 个当前搜索投影、1
 正式实例已应用至迁移 000031，运行 v0.2.0 并通过健康、查询与精确来源只读检查。
 本次未调用 Provider；演练写入只发生在隔离副本，内容与实际身份始终在仓库外。
 
-镜像的基础系统扫描保留失败状态，已核对的不可达项见 [DH-013](deferred-hardening-memo.md#dh-013-base-image-scanner-findings-outside-the-current-runtime-path)。
+每次发布和定期维护都扫描完整运行镜像，发现高危或严重漏洞时流水线失败。旧 Debian 镜像的检查与 v0.4.0 运行镜像调整见 [DH-013](deferred-hardening-memo.md#dh-013-base-image-scanner-findings-outside-the-current-runtime-path)。
 不能将历史零告警结果或当前产品回归通过描述为本次镜像扫描通过。
 巡检、备份调度、同机副本与离线限制以维护交接及外部运维记录为准。
 

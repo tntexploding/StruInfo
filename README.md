@@ -1,292 +1,121 @@
 # StruInfo
 
-<div align="center">
+**把订阅和文档整理成可以检索、追溯和复用的个人知识库。**
 
-**把文档变成可追溯、可检索、可编辑的个人知识网络。**
-
-Self-hosted, traceable document processing and personal knowledge workspace.
-
-[![Release](https://img.shields.io/github/v/release/tntexploding/StruInfo?display_name=tag&sort=semver)](https://github.com/tntexploding/StruInfo/releases/latest)
 [![Quality](https://github.com/tntexploding/StruInfo/actions/workflows/quality.yml/badge.svg)](https://github.com/tntexploding/StruInfo/actions/workflows/quality.yml)
-[![License: MIT](https://img.shields.io/github/license/tntexploding/StruInfo)](LICENSE)
-[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A524.18-339933?logo=node.js&logoColor=white)](package.json)
-[![Self-hosted](https://img.shields.io/badge/deployment-self--hosted-29c7c9)](docs/production-operations.md)
+[![Security](https://github.com/tntexploding/StruInfo/actions/workflows/maintenance-security.yml/badge.svg)](https://github.com/tntexploding/StruInfo/actions/workflows/maintenance-security.yml)
+[![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-[功能概览](#功能概览) · [工作流](#文档工作流) · [快速开始](#快速开始) · [Docker 部署](#docker-部署) · [项目文档](#项目文档)
+[安装](docs/getting-started.md) · [AI 与 MCP](docs/agent-interface.md) · [备份与升级](docs/production-operations.md) · [更新说明](docs/releases/v0.4.0.md) · [参与开发](CONTRIBUTING.md)
 
-</div>
+StruInfo 是自托管的个人文档工作区。订阅来源、上传文档、审核内容，然后在同一处阅读、拆分、打标签和建立联系。整理好的内容可以用于搜索、知识库问答和日报、周报、月报、专题报告。
 
-StruInfo 是一个面向单一所有者的私人资料整理与知识维护工作台。它保存原始证据，
-把文档拆成可管理的 `InformationEntry`，再通过三维标签、可解释联系、检索和可编辑关系图谱，
-把零散资料整理成能够回到精确来源的个人知识网络。
+原文与整理结果分别保存，每个条目都能回到出处。你可以手动整理，也可以配置 AI 完成接收审核到入库的流程。外部 Agent 可以通过 MCP 操作同一套接口。
 
-项目支持完整的无 AI 工作流；配置 Provider 后，可以按需增加拆分、标签、联系、查询综合、
-Embedding 和 RAG 能力。AI 只在明确的功能边界内工作，不会取代原始资料、人工编辑权或来源追溯。
+## 可以做什么
 
-> [!IMPORTANT]
-> StruInfo 当前是私人单用户应用，不是公共多用户 SaaS 或开放 API。应用端口应保持在宿主回环或
-> 私有网络内；远程访问必须经过 HTTPS + 认证反向代理、VPN 或 SSH 隧道。
+| 你的任务                                         | 在哪里操作              |
+| ------------------------------------------------ | ----------------------- |
+| 订阅 RSS/Atom，查看来源介绍和待审核文章          | **文档入口**            |
+| 上传 Markdown、文本、HTML 或带文本层的 PDF       | **文档入口 → 手动放入** |
+| 按来源、时间范围补收往期文章                     | **文档入口 → 补收往期** |
+| 阅读原文、检查拆分、调整标签和联系、按需翻译     | **工作台**              |
+| 搜索正文和标签、查看联系图、向知识库提问         | **数据阅览**            |
+| 生成日报、周报、月报、专题报告或资料摘录         | **报告**                |
+| 查看处理进度、等待原因、失败任务，继续或取消任务 | **总览**                |
+| 调整外观、处理规则、AI 并发和重试、价格时段      | **设置**                |
 
-所有者已确认 `v0.1.0` 的私人云端 Docker 部署投入使用。当前仓库的 M2 开发线包含首版之后的
-增量，并不自动代表云端运行版本；域名、凭据、数据、镜像摘要和备份记录始终保存在 Git 之外。
+界面支持深浅色、可调列宽、记忆展开状态、阅读字体和光效设置。刷新保留当前页面，新打开项目进入总览。
 
-## 当前版本
+## 从第一篇文档开始
 
-当前源码为 **v0.3.0**。文档入口、工作台、数据阅览、报告组成完整使用流程：
-审核接收后，AI 可在已有授权和预算内连续完成结构整理、标签与联系，最后确认入库。
-人工编辑保留为草稿，显式确认后再进入查询、RAG、图谱和新报告选材。
+1. 在文档入口添加来源或上传文件，先查看收到的正文。
+2. 选择接受、拒绝，或让 AI 审核。不确定的内容会留下原因，等待你决定。
+3. 接受的公开文档进入工作台。启用 AI 后，可继续完成拆分、标签、联系和入库；也可手动整理。
+4. 检查原文中的分段位置、条目标签和联系。人工修改后点击**确认入库**。
+5. 在数据阅览中检索已入库内容，或在报告页选择时间和主题生成报告。
 
-总览显示 AI 总控与逐篇任务进度，支持断点继续、有限重启和取消；高价时段等待、
-人工决定与原文证据始终保留。外部 Agent 可通过受限 API / MCP 使用相同业务边界。
-功能与升级说明见 [v0.3.0 更新说明](docs/releases/v0.3.0.md)，运维步骤见
-[维护交接](docs/maintenance-handoff.md)。源码版本与实际部署版本分别核验。
+连贯文章默认保持完整，只有独立可读的合集才拆分。AI 可以判断不需要建立联系。处理中的公开文档和未确认修改留在工作台，完成后才供搜索、问答、图谱和新报告使用。隐私文档使用手动处理，查看时需明确选择包含隐私内容。
 
-## 为什么使用 StruInfo
+## 安装与启动
 
-- **从原文出发**：原始文件、规范化内容、Snapshot 和 Fragment 形成可追溯证据链。
-- **处理过程清楚**：围绕同一份文档阅读、整理和确认，任务进度与等待原因集中可见。
-- **不依赖 AI**：人工操作和确定性规则始终可用；AI 是显式启用的增强项。
-- **知识可维护**：相似联系不会冒充已核验事实，用户可以编辑、削弱、屏蔽或恢复关系。
-- **隐私默认收敛**：私人内容默认不进入普通检索，查看、查询和关系展示都需要显式放宽范围。
-- **资料与代码分离**：文档、数据库、Blob、偏好、配置、密钥、导出和备份均位于仓库与镜像之外。
+推荐使用 **Docker Compose + PostgreSQL 18**，以 `all` 单实例运行。应用、数据库和持久数据分开保存。
 
-## 文档工作流
+[首次安装指南](docs/getting-started.md)包含数据库角色、配置、迁移和启动步骤。已有实例请按 [v0.4.0 升级说明](docs/releases/v0.4.0.md)先备份再升级。
 
-| 工作区       | 主要工作                                                         | 结果                                                               |
-| ------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------ |
-| **文档入口** | 查看订阅来源与待审原文，或手动上传；人工接受、拒绝或交给 AI 审核 | 保留来源的接收决定，接受后进入整理队列                             |
-| **工作台**   | 在全文中检查分段，编辑标签和联系，按需翻译或重做 AI 步骤         | 带断点的整理结果；人工修改确认后入库                               |
-| **数据阅览** | 搜索已入库条目、查看关系图，或基于公开证据提问                   | 精确来源、引用与可解释的检索结果                                   |
-| **报告**     | 配置日报、周报、月报或专题；查看生成队列与历史                   | 可核对的 AI 报告或无需模型的资料摘录，支持 Markdown 与本机打印 PDF |
+配置完成后的常用命令：
 
-点击左上角标志进入总览，左下角进入设置。刷新保留当前工作区，新打开项目进入总览。
-列宽和展开状态可记忆；隐私查看范围不随页面偏好保存。
-
-连贯文章默认完整保留，只有独立可读的合集才拆分。关联评估可以得出“不建立联系”，
-不会为了填充图谱而强行连线。外部 Agent 与内置 AI 共享版本检查和发布规则，
-具体操作见 [Agent / MCP 接口](docs/agent-interface.md) 与 [自动处理说明](docs/ingestion-automation.md)。
-
-## 功能概览
-
-### 文档与订阅
-
-- 本地 `.md`、`.markdown`、`.txt`、`.html`、`.htm` 和带文本层 `.pdf`；
-- GitHub 仓库中的公开 Markdown 文件；
-- RSS/Atom 订阅；
-- 声明式 JSON API；
-- 受限同源网页抓取；
-- 已安装且受信任的来源连接器；
-- 原始字节保存在外部内容寻址 Blob 根，HTML/PDF 仅生成供处理使用的 Markdown 投影。
-
-### 拆分与标注
-
-- CommonMark/结构规则拆分、人工 Fragment 分组、Unicode 范围切分；
-- 拆分前派生文本修改，不改写不可变原始证据；
-- 内容、类型、领域三个相互独立的关键词维度；
-- 有用程度、兴趣程度两个五档人工评分；
-- 确定性关键词建议、确认别名、排除项、个人快捷标签与外部偏好规则；
-- 可选 AI 拆分与标签提案，接受前不直接写入正式 Entry。
-
-### 联系与知识图谱
-
-- 由内容、类型、领域信号组成的可解释相似度；
-- 可版本化的全局权重与阈值；
-- 逐对增强、削弱、屏蔽、恢复和用户自定义联系；
-- Entry 中心的有界知识图谱，支持八类关系语义、方向、说明和来源核验状态；
-- 自动相似边始终标明为计算结果，人工覆盖优先于后续重建。
-
-### 搜索、语义检索与 RAG
-
-- 标题、正文、标签和来源的精确、子串与拼写容错词法检索；
-- 词项索引、可选向量索引及词法/语义混合召回；
-- 来源、时间、标签、Entry 类型、隐私范围和一至两跳联系过滤；
-- 稳定排序、游标分页、结果对比与精确 Snapshot/Fragment 来源返回；
-- 基于当前本地结果和证据句柄的可选查询综合与 RAG，不把 Provider 回答当作新的原始证据。
-
-### 个人数据与恢复
-
-- PostgreSQL 18 保存 Evidence、Entry、标签、联系、处理任务和兼容历史状态；
-- 外部数据根保存 Blob、个人偏好、订阅游标、连接器配置引用、导出和备份；
-- 个人数据包可携带当前工作区数据库分区、引用 Blob 字节和偏好；
-- 备份只能恢复到已经迁移且业务为空的同一 workspace，避免覆盖非空状态；
-- 维护命令可列出并完整只读校验备份，也可预览 keep-latest 保留结果；应用不会自动删除个人备份；
-- 维护状态可报告领域计数、搜索索引缺口、失败/停滞任务、外部数据根容量和备份年龄，供宿主监控调度；
-- Git、npm 包和容器镜像只包含代码、迁移、协议和合成测试资料。
-
-## 系统结构
-
-```mermaid
-flowchart LR
-    S[本地文件 / RSS / API / 网页 / 连接器] --> I[导入边界]
-    I --> E[Evidence + 外部 Blob]
-    E --> F[Snapshot + Fragment]
-    F --> P[确定性 / 人工 / 可选 AI 拆分]
-    P --> N[InformationEntry]
-    N --> T[三维标签与评分]
-    N --> A[可解释联系]
-    T --> C[完成或人工确认入库]
-    A --> C
-    C --> Q[词法 / 语义 / 混合查询]
-    C --> G[关系图谱]
-    Q --> R[精确来源 / 可选 RAG 综合]
-
-    X[(PostgreSQL 18)] --- E
-    X --- N
-    X --- A
-    D[(外部数据根)] --- E
-    D --- U[偏好 / 导出 / 备份]
-    O[可选 OpenAI / DeepSeek Provider] -. 明确请求 .-> P
-    O -. 标签 / 联系 / 查询 / Embedding .-> Q
+```bash
+# 启动
+docker compose -f compose.production.yaml up -d app
+# 检查
+docker compose -f compose.production.yaml ps
+# 查看日志
+docker compose -f compose.production.yaml logs --tail 100 app
+# 停止
+docker compose -f compose.production.yaml stop app
 ```
 
-后端是模块化 TypeScript 单体，同一构建可按 API、scheduler、worker 或 `all` 角色运行；
-Web 使用 React/Vite。所有领域写入都通过窄边界进入 PostgreSQL，原始内容和个人偏好不会编译进应用包。
+默认访问地址是 <http://127.0.0.1:3000>；通过 `STRUIINFO_HTTP_PORT` 可以更换宿主端口。Windows 可使用[独立启动器](docs/windows-instance-control.md)管理已配置的实例。
 
-## 快速开始
+StruInfo 面向单个所有者。远程使用时，通过带认证的 HTTPS 反向代理、VPN 或 SSH 隧道访问。应用自身不提供多用户登录，端口应保持在回环或受信任私网内。
 
-### 开发与质量验证
+## AI 怎么使用
 
-要求：Node.js `>=24.18.0`、Corepack、pnpm `11.20.0`。
+AI 默认不配置。安装完成后，按[模型配置说明](docs/runtime-configuration.md#deepseek)设置 DeepSeek 或 OpenAI 的模型与外部密钥文件，再在设置中选择允许的操作。
+
+- **手动触发**：选择文档，执行审核、整理、翻译、问答或报告。
+- **自动处理**：为选定来源启用新资料策略，按文档完成审核、拆分、标签、联系和入库。
+- **运行限制**：遵守全局允许/拒绝、并发、每篇调用上限、有限重试和价格时段。
+- **人工优先**：拒绝、暂缓和手动修改不会被自动任务覆盖。失败任务保留断点；总览显示原因和可用操作。
+
+模型调用可能产生费用。自动处理范围、重试额度和价格时段由你配置；没有模型也能完成导入、手动整理、词法搜索和资料摘录。语义向量检索需要另行配置 Embedding 模型。
+
+外部 Agent 有独立令牌和授权。可以只读，也可以授予导入、拆分、标签和联系写入；不需要让 Agent 操作界面。连接示例和工具列表见 [Agent / MCP 接口](docs/agent-interface.md)。
+
+## 数据与备份
+
+- PostgreSQL 保存文档结构、条目、标签、联系和任务。
+- 仓库外的数据目录保存原文、个人偏好、导出和备份。
+- 密钥通过环境或独立文件注入，不写入仓库、镜像或前端。
+- 备份包含数据库中的工作区数据及引用的原文字节。恢复目标必须是同一工作区的空库。
+
+升级前停写并创建、校验备份。数据库与数据目录需要一起保护，不能只备份镜像。完整命令见[运行与维护](docs/production-operations.md)。
+
+## 使用范围
+
+- 支持 RSS/Atom、公开 GitHub Markdown、声明式 JSON API、受限网页和受信任连接器。往期补收依据来源公开目录，不能保证覆盖网站的全部历史。
+- PDF 需要文本层；当前不提供 OCR、音视频转写或付费内容解锁。
+- AI 问答和报告提供原文引用，仍需结合来源核对。报告支持 Markdown 下载和浏览器打印 PDF，未内置外部推送渠道。
+- 当前运行方式是单所有者、单实例；多租户、集群写入和跨工作区合并不在支持范围。
+
+## 开发与验证
+
+要求 Node.js `>=24.18.0`、Corepack 和 pnpm `11.20.0`：
 
 ```bash
 git clone https://github.com/tntexploding/StruInfo.git
 cd StruInfo
 corepack enable
-pnpm install --frozen-lockfile
+pnpm install --frozen-lockfile --ignore-scripts
 pnpm verify
 ```
 
-`pnpm verify` 会执行格式、ESLint、TypeScript、单元测试、集成测试、构建、制品边界和部署静态检查。
-
-本机运行还需要 PostgreSQL 18、仓库外 runtime 配置、独立数据库 URL secret 和可写外部数据根。
-配置完成后：
-
-```powershell
-$env:STRUIINFO_CONFIG_PATH = 'C:\StruInfo\config\runtime.env'
-$env:DATABASE_URL_FILE = 'C:\StruInfo\secrets\runtime-database-url.txt'
-corepack pnpm run start:all
-```
-
-默认地址为 <http://127.0.0.1:3000>，按 `Ctrl+C` 优雅停止。首次数据库准备、角色权限和完整配置见
-[生产运行与维护手册](docs/production-operations.md)与
-[运行配置说明](docs/runtime-configuration.md)。
-
-## Docker 部署
-
-生产 Compose 边界使用非 root 用户、只读根文件系统、能力清空和 `no-new-privileges`，
-并把 Web/API 端口限制在宿主回环。外部 PostgreSQL、数据根、runtime 配置和两个数据库 URL secret
-必须在仓库与镜像之外准备。
-
-固定操作顺序是：
+`verify` 执行格式、静态检查、类型检查、单元/集成测试、构建和制品检查。另可运行：
 
 ```bash
-docker compose -f compose.production.yaml build
-docker compose -f compose.production.yaml -f compose.maintenance.yaml --profile maintenance run --rm migrate
-docker compose -f compose.production.yaml -f compose.maintenance.yaml --profile maintenance run --rm prepare-queue
-# 数据库所有者执行 deploy/postgresql/apply-runtime-grants.sql
-docker compose -f compose.production.yaml --profile maintenance run --rm preflight
-docker compose -f compose.production.yaml up -d app
+pnpm test:e2e                         # 使用本机已安装的 Chrome
+pnpm performance:m2-p0d -- --smoke    # 使用 Docker 创建临时 PostgreSQL
+pnpm audit --prod --audit-level low
 ```
 
-运行后可用同一 maintenance profile 执行脱敏状态检查：
+这些检查使用合成数据。真实资料、模型密钥和实例记录保存在仓库外。项目结构和贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-```bash
-docker compose -f compose.production.yaml --profile maintenance run --rm preflight node dist/entrypoints/maintenance.js status
-```
+## 更多说明
 
-Compose 需要四个指向外部绝对路径的变量：
-
-```text
-STRUIINFO_RUNTIME_CONFIG_FILE
-STRUIINFO_DATA_ROOT
-STRUIINFO_RUNTIME_DATABASE_URL_SECRET_FILE
-STRUIINFO_MIGRATION_DATABASE_URL_SECRET_FILE
-```
-
-不要直接把应用端口或 PostgreSQL 暴露到公网。远程私人部署应使用
-[Caddy 示例](deploy/reverse-proxy/Caddyfile.example)在宿主侧提供 HTTPS 与单用户认证。
-升级、备份、空库恢复、健康检查和云端检查清单均在
-[生产运行与维护手册](docs/production-operations.md)中给出。
-
-## AI 是可选能力
-
-未配置 Provider 时，导入、人工/确定性拆分、标签、联系、词法搜索、正式知识图谱、导出和恢复仍可运行。
-启用 AI 时，目前只开放以下窄能力：
-
-- 对选定公开 Snapshot 生成拆分提案；
-- 对选定公开 Entry 生成标签提案；
-- 对选定公开 Entry 对生成联系提案；
-- 对当前有限公开查询结果进行证据约束综合；
-- 生成可重建 Embedding，供语义/混合检索与本地来源约束 RAG 使用。
-
-密钥只通过环境变量或外部 secret 文件注入。私人 Entry/Snapshot 不会因为启用了 AI 就自动发送给 Provider，
-提案也不会绕过用户或既有写入边界直接修改正式状态。
-
-## 隐私与安全边界
-
-- 普通查询默认排除私人 Entry、私人文档及涉及私人端点的关系；
-- `包含隐私` 与 `只看隐私` 是当前请求的显式范围，不是持久的全局放宽；
-- 完整私人文档只在明确允许时通过独立结果通道返回；
-- 日志不得记录文档正文、数据库 URL、Provider key 或个人路径；
-- 应用面向单一所有者，不提供账户体系、租户隔离或公共写 API；
-- 安全问题请使用 GitHub 私密漏洞报告，不要在公开 Issue 中提交凭据或私人资料。
-
-详见 [Security Policy](SECURITY.md)。
-
-## v0.1.0 发行状态
-
-首个私人单用户版本已经完成本地 Docker Desktop + PostgreSQL 18 发布演练。
-所有者随后确认私人云端 Docker 实例已经上线；目标主机的实际版本、网络和恢复证据由外部运维记录维护。
-
-| 验证项         | v0.1.0 结果                                                 |
-| -------------- | ----------------------------------------------------------- |
-| GitHub Actions | Windows 与 Ubuntu `Quality` 矩阵通过                        |
-| 单元测试       | 142 个测试文件，882 项通过                                  |
-| 集成测试       | 2 个测试文件，4 项通过                                      |
-| 浏览器验收     | 11 项端到端场景通过                                         |
-| 应用构建       | React/Vite 80 modules                                       |
-| 制品边界       | 1,029 个发行文件；测试、fixture、个人数据路径 0 命中        |
-| 生产依赖审计   | `pnpm audit --prod --audit-level=low` 无已知漏洞            |
-| 容器扫描       | Trivy HIGH 0 / CRITICAL 0                                   |
-| 运行演练       | 迁移、队列、权限、preflight、健康、备份、空库恢复与重启通过 |
-
-这些结果证明的是当前单机私人部署基线，不代表公共多用户服务、云编排、跨租户权限或任意公网暴露已经实现。
-请参阅 [v0.1.0 发行说明](https://github.com/tntexploding/StruInfo/releases/tag/v0.1.0)
-和 [Changelog](CHANGELOG.md)。
-
-## 仓库结构
-
-```text
-apps/server/       API、任务角色、领域模块、PostgreSQL 与外部适配器
-apps/web/          React/Vite 单页应用
-packages/          共享合同与测试支持
-deploy/            runtime 模板、权限 SQL 与反向代理示例
-docs/              产品需求、架构、ADR、运行与发布文档
-tests/             合成集成与端到端测试
-tools/             制品、依赖、性能和部署验证工具
-```
-
-## 项目文档
-
-- [当前项目状态与实现清单](docs/current-project-state.md)
-- [产品需求](docs/product-requirements.md)
-- [路线图](docs/roadmap.md)
-- [知识核心与个人数据边界](docs/knowledge-core-architecture.md)
-- [本地 HTTP 接口](docs/m1c-local-http-api.md)
+- [历史补收](docs/source-history.md)
+- [订阅与自动处理](docs/ingestion-automation.md)
 - [运行配置](docs/runtime-configuration.md)
-- [生产运行与维护](docs/production-operations.md)
-- [个人数据包合同](docs/workspace-bundle-contract.md)
-- [文档条目处理准则](docs/document-entry-processing-guidelines.md)
-- [决策日志与 ADR](docs/decision-log.md)
-- [依赖 SBOM](docs/dependencies/sbom/npm-closure.spdx.json)
-
-历史合同和验收证据仍保存在 `docs/`，但旧合同不代表对应运行时仍然公开。
-判断当前产品能力时，以[当前项目状态与实现清单](docs/current-project-state.md)为准。
-
-## 参与项目
-
-提交代码前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。贡献必须保持仓库和发行包无个人数据，
-测试只使用合成、无个人含义的 fixture；可达的产品问题应修复，纯强化项不应阻塞核心开发。
-
-StruInfo 使用 [MIT License](LICENSE)。第三方材料仍分别遵循
-[第三方声明](THIRD_PARTY_NOTICES.md)及随制品保留的原始许可证。
+- [安装、备份与维护](docs/production-operations.md)
+- [架构](docs/knowledge-core-architecture.md) · [实现记录](docs/current-project-state.md) · [路线图](docs/roadmap.md)
+- [MIT 许可证](LICENSE) · [第三方声明](THIRD_PARTY_NOTICES.md)

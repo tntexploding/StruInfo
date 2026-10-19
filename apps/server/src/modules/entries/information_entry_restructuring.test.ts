@@ -4,7 +4,10 @@ import type {
   CurrentInformationEntry,
   InformationEntryMaterializeRow,
 } from './information_entry_contract.js';
-import {prepareManualSplitInformationEntries} from './information_entry.js';
+import {
+  prepareManualSplitInformationEntries,
+  prepareAiSplitInformationEntries,
+} from './information_entry.js';
 import {
   deriveInformationEntryRestructureGroups,
   prepareInformationEntryRestructure,
@@ -20,6 +23,89 @@ const FIRST_TEXT = 'Alpha source.';
 const SECOND_TEXT = 'Beta source.';
 
 describe('InformationEntry restructuring', () => {
+  it('restructures a whole CommonMark entry without losing source bytes or lineage', () => {
+    const original = snapshotFixture();
+    const text = FIRST_TEXT + '\n\n' + SECOND_TEXT;
+    const whole = {
+      ...fragment(FIRST_FRAGMENT_ID, 0, text),
+      nodeKind: 'document',
+    };
+    const snapshot = {
+      ...original,
+      structures: [
+        {structureId: STRUCTURE_ID, normalizedText: text, fragments: [whole]},
+      ],
+    };
+    const initial = prepareAiSplitInformationEntries(snapshot, [
+      {titlePath: 'Synthetic digest', fragmentIds: [FIRST_FRAGMENT_ID]},
+    ]);
+    const first = initial?.[0];
+    if (!first) throw new Error('missing synthetic entry');
+    const entries = [currentEntry(first, 0, false)];
+    const cut = FIRST_TEXT.length + 2;
+    const groups = [
+      {
+        titlePath: 'Alpha',
+        fragments: [
+          {fragmentId: FIRST_FRAGMENT_ID, startCodePoint: 0, endCodePoint: cut},
+        ],
+      },
+      {
+        titlePath: 'Beta',
+        fragments: [
+          {
+            fragmentId: FIRST_FRAGMENT_ID,
+            startCodePoint: cut,
+            endCodePoint: text.length,
+          },
+        ],
+      },
+    ];
+    const plan = prepareInformationEntryRestructure(
+      snapshot,
+      entries,
+      groups,
+      [],
+    );
+    expect(plan?.resultingEntries).toHaveLength(2);
+    expect(plan?.resultingEntries.map((e) => e.value.body).join('')).toBe(text);
+    expect(plan?.lineage).toHaveLength(2);
+    if (!plan) throw new Error('missing plan');
+    const rehydrated = plan.resultingEntries.map((entry) => {
+      const {fragmentIds, ...rest} = entry.value;
+      return {...entry, value: {fragmentIds, ...rest}};
+    });
+    expect(
+      prepareInformationEntryRestructure(snapshot, rehydrated, groups, [])
+        ?.hasChanges,
+    ).toBe(false);
+    expect(
+      prepareInformationEntryRestructure(
+        snapshot,
+        entries,
+        [
+          {
+            titlePath: 'Invalid gap',
+            fragments: [
+              {
+                fragmentId: FIRST_FRAGMENT_ID,
+                startCodePoint: 1,
+                endCodePoint: text.length,
+              },
+            ],
+          },
+        ],
+        [],
+      ),
+    ).toBeUndefined();
+    const unchanged = prepareInformationEntryRestructure(
+      snapshot,
+      entries,
+      deriveInformationEntryRestructureGroups(snapshot, entries) ?? [],
+      [],
+    );
+    expect(unchanged?.hasChanges).toBe(false);
+  });
   it('derives an unchanged round-trip partition without creating revisions', () => {
     const {snapshot, entries} = fixture();
     const groups = deriveInformationEntryRestructureGroups(snapshot, entries);

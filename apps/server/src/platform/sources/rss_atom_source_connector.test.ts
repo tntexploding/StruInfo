@@ -1,6 +1,15 @@
+import {createHash} from 'node:crypto';
+
 import {describe, expect, it, vi} from 'vitest';
 
-import type {SourceConnectorError} from '../../modules/subscriptions/index.js';
+import type {EvidenceCaptureRepositoryRequest} from '../../modules/evidence/index.js';
+import {
+  importSourceConnectorDocuments,
+  MAX_SOURCE_CONNECTOR_DOCUMENT_BYTES,
+  MAX_SOURCE_CONNECTOR_RAW_BYTES,
+  SourceConnectorRegistry,
+  type SourceConnectorError,
+} from '../../modules/subscriptions/index.js';
 import {
   RssAtomSourceConnector,
   RSS_ATOM_SOURCE_CONNECTOR_ID,
@@ -75,6 +84,100 @@ describe('RssAtomSourceConnector', () => {
     expect(headers.get('if-modified-since')).toBe(
       'Tue, 25 Aug 2026 08:00:00 GMT',
     );
+  });
+
+  it('imports a selected article from a large feed without losing raw evidence', async () => {
+    const feed = atomFeed([
+      atomEntry('synthetic-selected', 'Selected', 'Complete article.'),
+      atomEntry(
+        'synthetic-unselected',
+        'Unselected',
+        'x'.repeat(2 * 1024 * 1024),
+      ),
+    ]);
+    const feedBytes = new TextEncoder().encode(feed);
+    expect(feedBytes.byteLength).toBeGreaterThan(
+      MAX_SOURCE_CONNECTOR_DOCUMENT_BYTES,
+    );
+    const registry = new SourceConnectorRegistry([
+      connectorWith(
+        () => Promise.resolve(xmlResponse(feed, 'application/atom+xml')),
+        '203.0.113.10',
+      ),
+    ]);
+    const result = await registry.read(RSS_ATOM_SOURCE_CONNECTOR_ID, {
+      ...request(),
+      configuration: {feedUrl: FEED_URL, itemLimit: 1},
+    });
+    if (result.status !== 'changed')
+      throw new Error('expected selected article');
+    expect(result.documents).toHaveLength(1);
+    expect(result.documents[0]?.rawSourceBytes?.byteLength).toBe(
+      feedBytes.byteLength,
+    );
+    expect(new TextDecoder().decode(result.documents[0]?.sourceUtf8)).toContain(
+      'Complete article.',
+    );
+    const blobs = new Map<string, Uint8Array>();
+    const captures: EvidenceCaptureRepositoryRequest[] = [];
+    const imported = await importSourceConnectorDocuments(
+      {
+        blobStore: {
+          put: (bytes) => {
+            const digest = createHash('sha256').update(bytes).digest('hex');
+            blobs.set(digest, Uint8Array.from(bytes));
+            return Promise.resolve({
+              algorithm: 'sha256' as const,
+              digest,
+              byteLength: bytes.byteLength,
+            });
+          },
+          read: (identity) => {
+            const bytes = blobs.get(identity.digest);
+            if (bytes === undefined)
+              return Promise.reject(new Error('missing synthetic blob'));
+            return Promise.resolve(bytes);
+          },
+        },
+        evidenceRepository: {
+          saveCapture: (capture) => {
+            captures.push(capture);
+            return Promise.resolve({status: 'created' as const});
+          },
+        },
+      },
+      {
+        workspaceId: '11111111-1111-4111-8111-111111111111',
+        subscriptionId: SUBSCRIPTION_ID,
+        connectorId: RSS_ATOM_SOURCE_CONNECTOR_ID,
+        sourceAlias: 'Synthetic feed',
+        isPrivate: false,
+        capturedAt: '2026-08-27T08:00:00.000Z',
+        result,
+      },
+    );
+    expect(imported.status).toBe('complete');
+    expect(captures).toHaveLength(1);
+    const rawDigest = createHash('sha256').update(feedBytes).digest('hex');
+    expect(new TextDecoder().decode(blobs.get(rawDigest))).toBe(feed);
+  });
+
+  it('rejects a declared feed length above the raw response limit', async () => {
+    const connector = connectorWith(
+      () =>
+        Promise.resolve(
+          new Response('<feed/>', {
+            headers: {
+              'content-type': 'application/atom+xml',
+              'content-length': String(MAX_SOURCE_CONNECTOR_RAW_BYTES + 1),
+            },
+          }),
+        ),
+      '203.0.113.10',
+    );
+    await expect(connector.read(request())).rejects.toMatchObject({
+      code: 'connector_too_large',
+    });
   });
 
   it('returns only new or revised Atom items in the cursor window', async () => {
@@ -186,8 +289,11 @@ describe('RssAtomSourceConnector', () => {
     const oversized = connectorWith(
       () =>
         Promise.resolve(
-          new Response(new Uint8Array(1024 * 1024 + 1), {
-            headers: {'content-type': 'application/rss+xml'},
+          new Response(new Uint8Array(MAX_SOURCE_CONNECTOR_RAW_BYTES + 1), {
+            headers: {
+              'content-type': 'application/rss+xml',
+              'content-length': '32',
+            },
           }),
         ),
       '203.0.113.13',

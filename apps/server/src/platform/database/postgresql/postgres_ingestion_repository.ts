@@ -23,6 +23,7 @@ export async function recordIngestionCapture(
   client: PostgresClientBoundary,
   capture: ValidatedCaptureEvidence,
   origin: IngestionOrigin,
+  options: {reviewOnly?: boolean} = {},
 ) {
   if (capture.resource.isPrivate) return;
   // Persist the inbox choice in the same transaction as the new source evidence,
@@ -42,6 +43,7 @@ export async function recordIngestionCapture(
       }),
     ],
   );
+  if (options.reviewOnly) return;
   const result = await client.query(
     'SELECT current_version,settings_text,authorized_by_kind,authorized_by_id FROM struinfo.processing_ingestion_policy WHERE workspace_id=$1',
     [capture.workspaceId],

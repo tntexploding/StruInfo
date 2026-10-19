@@ -1,4 +1,17 @@
-import {useCallback, useEffect, useState, useRef, type ReactNode} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useRef,
+  type ReactNode,
+} from 'react';
+import {
+  loadVisualPreferences,
+  parseVisualPreferences,
+  VISUAL_PREFERENCES_KEY,
+  type VisualPreferences,
+} from '../theme/visual_preferences.js';
 import type {M1cApiClient} from '../api/m1c_api_client.js';
 import {
   DEFAULT_WORKSPACE_UI_PREFERENCES,
@@ -20,6 +33,48 @@ export function WorkspaceUiProvider({
   const [ready, setReady] = useState(false);
   const [message, setMessage] = useState('');
   const [generation, setGeneration] = useState(0);
+  const [visual, setVisual] = useState(loadVisualPreferences);
+  const [visualMessage, setVisualMessage] = useState('');
+  useLayoutEffect(() => {
+    document.body.dataset.glow = visual.glow > 0 ? 'on' : 'off';
+    document.body.dataset.glass = visual.glass ? 'on' : 'off';
+    document.body.dataset.motion = visual.motion ? 'on' : 'off';
+    document.body.dataset.flowMotion =
+      visual.motion && visual.flowMotion ? 'on' : 'off';
+    document.documentElement.style.setProperty(
+      '--ef-user-strength',
+      String(visual.glow / 100),
+    );
+    document.documentElement.style.setProperty(
+      '--si-text-reading',
+      `${String(visual.readingSize / 16)}rem`,
+    );
+  }, [visual]);
+  useEffect(() => {
+    const receive = (event: StorageEvent) => {
+      if (
+        event.storageArea === localStorage &&
+        (event.key === VISUAL_PREFERENCES_KEY || event.key === null)
+      ) {
+        setVisual(parseVisualPreferences(event.newValue));
+        setVisualMessage('');
+      }
+    };
+    window.addEventListener('storage', receive);
+    return () => {
+      window.removeEventListener('storage', receive);
+    };
+  }, []);
+  const updateVisual = (patch: Partial<VisualPreferences>) => {
+    const next = parseVisualPreferences(JSON.stringify({...visual, ...patch}));
+    setVisual(next);
+    try {
+      localStorage.setItem(VISUAL_PREFERENCES_KEY, JSON.stringify(next));
+      setVisualMessage('');
+    } catch {
+      setVisualMessage('已应用。浏览器未能保存，关闭页面后需要重新设置。');
+    }
+  };
   useEffect(() => {
     const abort = new AbortController();
     const request = ++requests.current;
@@ -63,7 +118,7 @@ export function WorkspaceUiProvider({
         }
         setPreferences(body.preferences);
         setReady(true);
-        setMessage('页面设置已保存。');
+        setMessage('已保存。');
         return true;
       } catch {
         if (request !== requests.current) return false;
@@ -79,6 +134,9 @@ export function WorkspaceUiProvider({
         preferences,
         ready,
         message,
+        visual,
+        visualMessage,
+        updateVisual,
         reload: () => {
           requests.current += 1;
           setReady(false);

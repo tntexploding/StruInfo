@@ -16,6 +16,48 @@ const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 const ENTRY_ID = '22222222-2222-4222-8222-222222222222';
 
 describe('AiTagProposalService', () => {
+  it.each([false, true])(
+    'compares persisted tag values independently of key order, preserving actual changes: %s',
+    async (changed) => {
+      const fixture = createFixture(false);
+      fixture.proposeTags.mockResolvedValueOnce({
+        summary: 'Synthetic custom type',
+        contentKeywords: ['Synthetic'],
+        typeKeyword: 'other',
+        typeCustomName: 'Synthetic collection',
+        domains: [{keyword: 'engineering_computing'}],
+      });
+      vi.spyOn(fixture.entries, 'loadCurrentEntries').mockImplementation(() => {
+        const current = fixture.current;
+        if (current.revision === 1) return Promise.resolve([current]);
+        return Promise.resolve([
+          {
+            ...current,
+            value: {
+              typeCustomName: 'Synthetic collection',
+              ...current.value,
+              ...(changed ? {typeCustomName: 'Owner correction'} : {}),
+            },
+          },
+        ]);
+      });
+      await fixture.service.start(ENTRY_ID, 'ordered-custom-type');
+      const [proposal] = await fixture.service.listForEntry(ENTRY_ID);
+      const accept = () =>
+        fixture.service.accept(ENTRY_ID, proposal?.proposalId ?? '');
+      if (changed) {
+        await expect(accept()).rejects.toMatchObject({
+          code: 'stale_entry_revision',
+        });
+      } else {
+        await expect(accept()).resolves.toMatchObject({outcome: 'accepted'});
+        await expect(accept()).resolves.toMatchObject({outcome: 'unchanged'});
+      }
+      expect(fixture.proposeTags).toHaveBeenCalledTimes(1);
+      expect(fixture.reviseEntry).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('creates a reviewable proposal and applies it only through Entry revision', async () => {
     const fixture = createFixture(false);
 
@@ -126,7 +168,10 @@ describe('AiTagProposalService', () => {
 function createFixture(
   isPrivate: boolean,
   providerConfig: Partial<
-    Pick<AiTagProposalProviderPort, 'providerKey' | 'model' | 'promptVersion'>
+    Pick<
+      AiTagProposalProviderPort,
+      'providerKey' | 'model' | 'promptVersion' | 'proposeTagsBatch'
+    >
   > = {},
 ) {
   let current = entry(isPrivate);
@@ -311,6 +356,7 @@ function createFixture(
   return {
     entries,
     processing,
+    appendTagProposal,
     provider,
     reviseEntry,
     proposeTags,
@@ -342,6 +388,114 @@ function run(runId: string, idempotencyKey: string): Readonly<ProcessingRun> {
     proposals: Object.freeze([]),
   });
 }
+
+function batchFixture() {
+  const selected = [0, 1, 2, 3].map((index) => ({
+    ...entry(false),
+    entryId: `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
+  }));
+  const proposeTagsBatch = vi.fn<
+    NonNullable<AiTagProposalProviderPort['proposeTagsBatch']>
+  >(() =>
+    Promise.resolve(
+      selected.map((item) => ({
+        entryId: item.entryId,
+        expectedRevision: item.revision,
+        result: {
+          summary: 'Synthetic batch',
+          contentKeywords: ['Queue'],
+          typeKeyword: 'knowledge_explanation',
+          domains: [{keyword: 'engineering_computing'}],
+        },
+      })),
+    ),
+  );
+  const fixture = createFixture(false, {proposeTagsBatch});
+  vi.spyOn(fixture.entries, 'loadCurrentEntries').mockImplementation(() =>
+    Promise.resolve(selected),
+  );
+  const requests = selected.map((item) => ({
+    entryId: item.entryId,
+    expectedRevision: item.revision,
+    requestKey: 'batch-synthetic',
+  }));
+  return {...fixture, selected, requests, proposeTagsBatch};
+}
+
+it('persists independent tag proposals from one bounded call and reuses them idempotently', async () => {
+  const f = batchFixture();
+  const results = await f.service.startBatch(f.requests);
+  expect(results).toHaveLength(4);
+  expect(f.proposeTagsBatch).toHaveBeenCalledTimes(1);
+  expect(f.proposeTags).not.toHaveBeenCalled();
+  expect(results.map(({run}) => run.proposals[0]?.targetEntryId)).toEqual(
+    f.selected.map((item) => item.entryId),
+  );
+  expect(
+    results.every(
+      ({run}) => run.proposals[0]?.tagPayload?.expectedEntryRevision === 1,
+    ),
+  ).toBe(true);
+  expect(f.reviseEntry).not.toHaveBeenCalled();
+  const again = await f.service.startBatch(f.requests);
+  expect(again.every((result) => result.outcome === 'existing')).toBe(true);
+  expect(f.proposeTagsBatch).toHaveBeenCalledTimes(1);
+});
+
+it.each(['missing', 'duplicate', 'stale', 'invalid-tags'] as const)(
+  'does not save any tag proposal for an invalid batch: %s',
+  async (problem) => {
+    const f = batchFixture();
+    const generated = [...(await f.proposeTagsBatch(f.selected))];
+    f.proposeTagsBatch.mockClear();
+    const first = generated[0];
+    if (!first) throw new Error('fixture');
+    if (problem === 'missing') generated.pop();
+    if (problem === 'duplicate') generated[1] = first;
+    if (problem === 'stale')
+      generated[1] = {
+        ...first,
+        entryId: f.selected[1]?.entryId ?? '',
+        expectedRevision: 9,
+      };
+    if (problem === 'invalid-tags')
+      generated[3] = {
+        ...first,
+        entryId: f.selected[3]?.entryId ?? '',
+        result: {...first.result, contentKeywords: []},
+      };
+    f.proposeTagsBatch.mockResolvedValueOnce(generated);
+    await expect(f.service.startBatch(f.requests)).rejects.toHaveProperty(
+      'code',
+    );
+    expect(f.appendTagProposal).not.toHaveBeenCalled();
+    expect(f.reviseEntry).not.toHaveBeenCalled();
+  },
+);
+
+it('does not send a stale revision and does not overwrite an edit during batch generation', async () => {
+  const f = batchFixture();
+  const first = f.selected[0];
+  if (!first) throw new Error('fixture');
+  f.selected[0] = {...first, revision: 2};
+  await expect(f.service.startBatch(f.requests)).rejects.toMatchObject({
+    code: 'stale_entry_revision',
+  });
+  expect(f.proposeTagsBatch).not.toHaveBeenCalled();
+  f.selected[0] = first;
+  const results = await f.proposeTagsBatch(f.selected);
+  f.proposeTagsBatch.mockImplementationOnce(() => {
+    f.selected[0] = {...first, revision: 2};
+    return Promise.resolve(results);
+  });
+  const saved = await f.service.startBatch(f.requests);
+  expect(saved[0]?.run).toMatchObject({
+    status: 'failed',
+    errorCode: 'stale_entry_revision',
+    proposals: [],
+  });
+  expect(f.reviseEntry).not.toHaveBeenCalled();
+});
 
 function entry(isPrivate: boolean): Readonly<CurrentInformationEntry> {
   return Object.freeze({

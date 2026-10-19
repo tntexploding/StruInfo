@@ -1,4 +1,4 @@
-import {splitReadingPackets} from './ai_split_input.js';
+import {splitReadingPackets, splitInputPackets} from './ai_split_input.js';
 import {
   MAXIMUM_ENTRY_BODY_CODE_POINTS,
   type MaterializedEvidenceSnapshot,
@@ -9,6 +9,7 @@ import {
   aiSplitEvidenceFragments,
   prepareAiSplitInformationEntries,
   type CurrentInformationEntry,
+  type EntryFragmentGroupInput,
   type InformationEntryEmptySnapshotRepositoryPort,
 } from '../entries/index.js';
 import {
@@ -120,8 +121,15 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
       this.#dependencies.blobStore,
     );
     const sectionFragments = orderedSectionFragments(materialized);
-    const packets = splitReadingPackets(sectionFragments);
-    const sections = providerSections(sectionFragments);
+    const packets = splitInputPackets(sectionFragments, materialized);
+    const sections = providerSections(sectionFragments, materialized);
+    if (packets.length > MAXIMUM_AI_SPLIT_FRAGMENTS)
+      throw new AiSplitProposalServiceError('ai_split_input_unsupported');
+    const whole =
+      sectionFragments.length === 1 &&
+      sectionFragments[0]?.nodeKind === 'document'
+        ? sectionFragments[0]
+        : undefined;
     const idempotencyKey = `ai-split:${snapshotId}:${requestKey}`;
     const runId = deriveProcessingRunId(
       this.#dependencies.workspaceId,
@@ -184,9 +192,27 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
         this.#dependencies.provider,
         generated.groups.map((group) => ({
           titlePath: group.titlePath,
-          fragmentIds: packets
-            .slice(group.startOrdinal, group.endOrdinal + 1)
-            .flatMap((packet) => packet.map((fragment) => fragment.fragmentId)),
+          fragmentIds: whole
+            ? [whole.fragmentId]
+            : packets
+                .slice(group.startOrdinal, group.endOrdinal + 1)
+                .flatMap((packet) =>
+                  packet.map((fragment) => fragment.fragmentId),
+                ),
+          ...(whole
+            ? {
+                fragmentRanges: [
+                  {
+                    startCodePoint:
+                      packets[group.startOrdinal]?.[0]?.codePointRange.start ??
+                      -1,
+                    endCodePoint:
+                      packets[group.endOrdinal]?.at(-1)?.codePointRange.end ??
+                      -1,
+                  },
+                ],
+              }
+            : {}),
         })),
       );
       const proposalId = deriveProcessingProposalId(runId, 0);
@@ -349,7 +375,10 @@ export function orderedSectionFragments(
   let sections = aiSplitEvidenceFragments(snapshot);
   // CommonMark may expose hundreds of chart cells. An exact document Fragment
   // preserves all bytes and provenance without manufacturing standalone entries.
-  if (sections.length > MAXIMUM_AI_SPLIT_FRAGMENTS) {
+  if (
+    sections.length > MAXIMUM_AI_SPLIT_FRAGMENTS ||
+    splitReadingPackets(sections).length > MAXIMUM_AI_SPLIT_FRAGMENTS
+  ) {
     const whole = structure.fragments.find(
       (f) =>
         f.nodeKind === 'document' &&
@@ -367,6 +396,7 @@ export function orderedSectionFragments(
   if (
     sections.length < 1 ||
     sections.length > MAXIMUM_AI_SPLIT_FRAGMENTS ||
+    splitReadingPackets(sections).length > MAXIMUM_AI_SPLIT_FRAGMENTS ||
     codePoints > MAXIMUM_ENTRY_BODY_CODE_POINTS
   ) {
     throw new AiSplitProposalServiceError('ai_split_input_unsupported');
@@ -375,9 +405,10 @@ export function orderedSectionFragments(
 }
 export function providerSections(
   fragments: ReturnType<typeof orderedSectionFragments>,
+  snapshot?: Readonly<MaterializedEvidenceSnapshot>,
 ): readonly Readonly<AiSplitProposalSection>[] {
   return Object.freeze(
-    splitReadingPackets(fragments).map((packet, ordinal) =>
+    splitInputPackets(fragments, snapshot).map((packet, ordinal) =>
       Object.freeze({
         ordinal,
         text: packet.map((fragment) => fragment.selectedText).join('\n\n'),
@@ -387,10 +418,7 @@ export function providerSections(
 }
 function storedPayload(
   provider: AiSplitProposalProviderPort,
-  entries: readonly Readonly<{
-    titlePath: string;
-    fragmentIds: readonly string[];
-  }>[],
+  entries: readonly Readonly<EntryFragmentGroupInput>[],
 ): Readonly<ProcessingSplitProposalPayload> {
   return Object.freeze({
     providerModel: provider.model,
@@ -401,6 +429,13 @@ function storedPayload(
         Object.freeze({
           titlePath: entry.titlePath,
           fragmentIds: Object.freeze([...entry.fragmentIds]),
+          ...(entry.fragmentRanges
+            ? {
+                fragmentRanges: Object.freeze(
+                  entry.fragmentRanges.map((r) => Object.freeze({...r})),
+                ),
+              }
+            : {}),
         }),
       ),
     ),
@@ -419,6 +454,7 @@ function providerErrorCode(error: unknown): AiSplitProposalServiceErrorCode {
     error instanceof Error &&
     'code' in error &&
     (error.code === 'ai_operations_paused' ||
+      error.code === 'ai_batch_budget_paused' ||
       error.code === 'ai_price_window_closed' ||
       error.code === 'ai_split_input_unsupported' ||
       error.code === 'ai_provider_timeout' ||

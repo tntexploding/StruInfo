@@ -6,6 +6,7 @@ import type {
 
 export type AiTagProposalProviderErrorCode =
   | 'ai_operations_paused'
+  | 'ai_batch_budget_paused'
   | 'ai_price_window_closed'
   | 'ai_provider_timeout'
   | 'ai_provider_unavailable'
@@ -42,4 +43,15 @@ export interface AiTagProposalProviderPort {
   proposeTags(
     entry: Readonly<CurrentInformationEntry>,
   ): Promise<Readonly<AiTagProposalProviderResult>>;
+
+  /** One bounded request; results must match every identity and frozen revision. */
+  proposeTagsBatch?(
+    entries: readonly Readonly<CurrentInformationEntry>[],
+  ): Promise<
+    readonly Readonly<{
+      entryId: string;
+      expectedRevision: number;
+      result: Readonly<AiTagProposalProviderResult>;
+    }>[]
+  >;
 }

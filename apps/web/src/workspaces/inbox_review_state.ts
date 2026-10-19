@@ -7,6 +7,7 @@ import {receiptTaskStatus} from './use_inbox_ai_review.js';
 
 /** Session-only navigation; it never carries a privacy opt-in or a saved decision. */
 export interface InboxReviewTarget {
+  readonly subscriptionId?: string;
   readonly snapshotId?: string;
 }
 

@@ -61,6 +61,14 @@ export interface AiAssociationProposalServicePort {
   readonly providerKey:
     'openai-responses-v1' | 'deepseek-responses-v1' | 'external-agent-v1';
   readonly model: string;
+  readonly supportsReview?: boolean;
+
+  review?(
+    entryId: string,
+    relatedEntryId: string,
+    proposalId: string,
+    requestKey: string,
+  ): Promise<Readonly<AiAssociationProposalStartResult>>;
 
   listForPair(
     entryId: string,
@@ -102,6 +110,10 @@ export class AiAssociationProposalService implements AiAssociationProposalServic
   public readonly model: string;
   readonly #dependencies: Readonly<AiAssociationProposalServiceDependencies>;
 
+  public get supportsReview() {
+    return typeof this.#dependencies.provider.reviewAssociation === 'function';
+  }
+
   public constructor(
     dependencies: Readonly<AiAssociationProposalServiceDependencies>,
   ) {
@@ -128,6 +140,33 @@ export class AiAssociationProposalService implements AiAssociationProposalServic
     relatedEntryId: string,
     requestKey: string,
   ): Promise<Readonly<AiAssociationProposalStartResult>> {
+    return this.#start(entryId, relatedEntryId, requestKey);
+  }
+
+  public async review(
+    entryId: string,
+    relatedEntryId: string,
+    proposalId: string,
+    requestKey: string,
+  ) {
+    const proposal = (await this.listForPair(entryId, relatedEntryId)).find(
+      (p) => p.proposalId === proposalId,
+    );
+    if (
+      !proposal?.associationPayload ||
+      proposal.status !== 'pending_review' ||
+      !this.supportsReview
+    )
+      throw new AiAssociationProposalServiceError('ai_proposal_invalid');
+    return this.#start(entryId, relatedEntryId, requestKey, proposal);
+  }
+
+  async #start(
+    entryId: string,
+    relatedEntryId: string,
+    requestKey: string,
+    review?: Readonly<ProcessingProposal>,
+  ): Promise<Readonly<AiAssociationProposalStartResult>> {
     const pair = requiredPair(entryId, relatedEntryId);
     const entries = await this.#loadPublicPair(
       pair.entryLowId,
@@ -139,10 +178,19 @@ export class AiAssociationProposalService implements AiAssociationProposalServic
         false,
       );
     const current = findOverride(snapshot, pair.entryLowId, pair.entryHighId);
+    const original = review?.associationPayload;
+    if (
+      original &&
+      (original.expectedEntryLowRevision !== entries.entryLow.revision ||
+        original.expectedEntryHighRevision !== entries.entryHigh.revision ||
+        original.expectedOverrideRevision !== (current?.revision ?? 0))
+    )
+      throw new AiAssociationProposalServiceError('stale_entry_revision');
     const idempotencyKey = [
-      'ai-association',
+      review ? 'ai-association-review' : 'ai-association',
       pair.entryLowId,
       pair.entryHighId,
+      ...(review ? [review.proposalId] : []),
       requestKey,
     ].join(':');
     const runId = deriveProcessingRunId(
@@ -189,10 +237,17 @@ export class AiAssociationProposalService implements AiAssociationProposalServic
     );
 
     try {
-      const generated = await this.#dependencies.provider.proposeAssociation(
-        entries.entryLow,
-        entries.entryHigh,
-      );
+      const generated =
+        original && this.#dependencies.provider.reviewAssociation
+          ? await this.#dependencies.provider.reviewAssociation(
+              entries.entryLow,
+              entries.entryHigh,
+              original,
+            )
+          : await this.#dependencies.provider.proposeAssociation(
+              entries.entryLow,
+              entries.entryHigh,
+            );
       if (generated.outcome === 'no_relation') {
         await requireWriteOutcome(
           this.#dependencies.processing.writeProgress({
@@ -522,11 +577,13 @@ function providerErrorCode(
     error instanceof Error &&
     'code' in error &&
     (error.code === 'ai_operations_paused' ||
+      error.code === 'ai_batch_budget_paused' ||
       error.code === 'ai_price_window_closed' ||
       error.code === 'ai_provider_timeout' ||
       error.code === 'ai_provider_unavailable' ||
       error.code === 'ai_provider_rejected' ||
-      error.code === 'ai_provider_invalid_response')
+      error.code === 'ai_provider_invalid_response' ||
+      error.code === 'ai_relation_review_uncertain')
   ) {
     return error.code;
   }

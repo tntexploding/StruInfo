@@ -393,7 +393,7 @@ export function InformationEntryEditor({
       setLocalFeedback({
         kind: 'error',
         title: '请选择一个主领域',
-        detail: '主领域用于文档聚合；不会从来源或用户偏好中静默猜测。',
+        detail: '主领域用于归类文档，请按正文内容选择。',
       });
       return;
     }
@@ -420,7 +420,7 @@ export function InformationEntryEditor({
       setLocalFeedback({
         kind: 'error',
         title: '至少需要一个内容关键词',
-        detail: '关键词用于搜索和推荐联系，不会替代正文。',
+        detail: '关键词用于搜索和推荐联系。',
       });
       return;
     }
@@ -566,7 +566,7 @@ export function InformationEntryEditor({
                 setBody(event.currentTarget.value);
               }}
             />
-            <small>编辑会更新当前条目，不会修改已导入的原文。</small>
+            <small>保存后更新当前条目，原文保留。</small>
           </label>
         </details>
         <label className="field field--full">

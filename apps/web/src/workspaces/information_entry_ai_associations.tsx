@@ -128,7 +128,7 @@ export function InformationEntryAiAssociations({
         setFeedback({
           kind: 'success',
           title: 'AI 关系建议已生成',
-          detail: '请核对关系名称和方向；接受之前不会修改知识图谱。',
+          detail: '请核对关系名称和方向，接受后保存到图谱。',
         });
         await loadProposals();
       } else {
@@ -211,17 +211,16 @@ export function InformationEntryAiAssociations({
 
       {!enabled ? (
         <p className="entry-ai-associations__boundary">
-          模型服务 未启用，仍可查看相似条目并人工编辑关系。
+          AI 未启用，仍可查看相似条目并人工编辑关系。
         </p>
       ) : isPrivate ? (
         <p className="entry-ai-associations__boundary">
-          隐私条目不会发送给 模型服务，请使用人工关系编辑。
+          隐私条目请手动编辑联系。
         </p>
       ) : (
         <>
           <p className="entry-ai-associations__boundary">
-            点击生成后，当前两个公开条目的标题、正文和标签会发送给
-            模型服务。其他条目不会发送，结果需要你确认后才会保存。
+            点击生成后，当前两个公开条目的标题、正文和标签会发送给模型服务。范围限于所选条目，确认后保存结果。
           </p>
           <div className="entry-ai-associations__actions">
             <button
@@ -343,12 +342,12 @@ function proposalStatusLabel(status: ProcessingProposalView['status']): string {
 function failureFeedback(code: string): ActionFeedback {
   const known: Readonly<Record<string, string>> = Object.freeze({
     ai_association_entry_not_found: '选中的条目已不存在；请刷新图谱。',
-    ai_private_entry_forbidden: '隐私条目不会发送给 模型服务。',
+    ai_private_entry_forbidden: 'AI 仅处理公开条目。',
     ai_provider_not_configured: '当前服务未启用 模型服务。',
     ai_operations_paused:
       '内置 AI 后续操作已禁止；可在总览允许继续，已有结果保留。',
     ai_price_window_closed:
-      '当前为 DeepSeek 高峰时段，请在低价时段重试。恢复时间见设置 → AI 接入。',
+      '当前为 DeepSeek 高峰时段，请在低价时段重试。恢复时间见设置 → AI 设置。',
     ai_provider_timeout: '模型服务 请求超时，知识图谱没有变化。',
     ai_provider_unavailable: '模型服务 暂时不可用，知识图谱没有变化。',
     ai_provider_rejected: '模型服务 拒绝了本次请求，知识图谱没有变化。',

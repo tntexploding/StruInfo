@@ -2,11 +2,11 @@ import {useState, type ReactNode} from 'react';
 import {WorkspaceActionRail} from '../components/workspace_action_rail.js';
 import {useWorkspaceUi} from '../components/use_workspace_ui.js';
 import {
-  WORKSPACE_SIDEBAR_ACTIONS,
   SIDEBAR_ACTION_LABELS,
   type WorkspaceUiPreferences,
 } from '../api/workspace_ui_preferences.js';
 import type {ProductSection} from '../components/product_types.js';
+import {VisualSettings} from './visual_settings.js';
 
 export function SettingsWorkspace({
   workflow,
@@ -27,12 +27,13 @@ export function SettingsWorkspace({
       <header className="workflow-page-heading">
         <div>
           <h1>设置</h1>
-          <p>页面布局、处理规则与模型接入，集中管理。</p>
+          <p>调整外观、AI 接入与处理规则，管理数据和备份。</p>
         </div>
       </header>
       <div className="settings-layout">
         <WorkspaceActionRail
           page="settings"
+          presentation="selection"
           active={section}
           actions={['appearance', 'workflow', 'ai', 'maintenance'].map(
             (id) => ({
@@ -48,6 +49,7 @@ export function SettingsWorkspace({
         <div className="settings-content">
           <div hidden={section !== 'appearance'}>
             <InterfaceSettings />
+            <VisualSettings />
           </div>
           <div hidden={section !== 'workflow'}>
             {visited.has('workflow') ? workflow : null}
@@ -64,13 +66,16 @@ export function SettingsWorkspace({
 function InterfaceSettings() {
   const ui = useWorkspaceUi();
   return (
-    <section className="interface-settings">
-      <h2>页面与外观</h2>
-      <p>
-        设置默认外观。各工作区直接围绕文档阅读与操作，布局宽度在使用时调整。
-      </p>
+    <section className="interface-settings settings-group">
+      <h2>主题</h2>
+      <p>选择浅色、深色或跟随系统，保存后应用到所有页面。</p>
       {!ui.ready ? (
-        <p>正在使用默认布局；读取成功后可以保存个人设置。</p>
+        <>
+          <p>正在读取已保存的主题。</p>
+          <button type="button" className="text-action" onClick={ui.reload}>
+            重新读取
+          </button>
+        </>
       ) : (
         <InterfaceSettingsForm
           key={ui.preferences.revision}
@@ -78,9 +83,6 @@ function InterfaceSettings() {
         />
       )}
       <p role="status">{ui.message}</p>
-      <button type="button" className="text-action" onClick={ui.reload}>
-        重新读取页面设置
-      </button>
     </section>
   );
 }
@@ -94,6 +96,7 @@ function InterfaceSettingsForm({
   const [busy, setBusy] = useState(false);
   return (
     <form
+      className="appearance-theme-form"
       onSubmit={(event) => {
         event.preventDefault();
         if (busy) return;
@@ -128,23 +131,11 @@ function InterfaceSettingsForm({
           type="button"
           className="secondary-action"
           disabled={busy}
-          onClick={() => {
-            setDraft({
-              ...draft,
-              theme: 'system',
-              sidebars: WORKSPACE_SIDEBAR_ACTIONS,
-            });
-          }}
+          onClick={ui.reload}
         >
-          恢复默认草稿
+          撤销未保存的修改
         </button>
       </div>
-      <p>
-        文档入口、工作台和报告的栏目宽度可直接拖动调整，并保存在当前浏览器。主要操作固定在正文下方，避免按钮位置随着配置变化。
-      </p>
-      <p className="workflow-boundary-note">
-        设置保存在当前外部工作区，并随个人数据包迁移。不会保存隐私可见范围。
-      </p>
     </form>
   );
 }

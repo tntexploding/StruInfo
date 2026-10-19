@@ -10,12 +10,13 @@ import {SettingsWorkspace} from './workspaces/settings_workspace.js';
 import {InformationEntrySplitRule} from './workspaces/information_entry_split_rule.js';
 import {InformationEntryPreferenceProfilePanel} from './workspaces/information_entry_preference_profile_panel.js';
 import {InformationEntryAutomationPolicyPanel} from './workspaces/information_entry_automation_policy_panel.js';
+import {AiExecutionSettings} from './workspaces/ai_execution_settings.js';
 import {AiPriceSettings} from './workspaces/ai_price_settings.js';
 import {
   FormalKnowledgeGraphWorkspace,
   type FormalKnowledgeGraphWorkspaceProps,
 } from './workspaces/formal_knowledge_graph_workspace.js';
-import type {InformationEntrySplitWorkspaceProps} from './workspaces/information_entry_split_workspace.js';
+import type {DocumentStructureServices} from './workspaces/document_structure_services.js';
 import type {MaterialsWorkspaceProps} from './workspaces/materials_workspace.js';
 import {ReviewSettings} from './workspaces/review_settings.js';
 import {useCallback, useEffect, useRef, useState} from 'react';
@@ -25,9 +26,6 @@ import type {
   AiAssociationProposalDecisionResponse,
   AiAssociationProposalListResponse,
   AiAssociationProposalStartResponse,
-  AiSplitProposalDecisionResponse,
-  AiSplitProposalListResponse,
-  AiSplitProposalStartResponse,
   EvidenceSnapshotSummary,
   InformationEntryAssociationPolicyWriteResponse,
   InformationEntryAssociationRebuildResponse,
@@ -435,14 +433,6 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
-  const materializeInformationEntries = useCallback(
-    (
-      body: unknown,
-    ): Promise<M1cHttpResponse<InformationEntryMaterializeResponse>> =>
-      apiClient.materializeInformationEntries(body),
-    [apiClient],
-  );
-
   const loadInformationDocumentWorkingCopy = useCallback(
     (
       snapshotId: string,
@@ -671,47 +661,6 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
-  const listAiSplitProposals = useCallback(
-    (
-      snapshotId: string,
-    ): Promise<M1cHttpResponse<AiSplitProposalListResponse>> =>
-      apiClient.listAiSplitProposals(snapshotId),
-    [apiClient],
-  );
-
-  const startAiSplitProposal = useCallback(
-    (
-      snapshotId: string,
-      requestKey: string,
-    ): Promise<M1cHttpResponse<AiSplitProposalStartResponse>> =>
-      apiClient.startAiSplitProposal(snapshotId, requestKey),
-    [apiClient],
-  );
-
-  const acceptAiSplitProposal = useCallback(
-    (
-      snapshotId: string,
-      proposalId: string,
-    ): Promise<M1cHttpResponse<AiSplitProposalDecisionResponse>> =>
-      apiClient.acceptAiSplitProposal(snapshotId, proposalId),
-    [apiClient],
-  );
-
-  const rejectAiSplitProposal = useCallback(
-    (
-      snapshotId: string,
-      proposalId: string,
-    ): Promise<M1cHttpResponse<AiSplitProposalDecisionResponse>> =>
-      apiClient.rejectAiSplitProposal(snapshotId, proposalId),
-    [apiClient],
-  );
-
-  const loadEvidenceSnapshotForSplit = useCallback(
-    (snapshotId: string, includePrivate = false) =>
-      apiClient.loadEvidenceSnapshot(snapshotId, {includePrivate}),
-    [apiClient],
-  );
-
   const listAiAssociationProposals = useCallback(
     (
       entryId: string,
@@ -916,31 +865,14 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     setActiveSection('documents');
   }
 
-  const splitServices: InformationEntrySplitWorkspaceProps = {
-    aiEnabled:
-      workspace.status === 'ready' &&
-      workspace.value.capabilities.includes('ai_split'),
-    onAcceptAiSplitProposal: acceptAiSplitProposal,
-    onListAiSplitProposals: listAiSplitProposals,
-    onListDocuments: listInformationEntryDocuments,
-    onLoadEvidenceSnapshot: loadEvidenceSnapshotForSplit,
+  const documentStructureServices: DocumentStructureServices = {
     onLoadDocumentWorkingCopy: loadInformationDocumentWorkingCopy,
     onSaveDocumentWorkingCopy: saveInformationDocumentWorkingCopy,
     onRestoreDocumentWorkingCopy: restoreInformationDocumentWorkingCopy,
     onCommitDocumentWorkingCopy: commitInformationDocumentWorkingCopy,
-    onMaterialize: materializeInformationEntries,
     onMaterializeManual: materializeManualInformationEntries,
-    onLoadSplitRuleProfile: loadInformationEntrySplitRuleProfile,
-    onSaveSplitRuleProfile: saveInformationEntrySplitRuleProfile,
-    onTrialSplitRule: trialInformationEntrySplitRule,
-    onApplySplitRule: applyInformationEntrySplitRule,
     onPreviewRestructure: previewInformationEntryRestructure,
     onApplyRestructure: applyInformationEntryRestructure,
-    onRejectAiSplitProposal: rejectAiSplitProposal,
-    onSearch: searchInformationEntries,
-    onStartAiSplitProposal: startAiSplitProposal,
-    onOpenEvidence: (snapshotId, fragmentId, includePrivate) =>
-      void openEvidence(snapshotId, undefined, fragmentId, includePrivate),
   };
   const graphServices: FormalKnowledgeGraphWorkspaceProps = {
     aiAssociationEnabled:
@@ -1028,7 +960,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           api={apiClient}
           selection={documentSelection}
           onSelectionChange={setDocumentSelection}
-          structureServices={splitServices}
+          structureServices={documentStructureServices}
           documentTags={{
             onAggregate: aggregateInformationDocumentTags,
             onRevise: reviseInformationDocumentTags,
@@ -1064,21 +996,22 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
             workflow={
               <>
                 <h2>处理流程</h2>
-                <p>文档内处理具体内容，这里管理共用规则。</p>
-                <details className="workflow-tool-drawer">
-                  <summary>结构规则</summary>
-                  <InformationEntrySplitRule
-                    snapshotId=""
-                    isPrivate={false}
-                    includePrivate={false}
-                    alreadyMaterialized={false}
-                    onLoad={loadInformationEntrySplitRuleProfile}
-                    onSave={saveInformationEntrySplitRuleProfile}
-                    onTrial={trialInformationEntrySplitRule}
-                    onApply={applyInformationEntrySplitRule}
-                    onCommitted={() => Promise.resolve()}
-                  />
-                </details>
+                <p>
+                  设置手动拆分、标签、联系推荐和评分规则。AI 自动处理在“AI
+                  设置”中配置。
+                </p>
+                <InformationEntrySplitRule
+                  settingsOnly
+                  snapshotId=""
+                  isPrivate={false}
+                  includePrivate={false}
+                  alreadyMaterialized={false}
+                  onLoad={loadInformationEntrySplitRuleProfile}
+                  onSave={saveInformationEntrySplitRuleProfile}
+                  onTrial={trialInformationEntrySplitRule}
+                  onApply={applyInformationEntrySplitRule}
+                  onCommitted={() => Promise.resolve()}
+                />
                 <ReviewSettings
                   preferences={reviewPreferences}
                   onSave={saveReviewPreferences}
@@ -1086,37 +1019,32 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
                   onRebuild={rebuildInformationEntryAssociations}
                   onReload={refreshReviewPreferences}
                 />
-                <details className="workflow-tool-drawer">
-                  <summary>偏好规则</summary>
-                  <InformationEntryPreferenceProfilePanel
-                    state={entryPreferenceProfile}
-                    onReload={() => {
-                      void refreshEntryPreferenceProfile();
-                    }}
-                    onSave={saveEntryPreferenceProfile}
-                    onSuggest={suggestEntryPreferenceProfile}
-                    onTrial={trialEntryPreferenceProfile}
-                  />
-                </details>
-                <details className="workflow-tool-drawer">
-                  <summary>自动分流</summary>
-                  <InformationEntryAutomationPolicyPanel
-                    enabled={
-                      workspace.status === 'ready' &&
-                      workspace.value.capabilities.includes('entry_automation')
-                    }
-                    onLoad={loadEntryAutomationPolicy}
-                    onSave={saveEntryAutomationPolicy}
-                    onTrial={trialEntryAutomationPolicy}
-                    onExecute={executeEntryAutomation}
-                    onListRuns={listEntryAutomationExecutions}
-                    onLoadRun={loadEntryAutomationExecution}
-                  />
-                </details>
+                <InformationEntryPreferenceProfilePanel
+                  state={entryPreferenceProfile}
+                  onReload={() => {
+                    void refreshEntryPreferenceProfile();
+                  }}
+                  onSave={saveEntryPreferenceProfile}
+                  onSuggest={suggestEntryPreferenceProfile}
+                  onTrial={trialEntryPreferenceProfile}
+                />
+                <InformationEntryAutomationPolicyPanel
+                  enabled={
+                    workspace.status === 'ready' &&
+                    workspace.value.capabilities.includes('entry_automation')
+                  }
+                  onLoad={loadEntryAutomationPolicy}
+                  onSave={saveEntryAutomationPolicy}
+                  onTrial={trialEntryAutomationPolicy}
+                  onExecute={executeEntryAutomation}
+                  onListRuns={listEntryAutomationExecutions}
+                  onLoadRun={loadEntryAutomationExecution}
+                />
               </>
             }
             ai={
               <>
+                <AiExecutionSettings />
                 <AiPriceSettings />
                 <AiWorkflowPanel
                   documents={snapshotValues}
@@ -1124,65 +1052,62 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
                     openDocument(id, false);
                   }}
                 />
-                <details className="workflow-tool-drawer">
-                  <summary>单项模型能力与接入说明</summary>
-                  <section className="ai-connection-settings">
-                    <h2>AI 接入</h2>
-                    <p>
-                      可配置 OpenAI 或 DeepSeek
-                      服务。每项能力独立启用，未配置时可以继续阅读、人工整理与文字查询。
-                    </p>
-                    <dl>
-                      {[
-                        ['ai_split', '拆分建议'],
-                        ['ai_tags', '标签建议'],
-                        ['ai_associations', '联系建议'],
-                        ['ai_entry_translation', '按需翻译'],
-                        ['ai_query_synthesis', '查询综合'],
-                      ].map(([key, label]) => (
-                        <div key={key}>
-                          <dt>{label}</dt>
-                          <dd>
-                            {key !== undefined &&
-                            workspace.status === 'ready' &&
-                            workspace.value.capabilities.includes(key)
-                              ? '已启用'
-                              : '未启用'}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                    <h3>连接配置</h3>
-                    <ol>
-                      <li>
-                        在现有外部运行环境文件中设置{' '}
-                        <code>STRUIINFO_OPENAI_MODEL</code> 或{' '}
-                        <code>STRUIINFO_DEEPSEEK_MODEL</code>
-                        ，选择一种服务并设置模型名称。
-                      </li>
-                      <li>
-                        通过服务器环境 <code>OPENAI_API_KEY</code> 或{' '}
-                        <code>OPENAI_API_KEY_FILE</code> 引用 OpenAI
-                        密钥；DeepSeek 使用 <code>DEEPSEEK_API_KEY</code> 或{' '}
-                        <code>DEEPSEEK_API_KEY_FILE</code>
-                        。直接值与文件各选其一。
-                      </li>
-                      <li>重启当前实例后，点击下方按钮检查能力状态。</li>
-                    </ol>
-                    <p>
-                      密钥由服务器读取；页面设置不存储密钥。模型只处理明确选择或已启用策略授权的公开资料，隐私条目不会发送。
-                    </p>
-                    <button
-                      className="secondary-action"
-                      type="button"
-                      onClick={() => {
-                        void refreshWorkspace();
-                      }}
-                    >
-                      刷新接入状态
-                    </button>
-                  </section>
-                </details>
+                <section className="ai-connection-settings settings-group">
+                  <h2>模型接入</h2>
+                  <p>
+                    可配置 OpenAI 或 DeepSeek 服务。下方显示各项功能是否已接通。
+                  </p>
+                  <dl>
+                    {[
+                      ['ai_split', '拆分建议'],
+                      ['ai_tags', '标签建议'],
+                      ['ai_associations', '联系建议'],
+                      ['ai_entry_translation', '按需翻译'],
+                      ['ai_query_synthesis', '查询综合'],
+                    ].map(([key, label]) => (
+                      <div key={key}>
+                        <dt>{label}</dt>
+                        <dd>
+                          {key !== undefined &&
+                          workspace.status === 'ready' &&
+                          workspace.value.capabilities.includes(key)
+                            ? '已启用'
+                            : '未启用'}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <h3>更换模型或密钥</h3>
+                  <p>这些配置在服务器上修改，保存后重启项目。</p>
+                  <ol>
+                    <li>
+                      在现有外部运行环境文件中设置{' '}
+                      <code>STRUIINFO_OPENAI_MODEL</code> 或{' '}
+                      <code>STRUIINFO_DEEPSEEK_MODEL</code>
+                      ，选择一种服务并设置模型名称。
+                    </li>
+                    <li>
+                      通过服务器环境 <code>OPENAI_API_KEY</code> 或{' '}
+                      <code>OPENAI_API_KEY_FILE</code> 引用 OpenAI
+                      密钥；DeepSeek 使用 <code>DEEPSEEK_API_KEY</code> 或{' '}
+                      <code>DEEPSEEK_API_KEY_FILE</code>
+                      。直接值与文件各选其一。
+                    </li>
+                    <li>重启当前实例后，点击下方按钮检查能力状态。</li>
+                  </ol>
+                  <p>
+                    密钥由服务器读取。模型仅处理你选中的公开资料，或自动处理设置范围内的公开资料。
+                  </p>
+                  <button
+                    className="secondary-action"
+                    type="button"
+                    onClick={() => {
+                      void refreshWorkspace();
+                    }}
+                  >
+                    刷新接入状态
+                  </button>
+                </section>
               </>
             }
             maintenance={
@@ -1196,6 +1121,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
         {activeSection === 'overview' ? (
           <WorkflowOverview
             snapshots={snapshots}
+            onRefreshEvidence={refreshEvidence}
             workspace={
               workspace.status === 'ready' ? workspace.value : undefined
             }
@@ -1204,6 +1130,10 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
             onCancelProcessingRun={cancelProcessingRun}
             onNavigate={navigate}
             onReviewInbox={reviewInbox}
+            onReviewSource={(subscriptionId) => {
+              navigate('import');
+              setInboxReviewTarget({subscriptionId});
+            }}
             onOpenDocument={(id) => {
               openDocument(id, false);
             }}
@@ -1340,7 +1270,7 @@ function RuntimeNotice({
         <span>
           {workspaceError ??
             (health.kind === 'not_ready'
-              ? '服务尚未就绪；表单不会把失败解释为已写入。'
+              ? '服务尚未就绪，请稍后重试。'
               : '健康响应无法验证；请检查本机配置。')}
         </span>
       </div>

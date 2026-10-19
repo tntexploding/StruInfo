@@ -1,4 +1,5 @@
 import type {CurrentInformationEntry} from '../../modules/entries/index.js';
+import {withoutPublicationContext} from '../../modules/processing/publication_context.js';
 
 /** A request projection only: the stored Entry and its complete evidence stay intact. */
 export function entryTagSubject(
@@ -8,7 +9,8 @@ export function entryTagSubject(
   body: string;
   documentContext?: Readonly<{titlePath: string; preface: string}>;
 }> {
-  const {titlePath, body, chunkMode, documentOrder} = entry.value;
+  const {titlePath, chunkMode, documentOrder} = entry.value;
+  const body = withoutPublicationContext(entry.value.body);
   const unchanged = {titlePath, body};
   if (chunkMode !== 'split' || documentOrder !== 0) return unchanged;
   const lines = body.split('\n');

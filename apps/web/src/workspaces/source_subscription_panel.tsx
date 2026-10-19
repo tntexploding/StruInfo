@@ -1,3 +1,4 @@
+import {SourceDescriptionField} from './source_description_field.js';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import type {
@@ -521,20 +522,15 @@ export function SourceSubscriptionPanel({
                             }}
                           />
                         </label>
-                        <label className="field field--wide">
-                          <span>用途与内容说明</span>
-                          <textarea
-                            maxLength={500}
-                            rows={3}
-                            placeholder="这个来源主要发布什么，你为什么关注它"
-                            value={subscription.description ?? ''}
-                            onChange={(event) => {
-                              updateDraft(subscription.subscriptionId, {
-                                description: event.currentTarget.value,
-                              });
-                            }}
-                          />
-                        </label>
+                        <SourceDescriptionField
+                          subscription={subscription}
+                          disabled={saving}
+                          onChange={(description) => {
+                            updateDraft(subscription.subscriptionId, {
+                              description,
+                            });
+                          }}
+                        />
                         <label className="field">
                           <span>来源别名</span>
                           <input
@@ -622,7 +618,7 @@ export function SourceSubscriptionPanel({
                               />
                               <small>
                                 仅 HTTPS
-                                RSS/Atom；不会跟随重定向或抓取条目链接。
+                                RSS/Atom。此处只读取订阅正文，跳转地址暂不支持。
                               </small>
                             </label>
                             <label className="field">
@@ -658,7 +654,7 @@ export function SourceSubscriptionPanel({
                                 }}
                               />
                               <small>
-                                仅发出公开 HTTPS GET；不会执行脚本或跟随重定向。
+                                读取公开 HTTPS 接口，暂不支持脚本或地址跳转。
                               </small>
                             </label>
                             <label className="field">
@@ -803,7 +799,7 @@ export function SourceSubscriptionPanel({
                                   }}
                                 />
                                 <small>
-                                  只保存变量名；令牌不会写入个人配置。
+                                  填写服务器环境变量名，令牌由服务器读取。
                                 </small>
                               </label>
                             ) : null}
@@ -1079,6 +1075,9 @@ function toWrite(
   const common = {
     subscriptionId: subscription.subscriptionId,
     label: subscription.label,
+    ...(subscription.description === undefined
+      ? {}
+      : {description: subscription.description}),
     enabled: subscription.enabled,
     sourceAlias: subscription.sourceAlias,
     isPrivate: subscription.isPrivate,

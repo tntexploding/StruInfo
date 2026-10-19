@@ -1,3 +1,4 @@
+import {documentProcessingInstructions} from '../../modules/processing/document_processing_standard.js';
 import {
   responsesEndpoint,
   responsesPromptVersion,
@@ -28,6 +29,62 @@ describe.each([
     model: 'deepseek-synthetic',
   },
 ])('$providerKey $model', (CONFIG) => {
+  it.each(['relation', 'no_relation', 'uncertain', 'changed'] as const)(
+    'independently verifies a candidate: %s',
+    async (outcome) => {
+      const candidate = {
+        relationLabel: '合成缓冲机制比较',
+        direction: 'symmetric' as const,
+      };
+      const positive = outcome === 'relation' || outcome === 'changed';
+      const fetcher = vi.fn<OpenAiFetch>(() =>
+        Promise.resolve(
+          responseEnvelope({
+            outcome: outcome === 'changed' ? 'relation' : outcome,
+            summary: 'Synthetic A and B evidence comparison.',
+            relationLabel: positive
+              ? outcome === 'changed'
+                ? 'Unrequested replacement'
+                : candidate.relationLabel
+              : null,
+            direction: positive ? candidate.direction : null,
+            basis: positive ? 'comparison' : 'insufficient_evidence',
+            evidenceA: positive ? ['A:0'] : [],
+            evidenceB: positive ? ['B:0'] : [],
+          }),
+        ),
+      );
+      const provider = new ResponsesEntryAssociationProvider(CONFIG, fetcher);
+      const result = provider.reviewAssociation(
+        entry('2', false),
+        entry('3', false),
+        candidate,
+      );
+      if (outcome === 'uncertain' || outcome === 'changed')
+        await expect(result).rejects.toMatchObject({
+          code:
+            outcome === 'uncertain'
+              ? 'ai_relation_review_uncertain'
+              : 'ai_provider_invalid_response',
+        });
+      else
+        expect(await result).toMatchObject(
+          outcome === 'relation' ? candidate : {outcome: 'no_relation'},
+        );
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      const body = fetcher.mock.calls[0]?.[1]?.body;
+      if (typeof body !== 'string')
+        throw new Error('missing synthetic request');
+      const request = JSON.parse(body) as {
+        input: string;
+        text: {format: {name: string}};
+      };
+      expect(JSON.parse(request.input)).toMatchObject({candidate});
+      expect(request.text.format.name).toBe(
+        'struinfo_entry_association_review',
+      );
+    },
+  );
   it('sends only the explicitly selected public pair with storage and tools disabled', async () => {
     const fetchImplementation = vi.fn<OpenAiFetch>(() =>
       Promise.resolve(
@@ -63,6 +120,9 @@ describe.each([
       max_output_tokens: 800,
     });
     expect(request).not.toHaveProperty('tools');
+    expect(String(request.instructions)).toContain(
+      documentProcessingInstructions('relations'),
+    );
     expect(provider.providerKey).toBe(CONFIG.providerKey);
     expect(request.reasoning).toEqual(
       CONFIG.providerKey === 'deepseek-responses-v1'
@@ -109,6 +169,129 @@ describe.each([
     ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});
   });
 
+  it.each([
+    'topic_only',
+    'incidental_entity',
+    'insufficient_evidence',
+    undefined,
+    'unknown',
+  ])(
+    'rejects a positive link without a specific relation basis: %s',
+    async (basis) => {
+      const provider = new ResponsesEntryAssociationProvider(CONFIG, () =>
+        Promise.resolve(
+          responseEnvelope({
+            outcome: 'relation',
+            basis,
+            summary:
+              'Only a broad subject is shared, without a specific mechanism.',
+            relationLabel: 'Broad subject',
+            direction: 'symmetric',
+          }),
+        ),
+      );
+      await expect(
+        provider.proposeAssociation(entry('2', false), entry('3', false)),
+      ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});
+    },
+  );
+
+  it('rejects a specific basis contradicted by a no-relation decision', async () => {
+    const provider = new ResponsesEntryAssociationProvider(CONFIG, () =>
+      Promise.resolve(
+        responseEnvelope({
+          outcome: 'no_relation',
+          basis: 'prerequisite',
+          summary: 'A prerequisite is claimed but denied.',
+          relationLabel: null,
+          direction: null,
+        }),
+      ),
+    );
+    await expect(
+      provider.proposeAssociation(entry('2', false), entry('3', false)),
+    ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});
+  });
+
+  it('exposes headings as context without selectable IDs and keeps body evidence IDs stable', async () => {
+    const first = entry('2', false);
+    const selected = {
+      ...first,
+      value: {
+        ...first.value,
+        body: '# Synthetic mechanism\n\nThe mechanism corrects measured drift.',
+      },
+    };
+    const fetcher = vi.fn<OpenAiFetch>(() =>
+      Promise.resolve(
+        responseEnvelope({
+          summary: 'A explains drift correction; B compares an implementation.',
+          basis: 'shared_mechanism',
+          relationLabel: 'Drift correction',
+          direction: 'symmetric',
+          evidenceA: ['A:1'],
+        }),
+      ),
+    );
+    await expect(
+      new ResponsesEntryAssociationProvider(CONFIG, fetcher).proposeAssociation(
+        selected,
+        entry('3', false),
+      ),
+    ).resolves.toMatchObject({relationLabel: 'Drift correction'});
+    const body = fetcher.mock.calls[0]?.[1]?.body;
+    if (typeof body !== 'string') throw new Error('missing request body');
+    const request = JSON.parse(body) as {
+      input: string;
+      text: {
+        format: {schema: {properties: {evidenceA: {items: {enum: string[]}}}}};
+      };
+    };
+    expect(JSON.parse(request.input)).toMatchObject({
+      entryA: {
+        headingContext: ['# Synthetic mechanism'],
+        passages: [
+          {
+            id: 'A:1',
+            role: 'content',
+            text: 'The mechanism corrects measured drift.',
+          },
+        ],
+      },
+    });
+    expect(request.text.format.schema.properties.evidenceA.items.enum).toEqual([
+      'A:1',
+    ]);
+    const invalid = new ResponsesEntryAssociationProvider(CONFIG, () =>
+      Promise.resolve(
+        responseEnvelope({
+          summary: 'A heading is not evidence.',
+          relationLabel: 'Invented link',
+          direction: 'symmetric',
+          evidenceA: ['A:0'],
+        }),
+      ),
+    );
+    await expect(
+      invalid.proposeAssociation(selected, entry('3', false)),
+    ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});
+    expect(selected.value.body).toBe(
+      '# Synthetic mechanism\n\nThe mechanism corrects measured drift.',
+    );
+  });
+
+  it('does not dispatch a relation request when an endpoint contains only a heading', async () => {
+    const first = entry('2', false);
+    const fetcher = vi.fn<OpenAiFetch>();
+    await expect(
+      new ResponsesEntryAssociationProvider(CONFIG, fetcher).proposeAssociation(
+        {...first, value: {...first.value, body: '# Only a title'}},
+        entry('3', false),
+      ),
+    ).resolves.toMatchObject({outcome: 'no_relation'});
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('rejects a private pair before calling the Provider', async () => {
     const fetchImplementation = vi.fn<OpenAiFetch>();
     const provider = new ResponsesEntryAssociationProvider(
@@ -122,6 +305,59 @@ describe.each([
       new AiAssociationProposalProviderError('ai_provider_rejected'),
     );
     expect(fetchImplementation).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {evidenceA: ['B:0'], evidenceB: ['B:0']},
+    {evidenceA: ['A:999'], evidenceB: ['B:0']},
+    {evidenceA: [], evidenceB: ['B:0']},
+  ])(
+    'rejects a relation with missing or cross-endpoint evidence: $evidenceA',
+    async (evidence) => {
+      const provider = new ResponsesEntryAssociationProvider(CONFIG, () =>
+        Promise.resolve(
+          responseEnvelope({
+            summary: 'A concrete but unsupported claim.',
+            relationLabel: 'comparison',
+            direction: 'symmetric',
+            ...evidence,
+          }),
+        ),
+      );
+      await expect(
+        provider.proposeAssociation(entry('2', false), entry('3', false)),
+      ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});
+    },
+  );
+
+  it('cannot cite a publication appendix removed from the pair subject', async () => {
+    const first = entry('2', false);
+    const selected = {
+      ...first,
+      value: {
+        ...first.value,
+        body: 'A concrete mechanism.\n\n# Colophon\n\nFictional publisher catalogue.',
+      },
+    };
+    const fetcher = vi.fn<OpenAiFetch>(() =>
+      Promise.resolve(
+        responseEnvelope({
+          summary: 'Both have a publisher.',
+          relationLabel: 'same publisher',
+          direction: 'symmetric',
+          evidenceA: ['A:2'],
+        }),
+      ),
+    );
+    await expect(
+      new ResponsesEntryAssociationProvider(CONFIG, fetcher).proposeAssociation(
+        selected,
+        entry('3', false),
+      ),
+    ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});
+    const sent = fetcher.mock.calls[0]?.[1]?.body;
+    expect(sent).not.toContain('Fictional publisher catalogue');
+    expect(selected.value.body).toContain('Fictional publisher catalogue');
   });
 
   it('fails closed when the result contains an unrequested field', async () => {
@@ -154,7 +390,16 @@ function responseEnvelope(payload: Record<string, unknown>): Response {
           content: [
             {
               type: 'output_text',
-              text: JSON.stringify({outcome: 'relation', ...payload}),
+              text: JSON.stringify({
+                outcome: 'relation',
+                basis:
+                  payload.outcome === 'no_relation'
+                    ? 'insufficient_evidence'
+                    : 'comparison',
+                evidenceA: payload.outcome === 'no_relation' ? [] : ['A:0'],
+                evidenceB: payload.outcome === 'no_relation' ? [] : ['B:0'],
+                ...payload,
+              }),
             },
           ],
         },

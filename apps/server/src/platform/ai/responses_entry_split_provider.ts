@@ -1,3 +1,7 @@
+import {documentProcessingInstructions} from '../../modules/processing/document_processing_standard.js';
+import {splitSourceTitle} from './split_source_title.js';
+import {parseResponseJson} from './response_json.js';
+import {isPublicationOnly} from '../../modules/processing/publication_context.js';
 import {documentModelInputLimit} from './document_model_capacity.js';
 import {isAiDispatchWait} from '../../modules/processing/ai_price_policy.js';
 import {
@@ -20,7 +24,7 @@ import {
   RESPONSE_METADATA_INSTRUCTIONS,
 } from './responses_metadata.js';
 
-export const OPENAI_SPLIT_PROMPT_VERSION = 'struinfo.openai-entry-split.v6';
+export const OPENAI_SPLIT_PROMPT_VERSION = 'struinfo.openai-entry-split.v14';
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 
 export class ResponsesEntrySplitProvider implements AiSplitProposalProviderPort {
@@ -93,7 +97,7 @@ export class ResponsesEntrySplitProvider implements AiSplitProposalProviderPort 
     const outputText = extractOutputText(envelope);
     let payload: unknown;
     try {
-      payload = JSON.parse(outputText) as unknown;
+      payload = parseResponseJson(outputText);
     } catch {
       fail();
     }
@@ -105,6 +109,9 @@ function createRequest(
   config: Readonly<AiProposalProviderConfig>,
   sections: readonly Readonly<AiSplitProposalSection>[],
 ): Readonly<Record<string, unknown>> {
+  const publicationOnlyOrdinals = sections
+    .filter((s) => isPublicationOnly(s.text))
+    .map((s) => s.ordinal);
   return Object.freeze({
     model: config.model,
     ...responsesOptions(config),
@@ -118,28 +125,18 @@ function createRequest(
       ),
     ),
     instructions: [
-      'Choose the appropriate reading unit for the complete public document.',
-      'Default documentMode to whole for a coherent article, news story, essay, case study, tutorial, paper or report.',
-      'Use independent_entries only when the source is already a collection of separate, independently understandable items, such as a digest or unrelated resource list.',
-      'Paragraphs, headings, changes of subtopic and model context limits do not justify separate Entries.',
-      'Input sections are technical reading packets, not proposed Entries. A packet can include a full chapter, table or the complete article. Never invent finer ordinals inside a packet. With one packet, return one group with both ordinals 0.',
-      'Reference lists and bibliography belong to their article; never split them into independent knowledge entries.',
-      'Never isolate author introductions, captions, narrative steps or conclusions. Attach a collection preface to its first item.',
-      'A standalone Entry must identify its subject and preserve the context of pronouns, examples, comparisons and conclusions without its siblings.',
-      'Decide the genre of the complete document first. A numbered news digest remains a collection even when all news shares a broad industry or date. Short but complete news briefs are independent items, not incomplete paragraphs.',
-      'numberedItemStarts are structural candidate boundaries, not a command to split: tutorial steps, arguments and sections of one coherent report must remain together.',
-      'For a collection, group each headline with ALL of its following body paragraphs, captions and source links up to the next independent item. A title-only block is not a separate item.',
-      'Attach opening editorial context to the first item and closing credits or return links to the last item. A preface or footer must not turn an otherwise independent collection into whole.',
-      'Prefer already self-contained groups. If a remaining group needs its adjacent context, set context to previous or next as appropriate; self means no dependency. Merge locally, not across unrelated news. A first group cannot depend on previous and a last group cannot depend on next.',
-      'Choose whole for a coherent document or if its overall genre cannot be determined; do not choose whole just because one group needs its neighbour.',
-      'Explain the genre and the grouping reason briefly in Chinese in summary, rather than summarizing the news.',
-      'Every section ordinal must appear exactly once, in its original order.',
-      'Groups must be contiguous and cover ordinal 0 through the final ordinal.',
-      'Do not rewrite, summarize, omit, duplicate, or reorder source text.',
-      'Return concise entry titles and only the requested JSON schema.',
+      documentProcessingInstructions('split'),
+      'Return a single JSON object without Markdown fences, commentary or schema-definition fields. Encode documentMode whole or independent_entries. Every group has exactly titlePath, startOrdinal, role and context. Return only the first ordinal of each group in strictly increasing order, starting with 0; do not emit endOrdinal. The application derives each end as the next start minus one, and the final end as the last source ordinal, so every section remains covered.',
+      'Classify each span role before deciding independence: content means a substantive reading contribution; framing means a preface, cover, table of contents, sponsor or purchase invitation, recurring author catalogue, archive navigation, credits or subscription footer supporting the publication. Use framing even when it has a descriptive title. The application attaches framing to adjacent content and never creates a standalone Entry from it. Do not label a substantive product review, technical explanation or curated reference directory framing merely because it contains links or a brand. A mixed span containing substantive explanation remains content; do not discard its evidence.',
+      'Mark each group context self, previous or next; the application merges adjacent dependencies. With a whole document return one group starting at 0. In an independent collection, separate self-contained linked stories or tools even if they share a category heading. For example, three unrelated source-linked recommendations in packets 1, 2 and 3 need separate starts, not one broad Tools group. linkedItemStarts, when present, identifies source-linked numbered packets, not proof that numbered steps in a tutorial are independent.',
       RESPONSE_METADATA_INSTRUCTIONS,
     ].join(' '),
-    input: JSON.stringify({sections, ...numberedCollectionHints(sections)}),
+    input: JSON.stringify({
+      sections,
+      ...numberedCollectionHints(sections),
+      ...linkedCollectionHints(sections),
+      ...(publicationOnlyOrdinals.length > 0 ? {publicationOnlyOrdinals} : {}),
+    }),
     text: {
       format: {
         type: 'json_schema',
@@ -158,29 +155,21 @@ function createRequest(
             groups: {
               type: 'array',
               minItems: 1,
-              maxItems: Math.min(MAXIMUM_AI_SPLIT_ENTRIES, sections.length),
+              // Framing spans do not consume the final 64-Entry allowance.
+              maxItems: sections.length,
               items: {
                 type: 'object',
                 additionalProperties: false,
-                required: [
-                  'titlePath',
-                  'startOrdinal',
-                  'endOrdinal',
-                  'context',
-                ],
+                required: ['titlePath', 'startOrdinal', 'role', 'context'],
                 properties: {
                   titlePath: {type: 'string', minLength: 1, maxLength: 200},
                   startOrdinal: {
                     type: 'integer',
                     minimum: 0,
-                    maximum: MAXIMUM_AI_SPLIT_FRAGMENTS - 1,
-                  },
-                  endOrdinal: {
-                    type: 'integer',
-                    minimum: 0,
-                    maximum: MAXIMUM_AI_SPLIT_FRAGMENTS - 1,
+                    maximum: sections.length - 1,
                   },
                   context: {type: 'string', enum: ['self', 'previous', 'next']},
+                  role: {type: 'string', enum: ['content', 'framing']},
                 },
               },
             },
@@ -227,54 +216,90 @@ function decodePayload(
     !['whole', 'independent_entries'].includes(String(value.documentMode)) ||
     !Array.isArray(value.groups) ||
     value.groups.length < 1 ||
-    value.groups.length > Math.min(MAXIMUM_AI_SPLIT_ENTRIES, sectionCount)
+    value.groups.length > sectionCount
   )
     fail();
-  const groups = value.groups.map((candidate) => {
+  const boundaries = value.groups.map((candidate) => {
     if (
       !isClosedRecord(candidate, [
         'titlePath',
         'startOrdinal',
-        'endOrdinal',
+        'role',
         'context',
       ]) ||
+      !['content', 'framing'].includes(String(candidate.role)) ||
       !['self', 'previous', 'next'].includes(String(candidate.context)) ||
       typeof candidate.startOrdinal !== 'number' ||
       !Number.isSafeInteger(candidate.startOrdinal) ||
-      typeof candidate.endOrdinal !== 'number' ||
-      !Number.isSafeInteger(candidate.endOrdinal) ||
       candidate.startOrdinal < 0 ||
-      candidate.endOrdinal < candidate.startOrdinal ||
-      candidate.endOrdinal >= sectionCount
+      candidate.startOrdinal >= sectionCount
     )
       fail();
     return Object.freeze({
       titlePath: boundedText(candidate.titlePath, 200),
       context: candidate.context as 'self' | 'previous' | 'next',
+      role: candidate.role as 'content' | 'framing',
       startOrdinal: candidate.startOrdinal,
-      endOrdinal: candidate.endOrdinal,
     });
   });
   if (
-    groups[0]?.startOrdinal !== 0 ||
-    groups.some(
+    boundaries.some(
       (group, index) =>
         index > 0 &&
-        group.startOrdinal !== (groups[index - 1]?.endOrdinal ?? -2) + 1,
-    ) ||
-    groups.at(-1)?.endOrdinal !== sectionCount - 1
+        group.startOrdinal <= (boundaries[index - 1]?.startOrdinal ?? -1),
+    )
   )
     fail();
+  const initial = boundaries[0];
+  if (!initial) fail();
+  if (initial.startOrdinal !== 0) {
+    // Only a verifiable title-only prefix may be attached. Missing prose is an
+    // invalid response, even if it looks like a plausible editorial preface.
+    if (
+      !sections.slice(0, initial.startOrdinal).every((s) => headingOnly(s.text))
+    )
+      fail();
+    boundaries[0] = {...initial, startOrdinal: 0};
+  }
+  // Model selects cuts, not two competing endpoints. Derivation preserves every
+  // source ordinal exactly once, including a final appendix or continuation.
+  const groups = boundaries.map((boundary, index) => ({
+    ...boundary,
+    endOrdinal: (boundaries[index + 1]?.startOrdinal ?? sectionCount) - 1,
+  }));
   // Do not trust “self” for explicitly named framing material. Its evidence is
   // retained in the adjacent item, even when the collection is not numbered.
   if (groups.length > 1) {
+    groups.forEach((group, index) => {
+      const text = sections
+        .slice(group.startOrdinal, group.endOrdinal + 1)
+        .map((section) => section.text)
+        .join('\n')
+        .trim();
+      if (isPublicationOnly(text)) {
+        groups[index] = {
+          ...group,
+          role: 'framing',
+          context: index === 0 ? 'next' : 'previous',
+        };
+        return;
+      }
+      if (headingOnly(text)) {
+        groups[index] = {
+          ...group,
+          role: 'framing',
+          context: index === groups.length - 1 ? 'previous' : 'next',
+        };
+      }
+    });
     const opening = groups[0];
     if (
+      opening &&
       /^(?:前言(?:与说明)?|引言|导言|作者介绍|编者按|preface|introduction|editorial introduction)$/iu.test(
         opening.titlePath.trim(),
       )
     )
-      groups[0] = {...opening, context: 'next'};
+      groups[0] = {...opening, role: 'framing', context: 'next'};
     const closing = groups.at(-1);
     if (
       closing &&
@@ -282,12 +307,37 @@ function decodePayload(
         closing.titlePath.trim(),
       )
     )
-      groups[groups.length - 1] = {...closing, context: 'previous'};
+      groups[groups.length - 1] = {
+        ...closing,
+        role: 'framing',
+        context: 'previous',
+      };
+  }
+  if (!groups.some((group) => group.role === 'content')) fail();
+  // Attach an entire ancillary run to one neighbour. Mixed previous/next
+  // directions must not form a bridge that collapses two unrelated stories.
+  for (let index = 0; index < groups.length; index++) {
+    const opening = groups[index];
+    if (opening?.role !== 'framing') continue;
+    let end = index + 1;
+    while (groups[end]?.role === 'framing') end++;
+    const context =
+      index === 0 || (end < groups.length && opening.context === 'next')
+        ? 'next'
+        : 'previous';
+    for (let i = index; i < end; i++) {
+      const group = groups[i];
+      if (group) groups[i] = {...group, context};
+    }
+    index = end - 1;
   }
   const firstGroup = groups[0];
+  if (!firstGroup) fail();
   const explanation = boundedText(value.summary, 240);
   if (value.documentMode === 'whole') {
-    const sourceTitle = sections[0]?.text.match(/^#{1,6}\s+([^\n]+)/u)?.[1];
+    const sourceTitle = sections[0]?.text
+      .trimStart()
+      .match(/^#{1,6}\s+([^\n]+)/u)?.[1];
     return Object.freeze({
       summary: decisionSummary('整篇保留（模型选择）', explanation),
       groups: Object.freeze([
@@ -329,7 +379,7 @@ function decodePayload(
         numberedStarts
           ? group.startOrdinal === numberedStarts[0] &&
             previous.startOrdinal < group.startOrdinal
-          : groups[index - 1]?.context === 'next'
+          : groups[index - 1]?.context === 'next' && group.role === 'content'
       )
         previous.titlePath = group.titlePath;
     } else {
@@ -340,6 +390,17 @@ function decodePayload(
       });
     }
   });
+  if (merged.length > MAXIMUM_AI_SPLIT_ENTRIES) fail();
+  const framingOrdinals = new Set(
+    groups
+      .filter((group) => group.role === 'framing')
+      .flatMap((group) =>
+        Array.from(
+          {length: group.endOrdinal - group.startOrdinal + 1},
+          (_, offset) => group.startOrdinal + offset,
+        ),
+      ),
+  );
   return Object.freeze({
     summary: decisionSummary(
       `独立合集：${merged.length.toString()} 条；相邻上下文合并 ${(groups.length - merged.length).toString()} 处` +
@@ -348,7 +409,14 @@ function decodePayload(
           : ''),
       explanation,
     ),
-    groups: Object.freeze(merged.map((group) => Object.freeze(group))),
+    groups: Object.freeze(
+      merged.map((group) =>
+        Object.freeze({
+          ...group,
+          titlePath: splitSourceTitle(sections, group, framingOrdinals),
+        }),
+      ),
+    ),
   });
 }
 
@@ -356,12 +424,19 @@ function decisionSummary(decision: string, explanation: string): string {
   return Array.from(`${decision}。${explanation}`).slice(0, 240).join('');
 }
 
+function headingOnly(text: string): boolean {
+  const lines = text.split('\n').filter((line) => line.trim());
+  return (
+    lines.length > 0 && lines.every((line) => /^\s*#{1,6}\s+\S/u.test(line))
+  );
+}
+
 /** Only suggest source boundaries; numbering alone does not establish independence. */
 function numberedCollectionHints(sections: readonly AiSplitProposalSection[]) {
   const byDepth = new Map<number, {number: number; ordinal: number}[]>();
   for (const section of sections) {
     const heading = /^(#{1,6})\s+(?:\*\*)?(\d{1,2})[.、．）)]\s*\S/u.exec(
-      section.text,
+      section.text.trimStart(),
     );
     const [, marker, number] = heading ?? [];
     if (!marker || !number) continue;
@@ -380,7 +455,7 @@ function numberedCollectionHints(sections: readonly AiSplitProposalSection[]) {
     // A numbered subsection inside one item must not absorb other, unnumbered
     // stories. Allow the document title, but require a uniform item-heading level.
     return sections.every((section, index) => {
-      const heading = /^(#{1,6})\s+/u.exec(section.text)?.[1];
+      const heading = /^(#{1,6})\s+/u.exec(section.text.trimStart())?.[1];
       return (
         index === 0 ||
         !heading ||
@@ -392,6 +467,18 @@ function numberedCollectionHints(sections: readonly AiSplitProposalSection[]) {
   return sequence
     ? {numberedItemStarts: sequence.map((item) => item.ordinal)}
     : {};
+}
+
+/** A source hint only: a linked list may still be one context-dependent article. */
+function linkedCollectionHints(sections: readonly AiSplitProposalSection[]) {
+  const linkedItemStarts = sections
+    .filter((section) =>
+      /^\d{1,2}[.、．）)][ \t]*\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)/u.test(
+        section.text.trimStart(),
+      ),
+    )
+    .map((section) => section.ordinal);
+  return linkedItemStarts.length >= 2 ? {linkedItemStarts} : {};
 }
 
 function boundedText(value: unknown, maximum: number): string {

@@ -1,6 +1,7 @@
 import {useId, type ReactNode} from 'react';
 
 import {ReadingContent} from '../components/reading_content.js';
+import {ResizablePanes} from '../components/two_pane.js';
 import {readingTitle, sourceShortName} from '../components/reading_text.js';
 import type {
   AiTagProposalDecisionResponse,
@@ -278,6 +279,7 @@ export function InformationEntryResults({
   onRetry,
   onSelectEntry,
   pageIndex,
+  layoutName,
   selectedEntryId,
   state,
 }: {
@@ -289,6 +291,7 @@ export function InformationEntryResults({
   readonly onRetry: () => void;
   readonly onSelectEntry: (entryId: string) => void;
   readonly pageIndex: number;
+  readonly layoutName?: string;
   readonly selectedEntryId: string | undefined;
   readonly state: InformationEntryViewState;
 }) {
@@ -319,122 +322,133 @@ export function InformationEntryResults({
     );
   }
 
-  return (
-    <div className="entry-workbench">
-      <section className="entry-result-list" aria-label={ariaLabel}>
-        <header>
-          <span>条目列表</span>
-          <strong>{state.response.totalCount.toString()}</strong>
-        </header>
-        <ol key={pageIndex} aria-label="本页条目" tabIndex={0}>
-          {state.response.items.map(
-            ({
-              association,
-              aliasMatches,
-              entry,
-              filterReasons,
-              matchReasons,
-              retrievalScore,
-              semanticMatch,
-              textMatch,
-            }) => (
-              <li key={entry.entryId}>
-                <button
-                  type="button"
-                  data-active={entry.entryId === selectedEntryId}
-                  title={readingTitle(entry.value.titlePath)}
-                  onClick={() => {
-                    onSelectEntry(entry.entryId);
-                  }}
-                >
-                  <span className="entry-result-list__order">
-                    {(entry.value.documentOrder + 1)
-                      .toString()
-                      .padStart(2, '0')}
-                  </span>
-                  <span>
-                    <strong>{readingTitle(entry.value.titlePath)}</strong>
-                    <small>
-                      {sourceShortName(entry)}
-                      {entry.value.isPrivate ? ' · 私密' : ''}
-                    </small>
-                    {matchReasons.length > 0 ? (
-                      <em className="entry-result-list__matches">
-                        命中：{matchReasons.map(matchReasonLabel).join(' / ')}
-                        {textMatch === undefined ? null : (
-                          <>
-                            {' · '}
-                            {textSearchModeLabel(textMatch.mode)}匹配{' '}
-                            {scorePercentage(textMatch.score)}/100
-                          </>
-                        )}
-                      </em>
-                    ) : null}
-                    {aliasMatches?.length ? (
-                      <em className="entry-result-list__matches">
-                        确认别名：
-                        {aliasMatches
-                          .map(({query, tag}) => `${query} → ${tag}`)
-                          .join(' / ')}
-                      </em>
-                    ) : null}
-                    {semanticMatch === undefined ? null : (
-                      <em>
-                        语义相似度 {scorePercentage(semanticMatch.score)}/100
-                        {retrievalScore === undefined
-                          ? null
-                          : ` · 综合匹配 ${scorePercentage(retrievalScore)}/100`}
-                      </em>
-                    )}
-                    {filterReasons.length > 0 ? (
-                      <em className="entry-result-list__filters">
-                        筛选：{filterReasons.map(filterReasonLabel).join(' / ')}
-                      </em>
-                    ) : null}
-                    {association === undefined ? null : (
-                      <em className="entry-result-list__association">
-                        {association.depth.toString()} 层联系 · 联系强度{' '}
-                        {scorePercentage(association.effectiveScore)}%
-                      </em>
-                    )}
-                  </span>
-                </button>
-              </li>
-            ),
-          )}
-        </ol>
-        <footer className="entry-pagination" aria-label="条目结果分页">
-          <button
-            className="secondary-action"
-            type="button"
-            disabled={pageIndex === 0}
-            onClick={onPreviousPage}
-          >
-            上一页
-          </button>
-          <span>第 {(pageIndex + 1).toString()} 页 · 每页最多 20 条</span>
-          <button
-            className="secondary-action"
-            type="button"
-            disabled={state.response.nextCursor === undefined}
-            onClick={onNextPage}
-          >
-            下一页
-          </button>
-        </footer>
-      </section>
-      {children === undefined ? null : (
-        <div
-          key={selectedEntryId}
-          className="entry-detail-stack"
-          role="region"
-          aria-label="所选条目详情"
-          tabIndex={0}
+  const list = (
+    <section className="entry-result-list" aria-label={ariaLabel}>
+      <header>
+        <span>条目列表</span>
+        <strong>{state.response.totalCount.toString()}</strong>
+      </header>
+      <ol key={pageIndex} aria-label="本页条目" tabIndex={0}>
+        {state.response.items.map(
+          ({
+            association,
+            aliasMatches,
+            entry,
+            filterReasons,
+            matchReasons,
+            retrievalScore,
+            semanticMatch,
+            textMatch,
+          }) => (
+            <li key={entry.entryId}>
+              <button
+                type="button"
+                data-active={entry.entryId === selectedEntryId}
+                title={readingTitle(entry.value.titlePath)}
+                onClick={() => {
+                  onSelectEntry(entry.entryId);
+                }}
+              >
+                <span className="entry-result-list__order">
+                  {(entry.value.documentOrder + 1).toString().padStart(2, '0')}
+                </span>
+                <span>
+                  <strong>{readingTitle(entry.value.titlePath)}</strong>
+                  <small>
+                    {sourceShortName(entry)}
+                    {entry.value.isPrivate ? ' · 私密' : ''}
+                  </small>
+                  {matchReasons.length > 0 ? (
+                    <em className="entry-result-list__matches">
+                      命中：{matchReasons.map(matchReasonLabel).join(' / ')}
+                      {textMatch === undefined ? null : (
+                        <>
+                          {' · '}
+                          {textSearchModeLabel(textMatch.mode)}匹配{' '}
+                          {scorePercentage(textMatch.score)}/100
+                        </>
+                      )}
+                    </em>
+                  ) : null}
+                  {aliasMatches?.length ? (
+                    <em className="entry-result-list__matches">
+                      确认别名：
+                      {aliasMatches
+                        .map(({query, tag}) => `${query} → ${tag}`)
+                        .join(' / ')}
+                    </em>
+                  ) : null}
+                  {semanticMatch === undefined ? null : (
+                    <em>
+                      语义相似度 {scorePercentage(semanticMatch.score)}/100
+                      {retrievalScore === undefined
+                        ? null
+                        : ` · 综合匹配 ${scorePercentage(retrievalScore)}/100`}
+                    </em>
+                  )}
+                  {filterReasons.length > 0 ? (
+                    <em className="entry-result-list__filters">
+                      筛选：{filterReasons.map(filterReasonLabel).join(' / ')}
+                    </em>
+                  ) : null}
+                  {association === undefined ? null : (
+                    <em className="entry-result-list__association">
+                      {association.depth.toString()} 层联系 · 联系强度{' '}
+                      {scorePercentage(association.effectiveScore)}%
+                    </em>
+                  )}
+                </span>
+              </button>
+            </li>
+          ),
+        )}
+      </ol>
+      <footer className="entry-pagination" aria-label="条目结果分页">
+        <button
+          className="secondary-action"
+          type="button"
+          disabled={pageIndex === 0}
+          onClick={onPreviousPage}
         >
-          {children}
-        </div>
-      )}
+          上一页
+        </button>
+        <span>第 {(pageIndex + 1).toString()} 页 · 每页最多 20 条</span>
+        <button
+          className="secondary-action"
+          type="button"
+          disabled={state.response.nextCursor === undefined}
+          onClick={onNextPage}
+        >
+          下一页
+        </button>
+      </footer>
+    </section>
+  );
+  const detail =
+    children === undefined ? null : (
+      <div
+        key={selectedEntryId}
+        className="entry-detail-stack"
+        role="region"
+        aria-label="所选条目详情"
+        tabIndex={0}
+      >
+        {children}
+      </div>
+    );
+  return layoutName === undefined ? (
+    <div className="entry-workbench">
+      {list}
+      {detail}
     </div>
+  ) : (
+    <ResizablePanes
+      name={layoutName}
+      className="entry-workbench entry-workbench--resizable"
+      left={list}
+    >
+      {detail}
+    </ResizablePanes>
   );
 }
 
@@ -536,7 +550,7 @@ export function InformationEntryReadOnlyDetail({
       </details>
       {variant === 'split' ? (
         <p className="workflow-boundary-note">
-          已导入的原文不会改变。这里显示生成后的段落；若要修改拆分前全文，请在“导入”页另存为新文档版本，再重新生成条目。
+          这里显示生成后的段落，原文保留。修改拆分前全文时，先另存为新版本，再生成条目。
         </p>
       ) : null}
     </article>

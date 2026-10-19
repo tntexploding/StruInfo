@@ -1,3 +1,9 @@
+import {SourceHistoryService} from '../application/source_history_service.js';
+import {SourceDescriptionService} from '../application/source_description_service.js';
+import {SourceDescriptionReader} from '../platform/sources/source_description_reader.js';
+import {PublicSourceHistoryReader} from '../platform/sources/source_history_reader.js';
+import {importSourceConnectorDocuments} from '../modules/subscriptions/source_connector.js';
+import {SourceQualityService} from '../application/source_quality_service.js';
 import {
   DocumentPublicationService,
   publishedEntryRepository,
@@ -15,6 +21,7 @@ import {AgentCaptureService} from '../application/agent_capture_service.js';
 import {IngestionService} from '../application/ingestion_service.js';
 import {AiPriceService} from '../application/ai_price_service.js';
 import {priceAwareFetch} from '../platform/ai/price_aware_fetch.js';
+import {LocalModelUsageJournal} from '../platform/ai/model_usage_journal.js';
 import {
   INGESTION_ACTOR_ID,
   ingestionTaskKey,
@@ -187,7 +194,14 @@ export async function startRoleRuntime(
     storage.reviewPreferences,
     config.aiProposalProvider?.providerKey,
   );
-  const modelFetch = priceAwareFetch(aiPrice);
+  const modelFetch = priceAwareFetch(
+    aiPrice,
+    globalThis.fetch,
+    new LocalModelUsageJournal(
+      config.dataRoot + '/exports',
+      config.workspaceId,
+    ),
+  );
   const aiSplitProposals =
     config.aiProposalProvider === undefined
       ? undefined
@@ -308,6 +322,12 @@ export async function startRoleRuntime(
       )
     : undefined;
   const intakeWeb = new WebSourceConnector();
+  const sourceDescriptionReader = new SourceDescriptionReader();
+  const sourceDescription = new SourceDescriptionService({
+    ...(intelligence ? {provider: intelligence} : {}),
+    checkModelCall: () => aiPrice.assertAllowed(),
+    read: (kind, url) => sourceDescriptionReader.read(kind, url),
+  });
 
   const intake = new DocumentIntakeService({
     workspaceId: config.workspaceId,
@@ -414,6 +434,7 @@ export async function startRoleRuntime(
     (task) => ingestion.guard(task),
     {
       check: () => aiPrice.assertAllowed(),
+      executionSettings: () => aiPrice.executionSettings(),
       checkOperations: () => aiPrice.assertOperationsAllowed(),
       canResume: async (task) =>
         task.actorKind !== 'external_agent' ||
@@ -607,6 +628,48 @@ export async function startRoleRuntime(
     evidenceRead: repositories.evidenceRead,
     subscriptions: sourceSubscriptions,
   });
+  const sourceQuality = new SourceQualityService(config.workspaceId, {
+    preferences: storage.reviewPreferences,
+    intake,
+    snapshots: () =>
+      repositories.evidenceRead.listSnapshots(config.workspaceId),
+  });
+  const sourceHistory = new SourceHistoryService({
+    sources: async () => (await sourceSubscriptions.list()).subscriptions,
+    snapshots: () =>
+      repositories.evidenceRead.listSnapshots(config.workspaceId),
+    reader: new PublicSourceHistoryReader(),
+    importArticle: async (source, document) => {
+      const result = await importSourceConnectorDocuments(
+        {
+          blobStore: storage.blobStore,
+          evidenceRepository: new PostgresEvidenceRepository(
+            database.pool,
+            (client, capture) =>
+              recordIngestionCapture(
+                client,
+                capture,
+                {kind: 'subscription', subscriptionId: source.subscriptionId},
+                {reviewOnly: true},
+              ),
+          ),
+        },
+        {
+          workspaceId: config.workspaceId,
+          subscriptionId: source.subscriptionId,
+          sourceAlias: source.sourceAlias,
+          isPrivate: false,
+          connectorId: 'builtin.history.v1',
+          capturedAt: new Date().toISOString(),
+          result: {status: 'changed', cursor: 'history', documents: [document]},
+        },
+      );
+      const saved =
+        result.status === 'complete' ? result.documents[0] : undefined;
+      if (!saved) throw new Error('history_import_failed');
+      return {snapshotId: saved.snapshotId, outcome: saved.outcome};
+    },
+  });
   const commands = (authority: ExecutionAuthority) =>
     new AgentCommands(authority, {
       documents: new DocumentUseCases(authority, commandDependencies),
@@ -614,6 +677,9 @@ export async function startRoleRuntime(
       relations: new RelationUseCases(authority, commandDependencies),
       tasks: agentTasks,
       publication,
+      sourceQuality,
+      sourceHistory,
+      sourceDescription,
       aiPrice,
       reports,
       capture,

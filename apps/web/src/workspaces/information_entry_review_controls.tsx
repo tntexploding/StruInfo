@@ -345,7 +345,7 @@ export function InformationEntryReviewControls({
 
           <div className="entry-alias-editor">
             <strong>标签别名合并</strong>
-            <p>大小写差异会自动合并；中英文等语义别名由你明确指定。</p>
+            <p>自动合并大小写差异。中英文别名由你设置。</p>
             <div className="entry-alias-editor__inputs">
               <label className="field">
                 <span>别名</span>

@@ -44,6 +44,6 @@ export const SIDEBAR_ACTION_LABELS: Readonly<Record<string, string>> = {
   tools: '更多工具',
   appearance: '页面与外观',
   workflow: '处理流程',
-  ai: 'AI 接入',
+  ai: 'AI 设置',
   maintenance: '数据与维护',
 };

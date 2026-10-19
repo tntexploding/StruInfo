@@ -92,7 +92,7 @@ export class DocumentUseCases {
     const {snapshot} = await this.read(snapshotId);
     return {
       snapshotId,
-      sections: providerSections(orderedSectionFragments(snapshot)),
+      sections: providerSections(orderedSectionFragments(snapshot), snapshot),
     };
   }
   public async list(includePrivate = false, includeInbox = false) {

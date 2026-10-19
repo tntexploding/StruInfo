@@ -32,7 +32,7 @@ export const agentTagResultSchema = z
           .strict(),
       )
       .min(1)
-      .max(12),
+      .max(3),
   })
   .strict();
 export const agentRelationResultSchema = z
@@ -137,6 +137,8 @@ export const agentTaskStepSchema = z
     expectedOverrideRevision: z.number().int().min(0).optional(),
     attempt: z.number().int().min(0).max(64),
     runId: id.optional(),
+    reviewRunId: id.optional(),
+    reviewAttempt: z.number().int().min(0).max(3).optional(),
     previousRunIds: z.array(id).max(3).optional(),
     proposalId: id.optional(),
     complete: z.boolean(),
@@ -160,7 +162,16 @@ export const agentTaskStateSchema = z
       'cancelled',
     ]),
     calls: z.number().int().min(0).max(64),
+    relationReviewRequired: z.boolean().optional(),
     supersededBy: id.optional(),
+    automaticRetry: z
+      .object({
+        limit: z.number().int().min(1).max(2),
+        used: z.number().int().min(0).max(2),
+        notBefore: z.iso.datetime().optional(),
+      })
+      .strict()
+      .optional(),
     recovery: z
       .object({
         previousTaskId: id,
@@ -215,6 +226,7 @@ export interface AgentTaskRepository {
   ): Promise<readonly AgentTask[]>;
   listPublicationTasks?(workspaceId: string): Promise<readonly AgentTask[]>;
   listPriceDeferred?(workspaceId: string): Promise<readonly AgentTask[]>;
+  listRetryDeferred?(workspaceId: string): Promise<readonly AgentTask[]>;
   saveState(
     workspaceId: string,
     taskId: string,

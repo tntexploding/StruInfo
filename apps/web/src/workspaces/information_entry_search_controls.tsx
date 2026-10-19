@@ -56,9 +56,9 @@ export function InformationEntryRetrievalOptions({
           : !semanticReady
             ? '内容相似索引尚未就绪，请先刷新索引。'
             : !publicScope
-              ? '隐私内容只在本机进行文字搜索，不会发送给外部 AI 服务。'
+              ? '隐私内容仅在本机进行文字搜索。'
               : queryPresent
-                ? '内容相似和综合搜索会按相似度排序，不代表事实正确性。'
+                ? '结果按内容相似度排序。可打开原文核对。'
                 : '输入搜索文字后可使用内容相似或综合搜索。'}
       </p>
     </fieldset>

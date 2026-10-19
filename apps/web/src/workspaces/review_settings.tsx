@@ -43,12 +43,20 @@ export function ReviewSettings({
   const value = preferences.value;
   return (
     <>
-      <details className="workflow-tool-drawer">
-        <summary>标签与个人词表</summary>
+      <section
+        className="settings-group"
+        aria-labelledby="vocabulary-settings-title"
+      >
+        <h2 id="vocabulary-settings-title">标签与个人词表</h2>
+        <p>设置常用标签、忽略的词语，以及同一个词的不同写法。</p>
         <VocabularySettings value={value} onSave={onSave} />
-      </details>
-      <details className="workflow-tool-drawer">
-        <summary>联系权重与阈值</summary>
+      </section>
+      <section
+        className="settings-group"
+        aria-labelledby="association-settings-title"
+      >
+        <h2 id="association-settings-title">联系推荐</h2>
+        <p>调整本地相似度计算。AI 建立联系时仍按原文判断。</p>
         <AssociationPolicyPanel
           key={value.associationPolicy.revision}
           policy={value.associationPolicy}
@@ -88,7 +96,7 @@ export function ReviewSettings({
           }}
         />
         <p role="status">{message}</p>
-      </details>
+      </section>
     </>
   );
 }

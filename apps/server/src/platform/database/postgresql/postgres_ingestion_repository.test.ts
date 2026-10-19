@@ -64,6 +64,29 @@ function row(settings: unknown) {
   };
 }
 describe('PostgreSQL ingestion adapter', () => {
+  it('keeps explicit historical backfills pending even under enabled automatic policy', async () => {
+    const client = new SqlFake((sql) =>
+      sql.startsWith('SELECT')
+        ? {rows: [row({enabled: true, subscriptionIds: [SUB]})]}
+        : {rowCount: 1},
+    );
+    await recordIngestionCapture(
+      client,
+      createSyntheticEvidenceCapture(),
+      {kind: 'subscription', subscriptionId: SUB},
+      {reviewOnly: true},
+    );
+    expect(client.calls).toHaveLength(1);
+    expect(client.calls[0]?.sql).toContain('processing_document_intake');
+    expect(JSON.parse(String(client.calls[0]?.parameters[2]))).toMatchObject({
+      receipt: 'pending',
+      captureOrigin: {kind: 'subscription', subscriptionId: SUB},
+    });
+    expect(
+      client.calls.some((c) => c.sql.includes('processing_ingestion_item')),
+    ).toBe(false);
+  });
+
   it.each([
     [{enabled: false, manualUploads: true}, {kind: 'upload'}, false],
     [{enabled: true, manualUploads: false}, {kind: 'upload'}, false],

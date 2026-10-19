@@ -15,11 +15,13 @@ export interface EntrySavedQueryServices {
 
 export function InformationEntrySavedQueries({
   context,
+  embedded = false,
   onLoad,
   onWrite,
   onOpen,
 }: {
   readonly context: Readonly<EntryQueryContext>;
+  readonly embedded?: boolean;
   readonly onLoad: EntrySavedQueryServices['onLoadSavedQueries'];
   readonly onWrite: EntrySavedQueryServices['onWriteSavedQuery'];
   readonly onOpen: (view: Readonly<EntrySavedQuery>) => void;
@@ -118,6 +120,7 @@ export function InformationEntrySavedQueries({
   }
   return (
     <FloatingToolPanel
+      embedded={embedded}
       className="saved-query-panel"
       title={
         '保存的查询' +
