@@ -297,7 +297,7 @@ export function InformationEntryMarkdownExport({
               条隐私资料 · {preview.relationCount.toString()} 条关系 ·{' '}
               {preview.byteLength.toLocaleString()} 字节
             </p>
-            <p>条目和关系变化后需重新预览。来源核对只表示核对了出处。</p>
+            <p>条目或关系修改后，请重新预览。来源状态记录出处核对情况。</p>
             <pre tabIndex={0} aria-label="Markdown 内容预览">
               {preview.markdown}
             </pre>

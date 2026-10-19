@@ -1,6 +1,6 @@
 {
   "name": "struinfo",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -63,6 +63,6 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.66.0",
     "vite": "8.2.1",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   }
 }

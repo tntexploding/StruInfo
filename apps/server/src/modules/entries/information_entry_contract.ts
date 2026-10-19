@@ -137,6 +137,7 @@ export interface InformationEntryMaterializeRow {
 export interface EntryFragmentGroupInput {
   readonly titlePath: string;
   readonly fragmentIds: readonly string[];
+  readonly fragmentRanges?: readonly Readonly<EntryFragmentRange>[];
 }
 
 export interface ManualEntryFragmentInput extends EntryFragmentRange {

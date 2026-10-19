@@ -46,7 +46,7 @@ export function renderEntryMarkdown(
     '工作区：' + workspaceId,
     '',
     '这是一份所选资料的版本快照。条目摘录可能经过人工编辑；来源摘录来自本地不可变证据。未包含会话内 AI 综合。',
-    '摘录按 Unicode 字符截取，截断处明确标注。关系与来源复核状态不等于事实核验结论。',
+    '摘录按 Unicode 字符截取，省略处已标注。联系和出处核对状态供参考，事实需另行核验。',
     '',
   ];
   for (const [index, source] of sources.entries()) {

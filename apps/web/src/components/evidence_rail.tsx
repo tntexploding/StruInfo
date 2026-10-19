@@ -207,7 +207,7 @@ function EvidenceDossier({
         <h3 id="source-identity">{sourceDisplayName(snapshot)}</h3>
         {snapshot.isPrivate === true ? (
           <p className="privacy-disclosure">
-            此全文、由其拆出的私密条目以及涉及私密条目的关系，默认不会出现在查询中。
+            该文档及其私密条目、联系默认隐藏。查询时可选择包含隐私内容。
           </p>
         ) : null}
         {safeReadingLink(snapshot.canonicalUri) === undefined ? null : (

@@ -247,9 +247,11 @@ export class IngestionService {
       } else if (task.runtimeStatus !== 'running') {
         // The model price scheduler owns these waits; they are not failed intake.
         if (
-          ['ai_price_window_closed', 'ai_operations_paused'].includes(
+          (['ai_price_window_closed', 'ai_operations_paused'].includes(
             task.state.errorCode ?? '',
-          ) &&
+          ) ||
+            (task.state.status === 'paused' &&
+              task.state.automaticRetry?.notBefore)) &&
           !task.pauseRequested
         )
           return;

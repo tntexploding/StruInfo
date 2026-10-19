@@ -32,7 +32,9 @@ describe('source subscription connector fields', () => {
     );
     expect(markup).toContain('主网页地址');
     expect(markup).toContain('其他同源页面');
-    expect(markup).toContain('不会跟随重定向、发现链接、执行脚本');
+    expect(markup).toContain(
+      '仅抓取此页，需登录、脚本加载或跳转的页面暂不支持',
+    );
     expect(markup).toContain('/about');
   });
 

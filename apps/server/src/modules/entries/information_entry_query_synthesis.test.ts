@@ -183,7 +183,7 @@ describe('InformationEntryQuerySynthesisService', () => {
         question: '检查引用',
         query: {includePrivate: false, onlyPrivate: false, limit: 8},
       }),
-    ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});
+    ).rejects.toMatchObject({code: 'ai_query_invalid_citations'});
   });
 
   it('rejects private records if a repository violates its public-read contract', () => {

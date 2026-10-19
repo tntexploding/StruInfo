@@ -1,3 +1,4 @@
+import {requireOperationValue} from '../../../application/operation_error.js';
 import {describe, expect, it, vi} from 'vitest';
 import {reportStateSchema} from '../../../application/report_contract.js';
 
@@ -377,3 +378,71 @@ function rows<Row extends Readonly<Record<string, unknown>>>(
 ): PostgresQueryResult<Row> {
   return {rows: values, rowCount: values.length};
 }
+
+it.each(['paused', 'succeeded', 'cancelled'])(
+  'restores automatic-retry tasks safely when %s',
+  async (status) => {
+    const {pool, statements, parameters} = createPool(() => rows([]));
+    const empty = createEmptyM1cWorkspaceTransferSnapshot(
+      WORKSPACE_ID,
+      CREATED_AT,
+    );
+    const task = {
+      workspace_id: WORKSPACE_ID,
+      task_id: WORKSPACE_ID,
+      actor_kind: 'owner',
+      actor_id: 'workspace-owner',
+      policy_version: 'struinfo.agent-task.v1',
+      request_key: 'synthetic-retry',
+      request_text: JSON.stringify({
+        kind: 'document',
+        snapshotId: WORKSPACE_ID,
+        maxModelCalls: 8,
+        maxEntries: 4,
+        maxRelations: 0,
+      }),
+      model: 'synthetic-model',
+      current_version: 3,
+      pause_requested: false,
+      cancel_requested: false,
+      created_at: CREATED_AT,
+      updated_at: CREATED_AT,
+      state_text: JSON.stringify({
+        status,
+        phase: 'split',
+        steps: [],
+        calls: 2,
+        automaticRetry: {limit: 2, used: 1, notBefore: CREATED_AT},
+        errorCode: 'ai_provider_timeout',
+      }),
+    };
+    await new PostgresM1cDomainTransferRepository(pool).restoreEmptyWorkspace(
+      WORKSPACE_ID,
+      {
+        ...empty,
+        processing: {
+          ...empty.processing,
+          tables: empty.processing.tables.map((t) =>
+            t.name === 'processing_agent_task' ? {...t, rows: [task]} : t,
+          ),
+        },
+      },
+    );
+    const index = statements.findIndex(
+      (sql) =>
+        sql.includes('processing_agent_task') && sql.includes('INSERT INTO'),
+    );
+    const restored = requireOperationValue(
+      (JSON.parse(String(parameters[index]?.[0])) as (typeof task)[])[0],
+    );
+    if (status === 'paused') {
+      expect(restored.pause_requested).toBe(true);
+      expect(JSON.parse(restored.state_text)).toMatchObject({
+        status: 'paused',
+        calls: 2,
+        errorCode: 'ai_price_resume_required',
+        automaticRetry: {limit: 2, used: 1},
+      });
+    } else expect(restored).toEqual(task);
+  },
+);

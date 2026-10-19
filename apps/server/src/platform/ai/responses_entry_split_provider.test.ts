@@ -1,3 +1,4 @@
+import {documentProcessingInstructions} from '../../modules/processing/document_processing_standard.js';
 import {
   responsesEndpoint,
   responsesPromptVersion,
@@ -36,6 +37,41 @@ describe.each([
     model: 'deepseek-synthetic',
   },
 ])('$providerKey $model', (CONFIG) => {
+  it('attaches a heading-only opening despite an unrelated generated title', async () => {
+    const provider = new ResponsesEntrySplitProvider(CONFIG, () =>
+      Promise.resolve(
+        responseEnvelope({
+          summary: 'A collection',
+          groups: [
+            {
+              titlePath: 'An invented opening label',
+              startOrdinal: 0,
+              endOrdinal: 0,
+            },
+            {
+              titlePath: 'Complete first resource',
+              startOrdinal: 1,
+              endOrdinal: 1,
+            },
+            {
+              titlePath: 'Complete second resource',
+              startOrdinal: 2,
+              endOrdinal: 2,
+            },
+          ],
+        }),
+      ),
+    );
+    const result = await provider.proposeSplit([
+      {ordinal: 0, text: '# Synthetic digest\n'},
+      {ordinal: 1, text: 'First independent resource with its explanation.'},
+      {ordinal: 2, text: 'Second independent resource with its explanation.'},
+    ]);
+    expect(result.groups).toEqual([
+      {titlePath: 'Complete first resource', startOrdinal: 0, endOrdinal: 1},
+      {titlePath: 'Complete second resource', startOrdinal: 2, endOrdinal: 2},
+    ]);
+  });
   it('sends only ordered public section text and requires a closed contiguous grouping', async () => {
     const fetchImplementation = vi.fn<OpenAiFetch>(() =>
       Promise.resolve(
@@ -79,6 +115,9 @@ describe.each([
       max_output_tokens: 800,
     });
     expect(request).not.toHaveProperty('tools');
+    expect(String(request.instructions)).toContain(
+      documentProcessingInstructions('split'),
+    );
     expect(provider.providerKey).toBe(CONFIG.providerKey);
     expect(request.reasoning).toEqual(
       CONFIG.providerKey === 'deepseek-responses-v1'
@@ -120,8 +159,8 @@ describe.each([
           schema: {
             properties: {
               groups: {
-                maxItems: 64,
-                items: {properties: {endOrdinal: {maximum: 127}}},
+                maxItems: 128,
+                items: {properties: {startOrdinal: {maximum: 127}}},
               },
             },
           },
@@ -273,9 +312,21 @@ describe.each([
       fetcher,
     ).proposeSplit(sections);
     expect(result.groups).toEqual([
-      {titlePath: 'Starvine sensor', startOrdinal: 0, endOrdinal: 2},
-      {titlePath: 'Moonstone archive', startOrdinal: 3, endOrdinal: 3},
-      {titlePath: 'Cloudfern timetable', startOrdinal: 4, endOrdinal: 5},
+      {
+        titlePath: '1. Starvine calibrates a sensor',
+        startOrdinal: 0,
+        endOrdinal: 2,
+      },
+      {
+        titlePath: '2. Moonstone opens an archive',
+        startOrdinal: 3,
+        endOrdinal: 3,
+      },
+      {
+        titlePath: '3. Cloudfern changes its timetable',
+        startOrdinal: 4,
+        endOrdinal: 5,
+      },
     ]);
     expect(result.summary).toContain('独立合集：3 条；相邻上下文合并 2 处');
     const body = fetcher.mock.calls[0]?.[1]?.body;
@@ -316,9 +367,9 @@ describe.each([
     );
     const result = await provider.proposeSplit(sections);
     expect(result.groups).toEqual([
-      {titlePath: '## 1. Starvine report', startOrdinal: 0, endOrdinal: 2},
-      {titlePath: '## 2. Moonstone report', startOrdinal: 3, endOrdinal: 4},
-      {titlePath: '## 3. Cloudfern report', startOrdinal: 5, endOrdinal: 7},
+      {titlePath: '1. Starvine report', startOrdinal: 0, endOrdinal: 2},
+      {titlePath: '2. Moonstone report', startOrdinal: 3, endOrdinal: 4},
+      {titlePath: '3. Cloudfern report', startOrdinal: 5, endOrdinal: 7},
     ]);
     expect(result.summary).toContain('编号边界归组 5 处');
   });
@@ -327,10 +378,10 @@ describe.each([
     const sections = [
       '# Synthetic digest',
       '## First independent story',
-      '### 1. Setup',
-      '### 2. Measurement',
-      '### 3. Result',
-      '## Another independent story',
+      '### 1. Setup\n\nThe experiment setup.',
+      '### 2. Measurement\n\nIts measurement.',
+      '### 3. Result\n\nIts result.',
+      '## Another independent story\n\nA complete unrelated report.',
     ].map((text, ordinal) => ({ordinal, text}));
     const result = await new ResponsesEntrySplitProvider(CONFIG, () =>
       Promise.resolve(
@@ -356,7 +407,7 @@ describe.each([
     ).proposeSplit(sections);
     expect(result.groups).toHaveLength(2);
     expect(result.groups[1]).toEqual({
-      titlePath: 'Another story',
+      titlePath: 'Another independent story',
       startOrdinal: 5,
       endOrdinal: 5,
     });
@@ -412,19 +463,26 @@ describe.each([
     {
       groups: [
         {titlePath: 'Overlap A', startOrdinal: 0, endOrdinal: 1},
-        {titlePath: 'Overlap B', startOrdinal: 1, endOrdinal: 2},
+        {titlePath: 'Overlap B', startOrdinal: 0, endOrdinal: 2},
       ],
     },
-    {groups: [{titlePath: 'Incomplete', startOrdinal: 0, endOrdinal: 1}]},
-  ])('rejects a non-contiguous or incomplete grouping', async ({groups}) => {
-    const provider = new ResponsesEntrySplitProvider(CONFIG, () =>
-      Promise.resolve(responseEnvelope({summary: 'Invalid grouping', groups})),
-    );
+    {groups: [{titlePath: 'Outside input', startOrdinal: 3}]},
+    {groups: [{titlePath: 'Not an ordinal', startOrdinal: 0.5}]},
+    {groups: [{titlePath: 'Negative ordinal', startOrdinal: -1}]},
+  ])(
+    'rejects missing initial, duplicate or invalid boundaries',
+    async ({groups}) => {
+      const provider = new ResponsesEntrySplitProvider(CONFIG, () =>
+        Promise.resolve(
+          responseEnvelope({summary: 'Invalid grouping', groups}),
+        ),
+      );
 
-    await expect(provider.proposeSplit(SECTIONS)).rejects.toEqual(
-      new AiSplitProposalProviderError('ai_provider_invalid_response'),
-    );
-  });
+      await expect(provider.proposeSplit(SECTIONS)).rejects.toEqual(
+        new AiSplitProposalProviderError('ai_provider_invalid_response'),
+      );
+    },
+  );
 });
 
 function responseEnvelope(payload: Record<string, unknown>): Response {
@@ -435,7 +493,11 @@ function responseEnvelope(payload: Record<string, unknown>): Response {
       ? {
           groups: payload.groups.map((group: Record<string, unknown>) => ({
             context: 'self',
-            ...group,
+            role: 'content',
+            // Fixtures describe materialized ranges; the model wire selects starts only.
+            ...Object.fromEntries(
+              Object.entries(group).filter(([key]) => key !== 'endOrdinal'),
+            ),
           })),
         }
       : {}),
@@ -517,4 +579,396 @@ it('keeps known large-context models bounded and leaves unknown models conservat
     ]),
   ).rejects.toMatchObject({code: 'ai_split_input_unsupported'});
   expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it('attaches publication-only source groups even when the model invents substantive titles', async () => {
+  const fetcher = vi.fn<OpenAiFetch>(() =>
+    Promise.resolve(
+      responseEnvelope({
+        summary: 'A synthetic essay and appendices.',
+        groups: [
+          {titlePath: 'Mechanism', startOrdinal: 0, endOrdinal: 0},
+          {titlePath: 'Literature and events', startOrdinal: 1, endOrdinal: 1},
+          {titlePath: 'Distribution', startOrdinal: 2, endOrdinal: 2},
+        ],
+      }),
+    ),
+  );
+  const sections = [
+    {ordinal: 0, text: '# Mechanism\n\nA complete independent explanation.'},
+    {
+      ordinal: 1,
+      text: '# Colophon ( permalink )\n\nUpcoming books and appearances.',
+    },
+    {
+      ordinal: 2,
+      text: '# How to get Synthetic Review\n\nSubscription addresses.',
+    },
+  ];
+  const result = await new ResponsesEntrySplitProvider(
+    BASE_CONFIG,
+    fetcher,
+  ).proposeSplit(sections);
+  expect(result.groups).toEqual([
+    {titlePath: 'Mechanism', startOrdinal: 0, endOrdinal: 2},
+  ]);
+  expect(sections[1]?.text).toContain('Upcoming books');
+});
+
+it('derives complete non-overlapping ranges from sparse starts and retains trailing evidence', async () => {
+  const sections = [
+    'First complete explanation.',
+    'Its supporting evidence.',
+    'A second unrelated explanation.',
+    'Its conclusion.',
+    'Its final source citation.',
+  ].map((text, ordinal) => ({text, ordinal}));
+  const fetcher = vi.fn<OpenAiFetch>(() =>
+    Promise.resolve(
+      responseEnvelope({
+        summary: 'Two independent explanations.',
+        groups: [
+          {titlePath: 'First', startOrdinal: 0},
+          {titlePath: 'Second', startOrdinal: 2},
+        ],
+      }),
+    ),
+  );
+  const result = await new ResponsesEntrySplitProvider(
+    BASE_CONFIG,
+    fetcher,
+  ).proposeSplit(sections);
+  expect(result.groups).toEqual([
+    {titlePath: 'First', startOrdinal: 0, endOrdinal: 1},
+    {titlePath: 'Second', startOrdinal: 2, endOrdinal: 4},
+  ]);
+  const request = parsedRequest(fetcher.mock.calls[0]?.[1]?.body);
+  expect(
+    request.text.format.schema.properties.groups.items.properties,
+  ).not.toHaveProperty('endOrdinal');
+  expect(sections[4]?.text).toBe('Its final source citation.');
+});
+
+it('recognizes numbered boundaries after evidence-preserved leading blank lines', async () => {
+  const sections = [
+    '# Digest',
+    '\n\n## 1. First\n\nComplete first story.',
+    '\n\n## 2. Second\n\nComplete second story.',
+    '\n\n## 3. Third\n\nComplete third story.',
+  ].map((text, ordinal) => ({text, ordinal}));
+  const fetcher = vi.fn<OpenAiFetch>(() =>
+    Promise.resolve(
+      responseEnvelope({
+        summary: 'Independent reports.',
+        groups: sections.map((section) => ({
+          titlePath: String(section.ordinal),
+          startOrdinal: section.ordinal,
+        })),
+      }),
+    ),
+  );
+  const result = await new ResponsesEntrySplitProvider(
+    BASE_CONFIG,
+    fetcher,
+  ).proposeSplit(sections);
+  expect(result.groups.map((g) => [g.startOrdinal, g.endOrdinal])).toEqual([
+    [0, 1],
+    [2, 2],
+    [3, 3],
+  ]);
+  const request = parsedRequest(fetcher.mock.calls[0]?.[1]?.body);
+  expect(JSON.parse(request.input)).toMatchObject({
+    numberedItemStarts: [1, 2, 3],
+    sections,
+  });
+});
+
+it('does not force a linked numbered procedure to become independent entries', async () => {
+  const sections = [
+    '# One procedure',
+    '\n\n1. [Setup](https://example.invalid/setup)\n\nPrepare the instrument.',
+    '\n\n2. [Calibration](https://example.invalid/calibration)\n\nCalibrate that instrument.',
+  ].map((text, ordinal) => ({text, ordinal}));
+  const fetcher = vi.fn<OpenAiFetch>(() =>
+    Promise.resolve(
+      responseEnvelope({
+        summary: 'Context-dependent procedure.',
+        documentMode: 'whole',
+        groups: [{titlePath: 'Procedure', startOrdinal: 0}],
+      }),
+    ),
+  );
+  const result = await new ResponsesEntrySplitProvider(
+    BASE_CONFIG,
+    fetcher,
+  ).proposeSplit(sections);
+  expect(result.groups).toEqual([
+    {titlePath: 'One procedure', startOrdinal: 0, endOrdinal: 2},
+  ]);
+  const request = parsedRequest(fetcher.mock.calls[0]?.[1]?.body);
+  expect(JSON.parse(request.input)).toMatchObject({linkedItemStarts: [1, 2]});
+});
+
+function parsedRequest(body: unknown) {
+  if (typeof body !== 'string') throw new Error('missing request');
+  return JSON.parse(body) as {
+    input: string;
+    text: {
+      format: {
+        schema: {
+          properties: {groups: {items: {properties: Record<string, unknown>}}};
+        };
+      };
+    };
+  };
+}
+
+it('attaches an omitted pure-heading prefix and unwraps a single JSON fence without dropping evidence', async () => {
+  const fetcher = vi.fn<OpenAiFetch>(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              content: [
+                {
+                  type: 'output_text',
+                  text:
+                    '```json\n' +
+                    JSON.stringify({
+                      summary: '独立短讯，标题附到首条。',
+                      documentMode: 'independent_entries',
+                      groups: [
+                        {
+                          titlePath: 'First transaction',
+                          startOrdinal: 1,
+                          role: 'content',
+                          context: 'self',
+                        },
+                        {
+                          titlePath: 'Second transaction',
+                          startOrdinal: 2,
+                          role: 'content',
+                          context: 'self',
+                        },
+                      ],
+                    }) +
+                    '\n```',
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    ),
+  );
+  const sections = [
+    '# Monthly collection',
+    'Company A raised a synthetic amount.',
+    'Company B built a synthetic instrument.',
+  ].map((text, ordinal) => ({text, ordinal}));
+  const result = await new ResponsesEntrySplitProvider(
+    BASE_CONFIG,
+    fetcher,
+  ).proposeSplit(sections);
+  expect(result.groups).toEqual([
+    {titlePath: 'First transaction', startOrdinal: 0, endOrdinal: 1},
+    {titlePath: 'Second transaction', startOrdinal: 2, endOrdinal: 2},
+  ]);
+  expect(
+    result.groups.flatMap((g) =>
+      sections.slice(g.startOrdinal, g.endOrdinal + 1),
+    ),
+  ).toEqual(sections);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  'An editorial overview with potentially substantive facts.',
+  '# Heading\n\nA substantive first report.',
+  '```md\n# A heading inside a code block\n```',
+])('never fills an omitted prose or code prefix: %s', async (prefix) => {
+  const fetcher = vi.fn<OpenAiFetch>(() =>
+    Promise.resolve(
+      responseEnvelope({
+        summary: 'A missing prefix.',
+        groups: [{titlePath: 'Remaining content', startOrdinal: 1}],
+      }),
+    ),
+  );
+  await expect(
+    new ResponsesEntrySplitProvider(BASE_CONFIG, fetcher).proposeSplit([
+      {ordinal: 0, text: prefix},
+      {ordinal: 1, text: 'A complete explanation.'},
+    ]),
+  ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});
+});
+
+it('attaches collection bridges locally while retaining distinct brief technical content', async () => {
+  const sections = [
+    '# Collection',
+    'This week introduces several instruments.',
+    'The first instrument corrects drift with a reference oscillator.',
+    '## Images\n\nToday we introduce the next instruments.',
+    'The second instrument measures pressure by capacitance.',
+  ].map((text, ordinal) => ({text, ordinal}));
+  const roles = ['framing', 'framing', 'content', 'framing', 'content'];
+  const fetcher = vi.fn<OpenAiFetch>(() =>
+    Promise.resolve(
+      responseEnvelope({
+        summary: '两个独立技术短讯，栏目引语不成条。',
+        groups: sections.map(({ordinal}) => ({
+          titlePath: `Span ${String(ordinal)}`,
+          startOrdinal: ordinal,
+          role: roles[ordinal],
+          context: roles[ordinal] === 'framing' ? 'next' : 'self',
+        })),
+      }),
+    ),
+  );
+  const result = await new ResponsesEntrySplitProvider(
+    BASE_CONFIG,
+    fetcher,
+  ).proposeSplit(sections);
+  expect(result.groups).toEqual([
+    {titlePath: 'Span 2', startOrdinal: 0, endOrdinal: 2},
+    {titlePath: 'Span 4', startOrdinal: 3, endOrdinal: 4},
+  ]);
+});
+
+it('attaches classified prefaces, advertisements and archive navigation without fusing independent stories', async () => {
+  const texts = [
+    'This issue introduces several unrelated stories.',
+    'Story A explains an independent queue mechanism.',
+    'Buy the editors new book.',
+    'Browse earlier issues in the archive.',
+    'Story B explains an independent optical instrument.',
+    'Subscribe to the next issue.',
+  ];
+  const roles = [
+    'framing',
+    'content',
+    'framing',
+    'framing',
+    'content',
+    'framing',
+  ];
+  const contexts = ['self', 'self', 'previous', 'next', 'self', 'self'];
+  const fetcher = vi.fn<OpenAiFetch>(() =>
+    Promise.resolve(
+      responseEnvelope({
+        summary: 'Two substantive contributions with publication framing.',
+        groups: texts.map((_text, startOrdinal) => ({
+          titlePath: `Span ${startOrdinal.toString()}`,
+          startOrdinal,
+          role: roles[startOrdinal],
+          context: contexts[startOrdinal],
+        })),
+      }),
+    ),
+  );
+  const sections = texts.map((text, ordinal) => ({text, ordinal}));
+  const before = structuredClone(sections);
+  const result = await new ResponsesEntrySplitProvider(
+    BASE_CONFIG,
+    fetcher,
+  ).proposeSplit(sections);
+  expect(result.groups).toEqual([
+    {titlePath: 'Span 1', startOrdinal: 0, endOrdinal: 3},
+    {titlePath: 'Span 4', startOrdinal: 4, endOrdinal: 5},
+  ]);
+  expect(
+    result.groups.flatMap((group) =>
+      sections.slice(group.startOrdinal, group.endOrdinal + 1),
+    ),
+  ).toEqual(before);
+  expect(sections).toEqual(before);
+});
+
+it.each(['framing', 'unknown', undefined])(
+  'rejects an all-framing or undeclared role instead of publishing an empty reading unit: %s',
+  async (role) => {
+    const fetcher = vi.fn<OpenAiFetch>(() =>
+      Promise.resolve(
+        responseEnvelope({
+          summary: 'Only a sponsor notice.',
+          documentMode: 'whole',
+          groups: [{titlePath: 'Offer', startOrdinal: 0, role}],
+        }),
+      ),
+    );
+    await expect(
+      new ResponsesEntrySplitProvider(BASE_CONFIG, fetcher).proposeSplit([
+        {ordinal: 0, text: 'Purchase the sponsor subscription.'},
+      ]),
+    ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});
+  },
+);
+
+it('keeps a substantive product explanation and an editorial directory when marked content', async () => {
+  const sections = [
+    {
+      ordinal: 0,
+      text: 'A branded instrument measures phase using a calibrated reference and corrects drift.',
+    },
+    {
+      ordinal: 1,
+      text: 'An editorial directory compares tools and their concrete capabilities.',
+    },
+  ];
+  const fetcher = vi.fn<OpenAiFetch>(() =>
+    Promise.resolve(
+      responseEnvelope({
+        summary: 'Two useful resources.',
+        groups: sections.map(({ordinal}) => ({
+          titlePath: 'Resource ' + ordinal.toString(),
+          startOrdinal: ordinal,
+          role: 'content',
+        })),
+      }),
+    ),
+  );
+  expect(
+    (
+      await new ResponsesEntrySplitProvider(BASE_CONFIG, fetcher).proposeSplit(
+        sections,
+      )
+    ).groups,
+  ).toHaveLength(2);
+});
+
+it('retains the 64-Entry capacity when a collection also has framing spans', async () => {
+  const texts = [
+    'An editorial preface.',
+    ...Array.from(
+      {length: 64},
+      (_, index) => `Independent substantive story ${index.toString()}.`,
+    ),
+    'A subscription invitation.',
+  ];
+  const sections = texts.map((text, ordinal) => ({text, ordinal}));
+  const fetcher = vi.fn<OpenAiFetch>(() =>
+    Promise.resolve(
+      responseEnvelope({
+        summary: '64 independent stories and publication framing.',
+        groups: sections.map(({ordinal}) => ({
+          titlePath: `Story ${ordinal.toString()}`,
+          startOrdinal: ordinal,
+          role: ordinal === 0 || ordinal === 65 ? 'framing' : 'content',
+        })),
+      }),
+    ),
+  );
+  const result = await new ResponsesEntrySplitProvider(
+    BASE_CONFIG,
+    fetcher,
+  ).proposeSplit(sections);
+  expect(result.groups).toHaveLength(64);
+  expect(result.groups[0]).toMatchObject({startOrdinal: 0, endOrdinal: 1});
+  expect(result.groups.at(-1)).toMatchObject({
+    startOrdinal: 64,
+    endOrdinal: 65,
+  });
 });

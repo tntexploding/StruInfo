@@ -124,7 +124,8 @@ export function DocumentWorkspaceList({
         </select>
         {status === 'unprocessed' ? (
           <p className="document-list-filter-hint">
-            按当前原文是否生成条目筛选，不代表 AI 排队数量；处理正文可能另存。
+            按当前文档的条目状态筛选。AI
+            任务进度见总览，处理后的正文可能另存为新版本。
           </p>
         ) : null}
       </div>

@@ -15,10 +15,28 @@ export function DocumentProcessingStrip({
   readonly onOpen: (stage?: ProcessingStageId) => void;
   readonly onRefresh: () => void;
 }) {
+  const running =
+    !error &&
+    !value?.historical &&
+    value?.task?.runtimeStatus === 'running' &&
+    value.task.state.status === 'running';
   return (
-    <section className="document-processing-strip" aria-label="本文 AI 处理">
+    <section
+      className="document-processing-strip"
+      aria-label="本文 AI 处理"
+      data-running={running}
+    >
       <div className="document-processing-heading">
-        <span aria-live="polite" data-tone={value?.tone}>
+        <span
+          className="ef-document-process"
+          aria-live="polite"
+          data-tone={value?.tone}
+        >
+          {running ? (
+            <span className="ef-lamp" aria-hidden="true">
+              <i />
+            </span>
+          ) : null}
           {error
             ? '处理状态读取失败'
             : value?.historical
@@ -101,6 +119,11 @@ export function DocumentProcessingDetails({
           className="processing-stage-detail processing-marker"
           data-stage={item.id}
           data-selected={stage === item.id}
+          data-running={
+            item.state === 'active' &&
+            task?.runtimeStatus === 'running' &&
+            task.state.status === 'running'
+          }
         >
           <h3>
             {item.label} <span>{item.detail}</span>
@@ -115,7 +138,7 @@ export function DocumentProcessingDetails({
             <>
               <p>
                 {item.state === 'done'
-                  ? '正文从原文证据生成；整篇保留也是有效的处理结果。'
+                  ? '正文来自原文。连贯文章保留整篇，合集按条目拆分。'
                   : '尚未完成条目生成，完整原文仍保留。'}
               </p>
               {currentBody && item.state === 'done' ? (
@@ -196,7 +219,7 @@ export function DocumentProcessingDetails({
         <details>
           <summary>任务标识与控制位置</summary>
           <p className="processing-task-id">{task.taskId}</p>
-          <p>暂停、继续和取消位于「设置 → AI 接入 → 独立任务与阶段明细」。</p>
+          <p>暂停、继续和取消位于「设置 → AI 设置 → 独立任务与阶段明细」。</p>
         </details>
       ) : null}
     </div>

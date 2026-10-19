@@ -21,6 +21,255 @@ Before frontend implementation or frontend design review, also read:
 
 ## Current Phase
 
+### Owner-requested Repository Audit and v0.4.0 Release (2026-10-19)
+
+Audit the accumulated source, remove confirmed unused code, repair reproduced
+logic and release failures, and rewrite entry documentation around installation
+and everyday use. The owner explicitly authorizes committing and pushing the
+reviewed release and maintaining GitHub CI/CD. Preserve the independent public
+main history, existing data, manual decisions, permission and price gates, and
+accepted interface. Apply necessary dependency security fixes with updated
+license and SBOM records; verify with synthetic tests and disposable services.
+Do not run models, process real materials, change instance policies or deploy
+unrelated backend changes to the private instance. Keep runtime records external.
+
+### Owner-requested Approved Theme Rollout (2026-10-17)
+
+Apply the accepted Titanium Amber 06M palette, detail B typography and combined
+interaction effects to the existing workspaces. Use Noto Sans SC for controls
+and Noto Serif SC for reading; keep persistent content opaque, and reserve
+glass/glow for interactive surfaces and real processing status. Overview motion
+must follow observed task completion and actual statistic deltas, with no replay
+on initial load, no invented counts, and reduced-motion/hidden-page handling.
+Preserve workflow, permissions, manual drafts and existing data. Validate with
+synthetic regressions and browser inspection, then update only the frontend of
+the existing local instance after a verified external backup. Do not roll out
+unrelated backend experiments, call models, process materials, change policies,
+add dependencies or migrations, commit or push. Keep runtime records outside Git.
+The owner subsequently requires direct reuse of the accepted preview code,
+including its button glow layers, glass and ring/beam renderers. Adapt selectors,
+real task events and responsive layout; do not substitute an approximate redesign.
+The owner further requests compact, plain-language page headers, contextual
+page actions, a system-status popover above Settings in the rail, and appearance
+selection only in Settings. Reuse the accepted segmented glass for grouped
+actions, organize query tools by purpose, and fill the available desktop height
+with a modest bottom inset. Preserve opaque reading, drafts and all existing
+action semantics; this remains a frontend-only local update.
+
+### Owner-requested Code Consolidation (2026-10-16)
+
+Audit the accumulated source changes and simplify confirmed obsolete code while
+preserving the document workflow, public contracts, historical data and manual
+authority. Do not enable the unaccepted semantic experiment for new tasks;
+retain its persisted checkpoints for compatibility. Validate with synthetic
+checks and the existing quality gate. This is repository cleanup, not another
+model experiment, production-data operation, deployment, dependency upgrade,
+migration, commit or push.
+
+### Owner-requested Semantic Repairs and Same-twenty Retest (2026-10-15)
+
+The owner requests implementing application-decided intake, source-bound split
+titles and bounded positive-relation verification, then comparing the same twenty
+public documents against the completed fixed-flow batch. Preserve earlier results,
+manual decisions, original text, candidate evidence and existing grants. Use
+synthetic regressions before one isolated external live retest capped at CNY 5,
+24 requests per document and the existing two-way concurrency, retry, permission
+and price gates. Verification calls count toward the same document allowance and
+must have durable checkpoints. Do not overwrite production knowledge or deploy
+implicitly; preserve the old paused budget and use separate external accounting.
+Report corrected errors and regressions separately. No dependencies, migrations,
+commit, push, further test rounds or remaining-corpus processing are included.
+
+### Owner-requested Fixed-flow Closure (2026-10-15)
+
+The owner accepts a finite closeout: freeze the current v4 processing flow,
+retain bounded checkpoint retries and uncertain intake holds, and allow a
+successful no-relation result. Add persistent batch transport protection and
+close directly reproduced evidence-selection defects without another prompt
+redesign or model comparison. After synthetic validation and a verified external
+backup, update the existing local instance and run one fixed public historical
+acceptance batch of at most 20 documents, covering the existing sources where
+possible. Cap this batch at CNY 5, 24 calls per document and the existing two-way
+concurrency, permission, price and retry gates. Preserve earlier budgets and
+answers, manual decisions, source scope and Agent grants. Record each outcome
+and review the resulting knowledge; do not replace held/failed cases to improve
+the result or start the remaining corpus. Materials, manifests, backups and
+usage remain external. No dependency, migration, commit or push is included.
+
+### Owner-requested v4 Focused Live Retest (2026-10-15)
+
+The owner requests continuing the test after the v4 repairs. Reuse the same 28
+frozen public cases and candidate pools from the v3 focused retest, project v4
+cut points separately from unchanged source text, and retain first responses.
+Use a new external evaluation directory and independent CNY 5 budget, at most
+24 requests per document and the current AI permission, price and concurrency
+gates. Separate format normalization, semantic review and any permitted transport
+recovery in the comparison. This authorizes this bounded paid test, not production
+writes, deployment, policy/source/grant changes, dependencies, migrations, commit,
+push or the remaining historical corpus. Preserve all prior evaluation records.
+
+### Owner-requested v4 Processing Repairs (2026-10-15)
+
+The owner accepts the focused v3 retest recommendations: expose finer collection
+cut points, normalize only a single complete JSON fence, and constrain relation
+bases and selectable body evidence. Preserve full source coverage, saved proposals,
+manual revisions, checkpoints, publication authority and existing model gates.
+Use synthetic regressions and read-only offline inspection of already selected
+frozen public inputs. This increment does not renew the completed retest budget or
+authorize live calls, production writes, deployment, source/policy/grant changes,
+dependencies, migrations, commit, push or remaining-corpus processing.
+
+### Owner-requested v3 Focused Live Retest (2026-10-14)
+
+The owner accepts a new bounded retest of 20-30 previously frozen public cases
+covering prior failures, intake holds and successful controls. Select 28 cases,
+use the current v3 adapters and retain first responses, immutable input text,
+candidate pools and prior experiment records. Keep all inputs, results and usage
+in a new external evaluation directory with a separate CNY 5 maximum budget,
+the existing 24-call per-document limit and current permission, price and
+concurrency gates. Report stage execution, semantic review and any transport
+recovery separately. This authorizes this selected paid retest only, not
+production writes, deployment, source/policy/grant changes, dependency,
+migration, commit, push or processing the remaining corpus.
+
+### Owner-requested Collection Framing and Batched Tags (2026-10-14)
+
+The owner accepts the next two fixes after the bounded fifty-case retest:
+classify and attach collection framing instead of publishing it as standalone
+Entries, and batch small tag requests within the existing document call budget.
+Preserve complete evidence, per-entry revision checks, durable proposals,
+manual decisions, dispatch/price/concurrency gates and publication authority.
+Use synthetic regressions and offline planning on the same frozen evaluation
+inputs. Do not renew the previous CNY 5 budget or launch another paid experiment
+implicitly. No production data writes, deployment, dependency, migration,
+source/policy/grant changes, commit, push or remaining-corpus processing.
+
+### Owner-requested Processing Constraints and DeepSeek Retest (2026-10-14)
+
+The owner requests implementing the concrete fixes identified by the fifty-case
+evaluation and retesting DeepSeek. Tighten publication-context separation,
+split boundaries and pair-bound evidence in the existing adapters; preserve
+complete stored sources, manual decisions and publication authority. Use
+synthetic regressions first, then the same frozen fifty public inputs in a new
+external evaluation directory with a separate budget capped at CNY 5. Preserve
+the first experiment and report stage failures separately from semantic quality.
+Reuse the existing model, permission, price and concurrency gates. No production
+knowledge writes, source/policy/grant changes, deployment, dependency, migration,
+commit or push. This does not authorize processing the remaining corpus.
+
+### Owner-requested Fifty-case Processing-standard Evaluation (2026-10-13)
+
+The owner requests a 50-document DeepSeek and gpt-6-luna subagent comparison
+selected from the prepared first 500-document remaining-history batch. Freeze
+the same public source text, candidate pools, v1 instructions and output schema
+for both participants; preserve first outputs and evaluate adherence separately
+from semantic judgment. This explicitly authorizes these bounded live calls and
+Luna subagents reading selected inputs and writing assigned results in a new
+external evaluation directory. Reuse the existing model configuration and
+permission, price and concurrency gates with a separate bounded usage journal.
+Do not import the sample into production, launch production document tasks,
+alter source/policy/grant settings, or replace previous experiment results.
+All materials, responses and comparison reports stay outside Git. No deployment,
+dependency, migration, commit or push is included.
+
+### Owner-requested Remaining Historical Batch Preparation (2026-10-13)
+
+The owner selects the first three preparation steps for the remaining historical
+corpus: freeze an external remaining-candidate manifest with cumulative source
+caps and prior decisions, deploy the shared processing standard to the existing
+local instance after backup and validation, and generalize the bounded batch
+runner for durable progress and expired discovery sessions. Public directory
+discovery and completeness checks are authorized; all real materials, manifests,
+configuration and operation records stay outside Git. Preserve the existing
+source list, date range, source enablement, AI permission/price/concurrency gates,
+manual decisions and Agent grants. This increment prepares but does not import
+the remaining articles or launch their AI tasks. Use synthetic execution tests;
+no live-model calls, budget renewal, dependency, migration, commit or push.
+
+### Owner-requested Same-material Compliance Experiment (2026-10-12)
+
+The owner now explicitly requests a live DeepSeek and Codex-subagent adherence
+experiment on the same 14 public cases from the earlier paired evaluation.
+Use the frozen original documents and candidate pools, the shared v1 processing
+standard, the same output schema and first-attempt evaluation. This supersedes
+the preceding increment's no-live-run restriction only for these selected cases.
+Keep all materials, responses, usage and reports in a new external evaluation
+directory; preserve the earlier outputs. Reuse existing model configuration,
+permission/price/concurrency gates and a bounded external usage journal. No
+production knowledge writes, wider corpus processing, policy/grant changes,
+deployment upgrade, commit or push. Codex subagents may read the selected public
+inputs and write their assigned results only inside this evaluation directory.
+
+### Owner-requested Shared Processing Standard (2026-10-12)
+
+The owner requests model-independent processing instructions after the paired
+evaluation. Centralize the existing intake, split, tag, recall and relation rules;
+use the same versioned text in internal adapters and a read-only Agent interface.
+See `docs/document-entry-processing-guidelines.md`. Keep transport-specific
+schemas, evidence, manual decisions, privacy, budgets and publication authority
+unchanged. Use synthetic validation; shared instructions are not proof of model
+semantic accuracy. No live-model run, historical rewrite, scope expansion,
+dependency, migration, commit or push is included in this increment.
+
+### Owner-authorized Historical Pilot (2026-09-27)
+
+The owner requests repairing the observed article-body extraction defects and
+running one selected public historical batch: 100 calibration documents, then
+400 more. They delegate accept/reject review while away. Reuse the current
+DeepSeek provider, document lifecycle, permission/price gates, bounded retries
+and existing application writes. Preserve source identity, publication dates,
+immutable evidence and manual revisions. Keep the source list and unattended
+policy unchanged. Record a fixed external manifest and usage journal; reserve
+cost before dispatch and stop at the external batch budget. Unknown billed
+usage retains its reservation. Keep all real material and operation records
+outside Git. Validate with synthetic regressions, back up and update the local
+instance before processing. This authorization covers only these 500 selected
+documents, not the remaining historical corpus, ongoing intake or external delivery.
+The reproduced split-persistence defect requires a compatible source-range migration; preserve old proposals and processing packages. No dependency, commit or push is included.
+
+### Owner-requested Source Introductions (2026-09-26)
+
+The owner requests optional AI descriptions when adding subscriptions and rewriting
+all 20 current public source introductions. Describe subject coverage and article
+formats; omit development, integration, capacity and operational commentary. This
+explicitly permits bounded description-only calls through the configured provider,
+with existing dispatch, concurrency and price gates. Generate editable drafts from
+public publisher metadata, recent titles and bounded syndicated excerpts; other connectors use
+owner-supplied content notes without sending connector configuration. Never transfer
+private sources, import articles or change source enablement. Preserve all other
+external preferences, back up before local deployment and apply description-only
+updates with the current subscription revision. Use synthetic tests; descriptions
+and operational records remain external. No dependency, migration, commit or push.
+
+### Owner-requested Historical Backfill (2026-09-26)
+
+The owner requests multi-source historical discovery through RSS and other public
+index channels, article/date-range selection and batch import. They explicitly
+selected pending inbox review after import. Keep backfill separate from automatic
+processing, live feed cursors and source enablement. Reuse evidence transactions;
+preserve original dates, exact source bytes, manual decisions and existing grants.
+Public read-only source checks and local deployment are in scope. Do not bulk
+import real articles without the owner's selection, call a model, commit or push.
+Use synthetic tests; directories and operational records stay outside Git. See
+`docs/source-history.md` for the implemented boundary.
+
+### Owner-requested Source Feedback and AI Execution Settings (2026-09-25)
+
+The owner requests using public manual receipt decisions as bounded examples for
+future AI intake review and overview alerts when a source accumulates adverse
+reviews. Their later instruction selects owner decisions: keep, review again, or
+close the subscription. Do not automatically disable a source. Preserve original
+evidence, both accepted and rejected examples, and distinguish explicit owner
+reasons from prior model assessments. No model call is added for learning itself.
+The owner also requests adjustable model concurrency and bounded automatic
+checkpoint retries. Defaults stay one concurrent request and zero retries; new
+document tasks freeze their retry allowance and retain existing call/step limits,
+price/permission gates, manual holds and restore safety. Existing failed tasks
+receive no automatic retry authority. Reuse external preferences and task JSON;
+no dependency or database migration is added. Validate using synthetic fixtures,
+then backup and update the existing local instance. Preserve the already enabled
+unattended source scope and limits; no unrelated model runs, commit or push.
+
 ### Owner-requested v0.3.0 Consolidation and Push (2026-09-20)
 
 The owner requests completing the accumulated project changes and pushing a

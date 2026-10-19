@@ -1,7 +1,7 @@
 name: struinfo
 
 x-struinfo-maintenance: &struinfo-maintenance
-  image: ${STRUIINFO_IMAGE:-struinfo:0.3.0}
+  image: ${STRUIINFO_IMAGE:-struinfo:0.4.0}
   init: true
   read_only: true
   cap_drop:

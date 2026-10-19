@@ -158,7 +158,7 @@ M1H action POST 接受 `{expectedVersion, operation: "apply" | "undo", includePr
 
 ### 3.4 联系
 
-`PUT /entries/associations/policy` 接受 `expectedRevision`、三项和为 100 的整数权重，以及 0–10000 的阈值。成功保存到外部个人偏好后，Web 会立即调用 rebuild；候选上限和逐对人工调整幅度仍是固定算法常量。rebuild 读取当前可见 Entry，按正文词项及内容/类型/领域维度生成可解释投影，不覆盖人工 override 或正式图谱关系。逐对 PUT 只接受当前 override 版本、`includePrivate` 和 `enhance`、`weaken`、`block`、`restore` 之一。自动 `similarity` 边不等于经过人工核验的事实性语义断言。
+`PUT /entries/associations/policy` 接受 `expectedRevision`、三项和为 100 的整数权重，以及 0–10000 的阈值。成功保存到外部个人偏好后，Web 会立即调用 rebuild；候选上限和逐对人工调整幅度仍是固定算法常量。rebuild 读取当前可见 Entry，按正文词项及内容/类型/领域维度生成可解释投影，不覆盖人工 override 或正式图谱关系。逐对 PUT 只接受当前 override 版本、`includePrivate` 和 `enhance`、`weaken`、`block`、`restore` 之一。自动 `similarity` 边表示计算相似度，人工核验状态单独记录。
 
 ### 3.5 查询
 

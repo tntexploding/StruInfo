@@ -102,7 +102,7 @@ const READ_SPLIT_ENTRIES_SQL = sql(
   'ORDER BY proposal_id, entry_ordinal',
 );
 const READ_SPLIT_ENTRY_FRAGMENTS_SQL = sql(
-  'SELECT proposal_id::text, entry_ordinal, fragment_ordinal, fragment_id::text',
+  'SELECT proposal_id::text, entry_ordinal, fragment_ordinal, fragment_id::text, start_code_point, end_code_point',
   'FROM struinfo.processing_split_proposal_entry_fragment',
   'WHERE workspace_id = $1 AND proposal_id = ANY($2::uuid[])',
   'ORDER BY proposal_id, entry_ordinal, fragment_ordinal',
@@ -174,8 +174,8 @@ const INSERT_SPLIT_ENTRY_SQL = sql(
 );
 const INSERT_SPLIT_ENTRY_FRAGMENT_SQL = sql(
   'INSERT INTO struinfo.processing_split_proposal_entry_fragment (',
-  '  workspace_id, proposal_id, entry_ordinal, fragment_ordinal, fragment_id',
-  ') VALUES ($1, $2, $3, $4, $5)',
+  '  workspace_id, proposal_id, entry_ordinal, fragment_ordinal, fragment_id, start_code_point, end_code_point',
+  ') VALUES ($1, $2, $3, $4, $5, $6, $7)',
 );
 const INSERT_PROPOSAL_INPUT_SQL = sql(
   'INSERT INTO struinfo.processing_proposal_fragment_input (',
@@ -877,6 +877,10 @@ async function loadSplitPayloads(
     [workspaceId, proposalIds],
   );
   const fragments = new Map<string, string[]>();
+  const ranges = new Map<
+    string,
+    {startCodePoint: number; endCodePoint: number}[]
+  >();
   for (const row of fragmentsResult.rows) {
     const proposalId = canonicalUuid(row.proposal_id);
     const entryOrdinal = integer(row.entry_ordinal);
@@ -886,6 +890,14 @@ async function loadSplitPayloads(
       throw new PostgresAdapterError();
     values.push(canonicalUuid(row.fragment_id));
     fragments.set(key, values);
+    if (row.start_code_point !== null || row.end_code_point !== null) {
+      const values = ranges.get(key) ?? [];
+      values.push({
+        startCodePoint: integer(row.start_code_point),
+        endCodePoint: integer(row.end_code_point),
+      });
+      ranges.set(key, values);
+    }
   }
   const entries = groupOrdered(
     entriesResult.rows,
@@ -894,11 +906,13 @@ async function loadSplitPayloads(
     (row) => {
       const proposalId = canonicalUuid(row.proposal_id);
       const entryOrdinal = integer(row.entry_ordinal);
+      const key = `${proposalId}:${entryOrdinal.toString()}`;
       return Object.freeze({
         titlePath: text(row.title_path),
-        fragmentIds: Object.freeze(
-          fragments.get(`${proposalId}:${entryOrdinal.toString()}`) ?? [],
-        ),
+        fragmentIds: Object.freeze(fragments.get(key) ?? []),
+        ...(ranges.has(key)
+          ? {fragmentRanges: Object.freeze(ranges.get(key) ?? [])}
+          : {}),
       });
     },
   );
@@ -956,6 +970,8 @@ async function insertSplitPayload(
             entryOrdinal,
             fragmentOrdinal,
             canonicalUuid(fragmentId),
+            entry.fragmentRanges?.[fragmentOrdinal]?.startCodePoint ?? null,
+            entry.fragmentRanges?.[fragmentOrdinal]?.endCodePoint ?? null,
           ])
         ).rowCount,
       );

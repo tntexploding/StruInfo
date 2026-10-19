@@ -98,7 +98,7 @@ export function AssociationPolicyPanel({
           }
           role={valid ? 'status' : 'alert'}
         >
-          三项相似度权重合计 {totalWeight.toString()}%；保存要求恰好为 100%。
+          权重合计 {totalWeight.toString()}%（需为 100%）。
         </p>
         <dl>
           <div>
@@ -123,7 +123,7 @@ export function AssociationPolicyPanel({
             {saving ? '保存并重建中…' : '保存权重并重建联系'}
           </button>
         </div>
-        <p>保存后会更新自动推荐，不会覆盖你手动修改的联系。</p>
+        <p>保存后更新自动推荐，保留手动修改的联系。</p>
       </form>
     </aside>
   );

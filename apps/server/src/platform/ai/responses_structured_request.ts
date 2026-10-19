@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {parseResponseJson} from './response_json.js';
 import {isAiDispatchWait} from '../../modules/processing/ai_price_policy.js';
 import type {AiProposalProviderConfig} from '../../config/runtime_config.js';
 import {OperationError} from '../../application/operation_error.js';
@@ -91,7 +92,7 @@ export async function requestStructuredResponse<T extends z.ZodType>(
   if (texts.length !== 1) throw formatFailure('ai_provider_invalid_envelope');
   let payload: unknown;
   try {
-    payload = JSON.parse(texts[0] ?? '') as unknown;
+    payload = parseResponseJson(texts[0] ?? '');
   } catch {
     throw formatFailure('ai_provider_invalid_json');
   }

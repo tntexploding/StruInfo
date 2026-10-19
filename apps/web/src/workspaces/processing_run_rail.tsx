@@ -120,7 +120,7 @@ export function ProcessingRunRail({
       </header>
 
       <p className="workflow-boundary-note">
-        以下仅表示最近一次任务，不代表全部资料的处理进度。
+        最近一次任务。全部文档的进度见总览。
       </p>
       <ol className="ai-stage-list">
         {STAGES.filter((stage) => stage.key === latest?.currentStage).map(

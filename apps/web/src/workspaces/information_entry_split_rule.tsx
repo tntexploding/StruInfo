@@ -13,6 +13,7 @@ import {ActionNotice} from '../components/action_notice.js';
 import type {ActionFeedback} from '../components/product_types.js';
 
 export interface InformationEntrySplitRuleProps {
+  readonly settingsOnly?: boolean;
   readonly snapshotId: string;
   readonly isPrivate: boolean;
   readonly includePrivate: boolean;
@@ -33,6 +34,7 @@ export interface InformationEntrySplitRuleProps {
 }
 
 export function InformationEntrySplitRule({
+  settingsOnly = false,
   snapshotId,
   isPrivate,
   includePrivate,
@@ -179,7 +181,7 @@ export function InformationEntrySplitRule({
           response.body.status === 'applied'
             ? '拆分规则已保存'
             : '规则没有变化',
-        detail: '规则已保存到个人设置，不会写入文档正文。',
+        detail: '规则已保存到个人设置。',
       });
     } catch {
       if (generation === requestGeneration.current) {
@@ -302,7 +304,11 @@ export function InformationEntrySplitRule({
       <header className="console-heading">
         <div>
           <h2 id="split-rule-title">结构规则</h2>
-          <p>设置规则后，可以先预览再生成条目。</p>
+          <p>
+            {settingsOnly
+              ? '设置手动拆分时使用的规则。AI 自动拆分按文章内容判断。'
+              : '设置规则后，可以先预览再生成条目。'}
+          </p>
         </div>
       </header>
 
@@ -324,7 +330,7 @@ export function InformationEntrySplitRule({
                 />
                 <span>
                   <strong>每个结构段独立</strong>
-                  <small>保持当前默认行为，适合已经分段清晰的材料。</small>
+                  <small>适用于已经按独立条目分段的材料。</small>
                 </span>
               </label>
               <label className="split-rule-choice">
@@ -338,7 +344,7 @@ export function InformationEntrySplitRule({
                 />
                 <span>
                   <strong>合并相邻短段</strong>
-                  <small>只合并相邻短段，不修改或打乱原文。</small>
+                  <small>按原文顺序合并相邻短段。</small>
                 </span>
               </label>
             </fieldset>
@@ -411,24 +417,31 @@ export function InformationEntrySplitRule({
               >
                 {busy === 'save' ? '正在保存…' : '保存规则'}
               </button>
-              <button
-                type="button"
-                className="secondary-action"
-                disabled={!valid || blocked || busy !== undefined}
-                onClick={() => void preview()}
-              >
-                {busy === 'trial' ? '正在预览…' : '预览当前文档'}
-              </button>
-              <button
-                type="button"
-                className="primary-action"
-                disabled={
-                  dirty || !previewMatchesSaved || blocked || busy !== undefined
-                }
-                onClick={() => void apply()}
-              >
-                {busy === 'apply' ? '正在生成…' : '按已保存规则生成'}
-              </button>
+              {!settingsOnly ? (
+                <>
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    disabled={!valid || blocked || busy !== undefined}
+                    onClick={() => void preview()}
+                  >
+                    {busy === 'trial' ? '正在预览…' : '预览当前文档'}
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-action"
+                    disabled={
+                      dirty ||
+                      !previewMatchesSaved ||
+                      blocked ||
+                      busy !== undefined
+                    }
+                    onClick={() => void apply()}
+                  >
+                    {busy === 'apply' ? '正在生成…' : '按已保存规则生成'}
+                  </button>
+                </>
+              ) : null}
             </div>
             {alreadyMaterialized ? (
               <p className="empty-copy">
@@ -442,39 +455,41 @@ export function InformationEntrySplitRule({
             ) : null}
           </div>
 
-          <div className="split-rule-preview" aria-live="polite">
-            <h3>结果预览</h3>
-            {visibleTrial === undefined ? (
-              <p className="empty-copy">
-                选择当前文档并运行预览后，这里会显示最终分组；预览不会写入数据库。
-              </p>
-            ) : (
-              <ol tabIndex={0} aria-label="拆分规则预览结果">
-                {visibleTrial.groups.map((group) => (
-                  <li
-                    key={`${visibleTrial.snapshotId}:${group.ordinal.toString()}`}
-                  >
-                    <div>
-                      <strong>{group.titlePath}</strong>
-                      <span>
-                        {group.fragmentCount.toString()} 段 ·{' '}
-                        {group.codePointCount.toString()} 字符
-                      </span>
-                    </div>
-                    <p>
-                      {group.previewText}
-                      {group.previewTruncated ? '…' : ''}
-                    </p>
-                    {group.exceedsMaximum ? (
-                      <small>
-                        原文片段本身超过当前上限；规则不会从中间截断。
-                      </small>
-                    ) : null}
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
+          {!settingsOnly ? (
+            <div className="split-rule-preview" aria-live="polite">
+              <h3>结果预览</h3>
+              {visibleTrial === undefined ? (
+                <p className="empty-copy">
+                  在工作台选择文档后可预览分组，确认后再保存。
+                </p>
+              ) : (
+                <ol tabIndex={0} aria-label="拆分规则预览结果">
+                  {visibleTrial.groups.map((group) => (
+                    <li
+                      key={`${visibleTrial.snapshotId}:${group.ordinal.toString()}`}
+                    >
+                      <div>
+                        <strong>{group.titlePath}</strong>
+                        <span>
+                          {group.fragmentCount.toString()} 段 ·{' '}
+                          {group.codePointCount.toString()} 字符
+                        </span>
+                      </div>
+                      <p>
+                        {group.previewText}
+                        {group.previewTruncated ? '…' : ''}
+                      </p>
+                      {group.exceedsMaximum ? (
+                        <small>
+                          该片段超出当前上限，请提高上限或手动拆分。
+                        </small>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          ) : null}
         </div>
       )}
       <ActionNotice feedback={feedback} />

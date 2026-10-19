@@ -64,6 +64,10 @@ export interface ProcessingRun {
 export interface ProcessingSplitProposalEntry {
   readonly titlePath: string;
   readonly fragmentIds: readonly string[];
+  readonly fragmentRanges?: readonly Readonly<{
+    startCodePoint: number;
+    endCodePoint: number;
+  }>[];
 }
 
 /** Closed payload for one explicitly selected public Snapshot. */

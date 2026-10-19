@@ -25,6 +25,7 @@ export interface EntryTranslation extends EntryTranslationText {
 
 export type EntryTranslationErrorCode =
   | 'ai_operations_paused'
+  | 'ai_batch_budget_paused'
   | 'ai_price_window_closed'
   | 'translation_entry_unavailable'
   | 'translation_source_stale'

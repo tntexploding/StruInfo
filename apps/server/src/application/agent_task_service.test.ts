@@ -2,6 +2,7 @@ import {
   AiPriceWindowClosedError,
   AiOperationsPausedError,
   AI_PRICE_WAIT,
+  AI_BUDGET_WAIT,
 } from '../modules/processing/ai_price_policy.js';
 import {requireOperationValue} from './operation_error.js';
 import {describe, it, expect, vi} from 'vitest';
@@ -75,6 +76,22 @@ function fixture(
   };
   let count = 0;
   const actions = {
+    reviewRunId: (_step: AgentTaskStep, proposalId: string, key: string) =>
+      `review:${proposalId}:${key}`,
+    loadRelationReview: vi.fn((step: AgentTaskStep) =>
+      Promise.resolve(
+        step.reviewRunId ? runs.get(step.reviewRunId) : undefined,
+      ),
+    ),
+    reviewRelation: vi.fn((_task: AgentTask, step: AgentTaskStep) => {
+      const run = {
+        runId: requireOperationValue(step.reviewRunId),
+        status: 'succeeded',
+        proposals: [{proposalId: S, status: 'pending_review'}],
+      } as unknown as ProcessingRun;
+      runs.set(run.runId, run);
+      return Promise.resolve(run);
+    }),
     model: 'synthetic-model',
     intakeModel: 'synthetic-model',
     reviewCheckpointCurrent: vi.fn(() => Promise.resolve(true)),
@@ -100,6 +117,13 @@ function fixture(
     ),
     recallGroupPlans: vi.fn((steps: readonly AgentTaskStep[]) =>
       Promise.all(steps.map(() => actions.recall())),
+    ),
+    tagGroup: vi.fn((_task: AgentTask, step: AgentTaskStep) =>
+      Promise.resolve([step]),
+    ),
+    generateTagGroup: vi.fn(),
+    tagCallEstimate: vi.fn((proposal: ProcessingProposal) =>
+      Promise.resolve(proposal.splitPayload?.entries.length ?? 0),
     ),
     recallCallEstimate: vi.fn((proposal: ProcessingProposal) =>
       Promise.resolve(proposal.splitPayload?.entries.length ?? 0),
@@ -183,6 +207,339 @@ function fixture(
   };
 }
 describe('bounded Agent tasks', () => {
+  it('does not opt new documents into experimental relation verification', async () => {
+    const f = fixture();
+    f.actions.relationSteps.mockResolvedValue([
+      {
+        kind: 'relation',
+        targetId: E,
+        relatedEntryId: P,
+        expectedRevision: 2,
+        expectedRelatedRevision: 1,
+        expectedOverrideRevision: 0,
+        attempt: 0,
+        complete: false,
+      },
+    ]);
+    const task = await f.service.start(owner, 'ordinary-document', {
+      kind: 'document',
+      snapshotId: S,
+      maxEntries: 4,
+      maxRelations: 1,
+      maxModelCalls: 3,
+    });
+    const result = await f.done(task.taskId);
+    expect(result.state).toMatchObject({status: 'succeeded', calls: 3});
+    expect(result.state.relationReviewRequired).toBeUndefined();
+    expect(f.actions.reviewRelation).not.toHaveBeenCalled();
+    expect(f.actions.publish).toHaveBeenCalledOnce();
+  });
+  it.each(['positive', 'negative', 'uncertain', 'budget', 'pause'] as const)(
+    'preserves stored independent relation review checkpoints: %s',
+    async (mode) => {
+      const f = fixture();
+      // Simulate a persisted trial task; production creation no longer opts in.
+      const create = f.repository.create.bind(f.repository);
+      f.repository.create = (task) =>
+        create({
+          ...task,
+          state: {...task.state, relationReviewRequired: true},
+        });
+      f.actions.relationSteps.mockResolvedValue([
+        {
+          kind: 'relation',
+          targetId: E,
+          relatedEntryId: P,
+          expectedRevision: 2,
+          expectedRelatedRevision: 1,
+          expectedOverrideRevision: 0,
+          attempt: 0,
+          complete: false,
+        },
+      ]);
+      const originalReview = requireOperationValue(
+        f.actions.reviewRelation.getMockImplementation(),
+      );
+      f.actions.reviewRelation.mockImplementation(async (task, step) => {
+        const run = await originalReview(task, step);
+        if (mode === 'pause')
+          await f.repository.control(
+            W,
+            task.taskId,
+            requireOperationValue(f.rows.get(task.taskId)).version,
+            'pause',
+          );
+        if (mode === 'negative') {
+          const negative = {
+            ...run,
+            proposals: [],
+            currentStage: 'associations' as const,
+            currentStep: '未发现有意义的联系',
+            completedUnits: 1,
+            totalUnits: 1,
+          };
+          f.runs.set(run.runId, negative);
+          return negative;
+        }
+        if (mode === 'uncertain') {
+          const held = {
+            ...run,
+            proposals: [],
+            status: 'failed' as const,
+            errorCode: 'ai_relation_review_uncertain',
+          };
+          f.runs.set(run.runId, held);
+          return held;
+        }
+        return run;
+      });
+      const task = await f.service.start(owner, `review-${mode}`, {
+        kind: 'document',
+        snapshotId: S,
+        maxEntries: 4,
+        maxRelations: 1,
+        maxModelCalls: mode === 'budget' ? 3 : 6,
+      });
+      let result = await f.done(task.taskId);
+      if (mode === 'pause') {
+        expect(result.state.status).toBe('paused');
+        await f.service.control(owner, task.taskId, result.version, 'resume');
+        result = await f.done(task.taskId);
+      }
+      if (mode === 'budget') {
+        expect(result.state).toMatchObject({
+          status: 'failed',
+          calls: 3,
+          errorCode: 'model_call_budget_exhausted',
+        });
+        expect(f.actions.reviewRelation).not.toHaveBeenCalled();
+      } else {
+        expect(result.state).toMatchObject({
+          status: mode === 'uncertain' ? 'paused' : 'succeeded',
+          calls: 4,
+          relationReviewRequired: true,
+        });
+        expect(f.actions.reviewRelation).toHaveBeenCalledTimes(1);
+        expect(
+          result.state.steps.find((step) => step.kind === 'relation')
+            ?.reviewAttempt,
+        ).toBe(1);
+      }
+      const accepted = f.actions.accept.mock.calls.filter(
+        ([, step]) => step.kind === 'relation',
+      );
+      if (mode === 'positive' || mode === 'pause') {
+        expect(accepted).toHaveLength(1);
+        expect(accepted[0]?.[2].proposalId).toBe(S);
+      } else expect(accepted).toHaveLength(0);
+      expect(f.actions.publish).toHaveBeenCalledTimes(
+        mode === 'budget' || mode === 'uncertain' ? 0 : 1,
+      );
+    },
+  );
+  it.each([24, 22])(
+    'plans a 35-entry collection against the unchanged %i-call limit',
+    async (limit) => {
+      const f = fixture();
+      const tags: AgentTaskStep[] = Array.from({length: 35}, (_, index) => ({
+        kind: 'tags',
+        targetId: `00000000-0000-4000-8000-${String(100 + index).padStart(12, '0')}`,
+        expectedRevision: 1,
+        attempt: 0,
+        complete: false,
+      }));
+      const original = requireOperationValue(
+        f.actions.generate.getMockImplementation(),
+      );
+      f.actions.generate.mockImplementation(async (task, step) => {
+        const run = await original(task, step);
+        if (step.kind !== 'split') return run;
+        const changed = {
+          ...run,
+          proposals: [
+            {
+              ...requireOperationValue(run.proposals[0]),
+              splitPayload: {
+                providerModel: 'synthetic-model',
+                promptVersion: 'synthetic-split',
+                splitRuleVersion: 'struinfo.entry-split.ai-group.v1',
+                entries: tags.map(() => ({
+                  titlePath: 'Synthetic',
+                  fragmentIds: [S],
+                })),
+              },
+            } as ProcessingProposal,
+          ],
+        };
+        f.runs.set(run.runId, changed);
+        return changed;
+      });
+      f.actions.tagSteps.mockResolvedValue(tags);
+      f.actions.tagCallEstimate.mockResolvedValue(9);
+      f.actions.recallCallEstimate.mockResolvedValue(9);
+      f.actions.tagGroup.mockImplementation((task) =>
+        Promise.resolve(
+          task.state.steps
+            .filter(
+              (step) => step.kind === 'tags' && !step.complete && !step.runId,
+            )
+            .slice(0, 4),
+        ),
+      );
+      f.actions.generateTagGroup.mockImplementation(
+        async (group: AgentTaskStep[]) => {
+          const task = requireOperationValue([...f.rows.values()][0]);
+          return Promise.all(
+            group.map(async (step) => ({
+              outcome: 'created',
+              run: await original(task, step),
+            })),
+          );
+        },
+      );
+      f.actions.recallSteps.mockResolvedValue(
+        tags.map((step) => ({...step, kind: 'recall', expectedRevision: 2})),
+      );
+      f.actions.recallGroup.mockImplementation((task) =>
+        Promise.resolve(
+          task.state.steps
+            .filter((step) => step.kind === 'recall' && !step.recallPlan)
+            .slice(0, 4),
+        ),
+      );
+      f.actions.relationSteps.mockResolvedValue(
+        tags.slice(0, 3).map((step) => ({
+          ...step,
+          kind: 'relation',
+          relatedEntryId: P,
+          expectedRevision: 2,
+          expectedRelatedRevision: 1,
+          expectedOverrideRevision: 0,
+        })),
+      );
+      const task = await f.service.start(
+        owner,
+        `collection-${limit.toString()}`,
+        {
+          kind: 'document',
+          snapshotId: S,
+          intake: {fetchFullText: false},
+          maxEntries: 64,
+          maxRelations: 3,
+          maxRelationCandidates: 3,
+          maxModelCalls: limit,
+        },
+      );
+      const result = await f.done(task.taskId);
+      if (limit === 24) {
+        expect(result.state).toMatchObject({status: 'succeeded', calls: 23});
+        expect(result.state.steps.every((step) => step.complete)).toBe(true);
+        expect(f.actions.publish).toHaveBeenCalledTimes(1);
+        expect(f.actions.generateTagGroup).toHaveBeenCalledTimes(9);
+      } else {
+        expect(result.state).toMatchObject({
+          status: 'failed',
+          calls: 2,
+          errorCode: 'insufficient_document_call_budget',
+        });
+        expect(f.actions.tagSteps).not.toHaveBeenCalled();
+        expect(f.writes).toBe(0);
+        expect(f.actions.publish).not.toHaveBeenCalled();
+      }
+    },
+  );
+  it.each(['complete', 'pause', 'cancel', 'price-wait', 'invalid'] as const)(
+    'reserves one tag call and independent checkpoints: %s',
+    async (mode) => {
+      const f = fixture();
+      const steps: AgentTaskStep[] = [E, P].map((targetId) => ({
+        kind: 'tags',
+        targetId,
+        expectedRevision: 1,
+        attempt: 0,
+        complete: false,
+      }));
+      f.actions.tagSteps.mockResolvedValue(steps);
+      f.actions.tagGroup.mockImplementation((task, first) =>
+        Promise.resolve(
+          task.state.steps.filter(
+            (step) =>
+              step.kind === 'tags' &&
+              !step.complete &&
+              step.attempt === first.attempt,
+          ),
+        ),
+      );
+      f.actions.generateTagGroup.mockImplementation(
+        async (group: AgentTaskStep[]) => {
+          const current = requireOperationValue([...f.rows.values()][0]);
+          expect(current.state.calls).toBe(2); // split + one tag request
+          expect(
+            current.state.steps
+              .filter((step) => step.kind === 'tags')
+              .every((step) => step.attempt === 1 && step.runId),
+          ).toBe(true);
+          if (mode === 'price-wait') throw new AiPriceWindowClosedError();
+          if (mode === 'invalid')
+            throw new OperationError(
+              'rejected',
+              'ai_provider_invalid_response',
+            );
+          const results = await Promise.all(
+            group.map(async (step) => ({
+              outcome: 'created',
+              run: await f.actions.generate(current, step),
+            })),
+          );
+          if (mode === 'pause' || mode === 'cancel')
+            await f.repository.control(
+              W,
+              current.taskId,
+              current.version,
+              mode,
+            );
+          return results;
+        },
+      );
+      const task = await f.service.start(owner, 'tag-batch-' + mode, {
+        kind: 'document',
+        snapshotId: S,
+        maxRelations: 0,
+        maxModelCalls: 3,
+      });
+      const result = await f.done(task.taskId);
+      expect(f.actions.generateTagGroup).toHaveBeenCalledTimes(1);
+      if (mode === 'complete') {
+        expect(result.state).toMatchObject({status: 'succeeded', calls: 2});
+        expect(f.actions.publish).toHaveBeenCalledTimes(1);
+        expect(f.writes).toBe(3);
+      } else {
+        expect(f.actions.publish).not.toHaveBeenCalled();
+        expect(f.writes).toBe(1); // only split was accepted
+        expect(result.state.calls).toBe(mode === 'price-wait' ? 1 : 2);
+        expect(
+          result.state.steps
+            .filter((step) => step.kind === 'tags')
+            .map((step) => step.attempt),
+        ).toEqual(mode === 'price-wait' ? [0, 0] : [1, 1]);
+        if (mode === 'pause') {
+          const current = await f.service.read(owner, task.taskId);
+          await f.service.control(
+            owner,
+            task.taskId,
+            current.version,
+            'resume',
+          );
+          await vi.waitFor(() => {
+            expect(f.rows.get(task.taskId)?.state.status).toBe('succeeded');
+          });
+          expect(f.actions.generateTagGroup).toHaveBeenCalledTimes(1);
+          expect(f.rows.get(task.taskId)?.state.calls).toBe(2);
+          expect(f.writes).toBe(3);
+        }
+      }
+    },
+  );
   it.each(['accepted', 'held'] as const)(
     'finishes a receipt-only review as %s without structure or annotations',
     async (outcome) => {
@@ -374,6 +731,46 @@ describe('bounded Agent tasks', () => {
       });
     });
     expect(f.actions.generate.mock.calls[1]?.[1].runId).not.toBe(abortedId);
+  });
+  it('keeps budget waits at their checkpoint until explicitly continued', async () => {
+    const f = fixture(undefined, {
+      check: () => Promise.resolve(),
+      canResume: () => true,
+    });
+    f.actions.generate.mockImplementationOnce(async (_task, step) => {
+      await Promise.resolve();
+      const run = {
+        runId: step.runId,
+        status: 'failed',
+        proposals: [],
+        errorCode: AI_BUDGET_WAIT,
+      } as unknown as ProcessingRun;
+      f.runs.set(requireOperationValue(step.runId), run);
+      return run;
+    });
+    const task = await f.service.start(owner, 'budget-checkpoint', {
+      kind: 'document',
+      snapshotId: S,
+      maxModelCalls: 2,
+    });
+    const paused = await f.done(task.taskId);
+    expect(paused.state).toMatchObject({
+      status: 'paused',
+      calls: 0,
+      errorCode: AI_BUDGET_WAIT,
+      steps: [{attempt: 0, complete: false}],
+    });
+    await vi.waitFor(async () => {
+      expect((await f.service.read(owner, task.taskId)).runtimeStatus).toBe(
+        'idle',
+      );
+    });
+    await f.service.pollPriceDeferred();
+    expect(f.rows.get(task.taskId)?.state.status).toBe('paused');
+    await f.service.control(owner, task.taskId, paused.version, 'resume');
+    await vi.waitFor(() => {
+      expect(f.rows.get(task.taskId)?.state.status).toBe('succeeded');
+    });
   });
   it.each(['pause', 'cancel'] as const)(
     'does not resume an explicitly %sd price wait',
@@ -1630,4 +2027,257 @@ it('finishes a corrected thirteen-item collection within the original 24-call ro
   expect(
     f.actions.recallGroupPlans.mock.calls.map(([steps]) => steps.length),
   ).toEqual([4, 4, 4, 1]);
+});
+
+describe('owner configured document execution', () => {
+  const gate = (limit: number, retries: number) => ({
+    check: () => Promise.resolve(),
+    canResume: () => true,
+    executionSettings: () =>
+      Promise.resolve({
+        maxConcurrentRequests: limit,
+        automaticRetryLimit: retries,
+      }),
+  });
+  const document = {
+    kind: 'document',
+    snapshotId: S,
+    maxModelCalls: 8,
+    maxEntries: 4,
+    maxRelations: 0,
+  };
+  it('runs independent documents up to configured concurrency', async () => {
+    const f = fixture(undefined, gate(2, 0));
+    const release: (() => void)[] = [];
+    f.actions.prepareIntake.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) =>
+          release.push(() => {
+            resolve(true);
+          }),
+        ),
+    );
+    const req = {...document, intake: {fetchFullText: false}};
+    const tasks = await Promise.all(
+      [1, 2, 3].map((n) =>
+        f.service.start(owner, 'parallel-' + String(n), {
+          ...req,
+          snapshotId: '00000000-0000-4000-8000-00000000000' + String(n + 5),
+        }),
+      ),
+    );
+    await vi.waitFor(() => {
+      expect(release).toHaveLength(2);
+    });
+    release[0]?.();
+    await f.done(requireOperationValue(tasks[0]).taskId);
+    await vi.waitFor(() => {
+      expect(release).toHaveLength(3);
+    });
+    release[1]?.();
+    release[2]?.();
+    await Promise.all(tasks.map((t) => f.done(t.taskId)));
+  });
+  it.each([
+    'ai_provider_timeout',
+    'ai_provider_invalid_json',
+    'ai_provider_invalid_response',
+  ])(
+    'resumes only unfinished stages after %s without renewing budgets',
+    async (code) => {
+      const f = fixture(undefined, gate(1, 2));
+      const generate = requireOperationValue(
+        f.actions.generate.getMockImplementation(),
+      );
+      f.actions.generate.mockImplementation((task, step) =>
+        step.kind === 'tags' && step.attempt === 1
+          ? Promise.reject(new OperationError('rejected', code))
+          : generate(task, step),
+      );
+      const task = await f.service.start(owner, 'auto-checkpoint', document);
+      const held = await f.done(task.taskId);
+      expect(held.state).toMatchObject({
+        status: 'paused',
+        calls: 2,
+        automaticRetry: {limit: 2, used: 1},
+        steps: [
+          {kind: 'split', complete: true},
+          {kind: 'tags', complete: false, attempt: 1},
+        ],
+      });
+      await f.service.pollPriceDeferred();
+      expect(f.actions.generate).toHaveBeenCalledTimes(2);
+      const now = vi
+        .spyOn(Date, 'now')
+        .mockReturnValue(
+          Date.parse(
+            requireOperationValue(held.state.automaticRetry?.notBefore),
+          ),
+        );
+      try {
+        await f.service.pollPriceDeferred();
+        await vi.waitFor(() => {
+          expect(f.rows.get(task.taskId)?.state.status).toBe('succeeded');
+        });
+        const final = requireOperationValue(f.rows.get(task.taskId));
+        expect(final.state.calls).toBe(3);
+        expect(final.state.automaticRetry).toEqual({limit: 2, used: 1});
+        expect(
+          f.actions.generate.mock.calls.map(([, step]) => step.kind),
+        ).toEqual(['split', 'tags', 'tags']);
+        expect(f.actions.publish).toHaveBeenCalledTimes(1);
+      } finally {
+        now.mockRestore();
+      }
+    },
+  );
+  it('retains scheduled retry authority across a price deferral and still honors disabling it', async () => {
+    let retries = 1;
+    const g = {
+      ...gate(1, 1),
+      check: vi.fn(() => Promise.resolve()),
+      executionSettings: () =>
+        Promise.resolve({
+          maxConcurrentRequests: 1,
+          automaticRetryLimit: retries,
+        }),
+    };
+    const f = fixture(undefined, g);
+    f.actions.generate.mockRejectedValueOnce(
+      new OperationError('rejected', 'ai_provider_timeout'),
+    );
+    const t = await f.service.start(owner, 'retry-price-switch', document);
+    const held = await f.done(t.taskId);
+    const now = vi
+      .spyOn(Date, 'now')
+      .mockReturnValue(
+        Date.parse(requireOperationValue(held.state.automaticRetry?.notBefore)),
+      );
+    try {
+      g.check
+        .mockResolvedValueOnce()
+        .mockRejectedValueOnce(new AiPriceWindowClosedError());
+      await f.service.pollPriceDeferred();
+      await vi.waitFor(() => {
+        expect(f.rows.get(t.taskId)?.state.errorCode).toBe(AI_PRICE_WAIT);
+      });
+      expect(f.rows.get(t.taskId)?.state.automaticRetry).toEqual(
+        held.state.automaticRetry,
+      );
+      expect(f.rows.get(t.taskId)?.state.calls).toBe(1);
+      retries = 0;
+      await f.service.pollPriceDeferred();
+      expect(f.actions.generate).toHaveBeenCalledTimes(1);
+      retries = 1;
+      await f.service.pollPriceDeferred();
+      await vi.waitFor(() => {
+        expect(f.rows.get(t.taskId)?.state.status).toBe('succeeded');
+      });
+    } finally {
+      now.mockRestore();
+    }
+  });
+  it('stops after the configured retry allowance', async () => {
+    const f = fixture(undefined, gate(1, 1));
+    f.actions.generate.mockRejectedValue(
+      new OperationError('rejected', 'ai_provider_invalid_json'),
+    );
+    const task = await f.service.start(owner, 'bounded-retry', document);
+    const held = await f.done(task.taskId);
+    const now = vi
+      .spyOn(Date, 'now')
+      .mockReturnValue(
+        Date.parse(requireOperationValue(held.state.automaticRetry?.notBefore)),
+      );
+    try {
+      await f.service.pollPriceDeferred();
+      await vi.waitFor(() => {
+        expect(f.rows.get(task.taskId)?.state.status).toBe('failed');
+      });
+      await f.service.pollPriceDeferred();
+      expect(f.actions.generate).toHaveBeenCalledTimes(2);
+      expect(f.rows.get(task.taskId)?.state.calls).toBe(2);
+    } finally {
+      now.mockRestore();
+    }
+  });
+  it.each([
+    'intake_held',
+    'insufficient_document_call_budget',
+    'model_call_budget_exhausted',
+    'stale_entry_revision',
+  ])('never retries %s', async (code) => {
+    const f = fixture(undefined, gate(1, 2));
+    f.actions.generate.mockRejectedValue(new OperationError('rejected', code));
+    const task = await f.service.start(owner, 'nonretry-' + code, document);
+    const result = await f.done(task.taskId);
+    expect(result.state.automaticRetry?.notBefore).toBeUndefined();
+    await f.service.pollPriceDeferred();
+    expect(f.actions.generate).toHaveBeenCalledTimes(1);
+  });
+  it.each(['pause', 'cancel', 'permission', 'price', 'disable'] as const)(
+    'honors %s while a retry is deferred',
+    async (control) => {
+      let retries = 2;
+      const g = {
+        ...gate(1, 2),
+        check: vi.fn(() => Promise.resolve()),
+        executionSettings: () =>
+          Promise.resolve({
+            maxConcurrentRequests: 1,
+            automaticRetryLimit: retries,
+          }),
+      };
+      const f = fixture(undefined, g);
+      f.actions.generate.mockRejectedValue(
+        new OperationError('rejected', 'ai_provider_timeout'),
+      );
+      const task = await f.service.start(
+        owner,
+        'retry-gate-' + control,
+        document,
+      );
+      const held = await f.done(task.taskId);
+      if (control === 'pause' || control === 'cancel')
+        await f.service.control(owner, task.taskId, held.version, control);
+      if (control === 'permission')
+        g.check.mockRejectedValue(new AiOperationsPausedError());
+      if (control === 'price')
+        g.check.mockRejectedValue(new AiPriceWindowClosedError());
+      if (control === 'disable') retries = 0;
+      const now = vi
+        .spyOn(Date, 'now')
+        .mockReturnValue(
+          Date.parse(
+            requireOperationValue(held.state.automaticRetry?.notBefore),
+          ),
+        );
+      try {
+        await f.service.pollPriceDeferred();
+        expect(f.actions.generate).toHaveBeenCalledTimes(1);
+      } finally {
+        now.mockRestore();
+      }
+    },
+  );
+  it('does not grant automatic retries to older failed tasks when settings change', async () => {
+    let retries = 0;
+    const f = fixture(undefined, {
+      ...gate(1, 0),
+      executionSettings: () =>
+        Promise.resolve({
+          maxConcurrentRequests: 1,
+          automaticRetryLimit: retries,
+        }),
+    });
+    f.actions.generate.mockRejectedValue(
+      new OperationError('rejected', 'ai_provider_timeout'),
+    );
+    const t = await f.service.start(owner, 'legacy-failure', document);
+    await f.done(t.taskId);
+    retries = 2;
+    await f.service.pollPriceDeferred();
+    expect(f.rows.get(t.taskId)?.state.automaticRetry).toBeUndefined();
+    expect(f.actions.generate).toHaveBeenCalledTimes(1);
+  });
 });

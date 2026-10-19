@@ -1,0 +1,1203 @@
+/* Declarations copied from accepted study.css; application selector aliases only. */
+.ef-app .stat[data-kind='relations'] .stat-label {
+  color: var(--blue);
+}
+.ef-app .stat[data-kind='tags'] .stat-label {
+  color: var(--coral);
+}
+.ef-app .button-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ef-app
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--control);
+  border-radius: 10px;
+  background: var(--raised);
+  color: var(--ink);
+  padding: 10px 14px;
+  min-height: 40px;
+  font-size: 13px;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px #0000000a;
+}
+.ef-app .primary-action {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--onAccent);
+  font-weight: 650;
+}
+.ef-app [data-ai-action='true'] {
+  background: var(--aiSoft);
+  border-color: var(--ai);
+  color: var(--ai);
+}
+.ef-app
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ).ghost {
+  background: transparent;
+}
+.ef-app
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ).small {
+  padding: 7px 11px;
+  min-height: 34px;
+  font-size: 12px;
+}
+.ef-app .stats-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  padding: 18px 0;
+  flex: none;
+}
+.ef-app .stat {
+  padding: 0 22px;
+  border-right: 1px solid var(--line);
+}
+.ef-app .stat:last-child {
+  border: 0;
+}
+.ef-app .stat-label {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 7px;
+}
+.ef-app .stat-value {
+  font-size: 29px;
+  line-height: 1.2;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+.ef-app .stat-value small {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+  margin-left: 8px;
+  color: var(--muted);
+}
+.ef-app .stat-value .small-delta {
+  margin-left: 12px;
+  color: var(--good);
+  font-size: 10px;
+}
+.ef-app .flow-panel {
+  flex: 1;
+  min-height: 0;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+}
+.ef-app .flow-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.ef-app .kicker {
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.ef-app .flow-heading h2 {
+  font-size: 19px;
+  font-weight: 650;
+}
+.ef-app .legend {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 18px;
+}
+.ef-app .legend > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ef-app .legend .hint {
+  margin-left: auto;
+  font-size: 10px;
+}
+.ef-app .flow-track {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 26px;
+  margin: 30px 0 26px;
+  flex: none;
+}
+.ef-app .flow-node {
+  position: relative;
+  background: var(--raised);
+  border: 1px solid var(--control);
+  border-radius: 16px;
+  padding: 14px;
+  min-height: 203px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.ef-app .flow-node:after {
+  content: '→';
+  position: absolute;
+  left: calc(100% + 5px);
+  top: 91px;
+  color: var(--muted);
+  font-size: 20px;
+}
+.ef-app .flow-node:last-child:after {
+  display: none;
+}
+.ef-app .node-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--muted);
+}
+.ef-app .node-top span:first-child {
+  font:
+    10px Consolas,
+    monospace;
+}
+.ef-app .node-icon {
+  margin-top: 8px;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--panel);
+  color: var(--muted);
+}
+.ef-app .flow-node .node-title {
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.ef-app .flow-node .node-caption {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.ef-app .flow-node .node-count {
+  font-size: 11px;
+  margin-top: auto;
+  color: var(--muted);
+}
+.ef-app .flow-node.running {
+  border-color: var(--ai);
+  background: var(--aiSoft);
+}
+.ef-app .flow-node.running .node-icon {
+  color: var(--ai);
+  background: var(--panel);
+}
+.ef-app .flow-node.running .node-top span:last-child {
+  color: var(--accent);
+}
+.ef-app .flow-node.running small {
+  color: var(--ai);
+}
+.ef-app .flow-node.running:before {
+  content: 'AI 自动';
+  position: absolute;
+  top: -12px;
+  left: 14px;
+  font-size: 10px;
+  background: var(--panel);
+  color: var(--ai);
+  border: 1px solid var(--ai);
+  border-radius: 5px;
+  padding: 2px 7px;
+}
+.ef-app .flow-node.review {
+  background: var(--warnSoft);
+  border-color: var(--warn);
+}
+.ef-app .flow-node.review :is(.node-icon, small, .node-top span:last-child) {
+  color: var(--warn);
+}
+.ef-app .flow-node.done :is(.node-icon, small, .node-top span:last-child) {
+  color: var(--good);
+}
+.ef-app .flow-node.failed {
+  background: var(--badSoft);
+  border-color: var(--bad);
+}
+.ef-app .flow-node.failed :is(.node-icon, small, .node-top span:last-child) {
+  color: var(--bad);
+}
+.ef-app .flow-node.waiting :is(small, .node-top span:last-child) {
+  color: var(--warn);
+}
+.ef-app .flow-lower {
+  display: grid;
+  grid-template-columns: 1.65fr 1fr;
+  gap: 24px;
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+  min-height: 0;
+  flex: 1;
+}
+.ef-app .flow-detail {
+  min-width: 0;
+}
+.ef-app .section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ef-app .section-heading h3 {
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ef-app .flow-detail > p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 12px 0;
+}
+.ef-app .flow-message {
+  border-left: 1px solid var(--line);
+  padding-left: 22px;
+}
+.ef-app .flow-message h3 {
+  font-size: 15px;
+  color: var(--ai);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ef-app .flow-message dl {
+  margin: 16px 0 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  font-size: 12px;
+  gap: 12px;
+}
+.ef-app .flow-message dt {
+  color: var(--muted);
+}
+.ef-app .flow-message dd {
+  margin: 0;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.ef-app .reader-footer .button-row {
+  gap: 7px;
+}
+.ef-app
+  .reader-footer
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ) {
+  font-size: 12px;
+  padding: 9px 11px;
+}
+
+/* Declarations copied from accepted details.css; application selector aliases only. */
+.detail-app
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ) {
+  border-width: var(--d-stroke);
+  border-radius: var(--d-control-radius);
+  min-height: var(--d-button);
+  padding: 8px 12px;
+  font-size: var(--d-ui);
+  font-weight: var(--d-control-weight);
+  box-shadow: none;
+}
+.detail-app .primary-action {
+  font-weight: 600;
+}
+.detail-app
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ).small {
+  min-height: var(--d-small-button);
+  font-size: 13px;
+  padding: 6px 10px;
+}
+.detail-app
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ):hover {
+  background: var(--panel);
+}
+.detail-app .primary-action:hover {
+  background: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--onAccent);
+}
+.detail-app
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ):active {
+  background: var(--bg);
+}
+.detail-app .primary-action:active {
+  background: var(--accentSoft);
+  color: var(--accent);
+}
+.detail-app .stats-row {
+  padding: 20px 0;
+}
+.detail-app .stat {
+  padding-inline: 20px;
+}
+.detail-app .stat-label {
+  font-size: 12px;
+}
+.detail-app .stat-value {
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.detail-app .stat-value small,
+.detail-app .stat-value .small-delta {
+  font-size: 12px;
+}
+.detail-app .flow-panel {
+  padding: var(--d-inset);
+}
+.detail-app .flow-heading h2 {
+  font-size: var(--d-section);
+  font-weight: 600;
+}
+.detail-app .kicker {
+  font-size: 12px;
+}
+.detail-app .legend {
+  font-size: 12px;
+  gap: 16px;
+  margin-top: 16px;
+}
+.detail-app .legend .hint {
+  font-size: 12px;
+}
+.detail-app .flow-track {
+  gap: 20px;
+  margin: 24px 0;
+}
+.detail-app .flow-node {
+  padding: 12px;
+  min-height: 200px;
+  border-radius: calc(var(--d-radius) - 4px);
+  border-width: var(--d-stroke);
+  gap: 8px;
+}
+.detail-app .flow-node:after {
+  left: calc(100% + 3px);
+}
+.detail-app .flow-node .node-title {
+  font-size: 20px;
+  font-weight: 600;
+}
+.detail-app .flow-node .node-caption,
+.detail-app .flow-node .node-count,
+.detail-app .node-top {
+  font-size: 12px;
+}
+.detail-app .node-top span:first-child {
+  font:
+    12px 'Noto Sans SC',
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.detail-app .node-icon {
+  border-radius: var(--d-control-radius);
+}
+.detail-app .flow-node.running:before {
+  font-size: 12px;
+  border-radius: var(--d-tag-radius);
+  top: -14px;
+}
+.detail-app .flow-lower {
+  gap: var(--d-gap);
+  padding-top: 16px;
+}
+.detail-app .flow-detail,
+.detail-app .flow-message {
+  overflow: auto;
+  min-height: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--control) var(--panel);
+}
+.detail-app .flow-message {
+  padding-left: var(--d-inset);
+}
+.detail-app .section-heading h3,
+.detail-app .flow-message h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.detail-app .flow-detail > p {
+  line-height: 1.7;
+  font-size: 12px;
+  margin: 12px 0;
+}
+.detail-app .flow-message dl {
+  font-size: 13px;
+  gap: 12px;
+}
+.detail-app
+  .reader-footer
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ) {
+  font-size: 13px;
+  padding: 8px 10px;
+}
+.detail-app .reader-footer .button-row {
+  gap: 8px;
+}
+
+/* Declarations copied from accepted effects.css; application selector aliases only. */
+.ef-app
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ) {
+  position: relative;
+  --ef-edge: var(--ink);
+  transition:
+    transform 220ms var(--ef-ease),
+    background-color 320ms ease-out;
+}
+.ef-app .primary-action {
+  --ef-edge: var(--accent);
+}
+.ef-app [data-ai-action='true'] {
+  --ef-edge: var(--ai);
+}
+.ef-app
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ):not(:disabled):active {
+  transform: scale(0.98);
+}
+body[data-effects='on'][data-glow='on']
+  :is(.ef-app, .ef-panel, .ef-material-board)
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ):not(:disabled) {
+  border-color: color-mix(in srgb, var(--ef-edge) 75%, transparent);
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--ef-edge) 20%, transparent),
+    inset 0 0 8px color-mix(in srgb, var(--ef-edge) 5%, transparent);
+}
+body[data-effects='on'][data-glow='on']
+  :is(.ef-app, .ef-panel, .ef-material-board)
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  )::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border: 1px solid var(--ef-edge);
+  border-radius: inherit;
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--ef-edge) 50%, transparent),
+    0 0 28px color-mix(in srgb, var(--ef-edge) 23%, transparent),
+    inset 0 0 10px color-mix(in srgb, var(--ef-edge) 8%, transparent);
+  opacity: calc(0.22 * var(--ef-strength));
+  pointer-events: none;
+  transition: opacity 360ms ease-in-out;
+}
+body[data-effects='on'][data-glow='on']
+  :is(.ef-app, .ef-panel, .ef-material-board)
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ):is(.primary, .ai, .primary-action, [data-ai-action='true'])::after {
+  opacity: calc(0.5 * var(--ef-strength));
+}
+body[data-effects='on'][data-glow='on']
+  :is(.ef-app, .ef-panel, .ef-material-board)
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ):is(:hover, :focus-visible)::after {
+  opacity: calc(0.85 * var(--ef-strength));
+}
+body[data-effects='on'][data-glass='on']
+  :is(
+    .ef-glass,
+    .floating-tool-panel__surface,
+    .workspace-tool-panel,
+    .overview-queue-dialog,
+    .document-queue-dialog,
+    .source-quality-dialog,
+    .history-preview,
+    .report-edit-workbench,
+    .reading-segments,
+    .journey-query-mode
+  ) {
+  background:
+    linear-gradient(
+      130deg,
+      #ffffff20,
+      #ffffff03 35%,
+      transparent 60%,
+      #ffffff16
+    ),
+    rgb(30 33 36 / 0.32);
+  border: 1px solid rgb(238 237 231 / 0.54);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  backdrop-filter: blur(12px) saturate(150%);
+  box-shadow:
+    inset 1px 1px 0 #ffffff91,
+    inset -1px -1px 0 #ffffff21,
+    0 16px 36px #0006;
+}
+body[data-effects='on'][data-glass='on']
+  :is(
+    .ef-glass,
+    .floating-tool-panel__surface,
+    .workspace-tool-panel,
+    .overview-queue-dialog,
+    .document-queue-dialog,
+    .source-quality-dialog,
+    .history-preview,
+    .report-edit-workbench,
+    .reading-segments,
+    .journey-query-mode
+  )::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 20% 0%, #ffffff1f, transparent 60%);
+  border-top: 1px solid #ffffff70;
+  border-left: 1px solid #ffffff30;
+}
+.ef-app .ef-lamp {
+  width: 14px;
+  height: 14px;
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  color: var(--ef-signal);
+  flex: none;
+}
+.ef-app .ef-lamp i {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    #f0faff 0%,
+    currentColor 30%,
+    transparent 75%
+  );
+  filter: blur(0.5px);
+}
+body[data-effects='on'][data-glow='on'] .ef-lamp i {
+  box-shadow:
+    0 0 12px color-mix(in srgb, currentColor 60%, transparent),
+    0 0 26px color-mix(in srgb, currentColor 35%, transparent);
+}
+.ef-app .ef-lamp::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+  border-radius: 50%;
+  border: 0;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, currentColor 38%, transparent),
+    color-mix(in srgb, currentColor 16%, transparent) 35%,
+    transparent 72%
+  );
+  filter: blur(3px);
+  opacity: 0;
+}
+body[data-effects='on'][data-task-status='running'] .ef-lamp::before,
+body[data-effects='on']
+  .document-processing-strip[data-running='true']
+  .ef-lamp::before {
+  opacity: 0.5;
+  animation: ef-breathe 5600ms ease-in-out infinite;
+}
+.ef-app .ef-system-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 12px;
+  border-right: 1px solid var(--line);
+}
+.ef-app .ef-system-state:last-child {
+  border-right: 0;
+}
+.ef-app .ef-system-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--muted);
+}
+.ef-app .ef-system-copy {
+  display: grid;
+  gap: 3px;
+  white-space: nowrap;
+}
+.ef-app .ef-system-copy > span {
+  font-size: 10px;
+  line-height: 1.1;
+  color: var(--muted);
+}
+.ef-app .ef-system-copy b {
+  font-size: 12px;
+  line-height: 1.2;
+  font-weight: 500;
+  color: var(--ink);
+}
+.ef-app .ef-system-ready {
+  width: 4px;
+  height: 4px;
+  background: var(--good);
+  border-radius: 2px;
+}
+.ef-app .ef-system-ai .ef-system-icon {
+  color: var(--ai);
+  background: #9ed3e90c;
+}
+.ef-app .ef-status-capacity {
+  margin-left: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  line-height: 1;
+  border: 1px solid #9ed3e936;
+  border-radius: 4px;
+  background: #9ed3e90a;
+  font-variant-numeric: tabular-nums;
+}
+.ef-app .ef-document-title-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.ef-app .ef-document-title-meta .document-subline {
+  margin: 0;
+}
+.ef-app .ef-document-process {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ai);
+  font-size: 12px;
+  line-height: 20px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.ef-app .flow-node {
+  cursor: pointer;
+}
+.ef-app .flow-node.running .node-top span:last-child {
+  color: var(--ai);
+}
+.ef-app .flow-node::after {
+  display: none;
+}
+.ef-app .ef-flow-ray {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 2px);
+  height: 2px;
+  width: 18px;
+  background: var(--control);
+}
+.ef-app .flow-track > li:last-child .ef-flow-ray {
+  display: none;
+}
+.ef-app .flow-message {
+  border: 1px solid var(--line);
+  position: relative;
+  border-radius: 14px;
+  padding: 16px;
+  margin-left: 8px;
+}
+@keyframes ef-breathe {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+@keyframes ef-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+body[data-effects='off'] .ef-lamp::before {
+  opacity: 0;
+}
+@media (prefers-reduced-transparency: reduce) {
+  body[data-effects='on'][data-glass='on']
+    :is(
+      .ef-glass,
+      .floating-tool-panel__surface,
+      .workspace-tool-panel,
+      .overview-queue-dialog,
+      .document-queue-dialog,
+      .source-quality-dialog,
+      .history-preview,
+      .report-edit-workbench,
+      .reading-segments,
+      .journey-query-mode
+    ) {
+    background: var(--raised);
+    backdrop-filter: none;
+  }
+}
+@supports not (backdrop-filter: blur(1px)) {
+  body[data-effects='on'][data-glass='on']
+    :is(
+      .ef-glass,
+      .floating-tool-panel__surface,
+      .workspace-tool-panel,
+      .overview-queue-dialog,
+      .document-queue-dialog,
+      .source-quality-dialog,
+      .history-preview,
+      .report-edit-workbench,
+      .reading-segments,
+      .journey-query-mode
+    ) {
+    background: var(--raised);
+  }
+}
+@media (max-height: 980px) {
+  .ef-app:has(.flow-panel) .app-main {
+    gap: 12px;
+  }
+  .ef-app:has(.flow-panel) .page-title {
+    min-height: 62px;
+  }
+  .ef-app .stats-row {
+    padding-block: 12px;
+  }
+  .ef-app .flow-panel {
+    padding-block: 16px;
+  }
+  .ef-app .legend {
+    margin-top: 12px;
+  }
+  .ef-app .flow-track {
+    margin: 20px 0 12px;
+  }
+  .ef-app .flow-node {
+    min-height: 160px;
+    gap: 6px;
+  }
+  .ef-app .node-icon {
+    width: 32px;
+    height: 32px;
+    margin-top: 4px;
+  }
+  .ef-app .flow-detail > p {
+    margin-block: 8px;
+  }
+  .ef-app .flow-message dl {
+    margin-top: 12px;
+    gap: 8px;
+  }
+}
+
+/* Declarations copied from accepted effects-flow.css; application selector aliases only. */
+.ef-app .stats-row {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.ef-app .stat {
+  position: relative;
+}
+.ef-app .stat-value {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.ef-app .stat-value small {
+  margin: 0;
+}
+.ef-app .ef-stat-number {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+}
+.ef-app .stat[data-kind='reports'] .stat-label {
+  color: var(--muted);
+}
+.ef-app .stats-row {
+  overflow: visible;
+}
+.ef-app .ef-result-caption {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.ef-app .flow-heading .kicker {
+  display: none;
+}
+.ef-app .flow-track {
+  gap: 36px;
+  margin-top: 50px;
+}
+.ef-app .flow-node::before {
+  content: none;
+}
+.ef-app .ef-stage-ai-label {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--ai) 70%, var(--panel));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ai) 10%, var(--panel));
+  box-shadow:
+    inset 0 1px 0 #def5ff1a,
+    0 3px 10px #00000026;
+  color: var(--ai);
+  font:
+    600 13px/16px 'Noto Sans SC',
+    sans-serif;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.ef-app .flow-node.running .ef-stage-ai-label {
+  display: inline-flex;
+}
+.ef-app .ef-stage-ai-label strong {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.ef-app .ef-stage-ai-label > span {
+  padding-left: 7px;
+  border-left: 1px solid color-mix(in srgb, var(--ai) 32%, transparent);
+}
+.ef-app .ef-stage-ai-label::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: calc(50% - 0.5px);
+  width: 1px;
+  height: 9px;
+  background: linear-gradient(var(--ai), transparent);
+}
+.ef-app .flow-node {
+  transition:
+    border-color 1600ms ease-in-out,
+    background-color 1600ms ease-in-out;
+}
+.ef-app .ef-flow-ray {
+  left: 100%;
+  top: calc(50% - 6px);
+  width: 38px;
+  height: 12px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #bcbcb816, #bcbcb82a 50%, #bcbcb816);
+  box-shadow: inset 0 0 0 1px #bcbcb812;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ef-app .ef-node-ring {
+  position: absolute;
+  inset: -28px;
+  width: calc(100% + 56px);
+  height: calc(100% + 56px);
+  pointer-events: none;
+}
+.ef-app .flow-node.running {
+  border-color: var(--control);
+}
+body[data-effects='on'] .flow-node.running .node-icon {
+  box-shadow: 0 0 15px #9ed3e92a;
+}
+.ef-app .ef-result-transfer {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  color: var(--ai);
+}
+.ef-app .ef-energy-ray path {
+  fill: none;
+  stroke: var(--ai);
+  stroke-linecap: round;
+}
+.ef-app .ef-energy-charge {
+  opacity: 0;
+}
+.ef-app .ef-energy-packet {
+  opacity: 0;
+}
+.ef-app .ef-energy-soft {
+  filter: blur(10px);
+  stroke-opacity: 0.65;
+}
+.ef-app .ef-energy-body {
+  filter: blur(4.5px);
+  stroke-opacity: 0.9;
+}
+.ef-app .ef-energy-ray .ef-energy-core {
+  stroke: #def5ff;
+  filter: blur(1.7px);
+}
+.ef-app .ef-energy-node .ef-energy-soft {
+  filter: blur(5px);
+}
+.ef-app .ef-energy-node .ef-energy-body {
+  filter: blur(2.4px);
+}
+.ef-app .ef-energy-node .ef-energy-core {
+  filter: blur(0.9px);
+}
+.ef-app .ef-stat-change {
+  color: var(--ai);
+  font:
+    500 16px/1.2 'Noto Sans SC',
+    sans-serif;
+  position: absolute;
+  bottom: 1px;
+  right: 14px;
+  animation: ef-delta-rise var(--ef-delta-ms) ease-in-out both;
+}
+.ef-app .ef-stat-arriving .ef-stat-number {
+  animation: ef-stat-receive var(--ef-count-ms) ease-in-out both;
+}
+.ef-app .ef-stat-arriving::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 20px;
+  right: 20px;
+  height: 2px;
+  background: var(--ai);
+  border-radius: 1px;
+  box-shadow: 0 0 12px #9ed3e990;
+  transform-origin: center;
+  animation: ef-stat-underline 2200ms ease-in-out both;
+}
+@keyframes ef-stat-receive {
+  0% {
+    color: var(--ai);
+    transform: translateY(4px);
+    text-shadow: 0 0 12px #9ed3e980;
+  }
+  35% {
+    transform: translateY(0);
+    color: var(--ai);
+  }
+  100% {
+    color: var(--ink);
+    text-shadow: none;
+  }
+}
+@keyframes ef-delta-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  20%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+}
+@keyframes ef-stat-underline {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.3);
+  }
+  25% {
+    opacity: 0.9;
+    transform: scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+body[data-motion='off'] .ef-result-transfer {
+  display: none;
+}
+@media (max-height: 980px) {
+  .ef-app .flow-heading > div:first-child {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+  }
+  .ef-app .ef-result-caption {
+    margin-top: 0;
+  }
+  .ef-app .flow-track {
+    margin-top: 46px;
+  }
+  .ef-app .flow-lower {
+    padding-top: 14px;
+  }
+  .ef-app .flow-message {
+    padding-block: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ef-app .ef-result-transfer {
+    display: none;
+  }
+  .ef-app .ef-stat-number {
+    text-shadow: none;
+    transform: none;
+  }
+}
+@media (max-width: 1350px) {
+  .ef-app .ef-stat-change {
+    top: -20px;
+    bottom: auto;
+    right: 0;
+    font-size: 14px;
+  }
+}
+
+/* Accepted reader controls from effects.css; product class / pressed-state aliases. */
+.ef-app .journey-floating-bar {
+  border-radius: 16px;
+  padding: 12px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 -4px 12px #00000014;
+}
+.ef-app
+  .journey-floating-bar
+  > .journey-action-group:not(.journey-ai-actions)
+  .secondary-action {
+  background: transparent;
+}
+.ef-app
+  :is(.reading-segments, .journey-query-mode, .workspace-selection)
+  button {
+  padding: 7px 14px;
+  min-height: 34px;
+  font-size: 13px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+}
+.ef-app
+  :is(.reading-segments, .journey-query-mode, .workspace-selection)
+  button[aria-pressed='true'] {
+  color: var(--accent);
+  background: #484033;
+  border-color: #c4a66b;
+}
+body[data-effects='on'][data-glass='on']
+  .ef-app
+  :is(.reading-segments, .journey-query-mode, .workspace-selection)
+  button[aria-pressed='true'] {
+  background: linear-gradient(160deg, #fff3, #fff0), #f3cd7b22;
+  box-shadow:
+    inset 0 1px 0 #fff5,
+    0 0 12px #f3cd7b22;
+}

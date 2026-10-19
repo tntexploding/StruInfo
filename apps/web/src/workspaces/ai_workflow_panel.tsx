@@ -226,8 +226,11 @@ export function AiWorkflowPanel({
           ) : null}
           {mode === 'settings' ? (
             <>
-              <details className="workflow-tool-drawer">
-                <summary>处理范围与预算</summary>
+              <section
+                className="settings-subgroup"
+                aria-labelledby="ai-policy-settings-title"
+              >
+                <h3 id="ai-policy-settings-title">处理范围与预算</h3>
                 <AiPolicyEditor
                   policy={view.queue.policy}
                   sources={view.sources}
@@ -235,9 +238,12 @@ export function AiWorkflowPanel({
                   busy={busy}
                   onSave={save}
                 />
-              </details>
-              <details className="workflow-tool-drawer">
-                <summary>手动启动一份文档</summary>
+              </section>
+              <section
+                className="settings-subgroup"
+                aria-labelledby="ai-single-document-title"
+              >
+                <h3 id="ai-single-document-title">手动启动一份文档</h3>
                 <SingleDocumentTask
                   documents={documents}
                   disabled={busy || !view.runtime.model}
@@ -265,7 +271,7 @@ export function AiWorkflowPanel({
                     )
                   }
                 />
-              </details>
+              </section>
             </>
           ) : null}
           <div className="ai-queue-heading">

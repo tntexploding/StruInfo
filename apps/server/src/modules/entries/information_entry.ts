@@ -206,6 +206,53 @@ export function prepareAiSplitInformationEntries(
   snapshot: Readonly<MaterializedEvidenceSnapshot>,
   groups: readonly Readonly<EntryFragmentGroupInput>[],
 ): readonly Readonly<InformationEntryMaterializeRow>[] | undefined {
+  if (groups.some((g) => g.fragmentRanges !== undefined)) {
+    const whole = snapshot.structures[0]?.fragments.find(
+      (f) => f.nodeKind === 'document',
+    );
+    if (
+      !whole ||
+      groups.some(
+        (g) =>
+          g.fragmentIds.length !== 1 ||
+          g.fragmentIds[0] !== whole.fragmentId ||
+          g.fragmentRanges?.length !== 1,
+      )
+    )
+      return undefined;
+    const rows = prepareManualSplitInformationEntries(
+      snapshot,
+      groups.map((g) => ({
+        titlePath: g.titlePath,
+        fragments: g.fragmentIds.map((fragmentId, i) => ({
+          fragmentId,
+          startCodePoint: g.fragmentRanges?.[i]?.startCodePoint ?? -1,
+          endCodePoint: g.fragmentRanges?.[i]?.endCodePoint ?? -1,
+        })),
+      })),
+    );
+    return rows?.map((row) => {
+      const entryId = deriveInformationEntryId(
+        snapshot.snapshotId,
+        whole.structureId,
+        'ai-range-v1:' +
+          informationEntryBodySha256(
+            JSON.stringify([row.value.fragmentIds, row.value.fragmentRanges]),
+          ),
+      );
+      return Object.freeze({
+        ...row,
+        entryId,
+        revisionId: deriveInformationEntryRevisionId(entryId, 1),
+        value: Object.freeze({
+          ...row.value,
+          splitRuleVersion: AI_ENTRY_SPLIT_RULE_VERSION,
+          chunkMode:
+            groups.length === 1 ? ('whole' as const) : ('split' as const),
+        }),
+      });
+    });
+  }
   return prepareGroupedInformationEntries(snapshot, groups, {
     commonMark: true,
     splitRuleVersion: AI_ENTRY_SPLIT_RULE_VERSION,
@@ -239,13 +286,32 @@ export function prepareManualSplitInformationEntries(
   if (structure === undefined || groups.length < 1 || groups.length > 256) {
     return undefined;
   }
-  const sections = structure.fragments
+  let sections = structure.fragments
     .filter((fragment) => fragment.nodeKind === 'section')
     .sort((left, right) =>
       left.codePointRange.start !== right.codePointRange.start
         ? left.codePointRange.start - right.codePointRange.start
         : left.fragmentId.localeCompare(right.fragmentId),
     );
+  if (sections.length === 0) {
+    const whole = structure.fragments.find(
+      (f) =>
+        f.nodeKind === 'document' &&
+        f.codePointRange.start === 0 &&
+        f.selectedText === structure.normalizedText &&
+        f.codePointRange.end ===
+          Array.from(structure.normalizedText ?? '').length,
+    );
+    // Preserve the representation already used by the current Entry. Both
+    // alternatives still require complete, ordered evidence coverage below.
+    sections =
+      whole &&
+      groups.every((g) =>
+        g.fragments.every((f) => f.fragmentId === whole.fragmentId),
+      )
+        ? [whole]
+        : aiSplitEvidenceFragments(snapshot);
+  }
   const scalarTextByFragment = new Map(
     sections.map((fragment) => [
       fragment.fragmentId,
@@ -573,8 +639,10 @@ export function prepareAiEntryTagRevision(
   ) {
     return undefined;
   }
+  const priorValue = {...current.value};
+  delete priorValue.typeCustomName;
   return Object.freeze({
-    ...current.value,
+    ...priorValue,
     typeKeyword: type.keyword,
     ...(type.customName === undefined ? {} : {typeCustomName: type.customName}),
     contentKeywords,

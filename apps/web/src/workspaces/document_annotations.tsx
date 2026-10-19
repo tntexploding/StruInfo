@@ -156,7 +156,7 @@ export function DocumentAnnotations({
             ) : null}
           </dl>
           <p className="document-relation-caution">
-            关系说明供阅读参考，不代表两篇内容互相证实。
+            关系说明用于比较两篇资料，事实请结合原文核对。
           </p>
         </AnnotationOverflow>
       </div>

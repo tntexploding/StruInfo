@@ -13,6 +13,8 @@ const descriptions: Record<AgentCommandName, string> = {
     'Read local Markdown for a completed report; labels draft/reviewed status and preserves citations. Does not send or publish it.',
   system_status:
     'Inspect model availability, process role and configured Agent grants. No secrets are returned.',
+  processing_standard:
+    'Read the versioned document-processing instructions used by the internal models. Read before preparing external output; optionally select intake, split, tags, recall or relations. Rules guide judgments; task schemas, current grants and revisions still govern writes. Read-only, no model call or content access.',
   document_import:
     'Capture public Markdown text with a stable requestKey. Retry identical requests with the same key. May enroll the document in an already enabled ingestion policy; requires capture.',
   document_sections:
@@ -55,14 +57,14 @@ const descriptions: Record<AgentCommandName, string> = {
   task_read:
     'Inspect task authorization, progress, proposal identities and recoverable errors.',
   task_start:
-    'Start an idempotent authorized task. intake reviews a pending receipt and accepts only complete admitted material, then stops without splitting/tags/relations; requires process and automate, plus capture when fetching full text. document reviews and accepts when needed, then splits, tags, evaluates relations and publishes only after completion; receiving pending material additionally requires automate; split/tags/relation accept external Agent output without internal model calls. For split, first read document_sections and submit a complete ordered partition; structure grant required. Reuse requestKey on retry. Relation low/high means sorted UUID order. Private content is forbidden.',
+    'Start an idempotent authorized task. Read processing_standard before preparing external output. intake reviews a pending receipt and accepts only complete admitted material, then stops without splitting/tags/relations; requires process and automate, plus capture when fetching full text. document reviews and accepts when needed, then splits, tags, evaluates relations and publishes only after completion; receiving pending material additionally requires automate; split/tags/relation accept external Agent output without internal model calls. For split, first read document_sections and submit a complete ordered partition; structure grant required. Reuse requestKey on retry. Relation low/high means sorted UUID order. Private content is forbidden.',
   task_control:
     'Pause at a stage boundary, resume or cancel with the latest task version. Completed writes remain.',
 };
 export function createAgentMcpServer(
   call: (operation: AgentCommandName, input: unknown) => Promise<unknown>,
 ) {
-  const server = new McpServer({name: 'struinfo', version: '0.3.0'});
+  const server = new McpServer({name: 'struinfo', version: '0.4.0'});
   for (const [key, schema] of Object.entries(agentCommandSchemas)) {
     const name = key as AgentCommandName;
     server.registerTool(

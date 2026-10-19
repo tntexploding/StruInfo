@@ -83,6 +83,15 @@ export const intakeRecordValueSchema = z
     decision: z.enum(['pending', 'admitted', 'held', 'blocked']),
     origin: z.enum(['system', 'model', 'manual']),
     reason: z.string().trim().max(500),
+    manualReviewNote: z.string().trim().max(500).optional(),
+    appliedManualReviews: z
+      .array(
+        z
+          .object({snapshotId: z.uuid(), version: z.number().int().min(1)})
+          .strict(),
+      )
+      .max(8)
+      .optional(),
     preparedSnapshotId: z.uuid().optional(),
     bodySource: z.enum(['received', 'web_article']).optional(),
     previousPreparedSnapshotIds: z.array(z.uuid()).max(16).optional(),
@@ -139,6 +148,12 @@ export interface IntakeReviewInput {
   readonly preparation: 'received' | 'web_article';
   readonly policy: IntakePolicy;
   readonly publishedAt?: string;
+  readonly manualReviews?: readonly Readonly<{
+    decision: 'accept' | 'reject';
+    excerpt: string;
+    ownerReason?: string;
+    previousAiAssessment?: IntakeAssessment;
+  }>[];
 }
 export const relationRecallPlanSchema = z
   .object({

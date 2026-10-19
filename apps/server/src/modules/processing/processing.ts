@@ -92,9 +92,14 @@ export function assertProcessingProposalAppend(
     uuid(value.targetSnapshotId);
     if (value.splitPayload !== undefined) {
       assertProcessingSplitProposalPayload(value.splitPayload);
-      const payloadIds = value.splitPayload.entries.flatMap(
+      const rawIds = value.splitPayload.entries.flatMap(
         (entry) => entry.fragmentIds,
       );
+      const payloadIds = value.splitPayload.entries.some(
+        (e) => e.fragmentRanges !== undefined,
+      )
+        ? [...new Set(rawIds)]
+        : rawIds;
       if (
         payloadIds.length !== value.fragmentIds.length ||
         payloadIds.some(
@@ -155,6 +160,9 @@ export function assertProcessingSplitProposalPayload(
     fail();
   const fragmentIds = new Set<string>();
   let inputCount = 0;
+  const ranged = value.entries.some((e) => e.fragmentRanges !== undefined);
+  let rangeEnd = 0;
+  let rangeAnchor: string | undefined;
   for (const entry of value.entries) {
     boundedText(entry.titlePath, 200);
     if (
@@ -163,9 +171,27 @@ export function assertProcessingSplitProposalPayload(
       entry.fragmentIds.length > MAXIMUM_AI_SPLIT_FRAGMENTS
     )
       fail();
+    if (ranged) {
+      const range = entry.fragmentRanges?.[0];
+      if (
+        entry.fragmentIds.length !== 1 ||
+        entry.fragmentRanges?.length !== 1 ||
+        !range ||
+        !Number.isSafeInteger(range.startCodePoint) ||
+        !Number.isSafeInteger(range.endCodePoint) ||
+        range.startCodePoint !== rangeEnd ||
+        range.endCodePoint <= range.startCodePoint ||
+        range.endCodePoint > 320_000
+      )
+        fail();
+      const anchor = entry.fragmentIds[0];
+      if (rangeAnchor !== undefined && rangeAnchor !== anchor) fail();
+      rangeAnchor = anchor;
+      rangeEnd = range.endCodePoint;
+    }
     for (const fragmentId of entry.fragmentIds) {
       uuid(fragmentId);
-      if (fragmentIds.has(fragmentId)) fail();
+      if (!ranged && fragmentIds.has(fragmentId)) fail();
       fragmentIds.add(fragmentId);
       inputCount += 1;
     }
@@ -206,7 +232,7 @@ export function assertProcessingTagProposalPayload(
   if (
     !isArrayValue(value.contentKeywords) ||
     value.contentKeywords.length < 1 ||
-    value.contentKeywords.length > 12
+    value.contentKeywords.length > 24
   )
     fail();
   const keywordIdentities = new Set<string>();

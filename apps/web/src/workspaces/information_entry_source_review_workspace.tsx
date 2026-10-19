@@ -170,7 +170,7 @@ export function InformationEntrySourceReviewWorkspace({
       <header className="workflow-page-heading">
         <div>
           <h1>来源复核</h1>
-          <p>逐条回看关系两端的证据，记录核验状态与需要继续检查的问题。</p>
+          <p>对照关系两端的原文，记录核对结果和待查问题。</p>
         </div>
         <button type="button" className="secondary-action" onClick={onBack}>
           返回图谱

@@ -85,14 +85,14 @@ export function InformationEntryTranslation({
       </div>
       <p className="workflow-boundary-note">
         {entry.value.isPrivate
-          ? '隐私条目仅支持原文阅读，不会发送给翻译服务。'
+          ? '隐私条目仅支持阅读原文。'
           : state.translation !== undefined
             ? '译文单独保存，原文保留。'
             : !services.enabled
               ? '翻译服务尚未启用。配置后可按需生成。'
               : tooLarge
                 ? '标题与正文超过 24,000 字符，本次无法翻译。'
-                : '点击生成会将当前条目的标题和正文发送给 模型服务。译文单独保存，原文保留；仅翻译已入库内容，摘要不会补全为全文。'}
+                : '生成译文时，将当前条目的标题和正文发送给模型服务。译文单独保存，原文保留。翻译范围以已接收的正文为准。'}
       </p>
       <div role="status" aria-live="polite">
         {state.busy === 'reading' ? <p>正在读取已保存的译文…</p> : null}

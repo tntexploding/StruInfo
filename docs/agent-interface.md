@@ -1,5 +1,26 @@
 # AI 自动处理与外部 Agent 接口
 
+## 跨模型处理规范（2026-10-12）
+
+外部 Agent 在整理前调用 `processing_standard`。省略参数返回完整规范，
+`{"stage":"split"}` 返回通用规则与拆分规则；其他阶段为 `intake`、`tags`、`recall`、
+`relations`。返回 `{version, stages, instructions}`，当前版本为
+`struinfo.document-processing.v1`，与内置 Responses 适配器使用同一文本。
+此读取只需既有 `read` grant 中的 `processing.read`，不读取文档、偏好或密钥，不调用模型，
+不授予新写权限。本机所有者也可从 `/api/v1/ai-tasks/commands` 调用。
+
+```json
+{"operation": "processing_standard", "input": {"stage": "relations"}}
+```
+
+按规范理解材料，再按 `task_start` 的实际 schema 提交：内置拆分的 `documentMode/context`
+等编码不是外部写入字段；外部提交已合并相邻依赖的连续分组。外部联系写入只接受真实要建立
+的联系，判断无联系时跳过候选。不能照抄其他适配器的 JSON 字段，也不能由规范内容推导授权。
+处理及对照记录应保留返回的规范版本；本接口不会替客户端记录其遵守情况。
+
+中文规则、验收方法和语义校验边界见[文档条目处理准则](document-entry-processing-guidelines.md)。
+共用规范不保证模型输出完全相同，既有证据、版本、预算和确认入库检查继续生效。
+
 ## 统一文档处理与入库（2026-09-19，ADR 0085）
 
 文档为连续任务的核心：审核接收 → 拆分 → 标签与联系 → 确认入库。
@@ -37,7 +58,7 @@ MCP and the authenticated Agent HTTP gateway expose `report_preview`, `reports_l
 
 ## 外部配置与授权
 
-按既有升级流程应用迁移至 000037，并执行 `deploy/postgresql/apply-runtime-grants.sql`。
+按既有升级流程应用当前全部迁移（v0.4.0 至 000039），并执行 `deploy/postgresql/apply-runtime-grants.sql`。
 在所选外部实例配置身份与 grants；令牌、密钥通过进程环境或只读 secret 文件提供：
 
 - `STRUIINFO_AGENT_ID`：稳定身份名，字母、数字、点、下划线或短横线。
@@ -127,6 +148,7 @@ typeKeyword/typeCustomName、domainKeyword/domainCustomName、captured/published
 3. `task_start` 提交如下结构；返回持久 taskId 后用 task_read 查询状态。
 4. `entry_read` 读取当前版本，提交 kind=tags 的 entryId、expectedRevision 和
    result（summary、contentKeywords、typeKeyword、domains）。
+   标签提案最多包含 24 个内容关键词和 3 个领域；接入、条目修订与持久化共同校验，保留完整提案和既有版本。
 5. `relations_read` 获取当前覆盖版本；提交 kind=relation、entryId、relatedEntryId、
    expectedRevision、expectedRelatedRevision、expectedOverrideRevision 和
    result（summary、relationLabel、direction）。low/high 以 UUID 字典序为准。

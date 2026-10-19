@@ -17,9 +17,9 @@ describe('InformationEntryRetrievalOptions', () => {
     const ready = render(true, true);
     const privateScope = render(true, true, false);
 
-    expect(ready).toContain('内容相似和综合搜索会按相似度排序');
+    expect(ready).toContain('结果按内容相似度排序');
     expect(ready.match(/disabled=""/gu)).toBeNull();
-    expect(privateScope).toContain('隐私内容只在本机进行文字搜索');
+    expect(privateScope).toContain('隐私内容仅在本机进行文字搜索');
     expect(privateScope.match(/disabled=""/gu)).toHaveLength(2);
   });
 });

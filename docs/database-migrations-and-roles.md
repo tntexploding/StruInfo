@@ -1,6 +1,6 @@
 # Database Migrations and Roles
 
-- Status: First-party runner and twenty-nine forward migrations implemented;
+- Status: First-party runner and thirty-nine forward migrations implemented;
   M1M queue preparation and operator-managed runtime grant boundary available
 - Contract: `C-M0-S-r2`
 - Database direction: PostgreSQL 18 with separate migration and runtime
@@ -9,8 +9,7 @@
 This document defines the operator and code boundary for forward migrations. It
 does not contain role-creation SQL or passwords. The first-party runner and first
 project-owned migrations are implemented. The checked-in runtime-grant script is
-an executable operator baseline; formal target-environment and deployment
-certification remains pending the unified release review.
+an executable operator baseline; release validation uses the disposable PostgreSQL smoke harness.
 
 ## Role boundary
 

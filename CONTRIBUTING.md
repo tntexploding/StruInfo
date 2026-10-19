@@ -1,93 +1,71 @@
 # Contributing to StruInfo
 
-StruInfo has accepted its foundational development outline and architecture
-decisions. M1C remains the compatibility baseline, while the active product is
-the cleaned InformationEntry-first flow. ADR 0011 governs the shipped M1E-2
-Entry-centred formal relation graph; ADR 0012 through ADR 0015 govern the
-provider-neutral task boundary and the shipped OpenAI split, tags and
-selected-pair association proposal slices. ADR 0016 through ADR 0019 complete
-manual split and local text/HTML/PDF import. ADR 0020 through ADR 0031 complete
-the query, exploration, source-subscription, external-preference, recoverable
-routing and owner-queue baseline. ADR 0032 through ADR 0036 add explicit local
-advance actions, post-materialization structure correction, pre-split derived
-source editing, versioned local split rules and an explicit local multi-file
-session queue. Any later AI or automation increment must still select one narrow
-authority boundary and one closed payload rather than adding a generic write
-path.
-An accepted ADR does not bypass a reachable product, dependency, or release
-obligation, but deferred hardening and test-tooling certification do not block
-unrelated product work.
+StruInfo is a single-owner document workspace. Changes should keep the complete path usable: receive a document, review it, organize its entries, then publish it for retrieval and reports.
 
-The repository and distributable image remain data-free even when an owner uses
-real material in an external deployment. Contributors must not add real
-documents, entries, preferences, Blob bytes, database exports, backups or
-derived knowledge to Git, tests or release artifacts. Use synthetic value-free
-fixtures only. Ordinary tests and reachable product-blocker fixes remain part
-of development; deferred hardening is not permission to skip them.
+## Set up
 
-## Sources of Truth
+Use Node.js >=24.18.0, Corepack and pnpm 11.20.0. Install the frozen graph without lifecycle scripts:
 
-- Product behavior: `docs/product-requirements.md`
-- Delivery order and gates: `docs/roadmap.md`
-- Current implementation and unfinished work: `docs/current-project-state.md`
-- Engineering rules: `docs/development-standards.md`
-- Dependency and license review: `docs/open-source-policy.md`
-- Decision history: `docs/decision-log.md`
+```bash
+corepack enable
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm verify
+```
 
-Update the canonical document instead of creating a new numbered copy for
-ordinary revisions. Git records small-version history; `docs/archive/` is only
-for major superseded directions.
+The normal checks use synthetic fixtures and do not need a model or a personal database. To run the application, follow [the installation guide](docs/getting-started.md). Runtime configuration, documents and secrets belong outside the repository.
 
-## Current development scope
+## Code map
 
-The current source version is v0.3.0; v0.2.0 remains an upgrade baseline. On 2026-09-12 the owner
-explicitly selected internal AI automation and an external Agent interface as
-the next development goal, starting with a repository structure audit and
-confirmed dead-code cleanup. Follow the delivery order in
-[the roadmap](docs/roadmap.md). Other candidates and frozen M2-P4R remain paused.
+| Directory                                        | Responsibility                                                              |
+| ------------------------------------------------ | --------------------------------------------------------------------------- |
+| `apps/server/src/modules`                        | Evidence, entries, processing, subscriptions and domain rules               |
+| `apps/server/src/application`                    | Document use cases, execution authority, task orchestration and publication |
+| `apps/server/src/platform`                       | PostgreSQL, network sources and model adapters                              |
+| `apps/server/src/transport`                      | Owner HTTP and external Agent / MCP interfaces                              |
+| `apps/server/src/composition`                    | Runtime wiring; keep framework setup out of domain rules                    |
+| `apps/server/src/storage`, `workspace_transfer`  | External files, preferences, backup and compatibility codecs                |
+| `apps/server/migrations`                         | Immutable forward SQL migrations                                            |
+| `apps/web/src/workspaces`, `components`, `theme` | Product pages, shared controls and accepted theme                           |
+| `packages/contracts`                             | Shared wire contracts and schemas                                           |
+| `packages/test_support`, `tests`, `tools`        | Synthetic fixtures, product checks and maintenance tooling                  |
 
-ADR 0075 permits bounded document tasks; ADR 0076 extends them through a
-default-off saved new-material policy and independent automate grants. Standalone AI proposals keep their explicit acceptance.
-Agent annotations use independent grants and typed external-agent provenance. New callers must share business use cases,
-privacy and concurrency checks instead of copying HTTP orchestration or writing
-directly to storage. Continue to use
-[the maintenance handoff](docs/maintenance-handoff.md) for the running instance.
+Keep writes in shared application use cases. New HTTP and MCP callers must reuse permission, revision, privacy and publication checks. Original evidence is immutable. Human decisions and drafts take priority over automatic work. Historical schemas and saved task checkpoints remain readable even when their old UI has been removed.
 
-## Workflow
+## Make a change
 
-1. Start from `main` and use a short-lived branch for a single purpose.
-2. Keep the change small, reversible, and linked to a requirement or decision.
-3. Add or update tests and documentation with the behavior they describe.
-4. Run the repository checks defined by the selected stack.
-5. Review security, privacy, provenance, migration, and license effects.
-6. Classify review findings under the proportional-gate rules in
-   `docs/development-standards.md`; move non-blocking hardening to
-   `docs/deferred-hardening-memo.md` instead of delaying the product path.
-7. Keep generated output, secrets, private snapshots, and local databases out
-   of Git.
+1. Read `AGENTS.md` and its canonical documents. Use a branch from public `main` for ordinary contributions.
+2. State the user-visible problem and keep the implementation focused.
+3. Add regression coverage for a reproduced behavior defect. Use synthetic content only.
+4. Update usage documentation when behavior or configuration changes.
+5. Run the checks relevant to the change, then the release checks below when preparing a release.
 
-The project uses `type(scope): imperative summary` commit subjects. Common types
-are `docs`, `chore`, `feat`, `fix`, `refactor`, `test`, `build`, `ci`, and
-`revert`. Keep one logical change per commit and explain non-obvious reasons in
-the body.
+Use `type(scope): summary` commit subjects. PR descriptions should explain the resulting behavior and validation. New dependencies and version changes require updated lockfile, license material, notices and SBOM. Do not alter applied migration files or replace old schemas to simplify tests.
 
-## Review Checklist
+## Checks and release
 
-- The change has one clear purpose and the simplest adequate design.
-- Module boundaries follow reasons to change, not arbitrary file size.
-- Public behavior, errors, and failure recovery are explicit.
-- Tests cover new behavior and regressions without relying on live services.
-- User data, credentials, logs, and AI inputs are handled safely.
-- Source citations and knowledge provenance remain intact where applicable.
-- Retried writes are idempotent and asynchronous failures remain observable.
-- New or upgraded third-party material has a recorded source and license review.
-- A high-impact architecture decision has an ADR or a decision-log entry.
-- Every blocking finding demonstrates a reachable, material product impact;
-  test-tooling gaps and unreachable edge cases are tracked as deferred hardening.
+```bash
+pnpm verify
+pnpm test:e2e
+pnpm performance:m2-p0d -- --smoke
+pnpm audit --prod --audit-level low
+docker build --tag struinfo:review .
+```
 
-## Project License Status
+Browser checks use installed Chrome; they do not download a browser. PostgreSQL smoke creates and removes its own Docker container and external temporary data. Use `--full` only for an intentional larger synthetic capacity check.
 
-StruInfo is distributed under the repository-root MIT `LICENSE`. Every release
-must also retain `THIRD_PARTY_NOTICES.md`, the admitted dependency license tree
-and the release SBOM. Personal data, credentials and external configuration are
-never release materials.
+GitHub runs the quality matrix on Windows and Ubuntu, browser/PostgreSQL smoke, and production dependency/runtime image security checks. A failed check stays failed until repaired or explicitly reviewed; do not remove tests or suppress findings to make a badge green. Maintenance security also runs weekly and can be started manually.
+
+Before release, synchronize package/image/MCP versions, changelog, release notes and SBOM; inspect the staged tree for owner data and secrets. The project's existing public `main` history is independent of the owner's development branch. Release reviewed source as a normal descendant of public `main`; never merge the private development history or force-push it over public history.
+
+Publishing source does not upgrade an existing installation. Deployment uses a verified external backup, forward migration, queue preparation, runtime grants and preflight. Preserve the owner's settings and existing model permissions.
+
+## Reference
+
+- [Product requirements](docs/product-requirements.md)
+- [Architecture](docs/knowledge-core-architecture.md)
+- [Development standards](docs/development-standards.md)
+- [Frontend design](docs/frontend-design-specification.md)
+- [Dependency policy](docs/open-source-policy.md)
+- [Current implementation](docs/current-project-state.md) and [roadmap](docs/roadmap.md)
+
+Code is MIT licensed. Releases retain [third-party notices](THIRD_PARTY_NOTICES.md), exact legal material and the SBOM. Documents, credentials, screenshots of private content, model replies and operation logs are not release materials.

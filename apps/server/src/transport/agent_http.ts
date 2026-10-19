@@ -1,3 +1,4 @@
+import {historySchemas} from '../application/source_history_service.js';
 import {REPORT_OPERATIONS} from '../application/report_commands.js';
 import {timingSafeEqual} from 'node:crypto';
 import type {Request, Response, NextFunction} from 'express';
@@ -71,14 +72,23 @@ export function agentHttpMiddleware(options: AgentHttpOptions) {
       owner &&
       !(
         price
-          ? ['ai_price_status', 'ai_price_save', 'ai_operations_save']
+          ? [
+              'ai_price_status',
+              'ai_price_save',
+              'ai_operations_save',
+              'ai_execution_save',
+            ]
           : reports
             ? REPORT_OPERATIONS
             : ingestion
               ? [
+                  ...Object.keys(historySchemas),
                   'system_status',
                   'ingestion_status',
                   'intake_status',
+                  'source_quality_status',
+                  'source_quality_control',
+                  'source_description_generate',
                   'intake_previews',
                   'intake_origins',
                   'intake_summarize',
@@ -92,6 +102,7 @@ export function agentHttpMiddleware(options: AgentHttpOptions) {
                 ]
               : [
                   'system_status',
+                  'processing_standard',
                   'tasks_list',
                   'document_queue_status',
                   'document_queue_apply',

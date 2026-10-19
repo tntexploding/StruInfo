@@ -73,7 +73,7 @@ export function AiPriceSettings({
       <div className="ai-price-heading">
         <div>
           <h2 id="ai-price-title">DeepSeek 峰谷价格</h2>
-          <p>把模型处理留到低价时段，订阅接收和本地阅读照常进行。</p>
+          <p>仅在低价时段调用 AI。订阅接收和阅读照常进行。</p>
         </div>
         <span className="status-badge">
           {!status
@@ -110,7 +110,7 @@ export function AiPriceSettings({
         </p>
       )}
       <p className="field-hint">
-        覆盖接收审核、拆分、标签、联系、翻译、查询综合和报告生成。即时工具在高峰提示稍后重试；已发出的请求允许完成。开启此项不会开启自动处理。
+        适用于审核、拆分、标签、联系、翻译、问答和报告。高峰期间，已发出的请求继续完成；即时操作请在低价时段重试。自动处理需单独开启。
       </p>
       <div className="ai-price-actions">
         <button
