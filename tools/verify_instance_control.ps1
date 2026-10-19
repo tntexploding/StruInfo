@@ -112,8 +112,8 @@ try {
     Start-StruInfoInstance $config
     $starts = @($script:calls | Where-Object { $_ -like 'container start *' })
     Assert-True (($starts -join ',') -eq 'container start synthetic-database,container start synthetic-app') 'Wrong start order or duplicate starts.'
-    $dbReady = $script:calls.IndexOf('exec synthetic-database pg_isready -q')
-    Assert-True ($dbReady -lt $script:calls.IndexOf('container start synthetic-app')) 'App started before database readiness.'
+    $dbReady = $script:calls.IndexOf('exec synthetic-database pg_isready -h 127.0.0.1 -q')
+    Assert-True ($dbReady -ge 0 -and $dbReady -lt $script:calls.IndexOf('container start synthetic-app')) 'App started before TCP database readiness.'
     $state = Get-Content -LiteralPath $config.StateFile -Raw | ConvertFrom-Json
     Assert-True ($state.schemaVersion -eq 1 -and $state.desiredState -eq 'running') 'Ready intent was not saved.'
   }

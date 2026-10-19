@@ -1070,6 +1070,10 @@ async function waitForPostgres(containerName: string): Promise<void> {
         'exec',
         containerName,
         'pg_isready',
+        // The image's initialization server accepts only Unix sockets.
+        // Wait for the final TCP server before issuing setup commands.
+        '-h',
+        '127.0.0.1',
         '-U',
         MIGRATOR_ROLE,
         '-d',
