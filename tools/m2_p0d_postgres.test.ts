@@ -1,4 +1,7 @@
 import {createHash} from 'node:crypto';
+import {mkdir, mkdtemp, readFile, stat, writeFile} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 
 import {describe, expect, it} from 'vitest';
 
@@ -16,9 +19,28 @@ import {
   M2_P0D_SMOKE_WORKLOAD,
   M2_P0D_STANDARD_WORKLOAD,
   parseM2P0dArguments,
+  removeTemporaryDataRoot,
 } from './m2_p0d_postgres.js';
 
 describe('M2-P0D disposable PostgreSQL workload', () => {
+  it('removes its native temporary directory and refuses broader or nested paths', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'struinfo-m2-p0d-'));
+    const nested = join(root, 'struinfo-m2-p0d-ABC123');
+    const evidence = join(nested, 'keep.txt');
+    try {
+      await mkdir(nested);
+      await writeFile(evidence, 'synthetic');
+      expect(await removeTemporaryDataRoot(tmpdir())).toBe(false);
+      expect(await removeTemporaryDataRoot(root + '-other')).toBe(false);
+      expect(await removeTemporaryDataRoot(nested)).toBe(false);
+      expect(await readFile(evidence, 'utf8')).toBe('synthetic');
+      expect(await removeTemporaryDataRoot(root)).toBe(true);
+      await expect(stat(root)).rejects.toMatchObject({code: 'ENOENT'});
+    } finally {
+      await removeTemporaryDataRoot(root);
+    }
+  });
+
   it('freezes full and smoke workloads without accepting arbitrary options', () => {
     expect(parseM2P0dArguments([])).toBe(M2_P0D_STANDARD_WORKLOAD);
     expect(parseM2P0dArguments(['--full'])).toBe(M2_P0D_STANDARD_WORKLOAD);
