@@ -1329,8 +1329,15 @@ async function openQuerySettings(page: Page, name = '筛选与匹配方式') {
     return;
   }
   const trigger = page.getByRole('button', {name, exact: true});
-  const expanded = await trigger.getAttribute('aria-expanded');
-  if (expanded !== 'true') await trigger.click();
+  // Native popover state remains current when a test pauses queued toggle events.
+  const expanded = await trigger.evaluate((button) => {
+    const id = button.getAttribute('aria-controls');
+    const surface = id ? document.getElementById(id) : null;
+    return surface?.hasAttribute('popover')
+      ? surface.matches(':popover-open')
+      : button.getAttribute('aria-expanded') === 'true';
+  });
+  if (!expanded) await trigger.click();
 }
 
 test('keeps floating reading controls from resizing the document', async ({
@@ -3884,8 +3891,6 @@ async function installMarkdownExportFixture(page: Page) {
   };
 }
 async function openMarkdownExportPanel(page: Page) {
-  if (await page.locator('.floating-tool-panel__surface:popover-open').count())
-    await page.keyboard.press('Escape');
   await openQuerySettings(page, '资料清单与导出');
   const panel = page.locator('.entry-markdown-export');
   if ((await panel.getAttribute('open')) === null)
