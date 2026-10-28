@@ -1,6 +1,6 @@
 {
   "name": "@struinfo/server",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -14,7 +14,7 @@
     "maintenance": "tsx src/entrypoints/maintenance.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.31.0",
+    "@modelcontextprotocol/sdk": "1.32.0",
     "@nestjs/common": "11.1.28",
     "@nestjs/core": "11.1.28",
     "@nestjs/platform-express": "11.1.28",
@@ -27,7 +27,7 @@
     "pg-boss": "12.26.3",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
-    "zod": "4.4.3"
+    "zod": "4.6.6"
   },
   "devDependencies": {
     "@types/express": "5.0.6",

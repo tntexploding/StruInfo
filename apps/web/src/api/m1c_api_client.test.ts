@@ -244,151 +244,6 @@ describe('M1cApiClient', () => {
     ]);
   });
 
-  it('uses dedicated owner-control routes for Entry automation policy, trial, execution and audit', async () => {
-    const requests: Readonly<{url: string; method?: string; body?: string}>[] =
-      [];
-    const client = createM1cApiClient(
-      'http://127.0.0.1:3000/',
-      (input, init) => {
-        requests.push({
-          url: requestUrl(input),
-          ...(init?.method === undefined ? {} : {method: init.method}),
-          ...(typeof init?.body === 'string' ? {body: init.body} : {}),
-        });
-        return Promise.resolve(
-          new Response(JSON.stringify({status: 'ok'}), {
-            headers: {'content-type': 'application/json'},
-          }),
-        );
-      },
-    );
-    const policy = {
-      revision: 3,
-      enabled: true,
-      paused: false,
-      profileRevision: 2,
-      minimumMatchedRuleCount: 1,
-      advanceThresholds: {usefulness: 3, interest: 3, requiredDimensions: 1},
-      deferThresholds: {usefulness: 3, interest: 3, requiredDimensions: 1},
-      budgets: {
-        maximumEntriesPerRun: 25,
-        maximumAdvanceCandidatesPerRun: 10,
-        maximumDeferCandidatesPerRun: 10,
-      },
-      advanceActions: {
-        deterministicTags: true,
-        rebuildAssociations: true,
-      },
-      failureMode: 'pause' as const,
-    } as const;
-    const policyWrite = {
-      expectedRevision: policy.revision,
-      enabled: policy.enabled,
-      paused: policy.paused,
-      profileRevision: policy.profileRevision,
-      minimumMatchedRuleCount: policy.minimumMatchedRuleCount,
-      advanceThresholds: policy.advanceThresholds,
-      deferThresholds: policy.deferThresholds,
-      budgets: policy.budgets,
-      advanceActions: policy.advanceActions,
-      failureMode: policy.failureMode,
-    };
-    const trial = {
-      includePrivate: false,
-      expectedPolicyRevision: 3,
-      expectedProfileRevision: 2,
-      policy,
-      manualTakeoverEntryIds: ['11111111-1111-4111-8111-111111111111'],
-    } as const;
-    const execution = {
-      idempotencyKey: 'synthetic-m1g-4c-run',
-      includePrivate: false,
-      expectedPolicyRevision: 3,
-      expectedProfileRevision: 2,
-      expectedEntries: [
-        {
-          entryId: '11111111-1111-4111-8111-111111111111',
-          revision: 4,
-        },
-      ],
-      manualTakeoverEntryIds: trial.manualTakeoverEntryIds,
-    } as const;
-
-    await client.loadInformationEntryAutomationPolicy();
-    await client.saveInformationEntryAutomationPolicy(policyWrite);
-    await client.trialInformationEntryAutomationPolicy(trial);
-    await client.executeInformationEntryAutomation(execution);
-    await client.listInformationEntryAutomationExecutions(7);
-    await client.loadInformationEntryAutomationExecution('synthetic/run');
-    await client.listInformationEntryAutomationWorkQueue(false);
-    await client.updateInformationEntryAutomationWorkItem('synthetic/run', 3, {
-      expectedVersion: 2,
-      state: 'completed',
-      includePrivate: false,
-    });
-    await client.executeInformationEntryAutomationWorkItemAction(
-      'synthetic/run',
-      3,
-      {
-        expectedVersion: 4,
-        operation: 'undo',
-        includePrivate: false,
-      },
-    );
-
-    expect(requests).toEqual([
-      {
-        url: 'http://127.0.0.1:3000/api/v1/entries/automation/policy',
-        method: 'GET',
-      },
-      {
-        url: 'http://127.0.0.1:3000/api/v1/entries/automation/policy',
-        method: 'PUT',
-        body: JSON.stringify(policyWrite),
-      },
-      {
-        url: 'http://127.0.0.1:3000/api/v1/entries/automation/trial',
-        method: 'POST',
-        body: JSON.stringify(trial),
-      },
-      {
-        url: 'http://127.0.0.1:3000/api/v1/entries/automation/runs',
-        method: 'POST',
-        body: JSON.stringify(execution),
-      },
-      {
-        url: 'http://127.0.0.1:3000/api/v1/entries/automation/runs?limit=7',
-        method: 'GET',
-      },
-      {
-        url: 'http://127.0.0.1:3000/api/v1/entries/automation/runs/synthetic%2Frun',
-        method: 'GET',
-      },
-      {
-        url: 'http://127.0.0.1:3000/api/v1/entries/automation/work-queue?includePrivate=false',
-        method: 'GET',
-      },
-      {
-        url: 'http://127.0.0.1:3000/api/v1/entries/automation/work-queue/synthetic%2Frun/3',
-        method: 'PUT',
-        body: JSON.stringify({
-          expectedVersion: 2,
-          state: 'completed',
-          includePrivate: false,
-        }),
-      },
-      {
-        url: 'http://127.0.0.1:3000/api/v1/entries/automation/work-queue/synthetic%2Frun/3/action',
-        method: 'POST',
-        body: JSON.stringify({
-          expectedVersion: 4,
-          operation: 'undo',
-          includePrivate: false,
-        }),
-      },
-    ]);
-  });
-
   it('encodes snapshot identity as one path segment', async () => {
     let requestedUrl = '';
     const client = createM1cApiClient('https://localhost:3000', (input) => {
@@ -571,7 +426,6 @@ describe('M1cApiClient', () => {
         profile: 'commonmark-v1',
         sourceAlias: 'synthetic-source',
         isPrivate: false,
-        routeAfterImport: false,
         intervalMinutes: 1_440,
       },
     ]);
@@ -824,7 +678,6 @@ describe('M1cApiClient', () => {
               profile: 'commonmark-v1',
               sourceAlias: 'synthetic-source',
               isPrivate: false,
-              routeAfterImport: false,
               intervalMinutes: 1_440,
             },
           ],
@@ -948,111 +801,6 @@ describe('M1cApiClient', () => {
             aliases: [{source: 'Synthetic CLI', canonical: '工具'}],
           },
         }),
-      },
-    ]);
-  });
-
-  it('uses the narrow Entry preference profile read, write, suggestion and trial routes', async () => {
-    const requests: {
-      url: string;
-      method: string | undefined;
-      body: unknown;
-    }[] = [];
-    const profile = {
-      revision: 2,
-      enabled: true,
-      rules: [
-        {
-          ruleId: '77777777-7777-4777-8777-777777777777',
-          dimension: 'usefulness' as const,
-          featureKind: 'content_keyword' as const,
-          featureIdentity: 'postgresql',
-          displayValue: 'PostgreSQL',
-          effect: 'prefer' as const,
-          weight: 4 as const,
-        },
-      ],
-    };
-    const client = createM1cApiClient(
-      'http://127.0.0.1:3000/',
-      (input, init) => {
-        const requestBody = init?.body;
-        if (
-          requestBody !== undefined &&
-          requestBody !== null &&
-          typeof requestBody !== 'string'
-        ) {
-          throw new Error('Expected synthetic JSON request body.');
-        }
-        requests.push({
-          url: requestUrl(input),
-          method: init?.method,
-          body:
-            requestBody === undefined || requestBody === null
-              ? undefined
-              : JSON.parse(requestBody),
-        });
-        return Promise.resolve(
-          new Response(JSON.stringify({status: 'ok', profile}), {
-            headers: {'content-type': 'application/json'},
-          }),
-        );
-      },
-    );
-
-    await client.loadInformationEntryPreferenceProfile();
-    await client.saveInformationEntryPreferenceProfile({
-      expectedRevision: 2,
-      enabled: profile.enabled,
-      rules: profile.rules,
-    });
-    await client.suggestInformationEntryPreferenceProfile(true);
-    await client.trialInformationEntryPreferenceProfile({
-      includePrivate: false,
-      expectedProfileRevision: 2,
-      profile,
-      expectedEntries: [
-        {
-          entryId: '88888888-8888-4888-8888-888888888888',
-          revision: 1,
-        },
-      ],
-    });
-
-    expect(requests).toEqual([
-      {
-        url: 'http://127.0.0.1:3000/api/v1/entries/preferences/profile',
-        method: 'GET',
-        body: undefined,
-      },
-      {
-        url: 'http://127.0.0.1:3000/api/v1/entries/preferences/profile',
-        method: 'PUT',
-        body: {
-          expectedRevision: 2,
-          enabled: true,
-          rules: profile.rules,
-        },
-      },
-      {
-        url: 'http://127.0.0.1:3000/api/v1/entries/preferences/profile/suggestions',
-        method: 'POST',
-        body: {includePrivate: true},
-      },
-      {
-        url: 'http://127.0.0.1:3000/api/v1/entries/preferences/profile/trial',
-        method: 'POST',
-        body: {
-          includePrivate: false,
-          expectedProfileRevision: 2,
-          profile,
-          expectedEntries: [
-            {
-              entryId: '88888888-8888-4888-8888-888888888888',
-              revision: 1,
-            },
-          ],
-        },
       },
     ]);
   });

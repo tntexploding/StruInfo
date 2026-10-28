@@ -1,4 +1,8 @@
 import {
+  EMPTY_ANNOTATION_VOCABULARY,
+  type AnnotationVocabulary,
+} from './structured_annotations.js';
+import {
   prepareEntrySearchAliases,
   type ConfirmedEntryAlias,
 } from './information_entry_search_aliases.js';
@@ -42,6 +46,7 @@ import {
 } from './information_entry_search_index_contract.js';
 
 export interface InformationEntryRetrievalServiceDependencies {
+  readonly annotationVocabulary?: () => Promise<AnnotationVocabulary>;
   readonly workspaceId: string;
   readonly entries: InformationEntryRepositoryPort;
   readonly associations: InformationEntryAssociationRepositoryPort;
@@ -79,6 +84,9 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
       this.#dependencies.translations,
     );
     const aliases = (await this.#dependencies.aliases?.()) ?? [];
+    const vocabulary =
+      (await this.#dependencies.annotationVocabulary?.()) ??
+      EMPTY_ANNOTATION_VOCABULARY;
     const expanded = prepareEntrySearchAliases(request, aliases);
     if (mode === 'lexical') {
       const browsePage = await this.#loadPlainBrowsePage(request);
@@ -86,11 +94,19 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
         const result = searchCurrentInformationEntries(
           browsePage.entries,
           request,
+          undefined,
+          undefined,
+          undefined,
+          aliases,
+          vocabulary,
         );
         return Object.freeze({...result, totalCount: browsePage.totalCount});
       }
       const accelerated =
-        expanded.text.length || expanded.contentKeyword.length
+        vocabulary.dimensions.length ||
+        request.annotationFilter ||
+        expanded.text.length ||
+        expanded.contentKeyword.length
           ? undefined
           : await this.#loadAcceleratedLexicalEntries(request, translations);
       const [entries, associations] = await Promise.all([
@@ -114,6 +130,7 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
         undefined,
         translations,
         aliases,
+        vocabulary,
       );
     }
     const [entries, associations] = await Promise.all([
@@ -183,6 +200,7 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
       semanticMatches,
       translations,
       aliases,
+      vocabulary,
     );
   }
 
@@ -459,6 +477,7 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
       );
     if (
       loadPage === undefined ||
+      request.annotationFilter !== undefined ||
       (request.text ?? '') !== '' ||
       request.contentKeyword !== undefined ||
       request.sourceKey !== undefined ||

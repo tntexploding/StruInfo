@@ -1,4 +1,5 @@
 import {intakeReviewKind, intakeReviewHint} from './inbox_review_state.js';
+import type {TopicJobView, TopicView} from '../api/topic_contract.js';
 import type {
   AiTask,
   AiQueueStatus,
@@ -14,6 +15,8 @@ import {
 import {aiError} from '../api/ai_workflow_client.js';
 
 export interface AiActivityData {
+  topicJobs?: TopicJobView[];
+  topics?: TopicView[];
   model?: string;
   price?: AiPriceStatus;
   tasks: AiTask[];
@@ -46,7 +49,7 @@ export interface AiActivityItem {
   phase?: string;
   interrupted?: boolean;
   createdAt?: string;
-  destination: 'import' | 'settings' | 'reports' | 'documents';
+  destination: 'import' | 'settings' | 'reports' | 'documents' | 'query';
 }
 const PHASES: Record<string, string> = {
   intake: '核对完整性与接收规则',
@@ -378,7 +381,32 @@ export function activityItems(
     settled: 7,
     done: 8,
   };
-  return [...tasks, ...reviews, ...scheduled, ...reports].sort(
+  const topics: AiActivityItem[] = (data.topicJobs ?? [])
+    .filter((job) => job.status !== 'cancelled')
+    .map((job) => ({
+      id: job.id,
+      kind: '主题归组',
+      phase: 'relations',
+      title: job.entries[0]?.title ?? '后台主题整理',
+      detail: job.errorCode
+        ? aiError(new Error(job.errorCode))
+        : job.note?.trim()
+          ? job.note
+          : `${String(job.entries.length)} 个条目 · ${String(job.attempts)} 次尝试`,
+      state:
+        (
+          {
+            queued: 'queued',
+            running: 'working',
+            succeeded: 'done',
+            failed: 'failed',
+            paused: 'paused',
+          } as Record<string, ActivityState>
+        )[job.status] ?? 'attention',
+      updatedAt: '',
+      destination: 'query',
+    }));
+  return [...tasks, ...reviews, ...scheduled, ...reports, ...topics].sort(
     (a, b) =>
       rank[a.state] - rank[b.state] ||
       (a.state === 'queued'
@@ -468,13 +496,16 @@ export interface AiArticleStage {
   total: number;
 }
 export function articleStages(task: AiTask): AiArticleStage[] {
-  return [
+  const stages = [
     ['intake', '审核'],
     ['split', '结构'],
     ['tags', '标签'],
-    ['relation', '联系'],
     ['publish', '入库'],
-  ].map(([kind, label]) => {
+  ];
+  // Historical tasks retain their old progress display, never new execution rights.
+  if (task.state.workflow !== 'confirmed-content-v1')
+    stages.splice(3, 0, ['relation', '联系']);
+  return stages.map(([kind, label]) => {
     const steps = task.state.steps.filter((s) => s.kind === kind);
     const complete = steps.filter((s) => s.complete).length;
     const held = steps.some((s) => s.outcome === 'held');

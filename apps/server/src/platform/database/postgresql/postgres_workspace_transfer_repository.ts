@@ -1,4 +1,4 @@
-import {ingestionSettingsSchema} from '../../../application/ingestion_contract.js';
+import {decodeStoredIngestionSettings} from '../../../application/ingestion_contract.js';
 import {
   assertM1cDomainWorkspace,
   M1C_DOMAIN_BUNDLE_SCHEMA,
@@ -192,51 +192,115 @@ async function restoreInTransaction(
     if (tableSnapshot.rows.length === 0) continue;
     await client.query<Row>(insertTableSql(tableSnapshot.name), [
       JSON.stringify(
-        tableSnapshot.name === 'processing_ingestion_policy'
-          ? tableSnapshot.rows.map((row) => ({
-              ...row,
-              current_version: Number(row.current_version) + 1,
-              settings_text: JSON.stringify({
-                ...ingestionSettingsSchema.parse(
-                  JSON.parse(String(row.settings_text)) as unknown,
-                ),
-                paused: true,
-              }),
-            }))
-          : tableSnapshot.name === 'processing_agent_task' ||
-              tableSnapshot.name === 'processing_report'
+        tableSnapshot.name === 'research_pipeline_record'
+          ? tableSnapshot.rows.map((row) => {
+              const value = JSON.parse(String(row.value_text)) as Record<
+                string,
+                unknown
+              >;
+              if (value.kind === 'schedule')
+                value.schedule = {
+                  ...(value.schedule as object),
+                  enabled: false,
+                };
+              if (value.kind === 'settings') {
+                const settings = value.settings as Record<string, unknown>;
+                value.settings = {
+                  ...settings,
+                  enabled: false,
+                  notices: {...(settings.notices as object), enabled: false},
+                };
+              }
+              if (
+                value.kind === 'run' &&
+                ['queued', 'generating'].includes(String(value.status))
+              ) {
+                value.status = 'paused';
+                value.errorCode = 'restore_resume_required';
+              }
+              return {
+                ...row,
+                current_version: Number(row.current_version) + 1,
+                value_text: JSON.stringify(value),
+              };
+            })
+          : tableSnapshot.name === 'content_organization_record'
             ? tableSnapshot.rows.map((row) => {
-                const state = JSON.parse(String(row.state_text)) as Record<
+                const value = JSON.parse(String(row.value_text)) as Record<
                   string,
                   unknown
                 >;
-                if (
-                  !['ai_price_window_closed', 'ai_operations_paused'].includes(
-                    String(state.errorCode),
-                  ) &&
-                  !(
-                    state.automaticRetry &&
-                    !['succeeded', 'cancelled'].includes(String(state.status))
-                  )
-                )
-                  return row;
-                return {
-                  ...row,
-                  current_version: Number(row.current_version) + 1,
-                  ...(tableSnapshot.name === 'processing_agent_task'
-                    ? {pause_requested: true}
-                    : {}),
-                  state_text: JSON.stringify({
-                    ...state,
-                    status:
-                      tableSnapshot.name === 'processing_agent_task'
-                        ? 'paused'
-                        : 'failed',
-                    errorCode: 'ai_price_resume_required',
-                  }),
-                };
+                return value.kind === 'job' &&
+                  ['queued', 'running'].includes(String(value.status))
+                  ? {
+                      ...row,
+                      current_version: Number(row.current_version) + 1,
+                      value_text: JSON.stringify({
+                        ...value,
+                        status: 'paused',
+                        errorCode: 'restore_resume_required',
+                      }),
+                    }
+                  : row;
               })
-            : tableSnapshot.rows,
+            : tableSnapshot.name === 'document_organization_work'
+              ? tableSnapshot.rows.map((row) =>
+                  ['pending', 'running'].includes(String(row.status))
+                    ? {
+                        ...row,
+                        status: 'paused',
+                        current_version: Number(row.current_version) + 1,
+                        error_code: 'restore_resume_required',
+                      }
+                    : row,
+                )
+              : tableSnapshot.name === 'processing_ingestion_policy'
+                ? tableSnapshot.rows.map((row) => ({
+                    ...row,
+                    current_version: Number(row.current_version) + 1,
+                    settings_text: JSON.stringify({
+                      ...decodeStoredIngestionSettings(
+                        JSON.parse(String(row.settings_text)) as unknown,
+                      ),
+                      paused: true,
+                    }),
+                  }))
+                : tableSnapshot.name === 'processing_agent_task' ||
+                    tableSnapshot.name === 'processing_report'
+                  ? tableSnapshot.rows.map((row) => {
+                      const state = JSON.parse(
+                        String(row.state_text),
+                      ) as Record<string, unknown>;
+                      if (
+                        ![
+                          'ai_price_window_closed',
+                          'ai_operations_paused',
+                        ].includes(String(state.errorCode)) &&
+                        !(
+                          state.automaticRetry &&
+                          !['succeeded', 'cancelled'].includes(
+                            String(state.status),
+                          )
+                        )
+                      )
+                        return row;
+                      return {
+                        ...row,
+                        current_version: Number(row.current_version) + 1,
+                        ...(tableSnapshot.name === 'processing_agent_task'
+                          ? {pause_requested: true}
+                          : {}),
+                        state_text: JSON.stringify({
+                          ...state,
+                          status:
+                            tableSnapshot.name === 'processing_agent_task'
+                              ? 'paused'
+                              : 'failed',
+                          errorCode: 'ai_price_resume_required',
+                        }),
+                      };
+                    })
+                  : tableSnapshot.rows,
       ),
     ]);
   }

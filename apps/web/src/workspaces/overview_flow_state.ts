@@ -7,15 +7,23 @@ export const FLOW_STAGES = [
     label: '接收',
     caption: '订阅与文档审核',
     destination: 'import',
-    action: '打开文档入口',
-    description: '新收到的文档在这里等待审核；接受后进入整理流程。',
+    action: '打开源管理',
+    description: '查看接收的原文，决定接受或拒绝。',
+  },
+  {
+    id: 'store',
+    label: '入库',
+    caption: '原文保存与发布',
+    destination: 'documents',
+    action: '打开文档阅读',
+    description: '保存原文与已确认的内容。基础发布和后台主题整理分别进行。',
   },
   {
     id: 'split',
     label: '拆分',
     caption: '保留上下文与结构',
     destination: 'documents',
-    action: '打开工作台',
+    action: '打开文档阅读',
     description:
       '连贯文章整篇保留；可独立理解的合集按内容拆分，原文与证据始终可回溯。',
   },
@@ -24,7 +32,7 @@ export const FLOW_STAGES = [
     label: '标签',
     caption: '提取主题与概念',
     destination: 'documents',
-    action: '打开工作台',
+    action: '打开文档阅读',
     description: '为条目提取标签，保留人工修改，形成可检索的主题标记。',
   },
   {
@@ -32,18 +40,8 @@ export const FLOW_STAGES = [
     label: '联系',
     caption: '召回与关联资料',
     destination: 'query',
-    action: '打开数据阅览',
-    description:
-      '查找相关资料并判断联系。没有合适的联系也可完成；整理完毕后发布知识版本。',
-  },
-  {
-    id: 'store',
-    label: '入库',
-    caption: '原文保存与发布',
-    destination: 'documents',
-    action: '打开工作台',
-    description:
-      '接收原文先保存到工作台。拆分、标签与联系完成后，确认发布的版本才进入查询和报告。',
+    action: '打开数据库',
+    description: '按标签查找相关资料，后台整理主题和联系。',
   },
   {
     id: 'report',
@@ -85,8 +83,9 @@ export function itemStage(item: AiActivityItem): FlowStageId {
       return 'tags';
     case 'recall':
     case 'relations':
-    case 'complete':
       return 'relations';
+    case 'complete':
+      return 'store';
     default:
       return 'store';
   }

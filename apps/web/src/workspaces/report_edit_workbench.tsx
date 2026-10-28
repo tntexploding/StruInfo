@@ -27,6 +27,7 @@ export function ReportEditWorkbench({
       aria-label="报告核对工作台"
       onCancel={(event) => {
         event.preventDefault();
+        event.stopPropagation();
         onCollapse();
       }}
     >

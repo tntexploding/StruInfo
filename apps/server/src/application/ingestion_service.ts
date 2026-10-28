@@ -183,11 +183,7 @@ export class IngestionService {
       return 'ingestion_model_changed';
     if (
       task.request.maxEntries > current.settings.maxEntries ||
-      task.request.maxRelations > current.settings.maxRelations ||
       task.request.maxModelCalls > current.settings.maxModelCalls ||
-      (task.request.maxRelationCandidates ?? task.request.maxRelations) >
-        (current.settings.maxRelationCandidates ??
-          current.settings.maxRelations) ||
       JSON.stringify(task.request.intake) !==
         JSON.stringify(
           task.request.intake
@@ -202,7 +198,10 @@ export class IngestionService {
   }
   public async poll(): Promise<void> {
     await this.repository.withPollLock(async () => {
-      for (const item of await this.repository.list(true, 25)) {
+      const items = this.repository.dispatchCandidates
+        ? await this.repository.dispatchCandidates(25)
+        : await this.repository.list(true, 25);
+      for (const item of items) {
         try {
           await this.advance(item);
         } catch (error) {
@@ -310,12 +309,7 @@ export class IngestionService {
       throw new OperationError('conflict', 'ingestion_model_changed');
     if (
       item.policy.settings.maxEntries > current.settings.maxEntries ||
-      item.policy.settings.maxRelations > current.settings.maxRelations ||
       item.policy.settings.maxModelCalls > current.settings.maxModelCalls ||
-      (item.policy.settings.maxRelationCandidates ??
-        item.policy.settings.maxRelations) >
-        (current.settings.maxRelationCandidates ??
-          current.settings.maxRelations) ||
       JSON.stringify(item.policy.settings.intake) !==
         JSON.stringify(current.settings.intake)
     )

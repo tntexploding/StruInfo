@@ -61,3 +61,5 @@ Desktop.ini
 # Local browser inspection and owner-supplied design reference.
 /.playwright-cli/
 /参考.png
+
+/V4重构.png

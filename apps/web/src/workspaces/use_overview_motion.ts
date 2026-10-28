@@ -7,6 +7,7 @@ import {
 import {makeApprovedRay} from '../theme/approved_effect_ray.js';
 import {
   overviewCompletions,
+  mergeOverviewCompletions,
   OVERVIEW_MOTION,
   type OverviewObservation,
   type OverviewCompletion,
@@ -18,7 +19,11 @@ const smooth = (value: number) => {
 };
 
 // Production binding only: the reference renderers receive observed completions.
-function animateOverview(root: HTMLElement, events: OverviewCompletion[]) {
+function animateOverview(
+  root: HTMLElement,
+  events: OverviewCompletion[],
+  started = performance.now(),
+) {
   const bounds = root.getBoundingClientRect();
   const elements = [...root.querySelectorAll<HTMLElement>('[data-flow-stage]')];
   const rings = createApprovedRings(root);
@@ -122,7 +127,6 @@ function animateOverview(root: HTMLElement, events: OverviewCompletion[]) {
       });
     }
   }
-  const started = performance.now();
   let frame = 0,
     disposed = false,
     settled = false;
@@ -160,11 +164,7 @@ function animateOverview(root: HTMLElement, events: OverviewCompletion[]) {
           ? (elapsed - OVERVIEW_MOTION.gather) / OVERVIEW_MOTION.flight
           : (elapsed - OVERVIEW_MOTION.arrive) / OVERVIEW_MOTION.expand,
     );
-    const energy =
-      elapsed < OVERVIEW_MOTION.charge
-        ? smooth(elapsed / OVERVIEW_MOTION.charge)
-        : 1 +
-          smooth((elapsed - OVERVIEW_MOTION.charge) / OVERVIEW_MOTION.boost);
+    const energy = phase === 'gather' ? progress * 0.5 : 2;
     svg.dataset.phase = phase;
     svg.dataset.chargePhase =
       elapsed < OVERVIEW_MOTION.charge ? 'charge' : 'boost';
@@ -222,6 +222,9 @@ export function useOverviewMotion(
 ) {
   const {visual} = useWorkspaceUi();
   const previous = useRef<OverviewObservation | undefined>(undefined);
+  const pending = useRef<
+    {events: OverviewCompletion[]; started: number} | undefined
+  >(undefined);
   useLayoutEffect(() => {
     const element = root.current;
     if (!element || (!observation && !stale)) return;
@@ -233,18 +236,38 @@ export function useOverviewMotion(
       visual.motion &&
       visual.flowMotion &&
       visual.glow > 0;
-    const events =
+    let events =
       canAnimate() && observation
         ? overviewCompletions(previous.current, observation)
         : [];
+    const now = performance.now();
+    const ongoing = pending.current;
+    let started = now;
+    if (
+      canAnimate() &&
+      observation &&
+      ongoing &&
+      now - ongoing.started < OVERVIEW_MOTION.finish &&
+      (!events.length || now - ongoing.started < OVERVIEW_MOTION.gather)
+    ) {
+      events = mergeOverviewCompletions(
+        ongoing.events,
+        events,
+        observation.metrics,
+      );
+      started = ongoing.started;
+    }
+    pending.current =
+      canAnimate() && events.length ? {events, started} : undefined;
     previous.current = stale ? undefined : observation;
     element.setAttribute('data-motion-allowed', String(canAnimate()));
     let stop = canAnimate()
-      ? animateOverview(element, events)
+      ? animateOverview(element, events, started)
       : () => undefined;
     const refresh = () => {
       stop();
       previous.current = undefined;
+      pending.current = undefined;
       element.setAttribute('data-motion-allowed', String(canAnimate()));
       stop = canAnimate() ? animateOverview(element, []) : () => undefined;
     };

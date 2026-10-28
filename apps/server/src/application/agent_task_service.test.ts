@@ -18,6 +18,10 @@ import type {
 import type {AgentTaskActions} from './agent_task_actions.js';
 import {AgentTaskService} from './agent_task_service.js';
 import {
+  SOURCE_SPLIT_ENGINE,
+  type FrozenSourceSplit,
+} from '../modules/entries/source_split_recipe.js';
+import {
   ExecutionAuthority,
   DELEGATED_READ_OPERATIONS,
 } from './execution_authority.js';
@@ -76,6 +80,11 @@ function fixture(
   };
   let count = 0;
   const actions = {
+    freezeSourceSplit: vi.fn<() => Promise<FrozenSourceSplit | undefined>>(() =>
+      Promise.resolve(undefined),
+    ),
+    decideSourceSplit: vi.fn(),
+    applySourceSplit: vi.fn(),
     reviewRunId: (_step: AgentTaskStep, proposalId: string, key: string) =>
       `review:${proposalId}:${key}`,
     loadRelationReview: vi.fn((step: AgentTaskStep) =>
@@ -207,244 +216,126 @@ function fixture(
   };
 }
 describe('bounded Agent tasks', () => {
-  it('does not opt new documents into experimental relation verification', async () => {
+  it('publishes confirmed content without recall or relation calls', async () => {
     const f = fixture();
-    f.actions.relationSteps.mockResolvedValue([
-      {
-        kind: 'relation',
-        targetId: E,
-        relatedEntryId: P,
-        expectedRevision: 2,
-        expectedRelatedRevision: 1,
-        expectedOverrideRevision: 0,
-        attempt: 0,
-        complete: false,
-      },
-    ]);
-    const task = await f.service.start(owner, 'ordinary-document', {
+    f.actions.relationSteps.mockRejectedValue(
+      new Error('retired relation workflow'),
+    );
+    const task = await f.service.start(owner, 'confirmed-content', {
       kind: 'document',
       snapshotId: S,
-      maxEntries: 4,
-      maxRelations: 1,
-      maxModelCalls: 3,
+      maxModelCalls: 2,
     });
     const result = await f.done(task.taskId);
-    expect(result.state).toMatchObject({status: 'succeeded', calls: 3});
-    expect(result.state.relationReviewRequired).toBeUndefined();
-    expect(f.actions.reviewRelation).not.toHaveBeenCalled();
+    expect(result.state).toMatchObject({
+      workflow: 'confirmed-content-v1',
+      status: 'succeeded',
+      calls: 2,
+    });
+    expect(result.state.steps.map((s) => s.kind)).toEqual(['split', 'tags']);
+    expect(f.actions.relationSteps).not.toHaveBeenCalled();
+    expect(f.actions.recall).not.toHaveBeenCalled();
     expect(f.actions.publish).toHaveBeenCalledOnce();
   });
-  it.each(['positive', 'negative', 'uncertain', 'budget', 'pause'] as const)(
-    'preserves stored independent relation review checkpoints: %s',
-    async (mode) => {
+  it('retains archived tasks for reading and cancellation but rejects resume and restart', async () => {
+    const f = fixture();
+    f.actions.generate.mockRejectedValue(
+      new OperationError('rejected', 'ai_provider_unavailable'),
+    );
+    const task = await f.service.start(owner, 'archived-document', {
+      kind: 'document',
+      snapshotId: S,
+    });
+    await f.done(task.taskId);
+    const current = requireOperationValue(f.rows.get(task.taskId));
+    const state = {...current.state};
+    delete state.workflow;
+    f.rows.set(task.taskId, {...current, state});
+    f.actions.generate.mockClear();
+    await expect(
+      f.service.control(owner, task.taskId, current.version, 'resume'),
+    ).rejects.toMatchObject({code: 'legacy_document_task'});
+    await expect(
+      f.service.restart(owner, task.taskId, current.version),
+    ).rejects.toMatchObject({code: 'legacy_document_task'});
+    await f.service.execute(task.taskId);
+    expect(f.rows.get(task.taskId)?.state).toMatchObject({
+      status: 'paused',
+      errorCode: 'legacy_document_task',
+    });
+    expect(f.actions.generate).not.toHaveBeenCalled();
+    const read = await f.service.read(owner, task.taskId);
+    await f.service.control(owner, task.taskId, read.version, 'cancel');
+    await vi.waitFor(() => {
+      expect(f.rows.get(task.taskId)?.state.status).toBe('cancelled');
+    });
+  });
+  it('rejects retired document relation parameters instead of ignoring them', async () => {
+    const f = fixture();
+    await expect(
+      f.service.start(owner, 'retired-parameters', {
+        kind: 'document',
+        snapshotId: S,
+        maxRelations: 3,
+      }),
+    ).rejects.toMatchObject({code: 'invalid_task_request'});
+    expect(f.rows.size).toBe(0);
+  });
+  it('retags and confirms through the same publication boundary', async () => {
+    const f = fixture();
+    const task = await f.service.start(owner, 'retag-confirmed-content', {
+      kind: 'document',
+      snapshotId: S,
+      reprocess: 'tags',
+      maxModelCalls: 1,
+    });
+    const result = await f.done(task.taskId);
+    expect(result.state).toMatchObject({status: 'succeeded', calls: 1});
+    expect(result.state.steps.map((s) => s.kind)).toEqual(['tags']);
+    expect(f.actions.publish).toHaveBeenCalledOnce();
+  });
+  it.each(['rule', 'review', 'ai'] as const)(
+    'freezes source rules and handles %s without losing task gates or budgets',
+    async (outcome) => {
       const f = fixture();
-      // Simulate a persisted trial task; production creation no longer opts in.
-      const create = f.repository.create.bind(f.repository);
-      f.repository.create = (task) =>
-        create({
-          ...task,
-          state: {...task.state, relationReviewRequired: true},
-        });
-      f.actions.relationSteps.mockResolvedValue([
-        {
-          kind: 'relation',
-          targetId: E,
-          relatedEntryId: P,
-          expectedRevision: 2,
-          expectedRelatedRevision: 1,
-          expectedOverrideRevision: 0,
-          attempt: 0,
-          complete: false,
-        },
-      ]);
-      const originalReview = requireOperationValue(
-        f.actions.reviewRelation.getMockImplementation(),
-      );
-      f.actions.reviewRelation.mockImplementation(async (task, step) => {
-        const run = await originalReview(task, step);
-        if (mode === 'pause')
-          await f.repository.control(
-            W,
-            task.taskId,
-            requireOperationValue(f.rows.get(task.taskId)).version,
-            'pause',
-          );
-        if (mode === 'negative') {
-          const negative = {
-            ...run,
-            proposals: [],
-            currentStage: 'associations' as const,
-            currentStep: '未发现有意义的联系',
-            completedUnits: 1,
-            totalUnits: 1,
-          };
-          f.runs.set(run.runId, negative);
-          return negative;
-        }
-        if (mode === 'uncertain') {
-          const held = {
-            ...run,
-            proposals: [],
-            status: 'failed' as const,
-            errorCode: 'ai_relation_review_uncertain',
-          };
-          f.runs.set(run.runId, held);
-          return held;
-        }
-        return run;
+      const frozen: FrozenSourceSplit = {
+        engine: SOURCE_SPLIT_ENGINE,
+        catalogRevision: 7,
+        recipes: [],
+      };
+      f.actions.freezeSourceSplit.mockResolvedValue(frozen);
+      f.actions.decideSourceSplit.mockResolvedValue({
+        outcome,
+        reason:
+          outcome === 'review' ? 'recipe_format_mismatch' : 'recipe_ready',
       });
-      const task = await f.service.start(owner, `review-${mode}`, {
+      const task = await f.service.start(owner, 'synthetic-recipe-' + outcome, {
         kind: 'document',
         snapshotId: S,
         maxEntries: 4,
-        maxRelations: 1,
-        maxModelCalls: mode === 'budget' ? 3 : 6,
+        maxRelations: 0,
+        maxModelCalls: 4,
       });
-      let result = await f.done(task.taskId);
-      if (mode === 'pause') {
-        expect(result.state.status).toBe('paused');
-        await f.service.control(owner, task.taskId, result.version, 'resume');
-        result = await f.done(task.taskId);
-      }
-      if (mode === 'budget') {
-        expect(result.state).toMatchObject({
-          status: 'failed',
-          calls: 3,
-          errorCode: 'model_call_budget_exhausted',
-        });
-        expect(f.actions.reviewRelation).not.toHaveBeenCalled();
-      } else {
-        expect(result.state).toMatchObject({
-          status: mode === 'uncertain' ? 'paused' : 'succeeded',
-          calls: 4,
-          relationReviewRequired: true,
-        });
-        expect(f.actions.reviewRelation).toHaveBeenCalledTimes(1);
-        expect(
-          result.state.steps.find((step) => step.kind === 'relation')
-            ?.reviewAttempt,
-        ).toBe(1);
-      }
-      const accepted = f.actions.accept.mock.calls.filter(
-        ([, step]) => step.kind === 'relation',
-      );
-      if (mode === 'positive' || mode === 'pause') {
-        expect(accepted).toHaveLength(1);
-        expect(accepted[0]?.[2].proposalId).toBe(S);
-      } else expect(accepted).toHaveLength(0);
-      expect(f.actions.publish).toHaveBeenCalledTimes(
-        mode === 'budget' || mode === 'uncertain' ? 0 : 1,
-      );
-    },
-  );
-  it.each([24, 22])(
-    'plans a 35-entry collection against the unchanged %i-call limit',
-    async (limit) => {
-      const f = fixture();
-      const tags: AgentTaskStep[] = Array.from({length: 35}, (_, index) => ({
-        kind: 'tags',
-        targetId: `00000000-0000-4000-8000-${String(100 + index).padStart(12, '0')}`,
-        expectedRevision: 1,
-        attempt: 0,
-        complete: false,
-      }));
-      const original = requireOperationValue(
-        f.actions.generate.getMockImplementation(),
-      );
-      f.actions.generate.mockImplementation(async (task, step) => {
-        const run = await original(task, step);
-        if (step.kind !== 'split') return run;
-        const changed = {
-          ...run,
-          proposals: [
-            {
-              ...requireOperationValue(run.proposals[0]),
-              splitPayload: {
-                providerModel: 'synthetic-model',
-                promptVersion: 'synthetic-split',
-                splitRuleVersion: 'struinfo.entry-split.ai-group.v1',
-                entries: tags.map(() => ({
-                  titlePath: 'Synthetic',
-                  fragmentIds: [S],
-                })),
-              },
-            } as ProcessingProposal,
-          ],
-        };
-        f.runs.set(run.runId, changed);
-        return changed;
-      });
-      f.actions.tagSteps.mockResolvedValue(tags);
-      f.actions.tagCallEstimate.mockResolvedValue(9);
-      f.actions.recallCallEstimate.mockResolvedValue(9);
-      f.actions.tagGroup.mockImplementation((task) =>
-        Promise.resolve(
-          task.state.steps
-            .filter(
-              (step) => step.kind === 'tags' && !step.complete && !step.runId,
-            )
-            .slice(0, 4),
-        ),
-      );
-      f.actions.generateTagGroup.mockImplementation(
-        async (group: AgentTaskStep[]) => {
-          const task = requireOperationValue([...f.rows.values()][0]);
-          return Promise.all(
-            group.map(async (step) => ({
-              outcome: 'created',
-              run: await original(task, step),
-            })),
-          );
-        },
-      );
-      f.actions.recallSteps.mockResolvedValue(
-        tags.map((step) => ({...step, kind: 'recall', expectedRevision: 2})),
-      );
-      f.actions.recallGroup.mockImplementation((task) =>
-        Promise.resolve(
-          task.state.steps
-            .filter((step) => step.kind === 'recall' && !step.recallPlan)
-            .slice(0, 4),
-        ),
-      );
-      f.actions.relationSteps.mockResolvedValue(
-        tags.slice(0, 3).map((step) => ({
-          ...step,
-          kind: 'relation',
-          relatedEntryId: P,
-          expectedRevision: 2,
-          expectedRelatedRevision: 1,
-          expectedOverrideRevision: 0,
-        })),
-      );
-      const task = await f.service.start(
-        owner,
-        `collection-${limit.toString()}`,
-        {
-          kind: 'document',
-          snapshotId: S,
-          intake: {fetchFullText: false},
-          maxEntries: 64,
-          maxRelations: 3,
-          maxRelationCandidates: 3,
-          maxModelCalls: limit,
-        },
-      );
       const result = await f.done(task.taskId);
-      if (limit === 24) {
-        expect(result.state).toMatchObject({status: 'succeeded', calls: 23});
-        expect(result.state.steps.every((step) => step.complete)).toBe(true);
-        expect(f.actions.publish).toHaveBeenCalledTimes(1);
-        expect(f.actions.generateTagGroup).toHaveBeenCalledTimes(9);
+      expect(result.state.sourceSplit).toEqual(frozen);
+      expect(f.actions.decideSourceSplit).toHaveBeenCalledOnce();
+      if (outcome === 'review') {
+        expect(result.state).toMatchObject({
+          status: 'paused',
+          calls: 0,
+          errorCode: 'recipe_format_mismatch',
+        });
+        expect(f.actions.generate).not.toHaveBeenCalled();
+        expect(f.actions.publish).not.toHaveBeenCalled();
       } else {
         expect(result.state).toMatchObject({
-          status: 'failed',
-          calls: 2,
-          errorCode: 'insufficient_document_call_budget',
+          status: 'succeeded',
+          calls: outcome === 'rule' ? 1 : 2,
         });
-        expect(f.actions.tagSteps).not.toHaveBeenCalled();
-        expect(f.writes).toBe(0);
-        expect(f.actions.publish).not.toHaveBeenCalled();
+        expect(f.actions.applySourceSplit).toHaveBeenCalledTimes(
+          outcome === 'rule' ? 1 : 0,
+        );
+        expect(f.actions.publish).toHaveBeenCalledOnce();
       }
     },
   );
@@ -820,62 +711,6 @@ describe('bounded Agent tasks', () => {
     });
     expect((await f.done(external.taskId)).state.status).toBe('succeeded');
   });
-  it('recovers a completed no-relation evaluation without another call or graph write', async () => {
-    const f = fixture();
-    const generate = requireOperationValue(
-      f.actions.generate.getMockImplementation(),
-    );
-    f.actions.relationSteps.mockResolvedValue([
-      {
-        kind: 'relation',
-        targetId: E,
-        relatedEntryId: S,
-        attempt: 0,
-        complete: false,
-      },
-    ]);
-    f.actions.generate.mockImplementation(async (task, step) => {
-      if (step.kind !== 'relation') return generate(task, step);
-      const run = {
-        runId: step.runId,
-        status: 'succeeded',
-        currentStage: 'associations',
-        currentStep: '未发现有意义的联系',
-        completedUnits: 1,
-        totalUnits: 1,
-        proposals: [],
-      } as unknown as ProcessingRun;
-      f.runs.set(requireOperationValue(step.runId), run);
-      const current = requireOperationValue(f.rows.get(task.taskId));
-      f.rows.set(task.taskId, {...current, pauseRequested: true});
-      return run;
-    });
-    const task = await f.service.start(owner, 'no-relation-recovery', {
-      kind: 'document',
-      snapshotId: S,
-      maxModelCalls: 3,
-    });
-    expect((await f.done(task.taskId)).state).toMatchObject({
-      status: 'paused',
-      calls: 3,
-    });
-    await vi.waitFor(async () => {
-      expect((await f.service.read(owner, task.taskId)).runtimeStatus).toBe(
-        'idle',
-      );
-    });
-    const current = await f.service.read(owner, task.taskId);
-    await f.service.control(owner, task.taskId, current.version, 'resume');
-    await vi.waitFor(() => {
-      expect(f.rows.get(task.taskId)?.state.status).toBe('succeeded');
-    });
-    expect(f.rows.get(task.taskId)?.state.steps.at(-1)).toMatchObject({
-      complete: true,
-      outcome: 'no_relation',
-    });
-    expect(f.actions.generate).toHaveBeenCalledTimes(3);
-    expect(f.writes).toBe(2);
-  });
 
   it('rechecks saved automation authority after generation and resumes the same proposal', async () => {
     let denied: string | undefined;
@@ -1158,66 +993,6 @@ describe('intake and multilingual task stages', () => {
     ).toBe(2);
     expect(f.writes).toBe(2);
   });
-  it('checks more candidates than the accepted edge cap and persists recall reasons', async () => {
-    const f = fixture();
-    f.actions.recallSteps.mockResolvedValue([
-      {
-        kind: 'recall',
-        targetId: E,
-        expectedRevision: 2,
-        attempt: 0,
-        complete: false,
-      },
-    ]);
-    f.actions.relationSteps.mockResolvedValue(
-      [S, P, W].map((relatedEntryId) => ({
-        kind: 'relation',
-        targetId: E,
-        relatedEntryId,
-        attempt: 0,
-        complete: false,
-        candidateReasons: ['Synthetic → 合成概念（正文）'],
-      })),
-    );
-    const generate = requireOperationValue(
-      f.actions.generate.getMockImplementation(),
-    );
-    f.actions.generate.mockImplementation(async (task, step) => {
-      if (step.kind !== 'relation' || step.relatedEntryId !== S)
-        return generate(task, step);
-      const run = {
-        runId: step.runId,
-        status: 'succeeded',
-        currentStage: 'associations',
-        currentStep: '未发现有意义的联系',
-        completedUnits: 1,
-        totalUnits: 1,
-        proposals: [],
-      } as unknown as ProcessingRun;
-      f.runs.set(requireOperationValue(step.runId), run);
-      return run;
-    });
-    const task = await f.service.start(owner, 'recall-budget', {
-      kind: 'document',
-      snapshotId: S,
-      maxRelations: 1,
-      maxRelationCandidates: 3,
-      maxModelCalls: 5,
-    });
-    const result = await f.done(task.taskId);
-    expect(result.state.status).toBe('succeeded');
-    expect(result.state.calls).toBe(5);
-    expect(
-      result.state.steps
-        .filter((s) => s.kind === 'relation')
-        .map((s) => s.outcome),
-    ).toEqual(['no_relation', undefined, 'edge_budget_reached']);
-    expect(
-      result.state.steps.find((s) => s.kind === 'recall')?.recallPlan
-        ?.concepts[0]?.variants,
-    ).toContain('合成概念');
-    expect(f.writes).toBe(3);
-  });
   it('does not grant capture access through an existing process grant', async () => {
     const f = fixture();
     const authority = ExecutionAuthority.agent(W, 'synthetic-agent', [
@@ -1349,196 +1124,7 @@ it('global resume preserves individual pauses and refuses to spend a call while 
   expect(f.rows.get(task.taskId)?.pauseRequested).toBe(true);
 });
 
-it.each([
-  {entries: 25, budget: 55, enough: false},
-  {entries: 25, budget: 56, enough: true},
-  {entries: 29, budget: 63, enough: false},
-  {entries: 29, budget: 64, enough: true},
-])(
-  'checks the entire collection plan before accepting a split: $entries entries / $budget calls',
-  async ({entries, budget, enough}) => {
-    const f = fixture();
-    const generate = requireOperationValue(
-      f.actions.generate.getMockImplementation(),
-    );
-    f.actions.generate.mockImplementation(async (task, step) => {
-      const run = await generate(task, step);
-      if (step.kind !== 'split') return run;
-      const updated = {
-        ...run,
-        proposals: run.proposals.map((proposal) => ({
-          ...proposal,
-          splitPayload: {
-            providerModel: 'synthetic-model',
-            promptVersion: 'synthetic-v1',
-            splitRuleVersion: 'struinfo.entry-split.ai-group.v1' as const,
-            entries: Array.from({length: entries}, (_, index) => ({
-              titlePath: `Synthetic news ${index.toString()}`,
-              fragmentIds: [S],
-            })),
-          },
-        })),
-      };
-      f.runs.set(updated.runId, updated);
-      return updated;
-    });
-    const targets = Array.from(
-      {length: entries},
-      (_, index) =>
-        `00000000-0000-4000-8000-${String(100 + index).padStart(12, '0')}`,
-    );
-    f.actions.tagSteps.mockResolvedValue(
-      targets.map((targetId) => ({
-        kind: 'tags',
-        targetId,
-        expectedRevision: 1,
-        attempt: 0,
-        complete: false,
-      })),
-    );
-    f.actions.recallSteps.mockResolvedValue(
-      targets.map((targetId) => ({
-        kind: 'recall',
-        targetId,
-        expectedRevision: 2,
-        attempt: 0,
-        complete: false,
-      })),
-    );
-    const task = await f.service.start(
-      owner,
-      `synthetic-capacity-${entries.toString()}-${budget.toString()}`,
-      {
-        kind: 'document',
-        snapshotId: S,
-        intake: {fetchFullText: false},
-        maxEntries: 64,
-        maxRelations: 2,
-        maxRelationCandidates: 4,
-        maxModelCalls: budget,
-      },
-    );
-    const result = await f.done(task.taskId);
-    expect(result.request).toMatchObject({maxModelCalls: budget});
-    if (enough) {
-      expect(result.state.status).toBe('succeeded');
-      expect(f.actions.recall).toHaveBeenCalledTimes(entries);
-    } else {
-      expect(result.state).toMatchObject({
-        status: 'failed',
-        calls: 2,
-        errorCode: 'insufficient_document_call_budget',
-      });
-      expect(f.actions.accept).not.toHaveBeenCalled();
-      expect(f.actions.recall).not.toHaveBeenCalled();
-      const split = result.state.steps.find((step) => step.kind === 'split');
-      expect(split?.proposalId).toBe(P);
-      expect(split?.complete).toBe(false);
-    }
-  },
-);
-
-it('resumes only the failed recall, retaining the completed writes and consumed attempts', async () => {
-  const f = fixture();
-  f.actions.recallSteps.mockResolvedValue([
-    {
-      kind: 'recall',
-      targetId: E,
-      expectedRevision: 2,
-      attempt: 0,
-      complete: false,
-    },
-  ]);
-  f.actions.recall.mockRejectedValueOnce(
-    new OperationError('rejected', 'ai_provider_incomplete_response'),
-  );
-  const task = await f.service.start(owner, 'synthetic-recall-recovery', {
-    kind: 'document',
-    snapshotId: S,
-    maxRelations: 1,
-    maxRelationCandidates: 1,
-    maxModelCalls: 8,
-  });
-  const failed = await f.done(task.taskId);
-  expect(failed.state).toMatchObject({
-    status: 'failed',
-    phase: 'recall',
-    calls: 3,
-    errorCode: 'ai_provider_incomplete_response',
-  });
-  expect(failed.state.steps.find((s) => s.kind === 'recall')).toMatchObject({
-    attempt: 1,
-    complete: false,
-  });
-  await f.service.control(owner, task.taskId, failed.version, 'resume');
-  const completed = await f.done(task.taskId);
-  expect(completed.state).toMatchObject({status: 'succeeded', calls: 4});
-  expect(completed.state.steps.find((s) => s.kind === 'recall')).toMatchObject({
-    attempt: 2,
-    complete: true,
-  });
-  expect(f.actions.generate).toHaveBeenCalledTimes(2);
-  expect(f.actions.accept).toHaveBeenCalledTimes(2);
-  expect(f.actions.recall).toHaveBeenCalledTimes(2);
-});
-
-it('does not reset the recall attempt limit on repeated explicit resumes', async () => {
-  const f = fixture();
-  f.actions.recallSteps.mockResolvedValue([
-    {
-      kind: 'recall',
-      targetId: E,
-      expectedRevision: 2,
-      attempt: 0,
-      complete: false,
-    },
-  ]);
-  f.actions.recall.mockRejectedValue(
-    new OperationError('rejected', 'ai_provider_invalid_schema'),
-  );
-  const task = await f.service.start(owner, 'synthetic-recall-attempt-limit', {
-    kind: 'document',
-    snapshotId: S,
-    maxRelations: 1,
-    maxRelationCandidates: 1,
-    maxModelCalls: 8,
-  });
-  let failed = await f.done(task.taskId);
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    await f.service.control(owner, task.taskId, failed.version, 'resume');
-    failed = await f.done(task.taskId);
-  }
-  expect(failed.state).toMatchObject({
-    status: 'failed',
-    calls: 5,
-    errorCode: 'step_attempt_budget_exhausted',
-  });
-  expect(f.actions.recall).toHaveBeenCalledTimes(3);
-  expect(f.actions.accept).toHaveBeenCalledTimes(2);
-});
-
 describe('owner workbench reprocessing', () => {
-  it('freezes tag steps at submission, confirms results, and never splits or recalls', async () => {
-    const f = fixture();
-    const task = await f.service.start(owner, 'workbench-retag', {
-      kind: 'document',
-      snapshotId: S,
-      reprocess: 'tags',
-      maxEntries: 12,
-      maxRelations: 0,
-      maxModelCalls: 3,
-    });
-    const completed = await f.done(task.taskId);
-    expect(completed.state.status).toBe('succeeded');
-    expect(completed.state.calls).toBe(1);
-    expect(f.actions.tagSteps).toHaveBeenCalledTimes(1);
-    expect(
-      f.actions.generate.mock.calls.every(([, step]) => step.kind === 'tags'),
-    ).toBe(true);
-    expect(f.actions.accept).toHaveBeenCalledTimes(1);
-    expect(f.actions.recallSteps).not.toHaveBeenCalled();
-    expect(f.actions.relationSteps).not.toHaveBeenCalled();
-  });
   it('does not silently expand reprocessing into relations', async () => {
     const f = fixture();
     await expect(
@@ -1548,7 +1134,7 @@ describe('owner workbench reprocessing', () => {
         reprocess: 'tags',
         maxRelations: 1,
       }),
-    ).rejects.toMatchObject({code: 'operation_not_authorized'});
+    ).rejects.toMatchObject({code: 'invalid_task_request'});
     expect(f.rows.size).toBe(0);
   });
 });
@@ -1659,6 +1245,15 @@ describe('document admission through publication', () => {
 describe('explicit failed-task recovery rounds', () => {
   async function exhausted() {
     const f = fixture();
+    f.actions.freezeSourceSplit.mockResolvedValue({
+      engine: SOURCE_SPLIT_ENGINE,
+      catalogRevision: 7,
+      recipes: [],
+    });
+    f.actions.decideSourceSplit.mockResolvedValue({
+      outcome: 'ai',
+      reason: 'recipe_not_configured',
+    });
     const task = await f.service.start(owner, 'recovery', {
       kind: 'document',
       snapshotId: S,
@@ -1680,6 +1275,7 @@ describe('explicit failed-task recovery rounds', () => {
       previousTaskId: f.failed.taskId,
       previousCalls: 1,
     });
+    expect(next.state.sourceSplit).toEqual(f.failed.state.sourceSplit);
     await f.done(next.taskId);
     expect(f.rows.get(next.taskId)?.state.status).toBe('succeeded');
     expect(f.actions.generate.mock.calls.map((call) => call[1].kind)).toEqual([
@@ -1786,83 +1382,6 @@ it('keeps exhausted attempt history and renews only unfinished attempts on expli
   expect(f.rows.get(task.taskId)?.state.steps[0]?.attempt).toBe(3);
 });
 
-it('accounts for one batched recall request and preserves all plans when paused after response', async () => {
-  const f = fixture();
-  const targets = [10, 11, 12, 13].map(
-    (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
-  );
-  f.actions.tagSteps.mockResolvedValue(
-    targets.map((targetId) => ({
-      kind: 'tags',
-      targetId,
-      expectedRevision: 1,
-      attempt: 0,
-      complete: false,
-    })),
-  );
-  f.actions.recallSteps.mockResolvedValue(
-    targets.map((targetId) => ({
-      kind: 'recall',
-      targetId,
-      expectedRevision: 2,
-      attempt: 0,
-      complete: false,
-    })),
-  );
-  f.actions.recallGroup.mockImplementation((task) =>
-    Promise.resolve(
-      task.state.steps.filter(
-        (s) => s.kind === 'recall' && !s.complete && !s.recallPlan,
-      ),
-    ),
-  );
-  f.actions.recallGroupPlans.mockImplementation((steps) => {
-    const task = requireOperationValue([...f.rows.values()][0]);
-    expect(task.state.calls).toBe(6); // One split, four tags, one four-item recall.
-    expect(
-      task.state.steps
-        .filter((s) => s.kind === 'recall')
-        .every((s) => s.attempt === 1),
-    ).toBe(true);
-    f.rows.set(task.taskId, {...task, pauseRequested: true});
-    return Promise.resolve(
-      steps.map((s) => ({
-        concepts: [{term: s.targetId, variants: ['Synthetic equivalent']}],
-      })),
-    );
-  });
-  const task = await f.service.start(owner, 'synthetic-batch-checkpoint', {
-    kind: 'document',
-    snapshotId: S,
-    maxEntries: 8,
-    maxRelations: 1,
-    maxRelationCandidates: 4,
-    maxModelCalls: 8,
-  });
-  expect((await f.done(task.taskId)).state).toMatchObject({
-    status: 'paused',
-    calls: 6,
-  });
-  expect(
-    f.rows
-      .get(task.taskId)
-      ?.state.steps.filter((s) => s.kind === 'recall')
-      .every((s) => s.recallPlan),
-  ).toBe(true);
-  await vi.waitFor(async () => {
-    expect((await f.service.read(owner, task.taskId)).runtimeStatus).toBe(
-      'idle',
-    );
-  });
-  const current = await f.service.read(owner, task.taskId);
-  await f.service.control(owner, task.taskId, current.version, 'resume');
-  await vi.waitFor(() => {
-    expect(f.rows.get(task.taskId)?.state.status).toBe('succeeded');
-  });
-  expect(f.rows.get(task.taskId)?.state.calls).toBe(6);
-  expect(f.actions.recallGroupPlans).toHaveBeenCalledTimes(1);
-});
-
 it('replans an explicitly selected failed pending split without renewing its budget or discarding history', async () => {
   const f = fixture();
   const generate = requireOperationValue(
@@ -1923,110 +1442,6 @@ it('replans an explicitly selected failed pending split without renewing its bud
   expect(f.runs.get(requireOperationValue(oldRun))?.proposals[0]?.status).toBe(
     'pending_review',
   );
-});
-
-it('finishes a corrected thirteen-item collection within the original 24-call round after one discarded split', async () => {
-  const f = fixture();
-  const generate = requireOperationValue(
-    f.actions.generate.getMockImplementation(),
-  );
-  f.actions.generate.mockImplementation(async (task, step) => {
-    const run = await generate(task, step);
-    if (step.kind !== 'split') return run;
-    const count = step.attempt === 1 ? 15 : 13;
-    const updated = {
-      ...run,
-      proposals: run.proposals.map((p) => ({
-        ...p,
-        splitPayload: {
-          providerModel: 'synthetic-model',
-          promptVersion: 'synthetic-v1',
-          splitRuleVersion: 'struinfo.entry-split.ai-group.v1' as const,
-          entries: Array.from({length: count}, () => ({
-            titlePath: 'Synthetic resource',
-            fragmentIds: [S],
-          })),
-        },
-      })),
-    };
-    f.runs.set(updated.runId, updated);
-    return updated;
-  });
-  const targets = Array.from(
-    {length: 13},
-    (_, n) => `00000000-0000-4000-8000-${String(100 + n).padStart(12, '0')}`,
-  );
-  f.actions.tagSteps.mockResolvedValue(
-    targets.map((targetId) => ({
-      kind: 'tags',
-      targetId,
-      expectedRevision: 1,
-      attempt: 0,
-      complete: false,
-    })),
-  );
-  f.actions.recallSteps.mockResolvedValue(
-    targets.map((targetId) => ({
-      kind: 'recall',
-      targetId,
-      expectedRevision: 2,
-      attempt: 0,
-      complete: false,
-    })),
-  );
-  f.actions.relationSteps.mockResolvedValue(
-    targets.slice(0, 4).map((targetId) => ({
-      kind: 'relation',
-      targetId,
-      relatedEntryId: S,
-      attempt: 0,
-      complete: false,
-    })),
-  );
-  f.actions.recallCallEstimate.mockResolvedValue(4);
-  f.actions.recallGroup.mockImplementation((task) =>
-    Promise.resolve(
-      task.state.steps
-        .filter(
-          (step) =>
-            step.kind === 'recall' && !step.complete && !step.recallPlan,
-        )
-        .slice(0, 4),
-    ),
-  );
-  const task = await f.service.start(owner, 'synthetic-thirteen-item-budget', {
-    kind: 'document',
-    snapshotId: S,
-    intake: {fetchFullText: false},
-    maxEntries: 64,
-    maxRelations: 4,
-    maxRelationCandidates: 4,
-    maxModelCalls: 24,
-  });
-  const failed = await f.done(task.taskId);
-  expect(failed.state).toMatchObject({
-    calls: 2,
-    errorCode: 'insufficient_document_call_budget',
-  });
-  await vi.waitFor(async () => {
-    expect((await f.service.read(owner, task.taskId)).runtimeStatus).toBe(
-      'idle',
-    );
-  });
-  const current = await f.service.read(owner, task.taskId);
-  await f.service.control(owner, task.taskId, current.version, 'resume', true);
-  await vi.waitFor(() => {
-    expect(f.rows.get(task.taskId)?.state.status).toBe('succeeded');
-  });
-  const result = requireOperationValue(f.rows.get(task.taskId));
-  expect(result.state.calls).toBe(24);
-  expect(result.request).toMatchObject({maxModelCalls: 24});
-  expect(
-    result.state.steps.filter((step) => step.kind === 'tags' && step.complete),
-  ).toHaveLength(13);
-  expect(
-    f.actions.recallGroupPlans.mock.calls.map(([steps]) => steps.length),
-  ).toEqual([4, 4, 4, 1]);
 });
 
 describe('owner configured document execution', () => {

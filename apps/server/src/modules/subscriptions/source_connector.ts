@@ -4,6 +4,7 @@ import {deriveUuidV5} from '../entries/index.js';
 import {
   importMarkdownEvidence,
   type EvidenceRepositoryPort,
+  type EvidenceReadRepositoryPort,
   type PublicationInput,
 } from '../evidence/index.js';
 import type {BlobStore} from '../../storage/blob_store.js';
@@ -195,6 +196,7 @@ function decodeConnectorDescriptor(
 }
 
 export interface SourceConnectorImportDependencies {
+  readonly evidenceRead?: EvidenceReadRepositoryPort;
   readonly blobStore: BlobStore;
   readonly evidenceRepository: EvidenceRepositoryPort;
   readonly importEvidence?: typeof importMarkdownEvidence;
@@ -266,15 +268,45 @@ export async function importSourceConnectorDocuments(
     const documentIdentity = digestText(
       `${input.connectorId}\u0000${document.externalId}`,
     );
-    const contentIdentity = digestText(`${rawSha256}\u0000${projectionSha256}`);
+    const legacyContentIdentity = digestText(
+      `${rawSha256}\u0000${projectionSha256}`,
+    );
+    // The enclosing feed can change while this article stays unchanged.
+    const contentIdentity = digestText(
+      JSON.stringify([document.version, document.profile, projectionSha256]),
+    );
     const resourceId = deriveUuidV5(
       input.workspaceId,
       `struinfo:source-connector-resource:v1:${input.subscriptionId}:${documentIdentity}`,
     );
     const snapshotId = deriveUuidV5(
       resourceId,
-      `struinfo:source-connector-snapshot:v1:${contentIdentity}`,
+      `struinfo:source-connector-snapshot:v2:${contentIdentity}`,
     );
+    const legacySnapshotId = deriveUuidV5(
+      resourceId,
+      `struinfo:source-connector-snapshot:v1:${legacyContentIdentity}`,
+    );
+    const previous =
+      (await dependencies.evidenceRead?.loadSnapshot(
+        input.workspaceId,
+        snapshotId,
+      )) ??
+      (await dependencies.evidenceRead?.loadSnapshot(
+        input.workspaceId,
+        legacySnapshotId,
+      ));
+    if (previous) {
+      if (Boolean(previous.isPrivate) !== input.isPrivate)
+        return {status: 'failed', documentIndex, code: 'conflict'};
+      importedDocuments.push({
+        externalId: document.externalId,
+        resourceId,
+        snapshotId: previous.snapshotId,
+        outcome: 'existing',
+      });
+      continue;
+    }
     const imported = await (
       dependencies.importEvidence ?? importMarkdownEvidence
     )(
@@ -284,7 +316,7 @@ export async function importSourceConnectorDocuments(
       },
       Object.freeze({
         workspaceId: input.workspaceId,
-        commandIdempotencyKey: `source-connector-import:${input.subscriptionId}:${contentIdentity}`,
+        commandIdempotencyKey: `source-connector-import:v2:${resourceId}:${contentIdentity}`,
         resource: Object.freeze({
           workspaceId: input.workspaceId,
           resourceId,

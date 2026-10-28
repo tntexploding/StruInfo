@@ -1,4 +1,26 @@
 import {
+  researchCommandSchemas,
+  researchOwnerSchemas,
+} from './research_contract.js';
+import type {ResearchService} from './research_service.js';
+import type {ReportPipeline} from './report_pipeline.js';
+import {
+  topicCommandSchemas,
+  topicOwnerSchemas,
+  type TopicService,
+} from './topic_service.js';
+import {
+  annotationCommandSchemas,
+  annotationOwnerSchemas,
+  type AnnotationService,
+} from './annotation_service.js';
+import {annotationFilterSchema} from '../modules/entries/structured_annotations.js';
+import {
+  splitRecipeReadSchemas,
+  splitRecipeOwnerSchemas,
+  type SourceSplitService,
+} from './source_split_service.js';
+import {
   historySchemas,
   type SourceHistoryService,
 } from './source_history_service.js';
@@ -90,6 +112,10 @@ const inboxOwnerSchemas = {
   intake_summarize: z.object({snapshotId: id}).strict(),
 };
 export const agentCommandSchemas = {
+  ...splitRecipeReadSchemas,
+  ...annotationCommandSchemas,
+  ...topicCommandSchemas,
+  ...researchCommandSchemas,
   ...reportReadCommandSchemas,
   system_status: z.object({}).strict(),
   processing_standard: z
@@ -169,8 +195,10 @@ export const agentCommandSchemas = {
     .strict(),
   document_read: z.object({snapshotId: id}).strict(),
   document_publish: documentPublishSchema,
+  document_publication_status: z.object({snapshotId: id}).strict(),
   entries_search: z
     .object({
+      annotationFilter: annotationFilterSchema.optional(),
       text: z.string().max(ENTRY_SEARCH_TEXT_LIMIT).default(''),
       textMode: z.enum(ENTRY_TEXT_SEARCH_MODES).optional(),
       sourceKey: z.string().max(2048).optional(),
@@ -227,6 +255,11 @@ export const agentCommandSchemas = {
 
 export type AgentCommandName = keyof typeof agentCommandSchemas;
 export interface AgentCommandDependencies {
+  readonly sourceSplit?: SourceSplitService;
+  readonly annotations?: AnnotationService;
+  readonly topics?: TopicService;
+  readonly research?: ResearchService;
+  readonly reportPipeline?: ReportPipeline;
   readonly sourceDescription?: SourceDescriptionService;
   readonly sourceHistory?: SourceHistoryService;
   readonly sourceQuality?: SourceQualityService;
@@ -270,6 +303,44 @@ export class AgentCommands {
     return this.deps.ingestion;
   }
   public async execute(name: string, input: unknown): Promise<unknown> {
+    if (
+      Object.hasOwn(researchOwnerSchemas, name) ||
+      name === 'report_pipeline_status'
+    ) {
+      if (!this.deps.reportPipeline)
+        throw new OperationError('rejected', 'research_unavailable');
+      return this.deps.reportPipeline.execute(this.authority, name, input);
+    }
+    if (Object.hasOwn(researchCommandSchemas, name)) {
+      if (!this.deps.research)
+        throw new OperationError('rejected', 'research_unavailable');
+      return this.deps.research.execute(this.authority, name, input);
+    }
+
+    if (
+      Object.hasOwn(topicCommandSchemas, name) ||
+      Object.hasOwn(topicOwnerSchemas, name)
+    ) {
+      if (!this.deps.topics)
+        throw new OperationError('rejected', 'topics_unavailable');
+      return this.deps.topics.execute(this.authority, name, input);
+    }
+    if (
+      Object.hasOwn(annotationCommandSchemas, name) ||
+      Object.hasOwn(annotationOwnerSchemas, name)
+    ) {
+      if (!this.deps.annotations)
+        throw new OperationError('rejected', 'annotations_unavailable');
+      return this.deps.annotations.execute(this.authority, name, input);
+    }
+    if (
+      Object.hasOwn(splitRecipeReadSchemas, name) ||
+      Object.hasOwn(splitRecipeOwnerSchemas, name)
+    ) {
+      if (!this.deps.sourceSplit)
+        throw new OperationError('rejected', 'split_recipes_unavailable');
+      return this.deps.sourceSplit.execute(this.authority, name, input);
+    }
     if (Object.hasOwn(historySchemas, name)) {
       if (this.authority.identity.kind !== 'owner')
         throw new OperationError('forbidden', 'operation_not_authorized');
@@ -484,14 +555,10 @@ export class AgentCommands {
                       kind: 'document',
                       snapshotId: record.snapshotId,
                       maxEntries: status.policy.settings.maxEntries,
-                      maxRelations: status.policy.settings.maxRelations,
                       maxModelCalls: status.policy.settings.maxModelCalls,
                       intake: status.policy.settings.intake ?? {
                         fetchFullText: true,
                       },
-                      maxRelationCandidates:
-                        status.policy.settings.maxRelationCandidates ??
-                        status.policy.settings.maxRelations,
                     },
                   );
               queued.push(task.taskId);
@@ -598,6 +665,15 @@ export class AgentCommands {
               }
             : {}),
         };
+      }
+      case 'document_publication_status': {
+        if (!this.deps.publication)
+          throw new OperationError('rejected', 'publication_unavailable');
+        return this.deps.publication.status(
+          this.authority,
+          parse(agentCommandSchemas.document_publication_status, input)
+            .snapshotId,
+        );
       }
       case 'document_publish': {
         if (!this.deps.publication)

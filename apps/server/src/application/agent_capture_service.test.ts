@@ -1,4 +1,5 @@
 import {describe, expect, it, vi} from 'vitest';
+import {DEFAULT_SOURCE_RECEIVING} from '../modules/subscriptions/source_receiving.js';
 import type {SourceSubscriptionServicePort} from '../modules/subscriptions/source_subscription.js';
 import type {
   ReviewRssSourceSubscription,
@@ -24,7 +25,6 @@ const source: ReviewRssSourceSubscription = {
   sourceAlias: 'synthetic',
   enabled: false,
   isPrivate: false,
-  routeAfterImport: false,
   intervalMinutes: 60,
   feedUrl: 'https://example.com/synthetic.xml',
   itemLimit: 5,
@@ -41,6 +41,17 @@ const input = publicSubscriptionSchema.parse({
 });
 
 describe('Agent source catalog updates', () => {
+  it('accepts the shared strategy and preserves it for clients omitting the new field', async () => {
+    const f = catalogFixture();
+    const receiving = {
+      ...DEFAULT_SOURCE_RECEIVING,
+      schedule: {mode: 'once' as const},
+    };
+    await f.service.put(agent, 7, {...input, receiving});
+    expect(f.current().subscriptions[0]?.receiving).toEqual(receiving);
+    await f.service.put(agent, 8, input);
+    expect(f.current().subscriptions[0]?.receiving).toEqual(receiving);
+  });
   it('rejects a future expected revision before an older read can overwrite a newer private source', async () => {
     const fixture = catalogFixture();
     fixture.list.mockImplementationOnce(() => {

@@ -1,0 +1,126 @@
+.content-topics-panel {
+  display: grid;
+  gap: 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  min-width: 0;
+}
+.content-topics-panel label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.content-topics-panel > .reading-segments {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.content-topics-panel > .reading-segments button {
+  flex: 1;
+  min-width: 0;
+  padding-inline: 5px;
+  white-space: normal;
+}
+.content-topics-panel label:has(input[type='checkbox']) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.editorial-app.editorial-app
+  .content-topics-panel
+  :is(input:not([type='checkbox']), select, textarea) {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  min-height: 42px;
+  border: 1px solid var(--si-color-border-default);
+  border-radius: 10px;
+  background: var(--si-color-surface-1);
+  color: var(--si-color-text-primary);
+  font: inherit;
+}
+.content-topics-panel :is(input, select, textarea):focus-visible {
+  outline: 2px solid var(--si-color-signal);
+  outline-offset: 2px;
+}
+.content-topics-panel textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+.topic-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.topic-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.topic-card {
+  padding: 16px;
+  border: 1px solid var(--si-color-border-default);
+  border-radius: 14px;
+  background: var(--si-color-surface-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.topic-card h3,
+.topic-card h4 {
+  margin: 0 0 8px;
+}
+.topic-card p {
+  margin: 8px 0;
+}
+.topic-member {
+  padding: 14px 0;
+  border-top: 1px solid var(--si-color-border-default);
+}
+.topic-member small {
+  display: block;
+}
+.topic-member blockquote {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--si-color-border-default);
+  font-family: var(--si-font-reading);
+}
+.content-topics-panel .topic-link {
+  display: block;
+  text-align: left;
+  max-width: 100%;
+  width: fit-content;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  margin-bottom: 6px;
+}
+.content-topics-panel details {
+  border-top: 1px solid var(--si-color-border-default);
+  padding-top: 12px;
+}
+.content-topics-panel summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.topic-edit-form {
+  display: grid;
+  gap: 12px;
+}
+.topic-edit-form button {
+  justify-self: start;
+}
+.topic-notice {
+  font-weight: 600;
+}
+@media (max-width: 480px) {
+  .topic-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .topic-card {
+    padding: 12px;
+  }
+}

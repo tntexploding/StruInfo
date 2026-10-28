@@ -36,20 +36,17 @@ export function DocumentAiActions({
             ? Math.max(entryCount, policy.maxEntries)
             : policy.maxEntries,
           maxModelCalls: policy.maxModelCalls,
-          maxRelations: retag ? 0 : policy.maxRelations,
           ...(retag
             ? {reprocess: 'tags'}
             : {
                 intake: policy.intake ?? DEFAULT_INTAKE_POLICY,
-                maxRelationCandidates:
-                  policy.maxRelationCandidates ?? policy.maxRelations,
               }),
         },
       });
       setMessage(
         retag
           ? 'AI 重做标签已排队。成功结果自动确认，手动标签和原文保留。'
-          : 'AI 整理已排队：审核、分段、标签和联系。成功结果自动确认。',
+          : 'AI 整理已排队：审核、分段、标注和确认入库。主题与联系单独处理。',
       );
       onStarted();
     } catch (e) {

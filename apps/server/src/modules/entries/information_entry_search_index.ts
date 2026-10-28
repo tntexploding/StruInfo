@@ -63,6 +63,9 @@ export function prepareInformationEntrySearchProjection(
     throw new Error('Private Entries cannot enter the derived search index.');
   }
   const tags = [
+    ...(entry.value.annotations?.inputBodySha256 === entry.value.bodySha256
+      ? entry.value.annotations.labels.flatMap((l) => [l.term.label, l.wording])
+      : []),
     ...entry.value.contentKeywords.map((keyword) => keyword.displayValue),
     ...(entry.value.typeKeyword === undefined
       ? []
@@ -99,6 +102,9 @@ export function informationEntryEmbeddingInput(
   if (entry.value.isPrivate)
     throw new Error('Private Entries cannot enter the derived search index.');
   const tags = [
+    ...(entry.value.annotations?.inputBodySha256 === entry.value.bodySha256
+      ? entry.value.annotations.labels.flatMap((l) => [l.term.label, l.wording])
+      : []),
     ...entry.value.contentKeywords.map((keyword) => keyword.displayValue),
     ...(entry.value.typeKeyword === undefined
       ? []

@@ -1,7 +1,14 @@
+import {ContentDialog} from '../components/content_dialog.js';
+import {aiWorkflowCommand} from '../api/ai_workflow_client.js';
+import {EntryAnnotationPanel} from './entry_annotation_panel.js';
 import {DocumentPublicationButton} from './document_publication_button.js';
+import {SourceSplitRecipePanel} from './source_split_recipe_panel.js';
 import {InformationDocumentWorkingCopy} from './information_document_working_copy.js';
 import {DocumentAiActions} from './document_ai_actions.js';
-import {TwoPane} from '../components/two_pane.js';
+import {ReadingWorkspaceFrame} from '../components/reading_workspace_frame.js';
+import {AnnotationSummary} from './annotation_summary.js';
+import {ContentTopicsPanel} from './content_topics_panel.js';
+import {FloatingToolPanel} from '../components/floating_tool_panel.js';
 import {InlineStructureEditor} from './inline_structure_editor.js';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type {ComponentProps, ReactNode} from 'react';
@@ -88,7 +95,13 @@ export function DocumentWorkspace({
   const scrollPositions = useRef(new Map<string, number>());
   const returnTarget = useRef<HTMLElement | null>(null);
   const [tool, setTool] = useState<string>();
+  const [annotationTarget, setAnnotationTarget] = useState<{
+    scope: string;
+    entryId: string;
+  }>();
   const [editingStructure, setEditingStructure] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [topicsOpen, setTopicsOpen] = useState(false);
   const [structureDrafts, setStructureDrafts] = useState<
     ReadonlyMap<string, readonly ManualSplitDraftGroup[]>
   >(new Map());
@@ -350,74 +363,180 @@ export function DocumentWorkspace({
   );
   return (
     <div
-      className="workspace-view document-workspace journey-workspace"
+      className="workspace-view document-workspace reading-sample reader-study mode-margin"
       data-workflow-page="documents"
       hidden={!active}
     >
       <header className="workflow-page-heading">
         <div>
-          <h1>工作台</h1>
-          <p>阅读和整理已接受的文档；修改分段、标签与联系后，确认入库。</p>
-        </div>
-        <div className="document-workspace__actions workspace-page-actions ef-glass">
-          <button
-            type="button"
-            className="secondary-action"
-            onClick={() => {
-              controller.refresh(documentId);
-              void processing.refresh();
-            }}
-            disabled={materializing}
-          >
-            刷新文档
-          </button>
+          <h1>文档阅读</h1>
+          <p>阅读原文，查看分段、标签和联系。修改后确认保存。</p>
         </div>
       </header>
-      <label className="privacy-query-toggle">
-        <input
-          type="checkbox"
-          checked={selection.includePrivate}
-          onChange={(event) => {
-            setFeedback(undefined);
-            setTool(undefined);
-            onSelectionChange({includePrivate: event.currentTarget.checked});
-          }}
-        />
-        本次查看包含隐私文档
-      </label>
-      <TwoPane
-        name="workbench"
+      <ReadingWorkspaceFrame
+        readingKey={documentId + ':' + mode}
+        selectedId={documentId}
+        title={document ? sourceDisplayName(document) : ''}
+        onRefresh={() => {
+          controller.refresh(documentId);
+          void processing.refresh();
+        }}
+        stateControl={
+          selectedEntry ? (
+            <button
+              type="button"
+              className="read-state-label text-action"
+              onClick={() => {
+                setAnnotationTarget({
+                  scope: toolScope,
+                  entryId: selectedEntry.entryId,
+                });
+                openTool('annotations');
+              }}
+            >
+              {
+                (
+                  {
+                    unread: '未读',
+                    reading: '在读',
+                    read: '已读',
+                    archived: '已归档',
+                  } as const
+                )[selectedEntry.value.annotations?.readingState ?? 'unread']
+              }
+            </button>
+          ) : null
+        }
+        editing={editing}
+        onEdit={() => {
+          setEditing((value) => !value);
+          setTool(undefined);
+          setEditingStructure(false);
+        }}
+        notes={
+          <>
+            <div className="annotation-title">
+              <h2>旁注</h2>
+              <small>{allEntries.length} 段原文</small>
+            </div>
+            <section className="info-block reading-outline">
+              <h3>分段 · {allEntries.length}</h3>
+              {allEntries.length ? (
+                <ol>
+                  {allEntries.map((entry) => (
+                    <li key={entry.entryId}>
+                      <button
+                        type="button"
+                        aria-pressed={
+                          mode === 'entries' &&
+                          selectedEntry?.entryId === entry.entryId
+                        }
+                        onClick={() => {
+                          controller.locateEntry(entry.entryId);
+                          setSelectedEntries((current) => ({
+                            ...current,
+                            [documentId]: entry.entryId,
+                          }));
+                          setMode('entries');
+                        }}
+                      >
+                        {readingTitle(entry.value.titlePath)}
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p>尚未拆分</p>
+              )}
+            </section>
+            {documentAnnotations}
+            {selectedEntry ? <AnnotationSummary entry={selectedEntry} /> : null}
+            <FloatingToolPanel
+              title="主题与联系"
+              preferredWidth={720}
+              onOpenChange={setTopicsOpen}
+            >
+              <ContentTopicsPanel
+                active={active && topicsOpen}
+                {...(selectedEntry ? {entry: selectedEntry} : {})}
+                onRead={(id) => {
+                  void aiWorkflowCommand<{entry: InformationEntry}>(
+                    'entry_annotations_read',
+                    {entryId: id, includePrivate: selection.includePrivate},
+                  )
+                    .then(({entry}) => {
+                      onSelectionChange({
+                        ...selection,
+                        snapshotId: entry.snapshotId,
+                      });
+                      setSelectedEntries((current) => ({
+                        ...current,
+                        [entry.snapshotId]: id,
+                      }));
+                      setModes((current) => ({
+                        ...current,
+                        [entry.snapshotId]: 'entries',
+                      }));
+                    })
+                    .catch(() => {
+                      setFeedback({
+                        kind: 'error',
+                        title: '无法打开条目',
+                        detail: '请重试。',
+                      });
+                    });
+                }}
+              />
+            </FloatingToolPanel>
+          </>
+        }
         left={
-          <DocumentWorkspaceList
-            state={controller.documents}
-            processing={processing.listView}
-            renderProcessing={(item) => {
-              if (!processing.listView || item.isPrivate) return null;
-              const value = processingForDocument(
-                item.snapshotId,
-                processing.listView.tasks,
-                processing.listView.records,
-              );
-              return value.task || value.intake ? (
-                <span
-                  className="document-library-item__processing"
-                  data-tone={value.tone}
-                >
-                  {value.historical ? '历史正文' : value.label}
-                </span>
-              ) : null;
-            }}
-            selectedId={document?.snapshotId}
-            onRetry={() => {
-              controller.refresh(documentId);
-            }}
-            onSelect={(snapshotId) => {
-              setFeedback(undefined);
-              setTool(undefined);
-              setEditingStructure(false);
-              onSelectionChange({...selection, snapshotId});
-            }}
-          />
+          <>
+            <label className="privacy-query-toggle">
+              <input
+                type="checkbox"
+                checked={selection.includePrivate}
+                onChange={(event) => {
+                  setFeedback(undefined);
+                  setTool(undefined);
+                  onSelectionChange({
+                    includePrivate: event.currentTarget.checked,
+                  });
+                }}
+              />
+              本次查看包含隐私文档
+            </label>
+            <DocumentWorkspaceList
+              state={controller.documents}
+              processing={processing.listView}
+              renderProcessing={(item) => {
+                if (!processing.listView || item.isPrivate) return null;
+                const value = processingForDocument(
+                  item.snapshotId,
+                  processing.listView.tasks,
+                  processing.listView.records,
+                );
+                return value.task || value.intake ? (
+                  <span
+                    className="document-library-item__processing"
+                    data-tone={value.tone}
+                  >
+                    {value.historical ? '历史正文' : value.label}
+                  </span>
+                ) : null;
+              }}
+              selectedId={document?.snapshotId}
+              onRetry={() => {
+                controller.refresh(documentId);
+              }}
+              onSelect={(snapshotId) => {
+                setFeedback(undefined);
+                setTool(undefined);
+                setEditingStructure(false);
+                onSelectionChange({...selection, snapshotId});
+              }}
+            />
+          </>
         }
       >
         {editingStructure &&
@@ -465,7 +584,7 @@ export function DocumentWorkspace({
                   {controller.documents.status === 'loading'
                     ? '正在读取可见文档…'
                     : selection.snapshotId === undefined
-                      ? '导入文档后，在左侧选择材料即可开始。'
+                      ? '点击“选择文档”开始阅读。'
                       : '所选文档不在当前可见范围，请重新选择文档或明确开启隐私范围。'}
                 </p>
               </div>
@@ -510,10 +629,7 @@ export function DocumentWorkspace({
                       controller.source.value.structures.length === 0
                     : selectedEntry === undefined
                 ) ? (
-                  <>
-                    {documentIdentity}
-                    {documentAnnotations}
-                  </>
+                  <>{documentIdentity}</>
                 ) : null}
                 <div
                   className="document-paper__source"
@@ -543,10 +659,7 @@ export function DocumentWorkspace({
                             key={structure.structureId}
                             leadingContent={
                               mode === 'source' && index === 0 ? (
-                                <>
-                                  {documentIdentity}
-                                  {documentAnnotations}
-                                </>
+                                <>{documentIdentity}</>
                               ) : undefined
                             }
                             active={active && mode === 'source'}
@@ -712,10 +825,7 @@ export function DocumentWorkspace({
                             key={`${selectedEntry.entryId}:${selectedEntry.revision.toString()}:${String(selection.includePrivate)}`}
                             leadingContent={
                               mode === 'entries' ? (
-                                <>
-                                  {documentIdentity}
-                                  {documentAnnotations}
-                                </>
+                                <>{documentIdentity}</>
                               ) : undefined
                             }
                             entry={selectedEntry}
@@ -733,89 +843,124 @@ export function DocumentWorkspace({
           </section>
         )}
         <div className="document-tool-area">
-          <footer className="journey-floating-bar" hidden={editingStructure}>
-            <div className="journey-action-group">
-              <button
-                className="secondary-action"
-                disabled={!document}
-                onClick={() => {
-                  setTool(undefined);
-                  if (document?.workingCopy) openTool('working-copy');
-                  else setEditingStructure(true);
-                }}
-              >
-                {structureDrafts.has(documentId) ? '继续分段草稿' : '修改分段'}
-              </button>
-              <button
-                className="secondary-action"
-                disabled={!document}
-                onClick={() => {
-                  openTool('tags');
-                }}
-              >
-                编辑标签
-              </button>
-              <button
-                className="secondary-action"
-                disabled={!selectedEntry}
-                onClick={() => {
-                  openTool('links');
-                }}
-              >
-                建立联系
-              </button>
-              <button
-                className="text-action"
-                disabled={!document}
-                onClick={() => {
-                  openTool('source');
-                }}
-              >
-                来源与证据
-              </button>
-            </div>
-            <div className="journey-action-group journey-ai-actions">
-              {document && !document.isPrivate ? (
-                <DocumentPublicationButton
-                  key={
-                    documentId +
-                    allEntries.map((entry) => entry.revision).join('-')
-                  }
-                  snapshotId={documentId}
-                  entries={
-                    controller.allEntries.status === 'ready'
-                      ? controller.allEntries.value.items.map(
-                          (item) => item.entry,
-                        )
-                      : []
-                  }
-                  onPublished={() => {
-                    void processing.refresh();
+          <ContentDialog
+            open={editing && !editingStructure && !toolOpen}
+            title="编辑文档"
+            onClose={() => {
+              setEditing(false);
+            }}
+            className="reading-editor-dialog"
+          >
+            <div className="reader-editor-actions">
+              <div className="journey-action-group">
+                <button
+                  className="secondary-action"
+                  disabled={!document}
+                  onClick={() => {
+                    setTool(undefined);
+                    if (document?.workingCopy) openTool('working-copy');
+                    else setEditingStructure(true);
                   }}
-                />
-              ) : null}
-              <button
-                className="secondary-action"
-                disabled={!document || document.isPrivate}
-                onClick={() => {
-                  setProcessingStage(undefined);
-                  openTool('processing');
-                }}
-              >
-                AI 处理
-              </button>
-              <button
-                className="secondary-action"
-                disabled={!selectedEntry || selectedEntry.value.isPrivate}
-                onClick={() => {
-                  setMode('entries');
-                  openTool('ai');
-                }}
-              >
-                AI 标签与翻译
-              </button>
+                >
+                  {structureDrafts.has(documentId)
+                    ? '继续分段草稿'
+                    : '修改分段'}
+                </button>
+                <button
+                  className="secondary-action"
+                  disabled={!document}
+                  onClick={() => {
+                    openTool('split-recipes');
+                  }}
+                >
+                  拆分方案
+                </button>
+                <button
+                  className="secondary-action"
+                  disabled={!document}
+                  onClick={() => {
+                    openTool('tags');
+                  }}
+                >
+                  编辑标签
+                </button>
+                <button
+                  className="secondary-action"
+                  disabled={!selectedEntry}
+                  onClick={() => {
+                    if (selectedEntry) {
+                      setAnnotationTarget({
+                        scope: toolScope,
+                        entryId: selectedEntry.entryId,
+                      });
+                      openTool('annotations');
+                    }
+                  }}
+                >
+                  条目标注
+                </button>
+                <button
+                  className="secondary-action"
+                  disabled={!selectedEntry}
+                  onClick={() => {
+                    openTool('links');
+                  }}
+                >
+                  建立联系
+                </button>
+                <button
+                  className="text-action"
+                  disabled={!document}
+                  onClick={() => {
+                    openTool('source');
+                  }}
+                >
+                  来源与证据
+                </button>
+              </div>
+              <div className="journey-action-group journey-ai-actions">
+                {document && !document.isPrivate ? (
+                  <DocumentPublicationButton
+                    key={
+                      documentId +
+                      allEntries.map((entry) => entry.revision).join('-')
+                    }
+                    snapshotId={documentId}
+                    entries={
+                      controller.allEntries.status === 'ready'
+                        ? controller.allEntries.value.items.map(
+                            (item) => item.entry,
+                          )
+                        : []
+                    }
+                    onPublished={() => {
+                      void processing.refresh();
+                    }}
+                  />
+                ) : null}
+                <button
+                  className="secondary-action"
+                  disabled={!document || document.isPrivate}
+                  onClick={() => {
+                    setProcessingStage(undefined);
+                    openTool('processing');
+                  }}
+                >
+                  AI 处理
+                </button>
+                <button
+                  className="secondary-action"
+                  disabled={!selectedEntry || selectedEntry.value.isPrivate}
+                  onClick={() => {
+                    setMode('entries');
+                    openTool('ai');
+                  }}
+                >
+                  AI 标签与翻译
+                </button>
+              </div>
             </div>
-          </footer>
+          </ContentDialog>
           {selectedEntry && openedTools.has(toolScope + ':ai') ? (
             <WorkspaceToolPanel
               title="AI 标签与翻译"
@@ -898,6 +1043,45 @@ export function DocumentWorkspace({
               ) : (
                 <p role="status">正在读取处理记录…</p>
               )}
+            </WorkspaceToolPanel>
+          ) : null}
+          {annotationTarget?.scope === toolScope &&
+          openedTools.has(toolScope + ':annotations') ? (
+            <WorkspaceToolPanel
+              title="条目标注"
+              open={toolOpen && tool === 'annotations'}
+              onClose={closeTool}
+            >
+              <EntryAnnotationPanel
+                key={
+                  annotationTarget.entryId +
+                  ':' +
+                  String(selection.includePrivate)
+                }
+                entryId={annotationTarget.entryId}
+                includePrivate={selection.includePrivate}
+                onSaved={() => {
+                  controller.refresh(documentId);
+                }}
+              />
+            </WorkspaceToolPanel>
+          ) : null}
+          {document && openedTools.has(toolScope + ':split-recipes') ? (
+            <WorkspaceToolPanel
+              key={toolScope + ':split-recipes'}
+              title="拆分方案"
+              open={toolOpen && tool === 'split-recipes'}
+              onClose={closeTool}
+            >
+              <SourceSplitRecipePanel
+                snapshotId={documentId}
+                includePrivate={selection.includePrivate}
+                isPrivate={Boolean(document.isPrivate)}
+                hasEntries={document.entryCount > 0}
+                onApplied={() => {
+                  controller.refresh(documentId);
+                }}
+              />
             </WorkspaceToolPanel>
           ) : null}
           {document === undefined
@@ -1061,7 +1245,7 @@ export function DocumentWorkspace({
                 ),
               )}
         </div>
-      </TwoPane>
+      </ReadingWorkspaceFrame>
     </div>
   );
 }

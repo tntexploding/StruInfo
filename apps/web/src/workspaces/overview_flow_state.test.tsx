@@ -47,7 +47,6 @@ function fixture(tasks: AiTask[] = []): AiActivityData {
           manualUploads: false,
           model: 'synthetic',
           maxEntries: 12,
-          maxRelations: 4,
           maxModelCalls: 24,
           maxDocumentsPerDay: 10,
         },

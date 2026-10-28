@@ -90,6 +90,41 @@ describe.each(['openai-responses-v1', 'deepseek-responses-v1'] as const)(
   },
 );
 describe('closed document intelligence adapter', () => {
+  it('returns only an editable bounded recipe and refuses executable fields', async () => {
+    const draft = {
+      name: '合成周刊方案',
+      explanation: '按独立条目拆分，需要核对。',
+      settings: {
+        template: 'numbered',
+        headingLevel: 2,
+        titleIncludes: ['Synthetic'],
+        appendixHeadings: ['References'],
+        minimumEntries: 2,
+        maximumEntries: 32,
+        minimumBodyCharacters: 20,
+        onMismatch: 'review',
+      },
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(response(draft))
+      .mockResolvedValueOnce(
+        response({
+          ...draft,
+          settings: {...draft.settings, script: 'do not execute'},
+        }),
+      );
+    const provider = new ResponsesDocumentIntelligenceProvider(config, fetcher);
+    expect(
+      await provider.suggestSplitRecipe({
+        text: '# Synthetic weekly\n\nPublic synthetic sample.',
+      }),
+    ).toEqual(draft);
+    await expect(
+      provider.suggestSplitRecipe({text: 'Synthetic sample.'}),
+    ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   it('applies actual policy instead of accepting an invented model restriction', async () => {
     const provider = new ResponsesDocumentIntelligenceProvider(config, () =>
       Promise.resolve(
@@ -491,8 +526,8 @@ describe('explicit inbox summary adapter', () => {
   });
 });
 
-it('generates four independent recall plans in one bounded call and rejects duplicate indexes', async () => {
-  const items = Array.from({length: 4}, (_, index) => ({
+it('generates eight independent recall plans in one bounded call and rejects duplicate indexes', async () => {
+  const items = Array.from({length: 8}, (_, index) => ({
     index,
     concepts: [
       {
@@ -522,7 +557,7 @@ it('generates four independent recall plans in one bounded call and rejects dupl
   const body = fetcher.mock.calls[0]?.[1]?.body;
   if (typeof body !== 'string') throw new Error('missing body');
   expect(JSON.parse(body)).toMatchObject({
-    max_output_tokens: 4096,
+    max_output_tokens: 8192,
     store: false,
   });
   await expect(provider.planRecalls(inputs)).rejects.toMatchObject({
@@ -530,7 +565,9 @@ it('generates four independent recall plans in one bounded call and rejects dupl
   });
   const first = inputs[0];
   if (!first) throw new Error('missing synthetic item');
-  await expect(provider.planRecalls([...inputs, first])).rejects.toMatchObject({
+  await expect(
+    provider.planRecalls(Array.from({length: 9}, () => first)),
+  ).rejects.toMatchObject({
     code: 'ai_intake_input_too_large',
   });
   expect(fetcher).toHaveBeenCalledTimes(2);

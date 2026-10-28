@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {appendFile, lstat, readFile, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {z} from 'zod';
+import {modelUsageScope} from './model_usage_scope.js';
 import {
   AiBudgetWaitError,
   AiPriceWindowClosedError,
@@ -80,13 +81,37 @@ export class LocalModelUsageJournal implements ModelUsageJournal {
     this.budgetPath = join(exportsRoot, workspaceId + '.ai-batch-budget.json');
     this.journalPath = join(exportsRoot, workspaceId + '.ai-usage.jsonl');
   }
+  public budgetStatus() {
+    return this.lock(async () => {
+      const source = await safeRead(this.budgetPath, 16_384);
+      if (source === undefined) return null;
+      const budget = budgetSchema.parse(JSON.parse(source));
+      if (budget.workspaceId !== this.workspaceId)
+        throw new AiBudgetWaitError();
+      const rows = (await this.records()).filter(
+        (r) => r.record.batchId === budget.batchId,
+      );
+      const chargedNanoCny = rows.reduce((n, r) => n + r.amount, 0);
+      return {
+        batchId: budget.batchId,
+        paused: budget.paused || this.failedPauseBatch === budget.batchId,
+        limitCny: budget.limitCny,
+        remainingCny: Math.max(0, budget.limitCny - chargedNanoCny / 1e9),
+      };
+    });
+  }
   public reserve(request: string): Promise<ModelUsageTicket | undefined> {
     return this.lock(async () => {
       const source = await safeRead(this.budgetPath, 16_384);
-      if (source === undefined) return undefined;
+      if (source === undefined) {
+        if (modelUsageScope.getStore()) throw new AiBudgetWaitError();
+        return undefined;
+      }
       const budget = budgetSchema.parse(JSON.parse(source));
       if (
         budget.workspaceId !== this.workspaceId ||
+        (modelUsageScope.getStore() &&
+          modelUsageScope.getStore()?.batchId !== budget.batchId) ||
         budget.paused ||
         this.failedPauseBatch === budget.batchId
       )
@@ -132,6 +157,11 @@ export class LocalModelUsageJournal implements ModelUsageJournal {
         reservedNanoCny,
       };
       await this.append(record);
+      await modelUsageScope.getStore()?.record({
+        id: record.id,
+        batchId: record.batchId,
+        reservedNanoCny: record.reservedNanoCny,
+      });
       return {record, budget};
     });
   }
@@ -156,7 +186,7 @@ export class LocalModelUsageJournal implements ModelUsageJournal {
           /* An unknown billed result retains its full reservation. */
         }
       }
-      await this.append({
+      const settlement = {
         kind: 'settled',
         id: ticket.record.id,
         at: new Date().toISOString(),
@@ -171,6 +201,14 @@ export class LocalModelUsageJournal implements ModelUsageJournal {
               usage.input_tokens_details?.cached_tokens ?? 0,
             )
           : ticket.record.reservedNanoCny,
+      };
+      await this.append(settlement);
+      await modelUsageScope.getStore()?.record({
+        id: ticket.record.id,
+        batchId: ticket.record.batchId,
+        reservedNanoCny: ticket.record.reservedNanoCny,
+        chargedNanoCny: settlement.chargedNanoCny,
+        usageKnown: settlement.usageKnown,
       });
       // Count completed responses in completion order, including across restart.
       // A full HTTP 200 resets transport failures even if its model JSON is bad.

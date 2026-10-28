@@ -53,6 +53,14 @@ docker build --tag struinfo:review .
 
 Browser checks use installed Chrome; they do not download a browser. PostgreSQL smoke creates and removes its own Docker container and external temporary data. Use `--full` only for an intentional larger synthetic capacity check.
 
+For P1–P5 publication, receiving, splitting, annotations and topics, run `pnpm test:publication`. It creates an empty
+PostgreSQL container and checks manual import, HTTP/MCP confirmation and query,
+draft isolation, topic persistence and conflicts, background failure, privacy and export/restore. The container is
+removed on exit; its synthetic test report stays in the printed temporary directory.
+No model configuration or private instance connection is loaded. See
+[ADR 0088](docs/adr/0088-confirmed-content-and-deferred-organization.md) for the
+publication boundary and [ADR 0092](docs/adr/0092-bounded-background-topics.md) for independent bounded topic work.
+
 GitHub runs the quality matrix on Windows and Ubuntu, browser/PostgreSQL smoke, and production dependency/runtime image security checks. A failed check stays failed until repaired or explicitly reviewed; do not remove tests or suppress findings to make a badge green. Maintenance security also runs weekly and can be started manually.
 
 Before release, synchronize package/image/MCP versions, changelog, release notes and SBOM; inspect the staged tree for owner data and secrets. The project's existing public `main` history is independent of the owner's development branch. Release reviewed source as a normal descendant of public `main`; never merge the private development history or force-push it over public history.
@@ -69,3 +77,16 @@ Publishing source does not upgrade an existing installation. Deployment uses a v
 - [Current implementation](docs/current-project-state.md) and [roadmap](docs/roadmap.md)
 
 Code is MIT licensed. Releases retain [third-party notices](THIRD_PARTY_NOTICES.md), exact legal material and the SBOM. Documents, credentials, screenshots of private content, model replies and operation logs are not release materials.
+
+P2 configuration and receipt behavior are documented in [source receiving](docs/source-receiving.md). Source strategies and capture metadata remain external data; use synthetic fixtures for tests.
+
+P3 recipes, trials and task compatibility are documented in [source splitting](docs/source-splitting.md).
+Personal recipes remain external; use synthetic sources for rule and browser tests.
+
+## Structured annotation changes
+
+See [ADR 0091](docs/adr/0091-evidence-bound-structured-annotations.md) and the
+[annotation guide](docs/structured-annotations.md). Keep body evidence, term identity,
+manual authority and confirmed publication checks together. Catalog fixtures must be synthetic;
+real vocabularies and model results stay outside Git. `pnpm test:publication` verifies migration,
+proposal persistence, confirmed retrieval and restore in disposable PostgreSQL.

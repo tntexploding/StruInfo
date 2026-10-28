@@ -36,6 +36,7 @@ GRANT UPDATE (state_text, pause_requested, cancel_requested, current_version, up
 ON TABLE struinfo.processing_agent_task TO struinfo_tm2_runtime;
 
 GRANT DELETE ON TABLE
+  struinfo.information_entry_annotation,
   struinfo.information_entry_association_projection,
   struinfo.information_document_tag_value,
   struinfo.information_entry_content_keyword,
@@ -67,4 +68,11 @@ GRANT SELECT, INSERT, UPDATE ON TABLE struinfo.processing_document_intake TO str
 
 GRANT SELECT, INSERT, UPDATE ON TABLE struinfo.processing_report TO struinfo_tm2_runtime;
 
+-- P1 confirmed versions remain insert-only. Only pointers and worker checkpoints change.
+GRANT UPDATE ON struinfo.document_publication_pointer, struinfo.document_organization_work TO struinfo_tm2_runtime;
+
+GRANT UPDATE ON struinfo.content_organization_record TO struinfo_tm2_runtime;
+
 COMMIT;
+
+GRANT UPDATE ON struinfo.research_pipeline_record TO struinfo_tm2_runtime;

@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import type {AgentCommandDependencies} from './agent_commands.js';
 import type {AgentTask} from './agent_task_contract.js';
-import {taskNeedsRestart} from './agent_task_service.js';
+import {isLegacyDocumentTask, taskNeedsRestart} from './agent_task_service.js';
 import {
   intakeSnapshotIds,
   type IntakeRecord,
@@ -73,7 +73,12 @@ export class DocumentQueue {
         b.createdAt.localeCompare(a.createdAt) ||
         b.taskId.localeCompare(a.taskId),
     )) {
-      if (task.request.kind !== 'document' || task.state.supersededBy) continue;
+      if (
+        task.request.kind !== 'document' ||
+        task.state.supersededBy ||
+        isLegacyDocumentTask(task)
+      )
+        continue;
       const key = root(task.request.snapshotId);
       if (!latest.has(key)) latest.set(key, task);
     }
@@ -255,11 +260,8 @@ export class DocumentQueue {
                 ? {expectedReceiptVersion: item.expectedVersion}
                 : {}),
               maxEntries: settings.maxEntries,
-              maxRelations: settings.maxRelations,
               maxModelCalls: settings.maxModelCalls,
               intake: settings.intake ?? {fetchFullText: true},
-              maxRelationCandidates:
-                settings.maxRelationCandidates ?? settings.maxRelations,
             },
           );
         } else {

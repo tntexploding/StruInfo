@@ -49,6 +49,10 @@ export function WorkspaceUiProvider({
       '--si-text-reading',
       `${String(visual.readingSize / 16)}rem`,
     );
+    document.documentElement.style.setProperty(
+      '--content-reading-measure',
+      `${String(visual.readingMeasure)}ch`,
+    );
   }, [visual]);
   useEffect(() => {
     const receive = (event: StorageEvent) => {

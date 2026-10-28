@@ -1,3 +1,4 @@
+import {sourceProcessingInstructions} from '../../application/source_processing_scope.js';
 import {documentProcessingInstructions} from '../../modules/processing/document_processing_standard.js';
 import {splitSourceTitle} from './split_source_title.js';
 import {parseResponseJson} from './response_json.js';
@@ -24,7 +25,7 @@ import {
   RESPONSE_METADATA_INSTRUCTIONS,
 } from './responses_metadata.js';
 
-export const OPENAI_SPLIT_PROMPT_VERSION = 'struinfo.openai-entry-split.v14';
+export const OPENAI_SPLIT_PROMPT_VERSION = 'struinfo.openai-entry-split.v16';
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 
 export class ResponsesEntrySplitProvider implements AiSplitProposalProviderPort {
@@ -126,6 +127,7 @@ function createRequest(
     ),
     instructions: [
       documentProcessingInstructions('split'),
+      sourceProcessingInstructions('split'),
       'Return a single JSON object without Markdown fences, commentary or schema-definition fields. Encode documentMode whole or independent_entries. Every group has exactly titlePath, startOrdinal, role and context. Return only the first ordinal of each group in strictly increasing order, starting with 0; do not emit endOrdinal. The application derives each end as the next start minus one, and the final end as the last source ordinal, so every section remains covered.',
       'Classify each span role before deciding independence: content means a substantive reading contribution; framing means a preface, cover, table of contents, sponsor or purchase invitation, recurring author catalogue, archive navigation, credits or subscription footer supporting the publication. Use framing even when it has a descriptive title. The application attaches framing to adjacent content and never creates a standalone Entry from it. Do not label a substantive product review, technical explanation or curated reference directory framing merely because it contains links or a brand. A mixed span containing substantive explanation remains content; do not discard its evidence.',
       'Mark each group context self, previous or next; the application merges adjacent dependencies. With a whole document return one group starting at 0. In an independent collection, separate self-contained linked stories or tools even if they share a category heading. For example, three unrelated source-linked recommendations in packets 1, 2 and 3 need separate starts, not one broad Tools group. linkedItemStarts, when present, identifies source-linked numbered packets, not proof that numbered steps in a tutorial are independent.',

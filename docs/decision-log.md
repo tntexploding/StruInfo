@@ -1,5 +1,44 @@
 # StruInfo Decision Log
 
+
+2026-10-24：P6 使用 DeepSeek Search / Fetch。联网证据显式保存，报告生成与站内发布分开；
+周期编号去重，固定来源版本，恢复后新权限关闭。见 [ADR 0093](adr/0093-explicit-web-evidence-and-report-publication.md)。
+
+## 2026-10-24 — P5 bounded topics and selective relations
+
+[ADR 0092](adr/0092-bounded-background-topics.md) adds bounded annotation/lexical recall,
+evidence-bound topic membership, incremental summaries and optional concrete relations.
+Owner-authorized groups use existing budgets with independent cost/status records; basic publication remains independent.
+Migration 000042 and Processing Bundle v18 preserve manual decisions, paid responses and paused restore behavior.
+
+## 2026-10-24 — P4 structured annotations
+
+[ADR 0091](adr/0091-evidence-bound-structured-annotations.md) adds evidence-bound labels and claims,
+external versioned vocabulary, confirmed equivalence and classification filters.
+Entry revisions and P1 confirmation remain the publication boundary; existing tag requests carry optional annotations.
+Migration 000041 and versioned bundles preserve current sets and historical proposals. P5 remains deferred.
+
+## 2026-10-24 — P3 source splitting
+
+[ADR 0090](adr/0090-versioned-source-split-recipes.md) adds declarative source/format
+recipes, owner-reviewed trials and versioned activation. New tasks freeze recipes;
+format changes hold or use explicitly selected model fallback within the original
+allowance. Existing evidence, manual edits and publication authority remain intact.
+
+## 2026-10-24 — P2 source receiving
+
+[ADR 0089](adr/0089-source-receiving-strategies.md) separates connector transport,
+external source strategy and intake admission. Source windows, failure backoff,
+stable duplicate handling and per-source queue turns share existing writers.
+History remains independently reviewed. The private instance is unchanged.
+
+## 2026-10-23 — P1 confirmed content
+
+[ADR 0088](adr/0088-confirmed-content-and-deferred-organization.md) separates
+confirmed reading from editable drafts and deferred organization. Confirmation and
+its work record commit together. Old task execution stays compatible. This phase
+uses synthetic empty databases; the private instance is unchanged.
+
 ## 2026-09-15 — Report editorial quality
 
 [ADR 0083](adr/0083-event-first-report-editorial-quality.md) separates event

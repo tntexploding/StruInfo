@@ -51,7 +51,12 @@ export function selectReportSources(
   );
   const eligible = entries.filter((e) => {
     const intake = admission.get(e.snapshotId);
-    if (e.value.isPrivate || !intake) return false;
+    if (
+      e.value.isPrivate ||
+      !intake ||
+      (request.cutoff && e.capturedAt > request.cutoff)
+    )
+      return false;
     const timestamp =
       request.timeField === 'received'
         ? dates.get(intake.snapshotId)
@@ -88,6 +93,7 @@ export function selectReportSources(
   );
   for (const entry of sorted) {
     if (excluded.has(entry.entryId)) continue;
+    if (request.cutoff && entry.capturedAt > request.cutoff) continue;
     const intake = admission.get(entry.snapshotId);
     if (!intake) continue;
     const timestamp =

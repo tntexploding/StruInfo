@@ -1,3 +1,4 @@
+import type {StructuredAnnotations} from '../entries/structured_annotations.js';
 export const PROCESSING_RUN_ORIGINS = ['deterministic', 'ai'] as const;
 export const PROCESSING_RUN_STATUSES = [
   'queued',
@@ -101,6 +102,7 @@ export interface ProcessingTagProposalDomain {
 
 /** Closed product payload for the first provider-backed proposal kind. */
 export interface ProcessingTagProposalPayload {
+  readonly annotations?: StructuredAnnotations;
   readonly expectedEntryRevision: number;
   readonly providerModel: string;
   readonly promptVersion: string;

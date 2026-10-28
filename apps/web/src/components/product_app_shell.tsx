@@ -13,24 +13,24 @@ const NAVIGATION: readonly Readonly<{
   groupStart?: boolean;
 }>[] = [
   {
+    section: 'overview',
+    label: '总览',
+    icon: 'M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5',
+  },
+  {
     section: 'import',
-    label: '文档入口',
+    label: '源管理',
     icon: 'M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5',
   },
   {
     section: 'documents',
-    label: '工作台',
+    label: '文档阅读',
     icon: 'M5 3h10l4 4v14H5z M14 3v5h5 M8 12h8 M8 16h6',
   },
   {
     section: 'query',
-    label: '数据阅览',
+    label: '数据库',
     icon: 'M10.5 3a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15 M16 16l5 5',
-  },
-  {
-    section: 'reports',
-    label: '报告',
-    icon: 'M5 3h14v18H5z M8 7h8 M8 11h8 M8 15h5',
   },
 ];
 
@@ -56,7 +56,7 @@ export function ProductAppShell({
     activeSection,
   )
     ? 'documents'
-    : activeSection === 'knowledge'
+    : activeSection === 'knowledge' || activeSection === 'reports'
       ? 'query'
       : activeSection;
   return (
@@ -65,7 +65,7 @@ export function ProductAppShell({
         跳至主要工作区
       </a>
       <div
-        className="product-shell workflow-shell detail-app ef-app editorial-app"
+        className="product-shell workflow-shell detail-app ef-app editorial-app content-app"
         data-section={activeSection}
       >
         <aside className="primary-rail" aria-label="主要导航">

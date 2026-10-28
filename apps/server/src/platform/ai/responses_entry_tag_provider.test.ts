@@ -1,3 +1,5 @@
+import {withSourceProcessing} from '../../application/source_processing_scope.js';
+import {EMPTY_ANNOTATION_VOCABULARY} from '../../modules/entries/structured_annotations.js';
 import {documentProcessingInstructions} from '../../modules/processing/document_processing_standard.js';
 import {
   responsesEndpoint,
@@ -29,6 +31,84 @@ describe.each([
     model: 'deepseek-synthetic',
   },
 ])('$providerKey $model', (CONFIG) => {
+  it('generates grounded structured annotations within the same tag request', async () => {
+    const selected = entry();
+    const dimensionId = '11111111-1111-4111-8111-111111111119';
+    const vocabulary = {
+      ...EMPTY_ANNOTATION_VOCABULARY,
+      revision: 1,
+      dimensions: [
+        {
+          id: dimensionId,
+          name: 'Issue',
+          role: 'issue' as const,
+          description: 'Subject',
+          enabled: true,
+        },
+      ],
+    };
+    const payload = {
+      summary: 'Synthetic',
+      contentKeywords: [],
+      type: {keyword: 'other', customName: 'Unknown'},
+      domains: [],
+      annotations: {
+        status: 'complete',
+        note: '',
+        labels: [
+          {
+            dimensionId,
+            termId: null,
+            label: 'Synthetic body',
+            meaning: 'Test fixture',
+            wording: 'Synthetic',
+            primary: true,
+            quote: 'Synthetic public body',
+          },
+        ],
+        claims: [],
+      },
+    };
+    const fetcher = vi.fn<OpenAiFetch>(() =>
+      Promise.resolve(responseEnvelope(payload)),
+    );
+    const provider = new ResponsesEntryTagProvider(CONFIG, fetcher, () =>
+      Promise.resolve(vocabulary),
+    );
+    const result = await withSourceProcessing(
+      {tags: 'SYNTHETIC_OWNER_TAG_GUIDANCE'},
+      () => provider.proposeTags(selected),
+    );
+    expect(fetcher.mock.calls[0]?.[1]?.body).toContain(
+      'SYNTHETIC_OWNER_TAG_GUIDANCE',
+    );
+    expect(result.annotations).toMatchObject({
+      inputRevision: selected.revision,
+      vocabularyRevision: 1,
+      origin: 'ai',
+    });
+    expect(result.annotations?.labels[0]?.evidence.quote).toBe(
+      'Synthetic public body',
+    );
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const label = payload.annotations.labels[0];
+    if (!label) throw new Error('Missing synthetic label');
+    label.quote = 'Not in this article';
+    await expect(provider.proposeTags(selected)).rejects.toMatchObject({
+      code: 'ai_provider_invalid_response',
+    });
+    await expect(
+      provider.proposeTags({
+        ...selected,
+        value: {...selected.value, isPrivate: true},
+      }),
+    ).rejects.toMatchObject({code: 'ai_provider_rejected'});
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls[1]?.[1]?.body).not.toContain(
+      'SYNTHETIC_OWNER_TAG_GUIDANCE',
+    );
+  });
+
   it('sends one public Entry through the Responses API with storage and tools disabled', async () => {
     const fetchImplementation = vi.fn<OpenAiFetch>(() =>
       Promise.resolve(
@@ -267,7 +347,7 @@ function responseEnvelope(payload: unknown): Response {
 }
 
 function batchEntries() {
-  return [0, 1, 2, 3].map((index) => ({
+  return Array.from({length: 8}, (_, index) => ({
     ...entry(),
     entryId: `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
     revision: index + 1,
@@ -292,7 +372,7 @@ function batchOutput() {
     })),
   };
 }
-it('classifies four independent entries in one request and binds reordered results by identity', async () => {
+it('classifies eight independent entries in one request and binds reordered results by identity', async () => {
   const output = batchOutput();
   output.items.reverse();
   const fetcher = vi.fn<OpenAiFetch>(() =>
@@ -321,7 +401,7 @@ it('classifies four independent entries in one request and binds reordered resul
       body: item.value.body,
     })),
   });
-  expect(request.max_output_tokens).toBe(4128);
+  expect(request.max_output_tokens).toBe(8128);
   expect(request.instructions).toContain(
     documentProcessingInstructions('tags'),
   );
@@ -382,7 +462,7 @@ it('accepts a complete fenced tag batch but keeps identity checks after normaliz
       await expect(result).rejects.toMatchObject({
         code: 'ai_provider_invalid_response',
       });
-    else await expect(result).resolves.toHaveLength(4);
+    else await expect(result).resolves.toHaveLength(8);
     expect(fetcher).toHaveBeenCalledTimes(1);
   }
 });
@@ -463,3 +543,67 @@ function entry(isPrivate = false): Readonly<CurrentInformationEntry> {
     }),
   });
 }
+
+it('shares bounded vocabulary once across an eight-entry annotation batch', async () => {
+  const dimensionId = '00000000-0000-4000-8000-000000000001';
+  const vocabulary = {
+    ...EMPTY_ANNOTATION_VOCABULARY,
+    revision: 1,
+    dimensions: [
+      {
+        id: dimensionId,
+        name: 'Entities',
+        role: 'entity' as const,
+        description: '',
+        enabled: true,
+      },
+    ],
+    terms: Array.from({length: 128}, (_, i) => ({
+      id: `00000000-0000-4000-8000-${String(i + 2).padStart(12, '0')}`,
+      dimensionId,
+      label: 'Synthetic ' + i.toString(),
+      meaning: 'm'.repeat(400),
+    })),
+  };
+  const output = {
+    items: batchOutput().items.map((item) => ({
+      ...item,
+      tags: {
+        ...item.tags,
+        annotations: {
+          status: 'unknown',
+          note: 'No supported identity',
+          labels: [],
+          claims: [],
+        },
+      },
+    })),
+  };
+  const fetcher = vi.fn<OpenAiFetch>(() =>
+    Promise.resolve(responseEnvelope(output)),
+  );
+  const results = await new ResponsesEntryTagProvider(
+    BASE_CONFIG,
+    fetcher,
+    () => Promise.resolve(vocabulary),
+  ).proposeTagsBatch(batchEntries());
+  expect(results).toHaveLength(8);
+  expect(results.every((r) => r.result.annotations?.status === 'unknown')).toBe(
+    true,
+  );
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  const body = fetcher.mock.calls[0]?.[1]?.body;
+  if (typeof body !== 'string') throw new Error('missing request');
+  const request = JSON.parse(body) as {input: string};
+  const input = JSON.parse(request.input) as {
+    annotationVocabulary: unknown;
+    items: Record<string, unknown>[];
+  };
+  expect(
+    Array.from(JSON.stringify(input.annotationVocabulary)).length,
+  ).toBeLessThanOrEqual(24000);
+  expect(request.input.length).toBeLessThan(100000);
+  expect(
+    input.items.every((item) => !Object.hasOwn(item, 'annotationVocabulary')),
+  ).toBe(true);
+});

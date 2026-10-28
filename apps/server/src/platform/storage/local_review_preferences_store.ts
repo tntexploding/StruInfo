@@ -1,4 +1,14 @@
 import {
+  EMPTY_ANNOTATION_VOCABULARY,
+  annotationVocabularySchema,
+  type AnnotationVocabulary,
+} from '../../modules/entries/structured_annotations.js';
+import {
+  EMPTY_SOURCE_SPLIT_CATALOG,
+  sourceSplitCatalogSchema,
+  type SourceSplitCatalog,
+} from '../../modules/entries/source_split_recipe.js';
+import {
   DEFAULT_AI_PRICE_POLICY,
   aiPricePolicySchema,
   type AiPricePolicy,
@@ -136,6 +146,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     entrySavedQueries: Readonly<EntrySavedQueries> = DEFAULT_ENTRY_SAVED_QUERIES,
     uiPreferences: Readonly<WorkspaceUiPreferences> = DEFAULT_WORKSPACE_UI_PREFERENCES,
     aiPricePolicy: Readonly<AiPricePolicy> = DEFAULT_AI_PRICE_POLICY,
+    sourceSplitRecipes: Readonly<SourceSplitCatalog> = EMPTY_SOURCE_SPLIT_CATALOG,
+    annotationVocabulary: Readonly<AnnotationVocabulary> = EMPTY_ANNOTATION_VOCABULARY,
   ): Promise<Readonly<ReviewPreferences>> {
     validateWorkspaceId(workspaceId);
     const attempt = this.#restoreAttempts.get(workspaceId);
@@ -157,6 +169,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
         entrySavedQueries,
         uiPreferences,
         aiPricePolicy,
+        sourceSplitRecipes,
+        annotationVocabulary,
       );
     });
   }
@@ -240,6 +254,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       preferences.entrySavedQueries ?? DEFAULT_ENTRY_SAVED_QUERIES,
       preferences.uiPreferences ?? DEFAULT_WORKSPACE_UI_PREFERENCES,
       preferences.aiPricePolicy ?? DEFAULT_AI_PRICE_POLICY,
+      preferences.sourceSplitRecipes ?? EMPTY_SOURCE_SPLIT_CATALOG,
+      preferences.annotationVocabulary ?? EMPTY_ANNOTATION_VOCABULARY,
     );
   }
 
@@ -258,7 +274,14 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     entrySavedQueries: Readonly<EntrySavedQueries>,
     uiPreferences: Readonly<WorkspaceUiPreferences>,
     aiPricePolicy: Readonly<AiPricePolicy>,
+    sourceSplitRecipes: Readonly<SourceSplitCatalog>,
+    annotationVocabulary: Readonly<AnnotationVocabulary>,
   ): Promise<Readonly<ReviewPreferences>> {
+    const annotations =
+      annotationVocabularySchema.safeParse(annotationVocabulary);
+    if (!annotations.success) throw invalid();
+    const recipes = sourceSplitCatalogSchema.safeParse(sourceSplitRecipes);
+    if (!recipes.success) throw invalid();
     const decodedPrice = aiPricePolicySchema.safeParse(aiPricePolicy);
     if (!decodedPrice.success) throw invalid();
     const decodedUi = decodeWorkspaceUiPreferences(uiPreferences);
@@ -322,6 +345,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       savedQueries,
       decodedUi,
       decodedPrice.data,
+      recipes.data,
+      annotations.data,
     );
     const bytes = new TextEncoder().encode(
       `${JSON.stringify(preferences, undefined, 2)}\n`,
@@ -384,6 +409,14 @@ function decodePreferences(
   ) {
     throw invalid();
   }
+  const annotations = annotationVocabularySchema.safeParse(
+    value.annotationVocabulary ?? EMPTY_ANNOTATION_VOCABULARY,
+  );
+  if (!annotations.success) throw invalid();
+  const recipes = sourceSplitCatalogSchema.safeParse(
+    value.sourceSplitRecipes ?? EMPTY_SOURCE_SPLIT_CATALOG,
+  );
+  if (!recipes.success) throw invalid();
   const price = aiPricePolicySchema.safeParse(
     value.aiPricePolicy ?? DEFAULT_AI_PRICE_POLICY,
   );
@@ -468,6 +501,8 @@ function decodePreferences(
     savedQueries,
     uiPreferences,
     price.data,
+    recipes.data,
+    annotations.data,
   );
 }
 

@@ -165,6 +165,24 @@ export function ActivityRow({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState('');
   const task = activity.data?.tasks.find((t) => t.taskId === item.id);
+  const topic = activity.data?.topicJobs?.find((job) => job.id === item.id);
+  async function controlTopic(action: 'resume' | 'cancel') {
+    if (!topic || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await aiWorkflowCommand('topic_job_control', {
+        jobId: topic.id,
+        expectedVersion: topic.version,
+        action,
+      });
+      activity.refresh();
+    } catch (cause) {
+      setError(aiError(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function control(action: 'resume' | 'pause' | 'cancel') {
     if (!task || busy) return;
     setBusy(true);
@@ -242,9 +260,29 @@ export function ActivityRow({
           ))}
         </ol>
       ) : null}
+      {topic && !['succeeded', 'cancelled'].includes(topic.status) ? (
+        <div className="ai-queue-controls">
+          {topic.canResume ? (
+            <button
+              className="secondary-action"
+              disabled={busy}
+              onClick={() => void controlTopic('resume')}
+            >
+              继续归组
+            </button>
+          ) : null}
+          <button
+            className="text-action"
+            disabled={busy}
+            onClick={() => void controlTopic('cancel')}
+          >
+            取消归组
+          </button>
+        </div>
+      ) : null}
       {task && !['succeeded', 'cancelled'].includes(task.state.status) ? (
         <div className="ai-queue-controls">
-          {['failed', 'attention'].includes(item.state) ? (
+          {['failed', 'attention', 'paused'].includes(item.state) ? (
             <button
               className="secondary-action"
               disabled={busy || activity.error}
@@ -253,7 +291,7 @@ export function ActivityRow({
               从断点继续
             </button>
           ) : null}
-          {['working', 'queued', 'price', 'paused'].includes(item.state) ? (
+          {['working', 'queued', 'price'].includes(item.state) ? (
             <button
               className="text-action"
               disabled={busy || activity.error}

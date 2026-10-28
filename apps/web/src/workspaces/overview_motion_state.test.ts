@@ -2,6 +2,7 @@ import {describe, expect, it} from 'vitest';
 import type {AiActivityItem} from './ai_activity_state.js';
 import {
   overviewCompletions,
+  mergeOverviewCompletions,
   type OverviewObservation,
 } from './overview_motion_state.js';
 
@@ -14,6 +15,7 @@ function observation(items: AiActivityItem[] = []): OverviewObservation {
       entries: 20,
       annotated: 10,
       tags: 30,
+      relations: 4,
       reports: 2,
     },
   };
@@ -39,6 +41,32 @@ function item(phase: string, completed: string[] = []): AiActivityItem {
 }
 
 describe('overview completion observations', () => {
+  it('combines separately delivered counts and task progress without replaying the count', () => {
+    const next = observation();
+    next.metrics.entries = 23;
+    const pending = [
+      {
+        source: 'split' as const,
+        metrics: [{id: 'entries' as const, before: 20, after: 23}],
+      },
+    ];
+    expect(
+      mergeOverviewCompletions(
+        pending,
+        [{source: 'split', target: 'tags', metrics: []}],
+        next.metrics,
+      ),
+    ).toEqual([
+      {
+        source: 'split',
+        target: 'tags',
+        metrics: [{id: 'entries', before: 20, after: 23}],
+      },
+    ]);
+    expect(
+      mergeOverviewCompletions(pending, [], observation().metrics)[0]?.metrics,
+    ).toEqual([]);
+  });
   it('does not replay initial, unchanged or newly discovered historical completions', () => {
     const current = observation([item('tags', ['审核', '结构'])]);
     expect(overviewCompletions(undefined, current)).toEqual([]);
@@ -94,6 +122,16 @@ describe('overview completion observations', () => {
         metrics: [{id: 'entries', before: 20, after: 22}],
       },
     ]);
+  });
+  it('animates only measured relation increases, not newly available counts', () => {
+    const before = observation();
+    const after = observation();
+    after.metrics.relations = 6;
+    expect(overviewCompletions(before, after)).toEqual([
+      {source: 'relations', metrics: [{id: 'relations', before: 4, after: 6}]},
+    ]);
+    before.metrics.relations = undefined;
+    expect(overviewCompletions(before, after)).toEqual([]);
   });
   it('supports newly received documents and completed reports without model tasks', () => {
     const before = observation();

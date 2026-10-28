@@ -41,6 +41,7 @@ export interface InformationEntryControllerOptions {
     | undefined;
   readonly initialQueryContext?: Readonly<EntryQueryContext>;
   readonly autoSearchDelayMs?: number;
+  readonly autoSearch?: boolean;
   readonly loadDocuments?: boolean;
   readonly onListDocuments?: InformationEntryServices['onListDocuments'];
   readonly onSearch: InformationEntryServices['onSearch'];
@@ -50,6 +51,7 @@ export function useInformationEntryController({
   initialDocument,
   initialQueryContext,
   autoSearchDelayMs = 0,
+  autoSearch = true,
   loadDocuments = false,
   onListDocuments,
   onSearch,
@@ -118,6 +120,10 @@ export function useInformationEntryController({
               textFields,
               retrievalMode: effectiveRetrievalMode,
             }),
+        ...(advancedFilters.annotationFilter &&
+        Object.keys(advancedFilters.annotationFilter).length
+          ? {annotationFilter: advancedFilters.annotationFilter}
+          : {}),
         ...(advancedFilters.contentKeyword.trim() === ''
           ? {}
           : {contentKeyword: advancedFilters.contentKeyword.trim()}),
@@ -270,6 +276,7 @@ export function useInformationEntryController({
   );
 
   useEffect(() => {
+    if (!autoSearch) return;
     const tracker = searchRequests.current;
     let cancelled = false;
     const startSearch = () => {
@@ -293,6 +300,7 @@ export function useInformationEntryController({
       tracker.invalidate();
     };
   }, [
+    autoSearch,
     autoSearchDelayMs,
     clearScheduledSearch,
     executeSearch,
@@ -485,6 +493,9 @@ function filtersFromSavedQuery(
     ...EMPTY_ENTRY_ADVANCED_SEARCH_FILTERS,
     contentKeyword: query?.contentKeyword ?? '',
     sourceKey: query?.sourceKey ?? '',
+    ...(query?.annotationFilter
+      ? {annotationFilter: query.annotationFilter}
+      : {}),
     typeCustomName: query?.typeCustomName ?? '',
     domainCustomName: query?.domainCustomName ?? '',
     domainScope: query?.domainScope ?? 'any',

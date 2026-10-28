@@ -421,6 +421,34 @@ describe('report material selection', () => {
   });
 });
 describe('reviewable report workflow', () => {
+  it('generates from frozen source versions after later edits and continues to enforce privacy', async () => {
+    const f = fixture();
+    const r = (await f.service.create(owner, 'frozen', request)).report;
+    const old = requireOperationValue(f.entries[0]);
+    f.entries[0] = {
+      ...old,
+      revision: 2,
+      value: {
+        ...old.value,
+        body: 'Completely changed material',
+        titlePath: 'New title',
+      },
+    };
+    await f.service.generate(owner, r.reportId, r.version);
+    await f.done(r.reportId);
+    expect(f.provider.summarize.mock.calls[0]?.[0].sources[0]).toMatchObject({
+      text: old.value.body,
+      title: old.value.titlePath,
+    });
+    expect((await f.service.export(owner, r.reportId)).markdown).toContain(
+      '版本 1',
+    );
+    f.entries[0] = {...old, value: {...old.value, isPrivate: true}};
+    await expect(f.service.export(owner, r.reportId)).rejects.toMatchObject({
+      code: 'report_sources_unavailable',
+    });
+  });
+
   it('creates idempotently without model calls and exposes only read operations to agents', async () => {
     const f = fixture(),
       created = await f.service.create(owner, 'synthetic-report', request);
@@ -677,9 +705,14 @@ describe('reviewable report workflow', () => {
     });
     expect((await hidden.service.list(owner)).reports).toEqual([]);
   });
-  it('rechecks source visibility and versions before model calls, edits and exports', async () => {
+  it('retains version checks for legacy reports without frozen text', async () => {
     const f = fixture(),
       r = (await f.service.create(owner, 'stale', request)).report;
+    for (const source of r.state.sources) {
+      delete source.frozenText;
+      delete source.textTruncated;
+    }
+    f.rows.set(r.reportId, r);
     f.entries[0] = {...requireOperationValue(f.entries[0]), revision: 2};
     expect((await f.service.read(owner, r.reportId)).staleSources).toEqual([
       id(10),

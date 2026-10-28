@@ -1,3 +1,4 @@
+import {structuredAnnotationsSchema} from '../entries/structured_annotations.js';
 import {
   MAXIMUM_AI_SPLIT_ENTRIES,
   MAXIMUM_AI_SPLIT_FRAGMENTS,
@@ -213,6 +214,11 @@ export function assertProcessingAssociationProposalPayload(
 export function assertProcessingTagProposalPayload(
   value: Readonly<ProcessingTagProposalPayload>,
 ): void {
+  if (
+    value.annotations &&
+    !structuredAnnotationsSchema.safeParse(value.annotations).success
+  )
+    fail();
   positiveInteger(value.expectedEntryRevision);
   boundedText(value.providerModel, 120);
   boundedText(value.promptVersion, 120);
@@ -231,7 +237,7 @@ export function assertProcessingTagProposalPayload(
   assertFixedOrOther(value.typeKeyword, value.typeCustomName);
   if (
     !isArrayValue(value.contentKeywords) ||
-    value.contentKeywords.length < 1 ||
+    value.contentKeywords.length < (value.annotations ? 0 : 1) ||
     value.contentKeywords.length > 24
   )
     fail();
@@ -244,7 +250,7 @@ export function assertProcessingTagProposalPayload(
   }
   if (
     !isArrayValue(value.domains) ||
-    value.domains.length < 1 ||
+    value.domains.length < (value.annotations ? 0 : 1) ||
     value.domains.length > 3
   )
     fail();

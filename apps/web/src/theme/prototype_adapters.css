@@ -1,0 +1,547 @@
+@import './prototypes/shared.css';
+/* Host integration only; workspace geometry is copied from the accepted prototypes. */
+.workspace-view.source-map {
+  --dock-handle: 54px;
+  --line: var(--line-strong);
+  --muted: var(--subtle);
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px;
+}
+.source-map .map-heading {
+  height: auto;
+  padding: 0;
+  min-height: 64px;
+}
+.source-map .source-layout {
+  height: 100%;
+  min-height: 0;
+}
+.source-map .source-edit-host,
+.source-map .source-subscription-panel,
+.source-map .source-edit-layout {
+  display: contents;
+}
+.source-map [hidden] {
+  display: none !important;
+}
+.source-map .source-detail-map {
+  height: 100%;
+  min-height: 0;
+}
+.source-map .source-wheel {
+  height: 100%;
+  min-height: 0;
+}
+.source-map .record-search input {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.source-map .source-description-field {
+  grid-column: 1/-1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.source-map .source-description-field .field {
+  gap: 7px;
+}
+.source-map .source-description-field textarea {
+  min-height: 58px;
+  max-height: 110px;
+  resize: vertical;
+  font-size: 13px;
+}
+.source-map .source-description-actions {
+  gap: 10px;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+}
+.source-map .source-description-actions button {
+  width: auto;
+  min-height: 28px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.source-map .source-description-actions small {
+  display: none;
+}
+.source-map .source-ai-scope {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.source-map .source-ai-scope small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.source-map .special-settings {
+  flex-wrap: wrap;
+}
+.source-map .source-bottom .intake-workspace {
+  min-height: 0;
+  height: auto;
+}
+.source-map .source-bottom .workflow-page-heading {
+  display: none;
+}
+.source-map .source-bottom .intake-tools {
+  flex: none;
+}
+.source-map .source-connection-dialog .dialog-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.source-map .source-connection-dialog .field--wide {
+  grid-column: 1/-1;
+}
+.source-map .source-connection-dialog small {
+  font-size: 12px;
+}
+.source-map .source-connection-dialog :is(input, select, textarea) {
+  max-width: 100%;
+  min-width: 0;
+}
+.source-map .source-form-state {
+  grid-row: 1/3;
+  align-self: center;
+  text-align: center;
+}
+.source-map .source-description-suggestion {
+  font-size: 13px;
+}
+.source-map .content-dialog {
+  inset: 0;
+  margin: auto;
+  max-height: calc(100dvh - 48px);
+}
+.source-map .content-dialog__body {
+  min-height: 0;
+  overflow: auto;
+}
+@media (max-width: 760px) {
+  .workspace-view.source-map {
+    height: auto;
+    display: block;
+  }
+  .source-map .source-layout {
+    height: auto;
+  }
+  .source-map .source-detail-map {
+    height: auto;
+    min-height: 700px;
+  }
+  .source-map .source-connection-dialog .dialog-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The application shell already owns the outer rail and viewport insets. */
+.content-app .workspace-view:is(.reader-study, .db-main, .settings-main) {
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  --muted: var(--subtle);
+}
+.content-app .reader-study {
+  display: flex;
+  flex-direction: column;
+}
+.content-app .reader-study > .workflow-page-heading {
+  padding: 4px 0 20px;
+}
+.content-app .reader-study .content-reading-frame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.content-app .reader-study .reading-stage {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+.content-app .reader-study .reading-scroll {
+  display: block;
+  min-height: 0;
+  overflow: auto;
+  padding: 26px 32px;
+}
+.content-app .reader-study .document-paper {
+  height: auto;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  display: block;
+}
+.content-app .reader-study .document-paper__identity {
+  padding: 0 0 18px;
+  border: 0;
+  background: transparent;
+}
+.content-app .reader-study .document-paper__identity h2 {
+  font-size: 28px;
+  font-weight: 550;
+  line-height: 1.45;
+}
+.content-app .reader-study .document-paper__toolbar {
+  padding: 0 0 20px;
+  border: 0;
+  background: transparent;
+}
+.content-app
+  .reader-study
+  :is(.document-paper__source, .document-paper__entries) {
+  overflow: visible;
+  max-height: none;
+  height: auto;
+  padding: 0;
+  display: block;
+}
+.content-app .reader-study .reading-status {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 7px 18px;
+}
+.content-app .reader-study .annotation-rail {
+  overflow: auto;
+  min-height: 0;
+}
+.content-app .reader-study .content-reading-notes__title {
+  margin: 0 0 22px;
+  font-size: 14px;
+  color: var(--subtle);
+}
+.content-app .reader-study .reader-editor-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.content-app .reader-study .document-switch small {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.content-app .database-blank .db-layout {
+  height: 100%;
+  min-height: 0;
+}
+.content-app .database-blank .side-panel {
+  display: flex;
+  flex-direction: column;
+}
+.content-app :is(.database-blank, .settings-sample, .reader-study) [hidden] {
+  display: none !important;
+}
+.content-app .database-blank .side-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.database-side-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 4;
+  border-radius: 8px;
+}
+.side-left > .database-side-divider {
+  right: -9px;
+}
+.side-right > .database-side-divider {
+  left: -9px;
+}
+.database-side-divider:hover,
+.database-side-divider:focus-visible {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.content-app .database-blank .result-space {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.content-app .database-blank .result-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.content-app .database-blank .query-studio-results {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+}
+.content-app .database-blank .database-research-results {
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+  padding: 12px;
+}
+.content-app .database-blank .search-secondary {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.content-app .database-blank .search-mode {
+  display: flex;
+  gap: 4px;
+}
+.content-app .database-blank .database-report-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  text-align: left;
+  align-items: flex-start;
+  padding: 12px 0;
+  gap: 6px;
+  border: 0;
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 13px;
+}
+.content-app .database-blank .database-report-card strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.content-app .database-blank .database-report-card small {
+  font-size: 11px;
+  color: var(--subtle);
+}
+.content-app .settings-main {
+  display: flex;
+  flex-direction: column;
+  --settings-surface: var(--paper);
+  --settings-input: var(--bg);
+  --settings-line: var(--line-strong);
+  --control: var(--line-strong);
+}
+.content-app .settings-main .settings-heading {
+  height: 86px;
+}
+.content-app .settings-main .settings-content {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  align-items: start;
+}
+.content-app .settings-main .settings-panels {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.content-app .settings-main .settings-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+.content-app .settings-main .ai-policy-form {
+  margin: 0;
+}
+.content-app .settings-main .ai-policy-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.content-app .settings-main .settings-policy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 18px;
+}
+.content-app .settings-main .ai-policy-fields .ai-source-options {
+  display: grid;
+  gap: 12px;
+}
+.content-app .settings-main .ai-policy-fields input:not([type='checkbox']) {
+  max-width: 200px;
+}
+.content-app .settings-main .ai-connection-settings dl {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.content-app .settings-main .ai-connection-settings h3 {
+  margin-top: 20px;
+}
+.content-app .settings-main .ai-connection-settings :is(p, ol) {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.content-app .settings-main .setting-card > p:empty {
+  display: none;
+}
+@media (max-width: 1000px) {
+  .content-app .settings-main .settings-policy-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 760px) {
+  .content-app .workspace-view:is(.reader-study, .db-main, .settings-main) {
+    height: auto;
+    min-height: calc(100dvh - 80px);
+    overflow: visible;
+  }
+  .content-app .database-blank .db-layout {
+    min-height: calc(100dvh - 100px);
+  }
+  .content-app .reader-study .reading-stage {
+    display: flex;
+    flex-direction: column;
+  }
+  .database-side-divider {
+    display: none;
+  }
+  .content-app .settings-main .settings-panels {
+    overflow: visible;
+  }
+}
+
+.settings-main .range-control output {
+  white-space: nowrap;
+  flex: none;
+}
+.settings-main .settings-content {
+  overflow: auto;
+  align-content: start;
+}
+
+.source-map .alternate-view {
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 24px;
+}
+
+.content-app .source-map .source-bottom {
+  transform: translateY(calc(100% - 54px));
+}
+.content-app .source-map .source-bottom.is-open {
+  transform: translateY(0);
+}
+.content-app .source-map .source-detail-map[data-mode='manual'] {
+  grid-template-rows: 44px minmax(0, 1fr) 54px;
+}
+.content-app .source-map .alternate-view {
+  display: block;
+}
+.content-app .database-options .blank-config {
+  inset: 0;
+  margin: auto;
+  height: fit-content;
+}
+.content-app .database-options .side-panel {
+  background: var(--panel);
+  color: var(--ink);
+}
+.content-app .source-map .dock-content .intake-tools {
+  position: static;
+}
+@media (max-width: 950px) {
+  .content-app .database-options .side-panel {
+    z-index: 30;
+  }
+  .content-app .database-options .database-side-divider {
+    display: none;
+  }
+}
+
+/* Search confirmation can wrap; results follow the measured header. */
+.content-app .database-options .result-space {
+  top: var(--db-search-space, 220px);
+}
+.content-app .database-options .query-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.database-report-host {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  gap: 14px;
+}
+
+.query-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: none;
+}
+
+/* The historical tool fills its modal; actions stay below the scrolling results. */
+.content-app .source-map .source-history-dialog[open] {
+  width: min(1280px, calc(100vw - 48px)) !important;
+  height: calc(100dvh - 48px);
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.content-app .source-history-dialog > .content-dialog__body {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow: hidden;
+  padding: 16px;
+}
+.content-app .source-history-dialog .history-workspace {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 12px;
+}
+.content-app
+  .source-history-dialog
+  .history-workspace
+  > .workflow-page-heading {
+  display: none;
+}
+.content-app .source-history-dialog .journey-two-pane {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+.content-app .source-history-dialog .history-flow {
+  flex: none;
+}
+@media (max-width: 760px) {
+  .content-app .source-history-dialog > .content-dialog__body {
+    overflow: auto;
+  }
+  .content-app .source-history-dialog .history-workspace {
+    height: auto;
+    overflow: visible;
+  }
+  .content-app .source-history-dialog .journey-two-pane {
+    flex: none;
+    min-height: 500px;
+  }
+}

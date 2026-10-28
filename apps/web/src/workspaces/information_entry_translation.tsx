@@ -1,3 +1,4 @@
+import {AnnotationSummary} from './annotation_summary.js';
 import {createPortal} from 'react-dom';
 import type {ReactNode, RefObject} from 'react';
 import {ReadingContent} from '../components/reading_content.js';
@@ -133,7 +134,12 @@ export function InformationEntryTranslation({
             <h3 lang="zh-CN">{readingTitle(state.translation.title)}</h3>
           )}
           <ReadingContent
-            leadingContent={leadingContent}
+            leadingContent={
+              <>
+                {leadingContent}
+                <AnnotationSummary entry={entry} />
+              </>
+            }
             active={active}
             scrollMemory={
               scrollPositions === undefined
@@ -156,7 +162,12 @@ export function InformationEntryTranslation({
         </>
       ) : (
         <ReadingContent
-          leadingContent={leadingContent}
+          leadingContent={
+            <>
+              {leadingContent}
+              <AnnotationSummary entry={entry} />
+            </>
+          }
           active={active}
           scrollMemory={
             scrollPositions === undefined

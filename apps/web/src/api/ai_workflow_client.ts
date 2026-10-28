@@ -1,3 +1,5 @@
+import type {Reception} from './source_receiving_contract.js';
+
 export interface AiIntakePolicy {
   fetchFullText: boolean;
   blockedKinds: string[];
@@ -15,6 +17,7 @@ export interface IntakeRecord {
   version: number;
   updatedAt: string;
   value: {
+    reception?: Reception;
     receipt?: 'pending' | 'accepted' | 'rejected';
     receiptOrigin?: 'manual' | 'model';
     receiptTaskId?: string;
@@ -46,11 +49,9 @@ export interface AiPolicySettings {
   manualUploads: boolean;
   model: string;
   maxEntries: number;
-  maxRelations: number;
   maxModelCalls: number;
   maxDocumentsPerDay: number;
   intake?: AiIntakePolicy;
-  maxRelationCandidates?: number;
 }
 export interface AiPolicy {
   revision: number;
@@ -68,6 +69,7 @@ export interface AiTask {
   cancelRequested?: boolean;
   request: {kind: string; snapshotId?: string; entryId?: string};
   state: {
+    workflow?: 'confirmed-content-v1';
     status: string;
     supersededBy?: string;
     automaticRetry?: {limit: number; used: number; notBefore?: string};
@@ -140,6 +142,10 @@ export const aiWorkflowCommand: AiWorkflowClient = async <T>(
     operation.startsWith('ingestion_') ||
     operation.startsWith('intake_') ||
     operation.startsWith('source_quality_') ||
+    operation.startsWith('annotation_') ||
+    operation.startsWith('topic') ||
+    operation.startsWith('entry_annotations_') ||
+    operation.startsWith('split_recipe') ||
     operation === 'source_description_generate' ||
     operation === 'subscriptions_list'
       ? '/api/v1/ingestion/commands'
@@ -168,6 +174,51 @@ export const aiWorkflowCommand: AiWorkflowClient = async <T>(
 export function aiError(error: unknown): string {
   const code = error instanceof Error ? error.message : '';
   const messages: Record<string, string> = {
+    topics_unavailable: '主题服务暂不可用。',
+    topic_invalid: '请检查名称、范围和数量设置。',
+    topic_input_too_large: '本组正文超过处理容量，请缩小候选数量。',
+    topic_input_changed: '条目或词表已更新，请重新查找候选。',
+    topic_version_changed: '主题已更新，已有结果保留，请刷新后核对。',
+    topic_evidence_changed: '引用或正文版本不符，请重新选择依据。',
+    topic_manual_decision: '这项内容由人工决定，请手动核对。',
+    topic_entry_unavailable: '请先在工作台确认入库，再整理主题。',
+    topic_job_cannot_resume:
+      '此任务不能直接继续，请查看原因；已有回答不会重发。',
+    topic_attempts_exhausted: '已达到本组尝试上限。',
+    topic_output_invalid: '归组回答未通过校验，已有内容保留。',
+    topic_relation_limit: '模型返回的联系超过本组上限。',
+    topics_busy: '主题正在保存，请稍后重试。',
+    restore_resume_required: '恢复的任务已暂停，请核对后继续。',
+    annotation_invalid: '标注格式有误，请检查填写内容。',
+    annotation_evidence_invalid: '引用与本条正文不符，请重新选择依据。',
+    stale_annotation_vocabulary: '词表已更新，请重新读取后保存。',
+    annotation_identity_changed:
+      '已有词条的名称、含义和维度需保留；请新建词条，再确认两者关系。',
+    manual_annotations_protected: '这条标注已由人工修改，请手动核对。',
+    split_recipe_invalid: '方案格式有误，请检查名称、数量和规则设置。',
+    stale_split_recipes: '方案列表已更新，点击“重新读取方案”后再核对草稿。',
+    stale_split_recipe: '方案版本已更新，请重新读取。',
+    recipe_trials_required:
+      '请完成样本试读，处理不符合预期的结果，并填写核对说明。',
+    recipe_copy_required: '已启用的方案请先复制为修订草稿。',
+    recipe_not_enabled: '请先试读并启用方案。',
+    recipe_catalog_full: '已保存 128 个方案，请修订现有方案。',
+    recipe_replaced: '这个方案已被替代，请选择当前方案。',
+    split_recipe_not_found: '方案不存在或不适用于本篇，请重新读取方案。',
+    recipe_settings_invalid: '拆分参数有误，请检查条目数量和正文长度。',
+    recipe_title_mismatch: '文章标题与方案条件不符，请核对方案。',
+    recipe_text_capacity: '正文超过本次规则处理容量，原文已保留。',
+    recipe_source_unavailable: '本篇没有可用正文，请检查来源内容。',
+    recipe_coverage_invalid: '拆分范围未完整覆盖原文，请核对方案。',
+    recipe_replacement_invalid: '修订方案的来源或前一版本已变化，请重新读取。',
+    recipe_receipt_not_accepted: '请先接收并放行当前文档。',
+    recipe_source_mismatch: '这个方案不适用于当前文档的来源。',
+    recipe_match_ambiguous: '有多个方案同时匹配，请在工作台核对。',
+    recipe_entry_count_changed: '条目数超出方案范围，请核对文章格式。',
+    recipe_format_mismatch: '文章格式与拆分方案不符，请在工作台核对。',
+    recipe_number_sequence_changed: '文章编号不连续，请核对拆分方案。',
+    recipe_body_too_short: '部分条目正文过短，请核对切点。',
+    recipe_entry_capacity: '条目数超过本任务上限，请核对拆分方案。',
     source_quality_changed: '来源或审核记录已改变，请刷新后重新决定。',
     source_quality_unavailable: '来源复核暂不可用，请刷新后重试。',
     stale_ingestion_policy:

@@ -293,7 +293,22 @@ export function prepareManualSplitInformationEntries(
         ? left.codePointRange.start - right.codePointRange.start
         : left.fragmentId.localeCompare(right.fragmentId),
     );
-  if (sections.length === 0) {
+  const explicitWhole = structure.fragments.find(
+    (f) =>
+      f.nodeKind === 'document' &&
+      f.codePointRange.start === 0 &&
+      f.selectedText === structure.normalizedText &&
+      f.codePointRange.end ===
+        Array.from(structure.normalizedText ?? '').length,
+  );
+  if (
+    explicitWhole &&
+    groups.every((g) =>
+      g.fragments.every((f) => f.fragmentId === explicitWhole.fragmentId),
+    )
+  ) {
+    sections = [explicitWhole];
+  } else if (sections.length === 0) {
     const whole = structure.fragments.find(
       (f) =>
         f.nodeKind === 'document' &&
@@ -589,6 +604,9 @@ export function prepareManualEntryRevision(
     return undefined;
   }
   return Object.freeze({
+    ...(current.value.annotations
+      ? {annotations: current.value.annotations}
+      : {}),
     documentOrder: current.value.documentOrder,
     titlePath: current.value.titlePath,
     body,
@@ -620,6 +638,7 @@ export function prepareManualEntryRevision(
 export function prepareAiEntryTagRevision(
   current: Readonly<CurrentInformationEntry>,
   input: Readonly<AiEntryTagAnnotationInput>,
+  allowEmpty = false,
 ): Readonly<InformationEntryRevisionValue> | undefined {
   const originVersion = input.originVersion.trim().normalize('NFC');
   if (originVersion.length === 0 || Array.from(originVersion).length > 512) {
@@ -629,9 +648,15 @@ export function prepareAiEntryTagRevision(
     input.contentKeywords,
     'ai',
     originVersion,
+    allowEmpty,
   );
   const type = normalizeType(input.typeKeyword, input.typeCustomName);
-  const domains = normalizeDomains(input.domains, 'ai', originVersion);
+  const domains = normalizeDomains(
+    input.domains,
+    'ai',
+    originVersion,
+    allowEmpty,
+  );
   if (
     contentKeywords === undefined ||
     type === undefined ||
@@ -679,10 +704,11 @@ function normalizeContentKeywords(
   values: readonly string[],
   origin: 'manual' | 'ai',
   originVersion: string,
+  allowEmpty = false,
 ): readonly Readonly<EntryContentKeyword>[] | undefined {
   if (
     !Array.isArray(values) ||
-    values.length < 1 ||
+    (!allowEmpty && values.length < 1) ||
     values.length > MAXIMUM_CONTENT_KEYWORDS
   ) {
     return undefined;
@@ -728,8 +754,9 @@ function normalizeDomains(
   }>[],
   origin: 'manual' | 'ai',
   originVersion: string,
+  allowEmpty = false,
 ): readonly Readonly<EntryDomainAssignment>[] | undefined {
-  if (values.length < 1 || values.length > 3) {
+  if ((!allowEmpty && values.length < 1) || values.length > 3) {
     return undefined;
   }
   const seen = new Set<string>();
