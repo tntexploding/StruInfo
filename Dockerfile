@@ -25,7 +25,7 @@ RUN --network=none pnpm --offline --config.trust-lockfile=true --config.inject-w
 
 FROM node:24-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS runtime
 
-ARG STRUIINFO_VERSION=0.4.0
+ARG STRUIINFO_VERSION=0.5.0
 ENV NODE_ENV=production
 WORKDIR /opt/struinfo/apps/server
 

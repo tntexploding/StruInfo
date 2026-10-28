@@ -1,10 +1,11 @@
+import {validateAnnotationEvidence} from '../entries/structured_annotations.js';
 import {isDeepStrictEqual} from 'node:util';
 import {assertProcessingTagProposalPayload} from './processing.js';
 import {
-  MAXIMUM_TAG_BATCH_ENTRIES,
+  MAXIMUM_AI_BATCH_ENTRIES,
   MAXIMUM_TAG_BATCH_CHARACTERS,
   tagBatchEntrySize,
-} from './ai_tag_batch.js';
+} from './ai_entry_batch.js';
 
 import {
   deriveInformationEntryRevisionId,
@@ -135,7 +136,7 @@ export class AiTagProposalService implements AiTagProposalServicePort {
     if (
       !provider.proposeTagsBatch ||
       requests.length < 2 ||
-      requests.length > MAXIMUM_TAG_BATCH_ENTRIES ||
+      requests.length > MAXIMUM_AI_BATCH_ENTRIES ||
       new Set(requests.map((request) => request.entryId)).size !==
         requests.length
     )
@@ -450,6 +451,7 @@ function toStoredPayload(
   generated: Awaited<ReturnType<AiTagProposalProviderPort['proposeTags']>>,
 ): Readonly<ProcessingTagProposalPayload> {
   return Object.freeze({
+    ...(generated.annotations ? {annotations: generated.annotations} : {}),
     expectedEntryRevision: entry.revision,
     providerModel: provider.model,
     promptVersion: provider.promptVersion,
@@ -475,19 +477,38 @@ function entryValueFromProposal(
   entry: Readonly<CurrentInformationEntry>,
   payload: Readonly<ProcessingTagProposalPayload>,
 ) {
-  const value = prepareAiEntryTagRevision(entry, {
-    contentKeywords: payload.contentKeywords.map(
-      (keyword) => keyword.displayValue,
-    ),
-    typeKeyword: payload.typeKeyword,
-    ...(payload.typeCustomName === undefined
-      ? {}
-      : {typeCustomName: payload.typeCustomName}),
-    domains: payload.domains,
-    originVersion: originVersion(payload),
-  });
+  const value = prepareAiEntryTagRevision(
+    entry,
+    {
+      contentKeywords: payload.contentKeywords.map(
+        (keyword) => keyword.displayValue,
+      ),
+      typeKeyword: payload.typeKeyword,
+      ...(payload.typeCustomName === undefined
+        ? {}
+        : {typeCustomName: payload.typeCustomName}),
+      domains: payload.domains,
+      originVersion: originVersion(payload),
+    },
+    payload.annotations !== undefined,
+  );
   if (value === undefined) {
     throw new AiTagProposalServiceError('ai_proposal_invalid');
+  }
+  if (payload.annotations) {
+    if (
+      payload.annotations.inputRevision !== payload.expectedEntryRevision ||
+      payload.annotations.inputBodySha256 !== entry.value.bodySha256 ||
+      !validateAnnotationEvidence(payload.annotations, entry.value.body)
+    )
+      throw new AiTagProposalServiceError('ai_proposal_invalid');
+    return {
+      ...value,
+      annotations:
+        entry.value.annotations?.origin === 'manual'
+          ? entry.value.annotations
+          : payload.annotations,
+    };
   }
   return value;
 }

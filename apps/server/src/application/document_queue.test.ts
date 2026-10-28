@@ -38,6 +38,7 @@ function task(n: number, status = 'paused', calls = 1) {
     runtimeStatus: 'idle',
     request: {kind: 'document', snapshotId: id(n), maxModelCalls: 4},
     state: {
+      workflow: 'confirmed-content-v1',
       status,
       phase: 'tags',
       calls,
@@ -154,7 +155,6 @@ describe('owner document queue', () => {
       expect.objectContaining({
         maxEntries: 64,
         maxModelCalls: 24,
-        maxRelations: 4,
         intake: {fetchFullText: true},
       }),
     );

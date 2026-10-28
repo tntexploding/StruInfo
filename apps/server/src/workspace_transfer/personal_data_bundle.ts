@@ -1,4 +1,12 @@
 import {
+  EMPTY_ANNOTATION_VOCABULARY,
+  annotationVocabularySchema,
+} from '../modules/entries/structured_annotations.js';
+import {
+  EMPTY_SOURCE_SPLIT_CATALOG,
+  sourceSplitCatalogSchema,
+} from '../modules/entries/source_split_recipe.js';
+import {
   DEFAULT_AI_PRICE_POLICY,
   aiPricePolicySchema,
 } from '../modules/processing/ai_price_policy.js';
@@ -181,6 +189,14 @@ function decodeIdentity(
 
 function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
   if (!isRecord(value)) fail();
+  const annotations = annotationVocabularySchema.safeParse(
+    value.annotationVocabulary ?? EMPTY_ANNOTATION_VOCABULARY,
+  );
+  if (!annotations.success) fail();
+  const recipes = sourceSplitCatalogSchema.safeParse(
+    value.sourceSplitRecipes ?? EMPTY_SOURCE_SPLIT_CATALOG,
+  );
+  if (!recipes.success) fail();
   const price = aiPricePolicySchema.safeParse(
     value.aiPricePolicy ?? DEFAULT_AI_PRICE_POLICY,
   );
@@ -268,6 +284,8 @@ function decodePreferences(value: unknown): Readonly<ReviewPreferences> {
     savedQueries,
     uiPreferences,
     price.data,
+    recipes.data,
+    annotations.data,
   );
 }
 

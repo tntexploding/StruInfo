@@ -1,3 +1,4 @@
+import type {StructuredAnnotations} from '../entries/structured_annotations.js';
 import type {
   CurrentInformationEntry,
   EntryDomainKeyword,
@@ -24,6 +25,7 @@ export class AiTagProposalProviderError extends Error {
 }
 
 export interface AiTagProposalProviderResult {
+  readonly annotations?: StructuredAnnotations;
   readonly summary: string;
   readonly contentKeywords: readonly string[];
   readonly typeKeyword: EntryTypeKeyword;

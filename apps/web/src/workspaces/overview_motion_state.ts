@@ -5,16 +5,22 @@ export const OVERVIEW_MOTION = {
   charge: 800,
   boost: 400,
   gather: 1200,
-  flight: 200,
-  arrive: 1400,
-  expand: 1000,
-  finish: 2400,
+  flight: 1200,
+  arrive: 2400,
+  expand: 700,
+  finish: 3400,
   count: 750,
   delta: 1000,
   orbit: 8500,
 } as const;
 export type MetricId =
-  'documents' | 'fragments' | 'entries' | 'annotated' | 'tags' | 'reports';
+  | 'documents'
+  | 'fragments'
+  | 'entries'
+  | 'annotated'
+  | 'tags'
+  | 'relations'
+  | 'reports';
 export type OverviewMetrics = Record<MetricId, number | undefined>;
 export interface OverviewObservation {
   items: readonly AiActivityItem[];
@@ -24,6 +30,34 @@ export interface OverviewCompletion {
   source: FlowStageId;
   target?: FlowStageId;
   metrics: {id: MetricId; before: number; after: number}[];
+}
+
+/** A polling cycle can deliver counts before task state; keep one charging event. */
+export function mergeOverviewCompletions(
+  pending: readonly OverviewCompletion[],
+  incoming: readonly OverviewCompletion[],
+  metrics: OverviewMetrics,
+): OverviewCompletion[] {
+  const result = new Map<FlowStageId, OverviewCompletion>();
+  for (const event of [...pending, ...incoming]) {
+    const current = result.get(event.source) ?? {
+      source: event.source,
+      metrics: [],
+    };
+    if (event.target) current.target = event.target;
+    for (const metric of event.metrics) {
+      const previous = current.metrics.find((value) => value.id === metric.id);
+      if (previous) previous.after = metric.after;
+      else current.metrics.push({...metric});
+    }
+    result.set(event.source, current);
+  }
+  // A concurrent removal or reset wins over an unfinished visual count.
+  for (const event of result.values())
+    event.metrics = event.metrics.filter(
+      (metric) => metrics[metric.id] === metric.after,
+    );
+  return [...result.values()];
 }
 const STAGE_LABELS: Record<string, FlowStageId> = {
   审核: 'intake',
@@ -38,6 +72,7 @@ const METRIC_STAGES: Record<MetricId, FlowStageId> = {
   entries: 'split',
   annotated: 'tags',
   tags: 'tags',
+  relations: 'relations',
   reports: 'report',
 };
 

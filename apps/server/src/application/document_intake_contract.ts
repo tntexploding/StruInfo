@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {receptionSchema} from '../modules/subscriptions/source_receiving.js';
 
 export const INTAKE_CONTENT_KINDS = [
   'article',
@@ -49,6 +50,7 @@ export interface InboxSummaryProvider {
 
 export const intakeRecordValueSchema = z
   .object({
+    reception: receptionSchema.optional(),
     // Receipt provenance is independent of the optional unattended-processing policy.
     captureOrigin: z
       .discriminatedUnion('kind', [

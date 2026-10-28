@@ -1,5 +1,5 @@
 import {
-  agentTaskRequestSchema,
+  storedAgentTaskRequestSchema,
   agentTaskStateSchema,
   type AgentTask,
   type AgentTaskRepository,
@@ -151,7 +151,7 @@ function decode(row: Readonly<Record<string, unknown>>): AgentTask {
     actorId: String(row.actor_id),
     policyVersion: 'struinfo.agent-task.v1',
     requestKey: String(row.request_key),
-    request: agentTaskRequestSchema.parse(
+    request: storedAgentTaskRequestSchema.parse(
       JSON.parse(String(row.request_text)) as unknown,
     ),
     model: String(row.model),

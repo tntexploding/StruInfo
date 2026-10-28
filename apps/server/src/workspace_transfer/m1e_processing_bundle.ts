@@ -1,4 +1,11 @@
+import {researchRecordValueSchema} from '../application/research_contract.js';
+import {topicRecordValueSchema} from '../modules/entries/content_topics.js';
+import {structuredAnnotationsSchema} from '../modules/entries/structured_annotations.js';
 import {Buffer} from 'node:buffer';
+import {
+  publicationContentSchema,
+  organizationStatusSchema,
+} from '../application/document_publication_contract.js';
 import {reportStateSchema} from '../application/report_contract.js';
 import {validateReportState} from '../application/report_content.js';
 import {intakeRecordValueSchema} from '../application/document_intake_contract.js';
@@ -16,8 +23,8 @@ import {
 } from './workspace_bundle.js';
 
 export const M1E_PROCESSING_BUNDLE_SECTION_TYPE = 'struinfo.m1e-processing';
-export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 15;
-export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v15';
+export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 19;
+export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v19';
 export const M1E_PROCESSING_VERSION_FOURTEEN_BUNDLE_SECTION_VERSION = 14;
 export const M1E_PROCESSING_VERSION_FOURTEEN_BUNDLE_SCHEMA =
   'struinfo.m1e-processing.v14';
@@ -367,10 +374,65 @@ export const M1E_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescript
       'created_at',
       'updated_at',
     ]),
+    table('document_publication_version', [
+      'workspace_id',
+      'publication_id',
+      'document_id',
+      'snapshot_id',
+      'content_text',
+      'confirmed_at',
+      'origin',
+    ]),
+    table('document_publication_pointer', [
+      'workspace_id',
+      'document_id',
+      'publication_id',
+    ]),
+    table('document_organization_work', [
+      'workspace_id',
+      'publication_id',
+      'status',
+      'current_version',
+      'error_code',
+      'updated_at',
+    ]),
+    table('processing_tag_annotation_payload', [
+      'workspace_id',
+      'proposal_id',
+      'value_text',
+    ]),
+    table('content_organization_record', [
+      'workspace_id',
+      'record_id',
+      'kind',
+      'value_text',
+      'current_version',
+      'updated_at',
+    ]),
+    table('research_pipeline_record', [
+      'workspace_id',
+      'record_id',
+      'kind',
+      'value_text',
+      'current_version',
+      'updated_at',
+    ]),
   ]);
 
+const VERSION_EIGHTEEN_PROCESSING_TABLES = Object.freeze(
+  M1E_PROCESSING_TABLES.slice(0, -1),
+);
+const VERSION_SEVENTEEN_PROCESSING_TABLES = Object.freeze(
+  VERSION_EIGHTEEN_PROCESSING_TABLES.slice(0, -1),
+);
+const VERSION_SIXTEEN_PROCESSING_TABLES = Object.freeze(
+  VERSION_SEVENTEEN_PROCESSING_TABLES.slice(0, -1),
+);
+const VERSION_FIFTEEN_PROCESSING_TABLES = Object.freeze(
+  VERSION_SIXTEEN_PROCESSING_TABLES.slice(0, -3),
+);
 const VERSION_FOURTEEN_PROCESSING_TABLES = Object.freeze(
-  M1E_PROCESSING_TABLES.map((descriptor) =>
+  VERSION_FIFTEEN_PROCESSING_TABLES.map((descriptor) =>
     descriptor.name === 'processing_split_proposal_entry_fragment'
       ? table(
           descriptor.name,
@@ -438,6 +500,82 @@ export const M1E_PROCESSING_VERSION_FOURTEEN_BUNDLE_CODEC: WorkspaceBundleSectio
     decode(payload: JsonValue): unknown {
       return upgradePreviousSnapshot(normalizeVersionFourteenSnapshot(payload));
     },
+  });
+export const M1E_PROCESSING_VERSION_EIGHTEEN_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: 18,
+    encode: (value: unknown) =>
+      normalizeSnapshot(
+        value,
+        'struinfo.m1e-processing.v18',
+        VERSION_EIGHTEEN_PROCESSING_TABLES,
+      ),
+    decode: (value: JsonValue) =>
+      upgradePreviousSnapshot(
+        normalizeSnapshot(
+          value,
+          'struinfo.m1e-processing.v18',
+          VERSION_EIGHTEEN_PROCESSING_TABLES,
+        ),
+      ),
+  });
+export const M1E_PROCESSING_VERSION_SEVENTEEN_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: 17,
+    encode: (value: unknown) =>
+      normalizeSnapshot(
+        value,
+        'struinfo.m1e-processing.v17',
+        VERSION_SEVENTEEN_PROCESSING_TABLES,
+      ),
+    decode: (value: JsonValue) =>
+      upgradePreviousSnapshot(
+        normalizeSnapshot(
+          value,
+          'struinfo.m1e-processing.v17',
+          VERSION_SEVENTEEN_PROCESSING_TABLES,
+        ),
+      ),
+  });
+export const M1E_PROCESSING_VERSION_SIXTEEN_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: 16,
+    encode: (value: unknown) =>
+      normalizeSnapshot(
+        value,
+        'struinfo.m1e-processing.v16',
+        VERSION_SIXTEEN_PROCESSING_TABLES,
+      ),
+    decode: (value: JsonValue) =>
+      upgradePreviousSnapshot(
+        normalizeSnapshot(
+          value,
+          'struinfo.m1e-processing.v16',
+          VERSION_SIXTEEN_PROCESSING_TABLES,
+        ),
+      ),
+  });
+export const M1E_PROCESSING_VERSION_FIFTEEN_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: 15,
+    encode: (payload: unknown) =>
+      normalizeSnapshot(
+        payload,
+        'struinfo.m1e-processing.v15',
+        VERSION_FIFTEEN_PROCESSING_TABLES,
+      ),
+    decode: (payload: JsonValue) =>
+      upgradePreviousSnapshot(
+        normalizeSnapshot(
+          payload,
+          'struinfo.m1e-processing.v15',
+          VERSION_FIFTEEN_PROCESSING_TABLES,
+        ),
+      ),
   });
 export const M1E_PROCESSING_VERSION_THIRTEEN_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
   Object.freeze({
@@ -811,8 +949,8 @@ function upgradePreviousSnapshot(
               ...table,
               rows: table.rows.map((row) => ({
                 ...row,
-                start_code_point: null,
-                end_code_point: null,
+                start_code_point: row.start_code_point ?? null,
+                end_code_point: row.end_code_point ?? null,
               })),
             }
           : table,
@@ -868,6 +1006,14 @@ function normalizeRow(
   descriptor: Readonly<M1eProcessingTableDescriptor>,
 ): M1eProcessingRow {
   const record = requireClosedObject(value, descriptor.columns);
+  if (descriptor.name === 'processing_tag_annotation_payload') {
+    if (typeof record.value_text !== 'string') fail();
+    try {
+      structuredAnnotationsSchema.parse(JSON.parse(record.value_text));
+    } catch {
+      fail();
+    }
+  }
   if (
     typeof record.workspace_id !== 'string' ||
     !CANONICAL_UUID.test(record.workspace_id)
@@ -887,6 +1033,88 @@ function normalizeRow(
       fail();
     }
     row[column] = field;
+  }
+  if (descriptor.name.startsWith('document_')) {
+    if (
+      typeof row.publication_id !== 'string' ||
+      !CANONICAL_UUID.test(row.publication_id)
+    )
+      fail();
+    if (
+      descriptor.name !== 'document_organization_work' &&
+      (typeof row.document_id !== 'string' ||
+        !CANONICAL_UUID.test(row.document_id))
+    )
+      fail();
+    if (descriptor.name === 'document_publication_version') {
+      if (
+        typeof row.content_text !== 'string' ||
+        Buffer.byteLength(row.content_text) > 33554432 ||
+        typeof row.confirmed_at !== 'string' ||
+        !Number.isFinite(Date.parse(row.confirmed_at)) ||
+        !['manual', 'external_agent', 'internal_ai'].includes(
+          String(row.origin),
+        )
+      )
+        fail();
+      const content = publicationContentSchema.parse(
+        JSON.parse(row.content_text),
+      );
+      if (
+        content.documentId !== row.document_id ||
+        content.snapshotId !== row.snapshot_id ||
+        content.entries.some(
+          (e) =>
+            e.workspaceId !== row.workspace_id ||
+            e.snapshotId !== row.snapshot_id ||
+            e.resourceId !== content.source.resourceId,
+        ) ||
+        new Set(content.entries.map((e) => e.entryId)).size !==
+          content.entries.length
+      )
+        fail();
+    }
+    if (descriptor.name === 'document_organization_work') {
+      organizationStatusSchema.parse(row.status);
+      if (
+        typeof row.current_version !== 'number' ||
+        !Number.isInteger(row.current_version) ||
+        row.current_version < 1 ||
+        typeof row.updated_at !== 'string' ||
+        !Number.isFinite(Date.parse(row.updated_at)) ||
+        (row.error_code !== null &&
+          (typeof row.error_code !== 'string' ||
+            !/^[a-z0-9_]{1,160}$/u.test(row.error_code)))
+      )
+        fail();
+    }
+  }
+  if (
+    descriptor.name === 'content_organization_record' ||
+    descriptor.name === 'research_pipeline_record'
+  ) {
+    try {
+      if (
+        typeof row.value_text !== 'string' ||
+        Buffer.byteLength(row.value_text) > ROW_BYTE_LIMIT ||
+        typeof row.record_id !== 'string' ||
+        !CANONICAL_UUID.test(row.record_id) ||
+        typeof row.current_version !== 'number' ||
+        !Number.isInteger(row.current_version) ||
+        row.current_version < 1 ||
+        typeof row.updated_at !== 'string' ||
+        !Number.isFinite(Date.parse(row.updated_at))
+      )
+        fail();
+      const value = (
+        descriptor.name === 'research_pipeline_record'
+          ? researchRecordValueSchema
+          : topicRecordValueSchema
+      ).parse(JSON.parse(row.value_text));
+      if (value.kind !== row.kind) fail();
+    } catch {
+      fail();
+    }
   }
   if (descriptor.name === 'processing_report') {
     try {

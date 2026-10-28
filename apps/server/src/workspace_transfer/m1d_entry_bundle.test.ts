@@ -29,16 +29,17 @@ describe('M1D Entry Bundle section', () => {
     expect(
       M1D_ENTRY_VERSION_SIX_BUNDLE_CODEC.decode({
         ...current,
+        tables: current.tables.slice(0, -1),
         schemaVersion: M1D_ENTRY_VERSION_SIX_BUNDLE_SCHEMA,
       }),
     ).toEqual(current);
   });
-  it('normalizes all ten current Entry, range, document-tag, and working-copy tables deterministically', () => {
+  it('normalizes all eleven current Entry, range, document-tag, and working-copy tables deterministically', () => {
     const first = syntheticSnapshot(false);
     const reversed = syntheticSnapshot(true);
 
     expect(reversed).toEqual(first);
-    expect(first.tables).toHaveLength(10);
+    expect(first.tables).toHaveLength(11);
     expect(m1dEntryTableCounts(first)).toMatchObject({
       information_entry: 2,
       information_document_tag_set: 1,
@@ -52,12 +53,16 @@ describe('M1D Entry Bundle section', () => {
 
   it('upgrades versions four, three, and two into current structure rows', () => {
     const current = syntheticSnapshot(false);
-    const versionFiveTables = current.tables.slice(0, -1);
+    const versionFiveTables = current.tables.slice(0, -2);
     const upgradedFive = M1D_ENTRY_VERSION_FIVE_BUNDLE_CODEC.decode({
       schemaVersion: M1D_ENTRY_VERSION_FIVE_BUNDLE_SCHEMA,
       tables: versionFiveTables,
     }) as ReturnType<typeof normalizeM1dEntrySnapshot>;
-    expect(upgradedFive.tables.at(-1)).toEqual({
+    expect(
+      upgradedFive.tables.find(
+        (t) => t.name === 'information_entry_translation',
+      ),
+    ).toEqual({
       name: 'information_entry_translation',
       rows: [],
     });
@@ -102,14 +107,20 @@ describe('M1D Entry Bundle section', () => {
         (row) => row.is_current_structure === true,
       ),
     ).toBe(true);
-    expect(upgradedFour.tables).toHaveLength(10);
-    expect(upgradedFour.tables.at(-1)).toEqual({
+    expect(upgradedFour.tables).toHaveLength(11);
+    expect(
+      upgradedFour.tables.find(
+        (t) => t.name === 'information_entry_translation',
+      ),
+    ).toEqual({
       name: 'information_entry_translation',
       rows: [],
     });
     expect(upgraded.schemaVersion).toBe(M1D_ENTRY_BUNDLE_SCHEMA);
-    expect(upgraded.tables).toHaveLength(10);
-    expect(upgraded.tables.at(-1)).toEqual({
+    expect(upgraded.tables).toHaveLength(11);
+    expect(
+      upgraded.tables.find((t) => t.name === 'information_entry_translation'),
+    ).toEqual({
       name: 'information_entry_translation',
       rows: [],
     });

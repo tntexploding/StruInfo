@@ -71,3 +71,124 @@ it('retains question headings and never promotes a linked image label to a title
     ),
   ).toBe('How does Starvine cache work?');
 });
+
+it('prefers the source heading to a later external guide or formula', () => {
+  for (const body of [
+    '## 2. A compact adaptation method\n\nThe update uses two factors.\n\nImplement the method from scratch\n[Read the external guide](https://example.invalid/guide)',
+    '## A dependency risk\n\nThe dependency changes the available choices.\n\nthen: dependency = 0\nhttps://example.invalid/example',
+  ]) {
+    expect(
+      splitSourceTitle([{ordinal: 0, text: body}], {
+        startOrdinal: 0,
+        endOrdinal: 0,
+        titlePath: 'Generated title',
+      }),
+    ).toBe(body.split('\n')[0]?.replace(/^## /u, ''));
+  }
+});
+
+it('does not promote a late external caption when no source heading exists', () => {
+  expect(
+    splitSourceTitle(
+      [
+        {
+          ordinal: 0,
+          text: 'The article explains a cache policy.\n\nAn external implementation\nhttps://example.invalid/guide',
+        },
+      ],
+      {startOrdinal: 0, endOrdinal: 0, titlePath: 'Cache policy'},
+    ),
+  ).toBe('Cache policy');
+});
+
+it('skips an internal-link contents outline and keeps the actual article heading', () => {
+  const body =
+    '# Synthetic issue\n\n# Today\n\n- [Valve design](https://example.invalid/issue#valve): Pressure control.\n\n- [Archives](https://example.invalid/issue#archive): Earlier issues.\n\n# Valve design ( permalink )\n\nA relief valve opens at a calibrated pressure.';
+  expect(
+    splitSourceTitle([{ordinal: 0, text: body}], {
+      startOrdinal: 0,
+      endOrdinal: 0,
+      titlePath: 'Incorrect generated title',
+    }),
+  ).toBe('Valve design');
+});
+
+it('keeps a source-backed article title when the range also includes a cover', () => {
+  const text =
+    '# Synthetic weekly\n\n## Cover\n\n![Harbour](https://example.invalid/photo)\n\nAn evening at the harbour.\n\n## Attention and interruptions\n\nRepeated interruptions make sustained work harder.\n\n## News';
+  expect(
+    splitSourceTitle([{ordinal: 0, text}], {
+      startOrdinal: 0,
+      endOrdinal: 0,
+      titlePath: 'Attention and interruptions',
+    }),
+  ).toBe('Attention and interruptions');
+});
+
+it.each(['4、', '4. ', '4) '])(
+  'uses a numbered item name, not the next category at the end: %s',
+  (prefix) => {
+    const text = `${prefix}[Starvine checker](https://example.invalid/checker)\n\nThe checker compares queue counters.\n\n## Resources`;
+    expect(
+      splitSourceTitle([{ordinal: 0, text}], {
+        startOrdinal: 0,
+        endOrdinal: 0,
+        titlePath: 'Tools: Starvine checker',
+      }),
+    ).toBe('Starvine checker');
+  },
+);
+
+it('ignores an empty trailing heading without overriding the supplied subject', () => {
+  expect(
+    splitSourceTitle(
+      [
+        {
+          ordinal: 0,
+          text: 'A valve releases excess pressure.\n\n## Next topic',
+        },
+      ],
+      {startOrdinal: 0, endOrdinal: 0, titlePath: 'Pressure relief'},
+    ),
+  ).toBe('Pressure relief');
+});
+
+it('preserves an accurate category prefix but rejects a neighbouring category', () => {
+  const input = [
+    {ordinal: 0, text: '## Tools'},
+    {
+      ordinal: 1,
+      text: '4、[Starvine checker](https://example.invalid/checker)\n\nThe checker compares queue counters.\n\n## Resources',
+    },
+  ];
+  expect(
+    splitSourceTitle(input, {
+      startOrdinal: 1,
+      endOrdinal: 1,
+      titlePath: 'Tools: Starvine checker',
+    }),
+  ).toBe('Tools: Starvine checker');
+  expect(
+    splitSourceTitle(input, {
+      startOrdinal: 1,
+      endOrdinal: 1,
+      titlePath: 'Resources: Starvine checker',
+    }),
+  ).toBe('Starvine checker');
+});
+
+it('does not promote a subheading or later external title that matches the model', () => {
+  for (const titlePath of ['Limitations', 'Complete external guide']) {
+    expect(
+      splitSourceTitle(
+        [
+          {
+            ordinal: 0,
+            text: '## Queue control\n\nA queue uses bounded retries.\n\n### Limitations\n\nRetries stop at the fixed budget.\n\n[Complete external guide](https://example.invalid/guide)',
+          },
+        ],
+        {startOrdinal: 0, endOrdinal: 0, titlePath},
+      ),
+    ).toBe('Queue control');
+  }
+});

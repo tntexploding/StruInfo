@@ -59,6 +59,8 @@ jobs:
           pnpm install --frozen-lockfile --ignore-scripts
       - name: Exercise workspaces using the runner's installed Chrome
         run: pnpm test:e2e
+      - name: Exercise confirmed publication and background organization in an empty workspace
+        run: pnpm test:publication
       - name: Exercise migrations, grants, recovery and queries in disposable PostgreSQL
         run: pnpm performance:m2-p0d -- --smoke
 

@@ -55,36 +55,6 @@
       "selectedLegalFile": "docs/dependencies/licenses/npm/humanfs__core@0.19.2/LICENSE"
     },
     {
-      "packageKey": "@rolldown/binding-linux-x64-gnu@1.2.3",
-      "tarballSha256": "EA535C99F739CABD74677456CC61F4FE650F183676248A6AA77A191E1EF8B395",
-      "declaredSpdx": "MIT",
-      "releaseRelation": "platform package shares exact version, repository, and license with rolldown@1.2.3",
-      "resolution": "EXACT_VERSION_MAIN_PACKAGE_LEGAL_TEXT",
-      "legalFiles": [
-        {
-          "evidencePath": "docs/dependencies/licenses/npm/rolldown@1.2.3/LICENSE",
-          "bytes": 1302,
-          "sha256": "23ECFFF35A5A2E80D92142F75228912C3B1ABC4B5A8337A821FF4397E2F9F734"
-        }
-      ],
-      "selectedLegalFile": "docs/dependencies/licenses/npm/rolldown@1.2.3/LICENSE"
-    },
-    {
-      "packageKey": "@rolldown/binding-win32-x64-msvc@1.2.3",
-      "tarballSha256": "CFD769C3025085B1F9FF9F50FD3766CADEE13D806F83F25829F710AB3EB2EFDD",
-      "declaredSpdx": "MIT",
-      "releaseRelation": "platform package shares exact version, repository, and license with rolldown@1.2.3",
-      "resolution": "EXACT_VERSION_MAIN_PACKAGE_LEGAL_TEXT",
-      "legalFiles": [
-        {
-          "evidencePath": "docs/dependencies/licenses/npm/rolldown@1.2.3/LICENSE",
-          "bytes": 1302,
-          "sha256": "23ECFFF35A5A2E80D92142F75228912C3B1ABC4B5A8337A821FF4397E2F9F734"
-        }
-      ],
-      "selectedLegalFile": "docs/dependencies/licenses/npm/rolldown@1.2.3/LICENSE"
-    },
-    {
       "packageKey": "@tokenizer/token@0.3.0",
       "commit": "e068a455370090f44c757946b8571bb3fb1f117e",
       "releaseRelation": "npm gitHead",
@@ -270,6 +240,46 @@
         }
       ],
       "selectedLegalFile": "docs/dependencies/licenses/npm-source/nodable__entities@3.0.0/canonical-MIT.txt"
+    },
+    {
+      "packageKey": "@rolldown/binding-linux-x64-gnu@1.2.15",
+      "tarballSha256": "C13DB693E72BD7C5E9B30BB1B43AA96015E4B8610EDB4143C540BCC68AACA3C1",
+      "declaredSpdx": "MIT",
+      "releaseRelation": "Platform package shares exact version, repository, and license with rolldown@1.2.15",
+      "resolution": "EXACT_VERSION_MAIN_PACKAGE_LEGAL_TEXT",
+      "legalFiles": [
+        {
+          "evidencePath": "docs/dependencies/licenses/npm/rolldown@1.2.15/LICENSE",
+          "bytes": 1302,
+          "sha256": "23ECFFF35A5A2E80D92142F75228912C3B1ABC4B5A8337A821FF4397E2F9F734"
+        },
+        {
+          "evidencePath": "docs/dependencies/licenses/npm/rolldown@1.2.15/THIRD-PARTY-LICENSE",
+          "bytes": 2209,
+          "sha256": "A877291D800ED43692F3F9AE09D8E01CC6F7293AD39D43896059C188FFBB8B7C"
+        }
+      ],
+      "selectedLegalFile": "docs/dependencies/licenses/npm/rolldown@1.2.15/LICENSE"
+    },
+    {
+      "packageKey": "@rolldown/binding-win32-x64-msvc@1.2.15",
+      "tarballSha256": "B0B5E3F40E330952D99A084BD6278BE6B8015679395A96361F389AE87167A40E",
+      "declaredSpdx": "MIT",
+      "releaseRelation": "Platform package shares exact version, repository, and license with rolldown@1.2.15",
+      "resolution": "EXACT_VERSION_MAIN_PACKAGE_LEGAL_TEXT",
+      "legalFiles": [
+        {
+          "evidencePath": "docs/dependencies/licenses/npm/rolldown@1.2.15/LICENSE",
+          "bytes": 1302,
+          "sha256": "23ECFFF35A5A2E80D92142F75228912C3B1ABC4B5A8337A821FF4397E2F9F734"
+        },
+        {
+          "evidencePath": "docs/dependencies/licenses/npm/rolldown@1.2.15/THIRD-PARTY-LICENSE",
+          "bytes": 2209,
+          "sha256": "A877291D800ED43692F3F9AE09D8E01CC6F7293AD39D43896059C188FFBB8B7C"
+        }
+      ],
+      "selectedLegalFile": "docs/dependencies/licenses/npm/rolldown@1.2.15/LICENSE"
     }
   ],
   "m1i2LockSha256": "9AA55459A0A5EDD2D6AB7BEEB8CD81152297CB2276CB2026E4634F2306D7BD22"

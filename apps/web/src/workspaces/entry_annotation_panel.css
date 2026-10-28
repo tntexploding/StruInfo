@@ -1,0 +1,119 @@
+.annotation-editor {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.annotation-editor fieldset {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--si-color-border-default);
+  border-radius: 16px;
+}
+.annotation-editor legend {
+  font-size: 1rem;
+  font-weight: 650;
+  padding-inline: 6px;
+}
+.annotation-editor label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.annotation-editor__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.annotation-editor__row {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.annotation-editor input:not([type='checkbox']),
+.annotation-editor select,
+.annotation-editor textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.editorial-app.editorial-app
+  .annotation-editor
+  :is(input:not([type='checkbox']), select, textarea) {
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--si-color-border-default);
+  border-radius: 10px;
+  background: var(--si-color-surface-1);
+  color: var(--si-color-text-primary);
+  font: inherit;
+  line-height: 1.5;
+}
+.editorial-app.editorial-app
+  .annotation-editor
+  :is(input, select, textarea):focus-visible {
+  outline: 2px solid var(--si-color-signal);
+  outline-offset: 2px;
+}
+.editorial-app.editorial-app
+  .annotation-editor
+  :is(input, select, textarea):disabled {
+  color: var(--si-color-text-secondary);
+  opacity: 0.7;
+}
+.annotation-editor input[type='checkbox'] {
+  width: auto;
+}
+.annotation-editor button {
+  justify-self: start;
+  width: auto;
+}
+.annotation-editor__item {
+  padding: 12px;
+  border-bottom: 1px solid var(--si-color-border-default);
+  overflow-wrap: anywhere;
+}
+.annotation-editor__subject {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.annotation-editor blockquote {
+  margin: 8px 0;
+  padding-inline-start: 12px;
+  border-inline-start: 2px solid var(--si-color-border-default);
+  font-size: 0.95rem;
+}
+.annotation-summary {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  font-size: 0.95rem;
+}
+.annotation-summary p {
+  margin: 0;
+}
+.annotation-summary__labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+@media (max-width: 680px) {
+  .annotation-editor__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .editorial-app.editorial-app
+    .document-tool-area
+    > .workspace-tool-panel:has(.annotation-editor) {
+    position: fixed;
+    inset: 112px 12px 12px;
+    inline-size: auto;
+    width: auto;
+    max-height: calc(100dvh - 124px);
+    max-block-size: calc(100dvh - 124px);
+  }
+}

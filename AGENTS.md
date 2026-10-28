@@ -21,6 +21,135 @@ Before frontend implementation or frontend design review, also read:
 
 ## Current Phase
 
+### Owner-requested P8 Cleanup, UI Integration and Release (2026-10-28)
+
+Complete P8 of `docs/content-system-refactor-plan.md`. Replace the active legacy
+document orchestration with confirmed-content publication and independent bounded
+topic work. Unify automatic intake, owner actions, batches and HTTP/MCP around the
+same application use cases. Retire replaced active paths; retain only necessary
+historical data decoding without silently running archived task semantics.
+Directly reuse the five accepted overview/source/reading/database/settings
+prototypes, adapting their data and controls rather than redesigning them.
+Audit the complete resulting repository, update application and operation docs,
+validate with synthetic models and disposable services, then commit and push a
+reviewed version on the independent public-main release history. Preserve owner
+files, external data, evidence, manual decisions, privacy and execution gates.
+This authorizes the release and supersedes earlier no-commit/no-push limits for
+the accepted refactor. It does not authorize live model calls, real-material
+processing, private-instance deployment, source/policy changes or a system
+assistant implementation.
+
+### Owner-requested P6 Search and Report Pipeline (2026-10-24)
+
+Implement P6 of `docs/content-system-refactor-plan.md`. The owner selects the
+DeepSeek Search / Fetch API, reusing existing credentials and execution gates.
+Add explicit local/web/mixed evidence, opt-in web capture, frozen report sources,
+time-zone schedules, separate in-app publication and local exports. Configuration
+and operational records belong to the personal workspace. Default new network,
+schedule and notice automation to off. Validate with synthetic providers and a
+disposable PostgreSQL workspace. Preserve privacy, manual decisions and P1-P5.
+Do not call paid services, process real sources, change the private instance,
+deploy, commit or push. External delivery remains unconfigured.
+
+### Owner-requested P5 Topics and Selective Relations (2026-10-24)
+
+Implement P5 of `docs/content-system-refactor-plan.md`: bounded candidates,
+evidence-bound topic membership, incremental summaries and selective relations.
+Keep publication independent, manual decisions authoritative and model work within
+an explicitly selected existing batch budget, permission, price and concurrency
+gates. Reuse shared HTTP/MCP use cases and provide a usable reading/workbench entry.
+Compatible migrations and backup changes are included. Validate with synthetic
+models, browser checks and disposable PostgreSQL. Do not call live models, change
+the private instance, process real articles, deploy, commit or push.
+
+### Owner-requested P4 Structured Annotations (2026-10-24)
+
+Implement P4 of `docs/content-system-refactor-plan.md`: external dimensions and
+vocabulary, confirmed aliases, evidence-bound annotations and explicit claims,
+reading states and basic classified retrieval. Reuse Entry revisions, publication,
+HTTP/MCP and existing bounded tag calls. Preserve manual authority, historical
+payloads, private material and execution gates. Use synthetic fixtures and disposable
+PostgreSQL/browser checks. Compatible storage and bundle changes are in scope;
+do not migrate the private instance, call live models, process real articles,
+deploy, commit or push. Topic organization remains P5.
+
+### Owner-requested P3 Source Splitting Recipes (2026-10-24)
+
+Implement P3 of `docs/content-system-refactor-plan.md`: bounded source/format
+recipes, editable AI suggestions, sample trials, activation/pause/replacement,
+coverage checks and explicit fallback. Freeze recipes for new document tasks,
+preserve historical tasks and manual structure, and reuse existing evidence,
+publication, model permission, price and budget boundaries. Integrate shared
+HTTP/MCP use cases and the workbench. Validate with synthetic fixtures and
+disposable services. Do not call live models, change private data or subscriptions,
+process the historical corpus, deploy, commit or push. Personal recipes stay
+outside Git; templates and schemas may be tracked.
+
+### Owner-requested P2 Receiving and Source Management (2026-10-24)
+
+Implement P2 of `docs/content-system-refactor-plan.md`: reusable source
+components, external source strategies, scheduling and intake management.
+Separate live and historical receipt provenance, preserve stable identities,
+cursor safety, manual decisions and the P1 publication boundary. Show source
+capabilities, next checks and waiting reasons in the document entrance. Validate
+with synthetic fixtures and disposable services. Do not change the private
+instance or real subscriptions, call models, process historical material,
+deploy, commit or push. Splitting recipes and topic workers remain later phases.
+
+### Owner-requested P1 Content Publication (2026-10-23)
+
+Implement P1 of `docs/content-system-refactor-plan.md`: manual import,
+revision-checked confirmation and query in a disposable empty PostgreSQL
+workspace. Persist confirmed content separately from drafts and register
+background organization independently of basic publication. Add the successor
+ADR, compatible migration, shared HTTP/MCP contracts and synthetic regressions.
+Preserve historical task semantics, manual decisions, privacy and model gates.
+Do not change the private instance, archive real data, call models, process the
+historical corpus, deploy, commit or push. P5 owns the topic-processing worker;
+P1 records durable deferred work without granting model execution authority.
+
+### Owner-requested Content-system Refactor Plan (2026-10-23)
+
+The owner accepts the eight-part refactor direction and requests an implementation
+plan before coding. Use `docs/content-system-refactor-plan.md` as the task plan:
+source strategies, source/format splitting recipes, structured annotations,
+background topics and selective relations, classified retrieval, reports and
+delivery, external personal configuration, and an archived-old/new-workspace
+cutover. This increment is documentation only. Preserve the current working tree
+and running instance; do not archive or delete data, migrate, deploy, call models,
+renew budgets, process the remaining corpus, commit or push during planning.
+The plan describes target behavior, not completed implementation. P1 records
+superseding architecture decisions and validates a synthetic minimal path before
+the active publication boundary changes. Keep original evidence, manual authority,
+privacy, shared HTTP/MCP use cases and existing execution gates throughout.
+
+### Owner-requested Deployment and First Hundred (2026-10-21)
+
+The owner requests deploying the tested pilot repairs to the existing local
+Docker instance, then processing one fixed batch of 100 public articles from
+the previously retained historical corpus. Verify an external backup, preserve
+the old image and runtime settings, and use native document tasks through final
+publication. Retain two model requests in parallel, one configured automatic
+retry, 24 calls per document, 64 Entries / 128 fragments, and permission/price
+gates. Use a separate bounded batch budget, preserve old paused accounting,
+manual decisions and existing knowledge, and record usage, timing and outcomes
+outside Git. Do not replace held/failed cases, start another batch, expand
+unattended intake, commit or push. This request supersedes the previous
+increment's no-deployment/no-live-run restriction for this batch only.
+
+### Owner-requested Historical Pilot Repairs (2026-10-20)
+
+Repair the pilot's source-title selection, standalone publication appendices,
+overstated relation notes and high-entry collection call planning. Keep complete
+source coverage and independent article boundaries. Batch short tag/recall inputs
+and allocate relation candidates within the frozen document allowance; preserve
+64-Entry/128-fragment limits, retries, manual decisions and model gates.
+Use synthetic regressions and offline replay of the existing external pilot.
+The follow-up repair also covers cover/trailing-category title overrides and
+explicit reading-referral evidence; preserve substantive short technical prose.
+This increment does not renew its paused budget, rewrite production knowledge,
+start the remaining corpus, deploy, commit or push. Keep real materials external.
+
 ### Owner-requested Repository Audit and v0.4.0 Release (2026-10-19)
 
 Audit the accumulated source, remove confirmed unused code, repair reproduced

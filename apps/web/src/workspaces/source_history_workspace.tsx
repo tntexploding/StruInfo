@@ -522,6 +522,7 @@ export function SourceHistoryWorkspace({
         ref={dialog}
         onCancel={(event) => {
           event.preventDefault();
+          event.stopPropagation();
           closePreview();
         }}
       >

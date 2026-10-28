@@ -23,14 +23,28 @@ export function ResizablePanes({
   className,
   left,
   children,
-}: PaneProps & {className: string}) {
+  side = 'left',
+  resizeLabel = side === 'left' ? '调整列表宽度' : '调整旁注宽度',
+  minimum = 240,
+  maximum = 520,
+  initial = 320,
+  contentMinimum = 492,
+}: PaneProps & {
+  className: string;
+  side?: 'left' | 'right';
+  resizeLabel?: string;
+  minimum?: number;
+  maximum?: number;
+  initial?: number;
+  contentMinimum?: number;
+}) {
   const root = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(() => {
     try {
       const value = Number(localStorage.getItem('struinfo:pane:v2:' + name));
-      return value >= 240 && value <= 520 ? value : 320;
+      return value >= minimum && value <= maximum ? value : initial;
     } catch {
-      return 320;
+      return initial;
     }
   });
   const [available, setAvailable] = useState(1200);
@@ -45,10 +59,10 @@ export function ResizablePanes({
       observer.disconnect();
     };
   }, []);
-  const actual = Math.min(width, Math.max(240, available - 492));
+  const actual = Math.min(width, Math.max(minimum, available - contentMinimum));
   const change = (value: number) => {
     const next = Math.round(
-      Math.max(240, Math.min(520, available - 492, value)),
+      Math.max(minimum, Math.min(maximum, available - contentMinimum, value)),
     );
     setWidth(next);
     try {
@@ -61,19 +75,27 @@ export function ResizablePanes({
     <div
       ref={root}
       className={className}
-      style={{gridTemplateColumns: String(actual) + 'px 12px minmax(0,1fr)'}}
+      style={{
+        gridTemplateColumns:
+          side === 'left'
+            ? String(actual) + 'px 12px minmax(0,1fr)'
+            : 'minmax(0,1fr) 12px ' + String(actual) + 'px',
+      }}
     >
-      {left}
+      {side === 'left' ? left : children}
       <div
         className="journey-divider"
         role="separator"
         aria-orientation="vertical"
-        aria-label="调整列表宽度"
-        aria-valuemin={240}
-        aria-valuemax={Math.max(240, Math.min(520, available - 492))}
+        aria-label={resizeLabel}
+        aria-valuemin={minimum}
+        aria-valuemax={Math.max(
+          minimum,
+          Math.min(maximum, available - contentMinimum),
+        )}
         aria-valuenow={actual}
         aria-valuetext={String(Math.round(actual)) + ' 像素'}
-        title="拖动或按左右方向键调整列表宽度，双击恢复默认"
+        title="拖动或按左右方向键调整宽度，双击恢复默认"
         tabIndex={0}
         onPointerDown={(e) => {
           if (e.button !== 0) return;
@@ -84,7 +106,10 @@ export function ResizablePanes({
         }}
         onPointerMove={(e) => {
           if (drag.current)
-            change(drag.current.width + e.clientX - drag.current.x);
+            change(
+              drag.current.width +
+                (e.clientX - drag.current.x) * (side === 'left' ? 1 : -1),
+            );
         }}
         onPointerUp={(e) => {
           drag.current = undefined;
@@ -94,7 +119,7 @@ export function ResizablePanes({
           drag.current = undefined;
         }}
         onDoubleClick={() => {
-          change(320);
+          change(initial);
         }}
         onPointerCancel={() => {
           drag.current = undefined;
@@ -104,15 +129,17 @@ export function ResizablePanes({
             e.preventDefault();
             change(
               e.key === 'Home'
-                ? 240
+                ? minimum
                 : e.key === 'End'
-                  ? 520
-                  : actual + (e.key === 'ArrowRight' ? 20 : -20),
+                  ? maximum
+                  : actual +
+                    (e.key === 'ArrowRight' ? 20 : -20) *
+                      (side === 'left' ? 1 : -1),
             );
           }
         }}
       />
-      {children}
+      {side === 'left' ? children : left}
     </div>
   );
 }

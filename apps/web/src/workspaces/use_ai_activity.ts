@@ -1,3 +1,4 @@
+import type {TopicsResponse} from '../api/topic_contract.js';
 import {useEffect, useRef, useState} from 'react';
 import {
   aiWorkflowCommand,
@@ -68,18 +69,20 @@ export function useAiActivity(refreshToken: number) {
       const requestEpoch = epoch.current;
       busy = true;
       try {
-        const [runtime, tasks, reports, queue, intake] = await Promise.all([
-          aiWorkflowCommand<AiRuntimeStatus & {aiPrice?: AiPriceStatus}>(
-            'system_status',
-          ),
-          aiWorkflowCommand<AiTask[]>('tasks_list', {prioritizeActive: true}),
-          reportCommand<ReportList>('reports_list', {prioritizeActive: true}),
-          aiWorkflowCommand<AiQueueStatus>('ingestion_status', {
-            limit: 100,
-            status: 'pending',
-          }),
-          aiWorkflowCommand<{records: IntakeRecord[]}>('intake_status'),
-        ]);
+        const [runtime, tasks, reports, queue, intake, topics] =
+          await Promise.all([
+            aiWorkflowCommand<AiRuntimeStatus & {aiPrice?: AiPriceStatus}>(
+              'system_status',
+            ),
+            aiWorkflowCommand<AiTask[]>('tasks_list', {prioritizeActive: true}),
+            reportCommand<ReportList>('reports_list', {prioritizeActive: true}),
+            aiWorkflowCommand<AiQueueStatus>('ingestion_status', {
+              limit: 100,
+              status: 'pending',
+            }),
+            aiWorkflowCommand<{records: IntakeRecord[]}>('intake_status'),
+            aiWorkflowCommand<TopicsResponse>('topics_list', {}),
+          ]);
         if (!Array.isArray(intake.records))
           throw new Error('invalid_intake_response');
         if (isCurrent() && requestEpoch === epoch.current) {
@@ -87,6 +90,8 @@ export function useAiActivity(refreshToken: number) {
             ...(runtime.model ? {model: runtime.model} : {}),
             ...(runtime.aiPrice ? {price: runtime.aiPrice} : {}),
             tasks,
+            ...(Array.isArray(topics.jobs) ? {topicJobs: topics.jobs} : {}),
+            ...(Array.isArray(topics.topics) ? {topics: topics.topics} : {}),
             intakeRecords: intake.records,
             reports: reports.reports,
             queue,

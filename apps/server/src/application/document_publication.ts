@@ -11,6 +11,7 @@ import {
   type IntakeRecord,
 } from './document_intake_contract.js';
 import type {InformationEntryRepositoryPort} from '../modules/entries/information_entry_repository.js';
+import type {DocumentPublicationRepository} from './document_publication_contract.js';
 
 /** Evidence and workbench reads remain complete. Knowledge consumers see finished documents. */
 export function unpublishedSnapshots(
@@ -90,21 +91,33 @@ export function publishedEntryRepository(
   exclusions: (
     entries: readonly CurrentInformationEntry[],
   ) => Promise<ReadonlySet<string>>,
+  publications?: DocumentPublicationRepository,
 ): InformationEntryRepositoryPort {
+  async function load(workspaceId: string, includePrivate: boolean) {
+    const entries = await raw.loadCurrentEntries(workspaceId, includePrivate);
+    const blocked = await exclusions(entries);
+    const confirmed = await publications?.loadPublished(
+      workspaceId,
+      includePrivate,
+    );
+    return [
+      ...entries.filter(
+        (entry) =>
+          !blocked.has(entry.snapshotId) &&
+          !confirmed?.managedSnapshotIds.has(entry.snapshotId),
+      ),
+      ...(confirmed?.entries ?? []),
+    ];
+  }
   return {
     materializeEntries: (rows) => raw.materializeEntries(rows),
     reviseEntry: (write) => raw.reviseEntry(write),
     async loadCurrentEntries(workspaceId, includePrivate) {
-      const entries = await raw.loadCurrentEntries(workspaceId, includePrivate);
-      const blocked = await exclusions(entries);
-      return entries.filter((entry) => !blocked.has(entry.snapshotId));
+      return load(workspaceId, includePrivate);
     },
     async loadCurrentEntriesByIds(workspaceId, includePrivate, ids) {
-      const entries = await raw.loadCurrentEntries(workspaceId, includePrivate);
-      const blocked = await exclusions(entries);
-      return entries.filter(
-        (entry) =>
-          ids.includes(entry.entryId) && !blocked.has(entry.snapshotId),
+      return (await load(workspaceId, includePrivate)).filter((entry) =>
+        ids.includes(entry.entryId),
       );
     },
   };
@@ -132,7 +145,30 @@ export class DocumentPublicationService {
     private readonly intake: DocumentIntakeService,
     private readonly entries: InformationEntryRepositoryPort,
     private readonly tasks: () => Promise<readonly AgentTask[]>,
+    private readonly publications?: DocumentPublicationRepository,
   ) {}
+  public async status(authority: ExecutionAuthority, snapshotId: string) {
+    if (authority.workspaceId !== this.workspaceId)
+      throw new OperationError('forbidden', 'workspace_mismatch');
+    authority.require('documents.read');
+    await this.intake.publicSnapshot(snapshotId);
+    const record = await this.intake.record(snapshotId);
+    const confirmed = await this.publications?.read(
+      record?.snapshotId ?? snapshotId,
+    );
+    const readable =
+      confirmed &&
+      (
+        await this.publications?.loadPublished(this.workspaceId, false)
+      )?.entries.some((entry) => entry.snapshotId === confirmed.snapshotId);
+    return {
+      snapshotId,
+      visibility: readable ? 'published' : 'unpublished',
+      hasDraft: record?.value.publication?.draft === true,
+      confirmed: confirmed ?? null,
+      organizationExecution: 'deferred' as const,
+    };
+  }
   public async stage(
     snapshotId: string,
     origin: 'manual' | 'external_agent' = 'external_agent',
@@ -222,6 +258,7 @@ export class DocumentPublicationService {
           (t) =>
             t.taskId !== task?.taskId &&
             t.request.kind === 'document' &&
+            t.state.workflow === 'confirmed-content-v1' &&
             ids.includes(t.request.snapshotId) &&
             ['running', 'queued'].includes(t.state.status),
         )
@@ -248,16 +285,39 @@ export class DocumentPublicationService {
         confirmedAt: new Date().toISOString(),
         entries: expected.map((v) => ({...v})),
       };
+      const nextIntake = {
+        ...(current?.value ?? {
+          decision: 'admitted' as const,
+          origin: 'manual' as const,
+          reason: '',
+          preparation: 'received' as const,
+        }),
+        publication,
+      };
+      if (this.publications) {
+        const committed = await this.publications.commit({
+          documentId: root,
+          snapshotId: target,
+          expectedIntakeVersion: current?.version ?? 0,
+          intake: nextIntake,
+          expectedEntries: expected,
+        });
+        if (committed.status === 'not_admitted')
+          throw new OperationError('rejected', 'document_not_admitted');
+        if (committed.status !== 'published')
+          throw new OperationError('conflict', 'stale_document_publication');
+        return {
+          status: 'published' as const,
+          snapshotId: target,
+          publication: {
+            ...publication,
+            confirmedAt: committed.publication.confirmedAt,
+          },
+          confirmedVersion: committed.publication,
+        };
+      }
       if (
-        !(await this.repository.save(root, current?.version ?? 0, {
-          ...(current?.value ?? {
-            decision: 'admitted',
-            origin: 'manual',
-            reason: '',
-            preparation: 'received',
-          }),
-          publication,
-        }))
+        !(await this.repository.save(root, current?.version ?? 0, nextIntake))
       )
         throw new OperationError('conflict', 'stale_intake_version');
       return {status: 'published' as const, snapshotId: target, publication};

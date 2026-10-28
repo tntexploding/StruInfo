@@ -1,4 +1,20 @@
+import {
+  researchCommandSchemas,
+  researchOwnerSchemas,
+} from '../application/research_contract.js';
+import {
+  topicCommandSchemas,
+  topicOwnerSchemas,
+} from '../application/topic_service.js';
+import {
+  annotationCommandSchemas,
+  annotationOwnerSchemas,
+} from '../application/annotation_service.js';
 import {historySchemas} from '../application/source_history_service.js';
+import {
+  splitRecipeReadSchemas,
+  splitRecipeOwnerSchemas,
+} from '../application/source_split_service.js';
 import {REPORT_OPERATIONS} from '../application/report_commands.js';
 import {timingSafeEqual} from 'node:crypto';
 import type {Request, Response, NextFunction} from 'express';
@@ -16,12 +32,14 @@ export function agentHttpMiddleware(options: AgentHttpOptions) {
   ): Promise<void> => {
     const external = request.path === '/api/v1/agent/commands';
     const ingestion = request.path === '/api/v1/ingestion/commands';
+    const research = request.path === '/api/v1/research/commands';
     const reports = request.path === '/api/v1/reports/commands';
     const price = request.path === '/api/v1/ai-price/commands';
     const owner =
       request.path === '/api/v1/ai-tasks/commands' ||
       ingestion ||
       reports ||
+      research ||
       price;
     if (!external && !owner) {
       next();
@@ -71,46 +89,58 @@ export function agentHttpMiddleware(options: AgentHttpOptions) {
     if (
       owner &&
       !(
-        price
+        research
           ? [
-              'ai_price_status',
-              'ai_price_save',
-              'ai_operations_save',
-              'ai_execution_save',
+              ...Object.keys(researchCommandSchemas),
+              ...Object.keys(researchOwnerSchemas),
             ]
-          : reports
-            ? REPORT_OPERATIONS
-            : ingestion
-              ? [
-                  ...Object.keys(historySchemas),
-                  'system_status',
-                  'ingestion_status',
-                  'intake_status',
-                  'source_quality_status',
-                  'source_quality_control',
-                  'source_description_generate',
-                  'intake_previews',
-                  'intake_origins',
-                  'intake_summarize',
-                  'intake_translate',
-                  'intake_control',
-                  'intake_receive',
-                  'intake_prepare',
-                  'ingestion_policy_save',
-                  'ingestion_item_control',
-                  'subscriptions_list',
-                ]
-              : [
-                  'system_status',
-                  'processing_standard',
-                  'tasks_list',
-                  'document_queue_status',
-                  'document_queue_apply',
-                  'task_read',
-                  'task_start',
-                  'document_publish',
-                  'task_control',
-                ]
+          : price
+            ? [
+                'ai_price_status',
+                'ai_price_save',
+                'ai_operations_save',
+                'ai_execution_save',
+              ]
+            : reports
+              ? REPORT_OPERATIONS
+              : ingestion
+                ? [
+                    ...Object.keys(historySchemas),
+                    ...Object.keys(splitRecipeReadSchemas),
+                    ...Object.keys(annotationCommandSchemas),
+                    ...Object.keys(topicCommandSchemas),
+                    ...Object.keys(topicOwnerSchemas),
+                    ...Object.keys(annotationOwnerSchemas),
+                    ...Object.keys(splitRecipeOwnerSchemas),
+                    'system_status',
+                    'ingestion_status',
+                    'intake_status',
+                    'source_quality_status',
+                    'source_quality_control',
+                    'source_description_generate',
+                    'intake_previews',
+                    'intake_origins',
+                    'intake_summarize',
+                    'intake_translate',
+                    'intake_control',
+                    'intake_receive',
+                    'intake_prepare',
+                    'ingestion_policy_save',
+                    'ingestion_item_control',
+                    'subscriptions_list',
+                  ]
+                : [
+                    'system_status',
+                    'processing_standard',
+                    'tasks_list',
+                    'document_queue_status',
+                    'document_queue_apply',
+                    'task_read',
+                    'task_start',
+                    'document_publish',
+                    'document_publication_status',
+                    'task_control',
+                  ]
       ).includes(body.operation)
     ) {
       response.status(400).json({error: {code: 'unknown_agent_operation'}});

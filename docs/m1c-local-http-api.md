@@ -55,15 +55,6 @@
 | `POST` | `/api/v1/entries/search/synthesize`                                                   | 显式综合当前公开确定性 Query 证据；答案只属于本次页面会话                             |
 | `POST` | `/api/v1/entries/exploration/candidates`                                              | 从选定 Entry 的当前可见直接联系生成独立页外探索候选                                   |
 | `PUT`  | `/api/v1/entries/exploration/policy`                                                  | 以期望修订保存外部探索开关、页额份额和三类候选开关                                    |
-| `GET`  | `/api/v1/entries/automation/policy`                                                   | 读取当前 AutomationPolicy 及其绑定 Profile 摘要                                       |
-| `PUT`  | `/api/v1/entries/automation/policy`                                                   | 以期望修订保存启停、暂停、阈值、预算和两个默认关闭的推进动作                          |
-| `POST` | `/api/v1/entries/automation/trial`                                                    | 对草稿策略执行只读路由试算并应用显式人工接管                                          |
-| `POST` | `/api/v1/entries/automation/runs`                                                     | 用幂等键和精确修订账本显式启动一次持久路由执行                                        |
-| `GET`  | `/api/v1/entries/automation/runs?limit=`                                              | 列出最近 1–20 个 typed 自动路由运行及 claims                                          |
-| `GET`  | `/api/v1/entries/automation/runs/:runId`                                              | 读取一个精确自动路由运行及 claims                                                     |
-| `GET`  | `/api/v1/entries/automation/work-queue?includePrivate=`                               | 读取成功 claim 派生的隐私过滤所有者工作队列                                           |
-| `PUT`  | `/api/v1/entries/automation/work-queue/:runId/:claimOrdinal`                          | 以期望版本完成、跳过或重新打开一个工作项                                              |
-| `POST` | `/api/v1/entries/automation/work-queue/:runId/:claimOrdinal/action`                   | 以动作期望版本续跑或安全撤销获授权的确定性推进动作                                    |
 | `GET`  | `/api/v1/entries/:entryId/tag-proposals`                                              | 列出一个 Entry 的有界 tags 提案                                                       |
 | `POST` | `/api/v1/entries/:entryId/tag-proposals/start`                                        | 用户显式请求一个公开 Entry 的 OpenAI 标签提案                                         |
 | `POST` | `/api/v1/entries/:entryId/tag-proposals/:proposalId/accept`                           | 接受提案并通过现有 Entry revision 保存标签                                            |
@@ -101,9 +92,9 @@ API/`all` 运行角色装配产品路由并提供 `apps/web/dist` 的同源单�
 
 Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和正文前置文字映射到这些字段。本地文件默认使用基础文件名加 SHA-256 作为 portable source key，不提交目录路径；无前置文字时 Base64 解码后的字节保持原样。相同命令可重放；同键异内容返回冲突。M1H-5 批次队列仍按顺序逐份调用同一 `/imports/document`，没有批次请求体；失败项重试同一请求身份，成功后只统一刷新页面列表。
 
-三个 `/source-subscriptions` 操作管理闭合的 `github_markdown`、`rss_atom`、`json_api`、`web` 和 `plugin` union。GET 返回 revision、可编辑字段、服务端维护的 last-attempt/last-success/run/cursor，以及当前实际安装连接器 capability；PUT 接受 `{expectedRevision, subscriptions}`，每项必须完整给出稳定 UUID、标签、enabled、类型配置、profile、sourceAlias、isPrivate、默认关闭的 `routeAfterImport` 和 15–10080 分钟间隔，不能伪造运行字段。Web 配置只含一个公开 HTTPS `pageUrl` 和最多七个 root-relative 同源路径；plugin 配置只含 `plugin.*` connector ID 与 opaque `configurationRef`。POST 只接受 `{requestKey}`；即使 enabled 为 false 也可手动运行。
+三个 `/source-subscriptions` 操作管理闭合的 `github_markdown`、`rss_atom`、`json_api`、`web` 和 `plugin` union。GET 返回 revision、可编辑字段、服务端维护的 last-attempt/last-success/run/cursor，以及当前实际安装连接器 capability；PUT 接受 `{expectedRevision, subscriptions}`，每项必须完整给出稳定 UUID、标签、enabled、类型配置、profile、sourceAlias、isPrivate 和 15–10080 分钟间隔，不能伪造运行字段。Web 配置只含一个公开 HTTPS `pageUrl` 和最多七个 root-relative 同源路径；plugin 配置只含 `plugin.*` connector ID 与 opaque `configurationRef`。POST 只接受 `{requestKey}`；即使 enabled 为 false 也可手动运行。
 
-每次运行先建立 import 阶段 ProcessingRun，再由所选 reader 返回 unchanged 或有界 changed documents。变化文档调用同一个 Evidence import；相同内容只推进 connector cursor，不重复生成 Snapshot。`routeAfterImport=false` 时在导入后结束；明确开启后，服务端继续复用确定性 Entry 物化和现有可恢复自动路由，返回 automation run ID 与各 Snapshot 的 Entry 数。若 AutomationPolicy 另外显式启用 M1H 推进动作，确定性标签和可替换联系投影也必须完成后才能推进成功 cursor；失败保留旧 cursor以便幂等重试。`source_subscriptions` capability 本身不允许开放 URL 抓取、链接发现、仓库目录扫描、代码执行、AI 调用、图谱修改或提案接受；插件也没有数据库或游标写端口。
+每次运行先建立 import 阶段 ProcessingRun，由组件返回 unchanged 或有界 changed documents。变化文档调用统一 Evidence import 和接收事务，重复版本保留原接收决定；游标仅在本次接收成功后推进。来源运行不直接拆分、打标签或建立联系。后续统一由审核与文档任务处理。插件没有数据库或游标写权限。
 
 ### 3.2 拆分
 
@@ -148,7 +139,7 @@ Web 页面负责把来源别名、链接、日期、Git 身份、隐私标记和
 
 文档级标签通过 aggregate 接口确定性重算，或通过 tags 接口人工覆盖。快捷标签、排除词、域名策略、已确认别名、联系策略和探索策略由 preferences 边界写入外部偏好文件，不进入数据库迁移、Git 或应用包。旧客户端不传 `associationPolicy` 或 `explorationPolicy` 时分别保留现值。
 
-M1G-4C 的六个 `/entries/automation/*` 操作把外部 AutomationPolicy、M1G-4A 只读试算和 M1G-4B typed execution 接入同一 Tags 次级控制面。策略 PUT 必须提供 `expectedRevision` 并绑定当前 Profile revision；启用/禁用和暂停/恢复都是显式新修订。trial 接受草稿策略、当次隐私范围、可选 Entry 修订账本和人工接管 ID，只返回路由、原因和计数。run start 只接受已保存且 ready 的精确修订、幂等键和同一账本；列表/详情只返回运行、修订、route/reason/status 和时间，不返回正文、来源 Blob、请求摘要或幂等键。M1G-4D 明确规定列表只是摘要导航：Web 必须在用户选择后调用精确详情操作，独立显示未结算/补偿 claim，并用分离的请求代次阻止迟到列表或详情覆盖更新状态。
+旧的 /entries/automation/* 与偏好评分接口已移除；归档格式只用于历史恢复。接收和整理使用 /ingestion/commands 与 /ai-tasks/commands。
 
 M1G-4 路由本身只记录控制与审计事实。M1H-1 仅在保存策略的 `advanceActions` 显式开启时，为 completed `advance_candidate` 创建并执行确定性标签和/或可替换联系投影；它不改评分、图谱、查询或 AI 提案。`manual_review` 与 `defer_candidate` 不获得动作，后者也不隐藏或删除内容。私密 Entry 只有在当前 trial/run 显式 `includePrivate=true` 时参与，且整个过程保持本地、无 Provider。
 

@@ -12,7 +12,7 @@ import {TextDecoder, TextEncoder} from 'node:util';
 // database, personal data or model access is required.
 const serverRoot = '/opt/struinfo/apps/server';
 const require = createRequire(resolve(serverRoot, 'package.json'));
-assert.equal(require('./package.json').version, '0.4.0');
+assert.equal(require('./package.json').version, '0.5.0');
 assert.equal(process.getuid(), 10001);
 assert.equal(
   readdirSync(resolve(serverRoot, 'node_modules'), {recursive: true}).some(

@@ -49,6 +49,40 @@ export class InformationEntryQuerySynthesisService implements InformationEntryQu
   public async synthesize(
     request: Readonly<InformationEntryQuerySynthesisRequest>,
   ): Promise<Readonly<InformationEntryQuerySynthesisResult>> {
+    const {querySha256, evidence} = await this.retrieve(request);
+    if (!evidence.length)
+      throw new InformationEntryQuerySynthesisServiceError(
+        'ai_query_no_evidence',
+      );
+    let generated: Readonly<InformationEntryQuerySynthesisProviderResult>;
+    try {
+      generated = await this.#dependencies.provider.synthesize(
+        request.question,
+        evidence.map(providerEvidence),
+      );
+    } catch (error) {
+      if (error instanceof AiQuerySynthesisProviderError) {
+        throw new InformationEntryQuerySynthesisServiceError(error.code);
+      }
+      throw error;
+    }
+    const accepted = acceptProviderResult(
+      generated,
+      new Set(evidence.map((item) => item.handle)),
+    );
+    return Object.freeze({
+      requestId: request.requestId,
+      querySha256,
+      providerKey: this.providerKey,
+      model: this.model,
+      promptVersion: this.promptVersion,
+      ...accepted,
+      evidence,
+    });
+  }
+  public async retrieve(
+    request: Readonly<InformationEntryQuerySynthesisRequest>,
+  ) {
     if (request.query.includePrivate || request.query.onlyPrivate) {
       throw new InformationEntryQuerySynthesisServiceError(
         'ai_query_private_scope_forbidden',
@@ -114,39 +148,10 @@ export class InformationEntryQuerySynthesisService implements InformationEntryQu
             )
           : await this.#dependencies.retrieval.search(boundedQuery);
     }
-    if (search.items.length === 0) {
-      throw new InformationEntryQuerySynthesisServiceError(
-        'ai_query_no_evidence',
-      );
-    }
     const evidence = prepareInformationEntryQuerySynthesisEvidence(
       search.items.map((item) => item.entry),
     );
-    let generated: Readonly<InformationEntryQuerySynthesisProviderResult>;
-    try {
-      generated = await this.#dependencies.provider.synthesize(
-        request.question,
-        evidence.map(providerEvidence),
-      );
-    } catch (error) {
-      if (error instanceof AiQuerySynthesisProviderError) {
-        throw new InformationEntryQuerySynthesisServiceError(error.code);
-      }
-      throw error;
-    }
-    const accepted = acceptProviderResult(
-      generated,
-      new Set(evidence.map((item) => item.handle)),
-    );
-    return Object.freeze({
-      requestId: request.requestId,
-      querySha256: search.querySha256,
-      providerKey: this.providerKey,
-      model: this.model,
-      promptVersion: this.promptVersion,
-      ...accepted,
-      evidence,
-    });
+    return {querySha256: search.querySha256, evidence};
   }
 }
 
@@ -218,7 +223,7 @@ function providerEvidence(
   });
 }
 
-function acceptProviderResult(
+export function acceptProviderResult(
   value: Readonly<InformationEntryQuerySynthesisProviderResult>,
   handles: ReadonlySet<string>,
 ): Readonly<{

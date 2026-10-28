@@ -378,8 +378,6 @@ export function DocumentIntakePanel({
                     snapshotId: root,
                     intake: DEFAULT_INTAKE_POLICY,
                     maxEntries: 12,
-                    maxRelations: 3,
-                    maxRelationCandidates: 12,
                     maxModelCalls: 24,
                   },
                 },

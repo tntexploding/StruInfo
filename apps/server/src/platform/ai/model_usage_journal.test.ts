@@ -4,6 +4,8 @@ import {tmpdir} from 'node:os';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {LocalModelUsageJournal} from './model_usage_journal.js';
 import {priceAwareFetch} from './price_aware_fetch.js';
+import {modelUsageScope} from './model_usage_scope.js';
+import type {TopicUsage} from '../../modules/entries/content_topics.js';
 
 const workspaceId = '00000000-0000-4000-8000-000000000001';
 const directories: string[] = [];
@@ -48,6 +50,41 @@ afterEach(async () => {
 });
 
 describe('bounded model usage journal', () => {
+  it('requires the selected existing budget and reports one scoped reservation/settlement', async () => {
+    const {store} = await fixture();
+    const record = vi.fn<(usage: TopicUsage) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    await expect(
+      modelUsageScope.run({batchId: 'wrong-batch', record}, () =>
+        store.reserve(request),
+      ),
+    ).rejects.toMatchObject({code: 'ai_batch_budget_paused'});
+    await modelUsageScope.run(
+      {batchId: 'synthetic-pilot', record},
+      async () => {
+        const ticket = await store.reserve(request);
+        expect(ticket).toBeDefined();
+        if (!ticket) throw new Error('ticket');
+        await store.settle(
+          ticket,
+          200,
+          new TextEncoder().encode(
+            JSON.stringify({usage: {input_tokens: 100, output_tokens: 20}}),
+          ),
+        );
+        await store.settle(ticket, 200);
+      },
+    );
+    expect(record).toHaveBeenCalledTimes(2);
+    expect(record.mock.calls[0]?.[0]).toMatchObject({
+      batchId: 'synthetic-pilot',
+    });
+    expect(record.mock.calls[1]?.[0]).toMatchObject({
+      chargedNanoCny: 180000,
+      usageKnown: true,
+    });
+  });
   it('keeps an off-peak budget behind the tariff gate even if general settings change', async () => {
     const {root, budgetPath} = await fixture();
     const saved = JSON.parse(await readFile(budgetPath, 'utf8')) as Record<

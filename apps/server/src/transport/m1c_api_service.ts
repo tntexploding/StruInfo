@@ -68,9 +68,6 @@ import {
   prepareInformationEntryRestructure,
   prepareManualInformationDocumentTags,
   reviewCurrentInformationEntryTypes,
-  suggestInformationEntryPreferenceRules,
-  trialInformationEntryAutomationPolicy,
-  trialInformationEntryPreferenceProfile,
   validateInformationDocumentWorkingCopyText,
   type CurrentInformationDocumentTags,
   type CurrentInformationEntry,
@@ -88,7 +85,6 @@ import {
   type InformationEntryGraphDirection,
   type InformationEntryGraphSemanticKind,
   type InformationEntryGraphVerificationStatus,
-  type InformationEntryPreferenceTrialExpectedEntry,
   type InformationEntryQuerySynthesisRequest,
   type InformationEntryQuerySynthesisServicePort,
   type InformationEntryRestructurePreparation,
@@ -116,19 +112,9 @@ import {
   AiAssociationProposalServiceError,
   AiSplitProposalServiceError,
   AiTagProposalServiceError,
-  executeEntryAutomationRunActions,
-  executeEntryAutomationWorkItemAction,
-  executeInformationEntryAutomation,
-  listEntryAutomationWorkQueue,
-  updateEntryAutomationWorkItem,
   type AiAssociationProposalServicePort,
   type AiSplitProposalServicePort,
   type AiTagProposalServicePort,
-  type EntryAutomationActionRepositoryPort,
-  type EntryAutomationExecution,
-  type EntryAutomationExecutionRepositoryPort,
-  type EntryAutomationWorkQueueRepositoryPort,
-  type ExecuteEntryAutomationResult,
   type ProcessingProposal,
   type ProcessingRun,
   type ProcessingRunRepositoryPort,
@@ -140,14 +126,10 @@ import {
 } from '../modules/subscriptions/index.js';
 import type {BlobStore} from '../storage/blob_store.js';
 import {
-  DEFAULT_ENTRY_AUTOMATION_POLICY,
-  DEFAULT_ENTRY_PREFERENCE_PROFILE,
   DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
   DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
-  decodeEntryAutomationPolicy,
-  decodeEntryPreferenceProfile,
   decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
   decodeReviewExplorationPolicyPreferences,
@@ -156,8 +138,6 @@ import {
   decodeReviewVocabularyPreferences,
   patchReviewPreferences,
   updateReviewPreferences,
-  type EntryAutomationPolicy,
-  type EntryPreferenceProfile,
   type ReviewAssociationPolicyPreferences,
   type ReviewExplorationPolicyPreferences,
   type ReviewPreferencesStore,
@@ -193,9 +173,6 @@ export interface M1cApiServiceDependencies {
   readonly informationEntryRetrieval?: InformationEntryRetrievalServicePort;
   readonly informationEntryRestructureRepository?: InformationEntryRestructureRepositoryPort;
   readonly processingRunRepository: ProcessingRunRepositoryPort;
-  readonly entryAutomationExecutionRepository?: EntryAutomationExecutionRepositoryPort;
-  readonly entryAutomationWorkQueueRepository?: EntryAutomationWorkQueueRepositoryPort;
-  readonly entryAutomationActionRepository?: EntryAutomationActionRepositoryPort;
   readonly sourceSubscriptions?: SourceSubscriptionServicePort;
   readonly aiSplitProposals?: AiSplitProposalServicePort;
   readonly aiTagProposals?: AiTagProposalServicePort;
@@ -278,35 +255,6 @@ export interface M1cApiServicePort {
   saveWorkspaceUiPreferences(body: unknown): Promise<M1cHttpResult>;
   loadReviewPreferences(): Promise<M1cHttpResult>;
   saveReviewPreferences(body: unknown): Promise<M1cHttpResult>;
-  loadInformationEntryPreferenceProfile(): Promise<M1cHttpResult>;
-  saveInformationEntryPreferenceProfile(body: unknown): Promise<M1cHttpResult>;
-  suggestInformationEntryPreferenceProfile(
-    body: unknown,
-  ): Promise<M1cHttpResult>;
-  trialInformationEntryPreferenceProfile(body: unknown): Promise<M1cHttpResult>;
-  loadInformationEntryAutomationPolicy(): Promise<M1cHttpResult>;
-  saveInformationEntryAutomationPolicy(body: unknown): Promise<M1cHttpResult>;
-  trialInformationEntryAutomationPolicy(body: unknown): Promise<M1cHttpResult>;
-  executeInformationEntryAutomation(body: unknown): Promise<M1cHttpResult>;
-  listInformationEntryAutomationExecutions(
-    limit?: unknown,
-  ): Promise<M1cHttpResult>;
-  loadInformationEntryAutomationExecution(
-    runId: string,
-  ): Promise<M1cHttpResult>;
-  listInformationEntryAutomationWorkQueue(
-    includePrivate?: unknown,
-  ): Promise<M1cHttpResult>;
-  updateInformationEntryAutomationWorkItem(
-    runId: string,
-    claimOrdinal: string,
-    body: unknown,
-  ): Promise<M1cHttpResult>;
-  executeInformationEntryAutomationWorkItemAction(
-    runId: string,
-    claimOrdinal: string,
-    body: unknown,
-  ): Promise<M1cHttpResult>;
   importMarkdown(body: unknown): Promise<M1cHttpResult>;
   importDocument(body: unknown): Promise<M1cHttpResult>;
   materializeInformationEntries(body: unknown): Promise<M1cHttpResult>;
@@ -480,9 +428,6 @@ export class M1cApiService implements M1cApiServicePort {
         'information_document_tags',
         'information_entry_knowledge_graph',
         'information_entry_association_policy',
-        ...(this.#dependencies.entryAutomationExecutionRepository === undefined
-          ? []
-          : ['entry_automation']),
         'information_entry_exploration',
         ...(this.#dependencies.informationEntryRetrieval === undefined
           ? []
@@ -1227,724 +1172,6 @@ export class M1cApiService implements M1cApiServicePort {
       });
     } catch {
       return reviewPreferencesFailure();
-    }
-  }
-
-  public async loadInformationEntryPreferenceProfile(): Promise<M1cHttpResult> {
-    try {
-      const preferences = await this.#dependencies.reviewPreferences.load(
-        this.#dependencies.workspaceId,
-      );
-      return httpResult(200, {
-        status: 'ok',
-        profile:
-          preferences.entryPreferenceProfile ??
-          DEFAULT_ENTRY_PREFERENCE_PROFILE,
-      });
-    } catch {
-      return entryPreferenceProfileFailure();
-    }
-  }
-
-  public async saveInformationEntryPreferenceProfile(
-    body: unknown,
-  ): Promise<M1cHttpResult> {
-    if (
-      !isRecord(body) ||
-      typeof body.expectedRevision !== 'number' ||
-      !Number.isSafeInteger(body.expectedRevision) ||
-      body.expectedRevision < 0
-    ) {
-      return inputFailure('body.expectedRevision');
-    }
-    const draft = decodeEntryPreferenceProfile({
-      revision: body.expectedRevision,
-      enabled: body.enabled,
-      rules: body.rules,
-    });
-    if (draft === undefined) return inputFailure('body');
-
-    try {
-      const update = await updateReviewPreferences<
-        Readonly<{
-          outcome: 'applied' | 'stale' | 'unchanged';
-          profile: Readonly<EntryPreferenceProfile>;
-        }>
-      >(
-        this.#dependencies.reviewPreferences,
-        this.#dependencies.workspaceId,
-        (preferences) => {
-          const current =
-            preferences.entryPreferenceProfile ??
-            DEFAULT_ENTRY_PREFERENCE_PROFILE;
-          if (current.revision !== body.expectedRevision) {
-            return Object.freeze({
-              next: preferences,
-              result: Object.freeze({
-                outcome: 'stale' as const,
-                profile: current,
-              }),
-            });
-          }
-          const unchanged = entryPreferenceProfilesHaveSameValue(
-            current,
-            draft,
-          );
-          const next: Readonly<EntryPreferenceProfile> = unchanged
-            ? current
-            : Object.freeze({
-                revision: current.revision + 1,
-                enabled: draft.enabled,
-                rules: draft.rules,
-              });
-          return Object.freeze({
-            next: unchanged
-              ? preferences
-              : patchReviewPreferences(preferences, {
-                  entryPreferenceProfile: next,
-                }),
-            result: Object.freeze({
-              outcome: unchanged
-                ? ('unchanged' as const)
-                : ('applied' as const),
-              profile: next,
-            }),
-          });
-        },
-      );
-      if (update.result.outcome === 'stale') {
-        return httpResult(409, {
-          status: 'rejected',
-          issue: Object.freeze({
-            code: 'stale_entry_preference_profile_revision',
-          }),
-        });
-      }
-      return httpResult(200, {
-        status: update.result.outcome,
-        profile: update.result.profile,
-      });
-    } catch {
-      return entryPreferenceProfileFailure();
-    }
-  }
-
-  public async suggestInformationEntryPreferenceProfile(
-    body: unknown,
-  ): Promise<M1cHttpResult> {
-    if (!isRecord(body) || typeof body.includePrivate !== 'boolean') {
-      return inputFailure('body.includePrivate');
-    }
-    try {
-      const entries =
-        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          body.includePrivate,
-        );
-      return httpResult(200, {
-        status: 'ok',
-        ...suggestInformationEntryPreferenceRules(entries, {
-          includePrivate: body.includePrivate,
-        }),
-      });
-    } catch {
-      return entryPreferenceProfileFailure();
-    }
-  }
-
-  public async trialInformationEntryPreferenceProfile(
-    body: unknown,
-  ): Promise<M1cHttpResult> {
-    if (
-      !isRecord(body) ||
-      typeof body.includePrivate !== 'boolean' ||
-      typeof body.expectedProfileRevision !== 'number' ||
-      !Number.isSafeInteger(body.expectedProfileRevision) ||
-      body.expectedProfileRevision < 0 ||
-      (body.expectedEntries !== undefined &&
-        !Array.isArray(body.expectedEntries))
-    ) {
-      return inputFailure('body');
-    }
-    try {
-      const [preferences, entries] = await Promise.all([
-        this.#dependencies.reviewPreferences.load(
-          this.#dependencies.workspaceId,
-        ),
-        this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          body.includePrivate,
-        ),
-      ]);
-      const currentProfile =
-        preferences.entryPreferenceProfile ?? DEFAULT_ENTRY_PREFERENCE_PROFILE;
-      const result = trialInformationEntryPreferenceProfile(
-        entries,
-        currentProfile.revision,
-        body.profile,
-        {
-          includePrivate: body.includePrivate,
-          expectedProfileRevision: body.expectedProfileRevision,
-          ...(body.expectedEntries === undefined
-            ? {}
-            : {
-                expectedEntries:
-                  body.expectedEntries as readonly Readonly<InformationEntryPreferenceTrialExpectedEntry>[],
-              }),
-        },
-      );
-      if (result.status === 'invalid_profile') {
-        return httpResult(422, {
-          status: 'rejected',
-          issue: Object.freeze({
-            code: 'invalid_entry_preference_profile',
-            path: 'body.profile',
-          }),
-        });
-      }
-      if (result.status === 'invalid_request') {
-        return inputFailure('body');
-      }
-      return httpResult(result.status === 'complete' ? 200 : 409, result);
-    } catch {
-      return entryPreferenceProfileFailure();
-    }
-  }
-
-  public async loadInformationEntryAutomationPolicy(): Promise<M1cHttpResult> {
-    try {
-      const preferences = await this.#dependencies.reviewPreferences.load(
-        this.#dependencies.workspaceId,
-      );
-      const profile =
-        preferences.entryPreferenceProfile ?? DEFAULT_ENTRY_PREFERENCE_PROFILE;
-      return httpResult(200, {
-        status: 'ok',
-        policy:
-          preferences.entryAutomationPolicy ?? DEFAULT_ENTRY_AUTOMATION_POLICY,
-        profile: Object.freeze({
-          revision: profile.revision,
-          enabled: profile.enabled,
-          ruleCount: profile.rules.length,
-        }),
-      });
-    } catch {
-      return entryAutomationFailure();
-    }
-  }
-
-  public async saveInformationEntryAutomationPolicy(
-    body: unknown,
-  ): Promise<M1cHttpResult> {
-    if (
-      !isRecord(body) ||
-      typeof body.expectedRevision !== 'number' ||
-      !Number.isSafeInteger(body.expectedRevision) ||
-      body.expectedRevision < 0
-    ) {
-      return inputFailure('body.expectedRevision');
-    }
-    const draft = decodeEntryAutomationPolicy({
-      revision: body.expectedRevision,
-      enabled: body.enabled,
-      paused: body.paused,
-      profileRevision: body.profileRevision,
-      minimumMatchedRuleCount: body.minimumMatchedRuleCount,
-      advanceThresholds: body.advanceThresholds,
-      deferThresholds: body.deferThresholds,
-      budgets: body.budgets,
-      advanceActions: body.advanceActions,
-      failureMode: body.failureMode,
-    });
-    if (draft === undefined) return inputFailure('body');
-
-    try {
-      const update = await updateReviewPreferences<
-        Readonly<{
-          outcome: 'applied' | 'stale' | 'stale_profile' | 'unchanged';
-          policy: Readonly<EntryAutomationPolicy>;
-          profile: Readonly<EntryPreferenceProfile>;
-        }>
-      >(
-        this.#dependencies.reviewPreferences,
-        this.#dependencies.workspaceId,
-        (preferences) => {
-          const current =
-            preferences.entryAutomationPolicy ??
-            DEFAULT_ENTRY_AUTOMATION_POLICY;
-          const profile =
-            preferences.entryPreferenceProfile ??
-            DEFAULT_ENTRY_PREFERENCE_PROFILE;
-          if (current.revision !== body.expectedRevision) {
-            return Object.freeze({
-              next: preferences,
-              result: Object.freeze({
-                outcome: 'stale' as const,
-                policy: current,
-                profile,
-              }),
-            });
-          }
-          if (draft.profileRevision !== profile.revision) {
-            return Object.freeze({
-              next: preferences,
-              result: Object.freeze({
-                outcome: 'stale_profile' as const,
-                policy: current,
-                profile,
-              }),
-            });
-          }
-          const unchanged = entryAutomationPoliciesHaveSameValue(
-            current,
-            draft,
-          );
-          if (unchanged) {
-            return Object.freeze({
-              next: preferences,
-              result: Object.freeze({
-                outcome: 'unchanged' as const,
-                policy: current,
-                profile,
-              }),
-            });
-          }
-          if (current.revision >= Number.MAX_SAFE_INTEGER) {
-            throw new Error('Entry automation policy revision exhausted.');
-          }
-          const nextPolicy = Object.freeze({
-            ...draft,
-            revision: current.revision + 1,
-          });
-          return Object.freeze({
-            next: patchReviewPreferences(preferences, {
-              entryAutomationPolicy: nextPolicy,
-            }),
-            result: Object.freeze({
-              outcome: 'applied' as const,
-              policy: nextPolicy,
-              profile,
-            }),
-          });
-        },
-      );
-      if (update.result.outcome === 'stale') {
-        return httpResult(409, {
-          status: 'rejected',
-          issue: Object.freeze({
-            code: 'stale_entry_automation_policy_revision',
-          }),
-        });
-      }
-      if (update.result.outcome === 'stale_profile') {
-        return httpResult(409, {
-          status: 'rejected',
-          issue: Object.freeze({
-            code: 'stale_entry_preference_profile_revision',
-          }),
-        });
-      }
-      return httpResult(200, {
-        status: update.result.outcome,
-        policy: update.result.policy,
-        profile: Object.freeze({
-          revision: update.result.profile.revision,
-          enabled: update.result.profile.enabled,
-          ruleCount: update.result.profile.rules.length,
-        }),
-      });
-    } catch {
-      return entryAutomationFailure();
-    }
-  }
-
-  public async trialInformationEntryAutomationPolicy(
-    body: unknown,
-  ): Promise<M1cHttpResult> {
-    if (
-      !isRecord(body) ||
-      typeof body.includePrivate !== 'boolean' ||
-      typeof body.expectedPolicyRevision !== 'number' ||
-      !Number.isSafeInteger(body.expectedPolicyRevision) ||
-      body.expectedPolicyRevision < 0 ||
-      typeof body.expectedProfileRevision !== 'number' ||
-      !Number.isSafeInteger(body.expectedProfileRevision) ||
-      body.expectedProfileRevision < 0 ||
-      (body.expectedEntries !== undefined &&
-        !Array.isArray(body.expectedEntries)) ||
-      (body.manualTakeoverEntryIds !== undefined &&
-        !Array.isArray(body.manualTakeoverEntryIds))
-    ) {
-      return inputFailure('body');
-    }
-    try {
-      const [preferences, entries] = await Promise.all([
-        this.#dependencies.reviewPreferences.load(
-          this.#dependencies.workspaceId,
-        ),
-        this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          true,
-        ),
-      ]);
-      const currentPolicy =
-        preferences.entryAutomationPolicy ?? DEFAULT_ENTRY_AUTOMATION_POLICY;
-      const currentProfile =
-        preferences.entryPreferenceProfile ?? DEFAULT_ENTRY_PREFERENCE_PROFILE;
-      const result = trialInformationEntryAutomationPolicy(
-        entries,
-        currentPolicy.revision,
-        currentProfile.revision,
-        body.policy,
-        currentProfile,
-        {
-          includePrivate: body.includePrivate,
-          expectedPolicyRevision: body.expectedPolicyRevision,
-          expectedProfileRevision: body.expectedProfileRevision,
-          ...(body.expectedEntries === undefined
-            ? {}
-            : {
-                expectedEntries:
-                  body.expectedEntries as readonly Readonly<InformationEntryPreferenceTrialExpectedEntry>[],
-              }),
-          ...(body.manualTakeoverEntryIds === undefined
-            ? {}
-            : {
-                manualTakeoverEntryIds:
-                  body.manualTakeoverEntryIds as readonly string[],
-              }),
-        },
-      );
-      if (result.status === 'invalid_policy') {
-        return httpResult(422, {
-          status: 'rejected',
-          issue: Object.freeze({
-            code: 'invalid_entry_automation_policy',
-            path: 'body.policy',
-          }),
-        });
-      }
-      if (
-        result.status === 'invalid_profile' ||
-        result.status === 'invalid_request'
-      ) {
-        return inputFailure('body');
-      }
-      return httpResult(result.status === 'complete' ? 200 : 409, result);
-    } catch {
-      return entryAutomationFailure();
-    }
-  }
-
-  public async executeInformationEntryAutomation(
-    body: unknown,
-  ): Promise<M1cHttpResult> {
-    const repository = this.#dependencies.entryAutomationExecutionRepository;
-    if (repository === undefined) return entryAutomationUnavailable();
-    if (
-      !isRecord(body) ||
-      typeof body.idempotencyKey !== 'string' ||
-      typeof body.includePrivate !== 'boolean' ||
-      typeof body.expectedPolicyRevision !== 'number' ||
-      typeof body.expectedProfileRevision !== 'number' ||
-      (body.expectedEntries !== undefined &&
-        !Array.isArray(body.expectedEntries)) ||
-      (body.manualTakeoverEntryIds !== undefined &&
-        !Array.isArray(body.manualTakeoverEntryIds))
-    ) {
-      return inputFailure('body');
-    }
-    try {
-      const result = await executeInformationEntryAutomation(
-        {
-          repository,
-          entries: this.#dependencies.informationEntryRepository,
-          preferences: this.#dependencies.reviewPreferences,
-        },
-        {
-          workspaceId: this.#dependencies.workspaceId,
-          idempotencyKey: body.idempotencyKey,
-          includePrivate: body.includePrivate,
-          expectedPolicyRevision: body.expectedPolicyRevision,
-          expectedProfileRevision: body.expectedProfileRevision,
-          ...(body.expectedEntries === undefined
-            ? {}
-            : {
-                expectedEntries:
-                  body.expectedEntries as readonly Readonly<InformationEntryPreferenceTrialExpectedEntry>[],
-              }),
-          ...(body.manualTakeoverEntryIds === undefined
-            ? {}
-            : {
-                manualTakeoverEntryIds:
-                  body.manualTakeoverEntryIds as readonly string[],
-              }),
-        },
-      );
-      if (result.status === 'invalid_request') return inputFailure('body');
-      let actions:
-        | Readonly<{
-            status: 'complete';
-            appliedCount: number;
-            unchangedCount: number;
-          }>
-        | undefined;
-      if (
-        result.status === 'succeeded' &&
-        this.#dependencies.entryAutomationActionRepository !== undefined
-      ) {
-        const workQueue = this.#dependencies.entryAutomationWorkQueueRepository;
-        if (workQueue === undefined) return entryAutomationUnavailable();
-        const actionResult = await executeEntryAutomationRunActions(
-          {
-            repository: this.#dependencies.entryAutomationActionRepository,
-            workQueue,
-            entries: this.#dependencies.informationEntryRepository,
-            associations:
-              this.#dependencies.informationEntryAssociationRepository,
-            preferences: this.#dependencies.reviewPreferences,
-          },
-          {
-            workspaceId: this.#dependencies.workspaceId,
-            runId: result.runId,
-            includePrivate: body.includePrivate,
-          },
-        );
-        if (actionResult.status !== 'complete') {
-          return httpResult(503, {
-            status: 'failed',
-            issue: Object.freeze({code: 'entry_automation_action_failed'}),
-            runId: result.runId,
-          });
-        }
-        actions = actionResult;
-      }
-      const execution =
-        'runId' in result
-          ? await repository.loadExecution(
-              this.#dependencies.workspaceId,
-              result.runId,
-            )
-          : undefined;
-      return httpResult(entryAutomationExecutionStatus(result), {
-        ...result,
-        ...(actions === undefined ? {} : {actions}),
-        ...(execution === undefined
-          ? {}
-          : {execution: entryAutomationExecutionResponse(execution)}),
-      });
-    } catch {
-      return entryAutomationFailure();
-    }
-  }
-
-  public async listInformationEntryAutomationExecutions(
-    limitInput: unknown = 10,
-  ): Promise<M1cHttpResult> {
-    const repository = this.#dependencies.entryAutomationExecutionRepository;
-    if (repository === undefined) return entryAutomationUnavailable();
-    const limit = decodeProcessingRunLimit(limitInput);
-    if (limit === undefined || limit > 20) return inputFailure('query.limit');
-    try {
-      const runs =
-        await this.#dependencies.processingRunRepository.listRecentRuns(
-          this.#dependencies.workspaceId,
-          100,
-        );
-      const runIds = runs
-        .filter(
-          (run) =>
-            run.origin === 'deterministic' &&
-            run.currentStage === 'tags' &&
-            run.currentStep?.startsWith('automation_') === true,
-        )
-        .slice(0, limit)
-        .map((run) => run.runId);
-      const loaded = await Promise.all(
-        runIds.map((runId) =>
-          repository.loadExecution(this.#dependencies.workspaceId, runId),
-        ),
-      );
-      const executions = loaded.filter(
-        (execution): execution is Readonly<EntryAutomationExecution> =>
-          execution !== undefined,
-      );
-      return httpResult(200, {
-        status: 'ok',
-        executions: Object.freeze(
-          executions.map(entryAutomationExecutionResponse),
-        ),
-      });
-    } catch {
-      return entryAutomationFailure();
-    }
-  }
-
-  public async loadInformationEntryAutomationExecution(
-    runId: string,
-  ): Promise<M1cHttpResult> {
-    const repository = this.#dependencies.entryAutomationExecutionRepository;
-    if (repository === undefined) return entryAutomationUnavailable();
-    if (!CANONICAL_UUID.test(runId)) return inputFailure('path.runId');
-    try {
-      const execution = await repository.loadExecution(
-        this.#dependencies.workspaceId,
-        runId,
-      );
-      return execution === undefined
-        ? httpResult(404, {
-            status: 'not_found',
-            issue: Object.freeze({code: 'entry_automation_run_not_found'}),
-          })
-        : httpResult(200, {
-            status: 'ok',
-            execution: entryAutomationExecutionResponse(execution),
-          });
-    } catch {
-      return entryAutomationFailure();
-    }
-  }
-
-  public async listInformationEntryAutomationWorkQueue(
-    includePrivateInput: unknown = false,
-  ): Promise<M1cHttpResult> {
-    const repository = this.#dependencies.entryAutomationWorkQueueRepository;
-    if (repository === undefined) return entryAutomationUnavailable();
-    if (typeof includePrivateInput !== 'boolean') {
-      return inputFailure('query.includePrivate');
-    }
-    try {
-      const result = await listEntryAutomationWorkQueue(
-        {
-          repository,
-          entries: this.#dependencies.informationEntryRepository,
-        },
-        this.#dependencies.workspaceId,
-        includePrivateInput,
-      );
-      return result.status === 'complete'
-        ? httpResult(200, {...result, status: 'ok'})
-        : inputFailure('query.includePrivate');
-    } catch {
-      return entryAutomationFailure();
-    }
-  }
-
-  public async updateInformationEntryAutomationWorkItem(
-    runId: string,
-    claimOrdinalInput: string,
-    body: unknown,
-  ): Promise<M1cHttpResult> {
-    const repository = this.#dependencies.entryAutomationWorkQueueRepository;
-    if (repository === undefined) return entryAutomationUnavailable();
-    const claimOrdinal = decodeNonNegativeInteger(claimOrdinalInput);
-    if (
-      !CANONICAL_UUID.test(runId) ||
-      claimOrdinal === undefined ||
-      !isRecord(body) ||
-      typeof body.expectedVersion !== 'number' ||
-      typeof body.state !== 'string' ||
-      typeof body.includePrivate !== 'boolean'
-    ) {
-      return inputFailure('body');
-    }
-    try {
-      const result = await updateEntryAutomationWorkItem(
-        {
-          repository,
-          entries: this.#dependencies.informationEntryRepository,
-        },
-        {
-          workspaceId: this.#dependencies.workspaceId,
-          runId,
-          claimOrdinal,
-          expectedVersion: body.expectedVersion,
-          state: body.state as 'pending' | 'completed' | 'dismissed',
-          includePrivate: body.includePrivate,
-        },
-      );
-      if (result.status === 'invalid_request') return inputFailure('body');
-      if (result.status === 'not_found') {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({code: 'entry_automation_work_item_not_found'}),
-        });
-      }
-      if (result.status === 'stale') {
-        return httpResult(409, {
-          status: 'stale',
-          issue: Object.freeze({code: 'stale_entry_automation_work_item'}),
-        });
-      }
-      return httpResult(200, result);
-    } catch {
-      return entryAutomationFailure();
-    }
-  }
-
-  public async executeInformationEntryAutomationWorkItemAction(
-    runId: string,
-    claimOrdinalInput: string,
-    body: unknown,
-  ): Promise<M1cHttpResult> {
-    const repository = this.#dependencies.entryAutomationActionRepository;
-    const workQueue = this.#dependencies.entryAutomationWorkQueueRepository;
-    const claimOrdinal = decodeNonNegativeInteger(claimOrdinalInput);
-    if (repository === undefined || workQueue === undefined) {
-      return entryAutomationUnavailable();
-    }
-    if (
-      !CANONICAL_UUID.test(runId) ||
-      claimOrdinal === undefined ||
-      !isRecord(body) ||
-      typeof body.expectedVersion !== 'number' ||
-      typeof body.includePrivate !== 'boolean' ||
-      (body.operation !== 'apply' && body.operation !== 'undo')
-    ) {
-      return inputFailure('body');
-    }
-    try {
-      const result = await executeEntryAutomationWorkItemAction(
-        {
-          repository,
-          workQueue,
-          entries: this.#dependencies.informationEntryRepository,
-          associations:
-            this.#dependencies.informationEntryAssociationRepository,
-          preferences: this.#dependencies.reviewPreferences,
-        },
-        {
-          workspaceId: this.#dependencies.workspaceId,
-          runId,
-          claimOrdinal,
-          expectedVersion: body.expectedVersion,
-          includePrivate: body.includePrivate,
-          operation: body.operation,
-        },
-      );
-      if (result.status === 'invalid_request') return inputFailure('body');
-      if (result.status === 'not_found') {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({code: 'entry_automation_work_item_not_found'}),
-        });
-      }
-      if (result.status === 'not_enabled') {
-        return httpResult(409, {
-          status: 'not_enabled',
-          issue: Object.freeze({code: 'entry_automation_action_not_enabled'}),
-        });
-      }
-      if (result.status === 'stale') {
-        return httpResult(409, {
-          status: 'stale',
-          issue: Object.freeze({code: 'stale_entry_automation_action'}),
-        });
-      }
-      if (result.status === 'failed') return entryAutomationFailure();
-      return httpResult(200, result);
-    } catch {
-      return entryAutomationFailure();
     }
   }
 
@@ -3524,9 +2751,14 @@ export class M1cApiService implements M1cApiServicePort {
     if (service === undefined) return sourceSubscriptionUnavailable();
     try {
       const value = await service.list();
+      const receiving = (await service.receivingStatus?.()) ?? {};
       return httpResult(200, {
         status: 'ok',
         ...value,
+        subscriptions: value.subscriptions.map((source) => ({
+          ...source,
+          receivingStatus: receiving[source.subscriptionId],
+        })),
         connectors: service.connectorCapabilities?.() ?? Object.freeze([]),
       });
     } catch (error) {
@@ -3546,9 +2778,14 @@ export class M1cApiService implements M1cApiServicePort {
         write.expectedRevision,
         write.subscriptions,
       );
+      const receiving = (await service.receivingStatus?.()) ?? {};
       return httpResult(200, {
         status: result.outcome,
         ...result.value,
+        subscriptions: result.value.subscriptions.map((source) => ({
+          ...source,
+          receivingStatus: receiving[source.subscriptionId],
+        })),
       });
     } catch (error) {
       return sourceSubscriptionFailure(error);
@@ -3922,133 +3159,10 @@ function reviewPreferencesFailure(): M1cHttpResult {
   });
 }
 
-function entryPreferenceProfileFailure(): M1cHttpResult {
-  return httpResult(503, {
-    status: 'failed',
-    issue: Object.freeze({code: 'entry_preference_profile_failed'}),
-  });
-}
-
 function entrySplitRuleFailure(): M1cHttpResult {
   return httpResult(503, {
     status: 'failed',
     issue: Object.freeze({code: 'entry_split_rule_profile_failed'}),
-  });
-}
-
-function entryAutomationFailure(): M1cHttpResult {
-  return httpResult(503, {
-    status: 'failed',
-    issue: Object.freeze({code: 'entry_automation_failed'}),
-  });
-}
-
-function entryAutomationUnavailable(): M1cHttpResult {
-  return httpResult(503, {
-    status: 'failed',
-    issue: Object.freeze({code: 'entry_automation_unavailable'}),
-  });
-}
-
-function entryPreferenceProfilesHaveSameValue(
-  current: Readonly<EntryPreferenceProfile>,
-  draft: Readonly<EntryPreferenceProfile>,
-): boolean {
-  if (
-    current.enabled !== draft.enabled ||
-    current.rules.length !== draft.rules.length
-  ) {
-    return false;
-  }
-  return current.rules.every((rule, index) => {
-    const candidate = draft.rules[index];
-    return (
-      candidate?.ruleId === rule.ruleId &&
-      rule.dimension === candidate.dimension &&
-      rule.featureKind === candidate.featureKind &&
-      rule.featureIdentity === candidate.featureIdentity &&
-      rule.displayValue === candidate.displayValue &&
-      rule.effect === candidate.effect &&
-      rule.weight === candidate.weight
-    );
-  });
-}
-
-function entryAutomationPoliciesHaveSameValue(
-  current: Readonly<EntryAutomationPolicy>,
-  draft: Readonly<EntryAutomationPolicy>,
-): boolean {
-  const currentActions =
-    current.advanceActions ??
-    Object.freeze({deterministicTags: false, rebuildAssociations: false});
-  const draftActions =
-    draft.advanceActions ??
-    Object.freeze({deterministicTags: false, rebuildAssociations: false});
-  return (
-    current.enabled === draft.enabled &&
-    current.paused === draft.paused &&
-    current.profileRevision === draft.profileRevision &&
-    current.minimumMatchedRuleCount === draft.minimumMatchedRuleCount &&
-    current.advanceThresholds.usefulness ===
-      draft.advanceThresholds.usefulness &&
-    current.advanceThresholds.interest === draft.advanceThresholds.interest &&
-    current.advanceThresholds.requiredDimensions ===
-      draft.advanceThresholds.requiredDimensions &&
-    current.deferThresholds.usefulness === draft.deferThresholds.usefulness &&
-    current.deferThresholds.interest === draft.deferThresholds.interest &&
-    current.deferThresholds.requiredDimensions ===
-      draft.deferThresholds.requiredDimensions &&
-    current.budgets.maximumEntriesPerRun ===
-      draft.budgets.maximumEntriesPerRun &&
-    current.budgets.maximumAdvanceCandidatesPerRun ===
-      draft.budgets.maximumAdvanceCandidatesPerRun &&
-    current.budgets.maximumDeferCandidatesPerRun ===
-      draft.budgets.maximumDeferCandidatesPerRun &&
-    currentActions.deterministicTags === draftActions.deterministicTags &&
-    currentActions.rebuildAssociations === draftActions.rebuildAssociations
-  );
-}
-
-function entryAutomationExecutionStatus(
-  result: Readonly<ExecuteEntryAutomationResult>,
-): number {
-  if (result.status === 'succeeded') return 200;
-  if (result.status === 'failed') return 500;
-  return 409;
-}
-
-function entryAutomationExecutionResponse(
-  execution: Readonly<EntryAutomationExecution>,
-) {
-  return Object.freeze({
-    runId: execution.runId,
-    status: execution.status,
-    version: execution.version,
-    policyRevision: execution.policyRevision,
-    profileRevision: execution.profileRevision,
-    includePrivate: execution.includePrivate,
-    ...(execution.errorCode === undefined
-      ? {}
-      : {errorCode: execution.errorCode}),
-    claims: Object.freeze(
-      execution.claims.map((claim) =>
-        Object.freeze({
-          ordinal: claim.ordinal,
-          entryId: claim.entryId,
-          entryRevision: claim.entryRevision,
-          route: claim.route,
-          reason: claim.reason,
-          status: claim.status,
-          ...(claim.errorCode === undefined
-            ? {}
-            : {errorCode: claim.errorCode}),
-          createdAt: claim.createdAt,
-          ...(claim.finishedAt === undefined
-            ? {}
-            : {finishedAt: claim.finishedAt}),
-        }),
-      ),
-    ),
   });
 }
 
@@ -5048,18 +4162,6 @@ function decodeProcessingRunLimit(value: unknown): number | undefined {
     : undefined;
 }
 
-function decodeNonNegativeInteger(value: unknown): number | undefined {
-  const candidate =
-    typeof value === 'string' && /^(?:0|[1-9][0-9]*)$/u.test(value)
-      ? Number(value)
-      : value;
-  return typeof candidate === 'number' &&
-    Number.isSafeInteger(candidate) &&
-    candidate >= 0
-    ? candidate
-    : undefined;
-}
-
 function decodeSourceSubscriptionReplace(body: unknown):
   | Readonly<{
       expectedRevision: number;
@@ -5085,7 +4187,6 @@ function decodeSourceSubscriptionReplace(body: unknown):
     'repositoryPath',
     'repositoryRef',
     'repositoryUri',
-    'routeAfterImport',
     'sourceAlias',
     'subscriptionId',
   ];
@@ -5098,7 +4199,6 @@ function decodeSourceSubscriptionReplace(body: unknown):
     'itemLimit',
     'kind',
     'label',
-    'routeAfterImport',
     'sourceAlias',
     'subscriptionId',
   ];
@@ -5114,7 +4214,6 @@ function decodeSourceSubscriptionReplace(body: unknown):
     'label',
     'recordLimit',
     'recordsPath',
-    'routeAfterImport',
     'sourceAlias',
     'subscriptionId',
     'titlePath',
@@ -5135,7 +4234,6 @@ function decodeSourceSubscriptionReplace(body: unknown):
     'kind',
     'label',
     'pageUrl',
-    'routeAfterImport',
     'sourceAlias',
     'subscriptionId',
   ];
@@ -5147,7 +4245,6 @@ function decodeSourceSubscriptionReplace(body: unknown):
     'isPrivate',
     'kind',
     'label',
-    'routeAfterImport',
     'sourceAlias',
     'subscriptionId',
   ];
@@ -5155,7 +4252,10 @@ function decodeSourceSubscriptionReplace(body: unknown):
     body.subscriptions.some((subscription) => {
       if (!isRecord(subscription)) return true;
       const ownKeys = Object.keys(subscription).filter(
-        (key) => key !== 'description',
+        (key) =>
+          key !== 'description' &&
+          key !== 'receiving' &&
+          key !== 'processingProfile',
       );
       const keys = ownKeys.sort().join('\\u0000');
       if (subscription.kind === 'rss_atom') {
@@ -5189,121 +4289,17 @@ function decodeSourceSubscriptionReplace(body: unknown):
   return Object.freeze({
     expectedRevision: body.expectedRevision as number,
     subscriptions: Object.freeze(
-      decoded.subscriptions.map((subscription) =>
-        subscription.kind === 'rss_atom'
-          ? Object.freeze({
-              kind: subscription.kind,
-              subscriptionId: subscription.subscriptionId,
-              label: subscription.label,
-              ...(subscription.description === undefined
-                ? {}
-                : {description: subscription.description}),
-              enabled: subscription.enabled,
-              feedUrl: subscription.feedUrl,
-              itemLimit: subscription.itemLimit,
-              sourceAlias: subscription.sourceAlias,
-              isPrivate: subscription.isPrivate,
-              routeAfterImport: subscription.routeAfterImport,
-              intervalMinutes: subscription.intervalMinutes,
-            })
-          : subscription.kind === 'json_api'
-            ? Object.freeze({
-                kind: subscription.kind,
-                subscriptionId: subscription.subscriptionId,
-                label: subscription.label,
-                ...(subscription.description === undefined
-                  ? {}
-                  : {description: subscription.description}),
-                enabled: subscription.enabled,
-                endpointUrl: subscription.endpointUrl,
-                recordsPath: subscription.recordsPath,
-                externalIdPath: subscription.externalIdPath,
-                titlePath: subscription.titlePath,
-                bodyPath: subscription.bodyPath,
-                ...(subscription.canonicalUriPath === undefined
-                  ? {}
-                  : {canonicalUriPath: subscription.canonicalUriPath}),
-                ...(subscription.publishedAtPath === undefined
-                  ? {}
-                  : {publishedAtPath: subscription.publishedAtPath}),
-                ...(subscription.versionPath === undefined
-                  ? {}
-                  : {versionPath: subscription.versionPath}),
-                recordLimit: subscription.recordLimit,
-                ...(subscription.pageCursor === undefined
-                  ? {}
-                  : {
-                      pageCursor: Object.freeze({
-                        ...subscription.pageCursor,
-                      }),
-                    }),
-                ...(subscription.incrementalCursor === undefined
-                  ? {}
-                  : {
-                      incrementalCursor: Object.freeze({
-                        ...subscription.incrementalCursor,
-                      }),
-                    }),
-                authentication: Object.freeze({
-                  ...subscription.authentication,
-                }),
-                sourceAlias: subscription.sourceAlias,
-                isPrivate: subscription.isPrivate,
-                routeAfterImport: subscription.routeAfterImport,
-                intervalMinutes: subscription.intervalMinutes,
-              })
-            : subscription.kind === 'web'
-              ? Object.freeze({
-                  kind: subscription.kind,
-                  subscriptionId: subscription.subscriptionId,
-                  label: subscription.label,
-                  ...(subscription.description === undefined
-                    ? {}
-                    : {description: subscription.description}),
-                  enabled: subscription.enabled,
-                  pageUrl: subscription.pageUrl,
-                  additionalPaths: Object.freeze([
-                    ...subscription.additionalPaths,
-                  ]),
-                  sourceAlias: subscription.sourceAlias,
-                  isPrivate: subscription.isPrivate,
-                  routeAfterImport: subscription.routeAfterImport,
-                  intervalMinutes: subscription.intervalMinutes,
-                })
-              : subscription.kind === 'plugin'
-                ? Object.freeze({
-                    kind: subscription.kind,
-                    subscriptionId: subscription.subscriptionId,
-                    label: subscription.label,
-                    ...(subscription.description === undefined
-                      ? {}
-                      : {description: subscription.description}),
-                    enabled: subscription.enabled,
-                    connectorId: subscription.connectorId,
-                    configurationRef: subscription.configurationRef,
-                    sourceAlias: subscription.sourceAlias,
-                    isPrivate: subscription.isPrivate,
-                    routeAfterImport: subscription.routeAfterImport,
-                    intervalMinutes: subscription.intervalMinutes,
-                  })
-                : Object.freeze({
-                    kind: 'github_markdown' as const,
-                    subscriptionId: subscription.subscriptionId,
-                    label: subscription.label,
-                    ...(subscription.description === undefined
-                      ? {}
-                      : {description: subscription.description}),
-                    enabled: subscription.enabled,
-                    repositoryUri: subscription.repositoryUri,
-                    repositoryRef: subscription.repositoryRef,
-                    repositoryPath: subscription.repositoryPath,
-                    profile: subscription.profile,
-                    sourceAlias: subscription.sourceAlias,
-                    isPrivate: subscription.isPrivate,
-                    routeAfterImport: subscription.routeAfterImport,
-                    intervalMinutes: subscription.intervalMinutes,
-                  }),
-      ),
+      decoded.subscriptions.map((subscription) => {
+        const configuration = {...subscription};
+        delete configuration.routeAfterImport;
+        delete configuration.cursor;
+        delete configuration.lastAttemptAt;
+        delete configuration.lastSuccessAt;
+        delete configuration.lastRunId;
+        delete configuration.checkState;
+        delete configuration.qualityReview;
+        return Object.freeze(configuration);
+      }),
     ),
   });
 }

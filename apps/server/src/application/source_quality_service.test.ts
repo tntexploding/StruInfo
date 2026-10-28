@@ -84,7 +84,6 @@ async function fixture(records: IntakeRecord[]) {
             itemLimit: 20,
             sourceAlias: 'synthetic',
             isPrivate: false,
-            routeAfterImport: false,
             intervalMinutes: 60,
           },
         ],

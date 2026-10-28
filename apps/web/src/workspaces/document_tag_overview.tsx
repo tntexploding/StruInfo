@@ -1,3 +1,4 @@
+import {AnnotationSummary} from './annotation_summary.js';
 import type {
   InformationEntry,
   InformationEntryDocumentView,
@@ -165,20 +166,23 @@ export function DocumentEntryTags({
   readonly entry: Readonly<InformationEntry>;
 }) {
   return (
-    <span
-      className="document-boundary-tags"
-      role="group"
-      aria-label={`第 ${(entry.value.documentOrder + 1).toString()} 条标签`}
-    >
-      <strong>本条标签</strong>
-      <span className="document-annotation-values">
-        {entry.value.contentKeywords.map((tag) => (
-          <span key={tag.normalizedValue} className="document-tag">
-            {tag.displayValue}
-            {tag.origin === 'ai' ? <small>AI</small> : null}
-          </span>
-        ))}
+    <>
+      <AnnotationSummary entry={entry} />
+      <span
+        className="document-boundary-tags"
+        role="group"
+        aria-label={`第 ${(entry.value.documentOrder + 1).toString()} 条标签`}
+      >
+        <strong>本条标签</strong>
+        <span className="document-annotation-values">
+          {entry.value.contentKeywords.map((tag) => (
+            <span key={tag.normalizedValue} className="document-tag">
+              {tag.displayValue}
+              {tag.origin === 'ai' ? <small>AI</small> : null}
+            </span>
+          ))}
+        </span>
       </span>
-    </span>
+    </>
   );
 }

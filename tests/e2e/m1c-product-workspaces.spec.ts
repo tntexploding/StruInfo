@@ -1,4 +1,12 @@
 import type {
+  AnnotationVocabulary,
+  AnnotationDraft,
+} from '../../apps/web/src/api/annotation_contract.js';
+import type {
+  SourceSplitCatalogView,
+  SourceSplitDefinition,
+} from '../../apps/web/src/api/source_split_contract.js';
+import type {
   ReportRecord,
   ReportRequest,
   ReportEdit,
@@ -253,6 +261,16 @@ async function installCurrentProductApi(
 
   await page.route('**/*', async (route) => {
     const request = route.request();
+    if (
+      request.url().endsWith('/api/v1/research/commands') &&
+      (request.postDataJSON() as {operation: string}).operation ===
+        'report_pipeline_status'
+    ) {
+      await route.fulfill({
+        json: {result: {schedules: [], runs: [], notices: []}},
+      });
+      return;
+    }
     const url = new URL(request.url());
     const path = url.pathname;
 
@@ -304,7 +322,6 @@ async function installCurrentProductApi(
               manualUploads: false,
               model: '',
               maxEntries: 12,
-              maxRelations: 4,
               maxModelCalls: 24,
               maxDocumentsPerDay: 10,
             },
@@ -343,34 +360,43 @@ async function installCurrentProductApi(
       const operation = (request.postDataJSON() as {operation: string})
         .operation;
       const result =
-        operation === 'document_queue_status'
-          ? {items: [], held: 0, duplicates: 0, batchLimit: 32}
-          : operation === 'intake_status'
-            ? {records: []}
-            : operation === 'intake_previews'
-              ? {previews: [], failed: []}
-              : operation === 'system_status'
-                ? {role: 'all', agentEnabled: false, grants: []}
-                : operation === 'ingestion_status'
-                  ? {
-                      policy: {
-                        revision: 0,
-                        settings: {
-                          enabled: false,
-                          paused: false,
-                          subscriptionIds: [],
-                          manualUploads: false,
-                          model: '',
-                          maxEntries: 12,
-                          maxRelations: 4,
-                          maxModelCalls: 24,
-                          maxDocumentsPerDay: 10,
+        operation === 'annotation_vocabulary'
+          ? {
+              vocabulary: {
+                revision: 0,
+                dimensions: [],
+                terms: [],
+                aliases: [],
+                relations: [],
+              },
+            }
+          : operation === 'document_queue_status'
+            ? {items: [], held: 0, duplicates: 0, batchLimit: 32}
+            : operation === 'intake_status'
+              ? {records: []}
+              : operation === 'intake_previews'
+                ? {previews: [], failed: []}
+                : operation === 'system_status'
+                  ? {role: 'all', agentEnabled: false, grants: []}
+                  : operation === 'ingestion_status'
+                    ? {
+                        policy: {
+                          revision: 0,
+                          settings: {
+                            enabled: false,
+                            paused: false,
+                            subscriptionIds: [],
+                            manualUploads: false,
+                            model: '',
+                            maxEntries: 12,
+                            maxModelCalls: 24,
+                            maxDocumentsPerDay: 10,
+                          },
                         },
-                      },
-                      items: [],
-                      modelConfigured: false,
-                    }
-                  : [];
+                        items: [],
+                        modelConfigured: false,
+                      }
+                    : [];
       await route.fulfill({json: {result}});
       return;
     }
@@ -439,6 +465,7 @@ async function installCurrentProductApi(
         json: {
           status: 'ok',
           snapshots: splitWorkspaceEnabled ? [SYNTHETIC_SNAPSHOT] : [],
+          totalCount: splitWorkspaceEnabled ? 1 : 0,
         },
         status: 200,
       });
@@ -1081,36 +1108,229 @@ async function installCurrentProductApi(
 }
 
 async function openReceiptDetails(page: Page) {
-  const menu = page
-    .locator('.journey-action-menu')
-    .filter({has: page.locator('summary').filter({hasText: '更多'})});
-  if ((await menu.getAttribute('open')) === null)
-    await menu.locator('summary').click();
+  const menu = page.getByRole('button', {name: '更多接收操作', exact: true});
+  if ((await menu.getAttribute('aria-expanded')) !== 'true') await menu.click();
   await page.getByRole('button', {name: '接收详情与正文恢复'}).click();
 }
 
-async function submitQuery(page: Page) {
+test('P3 previews and enables a document recipe without changing the reading layout', async ({
+  page,
+}, testInfo) => {
+  await installCurrentProductApi(page, {manualSplitRequests: []});
+  const operations: string[] = [];
+  const catalog: SourceSplitCatalogView = {
+    revision: 0,
+    sourceId: null,
+    recipes: [],
+  };
+  const plan = {
+    outcome: 'ready',
+    reason: 'recipe_ready',
+    groups: [{title: '合成文档', start: 0, end: 3}],
+    characters: 3,
+    completeCoverage: true,
+  };
+  await page.route('**/api/v1/ingestion/commands', async (route) => {
+    const {operation, input} = route.request().postDataJSON() as {
+      operation: string;
+      input: {
+        definition: SourceSplitDefinition;
+        note: string;
+        action: string;
+        sampleKind: 'typical' | 'variant' | 'exception';
+        expected: 'ready' | 'review';
+      };
+    };
+    if (!operation.startsWith('split_recipe')) {
+      await route.fallback();
+      return;
+    }
+    operations.push(operation);
+    let result: unknown = catalog;
+    if (operation === 'split_recipe_preview') result = plan;
+    if (operation === 'split_recipe_save') {
+      catalog.revision++;
+      catalog.recipes = [
+        {
+          ...input.definition,
+          status: 'draft',
+          approval: null,
+          replaces: null,
+          trials: [],
+        },
+      ];
+    }
+    const recipe = catalog.recipes[0];
+    if (recipe && operation === 'split_recipe_trial') {
+      catalog.revision++;
+      recipe.status = 'trial';
+      recipe.trials = [
+        {
+          snapshotId: SNAPSHOT_ID,
+          recipeRevision: recipe.revision,
+          sampleKind: input.sampleKind,
+          expected: input.expected,
+          outcome: 'ready',
+          reason: 'recipe_ready',
+          entryCount: 1,
+        },
+      ];
+      result = {catalog, plan};
+    }
+    if (recipe && operation === 'split_recipe_control') {
+      catalog.revision++;
+      recipe.status = input.action === 'enable' ? 'enabled' : 'paused';
+      result = catalog;
+    }
+    if (operation === 'split_recipe_apply') result = {createdCount: 1};
+    await route.fulfill({json: {result}});
+  });
+  await page.goto('/');
+  await openWorkspace(page, '工作台');
+  await openDocumentEditor(page);
+  await page
+    .locator('.reader-editor-actions')
+    .getByRole('button', {name: '拆分方案', exact: true})
+    .click();
+  const panel = page.getByRole('region', {name: '拆分方案', exact: true});
+  await panel
+    .getByRole('textbox', {name: '方案名称', exact: true})
+    .fill('合成整篇方案');
+  await panel.getByRole('button', {name: '预览切点', exact: true}).click();
+  await expect(
+    panel.getByRole('heading', {name: '1 个条目 · 原文完整覆盖'}),
+  ).toBeVisible();
+  expect(operations).not.toContain('split_recipe_apply');
+  await panel.getByRole('button', {name: '保存草稿', exact: true}).click();
+  await expect(
+    panel.getByRole('button', {name: '应用到当前文档', exact: true}),
+  ).toBeDisabled();
+  await panel.getByRole('button', {name: '记录本篇试读', exact: true}).click();
+  await expect(panel.getByText('当前文档 · 1 条 · 符合预期')).toBeVisible();
+  await panel
+    .getByRole('textbox', {name: '核对说明', exact: true})
+    .fill('已核对原文范围，整篇阅读。');
+  await panel.getByRole('button', {name: '启用方案', exact: true}).click();
+  await panel
+    .getByRole('button', {name: '应用到当前文档', exact: true})
+    .click();
+  await expect(panel.getByText('已生成 1 个条目，确认后入库。')).toBeVisible();
+  await expect(
+    panel.getByRole('textbox', {name: '方案名称', exact: true}),
+  ).toBeDisabled();
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({width, height: 1000});
+
+    await panel.getByRole('button', {name: '暂停方案', exact: true}).focus();
+    await expect(
+      panel.getByRole('button', {name: '暂停方案', exact: true}),
+    ).toBeFocused();
+    expect(
+      await panel.evaluate((el) => el.scrollWidth - el.clientWidth),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - innerWidth,
+      ),
+    ).toBeLessThanOrEqual(1);
+    await panel.evaluate((el) => {
+      el.scrollTop = 0;
+      for (const child of el.querySelectorAll('*'))
+        if (child.scrollHeight > child.clientHeight) child.scrollTop = 0;
+    });
+    await page.screenshot({
+      path: testInfo.outputPath('p3-recipe-' + String(width) + '.png'),
+      animations: 'disabled',
+    });
+    await expect(
+      panel.getByRole('button', {name: '关闭拆分方案', exact: true}),
+    ).toBeInViewport();
+  }
+  await panel.getByRole('button', {name: '暂停方案', exact: true}).click();
+  await expect(
+    panel.getByRole('button', {name: '应用到当前文档', exact: true}),
+  ).toBeDisabled();
+  await panel.getByRole('button', {name: '关闭拆分方案', exact: true}).focus();
   await page.keyboard.press('Escape');
-  await page.getByRole('button', {name: '搜索', exact: true}).click();
+  await expect(panel).not.toBeVisible();
+  expect(operations.filter((op) => op === 'split_recipe_apply')).toHaveLength(
+    1,
+  );
+  expect(operations).not.toContain('split_recipe_suggest');
+});
+
+async function openDocumentEditor(page: Page) {
+  if (
+    await page.getByRole('dialog', {name: '编辑文档', exact: true}).isVisible()
+  )
+    return;
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', {name: '编辑', exact: true}).click();
+}
+async function closeFloatingTools(page: Page) {
+  while (await page.locator('dialog[open], :popover-open').count()) {
+    await page.keyboard.press('Escape');
+  }
+}
+async function submitQuery(page: Page) {
+  await closeFloatingTools(page);
+  await page
+    .getByRole('search')
+    .getByRole('button', {name: '搜索', exact: true})
+    .click();
 }
 async function openQuerySettings(page: Page, name = '筛选与匹配方式') {
+  if (['筛选与匹配方式', '查询管理', '索引维护'].includes(name)) {
+    // Filters now live in the left scope panel; matching and index controls live in a dialog.
+    if (name === '筛选与匹配方式') {
+      const opener = page.getByRole('button', {
+        name: '展开内容范围',
+        exact: true,
+      });
+      if (await opener.isVisible()) await opener.click();
+      for (const group of ['分类与标签', '来源', '时间', '更多筛选']) {
+        const detail = page
+          .locator('.side-left details.filter-group')
+          .filter({has: page.locator('summary').filter({hasText: group})})
+          .first();
+        if (
+          (await detail.count()) &&
+          (await detail.getAttribute('open')) === null
+        )
+          await detail.locator(':scope > summary').click();
+      }
+      const structured = page.locator('.side-left .nested-options');
+      if (
+        (await structured.count()) &&
+        (await structured.getAttribute('open')) === null
+      )
+        await structured.locator('summary').click();
+      return;
+    }
+    if (
+      !(await page
+        .getByRole('dialog', {name: '搜索设置', exact: true})
+        .isVisible())
+    )
+      await page.getByRole('button', {name: '搜索设置 ⌄', exact: true}).click();
+    if (name === '索引维护') {
+      const d = page
+        .getByRole('dialog', {name: '搜索设置', exact: true})
+        .locator('details')
+        .filter({hasText: '索引维护'});
+      if ((await d.getAttribute('open')) === null)
+        await d.locator(':scope > summary').click();
+    }
+    return;
+  }
   const readingSections = ['阅读设置', '资料清单与导出', '比较与探索'];
-  if (name === '索引维护') await openQuerySettings(page, '查询管理');
-  if (readingSections.includes(name))
+  if (readingSections.includes(name)) {
     await openQuerySettings(page, '阅读与导出');
+    return;
+  }
   const trigger = page.getByRole('button', {name, exact: true});
-  // Native visibility changes before the queued toggle event updates React.
-  // In particular, the debounce test freezes the clock while reopening tools.
-  const expanded = await trigger.evaluate((element) => {
-    if (element.tagName === 'SUMMARY')
-      return element.parentElement?.hasAttribute('open') === true;
-    const panelId = element.getAttribute('aria-controls');
-    return (
-      panelId !== null &&
-      document.getElementById(panelId)?.matches(':popover-open') === true
-    );
-  });
-  if (!expanded) await trigger.click();
+  const expanded = await trigger.getAttribute('aria-expanded');
+  if (expanded !== 'true') await trigger.click();
 }
 
 test('keeps floating reading controls from resizing the document', async ({
@@ -1123,10 +1343,12 @@ test('keeps floating reading controls from resizing the document', async ({
   const paper = page.locator('.entry-readonly-detail');
   await expect(paper).toBeVisible();
   const before = await paper.boundingBox();
-  for (const name of ['筛选与匹配方式', '阅读与导出', '查询管理']) {
+  for (const name of ['搜索设置 ⌄', '阅读与导出']) {
     await page.getByRole('button', {name, exact: true}).click();
     await expect(
-      page.locator('.floating-tool-panel__surface:popover-open'),
+      name === '阅读与导出'
+        ? page.locator('.floating-tool-panel__surface:popover-open')
+        : page.getByRole('dialog', {name: '搜索设置'}),
     ).toBeVisible();
     expect(await paper.boundingBox()).toEqual(before);
     await page.keyboard.press('Escape');
@@ -1180,6 +1402,7 @@ test('recovers an existing working copy inside its document without rewriting or
   await page.setViewportSize({width: 1440, height: 1000});
   await page.goto('/');
   await openWorkspace(page, '资料库');
+  await openDocumentEditor(page);
   await page.getByRole('button', {name: '修改分段', exact: true}).click();
   const workingCopy = page.locator('.information-document-working-copy');
   const editor = workingCopy.getByRole('textbox', {
@@ -1227,10 +1450,14 @@ test('exposes exactly four document-centred pages with settings outside primary 
   await page.goto('/');
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
   await expect(navigation.getByRole('button')).toHaveCount(4);
-  for (const name of ['文档入口', '工作台', '数据阅览', '报告']) {
+  for (const name of ['总览', '源管理', '文档阅读', '数据库']) {
     await navigation.getByRole('button', {name, exact: true}).click();
     await expect(
-      page.getByRole('heading', {name, exact: true, level: 1}),
+      page.getByRole('heading', {
+        name: name === '总览' ? 'StruInfo' : name,
+        exact: true,
+        level: 1,
+      }),
     ).toBeVisible();
   }
   await expect(navigation.getByRole('button', {name: '设置'})).toHaveCount(0);
@@ -1439,7 +1666,7 @@ test('edits association weights and opens the complete private-document channel'
     }),
   ).toBeVisible();
 
-  await navigation.getByRole('button', {name: '数据阅览', exact: true}).click();
+  await openWorkspace(page, '查询');
   await openQuerySettings(page);
   await page.getByLabel('隐私结果').selectOption({label: '公开与隐私结果'});
   await submitQuery(page);
@@ -1475,8 +1702,7 @@ test('keeps exploration separate, explicit, and responsive across target widths'
   await page.setViewportSize({width: 390, height: 844});
   await page.goto('/');
 
-  const navigation = page.getByRole('navigation', {name: '产品工作区'});
-  await navigation.getByRole('button', {name: '数据阅览', exact: true}).click();
+  await openWorkspace(page, '查询');
   await openQuerySettings(page, '比较与探索');
 
   await expect(
@@ -1531,7 +1757,7 @@ test('keeps exploration separate, explicit, and responsive across target widths'
     expect(overflow).toBeLessThanOrEqual(1);
   }
   await page.setViewportSize({width: 390, height: 844});
-  await page.getByLabel('搜索信息条目').fill('新的查询范围');
+  await page.getByLabel('关键词或问题').fill('新的查询范围');
   await expect(
     page.getByRole('heading', {name: '合成探索 Entry', exact: true}),
   ).toBeHidden();
@@ -1552,250 +1778,6 @@ test('keeps exploration separate, explicit, and responsive across target widths'
   );
 });
 
-test('keeps the preference panel responsive and ignores superseded local results', async ({
-  page,
-}) => {
-  const suggestionGate = controlledGate();
-  const trialGate = controlledGate();
-  const suggestionScopes: boolean[] = [];
-  const trialScopes: boolean[] = [];
-  await installCurrentProductApi(page, {
-    preferenceSuggestionGate: suggestionGate.promise,
-    preferenceSuggestionScopes: suggestionScopes,
-    preferenceTrialGate: trialGate.promise,
-    preferenceTrialScopes: trialScopes,
-  });
-  await page.setViewportSize({width: 320, height: 720});
-  await page.goto('/');
-
-  const navigation = page.getByRole('navigation', {name: '产品工作区'});
-  await openWorkspace(page, '标签', navigation);
-  await expect(
-    page.getByRole('heading', {name: '偏好规则', exact: true}),
-  ).toBeVisible();
-
-  const privateScope = page.getByRole('checkbox', {
-    name: '本次建议与试运行包含隐私条目',
-    exact: true,
-  });
-  const generate = page.getByRole('button', {
-    name: '生成规则建议',
-    exact: true,
-  });
-  await generate.click();
-  await expect.poll(() => suggestionScopes.length).toBe(1);
-  await privateScope.check();
-  await generate.click();
-  await expect(page.getByText('当前隐私候选', {exact: true})).toBeVisible();
-  const lateSuggestionResponse = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname ===
-      '/api/v1/entries/preferences/profile/suggestions',
-  );
-  suggestionGate.release();
-  await lateSuggestionResponse;
-  await expect(page.getByText('迟到公开候选', {exact: true})).toHaveCount(0);
-  expect(suggestionScopes).toEqual([false, true]);
-
-  const trial = page.getByRole('button', {name: /试算最多 100 条/u});
-  await trial.click();
-  await expect.poll(() => trialScopes.length).toBe(1);
-  await privateScope.uncheck();
-  await trial.click();
-  await expect(page.getByText('bbbbbbbb…', {exact: true})).toBeVisible();
-  const lateTrialResponse = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname ===
-      '/api/v1/entries/preferences/profile/trial',
-  );
-  trialGate.release();
-  await lateTrialResponse;
-  await expect(page.getByText('aaaaaaaa…', {exact: true})).toHaveCount(0);
-  expect(trialScopes).toEqual([true, false]);
-
-  for (const viewport of [
-    {width: 320, height: 720},
-    {width: 390, height: 844},
-    {width: 768, height: 900},
-    {width: 1024, height: 900},
-    {width: 1440, height: 1000},
-  ]) {
-    await page.setViewportSize(viewport);
-    await expect(
-      page.getByRole('heading', {name: '偏好规则', exact: true}),
-    ).toBeVisible();
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - window.innerWidth,
-    );
-    expect(overflow).toBeLessThanOrEqual(1);
-    const generateBounds = await generate.boundingBox();
-    const trialBounds = await trial.boundingBox();
-    if (generateBounds === null || trialBounds === null)
-      throw new Error('Missing preference actions');
-    expect(generateBounds.width).toBeLessThanOrEqual(240);
-    expect(trialBounds.width).toBeLessThanOrEqual(240);
-    const tools = page.locator('.entry-preference-profile__tools > section');
-    const suggestionPanelBounds = await tools.first().boundingBox();
-    const trialPanelBounds = await tools.last().boundingBox();
-    if (suggestionPanelBounds === null || trialPanelBounds === null)
-      throw new Error('Missing preference tool panels');
-    if (Math.abs(suggestionPanelBounds.x - trialPanelBounds.x) > 1) {
-      expect(
-        Math.abs(suggestionPanelBounds.y - trialPanelBounds.y),
-      ).toBeLessThanOrEqual(1);
-    } else {
-      expect(trialPanelBounds.y).toBeGreaterThanOrEqual(
-        suggestionPanelBounds.y + suggestionPanelBounds.height,
-      );
-    }
-  }
-
-  await page.route(
-    '**/api/v1/entries/preferences/profile/suggestions',
-    (route) =>
-      route.fulfill({
-        json: {
-          status: 'ok',
-          includePrivate: false,
-          visibleEntryCount: 64,
-          totalCandidateCount: 64,
-          truncated: false,
-          candidates: Array.from({length: 64}, (_, index) => ({
-            dimension: 'usefulness',
-            featureKind: 'content_keyword',
-            featureIdentity: 'synthetic-' + String(index),
-            displayValue: '合成建议 ' + String(index + 1),
-            effect: 'prefer',
-            suggestedWeight: 4,
-            positiveCount: 3,
-            neutralCount: 0,
-            negativeCount: 0,
-            positiveEntryIds: [ENTRY_ID],
-            neutralEntryIds: [],
-            negativeEntryIds: [],
-          })),
-        },
-      }),
-  );
-  await generate.click();
-  const suggestions = page.getByRole('list', {
-    name: '偏好规则建议',
-    exact: true,
-  });
-  await expect(suggestions.locator(':scope > li')).toHaveCount(64);
-  for (const width of [1440, 390]) {
-    await page.setViewportSize({width, height: 900});
-    expect((await suggestions.boundingBox())?.height).toBeLessThanOrEqual(448);
-    await suggestions.focus();
-    await page.keyboard.press('End');
-    await expect
-      .poll(() => suggestions.evaluate((node) => node.scrollTop))
-      .toBeGreaterThan(0);
-    expect(
-      await generate.evaluate((node) =>
-        node.closest('.entry-preference-suggestion-list'),
-      ),
-    ).toBeNull();
-  }
-  await suggestions
-    .getByRole('button', {name: '把建议加入规则：合成建议 64', exact: true})
-    .click();
-  await expect(
-    page
-      .getByRole('list', {name: '偏好规则草稿', exact: true})
-      .getByRole('textbox', {name: '显示名称', exact: true}),
-  ).toHaveValue('合成建议 64');
-});
-
-test('keeps automation audit exact, responsive, and isolated from late run lists', async ({
-  page,
-}) => {
-  const runListGate = controlledGate();
-  const runListRequests: string[] = [];
-  await installCurrentProductApi(page, {
-    automationRunListGate: runListGate.promise,
-    automationRunListRequests: runListRequests,
-  });
-  await page.setViewportSize({width: 320, height: 720});
-  await page.goto('/');
-
-  await page.getByRole('button', {name: '设置', exact: true}).click();
-  await page.getByRole('button', {name: '处理流程', exact: true}).click();
-  const panel = page.locator('.entry-automation-policy');
-  await expect(
-    panel.getByRole('heading', {name: '自动分流', exact: true}),
-  ).toBeVisible();
-  await expect(panel.getByText('aaaaaaaa…aaaa', {exact: true})).toBeVisible();
-  await expect(
-    panel.getByRole('checkbox', {
-      name: '继续处理后生成自动标签',
-      exact: true,
-    }),
-  ).not.toBeChecked();
-  await expect(
-    panel.getByRole('checkbox', {
-      name: '标签处理后重建相似联系',
-      exact: true,
-    }),
-  ).not.toBeChecked();
-  await expect(
-    panel.getByText(
-      '两项默认关闭。开启后处理“建议继续处理”的条目，使用已保存的排除词与别名，保留人工联系和图谱关系。',
-      {exact: true},
-    ),
-  ).toBeVisible();
-
-  await panel.getByRole('button', {name: '刷新记录', exact: true}).click();
-  await expect.poll(() => runListRequests.length).toBe(2);
-  await panel.getByRole('button', {name: '重新读取', exact: true}).click();
-  await expect.poll(() => runListRequests.length).toBe(3);
-  await expect(panel.getByText('cccccccc…cccc', {exact: true})).toBeVisible();
-
-  const lateResponse = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === '/api/v1/entries/automation/runs',
-  );
-  runListGate.release();
-  await lateResponse;
-  await expect(panel.getByText('bbbbbbbb…bbbb', {exact: true})).toHaveCount(0);
-  await expect(panel.getByText('cccccccc…cccc', {exact: true})).toBeVisible();
-
-  await panel
-    .getByRole('button', {name: /读取运行 cccccccc…cccc 的详情/u})
-    .click();
-  await expect(
-    panel.getByRole('heading', {name: '运行详情', exact: true}),
-  ).toBeVisible();
-  await expect(
-    panel.getByText(
-      '全部分流记录均已完成；这次运行只记录处理去向，没有修改条目内容。',
-      {
-        exact: true,
-      },
-    ),
-  ).toBeVisible();
-  await expect(
-    panel.getByText('cccccccc-cccc-4ccc-8ccc-cccccccccccc', {exact: true}),
-  ).toBeVisible();
-
-  for (const viewport of [
-    {width: 320, height: 720},
-    {width: 390, height: 844},
-    {width: 768, height: 900},
-    {width: 1024, height: 900},
-    {width: 1440, height: 1000},
-  ]) {
-    await page.setViewportSize(viewport);
-    await expect(
-      panel.getByRole('heading', {name: '运行详情', exact: true}),
-    ).toBeVisible();
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - window.innerWidth,
-    );
-    expect(overflow).toBeLessThanOrEqual(1);
-  }
-});
-
 test('cancels inline segment edits without writing or changing immutable source', async ({
   page,
 }) => {
@@ -1803,6 +1785,7 @@ test('cancels inline segment edits without writing or changing immutable source'
   const {snapshot} = await installJourneyApi(page, writes);
   await page.goto('/');
   await openWorkspace(page, '资料库');
+  await openDocumentEditor(page);
   await page.getByRole('button', {name: '修改分段', exact: true}).click();
   await page
     .getByRole('button', {name: '＋ 在这里分段', exact: true})
@@ -1812,6 +1795,7 @@ test('cancels inline segment edits without writing or changing immutable source'
   expect(writes).toEqual([]);
   await page.getByRole('button', {name: '取消本次分段', exact: true}).click();
   await expect(page.locator('.inline-structure-editor')).toHaveCount(0);
+  await openDocumentEditor(page);
   await page.getByRole('button', {name: '修改分段', exact: true}).click();
   await expect(page.getByLabel('条目 2 标题', {exact: true})).toHaveCount(0);
   expect(writes).toEqual([]);
@@ -1877,6 +1861,7 @@ test('previews existing structure changes before confirming with the plan versio
   await page.setViewportSize({width: 1440, height: 1000});
   await page.goto('/');
   await openWorkspace(page, '资料库');
+  await openDocumentEditor(page);
   await page.getByRole('button', {name: '修改分段', exact: true}).click();
   const title = page.getByLabel('条目 1 标题', {exact: true});
   await expect(title).toBeVisible();
@@ -2580,10 +2565,7 @@ test('refreshes the index explicitly, pauses between windows and retries only un
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
-  await page
-    .getByRole('navigation', {name: '产品工作区'})
-    .getByRole('button', {name: '数据阅览', exact: true})
-    .click();
+  await openWorkspace(page, '数据阅览');
   await openQuerySettings(page, '索引维护');
   const panel = page.getByRole('complementary', {name: '搜索索引维护'});
   await expect(panel).toContainText('已收录 0 / 65');
@@ -2698,7 +2680,7 @@ test('leaves index checkpoints durable without letting late requests resume an u
   );
   await page.goto('/');
   const navigation = page.getByRole('navigation', {name: '产品工作区'});
-  const query = navigation.getByRole('button', {name: '数据阅览', exact: true});
+  const query = navigation.getByRole('button', {name: '数据库', exact: true});
   const overview = {click: () => openWorkspace(page, '总览', navigation)};
   const panel = page.getByRole('complementary', {name: '搜索索引维护'});
   await query.click();
@@ -2893,144 +2875,17 @@ async function installSavedQueryApi(
   return {writes, reads, state: () => savedQueries};
 }
 
-test('floats query tools without resizing the reading area and preserves drafts', async ({
-  page,
-}, testInfo) => {
-  test.setTimeout(60_000);
-  const fixture = await installSavedQueryApi(page);
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto('/');
-  await openWorkspace(page, '查询');
-  await expect(page.getByRole('region', {name: '条目查询结果'})).toBeVisible();
-
-  for (const width of [320, 768, 1024, 1440, 2220]) {
-    await page.setViewportSize({width, height: 1000});
-    const triggers = page.locator(
-      '.query-studio-settings .floating-tool-panel__trigger',
-    );
-    await expect(triggers).toHaveCount(3);
-    for (const trigger of await triggers.all()) {
-      await trigger.scrollIntoViewIfNeeded();
-      const before = await page.locator('.query-studio-results').boundingBox();
-      const documentHeight = await page.evaluate(
-        () => document.documentElement.scrollHeight,
-      );
-      await trigger.click();
-      await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-      const surface = page.locator(
-        '.floating-tool-panel__surface:popover-open',
-      );
-      await expect(surface).toHaveCount(1);
-      const after = await page.locator('.query-studio-results').boundingBox();
-      expect(after).toEqual(before);
-      expect(
-        await page.evaluate(() => document.documentElement.scrollHeight),
-      ).toBe(documentHeight);
-      const bounds = await surface.boundingBox();
-      if (bounds === null) throw new Error('Floating tools are missing.');
-      expect(bounds.x).toBeGreaterThanOrEqual(0);
-      expect(bounds.y).toBeGreaterThanOrEqual(0);
-      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
-      expect(bounds.y + bounds.height).toBeLessThanOrEqual(1000);
-      expect(
-        await surface.evaluate(
-          (element) => element.scrollWidth - element.clientWidth,
-        ),
-      ).toBeLessThanOrEqual(1);
-      await page.keyboard.press('Tab');
-      await expect(surface.getByRole('button', {name: /^收起/u})).toBeFocused();
-      await page.keyboard.press('Escape');
-      await expect(trigger).toHaveAttribute('aria-expanded', 'false');
-      await expect(trigger).toBeFocused();
-    }
-  }
-
-  await page.setViewportSize({width: 1440, height: 900});
-  const saved = await openSavedQueryPanel(page);
-  const savedTrigger = page.getByRole('button', {
-    name: '查询管理',
-    exact: true,
-  });
-  await saved.getByRole('textbox', {name: '查询名称'}).fill('合成悬浮菜单草稿');
-  await openQuerySettings(page);
-  await expect(savedTrigger).toHaveAttribute('aria-expanded', 'false');
-  const filter = page.locator('.query-filter-drawer');
-  const filterSurface = filter.locator('.floating-tool-panel__surface');
-  await expect(filterSurface).toBeVisible();
-  const body = filterSurface.locator('.floating-tool-panel__body');
-  expect(
-    await body.evaluate(
-      (element) => element.scrollHeight > element.clientHeight,
-    ),
-  ).toBe(true);
-  await filter.getByRole('combobox', {name: '隐私结果'}).selectOption('all');
-  await expect(filter.getByRole('combobox', {name: '隐私结果'})).toHaveValue(
-    'all',
-  );
-  await page.keyboard.press('Escape');
-  await openQuerySettings(page);
-  await expect(filter.getByRole('combobox', {name: '隐私结果'})).toHaveValue(
-    'all',
-  );
-  await filter.getByRole('button', {name: '清除筛选', exact: true}).click();
-  await page.keyboard.press('Escape');
-
-  await openSavedQueryPanel(page);
-  await expect(saved.getByRole('textbox', {name: '查询名称'})).toHaveValue(
-    '合成悬浮菜单草稿',
-  );
-  await savedTrigger.click();
-  await expect(savedTrigger).toHaveAttribute('aria-expanded', 'false');
-  await savedTrigger.focus();
-  await savedTrigger.press('Enter');
-  await expect(savedTrigger).toHaveAttribute('aria-expanded', 'true');
-  await page.getByRole('searchbox', {name: '搜索信息条目'}).click();
-  await expect(savedTrigger).toHaveAttribute('aria-expanded', 'false');
-
-  await openQuerySettings(page, '索引维护');
-  const indexTrigger = page.getByRole('button', {
-    name: '查询管理',
-    exact: true,
-  });
-  const indexSurface = page.locator(
-    '.floating-tool-panel__surface:popover-open',
-  );
-  const repair = indexSurface.locator(
-    '.entry-search-index-panel__repair > summary',
-  );
-  await repair.click();
-  await repair.click();
-  await expect(indexTrigger).toHaveAttribute('aria-expanded', 'true');
-  await expect(indexSurface).toBeVisible();
-  await indexSurface
-    .getByRole('button', {name: '读取状态', exact: true})
-    .click();
-  await expect(
-    indexSurface.getByRole('button', {name: '读取状态', exact: true}),
-  ).toBeEnabled();
-  await page.keyboard.press('Escape');
-  await expect(indexTrigger).toBeFocused();
-
-  for (const colorScheme of ['light', 'dark'] as const) {
-    await page.emulateMedia({colorScheme, reducedMotion: 'reduce'});
-    await openSavedQueryPanel(page);
-    await page.screenshot({
-      path: testInfo.outputPath('floating-tools-' + colorScheme + '.png'),
-    });
-    await page.getByRole('button', {name: '收起查询管理', exact: true}).click();
-    await expect(savedTrigger).toHaveAttribute('aria-expanded', 'false');
-  }
-  expect(fixture.writes).toEqual([]);
-  expect(errors).toEqual([]);
-});
-
 async function openSavedQueryPanel(page: Page) {
-  await openQuerySettings(page, '查询管理');
-  const panel = page.locator('.saved-query-panel');
-  if ((await panel.getAttribute('open')) === null)
-    await panel.getByRole('button', {name: /^保存的查询/u}).click();
-  return panel;
+  await closeFloatingTools(page);
+  const open = page.getByRole('button', {name: '展开内容范围', exact: true});
+  if (await open.isVisible()) await open.click();
+  const d = page
+    .locator('.side-left .filter-group')
+    .filter({has: page.locator('summary').filter({hasText: '保存的查询'})})
+    .first();
+  if ((await d.getAttribute('open')) === null)
+    await d.locator(':scope > summary').click();
+  return page.locator('.saved-query-panel');
 }
 
 test('saves and reopens named queries with current source and graph return', async ({
@@ -3061,13 +2916,16 @@ test('saves and reopens named queries with current source and graph return', asy
     });
   });
   await page.goto('/');
-  const nav = page.getByRole('navigation', {name: '产品工作区'});
-  await nav.getByRole('button', {name: '数据阅览', exact: true}).click();
+
+  await openWorkspace(page, '查询');
   await openQuerySettings(page);
   await page
-    .getByRole('searchbox', {name: '搜索信息条目'})
+    .getByRole('searchbox', {name: '关键词或问题'})
     .fill('合成检索条件');
-  await expect(page.getByText('条件已更改', {exact: true})).toHaveCount(0);
+  await submitQuery(page);
+  await expect(
+    page.locator('.entry-result-list button[data-active="true"]'),
+  ).toBeVisible();
   await expect(page.getByRole('region', {name: '条目查询结果'})).toBeVisible();
   const panel = await openSavedQueryPanel(page);
   await panel.getByRole('textbox', {name: '查询名称'}).fill('合成常用查询');
@@ -3079,14 +2937,14 @@ test('saves and reopens named queries with current source and graph return', asy
   });
   expect(fixture.writes[0]?.query).not.toHaveProperty('after');
   await page.reload();
-  await nav.getByRole('button', {name: '数据阅览', exact: true}).click();
+  await openWorkspace(page, '查询');
   await openQuerySettings(page);
   await openSavedQueryPanel(page);
   await panel
     .getByRole('combobox', {name: '已保存查询'})
     .selectOption({label: '合成常用查询'});
   await panel.getByRole('button', {name: '打开查询', exact: true}).click();
-  await expect(page.getByRole('searchbox', {name: '搜索信息条目'})).toHaveValue(
+  await expect(page.getByRole('searchbox', {name: '关键词或问题'})).toHaveValue(
     '合成检索条件',
   );
   await openQuerySettings(page, '阅读设置');
@@ -3097,14 +2955,14 @@ test('saves and reopens named queries with current source and graph return', asy
   expect(sourceReads.at(-1)).toContain(SNAPSHOT_ID);
   expect(sourceReads.at(-1)).not.toContain('includePrivate=true');
   await page.getByRole('button', {name: '关闭来源原文'}).click();
-  await expect(page.getByRole('searchbox', {name: '搜索信息条目'})).toHaveValue(
+  await expect(page.getByRole('searchbox', {name: '关键词或问题'})).toHaveValue(
     '合成检索条件',
   );
   await openQuerySettings(page, '阅读与导出');
   await page.getByRole('button', {name: '联系星图', exact: true}).click();
   await page.keyboard.press('Escape');
   await expect(
-    page.getByRole('heading', {name: '数据阅览', exact: true}),
+    page.getByRole('heading', {name: '数据库', exact: true}),
   ).toBeVisible();
   expect(graphReads.at(-1)).toMatchObject({
     centerEntryId: ENTRY_ID,
@@ -3113,7 +2971,7 @@ test('saves and reopens named queries with current source and graph return', asy
   await openQuerySettings(page, '阅读与导出');
   await page.getByRole('button', {name: '阅读正文', exact: true}).click();
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('searchbox', {name: '搜索信息条目'})).toHaveValue(
+  await expect(page.getByRole('searchbox', {name: '关键词或问题'})).toHaveValue(
     '合成检索条件',
   );
   await expect(
@@ -3127,7 +2985,7 @@ test('saves and reopens named queries with current source and graph return', asy
   await panel.getByRole('button', {name: '重命名', exact: true}).click();
   await expect(panel.getByText('查询已重命名。')).toBeVisible();
   await page
-    .getByRole('searchbox', {name: '搜索信息条目'})
+    .getByRole('searchbox', {name: '关键词或问题'})
     .fill('合成更新条件');
   await expect(page.getByText('条件已更改', {exact: true})).toHaveCount(0);
   await panel.getByRole('button', {name: '更新条件与位置'}).click();
@@ -3168,7 +3026,7 @@ test('restores an off-page selection and requires fresh private scope after navi
   });
   await page.goto('/');
   const nav = page.getByRole('navigation', {name: '产品工作区'});
-  await nav.getByRole('button', {name: '数据阅览', exact: true}).click();
+  await openWorkspace(page, '查询');
   await openQuerySettings(page);
   const panel = await openSavedQueryPanel(page);
   await panel
@@ -3194,21 +3052,21 @@ test('restores an off-page selection and requires fresh private scope after navi
   expect(fixture.reads.every((query) => query.includePrivate === false)).toBe(
     true,
   );
-  await page.getByRole('button', {name: '按保存的隐私范围打开'}).click();
+  await page.getByRole('button', {name: '按保存范围打开'}).click();
   await expect.poll(() => searches.at(-1)?.onlyPrivate).toBe(true);
   await expect.poll(() => fixture.reads.at(-1)?.includePrivate).toBe(true);
   await openWorkspace(page, '总览', nav);
   const previousPrivateCalls = searches.filter(
     (query) => query.includePrivate === true,
   ).length;
-  await nav.getByRole('button', {name: '数据阅览', exact: true}).click();
+  await openWorkspace(page, '查询');
   await expect(
     page.getByRole('region', {name: '重新选择隐私范围'}),
   ).toBeVisible();
   expect(
     searches.filter((query) => query.includePrivate === true),
   ).toHaveLength(previousPrivateCalls);
-  await page.getByRole('button', {name: '仅公开范围打开'}).click();
+  await page.getByRole('button', {name: '仅公开资料'}).click();
   await expect.poll(() => searches.at(-1)?.includePrivate).toBe(false);
   await expect(
     page.getByRole('region', {name: '重新选择隐私范围'}),
@@ -3266,10 +3124,7 @@ test('keeps saved-query controls responsive and offers recovery for unavailable 
     }),
   );
   await page.goto('/');
-  await page
-    .getByRole('navigation', {name: '产品工作区'})
-    .getByRole('button', {name: '数据阅览', exact: true})
-    .click();
+  await openWorkspace(page, '数据阅览');
   await openQuerySettings(page);
   const panel = await openSavedQueryPanel(page);
   await panel
@@ -3277,6 +3132,7 @@ test('keeps saved-query controls responsive and offers recovery for unavailable 
     .selectOption(WORKSPACE_ID);
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({width, height: 1000});
+    await openSavedQueryPanel(page);
     await panel.scrollIntoViewIfNeeded();
     await expect(panel).toBeVisible();
     const overflow = await page.evaluate(
@@ -3290,7 +3146,7 @@ test('keeps saved-query controls responsive and offers recovery for unavailable 
       expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
     }
     if (width === 1440) {
-      const search = await page.locator('.query-studio-search').boundingBox();
+      const search = await page.locator('.search-module').boundingBox();
       const results = await page.locator('.query-studio-results').boundingBox();
       if (search === null || results === null)
         throw new Error('Query layout is missing.');
@@ -3365,17 +3221,14 @@ test('discards a late private reading position and recovers from saved-view conf
     });
   });
   await page.goto('/');
-  await page
-    .getByRole('navigation', {name: '产品工作区'})
-    .getByRole('button', {name: '数据阅览', exact: true})
-    .click();
+  await openWorkspace(page, '数据阅览');
   await openQuerySettings(page);
   const panel = await openSavedQueryPanel(page);
   await panel
     .getByRole('combobox', {name: '已保存查询'})
     .selectOption(WORKSPACE_ID);
   await panel.getByRole('button', {name: '打开查询', exact: true}).click();
-  await page.getByRole('button', {name: '按保存的隐私范围打开'}).click();
+  await page.getByRole('button', {name: '按保存范围打开'}).click();
   await expect.poll(() => contextStarted).toBe(true);
   await openQuerySettings(page);
   await page.getByRole('combobox', {name: '隐私结果'}).selectOption('public');
@@ -3791,7 +3644,7 @@ test('reviews both exact sources, binds displayed revisions, handles conflicts a
   ).toHaveCount(20);
   await page.getByRole('button', {name: '返回图谱'}).click();
   await expect(
-    page.getByRole('heading', {name: '数据阅览', exact: true}),
+    page.getByRole('heading', {name: '数据库', exact: true}),
   ).toBeVisible();
 });
 
@@ -4041,10 +3894,7 @@ async function openMarkdownExportPanel(page: Page) {
 }
 async function openQueryForExport(page: Page) {
   await page.goto('/');
-  await page
-    .getByRole('navigation', {name: '产品工作区'})
-    .getByRole('button', {name: '数据阅览', exact: true})
-    .click();
+  await openWorkspace(page, '数据阅览');
   await expect(page.getByRole('region', {name: '条目查询结果'})).toContainText(
     '合成导出条目 1',
   );
@@ -4095,7 +3945,7 @@ test('exports a cited Markdown list from an explicit cross-page selection and cl
   expect(submitted).not.toHaveProperty('markdown');
   expect(submitted).not.toHaveProperty('path');
   await page
-    .getByRole('searchbox', {name: '搜索信息条目'})
+    .getByRole('searchbox', {name: '关键词或问题'})
     .fill('合成其他查询');
   await expect(panel.locator('summary')).toHaveText('资料清单与导出 · 0 条');
   expect(fixture.writes).toHaveLength(1);
@@ -4232,7 +4082,7 @@ test('waits for current query results before collecting or comparing after a fil
   await page.clock.install({time: new Date('2026-09-05T12:00:00Z')});
   await page.clock.pauseAt(new Date('2026-09-05T12:00:01Z'));
   await page
-    .getByRole('searchbox', {name: '搜索信息条目'})
+    .getByRole('searchbox', {name: '关键词或问题'})
     .fill('合成新的查询条件');
   await openMarkdownExportPanel(page);
   await expect(
@@ -4272,7 +4122,7 @@ test('keeps query pagination aligned after resubmitting and repeatedly clearing 
     '合成导出条目 2',
   );
   await expect(page.locator('.entry-pagination')).toContainText('第 2 页');
-  await page.getByRole('searchbox', {name: '搜索信息条目'}).press('Enter');
+  await page.getByRole('searchbox', {name: '关键词或问题'}).press('Enter');
   await expect(page.getByRole('region', {name: '条目查询结果'})).toContainText(
     '合成导出条目 1',
   );
@@ -4314,6 +4164,7 @@ test('edits a related entry from the document workbench without losing its readi
   await openWorkspace(page, '工作台');
   const paper = page.locator('.document-paper');
   const initial = await paper.boundingBox();
+  await openDocumentEditor(page);
   await page.getByRole('button', {name: '建立联系', exact: true}).click();
   const panel = page.getByRole('region', {name: '建立联系', exact: true});
   await panel
@@ -4343,8 +4194,9 @@ test('keeps manual type and tag correction readable in the document workbench', 
   await installCurrentProductApi(page, {restructureRequests: []});
   await page.goto('/');
   await openWorkspace(page, '工作台');
+  await openDocumentEditor(page);
   await page
-    .locator('.journey-floating-bar')
+    .locator('.reader-editor-actions')
     .getByRole('button', {name: '编辑标签', exact: true})
     .click();
   const panel = page.getByRole('region', {name: '添加标签', exact: true});
@@ -4410,10 +4262,7 @@ test('prioritizes reading with closed settings and keeps long titles and safe Ma
     }),
   );
   await page.goto('/');
-  await page
-    .getByRole('navigation', {name: '产品工作区'})
-    .getByRole('button', {name: '数据阅览', exact: true})
-    .click();
+  await openWorkspace(page, '数据阅览');
   await expect(page.locator('.reading-content strong')).toHaveText(
     'structured',
   );
@@ -4506,16 +4355,18 @@ test('shows only the latest actual task stage and handles cancellation and empty
   await expect(rail.locator('.ai-stage-list')).not.toContainText('处理中');
   status = 'succeeded';
   totalUnits = 1;
-  await page.getByRole('button', {name: '关闭队列', exact: true}).click();
-  await page.getByRole('button', {name: '刷新总览', exact: true}).click();
+  await page.keyboard.press('Escape');
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event('visibilitychange')),
+  );
   await page.getByRole('button', {name: '展开任务队列', exact: true}).click();
   await expect(rail.locator('.ai-stage-list')).toContainText('已完成');
   await expect(rail.locator('.ai-stage-list li')).toHaveCount(1);
-  await page.getByRole('button', {name: '关闭队列', exact: true}).click();
+  await page.keyboard.press('Escape');
   for (const width of [320, 768, 1024]) {
     await page.setViewportSize({width, height: 900});
     const navigation = page.getByRole('navigation', {name: '产品工作区'});
-    for (const label of ['文档入口', '工作台', '数据阅览', '报告']) {
+    for (const label of ['源管理', '文档阅读', '数据库']) {
       await expect(
         navigation.getByRole('button', {name: label, exact: true}),
       ).toBeVisible();
@@ -4617,6 +4468,7 @@ test('paginates and filters long document lists with exact source return', async
   );
   await page.goto('/');
   await openWorkspace(page, '工作台');
+  await page.getByRole('button', {name: /选择文档/}).click();
   const list = page.locator('.document-library-list');
   await expect(list.locator('.document-library-item__processing')).toHaveCount(
     20,
@@ -4630,6 +4482,7 @@ test('paginates and filters long document lists with exact source return', async
   expect(scrollBefore).toBeGreaterThan(100);
   holdSelectedTask = true;
   await target.click();
+  await page.getByRole('button', {name: /选择文档/}).click();
   await selectedTaskStarted.promise;
   try {
     await expect(list.locator('ol > li')).toHaveCount(20);
@@ -4639,9 +4492,9 @@ test('paginates and filters long document lists with exact source return', async
   } finally {
     selectedTaskResponse.release();
   }
-  await expect(page.getByLabel('本文 AI 处理')).toContainText(
-    'AI 等待低价时段',
-  );
+  await expect(
+    list.locator('.document-library-item__processing').first(),
+  ).toBeVisible();
   expect(
     await scrollBox.evaluate((element) => element.scrollTop),
   ).toBeGreaterThan(scrollBefore - 60);
@@ -4650,6 +4503,7 @@ test('paginates and filters long document lists with exact source return', async
   await list.getByRole('button', {name: '下一页', exact: true}).click();
   await expect(list.locator('ol > li')).toHaveCount(5);
   await list.locator('.document-library-item').last().click();
+  await page.getByRole('button', {name: /选择文档/}).click();
   await expect
     .poll(() => requestedSources.at(-1))
     .toBe(snapshots[44]?.snapshotId);
@@ -4673,152 +4527,6 @@ test('paginates and filters long document lists with exact source return', async
     ).toBeLessThanOrEqual(1);
     await list.getByRole('button', {name: '上一页', exact: true}).click();
   }
-});
-
-test('keeps subscription save outside a long scrollable list and locates new drafts', async ({
-  page,
-}) => {
-  await installCurrentProductApi(page);
-  await page.route('**/api/v1/workspace', (route) =>
-    route.fulfill({
-      json: {
-        status: 'ok',
-        workspaceId: WORKSPACE_ID,
-        capabilities: ['source_subscriptions'],
-      },
-    }),
-  );
-  let subscriptions = Array.from({length: 12}, (_, index) => ({
-    subscriptionId:
-      String(index).padStart(8, '0') + '-0000-4000-8000-000000000012',
-    kind: 'rss_atom',
-    label: 'Synthetic subscription ' + String(index + 1),
-    enabled: false,
-    sourceAlias: 'synthetic-' + String(index),
-    isPrivate: false,
-    routeAfterImport: false,
-    intervalMinutes: 1440,
-    feedUrl: 'https://example.invalid/feed-' + String(index),
-    itemLimit: 20,
-  }));
-  let saves = 0;
-  await page.route('**/api/v1/source-subscriptions', (route) => {
-    if (route.request().method() === 'PUT') {
-      const body = route.request().postDataJSON() as {
-        subscriptions: typeof subscriptions;
-      };
-      subscriptions = body.subscriptions;
-      saves += 1;
-      return route.fulfill({
-        json: {status: 'applied', revision: saves, subscriptions},
-      });
-    }
-    return route.fulfill({
-      json: {
-        status: 'ok',
-        revision: saves,
-        connectors: Array.from({length: 3}, (_, index) => ({
-          connectorId: 'synthetic-connector-' + String(index),
-          displayName:
-            index === 0
-              ? 'Synthetic' + 'LongConnectorName'.repeat(8)
-              : 'Synthetic connector ' + String(index),
-          origin: 'builtin',
-          configurationMode: 'internal',
-        })),
-        subscriptions,
-      },
-    });
-  });
-  await page.goto('/');
-  await openWorkspace(page, '文档入口');
-  await page.getByRole('button', {name: '选择来源', exact: true}).click();
-  await page.getByRole('button', {name: '管理订阅', exact: true}).click();
-  const list = page.getByRole('list', {name: '订阅列表'});
-  await page.locator('summary').filter({hasText: '可用订阅渠道'}).click();
-  const channels = page.getByLabel('可用订阅方式', {exact: true});
-  await expect(channels.getByRole('listitem')).toHaveCount(3);
-  for (const width of [1440, 390, 320]) {
-    await page.setViewportSize({width, height: 900});
-    await expect(channels).toBeVisible();
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth - window.innerWidth,
-      ),
-    ).toBeLessThanOrEqual(1);
-    const last = list.locator(':scope > li').last();
-    const disclosure = last.locator('summary');
-    if (
-      !(await last
-        .locator('details')
-        .evaluate((node) => node.hasAttribute('open')))
-    )
-      await disclosure.click();
-    await last
-      .getByRole('textbox', {name: '显示名称', exact: true})
-      .fill('Synthetic edited ' + String(width));
-    const save = page.getByRole('button', {name: '保存订阅设置', exact: true});
-    expect(
-      await save.evaluate((node) => !node.closest('.source-subscription-list')),
-    ).toBe(true);
-    expect((await list.boundingBox())?.height).toBeLessThanOrEqual(540);
-    await save.click();
-    await expect(page.getByText('订阅已保存', {exact: true})).toBeVisible();
-    expect(subscriptions.at(-1)?.label).toBe(
-      'Synthetic edited ' + String(width),
-    );
-  }
-  expect(saves).toBe(3);
-  await page.getByRole('button', {name: '新增订阅', exact: true}).click();
-  const draft = list.locator(':scope > li').last();
-  await expect(
-    draft.getByRole('textbox', {name: '显示名称', exact: true}),
-  ).toBeFocused();
-  await draft.getByRole('button', {name: '删除', exact: true}).click();
-  await expect(list.locator(':scope > li')).toHaveCount(12);
-  await expect(
-    page.getByRole('button', {name: '保存订阅设置', exact: true}),
-  ).toBeDisabled();
-});
-
-test('resizes document columns with keyboard and remembers the width after reload', async ({
-  page,
-}) => {
-  await installCurrentProductApi(page, {restructureRequests: []});
-  await page.setViewportSize({width: 1440, height: 1000});
-  await page.goto('/');
-  await openWorkspace(page, '工作台');
-  const divider = page.getByRole('separator', {name: '调整列表宽度'});
-  await expect(divider).toHaveAttribute('aria-valuenow', '320');
-  await divider.focus();
-  await divider.press('ArrowRight');
-  await divider.press('ArrowRight');
-  await expect(divider).toHaveAttribute('aria-valuenow', '360');
-  expect(
-    (await page.locator('.journey-pane--list:visible').boundingBox())?.height,
-  ).toBeCloseTo(
-    (await page.locator('.journey-pane--body:visible').boundingBox())?.height ??
-      0,
-    0,
-  );
-  await page.reload();
-  await openWorkspace(page, '工作台');
-  await expect(divider).toHaveAttribute('aria-valuenow', '360');
-  await divider.focus();
-  await divider.press('Home');
-  await expect(divider).toHaveAttribute('aria-valuenow', '240');
-  await page
-    .locator('.journey-floating-bar')
-    .getByRole('button', {name: '编辑标签', exact: true})
-    .focus();
-  await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', {name: '关闭添加标签'})).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(
-    page
-      .locator('.journey-floating-bar')
-      .getByRole('button', {name: '编辑标签', exact: true}),
-  ).toBeFocused();
 });
 
 test('intake recovery selects evidence and refreshes captures without starting a task', async ({
@@ -4914,10 +4622,7 @@ test('intake recovery selects evidence and refreshes captures without starting a
   await page
     .getByRole('combobox', {name: '接收状态', exact: true})
     .selectOption('accepted');
-  await page
-    .locator('.journey-action-menu summary')
-    .filter({hasText: '更多'})
-    .click();
+  await page.getByRole('button', {name: '更多接收操作', exact: true}).click();
   await page.getByRole('button', {name: '接收详情与正文恢复'}).click();
   const panel = page
     .getByRole('region', {name: '接收审核与拦截', exact: true})
@@ -4988,15 +4693,21 @@ test('DeepSeek price settings save with version checks and preserve drafts acros
   });
   await page.goto('/');
   await openWorkspace(page, '设置');
-  await page.getByRole('button', {name: 'AI 设置', exact: true}).click();
-  const panel = page.locator('.ai-price-settings');
-  const toggle = panel.getByRole('checkbox', {
+  await page.getByRole('link', {name: 'AI 执行', exact: true}).click();
+  const panel = page
+    .locator('.setting-card')
+    .filter({has: page.getByRole('heading', {name: '价格时段', exact: true})});
+  const toggle = panel.getByRole('switch', {
     name: '仅在 DeepSeek 低价时段调用',
   });
   await toggle.check();
   await panel.getByRole('button', {name: '保存时段设置'}).click();
-  await expect(panel.getByText('高峰 · 等待低价', {exact: true})).toBeVisible();
-  await expect(panel.getByText(/北京时间 1\/2 12:00 后自动续跑/)).toBeVisible();
+  await expect(
+    panel.getByText('高峰时段，等待低价', {exact: true}),
+  ).toBeVisible();
+  await expect(
+    panel.getByText(/下次允许调用：北京时间 1\/2 12:00/),
+  ).toBeVisible();
   expect(writes).toEqual([{revision: 0, enabled: true}]);
   await toggle.uncheck();
   await panel.getByRole('button', {name: '刷新状态'}).click();
@@ -5023,6 +4734,7 @@ async function openWorkspace(
   label: string,
   navigation: Locator = page.getByRole('navigation', {name: '产品工作区'}),
 ) {
+  await closeFloatingTools(page);
   if (label === '总览') {
     await page
       .getByRole('button', {name: 'StruInfo · 运行总览', exact: true})
@@ -5031,23 +4743,47 @@ async function openWorkspace(
   }
   if (label === '设置' || ['标签', '联系', '拆分'].includes(label)) {
     await page.getByRole('button', {name: '设置', exact: true}).click();
-    if (label !== '设置')
-      await page.getByRole('button', {name: '处理流程', exact: true}).click();
+    if (label !== '设置') {
+      await page.getByRole('link', {name: '自动处理', exact: true}).click();
+      await page
+        .getByRole('button', {name: '拆分与本地推荐', exact: true})
+        .click();
+    }
     return;
   }
   const names: Record<string, string> = {
-    导入: '文档入口',
-    收件箱: '文档入口',
-    资料库: '工作台',
-    查询: '数据阅览',
-    知识: '数据阅览',
+    导入: '源管理',
+    收件箱: '源管理',
+    文档入口: '源管理',
+    资料库: '文档阅读',
+    工作台: '文档阅读',
+    查询: '数据库',
+    知识: '数据库',
+    数据阅览: '数据库',
+    报告: '数据库',
   };
   await navigation
     .getByRole('button', {name: names[label] ?? label, exact: true})
     .click();
-  if (label === '导入') {
-    await page.getByRole('button', {name: '选择来源', exact: true}).click();
-    await page.getByRole('button', {name: /放入文档/u}).click();
+  if (label === '导入')
+    await page.getByRole('button', {name: '手动放入', exact: true}).click();
+  if (['文档入口', '收件箱'].includes(label))
+    await page.getByRole('button', {name: /接收记录与计划/u}).click();
+  if (['查询', '知识', '数据阅览'].includes(label))
+    await page
+      .getByRole('search')
+      .getByRole('button', {name: '搜索', exact: true})
+      .click();
+  if (
+    label === '报告' &&
+    !(await page.getByRole('dialog', {name: '报告', exact: true}).isVisible())
+  ) {
+    const panel = page.getByRole('button', {name: '展开报告', exact: true});
+    if (await panel.isVisible()) await panel.click();
+    const card = page.locator('.database-report-card').first();
+    if (await card.isVisible()) await card.click();
+    else
+      await page.getByRole('button', {name: '新建报告', exact: true}).click();
   }
   if (label === '知识') {
     await openQuerySettings(page, '阅读与导出');
@@ -5075,16 +4811,18 @@ test('keeps document reading stable through source, structure, tags and relation
   await expect(paper).toContainText(SYNTHETIC_ENTRY.value.titlePath);
   const before = await paper.boundingBox();
   if (before === null) throw Error('Reading paper missing');
+  await openDocumentEditor(page);
   await page.getByRole('button', {name: '来源与证据', exact: true}).click();
   await expect(
     page.getByRole('region', {name: '来源详情', exact: true}),
   ).toContainText('原文片段');
   await page.keyboard.press('Escape');
   await expect(
-    page.getByRole('button', {name: '来源与证据', exact: true}),
-  ).toBeFocused();
+    page.getByRole('button', {name: '编辑', exact: true}),
+  ).toBeVisible();
+  await openDocumentEditor(page);
   await page
-    .locator('.journey-floating-bar')
+    .locator('.reader-editor-actions')
     .getByRole('button', {name: '编辑标签', exact: true})
     .click();
   const tags = page.getByRole('region', {name: '添加标签', exact: true});
@@ -5094,6 +4832,7 @@ test('keeps document reading stable through source, structure, tags and relation
     .getByRole('combobox', {name: '主领域', exact: true})
     .selectOption('engineering_computing');
   await page.getByRole('button', {name: '关闭添加标签'}).click();
+  await openDocumentEditor(page);
   await page.getByRole('button', {name: '建立联系', exact: true}).click();
   await expect(
     page
@@ -5101,8 +4840,9 @@ test('keeps document reading stable through source, structure, tags and relation
       .locator('.knowledge-inspector'),
   ).toBeVisible();
   await page.getByRole('button', {name: '关闭建立联系'}).click();
+  await openDocumentEditor(page);
   await page
-    .locator('.journey-floating-bar')
+    .locator('.reader-editor-actions')
     .getByRole('button', {name: '编辑标签', exact: true})
     .click();
   await expect(keywords).toHaveValue('合成关键词');
@@ -5124,7 +4864,7 @@ test('keeps document reading stable through source, structure, tags and relation
     },
   });
   await expect(
-    page.getByRole('heading', {name: '工作台', exact: true}),
+    page.getByRole('heading', {name: '文档阅读', exact: true}),
   ).toBeVisible();
 });
 
@@ -5156,8 +4896,8 @@ test('persists appearance while keeping document actions stable and preserves a 
   await expect(
     page.getByRole('heading', {name: '光效与动画', exact: true}),
   ).toBeVisible();
-  await page.getByRole('combobox', {name: '默认外观'}).selectOption('dark');
-  await page.getByRole('button', {name: '保存页面设置', exact: true}).click();
+  await page.getByRole('combobox', {name: '主题'}).selectOption('dark');
+  await page.getByRole('button', {name: '保存主题', exact: true}).click();
   await expect(page.getByText('已保存。', {exact: true})).toBeVisible();
   expect(writes[0]?.sidebars).toEqual(
     DEFAULT_WORKSPACE_UI_PREFERENCES.sidebars,
@@ -5165,7 +4905,8 @@ test('persists appearance while keeping document actions stable and preserves a 
   await page.reload();
   await openWorkspace(page, '工作台');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  const actions = page.locator('.journey-floating-bar');
+  await openDocumentEditor(page);
+  const actions = page.locator('.reader-editor-actions');
   await expect(
     actions.getByRole('button', {name: '修改分段', exact: true}),
   ).toBeVisible();
@@ -5174,19 +4915,15 @@ test('persists appearance while keeping document actions stable and preserves a 
   ).toBeVisible();
   await openWorkspace(page, '设置');
   conflict = true;
-  await page.getByRole('combobox', {name: '默认外观'}).selectOption('light');
-  await page.getByRole('button', {name: '保存页面设置', exact: true}).click();
+  await page.getByRole('combobox', {name: '主题'}).selectOption('light');
+  await page.getByRole('button', {name: '保存主题', exact: true}).click();
   await expect(
-    page.locator('.interface-settings').getByRole('status'),
+    page.locator('.appearance-card').getByRole('status'),
   ).toContainText('当前草稿仍然保留');
-  await expect(page.getByRole('combobox', {name: '默认外观'})).toHaveValue(
-    'light',
-  );
+  await expect(page.getByRole('combobox', {name: '主题'})).toHaveValue('light');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await page.getByRole('button', {name: '撤销未保存的修改'}).click();
-  await expect(page.getByRole('combobox', {name: '默认外观'})).toHaveValue(
-    'dark',
-  );
+  await page.getByRole('button', {name: '重新读取'}).click();
+  await expect(page.getByRole('combobox', {name: '主题'})).toHaveValue('dark');
 });
 
 test('applies browser appearance controls and keeps settings groups open', async ({
@@ -5208,10 +4945,10 @@ test('applies browser appearance controls and keeps settings groups open', async
   for (let i = 0; i < 8; i++) await glow.press('ArrowRight');
   await expect(glow).toHaveValue('40');
   await expect(page.locator('body')).toHaveAttribute('data-glow', 'on');
-  await settings.getByRole('checkbox', {name: /玻璃效果/u}).uncheck();
-  await settings.getByRole('checkbox', {name: /^界面动画/u}).uncheck();
+  await settings.getByRole('switch', {name: /玻璃效果/u}).uncheck();
+  await settings.getByRole('switch', {name: /^界面动画/u}).uncheck();
   await expect(
-    settings.getByRole('checkbox', {name: /^流程动画/u}),
+    settings.getByRole('switch', {name: /^流程动画/u}),
   ).toBeDisabled();
   const size = settings.getByRole('slider', {name: /正文字号/u});
   await size.focus();
@@ -5259,26 +4996,20 @@ test('applies browser appearance controls and keeps settings groups open', async
       animations: 'disabled',
     });
   }
-  await page.getByRole('button', {name: '处理流程', exact: true}).click();
-  for (const title of [
-    '结构规则',
-    '标签与个人词表',
-    '联系推荐',
-    '偏好规则',
-    '自动分流',
-  ])
-    await expect(
-      settings.getByRole('heading', {name: title, exact: true}),
-    ).toBeVisible();
+  await page.getByRole('link', {name: '自动处理', exact: true}).click();
   await expect(
-    settings.getByRole('button', {name: '预览当前文档', exact: true}),
-  ).toHaveCount(0);
-  await page.getByRole('button', {name: '数据与维护', exact: true}).click();
+    settings.getByRole('button', {name: '拆分与本地推荐', exact: true}),
+  ).toBeVisible();
+  await page.getByRole('link', {name: '标签与词表', exact: true}).click();
   await expect(
-    settings.getByRole('button', {name: '刷新材料列表', exact: true}),
-  ).toHaveCount(0);
+    settings.getByRole('button', {name: '维度、词条与别名', exact: true}),
+  ).toBeVisible();
+  await page.getByRole('link', {name: '数据与维护', exact: true}).click();
+  await settings
+    .getByRole('button', {name: '导入、导出与恢复', exact: true})
+    .click();
   await expect(
-    settings.getByRole('button', {name: '导出全部个人数据', exact: true}),
+    page.getByRole('button', {name: '导出全部个人数据', exact: true}),
   ).toBeVisible();
 });
 
@@ -5295,7 +5026,6 @@ test('AI controls preserve drafts across refresh and filters, pause saved policy
       manualUploads: true,
       model: 'synthetic-model',
       maxEntries: 12,
-      maxRelations: 2,
       maxModelCalls: 20,
       maxDocumentsPerDay: 10,
     },
@@ -5315,8 +5045,14 @@ test('AI controls preserve drafts across refresh and filters, pause saved policy
     if (
       operation.startsWith('ai_price_') ||
       operation === 'reports_list' ||
+      operation === 'report_pipeline_status' ||
+      operation === 'topics_list' ||
+      operation === 'topic_jobs' ||
       operation === 'intake_status' ||
-      operation === 'source_quality_status'
+      operation === 'source_quality_status' ||
+      operation.startsWith('annotation_') ||
+      operation.startsWith('topic_') ||
+      operation.startsWith('split_')
     ) {
       await route.fallback();
       return;
@@ -5370,182 +5106,44 @@ test('AI controls preserve drafts across refresh and filters, pause saved policy
     await route.fulfill({json: {result}});
   });
   await page.goto('/');
-  await page.getByRole('button', {name: '设置', exact: true}).click();
-  await page.getByRole('button', {name: 'AI 设置', exact: true}).click();
-  const panel = page.locator('.settings-content .ai-workflow-panel');
-  await expect(
-    panel.getByText('内部模型：未配置', {exact: true}),
-  ).toBeVisible();
-  await panel
-    .getByRole('spinbutton', {name: '每日新文档', exact: true})
-    .fill('7');
-  await expect(
-    panel.getByRole('button', {name: '保存处理策略', exact: true}),
-  ).toBeDisabled();
+  await openWorkspace(page, '设置');
+  await page.getByRole('link', {name: '自动处理', exact: true}).click();
+  const panel = page.locator('.ai-automation-settings');
+  await expect(panel.getByText('模型尚未配置。', {exact: true})).toBeVisible();
+  const limit = panel.getByRole('spinbutton', {
+    name: '每日新文档',
+    exact: true,
+  });
+  await limit.fill('7');
+  const save = panel.getByRole('button', {name: '保存处理策略', exact: true});
+  await expect(save).toBeDisabled();
   configured = true;
-  await panel.getByRole('button', {name: '刷新处理状态', exact: true}).click();
-  await expect(
-    panel.getByRole('button', {name: '保存处理策略', exact: true}),
-  ).toBeEnabled();
-  await expect(
-    panel.getByRole('spinbutton', {name: '每日新文档', exact: true}),
-  ).toHaveValue('7');
-  await panel
-    .getByRole('combobox', {name: '自动处理状态筛选'})
-    .selectOption('completed');
-  await expect(
-    panel.getByText(
-      '当前没有符合条件的记录。新资料进入授权范围后会出现在这里。',
-    ),
-  ).toBeVisible();
-  await expect(
-    panel.getByRole('spinbutton', {name: '每日新文档', exact: true}),
-  ).toHaveValue('7');
-  await panel.getByRole('button', {name: '暂停自动处理', exact: true}).click();
-  await expect(
-    panel.getByRole('button', {name: '恢复自动处理', exact: true}),
-  ).toBeVisible();
-  expect(writes[0]).toMatchObject({
-    expectedRevision: 1,
-    settings: {paused: true, maxDocumentsPerDay: 10},
-  });
-  await panel.getByRole('button', {name: '保存处理策略', exact: true}).click();
-  await expect(
-    panel.getByRole('spinbutton', {name: '每日新文档', exact: true}),
-  ).toHaveValue('7');
-  await expect(
-    panel.getByText('服务器策略已变化，当前草稿保留。可重新读取最新策略。'),
-  ).toBeVisible();
+  await panel.getByRole('button', {name: '刷新状态', exact: true}).click();
+  await expect(save).toBeEnabled();
+  await expect(limit).toHaveValue('7');
+  policy = {
+    ...policy,
+    revision: 2,
+    settings: {...policy.settings, paused: true},
+  };
+  await panel.getByRole('button', {name: '刷新状态', exact: true}).click();
+  await expect(panel.getByText(/服务器策略已变化/)).toBeVisible();
+  await expect(limit).toHaveValue('7');
+  await save.click();
+  await expect(panel.getByRole('status').last()).toContainText('策略');
   await panel.getByRole('button', {name: '重新读取策略', exact: true}).click();
+  await expect(limit).toHaveValue('10');
   await expect(
-    panel.getByRole('spinbutton', {name: '每日新文档', exact: true}),
-  ).toHaveValue('10');
-  await panel
-    .getByRole('combobox', {name: '自动处理状态筛选'})
-    .selectOption('attention');
-  await panel.getByRole('button', {name: '重试 / 继续', exact: true}).click();
-  expect(controls[0]).toMatchObject({
-    snapshotId: SNAPSHOT_ID,
-    expectedVersion: 1,
-    action: 'retry',
+    panel.getByRole('switch', {name: '暂停处理，继续收件', exact: true}),
+  ).toBeChecked();
+  await limit.fill('7');
+  await save.click();
+  await expect(panel.getByRole('status').last()).toContainText('已保存');
+  expect(writes.at(-1)).toMatchObject({
+    expectedRevision: 2,
+    settings: {maxDocumentsPerDay: 7, paused: true},
   });
-  await panel
-    .getByRole('combobox', {name: '自动处理状态筛选'})
-    .selectOption('');
-  await panel.getByRole('button', {name: '人工接管', exact: true}).click();
-  expect(controls[1]).toMatchObject({
-    snapshotId: SNAPSHOT_ID,
-    expectedVersion: 2,
-    action: 'take_over',
-  });
-  await expect(
-    panel
-      .getByRole('list', {name: '自动处理文档'})
-      .getByText('已接管', {exact: false}),
-  ).toBeVisible();
-  for (const [width, height] of [
-    [1440, 1000],
-    [768, 1024],
-    [320, 800],
-  ] as const) {
-    await page.setViewportSize({width, height});
-    await page.emulateMedia({
-      colorScheme: width === 1440 ? 'dark' : 'light',
-      reducedMotion: 'reduce',
-    });
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () => document.documentElement.scrollWidth <= window.innerWidth,
-        ),
-      )
-      .toBe(true);
-    await page.locator('.settings-content').evaluate((el) => {
-      el.scrollTop = 0;
-    });
-    if (process.env.STRUIINFO_UI_EVIDENCE_ROOT)
-      await page.screenshot({
-        path:
-          process.env.STRUIINFO_UI_EVIDENCE_ROOT +
-          '/ai-settings-' +
-          width.toString() +
-          '.png',
-        fullPage: true,
-      });
-  }
-});
-
-test('AI task details distinguish completed no-relation evaluations from written edges', async ({
-  page,
-}) => {
-  await installCurrentProductApi(page);
-  await page.route('**/api/v1/*/commands', async (route) => {
-    const {operation} = route.request().postDataJSON() as {operation: string};
-    if (
-      operation.startsWith('ai_price_') ||
-      operation === 'reports_list' ||
-      operation === 'intake_status' ||
-      operation === 'source_quality_status'
-    ) {
-      await route.fallback();
-      return;
-    }
-    const result =
-      operation === 'system_status'
-        ? {role: 'all', model: 'synthetic-model', grants: []}
-        : operation === 'tasks_list'
-          ? [
-              {
-                taskId: SNAPSHOT_ID,
-                version: 1,
-                request: {kind: 'document'},
-                state: {
-                  status: 'succeeded',
-                  phase: 'complete',
-                  calls: 3,
-                  steps: [
-                    {complete: true},
-                    {complete: true},
-                    {complete: true, outcome: 'no_relation'},
-                  ],
-                },
-              },
-            ]
-          : operation === 'ingestion_status'
-            ? {
-                policy: {
-                  revision: 0,
-                  settings: {
-                    enabled: false,
-                    paused: false,
-                    subscriptionIds: [],
-                    manualUploads: false,
-                    model: 'synthetic-model',
-                    maxEntries: 8,
-                    maxRelations: 2,
-                    maxModelCalls: 14,
-                    maxDocumentsPerDay: 3,
-                  },
-                },
-                modelConfigured: true,
-                summary: {counts: {}, admittedToday: 0, modelAttempts: 0},
-                items: [],
-              }
-            : [];
-    await route.fulfill({json: {result}});
-  });
-  await page.goto('/');
-  await page.getByRole('button', {name: '设置', exact: true}).click();
-  await page.getByRole('button', {name: 'AI 设置', exact: true}).click();
-  const panel = page.locator('.settings-content .ai-workflow-panel');
-  await panel
-    .locator('summary')
-    .filter({hasText: '独立任务与阶段明细'})
-    .click();
-  await expect(
-    panel.getByText('未建立联系：1 对候选缺少明确依据。'),
-  ).toBeVisible();
-  await expect(panel.getByText(/3\/3 步/)).toBeVisible();
+  expect(controls).toEqual([]);
 });
 
 test('creates, reviews and exports cited reports while preserving reading context across workspaces', async ({
@@ -5776,7 +5374,7 @@ test('creates, reviews and exports cited reports while preserving reading contex
     .first()
     .click();
   await expect(
-    page.getByRole('heading', {name: '工作台', exact: true}),
+    page.getByRole('heading', {name: '文档阅读', exact: true}),
   ).toBeVisible();
   await openWorkspace(page, '报告');
   await expect(
@@ -5818,7 +5416,7 @@ test('creates, reviews and exports cited reports while preserving reading contex
     .getByRole('button', {name: '[1] Synthetic report article', exact: true})
     .click();
   await expect(
-    page.getByRole('heading', {name: '工作台', exact: true}),
+    page.getByRole('heading', {name: '文档阅读', exact: true}),
   ).toBeVisible();
   await expect(editor).not.toBeVisible();
   const changedElsewhere = record;
@@ -6007,19 +5605,27 @@ test('documents show scoped AI work and result details without moving the readin
   await page.setViewportSize({width: 1440, height: 1000});
   await page.goto('/');
   await openWorkspace(page, '资料库');
-  const strip = page.getByRole('region', {name: '本文 AI 处理', exact: true});
-  await expect(strip).toContainText('AI 等待低价时段');
-  expect(scoped.some((ids) => ids.includes(SNAPSHOT_ID))).toBe(true);
-  const paper = page.locator('.document-paper');
-  const before = await paper.boundingBox();
-  await strip.getByRole('button', {name: '处理详情', exact: true}).click();
+  const openDetails = async () => {
+    if (
+      await page
+        .getByRole('region', {name: 'AI 处理详情', exact: true})
+        .isVisible()
+    )
+      return;
+    await openDocumentEditor(page);
+    await page.getByRole('button', {name: 'AI 处理', exact: true}).click();
+  };
+  await openDetails();
   const details = page.getByRole('region', {name: 'AI 处理详情', exact: true});
+  await expect(details).toContainText('AI 等待低价时段');
   await expect(details).toContainText('0 次调用尝试');
-  expect(await paper.boundingBox()).toEqual(before);
-  await page.keyboard.press('Escape');
-  await expect(
-    strip.getByRole('button', {name: '处理详情', exact: true}),
-  ).toBeFocused();
+  expect(scoped.some((ids) => ids.includes(SNAPSHOT_ID))).toBe(true);
+  const paper = page.locator('.reading-stage');
+  const before = await paper.boundingBox();
+  await details
+    .getByRole('button', {name: '关闭AI 处理详情', exact: true})
+    .click();
+  await closeFloatingTools(page);
   task = {
     ...task,
     version: 2,
@@ -6057,8 +5663,9 @@ test('documents show scoped AI work and result details without moving the readin
     },
   };
   await page.getByRole('button', {name: '刷新文档', exact: true}).click();
-  await expect(strip).toContainText('AI 处理完成');
-  await strip.getByRole('button', {name: '处理详情', exact: true}).click();
+  await openDetails();
+  await expect(details).toContainText('AI 处理完成');
+  if (!(await details.isVisible())) await openDetails();
   await expect(details).toContainText('已建 0 · 未建 1 · 1 未评估');
   await details.getByText('候选 1 · 未建立联系', {exact: true}).click();
   await expect(details).toContainText('合成主题相似但没有明确关系');
@@ -6068,34 +5675,34 @@ test('documents show scoped AI work and result details without moving the readin
   await expect(paper).toContainText(SYNTHETIC_ENTRY.value.body);
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({width, height: 1000});
-    await strip.getByRole('button', {name: '处理详情', exact: true}).click();
+    if (!(await details.isVisible())) await openDetails();
     await expect(details).toBeVisible();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth - innerWidth,
       ),
     ).toBeLessThanOrEqual(1);
-    await page.keyboard.press('Escape');
+    await details
+      .getByRole('button', {name: '关闭AI 处理详情', exact: true})
+      .click();
+    await closeFloatingTools(page);
   }
   fail = true;
   await page.getByRole('button', {name: '刷新文档', exact: true}).click();
-  await expect(strip).toContainText('处理状态读取失败');
-  await expect(paper).toContainText(SYNTHETIC_ENTRY.value.body);
+  await openDetails();
+  await expect(details).toContainText('读取');
+  await details
+    .getByRole('button', {name: '关闭AI 处理详情', exact: true})
+    .click();
+  await closeFloatingTools(page);
+  await page.setViewportSize({width: 1440, height: 1000});
+  expect(await paper.boundingBox()).toEqual(before);
   fail = false;
-  await strip.getByRole('button', {name: '重试状态', exact: true}).click();
-  await expect(strip).toContainText('AI 处理完成');
+  await page.getByRole('button', {name: '刷新文档', exact: true}).click();
+  await openDetails();
+  await expect(details).toContainText('AI 处理完成');
   expect(writes).toEqual([]);
   expect(runtimeErrors).toEqual([]);
-  await page.emulateMedia({reducedMotion: 'reduce'});
-  for (const theme of ['浅色', '深色']) {
-    await page.emulateMedia({colorScheme: theme === '深色' ? 'dark' : 'light'});
-    await strip.getByRole('button', {name: '处理详情', exact: true}).click();
-    await page.screenshot({
-      path: test.info().outputPath('document-processing-' + theme + '.png'),
-      fullPage: true,
-    });
-    await page.keyboard.press('Escape');
-  }
 });
 
 test('document source shows real split lines and header annotations across entry pages', async ({
@@ -6424,20 +6031,28 @@ test('document source shows real split lines and header annotations across entry
       fullPage: true,
     });
   }
-  await source.evaluate((element) => {
+  await page.locator('.content-reading-main').evaluate((element) => {
     element.scrollTop = 400;
   });
-  const scrolled = await source.evaluate((element) => element.scrollTop);
+  const scrolled = await page
+    .locator('.content-reading-main')
+    .evaluate((element) => element.scrollTop);
   expect(scrolled).toBeGreaterThan(300);
   await page.getByRole('button', {name: '按条目 · 23', exact: true}).click();
   const entryBody = page.getByRole('region', {name: '原文正文', exact: true});
   await expect(
-    entryBody.getByRole('region', {name: '文首标签与联系', exact: true}),
+    page
+      .getByRole('complementary', {name: '文档旁注'})
+      .getByRole('region', {name: '文首标签与联系', exact: true}),
   ).toBeVisible();
   expect((await entryBody.boundingBox())?.height).toBeGreaterThanOrEqual(160);
   await page.getByRole('button', {name: '全文原文', exact: true}).click();
-  expect(await source.evaluate((element) => element.scrollTop)).toBe(scrolled);
-  await source.evaluate((element) => {
+  expect(
+    await page
+      .locator('.content-reading-main')
+      .evaluate((element) => element.scrollTop),
+  ).toBe(scrolled);
+  await page.locator('.content-reading-main').evaluate((element) => {
     element.scrollTop = 0;
   });
   await header.getByRole('button', {name: /Synthetic related reading/}).click();
@@ -6558,11 +6173,12 @@ test('reviews subscription receipts in the inbox before adding them to the libra
     sourceKey: '合成订阅资料 ' + String(index + 1).padStart(2, '0'),
     resourceKind: 'remote_document' as const,
   }));
-  const records: IntakeRecord[] = snapshots.map((s) => ({
+  const records: IntakeRecord[] = snapshots.map((s, index) => ({
     snapshotId: s.snapshotId,
     version: 1,
     updatedAt: '2040-01-01T00:00:00Z',
     value: {
+      reception: {channel: index === 2 || index === 3 ? 'history' : 'live'},
       receipt: 'pending',
       decision: 'pending',
       origin: 'system',
@@ -6654,30 +6270,40 @@ test('reviews subscription receipts in the inbox before adding them to the libra
   expect(records[0]?.value.receipt).toBe('accepted');
   await list.getByRole('checkbox').first().check();
   await page.getByRole('button', {name: '拒绝所选', exact: true}).click();
-  expect(records[1]?.value.receipt).toBe('rejected');
+  await expect
+    .poll(() => records.filter((r) => r.value.receipt === 'rejected').length)
+    .toBe(1);
   await state.selectOption('rejected');
   await expect(list.locator('.intake-article-choice')).toHaveCount(1);
-  await page
-    .locator('.journey-action-menu summary')
-    .filter({hasText: '更多'})
-    .click();
+  await page.getByRole('button', {name: '更多接收操作', exact: true}).click();
   await page.getByRole('button', {name: '恢复为待审', exact: true}).click();
   await state.selectOption('pending');
   await page.getByRole('button', {name: '下一页', exact: true}).click();
   await expect(list.locator('.intake-article-choice')).toHaveCount(2);
-  const more = page
-    .locator('.journey-action-menu')
-    .filter({has: page.locator('summary').filter({hasText: '更多'})});
-  if ((await more.getAttribute('open')) === null)
-    await more.locator('summary').click();
+  const channel = page.getByRole('combobox', {name: '接收渠道', exact: true});
+  await channel.selectOption('history');
+  await expect(list.locator('.intake-article-choice')).toHaveCount(2);
+  const more = page.getByRole('button', {name: '更多接收操作', exact: true});
+  if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click();
   await page
     .getByRole('button', {
-      name: '接受并整理当前来源全部待审（22）',
+      name: '接受并整理当前来源全部待审（2）',
       exact: true,
     })
     .click();
-  await expect(page.locator('.journey-feedback')).toContainText('已接受 22 份');
-  expect(batches).toEqual([1, 1, 1, 1, 22]);
+  await expect(page.locator('.journey-feedback')).toContainText('已接受 2 份');
+  expect(records.filter((r) => r.value.receipt === 'pending')).toHaveLength(20);
+  await channel.selectOption('all');
+  await expect(list.locator('.intake-article-choice')).toHaveCount(20);
+  if ((await more.getAttribute('aria-expanded')) !== 'true') await more.click();
+  await page
+    .getByRole('button', {
+      name: '接受并整理当前来源全部待审（20）',
+      exact: true,
+    })
+    .click();
+  await expect(page.locator('.journey-feedback')).toContainText('已接受 20 份');
+  expect(batches).toEqual([1, 1, 1, 1, 2, 20]);
   expect(modelStarts).toBe(0);
   await state.selectOption('accepted');
   for (const width of [320, 390, 768, 1024, 1440]) {
@@ -6690,6 +6316,7 @@ test('reviews subscription receipts in the inbox before adding them to the libra
   }
   await page.screenshot({path: testInfo.outputPath('inbox-receipts.png')});
   await openWorkspace(page, '工作台');
+  await page.getByRole('button', {name: /选择文档/}).click();
   await expect(page.locator('.document-library-list')).toContainText('23 份');
 });
 
@@ -6764,7 +6391,6 @@ test('submits inbox receipts to the complete document pipeline and retains uncer
                 manualUploads: false,
                 model: 'synthetic-model',
                 maxEntries: 12,
-                maxRelations: 3,
                 maxModelCalls: 12,
                 maxDocumentsPerDay: 10,
                 intake,
@@ -6904,6 +6530,7 @@ test('submits inbox receipts to the complete document pipeline and retains uncer
   await expect(page.locator('.intake-ai-status')).toContainText('已入库');
   await expect(ai).toBeDisabled();
   await openWorkspace(page, '工作台');
+  await page.getByRole('button', {name: /选择文档/}).click();
   await expect(page.locator('.document-library-list')).toContainText('1 份');
   expect(started).toHaveLength(2);
   expect(
@@ -6956,8 +6583,9 @@ test('routes AI decisions to current inbox holds and makes permission distinct f
             steps: [{kind: 'intake', complete: true, outcome: 'held'}],
           }
         : {
+            workflow: 'confirmed-content-v1',
             status: index === 1 ? 'paused' : 'failed',
-            phase: index === 1 ? 'intake' : 'recall',
+            phase: index === 1 ? 'intake' : 'tags',
             calls: 1,
             steps: [],
             errorCode:
@@ -7074,18 +6702,18 @@ test('routes AI decisions to current inbox holds and makes permission distinct f
   await page.getByRole('button', {name: '展开任务队列', exact: true}).click();
   const jump = queue.getByRole('button', {name: '待接受合成简报', exact: true});
   await expect(jump).toBeVisible();
-  await page.getByRole('button', {name: '关闭队列', exact: true}).click();
-  await page.getByRole('switch', {name: '暂停 AI 操作', exact: true}).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('switch', {name: '允许 AI 操作', exact: true}).click();
   await expect(
     page.getByRole('switch', {name: '允许 AI 操作', exact: true}),
-  ).toHaveAttribute('aria-checked', 'false');
+  ).toBeVisible();
   await page.getByRole('switch', {name: '允许 AI 操作', exact: true}).click();
-  await expect(page.locator('.ov-flow [role="alert"]')).toBeVisible();
+  await expect(page.locator('.control-panel [role="alert"]')).toBeVisible();
   await page.getByRole('switch', {name: '允许 AI 操作', exact: true}).click();
   await expect(
-    page.getByRole('switch', {name: '暂停 AI 操作', exact: true}),
-  ).toHaveAttribute('aria-checked', 'true');
-  await expect(page.locator('.ov-flow > .ov-section-head')).not.toContainText(
+    page.getByRole('switch', {name: '允许 AI 操作', exact: true}),
+  ).toBeVisible();
+  await expect(page.locator('.control-panel .panel-heading')).not.toContainText(
     'synthetic-model',
   );
   await page.getByRole('button', {name: '展开任务队列', exact: true}).click();
@@ -7098,7 +6726,7 @@ test('routes AI decisions to current inbox holds and makes permission distinct f
   ]);
   await queue.getByRole('button', {name: '失败合成文档', exact: true}).click();
   await expect(
-    page.getByRole('heading', {name: '工作台', exact: true}),
+    page.getByRole('heading', {name: '文档阅读', exact: true}),
   ).toBeVisible();
   await openWorkspace(page, '总览');
   await page.getByRole('button', {name: '展开任务队列', exact: true}).click();
@@ -7265,10 +6893,8 @@ test('inbox previews show sources and generate summaries only on explicit owner 
   const meta = page.locator('.intake-document-meta');
   await expect(list).toContainText('合成研究：完整标题');
   await expect(meta).toContainText('合成科学期刊');
-  const menu = page
-    .locator('.journey-action-menu')
-    .filter({has: page.locator('summary').filter({hasText: '摘要'})});
-  await menu.locator('summary').click();
+  const menu = page.getByRole('button', {name: '摘要设置', exact: true});
+  await menu.click();
   const toggle = page.getByRole('checkbox', {
     name: '启用按需 AI 摘要',
     exact: true,
@@ -7283,6 +6909,7 @@ test('inbox previews show sources and generate summaries only on explicit owner 
   expect(decisions).toBe(0);
   await list.locator('.intake-article-choice button').nth(1).click();
   priceClosed = true;
+  await menu.click();
   await page.getByRole('button', {name: '生成本篇摘要', exact: true}).click();
   await expect(page.locator('.journey-feedback')).toContainText(
     '当前为高价时段',
@@ -7291,6 +6918,7 @@ test('inbox previews show sources and generate summaries only on explicit owner 
   priceClosed = false;
   await list.getByRole('checkbox').nth(0).check();
   await list.getByRole('checkbox').nth(1).check();
+  await menu.click();
   await page.getByRole('button', {name: '生成所选摘要', exact: true}).click();
   await expect(meta.locator('.intake-summary')).toBeVisible();
   expect(calls).toBe(2);
@@ -7313,7 +6941,7 @@ test('inbox previews show sources and generate summaries only on explicit owner 
   await toggle.uncheck();
   await page.reload();
   await openWorkspace(page, '收件箱');
-  await menu.locator('summary').click();
+  await menu.click();
   await expect(toggle).not.toBeChecked();
   expect(calls).toBe(2);
 });
@@ -7397,7 +7025,6 @@ async function installJourneyApi(
             itemLimit: 5,
             enabled: true,
             isPrivate: false,
-            routeAfterImport: false,
             intervalMinutes: 60,
           },
         ],
@@ -7469,7 +7096,6 @@ async function installJourneyApi(
             manualUploads: false,
             model: '',
             maxEntries: 12,
-            maxRelations: 4,
             maxModelCalls: 24,
             maxDocumentsPerDay: 10,
           },
@@ -7493,10 +7119,9 @@ test('preserves the workspace on reload and opens new visits at overview', async
   const shell = page.locator('.product-shell');
   await expect(shell).toHaveAttribute('data-section', 'overview');
   for (const [label, section] of [
-    ['文档入口', 'import'],
-    ['工作台', 'documents'],
-    ['数据阅览', 'query'],
-    ['报告', 'reports'],
+    ['源管理', 'import'],
+    ['文档阅读', 'documents'],
+    ['数据库', 'query'],
     ['设置', 'settings'],
   ] as const) {
     await page.getByRole('button', {name: label, exact: true}).click();
@@ -7506,7 +7131,7 @@ test('preserves the workspace on reload and opens new visits at overview', async
   }
   await page.goto('/');
   await expect(shell).toHaveAttribute('data-section', 'overview');
-  await page.getByRole('button', {name: '工作台', exact: true}).click();
+  await openWorkspace(page, '工作台');
   const reopened = await context.newPage();
   await installCurrentProductApi(reopened);
   await reopened.goto('/');
@@ -7517,248 +7142,6 @@ test('preserves the workspace on reload and opens new visits at overview', async
   await reopened.close();
 });
 
-test('journey: four stable workspaces and source-first receipt decisions', async ({
-  page,
-}, testInfo) => {
-  await page.setViewportSize({width: 1440, height: 1000});
-  const {mutations} = await installJourneyApi(page);
-  await page.goto('/');
-  const navigation = page.getByRole('navigation', {name: '产品工作区'});
-  await expect(navigation.getByRole('button')).toHaveCount(4);
-  await page.getByRole('button', {name: '文档入口', exact: true}).click();
-  await page.getByRole('button', {name: '选择来源', exact: true}).click();
-  await page
-    .locator('.journey-source-list')
-    .getByRole('button', {name: '合成研究通讯', exact: false})
-    .click();
-  await expect(
-    page.getByText('解释研究方法、实验结果及其限制。'),
-  ).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(
-    page.getByText('需要核对：合成材料需要核对上下文'),
-  ).toBeVisible();
-  await expect(page.getByLabel('待审核文档全文')).toContainText(
-    '第三段保留原文结论',
-  );
-  await expect(
-    page.getByRole('button', {name: '交给 AI 审核并整理', exact: true}),
-  ).toBeDisabled();
-  await page.screenshot({
-    path: testInfo.outputPath('01-intake.png'),
-    fullPage: true,
-  });
-  await page
-    .getByRole('button', {name: '我已审核，接受并整理', exact: true})
-    .click();
-  await expect(page.getByRole('button', {name: '→ 进入工作台'})).toBeVisible();
-  expect(mutations).toHaveLength(1);
-  expect(mutations[0]).toMatchObject({
-    operation: 'intake_receive',
-    input: {action: 'accept', processAccepted: true},
-  });
-  const bounds = await page.evaluate(() => ({
-    scroll: document.documentElement.scrollHeight,
-    viewport: innerHeight,
-    width: document.documentElement.scrollWidth,
-    window: innerWidth,
-  }));
-  expect(bounds.scroll).toBeLessThanOrEqual(bounds.viewport + 2);
-  expect(bounds.width).toBeLessThanOrEqual(bounds.window);
-});
-
-test('journey: intake reading spans its pane and buttons remain reachable at different widths', async ({
-  page,
-}, testInfo) => {
-  const {snapshot} = await installJourneyApi(page);
-  const paragraph =
-    'A synthetic technical explanation preserves its context, examples, evidence and limitations in one readable document. ';
-  await page.route('**/api/v1/evidence/snapshots/*', (route) =>
-    route.fulfill({
-      json: {
-        status: 'ok',
-        snapshot: {
-          ...snapshot,
-          structures: snapshot.structures.map((structure) => ({
-            ...structure,
-            normalizedText:
-              '# 合成资料的完整上下文\n\n' +
-              Array.from({length: 30}, () => paragraph.repeat(3)).join('\n\n'),
-          })),
-        },
-      },
-    }),
-  );
-  await page.goto('/');
-  await page.getByRole('button', {name: '文档入口', exact: true}).click();
-  const reader = page.getByLabel('待审核文档全文');
-  await expect(reader).toBeVisible();
-  await expect(page.locator('.intake-document-meta')).toContainText(
-    '来源：合成研究通讯',
-  );
-  await expect(page.locator('.intake-article-source')).toHaveText(
-    '来源：合成研究通讯',
-  );
-  await expect(
-    page.getByRole('button', {name: '我已审核，接受并整理', exact: true}),
-  ).toHaveAccessibleDescription(
-    '采用你的接收决定；随后由 AI 拆分、添加标签与联系，完成后入库。',
-  );
-  await expect(
-    page.getByRole('button', {name: '交给 AI 审核并整理', exact: true}),
-  ).toHaveAccessibleDescription(
-    '先由 AI 判断是否接收：通过后自动接受并完成同样的整理；不确定则留待你决定。',
-  );
-  for (const width of [1920, 1440, 1024, 768, 320]) {
-    await page.setViewportSize({width, height: 1000});
-    const dimensions = await reader.evaluate((node) => {
-      const parent = node.parentElement;
-      if (!parent) throw new Error('Missing reading pane');
-      const style = getComputedStyle(parent);
-      return {
-        reader: node.getBoundingClientRect().width,
-        height: node.getBoundingClientRect().height,
-        scrolls: node.scrollHeight > node.clientHeight,
-        available:
-          parent.clientWidth -
-          parseFloat(style.paddingLeft) -
-          parseFloat(style.paddingRight),
-        overflow: document.documentElement.scrollWidth - innerWidth,
-      };
-    });
-    expect(
-      Math.abs(dimensions.reader - dimensions.available),
-    ).toBeLessThanOrEqual(2);
-    expect(dimensions.overflow).toBeLessThanOrEqual(1);
-    expect(dimensions.height).toBeLessThanOrEqual(900);
-    expect(dimensions.scrolls).toBe(true);
-    if (width === 1440)
-      await page.screenshot({
-        path: testInfo.outputPath('intake-width-and-actions.png'),
-        fullPage: true,
-      });
-  }
-  await page.setViewportSize({width: 1440, height: 1000});
-  await page.getByRole('button', {name: '选择来源', exact: true}).click();
-  const manualSource = page.getByRole('button', {name: /手动放入文档/});
-  await expect(manualSource).toContainText('本地输入');
-  await manualSource.click();
-  await expect(
-    page.getByRole('button', {name: '查看已放入文档（0）', exact: true}),
-  ).toBeVisible();
-});
-
-test('journey: manual capture occupies the reading pane without another rail', async ({
-  page,
-}, testInfo) => {
-  await page.setViewportSize({width: 1440, height: 1000});
-  await installJourneyApi(page);
-  const subscription = {
-    description: '合成来源，用于验证状态和排序。',
-    kind: 'rss_atom',
-    sourceAlias: 'synthetic-source',
-    feedUrl: 'https://example.invalid/rss',
-    itemLimit: 5,
-    isPrivate: false,
-    routeAfterImport: false,
-    intervalMinutes: 60,
-  };
-  await page.route('**/api/v1/source-subscriptions', (route) =>
-    route.fulfill({
-      json: {
-        status: 'ok',
-        revision: 1,
-        connectors: [],
-        subscriptions: [
-          {
-            ...subscription,
-            subscriptionId: '99999999-9999-4999-8999-999999999999',
-            label: 'Beta · 暂停来源',
-            enabled: false,
-          },
-          {
-            ...subscription,
-            subscriptionId: '99999999-9999-4999-8999-999999999991',
-            label: 'Zulu · 活跃来源',
-            enabled: true,
-          },
-          {
-            ...subscription,
-            subscriptionId: '99999999-9999-4999-8999-999999999992',
-            label: 'Alpha · 活跃来源',
-            enabled: true,
-          },
-        ],
-      },
-    }),
-  );
-  await page.route('**/api/v1/ingestion/commands', async (route) => {
-    const {operation} = route.request().postDataJSON() as {operation: string};
-    if (operation === 'intake_origins')
-      await route.fulfill({
-        json: {
-          result: {origins: [{snapshotId: SNAPSHOT_ID, kind: 'manual_text'}]},
-        },
-      });
-    else await route.fallback();
-  });
-  await page.goto('/');
-  await page.getByRole('button', {name: '文档入口', exact: true}).click();
-  const sourceNames = page.locator(
-    '.journey-source-list .journey-source-title strong',
-  );
-  await expect(sourceNames).toHaveText([
-    '全部来源',
-    '手动放入文档',
-    'Alpha · 活跃来源',
-    'Beta · 暂停来源',
-    'Zulu · 活跃来源',
-  ]);
-  await page.getByRole('button', {name: '选择来源', exact: true}).click();
-  await page.getByLabel('来源排序').selectOption('active');
-  await expect(sourceNames).toHaveText([
-    '全部来源',
-    '手动放入文档',
-    'Alpha · 活跃来源',
-    'Zulu · 活跃来源',
-    'Beta · 暂停来源',
-  ]);
-  const activeColor = await page
-    .getByText('已订阅', {exact: true})
-    .first()
-    .evaluate((element) => getComputedStyle(element).color);
-  const pausedColor = await page
-    .getByText('已暂停', {exact: true})
-    .evaluate((element) => getComputedStyle(element).color);
-  expect(activeColor).not.toBe(pausedColor);
-  await page.getByLabel('来源排序').selectOption('name');
-  await expect(sourceNames).toHaveText([
-    '全部来源',
-    '手动放入文档',
-    'Alpha · 活跃来源',
-    'Beta · 暂停来源',
-    'Zulu · 活跃来源',
-  ]);
-  await expect(
-    page.getByRole('button', {name: '＋ 放入文档', exact: true}),
-  ).toHaveCount(0);
-  await page.getByRole('button', {name: '手动放入文档', exact: true}).click();
-  await expect(
-    page.getByRole('radio', {name: '本地文件', exact: true}),
-  ).toBeVisible();
-  await page.getByRole('radio', {name: '本地文件', exact: true}).check();
-  await expect(page.locator('.capture-only .intake-console')).toBeVisible();
-  await expect(page.locator('.capture-only .record-list-section')).toBeHidden();
-  await page.screenshot({
-    path: testInfo.outputPath('02-capture.png'),
-    fullPage: true,
-  });
-  await page
-    .getByRole('button', {name: '查看已放入文档（1）', exact: true})
-    .click();
-  await expect(page.getByLabel('待审核文档全文')).toBeVisible();
-});
-
 test('journey: inline splitting stays a draft until explicit confirmation', async ({
   page,
 }, testInfo) => {
@@ -7766,7 +7149,8 @@ test('journey: inline splitting stays a draft until explicit confirmation', asyn
   const requests: string[] = [];
   const {snapshot} = await installJourneyApi(page, requests);
   await page.goto('/');
-  await page.getByRole('button', {name: '工作台', exact: true}).click();
+  await openWorkspace(page, '工作台');
+  await openDocumentEditor(page);
   await expect(
     page.getByRole('button', {name: '修改分段', exact: true}),
   ).toBeEnabled();
@@ -7803,9 +7187,10 @@ test('journey: data reading exposes search and cited answers in the same workspa
   await page.setViewportSize({width: 1440, height: 1000});
   await installJourneyApi(page);
   const requests: Record<string, unknown>[] = [];
-  await page.route('**/api/v1/entries/search/synthesize', async (route) => {
+  await page.route('**/api/v1/research/commands', async (route) => {
     const request = route.request().postDataJSON() as Record<string, unknown>;
-    requests.push(request);
+    if (request.operation !== 'research_answer') return route.fallback();
+    requests.push(request.input as Record<string, unknown>);
     const failure = [
       'ai_provider_incomplete_response',
       'ai_query_invalid_citations',
@@ -7813,116 +7198,78 @@ test('journey: data reading exposes search and cited answers in the same workspa
     if (failure) {
       await route.fulfill({
         status: 502,
-        json: {status: 'failed', issue: {code: failure}},
+        json: {error: {code: failure}},
       });
       return;
     }
     await route.fulfill({
       json: {
-        status: 'ok',
-        requestId: request.requestId,
-        querySha256: 'a'.repeat(64),
-        providerKey: 'synthetic',
-        model: 'synthetic-model',
-        promptVersion: 'synthetic-v1',
-        answer:
-          '合成资料说明了方法及其适用条件。\n\n1. 适用条件明确。\n2. 缺少长期结果。',
-        evidenceStatus: 'supported',
-        claims: [{statement: '方法有明确边界。', evidenceRefs: ['E01']}],
-        limitations: ['材料不包含长期结果。'],
-        evidence: [
-          {
-            handle: 'E01',
-            entryId: ENTRY_ID,
-            entryRevision: 1,
-            snapshotId: SNAPSHOT_ID,
-            fragmentIds: [FRAGMENT_ID],
-            titlePath: '合成资料的完整上下文',
-            excerpt: '完整问题与背景',
-            truncated: false,
-            contentKeywords: [],
-            domains: [],
-          },
-        ],
+        result: {
+          status: 'ok',
+          requestId: request.requestId,
+          querySha256: 'a'.repeat(64),
+          providerKey: 'synthetic',
+          model: 'synthetic-model',
+          promptVersion: 'synthetic-v1',
+          answer:
+            '合成资料说明了方法及其适用条件。\n\n1. 适用条件明确。\n2. 缺少长期结果。',
+          evidenceStatus: 'supported',
+          claims: [{statement: '方法有明确边界。', evidenceRefs: ['E01']}],
+          limitations: ['材料不包含长期结果。'],
+          evidence: [
+            {
+              handle: 'E01',
+              entryId: ENTRY_ID,
+              entryRevision: 1,
+              snapshotId: SNAPSHOT_ID,
+              fragmentIds: [FRAGMENT_ID],
+              titlePath: '合成资料的完整上下文',
+              excerpt: '完整问题与背景',
+              truncated: false,
+              contentKeywords: [],
+              domains: [],
+            },
+          ],
+        },
       },
     });
   });
   await page.goto('/');
-  await page.getByRole('button', {name: '数据阅览', exact: true}).click();
-  await expect(
-    page.getByRole('heading', {name: '数据阅览', exact: true}),
-  ).toBeVisible();
+  await openWorkspace(page, '查询');
   await expect(page.locator('.entry-result-list')).toContainText(
     SYNTHETIC_ENTRY.value.titlePath,
   );
-  await page.screenshot({
-    path: testInfo.outputPath('04-reading.png'),
-    fullPage: true,
-  });
-  await page.getByRole('button', {name: '向资料提问', exact: true}).click();
-  await expect(page.locator('.reading-answer-workspace')).toBeVisible();
-  await expect(page.locator('.query-studio-grid')).toBeHidden();
+  await page.getByRole('button', {name: 'AI 提问', exact: true}).click();
   await page
-    .getByRole('textbox', {name: '向知识库提问'})
+    .getByRole('searchbox', {name: '关键词或问题'})
     .fill('这些材料介绍的方法有什么限制？');
-  for (const [index, message] of [
-    'AI 回答尚未完整生成',
-    'AI 回答缺少有效引用',
-  ].entries()) {
-    await page.getByRole('button', {name: '使用知识库回答'}).click();
-    await expect(page.getByRole('alert')).toContainText(message);
-    await expect(page.getByRole('textbox', {name: '向知识库提问'})).toHaveValue(
-      '这些材料介绍的方法有什么限制？',
-    );
-    await expect(page.locator('.entry-query-synthesis-answer')).toBeHidden();
-    expect(requests).toHaveLength(index + 1);
+  for (const message of ['AI 回答尚未完整生成', 'AI 回答缺少有效引用']) {
+    await page
+      .getByRole('search')
+      .getByRole('button', {name: '提问', exact: true})
+      .click();
+    await expect(
+      page.locator('.database-research-results').getByRole('alert'),
+    ).toContainText(message);
   }
-  await page.getByRole('button', {name: '使用知识库回答'}).click();
-  await expect(page.locator('.reading-answer-workspace')).toContainText(
-    '合成资料说明了方法及其适用条件。',
-  );
-  await expect(page.locator('.entry-query-synthesis-answer__text')).toHaveText(
+  await page
+    .getByRole('search')
+    .getByRole('button', {name: '提问', exact: true})
+    .click();
+  await expect(page.locator('.research-answer')).toHaveText(
     '合成资料说明了方法及其适用条件。\n\n1. 适用条件明确。\n2. 缺少长期结果。',
   );
   expect(requests[0]).toMatchObject({
-    retrieveForQuestion: true,
+    mode: 'local',
+    question: '这些材料介绍的方法有什么限制？',
     query: {includePrivate: false},
   });
-  await page.getByRole('button', {name: '查看来源 E01', exact: true}).click();
-  await expect(page.locator('.evidence-rail')).toBeVisible();
-  await page.getByRole('button', {name: '关闭来源原文'}).click();
-  await page.screenshot({
-    path: testInfo.outputPath('05-question.png'),
-    fullPage: true,
-  });
-  await page.getByRole('button', {name: '搜索与关系图', exact: true}).click();
-  await expect(page.locator('.query-studio-grid')).toBeVisible();
-});
-
-test('journey: report configuration stays beside its expandable task queue', async ({
-  page,
-}, testInfo) => {
-  await page.setViewportSize({width: 1440, height: 1000});
-  await installJourneyApi(page);
-  await page.goto('/');
-  await page.getByRole('button', {name: '报告', exact: true}).click();
-  await expect(
-    page.getByRole('heading', {name: '报告任务与历史'}),
-  ).toBeVisible();
-  await page
-    .getByRole('combobox', {name: '报告类型', exact: true})
-    .selectOption('monthly');
-  await page
-    .getByRole('combobox', {name: '最多报告条目', exact: true})
-    .selectOption('0');
-  await page
-    .getByRole('combobox', {name: '内容方式', exact: true})
-    .selectOption('collection');
-  await expect(page.getByText('本地导出', {exact: true})).toBeVisible();
-  await page.screenshot({
-    path: testInfo.outputPath('06-reports.png'),
-    fullPage: true,
-  });
+  expect(new Set(requests.map((r) => r.requestKey)).size).toBe(1);
+  await page.screenshot({path: testInfo.outputPath('p8-question.png')});
+  await page.getByRole('button', {name: '查看条目', exact: true}).click();
+  await expect(page.locator('.entry-readonly-detail')).toContainText(
+    SYNTHETIC_ENTRY.value.body,
+  );
 });
 
 test('journey: every workspace fits narrow and wide viewports with local scrolling', async ({
@@ -7932,7 +7279,7 @@ test('journey: every workspace fits narrow and wide viewports with local scrolli
   await page.goto('/');
   for (const width of [320, 390, 768, 1024, 1440]) {
     await page.setViewportSize({width, height: 1000});
-    for (const name of ['文档入口', '工作台', '数据阅览', '报告', '设置']) {
+    for (const name of ['源管理', '文档阅读', '数据库', '设置']) {
       await page.getByRole('button', {name, exact: true}).click();
       if ([320, 768, 1440].includes(width))
         await page.screenshot({
@@ -8000,7 +7347,6 @@ test('journey: temporary intake translation shows local progress without accepti
                 manualUploads: false,
                 model: 'synthetic',
                 maxEntries: 12,
-                maxRelations: 4,
                 maxModelCalls: 24,
                 maxDocumentsPerDay: 10,
               },
@@ -8245,7 +7591,9 @@ test('batch document controls preserve checkpoints and expose cancellation witho
   await cancel.click();
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible();
-  await expect(cancel).toBeFocused();
+  await expect(
+    page.getByRole('button', {name: '展开任务队列', exact: true}),
+  ).toBeFocused();
   expect(writes).toHaveLength(2);
   expect(errors).toEqual([]);
 });
@@ -8306,7 +7654,6 @@ test('backfills selected publication dates across sources with previews and no A
     itemLimit: 5,
     enabled: false,
     isPrivate: false,
-    routeAfterImport: false,
     intervalMinutes: 60,
   }));
   await page.route('**/api/v1/source-subscriptions', (route) =>
@@ -8464,9 +7811,10 @@ test('backfills selected publication dates across sources with previews and no A
   });
   await page.setViewportSize({width: 1440, height: 900});
   await page.goto('/');
-  await page.getByRole('button', {name: '文档入口', exact: true}).click();
-  await page.getByRole('button', {name: '补收往期', exact: true}).click();
+  await openWorkspace(page, '源管理');
+  await page.getByRole('button', {name: /往期补收/}).click();
   const workspace = page.getByRole('region', {name: '补收往期', exact: true});
+  await workspace.getByRole('button', {name: '全选来源', exact: true}).click();
   await workspace.getByLabel('发布于', {exact: true}).fill('2024-01-01');
   await workspace.getByLabel('截止到', {exact: true}).fill('2024-12-31');
   await workspace.getByLabel('每个来源最多补收').fill('1');
@@ -8476,20 +7824,22 @@ test('backfills selected publication dates across sources with previews and no A
     .getByRole('button', {name: '查询选定时间段的内容', exact: true})
     .click();
   await expect(
-    workspace.getByRole('button', {name: '返回文档入口'}),
+    page
+      .getByRole('dialog', {name: '补收往期', exact: true})
+      .getByRole('button', {name: '关闭', exact: true}),
   ).toBeEnabled();
   await workspace
     .getByRole('button', {name: '预览', exact: true})
     .first()
     .click();
-  await expect(page.getByRole('dialog')).toContainText('完整合成正文');
+  await expect(page.locator('.history-preview')).toContainText('完整合成正文');
   const readingBox = await page
     .getByRole('region', {name: '历史文章预览'})
     .boundingBox();
   expect(readingBox?.height).toBeGreaterThan(500);
   expect(imports).toEqual([]);
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog')).not.toBeVisible();
+  await expect(page.locator('.history-preview')).not.toBeVisible();
   await expect(
     workspace.getByText('4 篇符合条件', {exact: true}),
   ).toBeVisible();
@@ -8580,7 +7930,6 @@ test('generates optional source introductions as editable drafts without changin
     enabled: false,
     sourceAlias: 'synthetic-description',
     isPrivate: false,
-    routeAfterImport: false,
     intervalMinutes: 1440,
     feedUrl: 'https://example.invalid/feed',
     itemLimit: 20,
@@ -8628,14 +7977,8 @@ test('generates optional source introductions as editable drafts without changin
     });
   });
   await page.goto('/');
-  await openWorkspace(page, '文档入口');
-  await page.getByRole('button', {name: '选择来源', exact: true}).click();
-  await page.getByRole('button', {name: '管理订阅', exact: true}).click();
-  const existing = page
-    .getByRole('list', {name: '订阅列表'})
-    .locator(':scope > li')
-    .first();
-  await existing.locator('summary').click();
+  await openWorkspace(page, '源管理');
+  const existing = page.locator('.source-map .source-edit-layout');
   const description = existing.getByRole('textbox', {
     name: '来源简介',
     exact: true,
@@ -8649,7 +7992,7 @@ test('generates optional source introductions as editable drafts without changin
   await expect(description).toHaveValue('A manual introduction');
   expect(saves).toBe(0);
   await existing
-    .getByRole('textbox', {name: '显示名称', exact: true})
+    .getByRole('textbox', {name: '来源名称', exact: true})
     .fill('Synthetic changed publication');
   await expect(
     existing.getByText('来源资料已变化，生成的旧草稿未应用，请重新生成。'),
@@ -8667,7 +8010,7 @@ test('generates optional source introductions as editable drafts without changin
     '关注合成系统设计，发布技术分析与教程。',
   );
   expect(saves).toBe(0);
-  await page.getByRole('button', {name: '保存订阅设置', exact: true}).click();
+  await page.getByRole('button', {name: '保存设置', exact: true}).click();
   await expect(page.getByText('订阅已保存', {exact: true})).toBeVisible();
   expect(saved[0]).toMatchObject({
     enabled: false,
@@ -8683,28 +8026,28 @@ test('generates optional source introductions as editable drafts without changin
     '请在低价时段再点击生成',
   );
   await existing
-    .getByRole('checkbox', {name: '导入为隐私文档', exact: true})
-    .check();
+    .getByRole('combobox', {name: '文档隐私', exact: true})
+    .selectOption('true');
   await expect(
     existing.getByRole('button', {name: 'AI 生成简介', exact: true}),
   ).toBeDisabled();
-  await page.getByRole('button', {name: '新增订阅', exact: true}).click();
-  const draft = page
-    .getByRole('list', {name: '订阅列表'})
-    .locator(':scope > li')
-    .last();
+  await page.getByRole('button', {name: '＋ 添加来源', exact: true}).click();
+  const draft = page.locator('.source-map .source-edit-layout');
   await draft
-    .getByRole('combobox', {name: '来源类型', exact: true})
+    .getByRole('combobox', {name: '接入类型', exact: true})
     .selectOption('rss_atom');
   await expect(
     draft.getByRole('button', {name: 'AI 生成简介', exact: true}),
   ).toBeDisabled();
   await draft
-    .getByLabel('显示名称', {exact: true})
+    .getByLabel('来源名称', {exact: true})
     .fill('Synthetic new source');
-  await draft
+  await draft.getByRole('button', {name: '编辑参数 ↗', exact: true}).click();
+  const parameters = page.getByRole('dialog', {name: '接收参数', exact: true});
+  await parameters
     .getByLabel('RSS / Atom 地址')
     .fill('https://example.invalid/new-feed');
+  await parameters.getByRole('button', {name: '关闭', exact: true}).click();
   await expect(
     draft.getByRole('button', {name: 'AI 生成简介', exact: true}),
   ).toBeEnabled();
@@ -8772,123 +8115,63 @@ test('approved theme animates observed completions once and respects reduced mot
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.setViewportSize({width: 1440, height: 900});
-  await page.clock.install({time: new Date('2040-01-01T00:00:00Z')});
   await page.goto('/');
   await page.emulateMedia({colorScheme: 'dark'});
-  await page.screenshot({
-    path: testInfo.outputPath('editorial-overview-before-check.png'),
-  });
-  // CSS transitions use the browser timeline, independently of the task clock.
-  await expect(page.locator('.flow-node').nth(1)).toHaveCSS(
-    'background-color',
-    'rgba(42, 60, 69, 0.62)',
-  );
-  const nodes = page.locator('[data-flow-stage]');
+  const split = page.locator('[data-flow-stage="split"]');
+  const tags = page.locator('[data-flow-stage="tags"]');
   const number = page.locator(
     '[data-overview-metric="entries"] [data-overview-number]',
   );
   await expect(number).toHaveText('20');
-  await expect(nodes.nth(1)).toHaveAttribute('data-flowing', 'true');
+  await expect(split).toHaveAttribute('data-flowing', 'true');
   await expect(page.locator('.overview-stat-delta')).toHaveCount(0);
-  const nodeBox = await page.locator('.flow-node').first().boundingBox();
-  const detailsBox = await page.locator('.ov-bottom').boundingBox();
+  const nodeBox = await split.boundingBox();
+  const detailsBox = await page.locator('.overview-bottom').boundingBox();
   if (!nodeBox || !detailsBox)
     throw new Error('Overview panels must be visible');
   expect(nodeBox.y + nodeBox.height + 8).toBeLessThanOrEqual(detailsBox.y);
-  const referenceStyles = await page
-    .locator('.flow-node')
-    .nth(1)
-    .evaluate((el) => {
-      const style = getComputedStyle(el);
-      const title = el.querySelector('.ov-step-title');
-      return {
-        background: style.backgroundColor,
-        radius: style.borderRadius,
-        padding: style.padding,
-        titleWeight: title && getComputedStyle(title).fontWeight,
-        duplicateBadge: getComputedStyle(el, '::before').content,
-      };
-    });
-  expect(referenceStyles).toEqual({
-    background: 'rgba(42, 60, 69, 0.62)',
-    radius: '28px',
-    padding: '0px',
-    titleWeight: '550',
-    duplicateBadge: '""',
-  });
-  const queueButton = page.getByRole('button', {
-    name: '展开任务队列',
-    exact: true,
-  });
-  await expect(queueButton).toBeVisible();
-  const titleBounds = await page
-    .locator('.editorial-overview > .workflow-page-heading')
-    .boundingBox();
-  const statusBounds = await page.locator('.system-status').boundingBox();
-  if (!titleBounds || !statusBounds)
-    throw new Error('Header and rail status must be present');
-  expect(statusBounds.y).toBeGreaterThan(500);
-  expect(statusBounds.x + statusBounds.width).toBeLessThan(titleBounds.x);
-  await page.screenshot({
-    path: testInfo.outputPath('titanium-amber-overview.png'),
-  });
-  completed = true;
+  expect(nodeBox.width).toBeLessThanOrEqual(208);
+
+  await page.getByRole('button', {name: '全部消息', exact: false}).click();
+  const refresh = page.getByRole('button', {name: '刷新总览', exact: true});
+  const dialog = page.getByRole('dialog', {name: '全部消息', exact: true});
+  // Statistics and task state can arrive separately in the same charging period.
   entryCount = 23;
-  await page.getByRole('button', {name: '刷新总览', exact: true}).click();
-  await expect(nodes.nth(1)).toHaveAttribute('data-motion-source', 'true');
-  await expect(nodes.nth(2)).toHaveAttribute('data-motion-target', 'true');
-  await expect(number).toHaveText('20');
-  await page.clock.runFor(1250);
+  await refresh.click();
+  await expect(page.locator('.ef-energy-stat')).toHaveCount(1);
+  completed = true;
+  await refresh.click();
+  await expect(tags).toHaveAttribute('data-motion-target', 'true');
+  await dialog.getByRole('button', {name: '关闭', exact: true}).click();
+  await expect(page.locator('.ef-result-transfer')).toHaveAttribute(
+    'data-phase',
+    'flight',
+  );
+  await expect(page.locator('.ef-energy-stat')).toHaveAttribute(
+    'data-energy',
+    '2',
+  );
   await expect(number).toHaveText('20');
   await page.screenshot({
-    path: testInfo.outputPath('titanium-amber-transfer.png'),
+    path: testInfo.outputPath('overview-observed-transfer.png'),
   });
-  await page.clock.runFor(200);
-  await expect(nodes.nth(2)).not.toHaveAttribute('data-motion-target', 'true');
-  await expect(
-    page.locator('[data-overview-metric="entries"]'),
-  ).toHaveAttribute('data-arriving', 'true');
-  await page.clock.runFor(1000);
   await expect(number).toHaveText('23');
   await expect(page.locator('.overview-stat-delta')).toHaveCount(0);
-  await page.getByRole('button', {name: '刷新总览', exact: true}).click();
+
+  await page.getByRole('button', {name: '全部消息', exact: false}).click();
+  await refresh.click();
   await expect(page.locator('[data-motion-source]')).toHaveCount(0);
   await expect(number).toHaveText('23');
   await page.emulateMedia({reducedMotion: 'reduce'});
   entryCount = 24;
-  await page.getByRole('button', {name: '刷新总览', exact: true}).click();
+  await refresh.click();
   await expect(number).toHaveText('24');
   await expect(page.locator('.ef-node-ring').first()).not.toBeVisible();
   await expect(page.locator('.overview-stat-delta')).toHaveCount(0);
-  await openWorkspace(page, '资料库');
-  await expect(page.locator('.document-paper')).toBeVisible();
-  expect(
-    await page
-      .locator('.reading-content')
-      .first()
-      .evaluate((el) => getComputedStyle(el).fontFamily),
-  ).toContain('Noto Serif SC');
-  expect(
-    await page
-      .locator('.primary-rail')
-      .evaluate((el) => getComputedStyle(el).fontFamily),
-  ).toContain('Noto Sans SC');
+  await dialog.getByRole('button', {name: '关闭', exact: true}).click();
   await page.screenshot({
-    path: testInfo.outputPath('titanium-amber-workbench.png'),
+    path: testInfo.outputPath('overview-reduced-motion.png'),
   });
-  await openWorkspace(page, '查询');
-  const tool = page.getByRole('button', {name: '筛选与匹配方式', exact: true});
-  await tool.click();
-  const panel = page.locator('.floating-tool-panel__surface:popover-open');
-  await expect(panel).toBeVisible();
-  expect(
-    await panel.evaluate((el) => getComputedStyle(el).backgroundColor),
-  ).toBe('rgba(30, 33, 36, 0.82)');
-  expect(
-    await panel.evaluate((el) => getComputedStyle(el).backdropFilter),
-  ).toContain('blur');
-  await page.keyboard.press('Escape');
-  await expect(tool).toBeFocused();
   expect(errors).toEqual([]);
 });
 
@@ -9021,16 +8304,39 @@ test('overview flow shows live stages, concurrent limits, messages and accessibl
       });
     return route.fallback();
   });
+  await page.route('**/api/v1/research/commands', (route) =>
+    route.fulfill({json: {result: {notices: [], jobs: [], schedules: []}}}),
+  );
   await page.setViewportSize({width: 1440, height: 900});
   await page.goto('/');
   const nodes = page.locator('.ov-pipeline .flow-node');
   await expect(nodes).toHaveCount(6);
+  await expect(page.locator('.ov-step-title')).toHaveText([
+    '接收',
+    '入库',
+    '拆分',
+    '标签',
+    '联系',
+    '报告',
+  ]);
+  await expect(page.locator('[data-overview-metric]')).toHaveCount(5);
   await expect(nodes.nth(0)).toHaveAttribute('data-tone', 'review');
-  await expect(nodes.nth(1)).toHaveAttribute('data-tone', 'working');
-  await expect(nodes.nth(1)).toContainText('AI 自动');
-  await expect(nodes.nth(2)).toHaveAttribute('data-tone', 'failed');
-  await expect(nodes.nth(3)).toHaveAttribute('data-tone', 'waiting');
-  await nodes.nth(1).locator('..').click();
+  await expect(page.locator('[data-flow-stage="split"]')).toHaveAttribute(
+    'data-tone',
+    'working',
+  );
+  await expect(page.locator('[data-flow-stage="split"]')).toContainText(
+    'AI 自动',
+  );
+  await expect(page.locator('[data-flow-stage="tags"]')).toHaveAttribute(
+    'data-tone',
+    'failed',
+  );
+  await expect(page.locator('[data-flow-stage="relations"]')).toHaveAttribute(
+    'data-tone',
+    'waiting',
+  );
+  await page.locator('[data-flow-stage="split"]').locator('..').click();
   await expect(
     page.getByRole('dialog', {name: '拆分 · 工序状态'}),
   ).toContainText('整理文档结构');
@@ -9051,6 +8357,7 @@ test('overview flow shows live stages, concurrent limits, messages and accessibl
   for (const theme of ['light', 'dark']) {
     await page.emulateMedia({colorScheme: theme === 'dark' ? 'dark' : 'light'});
     for (const [width, height] of [
+      [2560, 1280],
       [1440, 900],
       [1280, 720],
       [1024, 768],
@@ -9084,6 +8391,25 @@ test('overview flow shows live stages, concurrent limits, messages and accessibl
               ),
           ),
         ).toBeLessThanOrEqual(1);
+      if (width === 2560) {
+        const geometry = await nodes.evaluateAll((elements) =>
+          elements.map((element) => ({
+            width: element.getBoundingClientRect().width,
+            left: element.getBoundingClientRect().left,
+            right: element.getBoundingClientRect().right,
+          })),
+        );
+        expect(geometry.every((box) => Math.abs(box.width - 208) < 1)).toBe(
+          true,
+        );
+        const gaps = geometry.slice(1).map((box, index) => {
+          const previous = geometry[index];
+          if (!previous) throw new Error('Missing preceding workflow node');
+          return box.left - previous.right;
+        });
+        expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThan(1);
+        expect(gaps[0]).toBeGreaterThan(100);
+      }
       await page.screenshot({
         path: testInfo.outputPath(
           `overview-flow-${theme}-${String(width)}.png`,
@@ -9109,141 +8435,406 @@ test('overview flow shows live stages, concurrent limits, messages and accessibl
     'data-section',
     'reports',
   );
+  await page
+    .getByRole('dialog', {name: '报告', exact: true})
+    .getByRole('button', {name: '关闭', exact: true})
+    .click();
   await openWorkspace(page, '总览');
   offline = true;
-  await page.getByRole('button', {name: '刷新总览', exact: true}).click();
-  await expect(nodes.nth(1)).toHaveAttribute('data-tone', 'unknown');
-  await expect(nodes.nth(1)).toHaveAttribute('data-flowing', 'false');
+  await page.getByRole('button', {name: '全部消息', exact: false}).click();
+  await page.evaluate(() =>
+    document.dispatchEvent(new Event('visibilitychange')),
+  );
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-flow-stage="split"]')).toHaveAttribute(
+    'data-tone',
+    'unknown',
+  );
+  await expect(page.locator('[data-flow-stage="split"]')).toHaveAttribute(
+    'data-flowing',
+    'false',
+  );
   await expect(
-    page.getByRole('switch', {name: '暂停 AI 操作', exact: true}),
+    page.getByRole('switch', {name: '允许 AI 操作', exact: true}),
   ).toBeDisabled();
   expect(errors).toEqual([]);
 });
 
-test('workspace headers reserve actions and fill desktop height while global status stays in the rail', async ({
+test('P4 edits evidence-bound annotations and keeps the panel usable across widths', async ({
   page,
 }, testInfo) => {
-  await installJourneyApi(page);
-  await page.route('**/api/v1/preferences/interface', (route) =>
-    route.fulfill({
-      json: {
-        status: 'ok',
-        preferences: {...DEFAULT_WORKSPACE_UI_PREFERENCES, theme: 'dark'},
-      },
-    }),
-  );
-  const errors: string[] = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  await page.setViewportSize({width: 1440, height: 900});
+  await installCurrentProductApi(page, {manualSplitRequests: []});
+  let vocabulary: AnnotationVocabulary = {
+    revision: 0,
+    dimensions: [],
+    terms: [],
+    aliases: [],
+    relations: [],
+  };
+  let saved: AnnotationDraft | undefined;
+  await page.route('**/api/v1/ingestion/commands', async (route) => {
+    const {operation, input} = route.request().postDataJSON() as {
+      operation: string;
+      input: {
+        vocabulary: AnnotationVocabulary;
+        annotation: AnnotationDraft;
+        expectedRevision: number;
+      };
+    };
+    let result: unknown;
+    if (operation === 'entry_annotations_read')
+      result = {entry: SYNTHETIC_ENTRY, vocabulary};
+    else if (operation === 'annotation_vocabulary_save') {
+      vocabulary = {...input.vocabulary, revision: vocabulary.revision + 1};
+      result = {vocabulary};
+    } else if (operation === 'annotation_vocabulary') result = {vocabulary};
+    else if (operation === 'entry_annotations_save') {
+      expect(input.expectedRevision).toBe(1);
+      saved = input.annotation;
+      result = {status: 'applied'};
+    } else {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({json: {status: 'ok', result}});
+  });
   await page.goto('/');
-  for (const name of [
-    '总览',
-    '文档入口',
-    '工作台',
-    '数据阅览',
-    '报告',
-    '设置',
-  ]) {
-    await openWorkspace(page, name);
-    const heading = page.locator('.product-workspace h1:visible').first();
-    await expect(heading).toHaveText(name === '总览' ? '运行总览' : name);
-    await expect(page.getByRole('combobox', {name: '界面外观'})).toHaveCount(0);
-    const bounds = await page
-      .locator('.product-workspace > .workspace-view:visible')
-      .boundingBox();
-    if (!bounds) throw new Error('Missing active workspace');
-    expect(900 - bounds.y - bounds.height).toBeGreaterThanOrEqual(0);
-    expect(900 - bounds.y - bounds.height).toBeLessThanOrEqual(28);
+  await openWorkspace(page, '工作台');
+  await openDocumentEditor(page);
+  await page
+    .locator('.reader-editor-actions')
+    .getByRole('button', {name: '条目标注', exact: true})
+    .click();
+  const panel = page.getByRole('region', {name: '条目标注', exact: true});
+  await panel.getByRole('button', {name: '词表设置', exact: true}).click();
+  await panel
+    .getByRole('button', {name: '使用六个起始维度', exact: true})
+    .click();
+  await panel.getByRole('button', {name: '保存词表设置', exact: true}).click();
+  await expect(panel.getByText('词表已保存。')).toBeVisible();
+  expect(vocabulary.dimensions).toHaveLength(6);
+  await panel.getByRole('button', {name: '本条标注', exact: true}).click();
+  await panel
+    .getByRole('combobox', {name: '标注维度', exact: true})
+    .selectOption({label: '核心议题'});
+  await panel
+    .getByRole('textbox', {name: '标签名称', exact: true})
+    .fill('浏览器验证');
+  await panel
+    .getByRole('textbox', {name: '具体含义', exact: true})
+    .fill('合成界面测试');
+  await panel
+    .getByRole('textbox', {name: '正文依据', exact: true})
+    .fill('不存在的引用');
+  await panel.getByRole('button', {name: '添加到本条', exact: true}).click();
+  await expect(panel.getByRole('alert')).toContainText('原句');
+  await panel
+    .getByRole('textbox', {name: '正文依据', exact: true})
+    .fill(SYNTHETIC_ENTRY.value.body);
+  await panel.getByRole('button', {name: '添加到本条', exact: true}).click();
+  await panel
+    .getByRole('combobox', {name: '阅读状态', exact: true})
+    .selectOption('read');
+  await panel.getByRole('button', {name: '保存标注草稿', exact: true}).click();
+  await expect(panel.getByText('标注草稿已保存，请确认文档。')).toBeVisible();
+  expect(saved?.labels[0]?.evidence.quote).toBe(SYNTHETIC_ENTRY.value.body);
+  expect(saved?.readingState).toBe('read');
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({width, height: 1000});
+    await panel
+      .getByRole('button', {name: '关闭条目标注', exact: true})
+      .focus();
+    expect(
+      await panel.evaluate((el) => el.scrollWidth - el.clientWidth),
+    ).toBeLessThanOrEqual(1);
     expect(
       await page.evaluate(
-        () => document.documentElement.scrollHeight - innerHeight,
+        () => document.documentElement.scrollWidth - innerWidth,
       ),
     ).toBeLessThanOrEqual(1);
-    const footer = await page.locator('.primary-rail__footer').boundingBox();
-    if (!footer) throw new Error('Missing rail footer on ' + name);
-    expect(footer.y + footer.height, name + ' rail footer').toBeLessThanOrEqual(
-      900,
-    );
-    const headingBounds = await heading.boundingBox();
-    expect(
-      headingBounds?.x,
-      name + ' heading alignment',
-    ).toBeGreaterThanOrEqual(192);
-    expect(headingBounds?.x, name + ' heading alignment').toBeLessThanOrEqual(
-      232,
-    );
-    await page.evaluate(() => document.fonts.ready);
-    if (name === '数据阅览') {
-      await expect(
-        page.getByText('正在读取当前条目…', {exact: true}),
-      ).toHaveCount(0);
-    }
-    await expect(
-      page.getByRole('button', {name: '系统状态 · 正常', exact: true}),
-    ).toBeInViewport();
-    if (name === '设置') {
-      const content = await page.locator('.settings-content').boundingBox();
-      if (!content) throw new Error('Missing settings content');
-      expect(900 - content.y - content.height).toBeGreaterThanOrEqual(16);
-      expect(900 - content.y - content.height).toBeLessThanOrEqual(28);
-      const categories = page.getByRole('complementary', {name: '设置分类'});
-      const rows = categories.locator('.workspace-selection__item');
-      await expect(rows).toHaveCount(4);
-      const widths = await rows.evaluateAll((buttons) =>
-        buttons.map((button) => button.getBoundingClientRect().width),
-      );
-      expect(new Set(widths).size).toBe(1);
-      for (const label of ['处理流程', 'AI 设置', '数据与维护', '页面与外观']) {
-        const row = categories.getByRole('button', {name: label, exact: true});
-        await row.focus();
-        await row.press('Enter');
-        await expect(row).toHaveAttribute('aria-pressed', 'true');
-        await expect(categories.locator('[aria-pressed="true"]')).toHaveCount(
-          1,
-        );
-      }
-    }
+    await panel.evaluate((el) => {
+      el.scrollTop = 0;
+      for (const child of el.querySelectorAll('*'))
+        if (child.scrollHeight > child.clientHeight) child.scrollTop = 0;
+    });
     await page.screenshot({
-      path: testInfo.outputPath('header-' + name + '.png'),
+      path: testInfo.outputPath('p4-annotation-' + width.toString() + '.png'),
       animations: 'disabled',
     });
+    await expect(
+      panel.getByRole('button', {name: '关闭条目标注', exact: true}),
+    ).toBeInViewport();
   }
-  const status = page.getByRole('button', {
-    name: '系统状态 · 正常',
-    exact: true,
+  await page.setViewportSize({width: 1440, height: 1000});
+  await page.emulateMedia({colorScheme: 'dark'});
+  await page.screenshot({
+    path: testInfo.outputPath('p4-dark.png'),
+    animations: 'disabled',
   });
-  const statusBounds = await status.boundingBox();
-  const settingsBounds = await page
-    .getByRole('button', {name: '设置', exact: true})
-    .boundingBox();
-  if (!statusBounds || !settingsBounds) throw new Error('Missing rail footer');
-  expect(statusBounds.y + statusBounds.height).toBeLessThanOrEqual(
-    settingsBounds.y,
-  );
-  await status.click();
-  await expect(
-    page.getByRole('definition').filter({hasText: '已配置'}),
-  ).toBeVisible();
+  await page.emulateMedia({colorScheme: 'light'});
   await page.keyboard.press('Escape');
-  await expect(status).toBeFocused();
-  await expect(page.getByRole('combobox', {name: '默认外观'})).toBeVisible();
-  for (const width of [320, 390, 768, 1024]) {
-    await page.setViewportSize({width, height: 900});
-    const widths = await page
-      .locator('.workspace-selection__item')
-      .evaluateAll((buttons) =>
-        buttons.map((button) => button.getBoundingClientRect().width),
-      );
-    expect(Math.max(...widths) - Math.min(...widths)).toBeLessThanOrEqual(1);
+  await expect(panel).not.toBeVisible();
+  await page.setViewportSize({width: 1440, height: 1000});
+  await openWorkspace(page, '数据阅览');
+  await openQuerySettings(page);
+  const fields = page.getByRole('group', {name: '结构化分类', exact: true});
+  await fields
+    .getByRole('combobox', {name: '标注状态', exact: true})
+    .selectOption('none');
+  await fields
+    .getByRole('combobox', {name: '阅读进度', exact: true})
+    .selectOption('read');
+  await page.screenshot({
+    path: testInfo.outputPath('p4-query.png'),
+    animations: 'disabled',
+  });
+  const searched = page.waitForRequest(
+    (request) =>
+      request.url().endsWith('/api/v1/entries/search') &&
+      request.method() === 'POST',
+  );
+  await submitQuery(page);
+  expect((await searched).postDataJSON()).toMatchObject({
+    annotationFilter: {status: 'none', readingState: 'read'},
+  });
+});
+
+test('P5 separates candidates, topics and metered work without compressing reading', async ({
+  page,
+}, testInfo) => {
+  await installCurrentProductApi(page);
+  const topicId = '00000000-0000-4000-8000-000000000101';
+  const jobId = '00000000-0000-4000-8000-000000000102';
+  let decision = 'included',
+    version = 1,
+    started = false;
+  let selectedScope: unknown;
+  await page.route('**/api/v1/ingestion/commands', async (route) => {
+    const {operation, input} = route.request().postDataJSON() as {
+      operation: string;
+      input: Record<string, unknown>;
+    };
+    let result: unknown;
+    if (operation === 'topics_list')
+      result = {
+        topics: [
+          {
+            id: topicId,
+            version,
+            stale: false,
+            value: {
+              name: '带宽与计算效率',
+              scope: '讨论内存访问对计算速度的影响。',
+              summary: '两份材料解释带宽约束。',
+              members: [
+                {
+                  entryId: ENTRY_ID,
+                  revision: 1,
+                  quote: SYNTHETIC_ENTRY.value.body,
+                  reason: '说明内存访问的开销。',
+                  decision,
+                  origin: 'ai',
+                },
+              ],
+              relations: [],
+            },
+            entries: [
+              {entryId: ENTRY_ID, title: '合成条目：内存访问', stale: false},
+            ],
+          },
+        ],
+        jobs: started
+          ? [
+              {
+                id: jobId,
+                version: 1,
+                status: 'queued',
+                errorCode: 'ai_price_window_closed',
+                attempts: 0,
+                maxAttempts: 2,
+                budgetId: 'synthetic-p5',
+                chargedNanoCny: 0,
+                usageKnown: true,
+                entries: [{entryId: ENTRY_ID, title: '合成条目：内存访问'}],
+              },
+            ]
+          : [],
+      };
+    else if (operation === 'topic_member_set') {
+      decision = (input.member as {decision: string}).decision;
+      version++;
+      result = {topicId};
+    } else if (operation === 'topics_preview')
+      result = {
+        candidates: [
+          {
+            entryId: EXPLORATION_ENTRY_ID,
+            revision: 1,
+            title: '合成条目：优化内存访问',
+            source: 'synthetic.invalid',
+            score: 2,
+            reasons: ['共同标注：内存带宽', '正文词语：缓存、访问'],
+            samples: 2,
+            uncertain: true,
+          },
+        ],
+      };
+    else if (operation === 'topic_job_start') {
+      selectedScope = input.scope;
+      started = true;
+      result = {jobId, reused: false};
+    } else return route.fallback();
+    return route.fulfill({json: {result}});
+  });
+  await page.setViewportSize({width: 1440, height: 1000});
+  await page.goto('/');
+  await openWorkspace(page, '数据阅览');
+  const trigger = page.getByRole('button', {name: '主题与联系', exact: true});
+  await trigger.click();
+  const panel = page.locator('.content-topics-panel:visible');
+  await expect(
+    panel.getByRole('heading', {name: '带宽与计算效率'}),
+  ).toBeVisible();
+  await panel.getByRole('button', {name: '排除', exact: true}).click();
+  await expect(panel.getByText('已排除', {exact: true})).toBeVisible();
+  await panel.getByRole('button', {name: '相似候选', exact: true}).click();
+  await panel.getByRole('button', {name: '查找候选', exact: true}).click();
+  await expect(
+    panel.getByText('共同标注：内存带宽；正文词语：缓存、访问'),
+  ).toBeVisible();
+
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({width, height: 1000});
+    expect(
+      await panel.evaluate((el) => el.scrollWidth - el.clientWidth),
+    ).toBeLessThanOrEqual(1);
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth - innerWidth,
       ),
     ).toBeLessThanOrEqual(1);
     await page.screenshot({
-      path: testInfo.outputPath('settings-' + width.toString() + '.png'),
-      fullPage: true,
+      path: testInfo.outputPath('p5-candidates-' + String(width) + '.png'),
       animations: 'disabled',
+    });
+  }
+  await page.setViewportSize({width: 1440, height: 1000});
+  await panel
+    .getByRole('textbox', {name: '已有批次预算编号'})
+    .fill('synthetic-p5');
+  await panel.getByRole('button', {name: '让 AI 检查并归组'}).click();
+  await expect(panel.getByRole('heading', {name: '等待运行'})).toBeVisible();
+  expect(selectedScope).toMatchObject({
+    entryId: ENTRY_ID,
+    candidateLimit: 8,
+    crossConditions: false,
+  });
+  await expect(panel.getByText(/0.0000 元/)).toBeVisible();
+  await page.emulateMedia({colorScheme: 'dark'});
+  await page.screenshot({
+    path: testInfo.outputPath('p5-dark.png'),
+    animations: 'disabled',
+  });
+  await page.keyboard.press('Escape');
+  await expect(panel).not.toBeVisible();
+  await expect(trigger).toBeFocused();
+});
+
+test('P8 accepted five-page integration and viewport', async ({page}, info) => {
+  await installCurrentProductApi(page, {manualSplitRequests: []});
+  await page.route('**/api/v1/workspace', (route) =>
+    route.fulfill({
+      json: {
+        status: 'ok',
+        workspaceId: WORKSPACE_ID,
+        capabilities: ['source_subscriptions'],
+      },
+    }),
+  );
+  let sources = [
+    {
+      subscriptionId: '99999999-1111-4111-8111-111111111111',
+      kind: 'rss_atom',
+      label: '合成技术来源',
+      description: '技术文章与教程。',
+      enabled: false,
+      sourceAlias: 'synthetic-source',
+      isPrivate: false,
+      intervalMinutes: 1440,
+      feedUrl: 'https://example.invalid/feed',
+      itemLimit: 20,
+    },
+  ];
+  let revision = 0;
+  await page.route('**/api/v1/source-subscriptions', (route) => {
+    if (route.request().method() === 'PUT') {
+      const body = route.request().postDataJSON() as {
+        expectedRevision: number;
+        subscriptions: typeof sources;
+      };
+      expect(body.expectedRevision).toBe(revision);
+      sources = body.subscriptions;
+      revision++;
+    }
+    return route.fulfill({
+      json: {
+        status: route.request().method() === 'PUT' ? 'applied' : 'ok',
+        revision,
+        subscriptions: sources,
+        connectors: [],
+      },
+    });
+  });
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.setViewportSize({width: 1600, height: 1000});
+  await page.emulateMedia({colorScheme: 'dark'});
+  await page.goto('/');
+  await expect(page.locator('.overview-home')).toBeVisible();
+  await page.screenshot({path: info.outputPath('p8-overview.png')});
+  const nav = page.getByRole('navigation', {name: '产品工作区'});
+  await nav.getByRole('button', {name: '源管理', exact: true}).click();
+  await expect(page.getByLabel('来源名称', {exact: true})).toBeVisible();
+  await page.screenshot({path: info.outputPath('p8-sources.png')});
+  await page.getByLabel('来源名称', {exact: true}).fill('合成来源 · 已保存');
+  await page.getByRole('button', {name: '保存设置', exact: true}).click();
+  await expect.poll(() => sources[0]?.label).toBe('合成来源 · 已保存');
+  await page.getByRole('button', {name: '接收记录与计划'}).click();
+  await page.screenshot({path: info.outputPath('p8-source-drawer.png')});
+  await nav.getByRole('button', {name: '文档阅读', exact: true}).click();
+  await expect(page.locator('.reader-study')).toBeVisible();
+  await page.screenshot({path: info.outputPath('p8-reading.png')});
+  await nav.getByRole('button', {name: '数据库', exact: true}).click();
+  await expect(page.locator('.database-blank')).toBeVisible();
+  await page.screenshot({path: info.outputPath('p8-database-idle.png')});
+  await page
+    .getByRole('search')
+    .getByRole('button', {name: '搜索', exact: true})
+    .click();
+  await expect(page.locator('.query-studio-results')).toBeVisible();
+  await expect
+    .poll(
+      async () =>
+        (await page.locator('.search-module').boundingBox())?.y ?? 1000,
+    )
+    .toBeLessThan(70);
+  await page.screenshot({path: info.outputPath('p8-database-results.png')});
+  await page.getByRole('button', {name: '设置', exact: true}).click();
+  await expect(page.locator('.settings-main')).toBeVisible();
+  await page.screenshot({path: info.outputPath('p8-settings.png')});
+  for (const name of [
+    'AI 执行',
+    '自动处理',
+    '标签与词表',
+    '联网与通知',
+    '数据与维护',
+  ]) {
+    await page
+      .locator('.settings-nav')
+      .getByRole('link', {name, exact: true})
+      .click();
+    await page.screenshot({
+      path: info.outputPath('p8-settings-' + encodeURIComponent(name) + '.png'),
     });
   }
   expect(errors).toEqual([]);

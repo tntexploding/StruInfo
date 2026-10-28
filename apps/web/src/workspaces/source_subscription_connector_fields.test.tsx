@@ -13,7 +13,6 @@ const COMMON = Object.freeze({
   enabled: false,
   sourceAlias: 'synthetic',
   isPrivate: false,
-  routeAfterImport: false,
   intervalMinutes: 60,
 });
 

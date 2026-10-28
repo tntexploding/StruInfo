@@ -3,7 +3,10 @@ import {
   AI_OPERATIONS_PAUSED,
   isAiDispatchWait,
 } from '../modules/processing/ai_price_policy.js';
-import type {InformationEntryRepositoryPort} from '../modules/entries/index.js';
+import type {
+  InformationEntryRepositoryPort,
+  CurrentInformationEntry,
+} from '../modules/entries/index.js';
 import type {EvidenceReadRepositoryPort} from '../modules/evidence/index.js';
 import {deriveProcessingRunId} from '../modules/processing/processing_identity.js';
 import type {DocumentIntakeService} from './document_intake_service.js';
@@ -36,6 +39,11 @@ export class ReportService {
       evidence: EvidenceReadRepositoryPort;
       intake: Pick<DocumentIntakeService, 'list'>;
       provider?: ReportProvider;
+      filterEntries?: (
+        request: ReportRequest,
+        entries: readonly CurrentInformationEntry[],
+      ) => Promise<readonly CurrentInformationEntry[]>;
+      withBudget?: <T>(batchId: string, action: () => Promise<T>) => Promise<T>;
       checkModelCall?: () => Promise<void>;
       checkOperations?: () => Promise<void>;
     },
@@ -74,7 +82,8 @@ export class ReportService {
         intakeTargetSnapshot(record) !== source.snapshotId
       )
         throw new OperationError('forbidden', 'report_sources_unavailable');
-      if (entry.revision !== source.revision) stale.push(source.entryId);
+      if (entry.revision !== source.revision && source.frozenText === undefined)
+        stale.push(source.entryId);
     }
     if (strict && stale.length)
       throw new OperationError('conflict', 'report_sources_changed');
@@ -89,7 +98,9 @@ export class ReportService {
     ]);
     return selectReportSources(
       request,
-      [...data.entries.values()],
+      this.deps.filterEntries
+        ? await this.deps.filterEntries(request, [...data.entries.values()])
+        : [...data.entries.values()],
       [...data.intake.values()],
       snapshots,
     );
@@ -114,6 +125,20 @@ export class ReportService {
     const selected = await this.preview(authority, request);
     if (!selected.sources.length)
       throw new OperationError('rejected', 'no_report_sources');
+    const frozen = await this.current(selected.sources.map((s) => s.entryId));
+    const limit = Math.min(
+      12000,
+      Math.floor(90000 / Math.max(1, selected.sources.length)),
+    );
+    for (const source of selected.sources) {
+      const entry = frozen.entries.get(source.entryId);
+      if (entry?.revision !== source.revision)
+        throw new OperationError('conflict', 'report_sources_changed');
+      Object.assign(source, {
+        frozenText: Array.from(entry.value.body).slice(0, limit).join(''),
+        textTruncated: Array.from(entry.value.body).length > limit,
+      });
+    }
     const state: ReportState = {
       request,
       actor: {kind: 'owner', id: authority.identity.id},
@@ -170,6 +195,8 @@ export class ReportService {
       state.status = 'ready';
     }
     validateReportState(state);
+    if (Buffer.byteLength(JSON.stringify(state)) > 900000)
+      throw new OperationError('rejected', 'report_material_too_large');
     if (!(await this.deps.repository.save(reportId, 0, state))) {
       const concurrent = await this.get(reportId);
       if (JSON.stringify(concurrent.state.request) !== JSON.stringify(request))
@@ -455,21 +482,25 @@ export class ReportService {
           unsentCall = true;
           if (!state.planned) {
             const plan = reportPlanSchema.parse(
-              await provider.plan({
-                kind: state.request.kind,
-                sources: state.sources.map((s) => ({
-                  handle: s.handle,
-                  title: s.title,
-                  excerpt: s.excerpt,
-                  keywords: s.keywords,
-                  reason: s.reason,
-                  ...(s.receivedDate ? {receivedDate: s.receivedDate} : {}),
-                  ...(s.publishedDate ? {publishedDate: s.publishedDate} : {}),
-                  ...(s.publicationInferred !== undefined
-                    ? {publicationInferred: s.publicationInferred}
-                    : {}),
-                })),
-              }),
+              await this.modelCall(state, () =>
+                provider.plan({
+                  kind: state.request.kind,
+                  sources: state.sources.map((s) => ({
+                    handle: s.handle,
+                    title: s.title,
+                    excerpt: s.excerpt,
+                    keywords: s.keywords,
+                    reason: s.reason,
+                    ...(s.receivedDate ? {receivedDate: s.receivedDate} : {}),
+                    ...(s.publishedDate
+                      ? {publishedDate: s.publishedDate}
+                      : {}),
+                    ...(s.publicationInferred !== undefined
+                      ? {publicationInferred: s.publicationInferred}
+                      : {}),
+                  })),
+                }),
+              ),
             );
             state.items = [];
             state.otherGroups = [];
@@ -488,37 +519,42 @@ export class ReportService {
             if (!item)
               throw new OperationError('rejected', 'invalid_report_state');
             item.draft = reportStorySchema.parse(
-              await provider.summarize({
-                kind: state.request.kind,
-                title: item.group.title,
-                period: state.period,
-                timeField: state.request.timeField,
-                sources: item.group.sources.map((handle) => {
-                  const source = state.sources.find((s) => s.handle === handle);
-                  const entry = source
-                    ? data.entries.get(source.entryId)
-                    : undefined;
-                  if (!entry)
-                    throw new OperationError(
-                      'rejected',
-                      'report_sources_unavailable',
+              await this.modelCall(state, () =>
+                provider.summarize({
+                  kind: state.request.kind,
+                  title: item.group.title,
+                  period: state.period,
+                  timeField: state.request.timeField,
+                  sources: item.group.sources.map((handle) => {
+                    const source = state.sources.find(
+                      (s) => s.handle === handle,
                     );
-                  return {
-                    handle,
-                    title: entry.value.titlePath,
-                    text: entry.value.body,
-                    ...(source?.receivedDate
-                      ? {receivedDate: source.receivedDate}
-                      : {}),
-                    ...(source?.publishedDate
-                      ? {publishedDate: source.publishedDate}
-                      : {}),
-                    ...(source?.publicationInferred !== undefined
-                      ? {publicationInferred: source.publicationInferred}
-                      : {}),
-                  };
+                    const entry = source
+                      ? data.entries.get(source.entryId)
+                      : undefined;
+                    if (!entry)
+                      throw new OperationError(
+                        'rejected',
+                        'report_sources_unavailable',
+                      );
+                    return {
+                      handle,
+                      title: source?.title ?? entry.value.titlePath,
+                      text: source?.frozenText ?? entry.value.body,
+                      textTruncated: source?.textTruncated ?? false,
+                      ...(source?.receivedDate
+                        ? {receivedDate: source.receivedDate}
+                        : {}),
+                      ...(source?.publishedDate
+                        ? {publishedDate: source.publishedDate}
+                        : {}),
+                      ...(source?.publicationInferred !== undefined
+                        ? {publicationInferred: source.publicationInferred}
+                        : {}),
+                    };
+                  }),
                 }),
-              }),
+              ),
             );
           }
           unsentCall = false;
@@ -556,6 +592,12 @@ export class ReportService {
         });
       }
     });
+  }
+  private modelCall<T>(state: ReportState, call: () => Promise<T>): Promise<T> {
+    if (!state.request.batchId) return call();
+    if (!this.deps.withBudget)
+      throw new OperationError('rejected', 'report_budget_required');
+    return this.deps.withBudget(state.request.batchId, call);
   }
   public stop() {
     this.#closing = true;

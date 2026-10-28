@@ -27,18 +27,6 @@ import {
   DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
   DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
 } from '../modules/entries/index.js';
-import type {
-  EntryAutomationClaim,
-  EntryAutomationExecution,
-  EntryAutomationExecutionInitialize,
-  EntryAutomationExecutionRepositoryPort,
-  EntryAutomationExecutionSettle,
-  EntryAutomationWorkItem,
-  EntryAutomationWorkItemState,
-  EntryAutomationWorkQueueRepositoryPort,
-  ProcessingRun,
-  ProcessingRunWriteOutcome,
-} from '../modules/processing/index.js';
 import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
 import {
   createReviewPreferences,
@@ -49,7 +37,6 @@ import {
   DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
-  type EntryAutomationPolicy,
   type EntryPreferenceProfile,
   type ReviewPreferences,
   type ReviewAssociationPolicyPreferences,
@@ -438,6 +425,8 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_SAVED_QUERIES,
       DEFAULT_WORKSPACE_UI_PREFERENCES,
       {revision: 0, enabled: false},
+      {revision: 0, recipes: []},
+      {revision: 0, dimensions: [], terms: [], aliases: [], relations: []},
     );
   });
 
@@ -457,410 +446,6 @@ describe('M1cApiService', () => {
       body: {issue: {path: 'body.quickTags'}},
     });
     expect(save).not.toHaveBeenCalled();
-  });
-
-  it('serves the versioned Entry preference profile, suggestions and read-only trial', async () => {
-    let profile: Readonly<EntryPreferenceProfile> =
-      DEFAULT_ENTRY_PREFERENCE_PROFILE;
-    const entries = Object.freeze([
-      syntheticPreferenceServiceEntry(71),
-      syntheticPreferenceServiceEntry(72),
-      syntheticPreferenceServiceEntry(73),
-    ]);
-    const privateEntry = syntheticPreferenceServiceEntry(74);
-    const privateEntries = Object.freeze([
-      ...entries,
-      Object.freeze({
-        ...privateEntry,
-        value: Object.freeze({...privateEntry.value, isPrivate: true}),
-      }),
-    ]);
-    const loadCurrentEntries = vi.fn(
-      (_workspaceId: string, includePrivate: boolean) =>
-        Promise.resolve(includePrivate ? privateEntries : entries),
-    );
-    const load = vi.fn((workspaceId: string) =>
-      Promise.resolve({
-        format: 'struinfo.review-preferences' as const,
-        version: 1 as const,
-        workspaceId,
-        quickTags: ['保留快捷标记'],
-        automaticKeywords: DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
-        vocabulary: DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
-        associationPolicy: DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
-        explorationPolicy: DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
-        sourceSubscriptions: DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
-        entryPreferenceProfile: profile,
-      }),
-    );
-    const save = vi.fn(
-      (
-        workspaceId: string,
-        quickTags: readonly string[],
-        automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences>,
-        vocabulary: Readonly<ReviewVocabularyPreferences>,
-        associationPolicy: Readonly<ReviewAssociationPolicyPreferences>,
-        explorationPolicy: Readonly<ReviewExplorationPolicyPreferences>,
-        sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences>,
-        nextProfile: Readonly<EntryPreferenceProfile>,
-      ) => {
-        profile = nextProfile;
-        return Promise.resolve({
-          format: 'struinfo.review-preferences' as const,
-          version: 1 as const,
-          workspaceId,
-          quickTags,
-          automaticKeywords,
-          vocabulary,
-          associationPolicy,
-          explorationPolicy,
-          sourceSubscriptions,
-          entryPreferenceProfile: nextProfile,
-        });
-      },
-    );
-    const service = createService({
-      reviewPreferences: {load, save},
-      informationEntryRepository: {
-        materializeEntries: () =>
-          Promise.resolve({outcome: 'existing', createdCount: 0}),
-        materializeEntriesIfSnapshotEmpty: () =>
-          Promise.resolve({outcome: 'existing', createdCount: 0}),
-        reviseEntry: () => Promise.resolve('not_found'),
-        loadCurrentEntries,
-      },
-    });
-    const rule = Object.freeze({
-      ruleId: '77777777-7777-4777-8777-777777777777',
-      dimension: 'usefulness' as const,
-      featureKind: 'content_keyword' as const,
-      featureIdentity: 'postgresql',
-      displayValue: 'PostgreSQL',
-      effect: 'prefer' as const,
-      weight: 4 as const,
-    });
-
-    await expect(
-      service.loadInformationEntryPreferenceProfile(),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {status: 'ok', profile: {revision: 0, enabled: false, rules: []}},
-    });
-    await expect(
-      service.saveInformationEntryPreferenceProfile({
-        expectedRevision: 0,
-        enabled: true,
-        rules: [rule],
-      }),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {
-        status: 'applied',
-        profile: {revision: 1, enabled: true, rules: [rule]},
-      },
-    });
-    expect(save).toHaveBeenCalledExactlyOnceWith(
-      WORKSPACE_ID,
-      ['保留快捷标记'],
-      DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
-      DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
-      DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
-      DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
-      DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
-      {revision: 1, enabled: true, rules: [rule]},
-      DEFAULT_ENTRY_AUTOMATION_POLICY,
-      DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
-      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
-      DEFAULT_ENTRY_SAVED_QUERIES,
-      DEFAULT_WORKSPACE_UI_PREFERENCES,
-      {revision: 0, enabled: false},
-    );
-    await expect(
-      service.saveInformationEntryPreferenceProfile({
-        expectedRevision: 0,
-        enabled: false,
-        rules: [],
-      }),
-    ).resolves.toMatchObject({
-      statusCode: 409,
-      body: {
-        status: 'rejected',
-        issue: {code: 'stale_entry_preference_profile_revision'},
-      },
-    });
-    expect(save).toHaveBeenCalledTimes(1);
-
-    await expect(
-      service.suggestInformationEntryPreferenceProfile({
-        includePrivate: false,
-      }),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {
-        status: 'ok',
-        visibleEntryCount: 3,
-        totalCandidateCount: 6,
-        candidates: [
-          {
-            dimension: 'usefulness',
-            featureKind: 'content_keyword',
-            featureIdentity: 'postgresql',
-            positiveCount: 3,
-          },
-          {
-            dimension: 'usefulness',
-            featureKind: 'type',
-            featureIdentity: 'knowledge_explanation',
-          },
-          {
-            dimension: 'usefulness',
-            featureKind: 'domain',
-            featureIdentity: 'engineering_computing',
-          },
-          {
-            dimension: 'interest',
-            featureKind: 'content_keyword',
-            featureIdentity: 'postgresql',
-          },
-          {
-            dimension: 'interest',
-            featureKind: 'type',
-            featureIdentity: 'knowledge_explanation',
-          },
-          {
-            dimension: 'interest',
-            featureKind: 'domain',
-            featureIdentity: 'engineering_computing',
-          },
-        ],
-      },
-    });
-    await expect(
-      service.trialInformationEntryPreferenceProfile({
-        includePrivate: false,
-        expectedProfileRevision: 1,
-        profile,
-      }),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {
-        status: 'complete',
-        visibleEntryCount: 3,
-        evaluatedEntryCount: 3,
-        items: [
-          {totals: {usefulness: 4, interest: 0}},
-          {totals: {usefulness: 4, interest: 0}},
-          {totals: {usefulness: 4, interest: 0}},
-        ],
-      },
-    });
-    await expect(
-      service.suggestInformationEntryPreferenceProfile({
-        includePrivate: true,
-      }),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {
-        status: 'ok',
-        includePrivate: true,
-        visibleEntryCount: 4,
-      },
-    });
-    expect(loadCurrentEntries).toHaveBeenCalledTimes(3);
-    expect(loadCurrentEntries).toHaveBeenNthCalledWith(1, WORKSPACE_ID, false);
-    expect(loadCurrentEntries).toHaveBeenNthCalledWith(2, WORKSPACE_ID, false);
-    expect(loadCurrentEntries).toHaveBeenNthCalledWith(3, WORKSPACE_ID, true);
-  });
-
-  it('serves owner-controlled automation policy, trial, execution and audit through the public service', async () => {
-    const profile: Readonly<EntryPreferenceProfile> = Object.freeze({
-      revision: 1,
-      enabled: true,
-      rules: Object.freeze([
-        Object.freeze({
-          ruleId: '77777777-7777-4777-8777-777777777777',
-          dimension: 'usefulness' as const,
-          featureKind: 'content_keyword' as const,
-          featureIdentity: 'postgresql',
-          displayValue: 'PostgreSQL',
-          effect: 'prefer' as const,
-          weight: 5 as const,
-        }),
-      ]),
-    });
-    const preferences = new MemoryAutomationPreferences(
-      createReviewPreferences(
-        WORKSPACE_ID,
-        ['保留快捷标记'],
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        profile,
-      ),
-    );
-    const entries = Object.freeze([
-      syntheticPreferenceServiceEntry(81),
-      syntheticPreferenceServiceEntry(82),
-    ]);
-    const executions = new MemoryAutomationExecutionRepository();
-    const service = createService({
-      reviewPreferences: preferences,
-      entryAutomationExecutionRepository: executions,
-      entryAutomationWorkQueueRepository: executions,
-      informationEntryRepository: {
-        materializeEntries: () =>
-          Promise.resolve({outcome: 'existing', createdCount: 0}),
-        materializeEntriesIfSnapshotEmpty: () =>
-          Promise.resolve({outcome: 'existing', createdCount: 0}),
-        reviseEntry: () => Promise.resolve('not_found'),
-        loadCurrentEntries: () => Promise.resolve(entries),
-      },
-      processingRunRepository: {
-        listRecentRuns: () =>
-          Promise.resolve(
-            executions.current === undefined
-              ? []
-              : [automationProcessingRun(executions.current)],
-          ),
-        createRun: () => Promise.resolve('not_found'),
-        writeProgress: () => Promise.resolve('not_found'),
-        cancelRun: () => Promise.resolve('not_found'),
-        appendProposal: () => Promise.resolve('not_found'),
-      },
-    });
-
-    await expect(
-      service.loadInformationEntryAutomationPolicy(),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {
-        status: 'ok',
-        policy: {revision: 0, enabled: false, paused: false},
-        profile: {revision: 1, enabled: true, ruleCount: 1},
-      },
-    });
-
-    const policyDraft = automationPolicyDraft(1);
-    const saved = await service.saveInformationEntryAutomationPolicy({
-      expectedRevision: 0,
-      ...policyDraft,
-    });
-    expect(saved).toMatchObject({
-      statusCode: 200,
-      body: {
-        status: 'applied',
-        policy: {revision: 1, enabled: true, profileRevision: 1},
-      },
-    });
-    const policy = preferences.value.entryAutomationPolicy;
-    expect(policy).toBeDefined();
-
-    await expect(
-      service.trialInformationEntryAutomationPolicy({
-        includePrivate: false,
-        expectedPolicyRevision: 1,
-        expectedProfileRevision: 1,
-        policy,
-        manualTakeoverEntryIds: [entries[0]?.entryId],
-      }),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {
-        status: 'complete',
-        dryRunOnly: true,
-        activation: 'ready',
-        counts: {advance_candidate: 1, manual_review: 1, defer_candidate: 0},
-        items: [
-          {route: 'manual_review', reason: 'manual_takeover'},
-          {route: 'advance_candidate', reason: 'advance_threshold_met'},
-        ],
-      },
-    });
-
-    const executed = await service.executeInformationEntryAutomation({
-      idempotencyKey: 'm1g-4c-synthetic-run',
-      includePrivate: false,
-      expectedPolicyRevision: 1,
-      expectedProfileRevision: 1,
-      manualTakeoverEntryIds: [entries[0]?.entryId],
-    });
-    expect(executed).toMatchObject({
-      statusCode: 200,
-      body: {
-        status: 'succeeded',
-        replayed: false,
-        counts: {advance_candidate: 1, manual_review: 1, defer_candidate: 0},
-        execution: {
-          status: 'succeeded',
-          policyRevision: 1,
-          profileRevision: 1,
-          claims: [
-            {route: 'manual_review', status: 'completed'},
-            {route: 'advance_candidate', status: 'completed'},
-          ],
-        },
-      },
-    });
-    expect(executions.current?.runId).toBeDefined();
-
-    await expect(
-      service.listInformationEntryAutomationExecutions(10),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {
-        status: 'ok',
-        executions: [{status: 'succeeded', claims: [{}, {}]}],
-      },
-    });
-    await expect(
-      service.loadInformationEntryAutomationExecution(
-        executions.current?.runId ?? '',
-      ),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {status: 'ok', execution: {status: 'succeeded'}},
-    });
-    await expect(
-      service.listInformationEntryAutomationWorkQueue(false),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {
-        status: 'ok',
-        items: [
-          {state: 'pending', route: 'manual_review', stale: false},
-          {state: 'pending', route: 'advance_candidate', stale: false},
-        ],
-      },
-    });
-    await expect(
-      service.updateInformationEntryAutomationWorkItem(
-        executions.current?.runId ?? '',
-        '0',
-        {
-          expectedVersion: 1,
-          state: 'completed',
-          includePrivate: false,
-        },
-      ),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {status: 'applied', item: {state: 'completed', version: 2}},
-    });
-
-    await expect(
-      service.saveInformationEntryAutomationPolicy({
-        expectedRevision: 0,
-        ...policyDraft,
-      }),
-    ).resolves.toMatchObject({
-      statusCode: 409,
-      body: {
-        status: 'rejected',
-        issue: {code: 'stale_entry_automation_policy_revision'},
-      },
-    });
   });
 
   it('versions association weights in external personal preferences and rejects stale writes', async () => {
@@ -944,6 +529,8 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_SAVED_QUERIES,
       DEFAULT_WORKSPACE_UI_PREFERENCES,
       {revision: 0, enabled: false},
+      {revision: 0, recipes: []},
+      {revision: 0, dimensions: [], terms: [], aliases: [], relations: []},
     );
     await expect(
       service.reviseInformationEntryAssociationPolicy({
@@ -1067,6 +654,8 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_SAVED_QUERIES,
       DEFAULT_WORKSPACE_UI_PREFERENCES,
       {revision: 0, enabled: false},
+      {revision: 0, recipes: []},
+      {revision: 0, dimensions: [], terms: [], aliases: [], relations: []},
     );
 
     await expect(
@@ -1132,6 +721,8 @@ describe('M1cApiService', () => {
       DEFAULT_ENTRY_SAVED_QUERIES,
       DEFAULT_WORKSPACE_UI_PREFERENCES,
       {revision: 0, enabled: false},
+      {revision: 0, recipes: []},
+      {revision: 0, dimensions: [], terms: [], aliases: [], relations: []},
     );
   });
 
@@ -3313,7 +2904,6 @@ describe('M1E provider-neutral processing API', () => {
       profile: 'commonmark-v1' as const,
       sourceAlias: 'synthetic-source',
       isPrivate: false,
-      routeAfterImport: false,
       intervalMinutes: 1_440,
     });
     const rssSubscription = Object.freeze({
@@ -3325,7 +2915,6 @@ describe('M1E provider-neutral processing API', () => {
       itemLimit: 10,
       sourceAlias: 'synthetic-feed',
       isPrivate: false,
-      routeAfterImport: false,
       intervalMinutes: 60,
     });
     const jsonSubscription = Object.freeze({
@@ -3356,7 +2945,6 @@ describe('M1E provider-neutral processing API', () => {
       }),
       sourceAlias: 'synthetic-json',
       isPrivate: false,
-      routeAfterImport: false,
       intervalMinutes: 60,
     });
     const webSubscription = Object.freeze({
@@ -3368,7 +2956,6 @@ describe('M1E provider-neutral processing API', () => {
       additionalPaths: Object.freeze(['/about']),
       sourceAlias: 'synthetic-web',
       isPrivate: false,
-      routeAfterImport: false,
       intervalMinutes: 60,
     });
     const pluginSubscription = Object.freeze({
@@ -3380,7 +2967,6 @@ describe('M1E provider-neutral processing API', () => {
       configurationRef: 'profile.default',
       sourceAlias: 'synthetic-plugin',
       isPrivate: true,
-      routeAfterImport: false,
       intervalMinutes: 120,
     });
     const replace = vi.fn(() =>
@@ -3929,229 +3515,6 @@ class MemoryAutomationPreferences implements ReviewPreferencesStore {
   }
 }
 
-class MemoryAutomationExecutionRepository
-  implements
-    EntryAutomationExecutionRepositoryPort,
-    EntryAutomationWorkQueueRepositoryPort
-{
-  public current: Readonly<EntryAutomationExecution> | undefined;
-  public workItems: EntryAutomationWorkItem[] = [];
-
-  public loadExecution(
-    _workspaceId: string,
-    runId: string,
-  ): Promise<Readonly<EntryAutomationExecution> | undefined> {
-    return Promise.resolve(
-      this.current?.runId === runId ? this.current : undefined,
-    );
-  }
-
-  public initializeExecution(
-    initialize: Readonly<EntryAutomationExecutionInitialize>,
-  ): Promise<ProcessingRunWriteOutcome> {
-    if (this.current !== undefined) {
-      return Promise.resolve(
-        this.current.requestSha256 === initialize.requestSha256 &&
-          this.current.planSha256 === initialize.planSha256
-          ? 'unchanged'
-          : 'conflict',
-      );
-    }
-    this.current = Object.freeze({
-      workspaceId: initialize.workspaceId,
-      runId: initialize.runId,
-      idempotencyKey: initialize.idempotencyKey,
-      requestSha256: initialize.requestSha256,
-      planSha256: initialize.planSha256,
-      policyRevision: initialize.policyRevision,
-      profileRevision: initialize.profileRevision,
-      includePrivate: initialize.includePrivate,
-      status: 'queued',
-      version: 1,
-      claims: Object.freeze(
-        initialize.claims.map((claim) => automationClaim(initialize, claim)),
-      ),
-    });
-    return Promise.resolve('applied');
-  }
-
-  public startExecution(
-    _workspaceId: string,
-    _runId: string,
-    expectedVersion: number,
-  ): Promise<ProcessingRunWriteOutcome> {
-    if (this.current === undefined) return Promise.resolve('not_found');
-    if (this.current.status !== 'queued') return Promise.resolve('terminal');
-    if (this.current.version !== expectedVersion)
-      return Promise.resolve('stale');
-    this.current = Object.freeze({
-      ...this.current,
-      status: 'running',
-      version: 2,
-    });
-    return Promise.resolve('applied');
-  }
-
-  public settleExecution(
-    settle: Readonly<EntryAutomationExecutionSettle>,
-  ): Promise<ProcessingRunWriteOutcome> {
-    if (this.current === undefined) return Promise.resolve('not_found');
-    if (this.current.version !== settle.expectedVersion) {
-      return Promise.resolve('stale');
-    }
-    const claimStatus =
-      settle.status === 'succeeded' ? 'completed' : 'compensated';
-    this.current = Object.freeze({
-      ...this.current,
-      status: settle.status,
-      version: this.current.version + 1,
-      ...(settle.errorCode === undefined ? {} : {errorCode: settle.errorCode}),
-      claims: Object.freeze(
-        this.current.claims.map((claim) =>
-          Object.freeze({
-            ...claim,
-            status: claimStatus,
-            ...(settle.errorCode === undefined
-              ? {}
-              : {errorCode: settle.errorCode}),
-            finishedAt: '2040-01-02T03:04:06.000Z',
-          }),
-        ),
-      ),
-    });
-    if (settle.status === 'succeeded') {
-      this.workItems = this.current.claims.map((claim) => ({
-        workspaceId: claim.workspaceId,
-        runId: claim.runId,
-        claimOrdinal: claim.ordinal,
-        entryId: claim.entryId,
-        entryRevision: claim.entryRevision,
-        entryRevisionId: claim.entryRevisionId,
-        route: claim.route,
-        reason: claim.reason,
-        state: 'pending',
-        version: 1,
-        createdAt: '2040-01-02T03:04:06.000Z',
-        updatedAt: '2040-01-02T03:04:06.000Z',
-      }));
-    }
-    return Promise.resolve('applied');
-  }
-
-  public listWorkItems(): Promise<
-    readonly Readonly<EntryAutomationWorkItem>[]
-  > {
-    return Promise.resolve(Object.freeze([...this.workItems]));
-  }
-
-  public loadWorkItem(
-    _workspaceId: string,
-    runId: string,
-    claimOrdinal: number,
-  ): Promise<Readonly<EntryAutomationWorkItem> | undefined> {
-    return Promise.resolve(
-      this.workItems.find(
-        (item) => item.runId === runId && item.claimOrdinal === claimOrdinal,
-      ),
-    );
-  }
-
-  public updateWorkItem(
-    _workspaceId: string,
-    runId: string,
-    claimOrdinal: number,
-    expectedVersion: number,
-    state: EntryAutomationWorkItemState,
-  ): Promise<ProcessingRunWriteOutcome> {
-    const index = this.workItems.findIndex(
-      (item) => item.runId === runId && item.claimOrdinal === claimOrdinal,
-    );
-    const current = this.workItems[index];
-    if (current === undefined) return Promise.resolve('not_found');
-    if (current.version !== expectedVersion) return Promise.resolve('stale');
-    if (current.state === state) return Promise.resolve('unchanged');
-    const withoutResolution = {...current};
-    delete withoutResolution.resolvedAt;
-    this.workItems[index] = {
-      ...withoutResolution,
-      state,
-      version: current.version + 1,
-      updatedAt: '2040-01-02T04:00:00.000Z',
-      ...(state === 'pending' ? {} : {resolvedAt: '2040-01-02T04:00:00.000Z'}),
-    };
-    return Promise.resolve('applied');
-  }
-}
-
-function automationPolicyDraft(
-  profileRevision: number,
-): Omit<EntryAutomationPolicy, 'revision'> {
-  return Object.freeze({
-    enabled: true,
-    paused: false,
-    profileRevision,
-    minimumMatchedRuleCount: 1,
-    advanceThresholds: Object.freeze({
-      usefulness: 3,
-      interest: 3,
-      requiredDimensions: 1,
-    }),
-    deferThresholds: Object.freeze({
-      usefulness: 3,
-      interest: 3,
-      requiredDimensions: 1,
-    }),
-    budgets: Object.freeze({
-      maximumEntriesPerRun: 10,
-      maximumAdvanceCandidatesPerRun: 10,
-      maximumDeferCandidatesPerRun: 10,
-    }),
-    failureMode: 'pause',
-  });
-}
-
-function automationClaim(
-  initialize: Readonly<EntryAutomationExecutionInitialize>,
-  claim: Readonly<EntryAutomationExecutionInitialize['claims'][number]>,
-): Readonly<EntryAutomationClaim> {
-  return Object.freeze({
-    workspaceId: initialize.workspaceId,
-    runId: initialize.runId,
-    ...claim,
-    status: 'claimed',
-    createdAt: '2040-01-02T03:04:05.000Z',
-  });
-}
-
-function automationProcessingRun(
-  execution: Readonly<EntryAutomationExecution>,
-): Readonly<ProcessingRun> {
-  return Object.freeze({
-    workspaceId: execution.workspaceId,
-    runId: execution.runId,
-    idempotencyKey: execution.idempotencyKey,
-    origin: 'deterministic',
-    status: execution.status,
-    privacyScope: execution.includePrivate ? 'include_private' : 'public_only',
-    currentStage: 'tags',
-    currentStep:
-      execution.status === 'succeeded'
-        ? 'automation_complete'
-        : 'automation_routing',
-    completedUnits:
-      execution.status === 'succeeded' ? execution.claims.length : 0,
-    totalUnits: execution.claims.length,
-    attempt: 1,
-    version: execution.version,
-    createdAt: '2040-01-02T03:04:05.000Z',
-    updatedAt: '2040-01-02T03:04:06.000Z',
-    ...(execution.status === 'succeeded'
-      ? {finishedAt: '2040-01-02T03:04:06.000Z'}
-      : {}),
-    proposals: Object.freeze([]),
-  });
-}
-
 function syntheticExplorationEntry(
   ordinal: number,
   snapshotId: string,
@@ -4188,28 +3551,6 @@ function syntheticExplorationEntry(
         }),
       ]),
       fragmentIds: Object.freeze([FRAGMENT_ID]),
-    }),
-  });
-}
-
-function syntheticPreferenceServiceEntry(
-  ordinal: number,
-): Readonly<CurrentInformationEntry> {
-  const base = syntheticExplorationEntry(ordinal, SNAPSHOT_ID);
-  return Object.freeze({
-    ...base,
-    value: Object.freeze({
-      ...base.value,
-      usefulnessScore: 5 as const,
-      interestScore: 4 as const,
-      contentKeywords: Object.freeze([
-        Object.freeze({
-          displayValue: 'PostgreSQL',
-          normalizedValue: 'postgresql',
-          origin: 'manual' as const,
-          originVersion: 'synthetic.v1',
-        }),
-      ]),
     }),
   });
 }

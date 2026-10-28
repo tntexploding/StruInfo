@@ -14,7 +14,33 @@ describe('StruInfo MCP protocol', () => {
     await client.connect(b);
     try {
       const tools = await client.listTools();
-      expect(tools.tools).toHaveLength(29);
+      expect(tools.tools).toHaveLength(46);
+      for (const name of [
+        'split_recipes_read',
+        'split_recipe_preview',
+        'annotation_vocabulary',
+        'topics_list',
+        'topics_preview',
+        'entry_annotations_read',
+      ]) {
+        expect(
+          tools.tools.find((tool) => tool.name === name)?.annotations,
+        ).toMatchObject({readOnlyHint: true, openWorldHint: false});
+      }
+      expect(
+        tools.tools.find((tool) => tool.name === 'split_recipe_apply')
+          ?.annotations,
+      ).toMatchObject({readOnlyHint: false, openWorldHint: false});
+      expect(
+        tools.tools.some((tool) => tool.name === 'split_recipe_control'),
+      ).toBe(false);
+      expect(
+        tools.tools.some((tool) => tool.name === 'annotation_vocabulary_save'),
+      ).toBe(false);
+      expect(
+        tools.tools.find((tool) => tool.name === 'entry_annotations_save')
+          ?.annotations,
+      ).toMatchObject({readOnlyHint: false, openWorldHint: false});
       expect(
         tools.tools.find((tool) => tool.name === 'processing_standard')
           ?.annotations,
@@ -68,6 +94,42 @@ describe('StruInfo MCP protocol', () => {
         arguments: {stage: 'tags'},
       });
       expect(call).toHaveBeenCalledWith('processing_standard', {stage: 'tags'});
+      await client.callTool({name: 'annotation_vocabulary', arguments: {}});
+      expect(call).toHaveBeenCalledWith('annotation_vocabulary', {});
+      const annotationEntryId = '00000000-0000-4000-8000-000000000001';
+      const annotationWrite = {
+        entryId: annotationEntryId,
+        includePrivate: false,
+        expectedRevision: 1,
+        vocabularyRevision: 0,
+        annotation: {
+          status: 'none',
+          note: '',
+          readingState: 'unread',
+          labels: [],
+          claims: [],
+        },
+      };
+      expect(
+        (
+          await client.callTool({
+            name: 'entry_annotations_save',
+            arguments: annotationWrite,
+          })
+        ).isError,
+      ).toBe(false);
+      expect(call).toHaveBeenCalledWith(
+        'entry_annotations_save',
+        annotationWrite,
+      );
+      expect(
+        (
+          await client.callTool({
+            name: 'entry_annotations_save',
+            arguments: {...annotationWrite, expectedRevision: 0},
+          })
+        ).isError,
+      ).toBe(true);
       for (const name of [
         'intake_prepare',
         'document_import',

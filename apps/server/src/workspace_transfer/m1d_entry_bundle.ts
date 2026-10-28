@@ -1,3 +1,4 @@
+import {structuredAnnotationsSchema} from '../modules/entries/structured_annotations.js';
 import {Buffer} from 'node:buffer';
 
 import {
@@ -13,8 +14,8 @@ import {
 } from './workspace_bundle.js';
 
 export const M1D_ENTRY_BUNDLE_SECTION_TYPE = 'struinfo.m1d-entry';
-export const M1D_ENTRY_BUNDLE_SECTION_VERSION = 7;
-export const M1D_ENTRY_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v7';
+export const M1D_ENTRY_BUNDLE_SECTION_VERSION = 8;
+export const M1D_ENTRY_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v8';
 export const M1D_ENTRY_VERSION_SIX_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v6';
 export const M1D_ENTRY_VERSION_FIVE_BUNDLE_SECTION_VERSION = 5;
 export const M1D_ENTRY_VERSION_FIVE_BUNDLE_SCHEMA = 'struinfo.m1d-entry.v5';
@@ -165,9 +166,18 @@ export const M1D_ENTRY_TABLES: readonly Readonly<M1dEntryTableDescriptor>[] =
       'prompt_version',
       'translated_at',
     ]),
+    table('information_entry_annotation', [
+      'workspace_id',
+      'entry_id',
+      'value_text',
+    ]),
   ]);
 
-const VERSION_FIVE_ENTRY_TABLES = Object.freeze(M1D_ENTRY_TABLES.slice(0, -1));
+const VERSION_SEVEN_ENTRY_TABLES = Object.freeze(M1D_ENTRY_TABLES.slice(0, -1));
+
+const VERSION_FIVE_ENTRY_TABLES = Object.freeze(
+  VERSION_SEVEN_ENTRY_TABLES.slice(0, -1),
+);
 const VERSION_FOUR_ENTRY_TABLES = Object.freeze(
   VERSION_FIVE_ENTRY_TABLES.slice(0, -1),
 );
@@ -302,16 +312,16 @@ export const M1D_ENTRY_VERSION_SIX_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
       return normalizeSnapshot(
         value,
         M1D_ENTRY_VERSION_SIX_BUNDLE_SCHEMA,
-        M1D_ENTRY_TABLES,
+        VERSION_SEVEN_ENTRY_TABLES,
       );
     },
     decode(payload: JsonValue): unknown {
       const snapshot = normalizeSnapshot(
         payload,
         M1D_ENTRY_VERSION_SIX_BUNDLE_SCHEMA,
-        M1D_ENTRY_TABLES,
+        VERSION_SEVEN_ENTRY_TABLES,
       );
-      return normalizeM1dEntrySnapshot({
+      return upgradeToCurrent({
         ...snapshot,
         schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
       });
@@ -335,7 +345,7 @@ export const M1D_ENTRY_VERSION_FIVE_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
         M1D_ENTRY_VERSION_FIVE_BUNDLE_SCHEMA,
         VERSION_FIVE_ENTRY_TABLES,
       );
-      return normalizeM1dEntrySnapshot({
+      return upgradeToCurrent({
         schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
         tables: [
           ...snapshot.tables,
@@ -395,6 +405,41 @@ export const M1D_ENTRY_LEGACY_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
     },
   });
 
+function upgradeToCurrent(value: {
+  schemaVersion: string;
+  tables: readonly Readonly<M1dEntryTableSnapshot>[];
+}): M1dEntrySnapshot {
+  return normalizeM1dEntrySnapshot({
+    ...value,
+    schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
+    tables: value.tables.some((t) => t.name === 'information_entry_annotation')
+      ? value.tables
+      : [...value.tables, {name: 'information_entry_annotation', rows: []}],
+  });
+}
+
+export const M1D_ENTRY_VERSION_SEVEN_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1D_ENTRY_BUNDLE_SECTION_TYPE,
+    version: 7,
+    encode(value: unknown) {
+      return normalizeSnapshot(
+        value,
+        'struinfo.m1d-entry.v7',
+        VERSION_SEVEN_ENTRY_TABLES,
+      );
+    },
+    decode(value: JsonValue) {
+      return upgradeToCurrent(
+        normalizeSnapshot(
+          value,
+          'struinfo.m1d-entry.v7',
+          VERSION_SEVEN_ENTRY_TABLES,
+        ),
+      );
+    },
+  });
+
 export function normalizeM1dEntrySnapshot(value: unknown): M1dEntrySnapshot {
   return normalizeSnapshot(
     value,
@@ -426,7 +471,7 @@ export function m1dEntryTableCounts(
 }
 
 export function createEmptyM1dEntrySnapshot(): M1dEntrySnapshot {
-  return normalizeM1dEntrySnapshot({
+  return upgradeToCurrent({
     schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
     tables: M1D_ENTRY_TABLES.map((descriptor) => ({
       name: descriptor.name,
@@ -480,7 +525,7 @@ function normalizeVersionFourSnapshot(value: unknown): Readonly<{
 function upgradeVersionFourSnapshot(
   snapshot: ReturnType<typeof normalizeVersionFourSnapshot>,
 ): M1dEntrySnapshot {
-  return normalizeM1dEntrySnapshot({
+  return upgradeToCurrent({
     schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
     tables: [
       ...snapshot.tables,
@@ -647,7 +692,7 @@ function upgradeLegacySnapshot(
     })
     .map((row) => rowFor(requiredDescriptor(M1D_ENTRY_TABLES, 6), row));
 
-  return normalizeM1dEntrySnapshot({
+  return upgradeToCurrent({
     schemaVersion: M1D_ENTRY_BUNDLE_SCHEMA,
     tables: [
       {name: 'information_entry', rows: currentEntries},
@@ -772,6 +817,14 @@ function normalizeRow(
   descriptor: Readonly<M1dEntryTableDescriptor>,
 ): M1dEntryRow {
   const record = requireClosedObject(value, descriptor.columns);
+  if (descriptor.name === 'information_entry_annotation') {
+    if (typeof record.value_text !== 'string') fail();
+    try {
+      structuredAnnotationsSchema.parse(JSON.parse(record.value_text));
+    } catch {
+      fail();
+    }
+  }
   if (
     typeof record.workspace_id !== 'string' ||
     !CANONICAL_UUID.test(record.workspace_id)

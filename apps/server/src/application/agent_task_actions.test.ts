@@ -1,4 +1,10 @@
 import {requireOperationValue} from './operation_error.js';
+import type {SourceSplitService} from './source_split_service.js';
+import {
+  SOURCE_SPLIT_ENGINE,
+  SOURCE_RECIPE_SPLIT_VERSION,
+  type SourceSplitDefinition,
+} from '../modules/entries/source_split_recipe.js';
 import {createHash} from 'node:crypto';
 import type {AiTagProposalServicePort} from '../modules/processing/ai_tag_proposal_service.js';
 import type {DocumentIntakeService} from './document_intake_service.js';
@@ -22,30 +28,6 @@ const W = '00000000-0000-4000-8000-000000000001',
   E = '00000000-0000-4000-8000-000000000002',
   S = '00000000-0000-4000-8000-000000000003';
 
-it('does not apply a verified relation after the owner rejects its original proposal', async () => {
-  const f = fixture();
-  const actions = new AgentTaskActions(f.dependencies);
-  vi.spyOn(actions, 'loadRun').mockResolvedValue({
-    proposals: [{status: 'rejected'}],
-  } as unknown as ProcessingRun);
-  const task = {
-    ...f.task,
-    state: {...f.task.state, relationReviewRequired: true},
-  };
-  const step: AgentTaskStep = {
-    kind: 'relation',
-    targetId: E,
-    relatedEntryId: S,
-    attempt: 1,
-    complete: false,
-    runId: W,
-    reviewRunId: S,
-  };
-  await expect(
-    actions.accept(task, step, {proposalId: E} as ProcessingProposal),
-  ).rejects.toMatchObject({code: 'ai_proposal_invalid'});
-});
-
 function batchTags(): AiTagProposalServicePort {
   return {
     providerKey: 'deepseek-responses-v1',
@@ -61,7 +43,7 @@ function batchTags(): AiTagProposalServicePort {
 
 it('groups only unfinished tag steps, shrinks retries and keeps a large Entry whole', async () => {
   const f = fixture();
-  const entries = Array.from({length: 6}, (_, index) => ({
+  const entries = Array.from({length: 10}, (_, index) => ({
     ...f.current,
     entryId: `00000000-0000-4000-8000-${String(80 + index).padStart(12, '0')}`,
   }));
@@ -90,7 +72,7 @@ it('groups only unfinished tag steps, shrinks retries and keeps a large Entry wh
     } as AgentTask;
     expect(
       await actions.tagGroup(task, requireOperationValue(steps[0])),
-    ).toHaveLength(4 / 2 ** attempt);
+    ).toHaveLength(requireOperationValue([8, 4, 1][attempt]));
     const done = {...requireOperationValue(steps[1]), complete: true};
     expect(
       (
@@ -131,8 +113,8 @@ it('groups only unfinished tag steps, shrinks retries and keeps a large Entry wh
   expect(startBatch).not.toHaveBeenCalled();
 });
 
-it.each([35, 31])(
-  'estimates tag calls from %i exact split ranges before materialization',
+it.each([35, 31, 32, 64])(
+  'estimates tag and recall calls from %i exact split ranges before materialization',
   async (count) => {
     const f = fixture();
     const parts = Array.from(
@@ -192,6 +174,12 @@ it.each([35, 31])(
     const dependencies = {
       ...f.dependencies,
       tags: batchTags(),
+      intelligence: {
+        model: 'synthetic-model',
+        reviewIntake: vi.fn(),
+        planRecall: vi.fn(),
+        planRecalls: vi.fn(),
+      },
       evidence: {
         ...f.dependencies.evidence,
         loadSnapshot: () => Promise.resolve(snapshot),
@@ -204,7 +192,7 @@ it.each([35, 31])(
     } as unknown as ProcessingProposal;
     expect(
       await new AgentTaskActions(dependencies).tagCallEstimate(proposal),
-    ).toBe(Math.ceil(count / 4));
+    ).toBe(Math.ceil(count / 8));
     expect(
       await new AgentTaskActions({
         ...dependencies,
@@ -361,6 +349,104 @@ function fixture(isPrivate = false) {
   };
 }
 describe('Agent actions reuse actual proposal acceptance', () => {
+  it('budgets future stages before deterministic splitting and protects manual revisions afterwards', async () => {
+    const f = fixture();
+    const recipe: SourceSplitDefinition = {
+      recipeId: W,
+      revision: 1,
+      name: 'Synthetic',
+      origin: 'manual',
+      scope: {kind: 'document', snapshotId: S},
+      settings: {
+        template: 'whole',
+        headingLevel: 2,
+        titleIncludes: [],
+        appendixHeadings: [],
+        minimumEntries: 1,
+        maximumEntries: 1,
+        minimumBodyCharacters: 0,
+        onMismatch: 'review',
+      },
+    };
+    const row = {
+      ...f.current,
+      value: {
+        ...f.current.value,
+        splitRuleVersion: SOURCE_RECIPE_SPLIT_VERSION,
+      },
+    };
+    const rows = Array.from({length: 4}, () => row);
+    let writes = 0;
+    const apply = vi.fn<SourceSplitService['apply']>(
+      (_id, _recipe, _private, _recover, check) => {
+        check?.(rows);
+        writes++;
+        return Promise.resolve({
+          rows,
+          plan: {
+            outcome: 'ready',
+            reason: 'recipe_ready',
+            groups: [],
+            characters: 1,
+            completeCoverage: true,
+          },
+        });
+      },
+    );
+    const actions = new AgentTaskActions({
+      ...f.dependencies,
+      sourceSplit: {apply} as unknown as SourceSplitService,
+      entries: {
+        ...f.dependencies.entries,
+        loadCurrentEntries: () => Promise.resolve([row]),
+      },
+    });
+    const step: AgentTaskStep = {
+      kind: 'split',
+      targetId: S,
+      attempt: 0,
+      complete: true,
+      sourceSplit: {outcome: 'rule', recipeId: W, reason: 'recipe_ready'},
+    };
+    const task: AgentTask = {
+      ...f.task,
+      request: {
+        kind: 'document',
+        snapshotId: S,
+        maxEntries: 4,
+        maxRelations: 0,
+        maxModelCalls: 3,
+      },
+      state: {
+        status: 'running',
+        phase: 'split',
+        calls: 0,
+        steps: [step],
+        sourceSplit: {
+          engine: SOURCE_SPLIT_ENGINE,
+          catalogRevision: 1,
+          recipes: [recipe],
+        },
+      },
+    };
+    await expect(actions.applySourceSplit(task, step)).rejects.toMatchObject({
+      code: 'insufficient_document_call_budget',
+    });
+    expect(writes).toBe(0);
+    if (task.request.kind !== 'document')
+      throw new Error('Expected synthetic document task');
+    await actions.applySourceSplit(
+      {...task, request: {...task.request, maxModelCalls: 4}},
+      step,
+    );
+    expect(writes).toBe(1);
+    expect(await actions.tagSteps(task)).toHaveLength(1);
+    row.revision = 2;
+    await expect(actions.tagSteps(task)).rejects.toMatchObject({
+      code: 'document_structure_changed',
+    });
+  });
+
   it.each(['intake_held', 'intake_blocked'] as const)(
     'rechecks a planned relation candidate when intake changes to %s',
     async (decision) => {
@@ -392,7 +478,7 @@ describe('Agent actions reuse actual proposal acceptance', () => {
           kind: 'document',
           snapshotId: S,
           maxEntries: 8,
-          maxRelations: 2,
+          maxRelations: 0,
           maxModelCalls: 14,
         },
         state: {
@@ -417,56 +503,6 @@ describe('Agent actions reuse actual proposal acceptance', () => {
       expect(await actions.guard(task)).toBeUndefined();
     },
   );
-  it('excludes earlier captures of the same article while retaining other matching sources', async () => {
-    const f = fixture();
-    const current: CurrentInformationEntry = {
-      ...f.current,
-      revision: 2,
-      canonicalUri: 'https://example.invalid/article',
-      value: {
-        ...f.current.value,
-        contentKeywords: [
-          {
-            displayValue: 'Synthetic',
-            normalizedValue: 'synthetic',
-            origin: 'manual',
-            originVersion: 'synthetic-v1',
-          },
-        ],
-      },
-    };
-    const previous = {
-      ...current,
-      entryId: '00000000-0000-4000-8000-000000000004',
-      snapshotId: '00000000-0000-4000-8000-000000000005',
-    };
-    const other = {
-      ...previous,
-      entryId: '00000000-0000-4000-8000-000000000006',
-      canonicalUri: 'https://example.invalid/other',
-    };
-    const actions = new AgentTaskActions({
-      ...f.dependencies,
-      entries: {
-        ...f.dependencies.entries,
-        loadCurrentEntries: () => Promise.resolve([current, previous, other]),
-      },
-    });
-    const task = {
-      ...f.task,
-      request: {
-        kind: 'document',
-        snapshotId: S,
-        maxEntries: 8,
-        maxRelations: 2,
-        maxModelCalls: 14,
-      },
-      state: {steps: [{...f.step, expectedRevision: 1, complete: true}]},
-    } as AgentTask;
-    const steps = await actions.relationSteps(task);
-    expect(steps).toHaveLength(1);
-    expect(steps[0]?.relatedEntryId).toBe(other.entryId);
-  });
   it('writes external tags without an internal model and preserves source/body/scores', async () => {
     const f = fixture();
     const actions = new AgentTaskActions(f.dependencies);
@@ -512,7 +548,7 @@ describe('Agent actions reuse actual proposal acceptance', () => {
         kind: 'document',
         snapshotId: S,
         maxEntries: 12,
-        maxRelations: 4,
+        maxRelations: 0,
         maxModelCalls: 24,
       }),
     ).rejects.toMatchObject({code: 'ai_not_configured'});
@@ -532,7 +568,7 @@ describe('Agent actions reuse actual proposal acceptance', () => {
         kind: 'document',
         snapshotId: S,
         maxEntries: 12,
-        maxRelations: 4,
+        maxRelations: 0,
         maxModelCalls: 24,
       }),
     ).rejects.toMatchObject({code: 'private_model_transfer_forbidden'});
@@ -576,152 +612,4 @@ describe('recovery checkpoint validation', () => {
       code: 'document_changed_after_tags',
     });
   });
-});
-
-it('batches recall only for unchanged public entries and reads the collection once', async () => {
-  const f = fixture();
-  const second = {
-    ...f.current,
-    entryId: '00000000-0000-4000-8000-000000000010',
-  };
-  const hidden = {
-    ...f.current,
-    entryId: '00000000-0000-4000-8000-000000000011',
-    value: {...f.current.value, isPrivate: true},
-  };
-  const load = vi.fn(() => Promise.resolve([f.current, second, hidden]));
-  const plan = {concepts: [{term: 'Synthetic', variants: ['合成']}]};
-  const planRecalls = vi.fn(() => Promise.resolve([plan, plan]));
-  const intelligence = {
-    model: 'synthetic-model',
-    reviewIntake: vi.fn(),
-    planRecall: vi.fn(() => Promise.resolve(plan)),
-    planRecalls,
-  };
-  const actions = new AgentTaskActions({
-    ...f.dependencies,
-    entries: {...f.dependencies.entries, loadCurrentEntries: load},
-    intelligence,
-  });
-  const steps: AgentTaskStep[] = [f.current, second].map((e) => ({
-    kind: 'recall',
-    targetId: e.entryId,
-    expectedRevision: e.revision,
-    attempt: 0,
-    complete: false,
-  }));
-  const first = requireOperationValue(steps[0]);
-  const task = {
-    ...f.task,
-    state: {status: 'running', phase: 'recall', calls: 4, steps},
-  } as AgentTask;
-  expect(await actions.recallGroup(task, first)).toEqual(steps);
-  expect(load).toHaveBeenCalledTimes(1);
-  expect(await actions.recallGroupPlans(steps)).toEqual([plan, plan]);
-  expect(planRecalls).toHaveBeenCalledTimes(1);
-  expect(load).toHaveBeenCalledTimes(2);
-  f.edit();
-  await expect(actions.recallGroupPlans(steps)).rejects.toMatchObject({
-    code: 'stale_entry_revision',
-  });
-  await expect(
-    actions.recallGroupPlans([{...first, targetId: hidden.entryId}]),
-  ).rejects.toMatchObject({code: 'public_entry_not_found'});
-  expect(planRecalls).toHaveBeenCalledTimes(1);
-});
-
-it('keeps long recall inputs in separate calls instead of overflowing a batch', async () => {
-  const f = fixture();
-  const entries = [0, 1].map((n) => ({
-    ...f.current,
-    entryId: `00000000-0000-4000-8000-${String(20 + n).padStart(12, '0')}`,
-    value: {...f.current.value, body: 'x'.repeat(70_000)},
-  }));
-  const actions = new AgentTaskActions({
-    ...f.dependencies,
-    entries: {
-      ...f.dependencies.entries,
-      loadCurrentEntries: () => Promise.resolve(entries),
-    },
-    intelligence: {
-      model: 'synthetic-model',
-      reviewIntake: vi.fn(),
-      planRecall: vi.fn(),
-      planRecalls: vi.fn(),
-    },
-  });
-  const steps: AgentTaskStep[] = entries.map((e) => ({
-    kind: 'recall',
-    targetId: e.entryId,
-    expectedRevision: e.revision,
-    attempt: 0,
-    complete: false,
-  }));
-  const first = requireOperationValue(steps[0]);
-  const task = {
-    ...f.task,
-    state: {status: 'running', phase: 'recall', calls: 4, steps},
-  } as AgentTask;
-  expect(await actions.recallGroup(task, first)).toEqual([first]);
-});
-
-it('shrinks failed recall groups and uses the single-entry contract on the last attempt', async () => {
-  const f = fixture();
-  const entries = [0, 1, 2, 3].map((n) => ({
-    ...f.current,
-    entryId: `00000000-0000-4000-8000-${String(40 + n).padStart(12, '0')}`,
-  }));
-  const plan = {concepts: [{term: 'Synthetic', variants: ['合成']}]};
-  const planRecall = vi.fn(() => Promise.resolve(plan));
-  const planRecalls = vi.fn(() => Promise.resolve([plan, plan]));
-  const actions = new AgentTaskActions({
-    ...f.dependencies,
-    entries: {
-      ...f.dependencies.entries,
-      loadCurrentEntries: () => Promise.resolve(entries),
-    },
-    intelligence: {
-      model: 'synthetic-model',
-      reviewIntake: vi.fn(),
-      planRecall,
-      planRecalls,
-    },
-  });
-  for (const attempt of [0, 1, 2]) {
-    const steps: AgentTaskStep[] = entries.map((entry) => ({
-      kind: 'recall',
-      targetId: entry.entryId,
-      expectedRevision: entry.revision,
-      attempt,
-      complete: false,
-    }));
-    const task = {
-      ...f.task,
-      state: {status: 'running', phase: 'recall', calls: 8, steps},
-    } as AgentTask;
-    const original = structuredClone(task);
-    const group = await actions.recallGroup(
-      task,
-      requireOperationValue(steps[0]),
-    );
-    expect(group).toEqual(steps.slice(0, 4 / 2 ** attempt));
-    expect(task).toEqual(original);
-    if (attempt === 2) {
-      expect(await actions.recallGroupPlans(group)).toEqual([plan]);
-      expect(planRecall).toHaveBeenCalledTimes(1);
-      expect(planRecalls).not.toHaveBeenCalled();
-    }
-    if (attempt === 0) {
-      const mixed = steps.map((step, index) => ({
-        ...step,
-        attempt: index === 1 ? 2 : index === 2 ? 3 : 0,
-      }));
-      expect(
-        await actions.recallGroup(
-          {...task, state: {...task.state, steps: mixed}},
-          requireOperationValue(mixed[0]),
-        ),
-      ).toEqual([mixed[0], mixed[3]]);
-    }
-  }
 });

@@ -71,7 +71,7 @@ describe('M1C workspace transfer', () => {
       M1cDomainTransferRepositoryPort['restoreEmptyWorkspace']
     >((workspaceId, restoredSnapshot) => {
       expect(workspaceId).toBe(WORKSPACE_ID);
-      expect(restoredSnapshot.entries.tables).toHaveLength(10);
+      expect(restoredSnapshot.entries.tables).toHaveLength(11);
       expect(
         restoredSnapshot.entries.tables.find(
           (table) => table.name === 'information_entry_translation',

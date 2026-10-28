@@ -1,7 +1,12 @@
 import {
+  receptionSchema,
+  type Reception,
+} from '../../../modules/subscriptions/source_receiving.js';
+import {
   EMPTY_INGESTION_POLICY,
   ingestionScopeMatches,
   ingestionSettingsSchema,
+  decodeStoredIngestionSettings,
   type IngestionRepository,
   type IngestionOrigin,
   type IngestionPolicy,
@@ -23,7 +28,7 @@ export async function recordIngestionCapture(
   client: PostgresClientBoundary,
   capture: ValidatedCaptureEvidence,
   origin: IngestionOrigin,
-  options: {reviewOnly?: boolean} = {},
+  options: {reviewOnly?: boolean; reception?: Reception} = {},
 ) {
   if (capture.resource.isPrivate) return;
   // Persist the inbox choice in the same transaction as the new source evidence,
@@ -34,6 +39,9 @@ export async function recordIngestionCapture(
       capture.workspaceId,
       capture.snapshot.snapshotId,
       JSON.stringify({
+        reception: options.reception ?? {
+          channel: origin.kind === 'upload' ? 'manual' : 'live',
+        },
         captureOrigin: origin,
         receipt: 'pending',
         decision: 'pending',
@@ -77,6 +85,53 @@ export class PostgresIngestionRepository implements IngestionRepository {
     private readonly pool: PostgresPoolBoundary,
     private readonly workspaceId: string,
   ) {}
+
+  public async pendingSourceCounts(): Promise<
+    Readonly<Record<string, number>>
+  > {
+    const result = await this.pool.query(
+      `SELECT d.state_text::jsonb->'captureOrigin'->>'subscriptionId' AS source_id, count(*)::int AS total
+      FROM struinfo.processing_document_intake d
+      JOIN struinfo.snapshot s USING(workspace_id,snapshot_id)
+      JOIN struinfo.resource r USING(workspace_id,resource_id)
+      WHERE d.workspace_id=$1 AND NOT r.is_private AND d.state_text::jsonb->>'receipt'='pending'
+      GROUP BY source_id`,
+      [this.workspaceId],
+    );
+    return Object.fromEntries(
+      result.rows
+        .filter((r) => typeof r.source_id === 'string')
+        .map((r) => [String(r.source_id), Number(r.total)]),
+    );
+  }
+
+  public async dispatchCandidates(
+    limit: number,
+  ): Promise<readonly IngestionItem[]> {
+    const result = await this.pool.query(
+      `WITH eligible AS (
+      SELECT i.*, d.state_text::jsonb->'reception' AS reception,
+        r.source_key AS source_label,
+        EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP-i.created_at))/3600
+          + CASE d.state_text::jsonb->'reception'->'strategy'->>'urgency' WHEN 'high' THEN 24 WHEN 'low' THEN -12 ELSE 0 END
+          + (COALESCE((d.state_text::jsonb->'reception'->'strategy'->>'preference')::int,50)-50)/5.0
+          - CASE WHEN d.state_text::jsonb->'reception'->>'channel'='history' THEN 12 ELSE 0 END AS priority
+      FROM struinfo.processing_ingestion_item i
+      JOIN struinfo.snapshot s USING(workspace_id,snapshot_id)
+      JOIN struinfo.resource r USING(workspace_id,resource_id)
+      LEFT JOIN struinfo.processing_document_intake d ON d.workspace_id=i.workspace_id AND d.snapshot_id=i.snapshot_id
+      WHERE i.workspace_id=$1 AND i.status IN ('pending','running') AND NOT r.is_private
+        AND (i.task_id IS NOT NULL OR (COALESCE(d.state_text::jsonb->>'receipt','') <> 'rejected'
+          AND COALESCE(d.state_text::jsonb->>'deferProcessing','') <> 'true'))
+    ), ranked AS (
+      SELECT *, row_number() OVER (PARTITION BY COALESCE(subscription_id::text,'manual'),
+        COALESCE(reception->>'channel','live') ORDER BY (task_id IS NOT NULL) DESC, priority DESC, snapshot_id) AS source_turn
+      FROM eligible
+    ) SELECT * FROM ranked ORDER BY source_turn, priority DESC, snapshot_id LIMIT $2`,
+      [this.workspaceId, limit],
+    );
+    return result.rows.map(decodeItem);
+  }
   public async summary() {
     const result = await this.pool.query(
       "SELECT i.status, count(*) AS count, count(*) FILTER (WHERE i.admitted_at >= date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') AS today, COALESCE(sum((t.state_text::jsonb->>'calls')::integer),0) AS attempts FROM struinfo.processing_ingestion_item i LEFT JOIN struinfo.processing_agent_task t USING(workspace_id,task_id) WHERE i.workspace_id=$1 GROUP BY i.status",
@@ -150,7 +205,7 @@ export class PostgresIngestionRepository implements IngestionRepository {
     status?: IngestionStatus,
   ) {
     const result = await this.pool.query(
-      `SELECT i.*, (SELECT r.source_key FROM struinfo.snapshot s JOIN struinfo.resource r USING(workspace_id,resource_id) WHERE s.workspace_id=i.workspace_id AND s.snapshot_id=i.snapshot_id) AS source_label FROM struinfo.processing_ingestion_item i WHERE workspace_id=$1
+      `SELECT i.*, (SELECT d.state_text::jsonb->'reception' FROM struinfo.processing_document_intake d WHERE d.workspace_id=i.workspace_id AND d.snapshot_id=i.snapshot_id) AS reception, (SELECT r.source_key FROM struinfo.snapshot s JOIN struinfo.resource r USING(workspace_id,resource_id) WHERE s.workspace_id=i.workspace_id AND s.snapshot_id=i.snapshot_id) AS source_label FROM struinfo.processing_ingestion_item i WHERE workspace_id=$1
       AND ($2::boolean = false OR status IN ('pending','running'))
       AND ($2::boolean = false OR i.task_id IS NOT NULL OR NOT EXISTS (
         SELECT 1 FROM struinfo.processing_document_intake d WHERE d.workspace_id=i.workspace_id AND d.snapshot_id=i.snapshot_id
@@ -268,7 +323,7 @@ function decodePolicy(row: Readonly<Record<string, unknown>>): IngestionPolicy {
       id: row.authorized_by_id,
     },
     revision: Number(row.current_version),
-    settings: ingestionSettingsSchema.parse(
+    settings: decodeStoredIngestionSettings(
       JSON.parse(String(row.settings_text)) as unknown,
     ),
   };
@@ -290,6 +345,8 @@ function decodeItem(row: Readonly<Record<string, unknown>>): IngestionItem {
     v instanceof Date ? v.toISOString() : String(v);
   return {
     snapshotId: String(row.snapshot_id),
+    ...(row.reception ? {reception: receptionSchema.parse(row.reception)} : {}),
+    ...(row.priority !== undefined ? {priority: Number(row.priority)} : {}),
     ...(typeof row.source_label === 'string'
       ? {sourceLabel: row.source_label}
       : {}),

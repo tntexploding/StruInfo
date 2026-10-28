@@ -1,0 +1,79 @@
+.research-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-width: 0;
+  padding: 0.5rem;
+  line-height: 1.65;
+}
+.research-panel > * {
+  grid-column: 1;
+  grid-row: auto;
+  min-width: 0;
+}
+.research-panel fieldset {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--border-color, #61594c);
+  border-radius: 14px;
+}
+.research-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.research-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.research-fields label:has(input[type='checkbox']) {
+  flex-direction: row;
+  align-items: center;
+}
+.editorial-app.editorial-app
+  .research-panel
+  :is(input:not([type='checkbox']), select, textarea) {
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.65rem;
+  font: inherit;
+}
+.research-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem 1.5rem;
+  justify-content: space-between;
+}
+.research-result {
+  padding: 1rem 0;
+  border-top: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+.research-result small {
+  display: block;
+  opacity: 0.8;
+}
+.research-result p {
+  max-height: 15rem;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.research-result button {
+  margin: 0.5rem 1rem 0.5rem 0;
+}
+.research-answer {
+  white-space: pre-wrap;
+  line-height: 1.9;
+}
+.research-panel .entry-command-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}

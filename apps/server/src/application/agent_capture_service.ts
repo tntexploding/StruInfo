@@ -1,3 +1,4 @@
+import {sourceReceivingSchema} from '../modules/subscriptions/source_receiving.js';
 import {z} from 'zod';
 import {deriveProcessingRunId} from '../modules/processing/processing_identity.js';
 import {
@@ -25,6 +26,7 @@ export const captureTextSchema = z
   })
   .strict();
 const common = {
+  receiving: sourceReceivingSchema.optional(),
   subscriptionId: z.uuid(),
   label: z.string().trim().min(1).max(120),
   description: z.string().trim().max(500).optional(),
@@ -91,6 +93,7 @@ export class AgentCaptureService {
   public async importText(
     authority: ExecutionAuthority,
     input: z.infer<typeof captureTextSchema>,
+    webOrigin?: {url: string; publishedAt?: string},
   ): Promise<
     Extract<ImportMarkdownEvidenceResult, {status: 'created' | 'existing'}>
   > {
@@ -127,6 +130,7 @@ export class AgentCaptureService {
           resourceId,
           resourceKind: 'manual_text',
           sourceKey: request.title,
+          ...(webOrigin ? {canonicalUri: webOrigin.url} : {}),
         },
         snapshot: {
           workspaceId: this.workspaceId,
@@ -134,6 +138,15 @@ export class AgentCaptureService {
           snapshotId,
           mediaType: 'text/markdown',
           capturedAt: previous?.capturedAt ?? new Date().toISOString(),
+          ...(webOrigin?.publishedAt
+            ? {
+                publication: {
+                  instant: webOrigin.publishedAt,
+                  precision: 'second',
+                  inferred: false,
+                },
+              }
+            : {}),
         },
         gitObservations: [],
         profile: 'commonmark-v1',
@@ -150,12 +163,16 @@ export class AgentCaptureService {
   public async list(authority: ExecutionAuthority) {
     this.authorize(authority, false);
     const current = await this.deps.subscriptions.list();
+    const receiving = (await this.deps.subscriptions.receivingStatus?.()) ?? {};
     return {
       revision: current.revision,
       subscriptions: current.subscriptions
         .filter((s) => !s.isPrivate)
         .map((s) => {
-          const publicState = {...s};
+          const publicState = {
+            ...s,
+            receivingStatus: receiving[s.subscriptionId],
+          };
           delete publicState.cursor;
           // Authenticated APIs and installed plugin configuration references stay owner-managed.
           if (
@@ -189,8 +206,15 @@ export class AgentCaptureService {
     if (previous) this.publicSource(previous);
     const next: SourceSubscriptionWrite = {
       ...request,
+      ...(previous?.processingProfile
+        ? {processingProfile: previous.processingProfile}
+        : {}),
+      ...(request.receiving
+        ? {}
+        : previous?.receiving
+          ? {receiving: previous.receiving}
+          : {}),
       isPrivate: false,
-      routeAfterImport: previous?.routeAfterImport ?? false,
       ...(request.kind === 'json_api'
         ? {authentication: {kind: 'none' as const}}
         : {}),

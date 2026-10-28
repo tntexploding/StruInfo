@@ -220,6 +220,9 @@ export function prepareInformationEntryRestructure(
         ? exact.value.splitRuleVersion
         : MANUAL_ENTRY_RESTRUCTURE_RULE_VERSION,
       ...annotations.value,
+      ...(preservesExistingStructure && exact.value.annotations
+        ? {annotations: exact.value.annotations}
+        : {}),
     });
     const operation =
       exact === undefined
