@@ -149,9 +149,9 @@ try {
         'SELECT count(*)::integer AS total FROM struinfo_meta.schema_migrations',
       )
     ).rows[0]?.total,
-    39,
+    40,
   );
-  mark('39 migrations replay safely; restricted runtime grants applied');
+  mark('40 migrations replay safely; restricted runtime grants applied');
 
   await mkdir(output, {recursive: true});
   const layout = await initializeLocalDataRoot(output);
@@ -199,7 +199,6 @@ try {
     },
     evidenceForSubscription: (id) =>
       captureRepo({kind: 'subscription', subscriptionId: id}),
-    ownsAutomaticSnapshot: async (id) => Boolean(await queue.read(id)),
   });
   const capture = new AgentCaptureService(w, {
     blobStore,
@@ -248,7 +247,6 @@ try {
       ...source,
       subscriptionId: privateSub,
       isPrivate: true,
-      routeAfterImport: false,
     },
   ]);
   await assert.rejects(() => capture.put(readOnly, 1, source), {
@@ -412,7 +410,6 @@ try {
           kind: 'document',
           snapshotId,
           maxEntries: policy.settings.maxEntries,
-          maxRelations: policy.settings.maxRelations,
           maxModelCalls: policy.settings.maxModelCalls,
           intake: policy.settings.intake ?? {fetchFullText: true},
         }),

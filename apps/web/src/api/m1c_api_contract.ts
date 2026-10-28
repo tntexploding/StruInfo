@@ -1,3 +1,12 @@
+import type {
+  StructuredAnnotations,
+  AnnotationFilter,
+} from './annotation_contract.js';
+import type {
+  SourceReceiving,
+  SourceReceivingStatus,
+} from './source_receiving_contract.js';
+
 export interface WorkspaceResponse {
   readonly status: 'ok';
   readonly workspaceId: string;
@@ -95,13 +104,19 @@ export type ProcessingRunCancelResponse =
     }>;
 
 interface SourceSubscriptionWriteBase {
+  readonly processingProfile?: Readonly<{
+    split: string;
+    tags: string;
+    relations: string;
+    accent?: string;
+  }>;
+  readonly receiving?: SourceReceiving;
   readonly subscriptionId: string;
   readonly label: string;
   readonly description?: string;
   readonly enabled: boolean;
   readonly sourceAlias: string;
   readonly isPrivate: boolean;
-  readonly routeAfterImport: boolean;
   readonly intervalMinutes: number;
 }
 
@@ -170,6 +185,7 @@ export type SourceSubscriptionWrite =
 
 export type SourceSubscriptionView = SourceSubscriptionWrite &
   Readonly<{
+    readonly receivingStatus?: SourceReceivingStatus;
     readonly lastAttemptAt?: string;
     readonly lastSuccessAt?: string;
     readonly lastRunId?: string;
@@ -207,9 +223,6 @@ export type SourceSubscriptionRunResponse =
       snapshotId?: string;
       snapshotIds?: readonly string[];
       importedDocumentCount?: number;
-      automationRunId?: string;
-      automationRunIds?: readonly string[];
-      materializedEntryCount?: number;
     }>
   | Readonly<{
       status: 'not_found' | 'rejected' | 'failed';
@@ -861,6 +874,7 @@ export interface InformationEntry {
     titlePath: string;
     body: string;
     bodySha256: string;
+    annotations?: StructuredAnnotations;
     chunkMode: 'split' | 'whole';
     splitRuleVersion: string;
     isPrivate: boolean;
@@ -1134,6 +1148,7 @@ export type InformationEntryMatchReason =
   | 'body'
   | 'translation_title'
   | 'translation_body'
+  | 'structured_annotation'
   | 'content_keyword_alias'
   | 'content_keyword'
   | 'type_keyword'
@@ -1611,6 +1626,7 @@ export interface M1cHttpResponse<T> {
 }
 
 export interface EntrySavedQueryConditions {
+  readonly annotationFilter?: AnnotationFilter;
   readonly text?: string;
   readonly retrievalMode?: EntryRetrievalMode;
   readonly textMode?: EntryTextSearchMode;

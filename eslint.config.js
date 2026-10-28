@@ -23,6 +23,7 @@ export default tseslint.config(
       'coverage/**',
       'playwright-report/**',
       'test-results/**',
+      'output/**',
       'docs/dependencies/licenses/**',
       'docs/dependencies/sbom/**',
       'apps/server/test_support/postgres_tm2/**',

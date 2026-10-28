@@ -4,7 +4,9 @@ import {
   assertM1eProcessingWorkspace,
   createEmptyM1eProcessingSnapshot,
   M1E_PROCESSING_BUNDLE_SCHEMA,
+  M1E_PROCESSING_VERSION_SEVENTEEN_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_FOURTEEN_BUNDLE_CODEC,
+  M1E_PROCESSING_VERSION_FIFTEEN_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_TWELVE_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_TEN_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_ELEVEN_BUNDLE_CODEC,
@@ -33,6 +35,51 @@ import {
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('M1E processing Bundle section', () => {
+  it('upgrades v17 with no topics or task authority', () => {
+    const upgraded = M1E_PROCESSING_VERSION_SEVENTEEN_BUNDLE_CODEC.decode({
+      schemaVersion: 'struinfo.m1e-processing.v17',
+      tables: M1E_PROCESSING_TABLES.slice(0, -2).map((t) => ({
+        name: t.name,
+        rows: [],
+      })),
+    });
+    expect(
+      normalizeM1eProcessingSnapshot(upgraded).tables.find(
+        (t) => t.name === 'content_organization_record',
+      ),
+    ).toEqual({
+      name: 'content_organization_record',
+      rows: [],
+    });
+  });
+  it('upgrades v15 without changing ranges or creating publication authority', () => {
+    const range = {
+      workspace_id: WORKSPACE_ID,
+      proposal_id: WORKSPACE_ID,
+      entry_ordinal: 0,
+      fragment_ordinal: 0,
+      fragment_id: WORKSPACE_ID,
+      start_code_point: 3,
+      end_code_point: 71,
+    };
+    const upgraded = M1E_PROCESSING_VERSION_FIFTEEN_BUNDLE_CODEC.decode({
+      schemaVersion: 'struinfo.m1e-processing.v15',
+      tables: M1E_PROCESSING_TABLES.slice(0, -6).map((t) => ({
+        name: t.name,
+        rows:
+          t.name === 'processing_split_proposal_entry_fragment' ? [range] : [],
+      })),
+    });
+    const normalized = normalizeM1eProcessingSnapshot(upgraded);
+    expect(
+      normalized.tables.find(
+        (t) => t.name === 'processing_split_proposal_entry_fragment',
+      )?.rows,
+    ).toEqual([range]);
+    expect(normalized.tables.slice(-6).every((t) => t.rows.length === 0)).toBe(
+      true,
+    );
+  });
   it('preserves old split fragments without inventing ranges and exports new exact ranges', () => {
     const name = 'processing_split_proposal_entry_fragment';
     const oldRow = {
@@ -44,7 +91,7 @@ describe('M1E processing Bundle section', () => {
     };
     const upgraded = M1E_PROCESSING_VERSION_FOURTEEN_BUNDLE_CODEC.decode({
       schemaVersion: 'struinfo.m1e-processing.v14',
-      tables: M1E_PROCESSING_TABLES.map((t) => ({
+      tables: M1E_PROCESSING_TABLES.slice(0, -6).map((t) => ({
         name: t.name,
         rows: t.name === name ? [oldRow] : [],
       })),

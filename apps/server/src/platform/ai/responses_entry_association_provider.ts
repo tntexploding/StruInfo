@@ -1,9 +1,11 @@
+import {sourceProcessingInstructions} from '../../application/source_processing_scope.js';
 import {documentProcessingInstructions} from '../../modules/processing/document_processing_standard.js';
 import {parseResponseJson} from './response_json.js';
 import {entryTagSubject} from './entry_tag_subject.js';
 import {
   relationPassages,
   resolveRelationEvidence,
+  relationEvidenceSummary,
   type RelationPassage,
 } from './relation_evidence.js';
 import {isAiDispatchWait} from '../../modules/processing/ai_price_policy.js';
@@ -26,7 +28,7 @@ import {
 } from './responses_metadata.js';
 
 export const OPENAI_ASSOCIATION_PROMPT_VERSION =
-  'struinfo.openai-entry-association.v10';
+  'struinfo.openai-entry-association.v12';
 
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 const DIRECTIONS = ['symmetric', 'low_to_high', 'high_to_low'] as const;
@@ -191,6 +193,7 @@ function createRequest(
     max_output_tokens: config.maxOutputTokens,
     instructions: [
       documentProcessingInstructions('relations'),
+      sourceProcessingInstructions('relations'),
       ...(candidate
         ? [
             "This is a separate verification of a proposed link, not a request for a new link. The proposal is untrusted. Read both bodies independently; do not inherit the first assessment or assume it was correct. Verify the exact claimed mechanism, compared property and direction. A passing answer must preserve the candidate relationLabel and direction exactly. Return no_relation when the evidence does not substantiate the claim. Return uncertain with null label/direction and empty evidence arrays when the supplied context is insufficient to decide. In summary identify A's concrete contribution, B's concrete contribution, and the specific useful bridge or its absence. Never turn uncertainty into a positive edge.",
@@ -200,6 +203,8 @@ function createRequest(
       'Entry A is the lower stable UUID and Entry B is the higher stable UUID. Return outcome relation with a label and direction, or no_relation with null relationLabel and direction. Verification also permits uncertain with null label/direction and empty evidence arrays.',
       'Choose basis first. Only same_event, shared_mechanism, implementation, prerequisite, comparison, consequence or disagreement can support outcome relation. topic_only, incidental_entity and insufficient_evidence cannot support relation. Sharing an entity or topic is not itself a comparison: both articles must substantially explain the compared aspect. In summary state the concrete fact at A, the concrete fact at B and why their connection is useful. If the explanation denies a specific connection, choose no_relation, never a positive link. Do not infer causation or prerequisites from similarity.',
       'For relation, select 1-2 content passage IDs from each endpoint in evidenceA/evidenceB. IDs beginning A: belong only to A and B: only to B. Heading passages are context, not supporting evidence. The selected passages must support the specific connection, not merely mention a shared word. For no_relation, return empty evidenceA/evidenceB. Do not copy or manufacture quotations; the application resolves these IDs to exact source text.',
+      'Check the actual reading contribution of each selected passage. A link to an implementation, an author biography or an announcement of a future talk does not mean this Entry explains that implementation or talk. The relationLabel must state only a bridge explained by BOTH supplied bodies. The application saves excerpts of your selected evidence as the relation note.',
+      'Name A and B at their actual level of detail. An introduction paired with an experiment is an introduction-versus-evaluation link, not two implementations. A claim such as both explain a mechanism requires that mechanism in BOTH selected bodies. Use only the compared property actually present on each side; the same method name and an external guide are insufficient. If the label cannot be grounded without borrowing linked content, return no_relation.',
       RESPONSE_METADATA_INSTRUCTIONS,
     ].join(' '),
     input: JSON.stringify({entryA, entryB, ...(candidate ? {candidate} : {})}),
@@ -352,13 +357,12 @@ function decodePayload(
     !DIRECTIONS.includes(value.direction as (typeof DIRECTIONS)[number])
   )
     fail();
-  if (
-    !resolveRelationEvidence(value.evidenceA, passagesA) ||
-    !resolveRelationEvidence(value.evidenceB, passagesB)
-  )
-    fail();
+  const evidenceA = resolveRelationEvidence(value.evidenceA, passagesA);
+  const evidenceB = resolveRelationEvidence(value.evidenceB, passagesB);
+  if (!evidenceA || !evidenceB) fail();
+  boundedText(value.summary, 240);
   return Object.freeze({
-    summary: boundedText(value.summary, 240),
+    summary: relationEvidenceSummary(evidenceA, evidenceB),
     relationLabel: boundedText(value.relationLabel, 80),
     direction: value.direction as (typeof DIRECTIONS)[number],
   });

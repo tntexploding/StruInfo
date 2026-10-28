@@ -91,7 +91,10 @@ export function useSourceHistory({
   onImported: () => void;
 }) {
   const supported = sources.filter(
-    (s) => !s.isPrivate && (s.kind === 'rss_atom' || s.kind === 'web'),
+    (s) =>
+      !s.isPrivate &&
+      s.receiving?.history !== 'none' &&
+      (s.kind === 'rss_atom' || s.kind === 'web'),
   );
   const [chosen, setChosen] = useState(
     () =>

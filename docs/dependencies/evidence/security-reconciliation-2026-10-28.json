@@ -1,0 +1,519 @@
+{
+  "date": "2026-10-28",
+  "lifecycleExecution": false,
+  "packages": [
+    {
+      "package": "@modelcontextprotocol/sdk@1.32.0",
+      "registry": "https://registry.npmjs.org/@modelcontextprotocol/sdk/-/sdk-1.32.0.tgz",
+      "integrity": "sha512-8BviX/hK4Gd2eL1KdTwm0gfl4d3wdoErW0Jd00h6nomUAtk6IJk5vwQJc6kfWtJTzN5OEV/lgIiJKI8fiDGAlA==",
+      "sha256": "41DD4776A00ED50EAAA43EE335E27363AD1F53C3B7FA27FD0F75C0520F5342EC",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/modelcontextprotocol/typescript-sdk.git",
+        "type": "git"
+      },
+      "scripts": {
+        "lint": "eslint src/ && prettier --check .",
+        "test": "vitest run --exclude \"test/e2e/**\"",
+        "build": "npm run build:esm && npm run build:cjs",
+        "check": "npm run typecheck && npm run lint",
+        "start": "npm run server",
+        "client": "tsx scripts/cli.ts client",
+        "server": "tsx watch --clear-screen=false scripts/cli.ts server",
+        "prepack": "npm run build:esm && npm run build:cjs",
+        "lint:fix": "eslint src/ --fix && prettier --write .",
+        "test:e2e": "vitest run test/e2e",
+        "build:cjs": "mkdir -p dist/cjs && echo '{\"type\": \"commonjs\"}' > dist/cjs/package.json && tsc -p tsconfig.cjs.json",
+        "build:esm": "mkdir -p dist/esm && echo '{\"type\": \"module\"}' > dist/esm/package.json && tsc -p tsconfig.prod.json",
+        "typecheck": "tsgo --noEmit",
+        "test:watch": "vitest",
+        "build:cjs:w": "npm run build:cjs -- -w",
+        "build:esm:w": "npm run build:esm -- -w",
+        "fetch:spec-types": "tsx scripts/fetch-spec-types.ts",
+        "test:conformance:client": "npx @modelcontextprotocol/conformance client --command 'npx tsx test/conformance/src/everythingClient.ts' --expected-failures test/conformance/conformance-baseline.yml",
+        "test:conformance:server": "test/conformance/scripts/run-server-conformance.sh --expected-failures test/conformance/conformance-baseline.yml",
+        "examples:simple-server:w": "tsx --watch src/examples/server/simpleStreamableHttp.ts --oauth",
+        "test:conformance:client:all": "npx @modelcontextprotocol/conformance client --command 'npx tsx test/conformance/src/everythingClient.ts' --suite all --expected-failures test/conformance/conformance-baseline.yml",
+        "test:conformance:server:all": "test/conformance/scripts/run-server-conformance.sh --suite all --expected-failures test/conformance/conformance-baseline.yml",
+        "test:conformance:server:run": "npx tsx test/conformance/src/everythingServer.ts"
+      },
+      "legalSource": "@modelcontextprotocol/sdk@1.32.0",
+      "legalFiles": [
+        "docs/dependencies/licenses/npm/modelcontextprotocol__sdk@1.32.0/LICENSE"
+      ]
+    },
+    {
+      "package": "@oxc-project/types@0.155.0",
+      "registry": "https://registry.npmjs.org/@oxc-project/types/-/types-0.155.0.tgz",
+      "integrity": "sha512-SeE8JPwW1xs1tHeNycjUtUBdhorRa8o4jlvjwk49R7/Z291i+4DQa7JJIgOm/TaYQZx+QrPQbVJ/9c8dMIZN8Q==",
+      "sha256": "FDC38C0C4EE5FECF7E6F90093BE14CC828D4453F81FD847C659DE871C0C44853",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/oxc-project/oxc.git",
+        "type": "git",
+        "directory": "npm/oxc-types"
+      },
+      "legalSource": "@oxc-project/types@0.155.0",
+      "legalFiles": [
+        "docs/dependencies/licenses/npm/oxc-project__types@0.155.0/LICENSE"
+      ]
+    },
+    {
+      "package": "@rolldown/binding-linux-x64-gnu@1.2.15",
+      "registry": "https://registry.npmjs.org/@rolldown/binding-linux-x64-gnu/-/binding-linux-x64-gnu-1.2.15.tgz",
+      "integrity": "sha512-FHg60rS6DBePAYZ9X9F67x+JObFdmgn6tupA1C/a3B+CufFmTD4mX+e8M75tCiAO3foR/6xwVBI0KQiI7sn/rw==",
+      "sha256": "C13DB693E72BD7C5E9B30BB1B43AA96015E4B8610EDB4143C540BCC68AACA3C1",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/rolldown/rolldown.git",
+        "type": "git",
+        "directory": "packages/rolldown"
+      },
+      "legalSource": "rolldown@1.2.15",
+      "legalFiles": [
+        "docs/dependencies/licenses/npm/rolldown@1.2.15/LICENSE",
+        "docs/dependencies/licenses/npm/rolldown@1.2.15/THIRD-PARTY-LICENSE"
+      ]
+    },
+    {
+      "package": "@rolldown/binding-win32-x64-msvc@1.2.15",
+      "registry": "https://registry.npmjs.org/@rolldown/binding-win32-x64-msvc/-/binding-win32-x64-msvc-1.2.15.tgz",
+      "integrity": "sha512-HFZd2QNQYn1JbIi+Hpd7H+r/lkWxcfIu28nirZ6eCn2LafuvmExMlb/P96Sfx5tf7pPArw39IdhmCF8vmV+NhQ==",
+      "sha256": "B0B5E3F40E330952D99A084BD6278BE6B8015679395A96361F389AE87167A40E",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/rolldown/rolldown.git",
+        "type": "git",
+        "directory": "packages/rolldown"
+      },
+      "legalSource": "rolldown@1.2.15",
+      "legalFiles": [
+        "docs/dependencies/licenses/npm/rolldown@1.2.15/LICENSE",
+        "docs/dependencies/licenses/npm/rolldown@1.2.15/THIRD-PARTY-LICENSE"
+      ]
+    },
+    {
+      "package": "@vitest/expect@4.1.12",
+      "registry": "https://registry.npmjs.org/@vitest/expect/-/expect-4.1.12.tgz",
+      "integrity": "sha512-vFlTt+YEu9WBpNjdGayNmlMVzrWPi1+sv853/7t2FU7hpO5gAFBKHzQmkCq5Xjpr+evegF2994LQT3hF3mRlqQ==",
+      "sha256": "8C932064DAFE90DCA40312B44C5B63623C8C7E03BB9B38C4BD9AF2F5701F7BB6",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/vitest-dev/vitest.git",
+        "type": "git",
+        "directory": "packages/expect"
+      },
+      "scripts": {
+        "dev": "rollup -c --watch",
+        "build": "premove dist && rollup -c"
+      },
+      "legalSource": "@vitest/expect@4.1.12",
+      "legalFiles": [
+        "docs/dependencies/licenses/npm/vitest__expect@4.1.12/LICENSE"
+      ]
+    },
+    {
+      "package": "@vitest/mocker@4.1.12",
+      "registry": "https://registry.npmjs.org/@vitest/mocker/-/mocker-4.1.12.tgz",
+      "integrity": "sha512-fKShNpKZzupWZuY0z7egydvL0sqW4INEZBEExMBMAa6izlENEVHwoXgdaTCaBZ5fwlr4xf2o1wXC83n9RpO+NA==",
+      "sha256": "8F9AC0144028329F5C649C031608B8877EFEA748CDBDED0D7F41D60F9BE49C52",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/vitest-dev/vitest.git",
+        "type": "git",
+        "directory": "packages/mocker"
+      },
+      "scripts": {
+        "dev": "rollup -c --watch",
+        "build": "premove dist && rollup -c"
+      },
+      "legalSource": "@vitest/mocker@4.1.12",
+      "legalFiles": [
+        "docs/dependencies/licenses/npm/vitest__mocker@4.1.12/LICENSE"
+      ]
+    },
+    {
+      "package": "@vitest/pretty-format@4.1.12",
+      "registry": "https://registry.npmjs.org/@vitest/pretty-format/-/pretty-format-4.1.12.tgz",
+      "integrity": "sha512-XW9O8+Mxx4VpCtkYdMJLZQQwsVryP9wk7cPKDxtXFfwSak6yRh5+2fep/Y0XF/ElBvJHq8bcYdi6aeuai0opZA==",
+      "sha256": "929BEB93DAFED9E676E55F07919839643231679384020A5EF9C2D02022A5DD80",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/vitest-dev/vitest.git",
+        "type": "git",
+        "directory": "packages/pretty-format"
+      },
+      "scripts": {
+        "dev": "rollup -c --watch",
+        "build": "premove dist && rollup -c"
+      },
+      "legalSource": "@vitest/pretty-format@4.1.12",
+      "legalFiles": [
+        "docs/dependencies/licenses/npm/vitest__pretty-format@4.1.12/LICENSE"
+      ]
+    },
+    {
+      "package": "@vitest/runner@4.1.12",
+      "registry": "https://registry.npmjs.org/@vitest/runner/-/runner-4.1.12.tgz",
+      "integrity": "sha512-NKlVKCr5QnCe8jijdMnmkpHHU+WTqiLFR6G0pHji9uRjXK9xJl1k1nTw6F3pOOj2PDcsDt2GKQMI7wIsaT491w==",
+      "sha256": "061DB956DCEB2B291E1A4CEB3C5B7E31C368E75B34411953402E339EF566E6CF",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/vitest-dev/vitest.git",
+        "type": "git",
+        "directory": "packages/runner"
+      },
+      "scripts": {
+        "dev": "rollup -c --watch",
+        "build": "premove dist && rollup -c"
+      },
+      "legalSource": "@vitest/runner@4.1.12",
+      "legalFiles": [
+        "docs/dependencies/licenses/npm/vitest__runner@4.1.12/LICENSE"
+      ]
+    },
+    {
+      "package": "@vitest/snapshot@4.1.12",
+      "registry": "https://registry.npmjs.org/@vitest/snapshot/-/snapshot-4.1.12.tgz",
+      "integrity": "sha512-ko1y1Qgb/slzQ9mr+b89Cuqud8WG1TKtsPD8r7ZUBdvVOGt85Af2HwCqHujrhwJq95hs/9RM7fcAPg57o1vlzw==",
+      "sha256": "10B57FB1CB37D110309DD64E22A154BF26BD98526CC1EA5307B2F2478CBDDDF5",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/vitest-dev/vitest.git",
+        "type": "git",
+        "directory": "packages/snapshot"
+      },
+      "scripts": {
+        "dev": "rollup -c --watch",
+        "build": "premove dist && rollup -c"
+      },
+      "legalSource": "@vitest/snapshot@4.1.12",
+      "legalFiles": [
+        "docs/dependencies/licenses/npm/vitest__snapshot@4.1.12/LICENSE"
+      ]
+    },
+    {
+      "package": "@vitest/spy@4.1.12",
+      "registry": "https://registry.npmjs.org/@vitest/spy/-/spy-4.1.12.tgz",
+      "integrity": "sha512-RGq9x4JNGNTZHEJxvN0oSiJjeSCExm0n2gZKKJZHY9cX5AVA6M7VJILBT3ZJ/tJ/0J9uWT7fETV9/btoi//vSg==",
+      "sha256": "EB9A67720D1082F33BFC5CF3A41EE6D297E994CF26013DAE0AD807A474FA44A3",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/vitest-dev/vitest.git",
+        "type": "git",
+        "directory": "packages/spy"
+      },
+      "scripts": {
+        "dev": "rollup -c --watch",
+        "build": "premove dist && rollup -c"
+      },
+      "legalSource": "@vitest/spy@4.1.12",
+      "legalFiles": [
+        "docs/dependencies/licenses/npm/vitest__spy@4.1.12/LICENSE"
+      ]
+    },
+    {
+      "package": "@vitest/utils@4.1.12",
+      "registry": "https://registry.npmjs.org/@vitest/utils/-/utils-4.1.12.tgz",
+      "integrity": "sha512-Q3awXrwOfEV+qc3WmO5ONyE0yO7Q1gQ9/oyHxGLZ/pl7N3NO/ZztqQwKLuwMkV+CA1JYSIeO3gkHnRDIo4AVaA==",
+      "sha256": "0C25F072D4AFCB52FA48266177111CA90BC4116C66473170959AAE1D57DB347D",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/vitest-dev/vitest.git",
+        "type": "git",
+        "directory": "packages/utils"
+      },
+      "scripts": {
+        "dev": "rollup -c --watch",
+        "build": "premove dist && rollup -c"
+      },
+      "legalSource": "@vitest/utils@4.1.12",
+      "legalFiles": [
+        "docs/dependencies/licenses/npm/vitest__utils@4.1.12/LICENSE"
+      ]
+    },
+    {
+      "package": "body-parser@2.4.0",
+      "registry": "https://registry.npmjs.org/body-parser/-/body-parser-2.4.0.tgz",
+      "integrity": "sha512-Ifk1KcLrxaGt1occQagQNFNNOqRt1LFuehEnHHzB8Z6cRgIxRU1TBaiIsUiCdA+gy5PL7Y1IX31DNKkRmxtXjQ==",
+      "sha256": "3F6E22DC9710A8BD5942FEE8DFBD4632B54980CC2F33854F1EC1E314B17B2357",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/expressjs/body-parser.git",
+        "type": "git"
+      },
+      "scripts": {
+        "lint": "eslint .",
+        "test": "mocha --reporter spec --check-leaks test/",
+        "test-ci": "nyc --reporter=lcovonly --reporter=text npm test",
+        "test-cov": "nyc --reporter=html --reporter=text npm test"
+      },
+      "legalSource": "body-parser@2.4.0",
+      "legalFiles": ["docs/dependencies/licenses/npm/body-parser@2.4.0/LICENSE"]
+    },
+    {
+      "package": "content-type@2.1.0",
+      "registry": "https://registry.npmjs.org/content-type/-/content-type-2.1.0.tgz",
+      "integrity": "sha512-mj7UPXE0jaqaOsukNZRUEfEi2AcL7C/vwmwcHV0O97eO1E1pxBZuyjlZrx5seTaNBg1U6+o35wpa35Qfcc+7ag==",
+      "sha256": "47A08EE5DDF87A96DD263AA942C5E04B2C5D26251E04AFFA8ACE6804B450D758",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/jshttp/content-type.git",
+        "type": "git"
+      },
+      "scripts": {
+        "test": "ts-scripts test",
+        "bench": "vitest bench",
+        "build": "ts-scripts build",
+        "specs": "ts-scripts specs",
+        "format": "ts-scripts format",
+        "prepare": "ts-scripts install && npm run build"
+      },
+      "legalSource": "content-type@2.1.0",
+      "legalFiles": [
+        "docs/dependencies/licenses/npm/content-type@2.1.0/LICENSE"
+      ]
+    },
+    {
+      "package": "fast-uri@3.1.9",
+      "registry": "https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.9.tgz",
+      "integrity": "sha512-hS/0Wt3Ya043oKXs0sIxrMpKQITXhMLIrVAKKXi4gozGC9v7YRWVnXIZzjNPTO02M9BdxLCWqK1yRXgNziVyJQ==",
+      "sha256": "4F5A67F7B61110AAE7B3AD38E806627F5712F4C150BD38EB804A562E69A9EE5E",
+      "license": "BSD-3-Clause",
+      "repository": {
+        "url": "git+https://github.com/fastify/fast-uri.git",
+        "type": "git"
+      },
+      "scripts": {
+        "lint": "eslint",
+        "test": "npm run test:unit && npm run test:typescript",
+        "lint:fix": "eslint --fix",
+        "test:unit": "tape test/**/*.js",
+        "test:browser": "npm run test:browser:chromium && npm run test:browser:firefox && npm run test:browser:webkit",
+        "test:unit:dev": "npm run test:unit -- --coverage-report=html",
+        "test:typescript": "tsd",
+        "test:browser:webkit": "playwright-test ./test/* --runner tape --browser=webkit",
+        "test:browser:firefox": "playwright-test ./test/* --runner tape --browser=firefox",
+        "test:browser:chromium": "playwright-test ./test/* --runner tape --browser=chromium"
+      },
+      "legalSource": "fast-uri@3.1.9",
+      "legalFiles": ["docs/dependencies/licenses/npm/fast-uri@3.1.9/LICENSE"]
+    },
+    {
+      "package": "hono@4.13.11",
+      "registry": "https://registry.npmjs.org/hono/-/hono-4.13.11.tgz",
+      "integrity": "sha512-/SMX/RQNJn7oNmFwH6DtwDqcrzZU2otm1FD6OJe2cWF6cfy/F8hq0XVBv7xW3FTJshRQwuBnXHDq2kNsdZnshg==",
+      "sha256": "F51D75DC87DBFF6060E6971BCB7DBE8084FCD90CC4C42600873A88199ECE23A3",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/honojs/hono.git",
+        "type": "git"
+      },
+      "scripts": {
+        "lint": "vp lint src runtime-tests build perf-measures benchmarks adapters",
+        "test": "tsc -p tsconfig.spec.json && vp test --run",
+        "build": "pnpm run remove-dist && vp pack && pnpm run copy:package.cjs.json && publint",
+        "check": "vp check",
+        "watch": "pnpm run remove-dist && vp pack --watch && pnpm run copy:package.cjs.json",
+        "format": "vp fmt --check \"src/**/*.{js,ts,tsx}\" \"runtime-tests/**/*.{js,ts,tsx}\" \"build/**/*.{js,ts,tsx}\" \"perf-measures/**/*.{js,ts,tsx}\" \"benchmarks/**/*.{js,ts,tsx}\" \"adapters/**/*.{js,ts,tsx}\"",
+        "release": "np --no-publish",
+        "coverage": "vp test --run --coverage",
+        "lint:fix": "vp lint --fix src runtime-tests build perf-measures benchmarks adapters",
+        "test:all": "pnpm run test && pnpm run test:deno && pnpm run test:bun",
+        "test:bun": "bun test --jsx-import-source ../../src/jsx runtime-tests/bun",
+        "check:fix": "vp check --fix",
+        "test:deno": "deno test --allow-read --allow-env --allow-write --allow-net -c runtime-tests/deno/deno.json runtime-tests/deno && deno test --no-lock -c runtime-tests/deno-jsx/deno.precompile.json runtime-tests/deno-jsx && deno test --no-lock -c runtime-tests/deno-jsx/deno.react-jsx.json runtime-tests/deno-jsx",
+        "test:node": "vp test --run --project node",
+        "format:fix": "vp fmt \"src/**/*.{js,ts,tsx}\" \"runtime-tests/**/*.{js,ts,tsx}\" \"build/**/*.{js,ts,tsx}\" \"perf-measures/**/*.{js,ts,tsx}\" \"benchmarks/**/*.{js,ts,tsx}\" \"adapters/**/*.{js,ts,tsx}\"",
+        "prerelease": "pnpm run test:deno && pnpm run build",
+        "test:watch": "vp test --watch",
+        "remove-dist": "rm -rf dist",
+        "test:fastly": "vp test --run --project fastly",
+        "test:workerd": "vp test --run --project workerd",
+        "test:adapters": "pnpm -r --filter \"./adapters/*\" run test",
+        "build:adapters": "pnpm -r --filter \"./adapters/*\" run build",
+        "release:adapter": "node ./build/release-adapter.ts",
+        "editorconfig-checker": "editorconfig-checker",
+        "copy:package.cjs.json": "cp ./package.cjs.json ./dist/cjs/package.json && cp ./package.cjs.json ./dist/types/package.json"
+      },
+      "legalSource": "hono@4.13.11",
+      "legalFiles": ["docs/dependencies/licenses/npm/hono@4.13.11/LICENSE"]
+    },
+    {
+      "package": "ip-address@10.7.4",
+      "registry": "https://registry.npmjs.org/ip-address/-/ip-address-10.7.4.tgz",
+      "integrity": "sha512-DWBMKyeM25D70nrIiTkgQth59/G+naKOTep6huF9j+GmeK3DMD60Zvxg5d5qQnz+38AHgou6ean2LECX+lrKDg==",
+      "sha256": "F9E1D0DD369C002F43770C6EE35942C8078E76D080A1E18E89113EEF865F26FF",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/beaugunderson/ip-address.git",
+        "type": "git"
+      },
+      "scripts": {
+        "docs": "tsx scripts/build-readme.ts",
+        "lint": "prettier --check . && eslint . --ext .ts,.js --max-warnings 0",
+        "test": "mocha",
+        "build": "rm -rf dist; mkdir dist; tsc",
+        "watch": "mocha --watch",
+        "prepack": "npm run docs && npm run build",
+        "prepare": "git config core.hooksPath hooks || true",
+        "test-ci": "c8 --experimental-monocart mocha",
+        "lint:fix": "prettier --write . && eslint . --ext .ts,.js --max-warnings 0 --fix",
+        "docs:check": "tsx scripts/build-readme.ts --check"
+      },
+      "legalSource": "ip-address@10.7.4",
+      "legalFiles": ["docs/dependencies/licenses/npm/ip-address@10.7.4/LICENSE"]
+    },
+    {
+      "package": "multer@2.5.0",
+      "registry": "https://registry.npmjs.org/multer/-/multer-2.5.0.tgz",
+      "integrity": "sha512-BsqOzYGVq49JcW2IzoSAxeKYRevb+dGGPPWleOR8Lrlk4igwxu1/9pwSXlByhCb7MVZDrNJFC0IBP5/O5nLYRw==",
+      "sha256": "B6A535AE5FA87F6CFFC90FB213B43C2EA34FDC21DC7CCAD3F25CAAF009D7FCAA",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/expressjs/multer.git",
+        "type": "git"
+      },
+      "scripts": {
+        "lint": "standard",
+        "test": "mocha --reporter spec --exit --check-leaks test/",
+        "test-ci": "nyc --reporter=lcov --reporter=text npm test",
+        "lint:fix": "standard --fix",
+        "test-cov": "nyc --reporter=html --reporter=text npm test"
+      },
+      "legalSource": "multer@2.5.0",
+      "legalFiles": ["docs/dependencies/licenses/npm/multer@2.5.0/LICENSE"]
+    },
+    {
+      "package": "qs@6.16.1",
+      "registry": "https://registry.npmjs.org/qs/-/qs-6.16.1.tgz",
+      "integrity": "sha512-5Px6J7rfHBAGUhNQ3es4YzcOdBBw0SDcVtThJml4RdnKw4tKs2epA0kPZ+K8X+WiHktT93RHVcQ/3ym5aTCgtg==",
+      "sha256": "BDB0E06E5CDE7B4D7E0117FAA678416BBC2C9287B0672C35C04DA2B9DE1D3CBF",
+      "license": "BSD-3-Clause",
+      "repository": {
+        "url": "git+https://github.com/ljharb/qs.git",
+        "type": "git"
+      },
+      "scripts": {
+        "dist": "mkdirp dist && browserify --standalone Qs -g unassertify -g @browserify/envify -g [@browserify/uglifyify --mangle.keep_fnames --compress.keep_fnames --format.indent_level=1 --compress.arrows=false --compress.passes=4 --compress.typeofs=false] -p common-shakeify -p bundle-collapser/plugin lib/index.js > dist/qs.js",
+        "lint": "eslint .",
+        "test": "npm run tests-only",
+        "readme": "evalmd README.md",
+        "prepack": "npmignore --auto --commentLines=autogenerated && npm run dist",
+        "pretest": "npm run --silent readme && npm run --silent lint",
+        "postlint": "eclint check $(git ls-files | xargs find 2> /dev/null | grep -vE 'node_modules|\\.git' | grep -v dist/)",
+        "posttest": "npx npm@'>=10.2' audit --production",
+        "prepublish": "not-in-publish || npm run prepublishOnly",
+        "tests-only": "nyc tape 'test/**/*.js'",
+        "prepublishOnly": "safe-publish-latest"
+      },
+      "legalSource": "qs@6.16.1",
+      "legalFiles": ["docs/dependencies/licenses/npm/qs@6.16.1/LICENSE.md"]
+    },
+    {
+      "package": "rolldown@1.2.15",
+      "registry": "https://registry.npmjs.org/rolldown/-/rolldown-1.2.15.tgz",
+      "integrity": "sha512-6odND+fel5zVw3I4Yc2e69gvguDnX0CAAGiNDZSq4ik5WUcaLrkD2GLuog0XcODbor31hZ5ayEMgVDno+KPV5g==",
+      "sha256": "0F4E689F37F168B87605F3B9756B150C63BD1CB52BD04BA5D90E156794625067",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/rolldown/rolldown.git",
+        "type": "git",
+        "directory": "packages/rolldown"
+      },
+      "scripts": {
+        "publint": "publint .",
+        "artifacts": "napi artifacts --cwd ./src --package-json-path ../package.json -o=../artifacts --npm-dir ../npm",
+        "build-node": "node --enable-source-maps --import @oxc-node/core/register -C dev ./build.ts",
+        "build-binding": "oxnode ./build-binding.ts",
+        "build-js-glue": "pnpm run --sequential '/^build-(node|types-check)$/'",
+        "build-wasi:debug": "TARGET='rolldown-wasi' pnpm run --sequential '/^build-(binding|binding:wasi|node)$/'",
+        "build-types-check": "tsc -p ./tsconfig.check.json",
+        "build-binding:wasi": "pnpm build-binding --target wasm32-wasip1-threads",
+        "build-native:debug": "pnpm run --sequential '/^build-(binding|js-glue)$/'",
+        "build-wasi:release": "TARGET='rolldown-wasi' pnpm run --sequential '/^build-(binding|binding:wasi:release|node)$/'",
+        "# Scrips for docs #": "_",
+        "# Scrips for node #": "_",
+        "build-native:profile": "pnpm run build-binding:profile && pnpm run build-js-glue",
+        "build-native:release": "pnpm run --sequential '/^build-(binding:release|js-glue)$/'",
+        "build-binding:profile": "pnpm build-binding --profile profile --features chrome-tracing",
+        "build-binding:release": "pnpm build-binding --release",
+        "# Scrips for binding #": "_",
+        "build-browser-pkg:debug": "TARGET='browser' pnpm run --sequential '/^build-(binding:wasi|node)$/'",
+        "build-browser-pkg:release": "TARGET='browser' pnpm run --sequential '/^build-(binding:wasi:release|node)$/'",
+        "build-binding:wasi:release": "pnpm build-binding --profile release-wasi --target wasm32-wasip1-threads",
+        "build-native:memory-profile": "pnpm run build-binding:profile --features default_global_allocator && pnpm run build-js-glue"
+      },
+      "legalSource": "rolldown@1.2.15",
+      "legalFiles": [
+        "docs/dependencies/licenses/npm/rolldown@1.2.15/LICENSE",
+        "docs/dependencies/licenses/npm/rolldown@1.2.15/THIRD-PARTY-LICENSE"
+      ]
+    },
+    {
+      "package": "vite@8.2.4",
+      "registry": "https://registry.npmjs.org/vite/-/vite-8.2.4.tgz",
+      "integrity": "sha512-lfauXnrf2x0p+UoA+wXh0dgFWnUjCyG6Js95KBkgaCwUU9k0DAHI4W6Q0WCx+h+5g+Alce1y4Zi2QjjK0UvGBw==",
+      "sha256": "1D132A84F4980B2CBB15E1C1C78728AED90F5EB81C70791ED0CF133A1211139A",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/vitejs/vite.git",
+        "type": "git",
+        "directory": "packages/vite"
+      },
+      "scripts": {
+        "dev": "premove dist && pnpm build-bundle -w",
+        "lint": "eslint --cache --ext .ts src/**",
+        "build": "premove dist && pnpm build-bundle && pnpm build-types",
+        "format": "oxfmt",
+        "typecheck": "tsc && tsc -p src/node && tsc -p src/client && tsc -p src/module-runner && tsc -p src/shared && tsc -p src/node/__tests_dts__ && tsc -p src/module-runner/__tests_dts__",
+        "build-types": "pnpm build-types-roll && pnpm build-types-check",
+        "build-bundle": "rolldown --config rolldown.config.ts",
+        "generate-target": "tsx scripts/generateTarget.ts",
+        "build-types-roll": "rolldown --config rolldown.dts.config.ts",
+        "build-types-check": "tsc --project tsconfig.check.json"
+      },
+      "legalSource": "vite@8.2.4",
+      "legalFiles": ["docs/dependencies/licenses/npm/vite@8.2.4/LICENSE.md"]
+    },
+    {
+      "package": "vitest@4.1.12",
+      "registry": "https://registry.npmjs.org/vitest/-/vitest-4.1.12.tgz",
+      "integrity": "sha512-5eWdz2yb3ajxWF3C8C4TjkXl7FGm3n2E/VlazALrQHzK7nYMSGFnCZto0bbPNl77AwkOZVLk0YnBAejUu0NiWA==",
+      "sha256": "AC79C9561C99EABC1CC29E0A839CBD03D1FF0E45BBECB5A2EDFA6C3827C823D1",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/vitest-dev/vitest.git",
+        "type": "git",
+        "directory": "packages/vitest"
+      },
+      "scripts": {
+        "dev": "NODE_OPTIONS=\"--max-old-space-size=8192\" rollup -c --watch -m inline",
+        "build": "premove dist && rollup -c"
+      },
+      "legalSource": "vitest@4.1.12",
+      "legalFiles": ["docs/dependencies/licenses/npm/vitest@4.1.12/LICENSE.md"]
+    },
+    {
+      "package": "zod@4.6.6",
+      "registry": "https://registry.npmjs.org/zod/-/zod-4.6.6.tgz",
+      "integrity": "sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==",
+      "sha256": "312553620AC82CBB25D505100FBB41C1E219B3CD6979CF93C3A1B4DD5B79E039",
+      "license": "MIT",
+      "repository": {
+        "url": "git+https://github.com/colinhacks/zod.git",
+        "type": "git"
+      },
+      "scripts": {
+        "test": "nub exec --node vitest run",
+        "build": "nub exec --node zshy --project tsconfig.build.json",
+        "clean": "git clean -xdf . -e node_modules",
+        "postbuild": "nub ../../scripts/write-stub-package-jsons.ts && nub exec --node biome check --write .",
+        "test:watch": "nub exec --node vitest",
+        "prepublishOnly": "nub ../../scripts/check-versions.ts"
+      },
+      "legalSource": "zod@4.6.6",
+      "legalFiles": ["docs/dependencies/licenses/npm/zod@4.6.6/LICENSE"]
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+.source-split-panel {
+  display: grid;
+  gap: 1rem;
+  font-size: 14px;
+  line-height: 1.6;
+  min-width: 0;
+}
+.source-split-panel fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.source-split-panel .field {
+  min-width: 0;
+}
+.source-split-panel input,
+.source-split-panel textarea,
+.source-split-panel select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+.source-split-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.source-split-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.source-split-trials {
+  border-top: 1px solid var(--si-color-border-default);
+  padding-top: 1rem;
+}
+.source-split-panel li {
+  overflow-wrap: anywhere;
+  margin-bottom: 0.5rem;
+}
+.source-split-panel li span {
+  display: block;
+  color: var(--si-color-text-secondary);
+}
+.editorial-app.editorial-app
+  .workspace-tool-panel
+  .source-split-panel
+  :is(input, textarea, select):disabled {
+  opacity: 1;
+  color: var(--si-color-text-secondary);
+  background: var(--si-color-surface-1);
+}
+@media (max-width: 760px) {
+  .editorial-app.editorial-app
+    .document-tool-area
+    > .workspace-tool-panel:has(.source-split-panel) {
+    position: fixed;
+    inset: 112px 12px 12px;
+    inline-size: auto;
+    width: auto;
+    max-height: calc(100dvh - 124px);
+    max-block-size: calc(100dvh - 124px);
+  }
+}
+@media (max-width: 480px) {
+  .source-split-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -1,11 +1,20 @@
+import {sourceProcessingInstructions} from '../../application/source_processing_scope.js';
+import {z} from 'zod';
+import {
+  annotationResponseSchema,
+  ANNOTATION_INSTRUCTIONS,
+  annotationModelContext,
+  decodeAnnotationResponse,
+} from './annotation_response.js';
+import type {AnnotationVocabulary} from '../../modules/entries/structured_annotations.js';
 import {documentProcessingInstructions} from '../../modules/processing/document_processing_standard.js';
 import {parseResponseJson} from './response_json.js';
 import {entryTagSubject} from './entry_tag_subject.js';
 import {
-  MAXIMUM_TAG_BATCH_ENTRIES,
+  MAXIMUM_AI_BATCH_ENTRIES,
   MAXIMUM_TAG_BATCH_CHARACTERS,
   tagBatchEntrySize,
-} from '../../modules/processing/ai_tag_batch.js';
+} from '../../modules/processing/ai_entry_batch.js';
 import {isAiDispatchWait} from '../../modules/processing/ai_price_policy.js';
 import {
   responsesEndpoint,
@@ -31,7 +40,7 @@ import {
   RESPONSE_METADATA_INSTRUCTIONS,
 } from './responses_metadata.js';
 
-export const OPENAI_TAG_PROMPT_VERSION = 'struinfo.openai-entry-tags.v10';
+export const OPENAI_TAG_PROMPT_VERSION = 'struinfo.openai-entry-tags.v11';
 
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 const TYPE_VALUES = [...ENTRY_TYPE_KEYWORDS];
@@ -52,6 +61,7 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
   public constructor(
     config: Readonly<AiProposalProviderConfig>,
     fetchImplementation: OpenAiFetch = globalThis.fetch,
+    private readonly vocabulary?: () => Promise<AnnotationVocabulary>,
   ) {
     this.#config = config;
     this.#fetch = fetchImplementation;
@@ -69,8 +79,14 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
     if (entry.value.isPrivate) {
       throw new AiTagProposalProviderError('ai_provider_rejected');
     }
+    const vocabulary = await this.vocabulary?.();
+    const active = vocabulary?.dimensions.some((d) => d.enabled)
+      ? vocabulary
+      : undefined;
     return decodePayload(
-      await this.request(createRequest(this.#config, entry)),
+      await this.request(createRequest(this.#config, entry, active)),
+      entry,
+      active,
     );
   }
 
@@ -79,7 +95,7 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
   ) {
     if (
       !entries.length ||
-      entries.length > MAXIMUM_TAG_BATCH_ENTRIES ||
+      entries.length > MAXIMUM_AI_BATCH_ENTRIES ||
       new Set(entries.map((entry) => entry.entryId)).size !== entries.length ||
       new Set(entries.map((entry) => entry.snapshotId)).size !== 1 ||
       entries.some((entry) => entry.value.isPrivate) ||
@@ -87,18 +103,29 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
         MAXIMUM_TAG_BATCH_CHARACTERS
     )
       throw new AiTagProposalProviderError('ai_provider_rejected');
-    const requests = entries.map((entry) => createRequest(this.#config, entry));
+    const vocabulary = await this.vocabulary?.();
+    const active = vocabulary?.dimensions.some((d) => d.enabled)
+      ? vocabulary
+      : undefined;
+    const requests = entries.map((entry) =>
+      createRequest(this.#config, entry, active),
+    );
     const first = requests[0];
     if (!first) fail();
     const input = JSON.stringify({
-      items: entries.map((entry, index) => ({
-        entryId: entry.entryId,
-        expectedRevision: entry.revision,
-        ...(JSON.parse(String(requests[index]?.input)) as Record<
+      ...(active ? {annotationVocabulary: annotationModelContext(active)} : {}),
+      items: entries.map((entry, index) => {
+        const subject = JSON.parse(String(requests[index]?.input)) as Record<
           string,
           unknown
-        >),
-      })),
+        >;
+        delete subject.annotationVocabulary;
+        return {
+          entryId: entry.entryId,
+          expectedRevision: entry.revision,
+          ...subject,
+        };
+      }),
     });
     if (Array.from(input).length > MAXIMUM_TAG_BATCH_CHARACTERS)
       throw new AiTagProposalProviderError('ai_provider_rejected');
@@ -109,8 +136,17 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
         entries.length * 1000 + 128,
       ),
       instructions: [
+        ...(active
+          ? [
+              ANNOTATION_INSTRUCTIONS,
+              'Each tags object also contains annotations as specified in the response schema.',
+            ]
+          : []),
         documentProcessingInstructions('tags'),
-        'Return exactly one JSON object {"items":[{"entryId":"...","expectedRevision":1,"tags":{"summary":"...","contentKeywords":["..."],"type":{"keyword":"...","customName":null},"domains":[{"keyword":"...","customName":null}]}}]}. No fences or extra fields. domains is always an array. Use customName only for other; otherwise null.',
+        sourceProcessingInstructions('tags'),
+        active
+          ? 'Return one JSON object with items. Each item contains entryId, expectedRevision and tags. Each tags object contains summary, contentKeywords, type, domains and annotations, using the exact response schema. No fences or extra fields.'
+          : 'Return exactly one JSON object {"items":[{"entryId":"...","expectedRevision":1,"tags":{"summary":"...","contentKeywords":["..."],"type":{"keyword":"...","customName":null},"domains":[{"keyword":"...","customName":null}]}}]}. No fences or extra fields. domains is always an array. Use customName only for other; otherwise null.',
         'Return every supplied entryId and expectedRevision exactly once. Each tags object describes only that Entry. Never pool keywords across items, borrow a neighbouring item subject, or tag the collection preface or advertisements. Existing tags are hints, not evidence.',
         RESPONSE_METADATA_INSTRUCTIONS,
       ].join(' '),
@@ -172,7 +208,7 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
       return {
         entryId: entry.entryId,
         expectedRevision: entry.revision,
-        result: decodePayload(item.tags),
+        result: decodePayload(item.tags, entry, active),
       };
     });
     return results;
@@ -237,6 +273,7 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
 function createRequest(
   config: Readonly<AiProposalProviderConfig>,
   entry: Readonly<CurrentInformationEntry>,
+  vocabulary?: AnnotationVocabulary,
 ) {
   const subject = entryTagSubject(entry);
   return Object.freeze({
@@ -246,13 +283,20 @@ function createRequest(
     max_output_tokens: config.maxOutputTokens,
     instructions: [
       documentProcessingInstructions('tags'),
+      sourceProcessingInstructions('tags'),
       'Use customName only when keyword is other; otherwise return null.',
-      'Return one JSON object with exactly summary, contentKeywords, type and domains. No Markdown fences, comments, $schema or placeholder fields. domains MUST be an array of objects even for ONE domain; type is one object. Do not put a quotation mark after an array closing bracket.',
+      ...(vocabulary ? [ANNOTATION_INSTRUCTIONS] : []),
+      vocabulary
+        ? 'Return one JSON object with summary, contentKeywords, type, domains and annotations using the exact response schema. No fences or extra fields.'
+        : 'Return one JSON object with summary, contentKeywords, type and domains. No Markdown fences, comments, $schema or placeholder fields. domains MUST be an array of objects even for ONE domain; type is one object. Do not put a quotation mark after an array closing bracket.',
       'Shape example for a synthetic database-index explanation only: {"summary":"解释数据库索引的查找机制","contentKeywords":["数据库索引"],"type":{"keyword":"knowledge_explanation","customName":null},"domains":[{"keyword":"engineering_computing","customName":null}]}. This example shows JSON structure, not tags or taxonomy to copy into unrelated material. Select all values from the current Entry and allowed enums.',
       RESPONSE_METADATA_INSTRUCTIONS,
     ].join(' '),
     input: JSON.stringify({
       ...subject,
+      ...(vocabulary
+        ? {annotationVocabulary: annotationModelContext(vocabulary)}
+        : {}),
       existingContentKeywords: (subject.documentContext ||
       subject.body !== entry.value.body
         ? []
@@ -272,12 +316,21 @@ function createRequest(
         schema: {
           type: 'object',
           additionalProperties: false,
-          required: ['summary', 'contentKeywords', 'type', 'domains'],
+          required: [
+            'summary',
+            'contentKeywords',
+            'type',
+            'domains',
+            ...(vocabulary ? ['annotations'] : []),
+          ],
           properties: {
+            ...(vocabulary
+              ? {annotations: z.toJSONSchema(annotationResponseSchema)}
+              : {}),
             summary: {type: 'string', minLength: 1, maxLength: 240},
             contentKeywords: {
               type: 'array',
-              minItems: 1,
+              minItems: vocabulary ? 0 : 1,
               maxItems: 12,
               items: {type: 'string', minLength: 1, maxLength: 80},
             },
@@ -292,7 +345,7 @@ function createRequest(
             },
             domains: {
               type: 'array',
-              minItems: 1,
+              minItems: vocabulary ? 0 : 1,
               maxItems: 3,
               items: {
                 type: 'object',
@@ -344,13 +397,25 @@ function extractOutputText(value: unknown): string {
   return text;
 }
 
-function decodePayload(value: unknown): Readonly<AiTagProposalProviderResult> {
-  if (!isClosedRecord(value, ['summary', 'contentKeywords', 'type', 'domains']))
+function decodePayload(
+  value: unknown,
+  entry?: CurrentInformationEntry,
+  vocabulary?: AnnotationVocabulary,
+): Readonly<AiTagProposalProviderResult> {
+  if (
+    !isClosedRecord(value, [
+      'summary',
+      'contentKeywords',
+      'type',
+      'domains',
+      ...(vocabulary ? ['annotations'] : []),
+    ])
+  )
     fail();
   const summary = boundedText(value.summary, 240);
   if (
     !Array.isArray(value.contentKeywords) ||
-    value.contentKeywords.length < 1 ||
+    value.contentKeywords.length < (vocabulary ? 0 : 1) ||
     value.contentKeywords.length > 12
   )
     fail();
@@ -362,7 +427,7 @@ function decodePayload(value: unknown): Readonly<AiTagProposalProviderResult> {
   const type = decodeFixedOrOther(value.type, ENTRY_TYPE_KEYWORDS);
   if (
     !Array.isArray(value.domains) ||
-    value.domains.length < 1 ||
+    value.domains.length < (vocabulary ? 0 : 1) ||
     value.domains.length > 3
   )
     fail();
@@ -374,7 +439,20 @@ function decodePayload(value: unknown): Readonly<AiTagProposalProviderResult> {
       `${domain.keyword}:${informationEntrySearchKey(domain.customName ?? '')}`,
   );
   if (new Set(domainIdentities).size !== domainIdentities.length) fail();
+  let annotations;
+  if (vocabulary && entry) {
+    try {
+      annotations = decodeAnnotationResponse(
+        value.annotations,
+        entry,
+        vocabulary,
+      );
+    } catch {
+      fail();
+    }
+  }
   return Object.freeze({
+    ...(annotations ? {annotations} : {}),
     summary,
     contentKeywords: Object.freeze(contentKeywords),
     typeKeyword: type.keyword,

@@ -1,4 +1,24 @@
 import {
+  sourceProcessingProfileSchema,
+  type SourceProcessingProfile,
+} from '../modules/subscriptions/source_processing_profile.js';
+import {
+  EMPTY_ANNOTATION_VOCABULARY,
+  annotationVocabularySchema,
+  type AnnotationVocabulary,
+} from '../modules/entries/structured_annotations.js';
+import {
+  EMPTY_SOURCE_SPLIT_CATALOG,
+  sourceSplitCatalogSchema,
+  type SourceSplitCatalog,
+} from '../modules/entries/source_split_recipe.js';
+import {
+  sourceReceivingSchema,
+  sourceCheckStateSchema,
+  type SourceReceiving,
+  type SourceCheckState,
+} from '../modules/subscriptions/source_receiving.js';
+import {
   DEFAULT_AI_PRICE_POLICY,
   aiPricePolicySchema,
   type AiPricePolicy,
@@ -180,6 +200,9 @@ export type ReviewJsonApiAuthentication =
   Readonly<{kind: 'none'}> | Readonly<{kind: 'bearer_env'; variable: string}>;
 
 interface ReviewSourceSubscriptionBase {
+  readonly processingProfile?: SourceProcessingProfile;
+  readonly receiving?: SourceReceiving;
+  readonly checkState?: SourceCheckState;
   readonly qualityReview?: Readonly<{
     reviewedAt: string;
     documentKeys: readonly string[];
@@ -192,7 +215,8 @@ interface ReviewSourceSubscriptionBase {
   readonly sourceAlias: string;
   readonly isPrivate: boolean;
   /** Default-off: route a changed import after deterministic materialization. */
-  readonly routeAfterImport: boolean;
+  /** Historical backup field; new subscriptions always use intake. */
+  readonly routeAfterImport?: boolean;
   readonly intervalMinutes: number;
   readonly lastAttemptAt?: string;
   readonly lastSuccessAt?: string;
@@ -342,6 +366,8 @@ export interface ReviewPreferences {
   readonly entrySavedQueries?: Readonly<EntrySavedQueries>;
   readonly uiPreferences?: Readonly<WorkspaceUiPreferences>;
   readonly aiPricePolicy?: Readonly<AiPricePolicy>;
+  readonly sourceSplitRecipes?: Readonly<SourceSplitCatalog>;
+  readonly annotationVocabulary?: Readonly<AnnotationVocabulary>;
 }
 
 export interface ReviewPreferencesStore {
@@ -367,6 +393,8 @@ export interface ReviewPreferencesStore {
     entrySavedQueries?: Readonly<EntrySavedQueries>,
     uiPreferences?: Readonly<WorkspaceUiPreferences>,
     aiPricePolicy?: Readonly<AiPricePolicy>,
+    sourceSplitRecipes?: Readonly<SourceSplitCatalog>,
+    annotationVocabulary?: Readonly<AnnotationVocabulary>,
   ): Promise<Readonly<ReviewPreferences>>;
   update?<T>(
     workspaceId: string,
@@ -402,6 +430,8 @@ export interface ReviewPreferencesPatch {
   readonly entrySavedQueries?: Readonly<EntrySavedQueries>;
   readonly uiPreferences?: Readonly<WorkspaceUiPreferences>;
   readonly aiPricePolicy?: Readonly<AiPricePolicy>;
+  readonly sourceSplitRecipes?: Readonly<SourceSplitCatalog>;
+  readonly annotationVocabulary?: Readonly<AnnotationVocabulary>;
 }
 
 export function patchReviewPreferences(
@@ -445,6 +475,12 @@ export function patchReviewPreferences(
       current.uiPreferences ??
       DEFAULT_WORKSPACE_UI_PREFERENCES,
     patch.aiPricePolicy ?? current.aiPricePolicy ?? DEFAULT_AI_PRICE_POLICY,
+    patch.sourceSplitRecipes ??
+      current.sourceSplitRecipes ??
+      EMPTY_SOURCE_SPLIT_CATALOG,
+    patch.annotationVocabulary ??
+      current.annotationVocabulary ??
+      EMPTY_ANNOTATION_VOCABULARY,
   );
 }
 
@@ -482,6 +518,8 @@ export async function updateReviewPreferences<T>(
           update.next.entrySavedQueries,
           update.next.uiPreferences,
           update.next.aiPricePolicy,
+          update.next.sourceSplitRecipes,
+          update.next.annotationVocabulary,
         );
   return Object.freeze({preferences, result: update.result});
 }
@@ -785,6 +823,8 @@ export function createReviewPreferences(
   entrySavedQueries: Readonly<EntrySavedQueries> = DEFAULT_ENTRY_SAVED_QUERIES,
   uiPreferences: Readonly<WorkspaceUiPreferences> = DEFAULT_WORKSPACE_UI_PREFERENCES,
   aiPricePolicy: Readonly<AiPricePolicy> = DEFAULT_AI_PRICE_POLICY,
+  sourceSplitRecipes: Readonly<SourceSplitCatalog> = EMPTY_SOURCE_SPLIT_CATALOG,
+  annotationVocabulary: Readonly<AnnotationVocabulary> = EMPTY_ANNOTATION_VOCABULARY,
 ): Readonly<ReviewPreferences> {
   const advanceActions =
     entryAutomationPolicy.advanceActions ??
@@ -800,6 +840,9 @@ export function createReviewPreferences(
     entrySavedQueries,
     uiPreferences,
     aiPricePolicy: Object.freeze(aiPricePolicySchema.parse(aiPricePolicy)),
+    sourceSplitRecipes: sourceSplitCatalogSchema.parse(sourceSplitRecipes),
+    annotationVocabulary:
+      annotationVocabularySchema.parse(annotationVocabulary),
     automaticKeywords: Object.freeze({
       enabled: automaticKeywords.enabled,
       includeLinkDomains: automaticKeywords.includeLinkDomains,
@@ -1065,6 +1108,25 @@ export function normalizeEntryPreferenceFeatureIdentity(value: string): string {
 function decodeSourceSubscription(
   value: unknown,
 ): Readonly<ReviewSourceSubscription> | undefined {
+  if (!isRecord(value)) return undefined;
+  const receiving =
+    value.receiving === undefined
+      ? undefined
+      : sourceReceivingSchema.safeParse(cleanStoredReceiving(value.receiving));
+  const checkState =
+    value.checkState === undefined
+      ? undefined
+      : sourceCheckStateSchema.safeParse(value.checkState);
+  const processingProfile =
+    value.processingProfile === undefined
+      ? undefined
+      : sourceProcessingProfileSchema.safeParse(value.processingProfile);
+  if (
+    processingProfile?.success === false ||
+    receiving?.success === false ||
+    checkState?.success === false
+  )
+    return undefined;
   if (
     !isRecord(value) ||
     typeof value.subscriptionId !== 'string' ||
@@ -1106,6 +1168,23 @@ function decodeSourceSubscription(
     return undefined;
   }
   const common = Object.freeze({
+    ...(processingProfile?.success
+      ? {processingProfile: processingProfile.data}
+      : {}),
+    ...(receiving?.success ? {receiving: receiving.data} : {}),
+    ...(checkState?.success
+      ? {
+          checkState: {
+            failures: checkState.data.failures,
+            ...(checkState.data.errorCode
+              ? {errorCode: checkState.data.errorCode}
+              : {}),
+            ...(checkState.data.lastNewAt
+              ? {lastNewAt: checkState.data.lastNewAt}
+              : {}),
+          },
+        }
+      : {}),
     ...(isRecord(value.qualityReview)
       ? {
           qualityReview: {
@@ -1303,6 +1382,11 @@ function decodeSourceSubscription(
 function cloneSourceSubscription(
   subscription: Readonly<ReviewSourceSubscription>,
 ): Readonly<ReviewSourceSubscription> {
+  if (subscription.processingProfile)
+    subscription = {
+      ...subscription,
+      processingProfile: Object.freeze({...subscription.processingProfile}),
+    };
   if (subscription.qualityReview)
     subscription = {
       ...subscription,
@@ -1700,4 +1784,16 @@ function isClosedRecord(
     keys.length === expected.length &&
     keys.every((key, index) => key === expected[index])
   );
+}
+
+function cleanStoredReceiving(value: unknown): unknown {
+  if (
+    value === null ||
+    typeof value !== 'object' ||
+    !('retryBackoffMinutes' in value)
+  )
+    return value;
+  const current = {...value};
+  delete current.retryBackoffMinutes;
+  return current;
 }

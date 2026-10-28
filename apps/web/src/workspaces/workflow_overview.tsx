@@ -11,9 +11,8 @@ import type {Loadable, ProductSection} from '../components/product_types.js';
 import {useRememberedDisclosure} from '../components/use_remembered_disclosure.js';
 import {ProcessingRunRail} from './processing_run_rail.js';
 import {useAiActivity} from './use_ai_activity.js';
-import {useInboxPreviews} from './use_inbox_previews.js';
+import {ContentDialog} from '../components/content_dialog.js';
 import {FloatingToolPanel} from '../components/floating_tool_panel.js';
-import {sourceDisplayName} from '../components/reading_text.js';
 import {activityItems} from './ai_activity_state.js';
 import {currentOverviewItems} from './overview_flow_state.js';
 import {OverviewFlow} from './overview_flow.js';
@@ -55,6 +54,7 @@ export function WorkflowOverview({
   const [documents, setDocuments] =
     useState<Extract<InformationEntryDocumentListResponse, {status: 'ok'}>>();
   const root = useRef<HTMLDivElement>(null);
+  const [selectedMetric, setSelectedMetric] = useState<MetricId>();
   const [documentsAt, setDocumentsAt] = useState<string>();
   const [dataError, setDataError] = useState(false);
   const [processingRefreshToken, setProcessingRefreshToken] = useState(0);
@@ -118,6 +118,21 @@ export function WorkflowOverview({
         (n, d) => n + d.annotatedEntryCount,
         0,
       ),
+      relations: activity.data?.topics
+        ? new Set(
+            activity.data.topics.flatMap((topic) =>
+              topic.value.relations
+                .filter((relation) => !relation.blocked)
+                .map((relation) =>
+                  JSON.stringify([
+                    relation.from.entryId,
+                    relation.to.entryId,
+                    relation.kind,
+                  ]),
+                ),
+            ),
+          ).size
+        : undefined,
       tags: documents?.documents.reduce(
         (n, d) => n + (d.currentTags?.value.tags.length ?? 0),
         0,
@@ -138,267 +153,132 @@ export function WorkflowOverview({
     observation,
     dataError || activity.error || snapshots.status === 'error',
   );
-  const recent = useMemo(
-    () =>
-      [...(documents?.documents ?? [])]
-        .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt))
-        .slice(0, 5),
-    [documents],
-  );
-  const previews = useInboxPreviews(
-    recent.map((d) => d.snapshotId),
-    false,
-    true,
-  );
-  const pending = activity.data?.intakeRecords.filter(
-    (r) => r.value.receipt === 'pending' && r.value.decision !== 'blocked',
-  ).length;
-  const attention = items.find((i) =>
-    ['failed', 'review', 'attention'].includes(i.state),
-  );
   return (
-    <div ref={root} className="workspace-view editorial-overview overview">
-      <header className="workflow-page-heading">
-        <div>
-          <h1>运行总览</h1>
-          <p>查看待办资料与处理进度。</p>
-        </div>
-        <div className="workspace-page-actions">
-          <button
-            className="secondary-action"
-            onClick={() => {
-              setProcessingRefreshToken((v) => v + 1);
-            }}
-          >
-            刷新总览
-          </button>
-        </div>
-      </header>
-      <section className="ov-home-top" aria-label="项目概况">
-        <div className="ov-project-brand">
-          <div className="ov-wordmark">
-            <div className="ov-logo" aria-hidden="true">
-              <div className="logo-face">
-                <span>SI</span>
-              </div>
-            </div>
-            <div>
-              <h2>StruInfo</h2>
-              <p>收集、整理与检索文档</p>
-            </div>
+    <div
+      ref={root}
+      className="workspace-view editorial-overview overview overview-home"
+      aria-label="总览"
+    >
+      <header className="overview-hero">
+        <div className="overview-brand">
+          <span className="si-mark hero-mark" aria-hidden="true">
+            SI
+          </span>
+          <div>
+            <h1>StruInfo</h1>
+            <p className="hero-subtitle">个人知识库</p>
+            <p className="hero-intro">接收资料，整理内容，查询与阅读。</p>
           </div>
         </div>
-        <div className="ov-project-activity">
-          <section className="ov-next-tasks" aria-label="当前待办">
-            <h3>接下来</h3>
-            <button
-              className="ov-next-task"
-              onClick={() => {
-                onReviewInbox();
-              }}
-            >
-              <span className="ov-next-icon" aria-hidden="true">
-                ↓
-              </span>
-              <span className="ov-next-copy">
-                <strong>
-                  审核新资料{' '}
-                  <span>
-                    {pending === undefined ? '读取中' : `${String(pending)} 份`}
-                  </span>
-                </strong>
-                <small>查看来源与正文，决定接受或拒绝。</small>
-              </span>
-              <span className="ov-next-action">打开 ↗</span>
-            </button>
-            <button
-              className={`ov-next-task ${attention ? 'failed' : 'settled'}`}
-              onClick={() => {
-                if (
-                  attention?.state === 'review' ||
-                  attention?.destination === 'import'
-                )
-                  onReviewInbox(
-                    attention.reviewSnapshotId ?? attention.snapshotId,
-                  );
-                else if (attention?.snapshotId && onOpenDocument)
-                  onOpenDocument(attention.snapshotId);
-                else onNavigate(attention?.destination ?? 'documents');
-              }}
-            >
-              <span className="ov-next-icon" aria-hidden="true">
-                {attention ? '!' : '✓'}
-              </span>
-              <span className="ov-next-copy">
-                <strong>
-                  {attention ? '查看待处理任务' : '继续阅读与整理'}
-                </strong>
-                <small>
-                  {attention?.detail ?? '在工作台查看原文、标签和联系。'}
-                </small>
-              </span>
-              <span className="ov-next-action">打开 ↗</span>
-            </button>
-          </section>
-          <section className="ov-statistics" aria-label="当前项目数据">
+        <section
+          className="hero-statistics"
+          aria-labelledby="overview-stats-heading"
+        >
+          <div className="statistics-heading">
+            <h2 id="overview-stats-heading">内容统计</h2>
             <FloatingToolPanel
               title="统计说明"
               preferredWidth={380}
               className="ov-statistics-detail"
             >
               <p>
-                原文版本包含待审与已接收资料；文档标签按每份文档累计。报告显示近期已生成的记录。
+                文档统计公开原文版本，包含待审核资料；条目按文档累计，标签按文档累计。
               </p>
-              <Metric
-                id="fragments"
-                label="来源片段"
-                value={metrics.fragments}
-                unit="段"
-              />
-              <Metric
-                id="annotated"
-                label="已有标签的条目"
-                value={metrics.annotated}
-                unit="条"
-              />
+              <p>
+                联系统计当前可见主题中的有效联系，按条目对和类型去重。报告统计近期已生成的记录。
+              </p>
+              <p>
+                来源片段 {metrics.fragments?.toLocaleString('zh-CN') ?? '—'} 段
+                · 已有标签的条目{' '}
+                {metrics.annotated?.toLocaleString('zh-CN') ?? '—'} 条
+              </p>
+              {dataError || snapshots.status === 'error' ? (
+                <p role="alert">统计刷新失败，保留上次结果。</p>
+              ) : null}
             </FloatingToolPanel>
-            <div className="ov-metrics">
-              <Metric
-                id="documents"
-                label="原文版本"
-                value={metrics.documents}
-                unit="份"
-              />
-              <Metric
-                id="entries"
-                label="信息条目"
-                value={metrics.entries}
-                unit="条"
-              />
-              <Metric
-                id="tags"
-                label="文档标签"
-                value={metrics.tags}
-                unit="个"
-              />
-              <Metric
-                id="reports"
-                label="近期报告"
-                value={metrics.reports}
-                unit="份"
-              />
-            </div>
-          </section>
-          <div className="ov-system">
-            <dl className="ov-system-list">
-              <div>
-                <dt>工作区</dt>
-                <dd>
-                  <i
-                    className={`ov-state-dot ${workspace ? 'connected' : ''}`}
-                  />
-                  {workspace ? '已连接' : '读取中'}
-                </dd>
-              </div>
-              <div className={activity.error ? 'failed' : ''}>
-                <dt>服务</dt>
-                <dd>
-                  <i
-                    className={`ov-state-dot ${activity.data && !activity.error ? 'connected' : ''}`}
-                  />
-                  {activity.error
-                    ? '连接异常'
-                    : activity.data
-                      ? '就绪'
-                      : '连接中'}
-                </dd>
-              </div>
-              <div
-                className={
-                  items.some((i) => i.state === 'working') ? 'running' : ''
-                }
-              >
-                <dt>AI</dt>
-                <dd>
-                  <i className="ov-state-dot" />
-                  {activity.error
-                    ? '状态未知'
-                    : !activity.data
-                      ? '读取中'
-                      : !activity.data.model
-                        ? '未配置'
-                        : activity.data.price?.policy.operationsAllowed ===
-                            false
-                          ? '已暂停'
-                          : items.some((i) => i.state === 'working')
-                            ? '运行中'
-                            : '等待任务'}
-                </dd>
-              </div>
-            </dl>
           </div>
-        </div>
-      </section>
-      {dataError || snapshots.status === 'error' ? (
-        <p className="overview-data-error" role="alert">
-          统计刷新失败，保留上次结果；可继续使用各工作页面。
-        </p>
-      ) : null}
-      <OverviewFlow
-        recent={
-          <section className="ov-recent" aria-label="最近文档">
-            <header className="ov-section-head">
-              <h3>最近文档</h3>
-              <button
-                className="ov-text-link muted"
-                onClick={() => {
-                  onNavigate('documents');
-                }}
-              >
-                查看全部 ↗
-              </button>
-            </header>
-            <div className="ov-recent-list">
-              {recent.length ? (
-                recent.map((d, i) => (
-                  <button
-                    key={d.snapshotId}
-                    className="ov-document-row"
-                    onClick={() => {
-                      if (onOpenDocument) onOpenDocument(d.snapshotId);
-                      else onNavigate('documents');
-                    }}
-                  >
-                    <span className="ov-row-number">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <span className="ov-document-info">
-                      <strong>
-                        {previews.previews.get(d.snapshotId)?.title ??
-                          sourceDisplayName(d)}
-                      </strong>
-                      <span>
-                        {previews.previews.get(d.snapshotId)?.source.name ??
-                          sourceDisplayName(d)}
-                        <i>·</i>
-                        {d.entryCount} 个条目
-                      </span>
-                    </span>
-                    <time>
-                      {new Date(d.capturedAt).toLocaleDateString('zh-CN')}
-                    </time>
-                  </button>
-                ))
-              ) : (
-                <p className="ov-empty">
-                  {documents
-                    ? '还没有文档。可从文档入口开始收集。'
-                    : '正在读取文档…'}
-                </p>
-              )}
-            </div>
-          </section>
+          <div className="hero-stats">
+            <Metric
+              id="documents"
+              label="文档"
+              value={metrics.documents}
+              onOpen={() => {
+                setSelectedMetric('documents');
+              }}
+            />
+            <Metric
+              id="entries"
+              label="条目"
+              value={metrics.entries}
+              onOpen={() => {
+                setSelectedMetric('entries');
+              }}
+            />
+            <Metric
+              id="tags"
+              label="标签"
+              value={metrics.tags}
+              onOpen={() => {
+                setSelectedMetric('tags');
+              }}
+            />
+            <Metric
+              id="relations"
+              label="联系"
+              value={metrics.relations}
+              onOpen={() => {
+                setSelectedMetric('relations');
+              }}
+            />
+            <Metric
+              id="reports"
+              label="报告"
+              value={metrics.reports}
+              onOpen={() => {
+                setSelectedMetric('reports');
+              }}
+            />
+          </div>
+        </section>
+      </header>
+      <ContentDialog
+        open={selectedMetric !== undefined}
+        title={
+          selectedMetric
+            ? `${METRIC_DETAILS[selectedMetric].label}统计`
+            : '内容统计'
         }
+        onClose={() => {
+          setSelectedMetric(undefined);
+        }}
+        className="content-task-dialog"
+      >
+        {selectedMetric ? (
+          <>
+            <p>
+              {metrics[selectedMetric] === undefined
+                ? '统计尚未读取。'
+                : `${METRIC_DETAILS[selectedMetric].label}：${metrics[selectedMetric].toLocaleString('zh-CN')}`}
+            </p>
+            <p>{METRIC_DETAILS[selectedMetric].scope}</p>
+            <button
+              className="secondary-action"
+              onClick={() => {
+                onNavigate(METRIC_DETAILS[selectedMetric].destination);
+                setSelectedMetric(undefined);
+              }}
+            >
+              {METRIC_DETAILS[selectedMetric].action}
+            </button>
+          </>
+        ) : null}
+      </ContentDialog>
+      <OverviewFlow
+        workspaceConnected={Boolean(workspace)}
+        statisticsError={dataError || snapshots.status === 'error'}
+        onRefresh={() => {
+          setProcessingRefreshToken((v) => v + 1);
+        }}
         activity={activity}
         items={items}
         onNavigate={onNavigate}
@@ -430,23 +310,78 @@ export function WorkflowOverview({
 function Metric({
   id,
   label,
-  unit,
   value,
+  onOpen,
 }: {
   id: MetricId;
   label: string;
-  unit: string;
   value: number | undefined;
+  onOpen: () => void;
 }) {
   return (
-    <article className="ov-metric" data-kind={id} data-overview-metric={id}>
-      <span className="ov-metric-label">{label}</span>
+    <button
+      type="button"
+      aria-label={`查看${label}统计`}
+      onClick={onOpen}
+      className="hero-stat"
+      data-stat={id}
+      data-overview-metric={id}
+    >
       <strong className="stat-value">
         <span className="ef-stat-number" data-overview-number>
           {value === undefined ? '—' : value.toLocaleString('zh-CN')}
         </span>
-        <small>{value === undefined ? '读取中' : unit}</small>
       </strong>
-    </article>
+      <span>{label}</span>
+    </button>
   );
 }
+
+const METRIC_DETAILS: Record<
+  MetricId,
+  {label: string; scope: string; destination: ProductSection; action: string}
+> = {
+  documents: {
+    label: '文档',
+    scope: '公开原文版本，包含待审核和已接受的资料。',
+    destination: 'documents',
+    action: '打开文档阅读',
+  },
+  fragments: {
+    label: '来源片段',
+    scope: '公开原文中保存的来源片段。',
+    destination: 'documents',
+    action: '打开文档阅读',
+  },
+  entries: {
+    label: '条目',
+    scope: '按当前公开文档累计。待确认的整理内容也包含在内。',
+    destination: 'documents',
+    action: '打开文档阅读',
+  },
+  annotated: {
+    label: '已有标签的条目',
+    scope: '当前公开文档中已有标签的条目。',
+    destination: 'documents',
+    action: '打开文档阅读',
+  },
+  tags: {
+    label: '标签',
+    scope: '按当前公开文档累计；不同文档的同名标签分别计数。',
+    destination: 'documents',
+    action: '打开文档阅读',
+  },
+  relations: {
+    label: '联系',
+    scope:
+      '当前可见主题中的有效联系，按有向条目对和类型去重。未包含旧图谱联系。',
+    destination: 'query',
+    action: '打开数据库',
+  },
+  reports: {
+    label: '报告',
+    scope: '近期已生成、可阅读或核对的报告。',
+    destination: 'reports',
+    action: '打开报告',
+  },
+};

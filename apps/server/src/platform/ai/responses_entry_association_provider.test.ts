@@ -103,7 +103,7 @@ describe.each([
     await expect(
       provider.proposeAssociation(entry('2', false), entry('3', false)),
     ).resolves.toEqual({
-      summary: 'A 补充 B 的实现背景。',
+      summary: 'A：「Synthetic body 2」；B：「Synthetic body 3」',
       relationLabel: '补充说明',
       direction: 'low_to_high',
     });
@@ -290,6 +290,68 @@ describe.each([
       ),
     ).resolves.toMatchObject({outcome: 'no_relation'});
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('does not promote an external reading pointer into a mechanism or implementation link', async () => {
+    const original = entry('2', false);
+    const pointer = {
+      ...original,
+      value: {
+        ...original.value,
+        body: [
+          '# Starvine adaptation',
+          'In [Starvine](https://example.invalid/paper), researchers introduce a compact alternative. I originally planned to cover it in this article, but I implemented it a few weeks ago.',
+          'For further details, I have written a comprehensive article and implementation guide here:',
+          '[Implementation guide](https://example.invalid/guide)',
+        ].join('\n\n'),
+      },
+    };
+    const fetcher = vi.fn<OpenAiFetch>();
+    const provider = new ResponsesEntryAssociationProvider(CONFIG, fetcher);
+    await expect(
+      provider.proposeAssociation(pointer, entry('3', false)),
+    ).resolves.toMatchObject({outcome: 'no_relation'});
+    await expect(
+      provider.reviewAssociation(pointer, entry('3', false), {
+        relationLabel: 'Both explain the implementation',
+        direction: 'symmetric',
+      }),
+    ).rejects.toMatchObject({code: 'ai_relation_review_uncertain'});
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(pointer.value.body).toContain('implementation guide here:');
+  });
+
+  it('allows direct body evidence but rejects a referral passage selected as proof', async () => {
+    const original = entry('2', false);
+    const mixed = {
+      ...original,
+      value: {
+        ...original.value,
+        body: 'For more details see our implementation guide:\n\n[Guide](https://example.invalid/guide)\n\nThe implementation keeps a bounded queue with a shared counter.',
+      },
+    };
+    for (const evidenceA of [['A:0'], ['A:2']]) {
+      const provider = new ResponsesEntryAssociationProvider(CONFIG, () =>
+        Promise.resolve(
+          responseEnvelope({
+            basis: 'shared_mechanism',
+            summary: 'Both use a bounded queue.',
+            relationLabel: 'Queue mechanism',
+            direction: 'symmetric',
+            evidenceA,
+          }),
+        ),
+      );
+      const result = provider.proposeAssociation(mixed, entry('3', false));
+      if (evidenceA[0] === 'A:0')
+        await expect(result).rejects.toMatchObject({
+          code: 'ai_provider_invalid_response',
+        });
+      else
+        await expect(result).resolves.toMatchObject({
+          relationLabel: 'Queue mechanism',
+        });
+    }
   });
 
   it('rejects a private pair before calling the Provider', async () => {

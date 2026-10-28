@@ -7,7 +7,7 @@
     "emitDecoratorMetadata": true,
     "jsx": "react-jsx",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": ["node"]
+    "types": ["node", "vite/client"]
   },
   "include": [
     "./apps/**/*.test.ts",

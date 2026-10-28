@@ -1,4 +1,10 @@
 import {
+  EMPTY_ANNOTATION_VOCABULARY,
+  annotationSearchWords,
+  matchesAnnotationFilter,
+  type AnnotationVocabulary,
+} from './structured_annotations.js';
+import {
   prepareEntrySearchAliases,
   type ConfirmedEntryAlias,
 } from './information_entry_search_aliases.js';
@@ -57,8 +63,9 @@ export function searchCurrentInformationEntries(
   > = new Map(),
   translations: ReadonlyMap<string, Readonly<EntryTranslation>> = new Map(),
   aliases: readonly Readonly<ConfirmedEntryAlias>[] = [],
+  vocabulary: AnnotationVocabulary = EMPTY_ANNOTATION_VOCABULARY,
 ): Readonly<InformationEntrySearchResult> {
-  const querySha256 = informationEntryQuerySha256(request, aliases);
+  const querySha256 = informationEntryQuerySha256(request, aliases, vocabulary);
   const expanded = prepareEntrySearchAliases(request, aliases);
   if (
     request.after !== undefined &&
@@ -85,6 +92,15 @@ export function searchCurrentInformationEntries(
   const textMode = request.textMode ?? 'substring';
   const textFields = canonicalTextSearchFields(request.textFields);
   const matches = visibleEntries.flatMap((entry) => {
+    if (
+      !matchesAnnotationFilter(
+        entry.value.annotations,
+        entry.value.bodySha256,
+        request.annotationFilter,
+        vocabulary,
+      )
+    )
+      return [];
     const filterReasons = structuralFilterReasons(
       entry,
       request,
@@ -101,6 +117,7 @@ export function searchCurrentInformationEntries(
       textFields,
       translations.get(entry.entryId),
       expanded.text,
+      vocabulary,
     );
     const aliasMatches = entry.value.contentKeywords
       .flatMap((keyword) => {
@@ -182,11 +199,18 @@ export function searchCurrentInformationEntries(
 export function informationEntryQuerySha256(
   request: Readonly<InformationEntrySearchRequest>,
   aliases: readonly Readonly<ConfirmedEntryAlias>[] = [],
+  vocabulary: AnnotationVocabulary = EMPTY_ANNOTATION_VOCABULARY,
 ): string {
   const expanded = prepareEntrySearchAliases(request, aliases);
   const projection = {
     ...(expanded.text.length || expanded.contentKeyword.length
       ? {confirmedAliases: expanded}
+      : {}),
+    ...(vocabulary.revision
+      ? {annotationVocabularyRevision: vocabulary.revision}
+      : {}),
+    ...(request.annotationFilter
+      ? {annotationFilter: request.annotationFilter}
       : {}),
     schemaVersion: 'struinfo.information-entry-search.v3',
     ...(request.retrievalMode === undefined ||
@@ -318,6 +342,7 @@ function matchInformationEntryText(
   fields: readonly EntryTextSearchField[],
   translation: Readonly<EntryTranslation> | undefined,
   aliases: readonly string[],
+  vocabulary: AnnotationVocabulary = EMPTY_ANNOTATION_VOCABULARY,
 ): Readonly<InformationEntryTextMatchEvaluation> | undefined {
   if (query === '') return undefined;
   const selected = new Set(fields);
@@ -353,6 +378,11 @@ function matchInformationEntryText(
       addReason('translation_body', [currentTranslation.body]);
   }
   if (selected.has('tags')) {
+    if (entry.value.annotations?.inputBodySha256 === entry.value.bodySha256)
+      addReason(
+        'structured_annotation',
+        annotationSearchWords(entry.value.annotations, vocabulary),
+      );
     if (
       entry.value.contentKeywords.some((keyword) =>
         aliases.includes(keyword.normalizedValue),

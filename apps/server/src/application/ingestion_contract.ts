@@ -5,9 +5,10 @@ import {
   type IntakeRecordValue,
 } from './document_intake_contract.js';
 import type {AgentTask} from './agent_task_contract.js';
+import type {Reception} from '../modules/subscriptions/source_receiving.js';
 
 export const INGESTION_ACTOR_ID = 'new-materials-policy';
-export const ingestionSettingsSchema = z
+const storedIngestionSettingsObject = z
   .object({
     enabled: z.boolean().default(false),
     paused: z.boolean().default(false),
@@ -26,8 +27,18 @@ export const ingestionSettingsSchema = z
     maxRelationCandidates: z.number().int().min(0).max(24).optional(),
     maxDocumentsPerDay: z.number().int().min(1).max(100).default(10),
   })
-  .strict()
+  .strict();
+export const ingestionSettingsSchema = storedIngestionSettingsObject
+  .omit({maxRelations: true, maxRelationCandidates: true})
   .refine((s) => new Set(s.subscriptionIds).size === s.subscriptionIds.length);
+/** Earlier personal policies cannot restore the retired relation stage. */
+export function decodeStoredIngestionSettings(input: unknown) {
+  const old = storedIngestionSettingsObject.parse(input);
+  const current = {...old} as Partial<typeof old>;
+  delete current.maxRelations;
+  delete current.maxRelationCandidates;
+  return ingestionSettingsSchema.parse(current);
+}
 export type IngestionSettings = z.infer<typeof ingestionSettingsSchema>;
 export interface IngestionPolicy {
   readonly revision: number;
@@ -43,6 +54,8 @@ export type IngestionOrigin = Readonly<
 export type IngestionStatus =
   'pending' | 'running' | 'paused' | 'attention' | 'completed' | 'taken_over';
 export interface IngestionItem {
+  readonly reception?: Reception;
+  readonly priority?: number;
   readonly snapshotId: string;
   readonly sourceLabel?: string;
   readonly origin: IngestionOrigin;
@@ -99,6 +112,7 @@ export const ingestionStatusQuerySchema = z
   .strict();
 export type IngestionStatusQuery = z.infer<typeof ingestionStatusQuerySchema>;
 export interface IngestionRepository {
+  dispatchCandidates?(limit: number): Promise<readonly IngestionItem[]>;
   summary?(): Promise<{
     counts: Readonly<Record<string, number>>;
     admittedToday: number;

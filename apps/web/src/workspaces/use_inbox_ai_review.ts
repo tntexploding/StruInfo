@@ -105,10 +105,6 @@ export function useInboxAiReview(
               snapshotId: item.snapshotId,
               expectedReceiptVersion: item.expectedVersion,
               maxEntries: status.policy.settings.maxEntries,
-              maxRelations: status.policy.settings.maxRelations,
-              maxRelationCandidates:
-                status.policy.settings.maxRelationCandidates ??
-                status.policy.settings.maxRelations,
               intake: status.policy.settings.intake ?? DEFAULT_INTAKE_POLICY,
               maxModelCalls: status.policy.settings.maxModelCalls,
             },
@@ -124,7 +120,7 @@ export function useInboxAiReview(
           ' 份 AI 审核与整理任务。' +
           (failed.length
             ? failed.length.toString() + ' 份未提交：' + (failed[0] ?? '')
-            : 'AI 判断通过后自动接受，随后拆分、添加标签与联系并入库；不确定的资料留待你决定。'),
+            : 'AI 审核通过后拆分、标注并确认入库。主题与联系单独处理；不确定的资料留待你决定。'),
       );
     } catch (error) {
       setMessage(aiError(error));

@@ -1,3 +1,4 @@
+import {withSourceProcessing} from './source_processing_scope.js';
 import {createHash} from 'node:crypto';
 import {AiWorkQueue} from './ai_work_queue.js';
 import {isNoRelationRun} from '../modules/processing/ai_association_proposal.js';
@@ -9,6 +10,7 @@ import {
 } from '../modules/processing/ai_price_policy.js';
 import {
   agentTaskRequestSchema,
+  DOCUMENT_WORKFLOW,
   type AgentTask,
   type AgentTaskRepository,
   type AgentTaskState,
@@ -143,6 +145,7 @@ export class AgentTaskService {
               complete: false,
             };
     const now = new Date().toISOString();
+    const sourceSplit = await this.actions.freezeSourceSplit(request);
     const retryLimit =
       (await this.priceGate?.executionSettings?.())?.automaticRetryLimit ?? 0;
     const task: AgentTask = {
@@ -162,6 +165,8 @@ export class AgentTaskService {
             )
           : 'external-agent',
       state: {
+        ...(request.kind === 'document' ? {workflow: DOCUMENT_WORKFLOW} : {}),
+        ...(sourceSplit ? {sourceSplit} : {}),
         // Relation verification remains readable for existing checkpoints, but
         // its semantic trial did not qualify it as a default for new tasks.
         ...(request.kind === 'document' && retryLimit > 0
@@ -295,6 +300,7 @@ export class AgentTaskService {
       taskId,
       async () => {
         const task = await this.read(authority, taskId);
+        assertCurrentDocumentWorkflow(task);
         if (task.state.supersededBy)
           return this.read(authority, task.state.supersededBy);
         if (task.version !== expectedVersion)
@@ -314,8 +320,9 @@ export class AgentTaskService {
           actorId: authority.identity.id,
           requestKey: 'restart-' + taskId,
           state: {
-            ...(task.state.relationReviewRequired
-              ? {relationReviewRequired: true}
+            workflow: DOCUMENT_WORKFLOW,
+            ...(task.state.sourceSplit
+              ? {sourceSplit: task.state.sourceSplit}
               : {}),
             status: 'queued',
             calls: 0,
@@ -383,6 +390,7 @@ export class AgentTaskService {
     if (task.state.status === 'succeeded' || task.state.status === 'cancelled')
       throw new OperationError('conflict', 'task_terminal');
     if (action === 'resume') {
+      assertCurrentDocumentWorkflow(task);
       authority.require(
         task.request.kind === 'document' || task.request.kind === 'intake'
           ? 'models.use'
@@ -432,6 +440,7 @@ export class AgentTaskService {
   ) {
     return this.repository.withLock(this.workspaceId, taskId, async () => {
       const task = await this.read(authority, taskId);
+      assertCurrentDocumentWorkflow(task);
       if (task.version !== expectedVersion)
         throw new OperationError('conflict', 'stale_task_version');
       const index = task.state.steps.findIndex((s) => !s.complete);
@@ -469,6 +478,13 @@ export class AgentTaskService {
     });
   }
   public async execute(taskId: string): Promise<void> {
+    const task = await this.repository.read(this.workspaceId, taskId);
+    return withSourceProcessing(
+      task?.state.sourceSplit?.processingProfile,
+      () => this.executeScoped(taskId),
+    );
+  }
+  private async executeScoped(taskId: string): Promise<void> {
     await this.repository.withLock(this.workspaceId, taskId, async () => {
       let task = await this.repository.read(this.workspaceId, taskId);
       if (
@@ -478,6 +494,14 @@ export class AgentTaskService {
       )
         return;
       let state: AgentTaskState = {...task.state, status: 'running'};
+      if (isLegacyDocumentTask(task)) {
+        await this.repository.saveState(this.workspaceId, taskId, {
+          ...task.state,
+          status: task.cancelRequested ? 'cancelled' : 'paused',
+          errorCode: 'legacy_document_task',
+        });
+        return;
+      }
       let unsentAttempt: AgentTaskState | undefined;
       delete state.errorCode;
       const save = async () => {
@@ -545,22 +569,6 @@ export class AgentTaskService {
               await save();
               continue;
             }
-            if (
-              task.request.kind === 'document' &&
-              state.phase === 'tags' &&
-              task.request.maxRelationCandidates !== undefined
-            ) {
-              state = {
-                ...state,
-                phase: 'recall',
-                steps: [
-                  ...state.steps,
-                  ...(await this.actions.recallSteps(task)),
-                ],
-              };
-              await save();
-              continue;
-            }
             if (task.request.kind === 'document' && state.phase === 'split') {
               state = {
                 ...state,
@@ -570,25 +578,7 @@ export class AgentTaskService {
               await save();
               continue;
             }
-            if (
-              task.request.kind === 'document' &&
-              (state.phase === 'tags' || state.phase === 'recall')
-            ) {
-              state = {
-                ...state,
-                phase: 'relations',
-                steps: [
-                  ...state.steps,
-                  ...(await this.actions.relationSteps(task)),
-                ],
-              };
-              await save();
-              continue;
-            }
-            if (
-              task.request.kind === 'document' &&
-              state.phase === 'relations'
-            ) {
+            if (task.request.kind === 'document' && state.phase === 'tags') {
               state = {...state, phase: 'publish'};
               await save();
               continue;
@@ -607,30 +597,12 @@ export class AgentTaskService {
           }
           let step = requireOperationValue(state.steps[index]);
           if (
-            task.request.kind === 'document' &&
-            step.kind === 'relation' &&
-            state.steps.filter(
-              (s) =>
-                s.kind === 'relation' &&
-                s.complete &&
-                s.proposalId &&
-                !s.outcome,
-            ).length >= task.request.maxRelations
-          ) {
-            state = {
-              ...state,
-              steps: state.steps.map((s, i) =>
-                i === index
-                  ? {...s, complete: true, outcome: 'edge_budget_reached'}
-                  : s,
-              ),
-            };
-            await save();
-            continue;
-          }
-          if (step.kind === 'intake' || step.kind === 'recall') {
+            step.kind === 'recall' ||
+            (task.request.kind === 'document' && step.kind === 'relation')
+          )
+            throw new OperationError('rejected', 'legacy_document_task');
+          if (step.kind === 'intake') {
             if (
-              step.kind === 'intake' &&
               task.request.kind === 'document' &&
               step.receiptVersion !== undefined &&
               !(await this.actions.reviewCheckpointCurrent(
@@ -642,10 +614,8 @@ export class AgentTaskService {
               delete step.receiptVersion;
             }
             const needsCall =
-              step.kind === 'recall'
-                ? !step.recallPlan
-                : step.receiptVersion === undefined &&
-                  (await this.actions.prepareIntake(task));
+              step.receiptVersion === undefined &&
+              (await this.actions.prepareIntake(task));
             const currentTask = requireOperationValue(
               await this.repository.read(this.workspaceId, taskId),
             );
@@ -675,66 +645,18 @@ export class AgentTaskService {
                   'rejected',
                   'step_attempt_budget_exhausted',
                 );
-              const recallGroup =
-                step.kind === 'recall'
-                  ? await this.actions.recallGroup({...task, state}, step)
-                  : [step];
-              const reserved = new Map(
-                recallGroup.map((s) => [
-                  s.targetId,
-                  {...s, attempt: s.attempt + 1},
-                ]),
-              );
               unsentAttempt = structuredClone(state);
               state = clearRetryWait(state);
-              step = requireOperationValue(reserved.get(step.targetId));
+              step = {...step, attempt: step.attempt + 1};
               state = {
                 ...state,
                 calls: state.calls + 1,
-                steps: state.steps.map((s, i) =>
-                  step.kind === 'recall' && s.kind === 'recall'
-                    ? (reserved.get(s.targetId) ?? s)
-                    : i === index
-                      ? step
-                      : s,
-                ),
+                steps: state.steps.map((s, i) => (i === index ? step : s)),
               };
               await save();
-              if (step.kind === 'intake') {
-                const reviewedVersion = await this.actions.reviewIntake(task);
-                if (reviewedVersion !== undefined)
-                  step = {
-                    ...step,
-                    receiptVersion: requireOperationValue(reviewedVersion),
-                  };
-              } else {
-                const plans = await this.actions.recallGroupPlans(recallGroup);
-                if (plans.length !== recallGroup.length)
-                  throw new OperationError(
-                    'rejected',
-                    'ai_provider_invalid_schema',
-                  );
-                const completedPlans = new Map(
-                  recallGroup.map((s, i) => [
-                    s.targetId,
-                    requireOperationValue(plans[i]),
-                  ]),
-                );
-                state = {
-                  ...state,
-                  steps: state.steps.map((s) =>
-                    s.kind === 'recall' && completedPlans.has(s.targetId)
-                      ? {
-                          ...s,
-                          recallPlan: requireOperationValue(
-                            completedPlans.get(s.targetId),
-                          ),
-                        }
-                      : s,
-                  ),
-                };
-                step = requireOperationValue(state.steps[index]);
-              }
+              const reviewedVersion = await this.actions.reviewIntake(task);
+              if (reviewedVersion !== undefined)
+                step = {...step, receiptVersion: reviewedVersion};
               unsentAttempt = undefined;
             }
             if (task.request.kind === 'intake') {
@@ -800,6 +722,39 @@ export class AgentTaskService {
             };
             await save();
             continue;
+          }
+          if (
+            task.request.kind === 'document' &&
+            step.kind === 'split' &&
+            state.sourceSplit &&
+            !step.runId &&
+            step.attempt === 0
+          ) {
+            if (!step.sourceSplit) {
+              step = {
+                ...step,
+                sourceSplit: await this.actions.decideSourceSplit(task, step),
+              };
+              state = {
+                ...state,
+                steps: state.steps.map((s, i) => (i === index ? step : s)),
+              };
+              await save();
+              continue;
+            }
+            if (step.sourceSplit.outcome === 'review')
+              throw new OperationError('rejected', step.sourceSplit.reason);
+            if (step.sourceSplit.outcome === 'rule') {
+              await this.actions.applySourceSplit(task, step);
+              state = {
+                ...state,
+                steps: state.steps.map((s, i) =>
+                  i === index ? {...step, complete: true} : s,
+                ),
+              };
+              await save();
+              continue;
+            }
           }
           let run = await this.actions.loadRun(step);
           let proposal = run?.proposals[0];
@@ -947,115 +902,12 @@ export class AgentTaskService {
           }
           if (
             task.request.kind === 'document' &&
-            state.relationReviewRequired &&
-            step.kind === 'relation' &&
-            proposal &&
-            proposal.status !== 'accepted'
-          ) {
-            let review = await this.actions.loadRelationReview(step);
-            if (!review?.proposals.length && !isNoRelationRun(review)) {
-              await this.priceGate?.check();
-              if (state.calls >= task.request.maxModelCalls)
-                throw new OperationError(
-                  'rejected',
-                  'model_call_budget_exhausted',
-                );
-              const attempt = (step.reviewAttempt ?? 0) + 1;
-              if (attempt > 3)
-                throw new OperationError(
-                  'rejected',
-                  'step_attempt_budget_exhausted',
-                );
-              const key = [taskId, index, 'review', attempt, task.version].join(
-                '-',
-              );
-              unsentAttempt = structuredClone(state);
-              step = {
-                ...step,
-                reviewAttempt: attempt,
-                reviewRunId: this.actions.reviewRunId(
-                  step,
-                  proposal.proposalId,
-                  key,
-                ),
-              };
-              state = {
-                ...clearRetryWait(state),
-                calls: state.calls + 1,
-                steps: state.steps.map((s, i) => (i === index ? step : s)),
-              };
-              await save();
-              review = await this.actions.reviewRelation(
-                task,
-                step,
-                proposal.proposalId,
-                key,
-              );
-              if (!review.proposals.length && !isNoRelationRun(review))
-                throw new OperationError(
-                  'rejected',
-                  safeCode(
-                    review.errorCode ?? 'proposal_generation_incomplete',
-                  ),
-                );
-              unsentAttempt = undefined;
-            }
-            noRelation = isNoRelationRun(review);
-            proposal = review?.proposals[0];
-            step = {
-              ...step,
-              ...(proposal ? {proposalId: proposal.proposalId} : {}),
-              ...(noRelation ? {outcome: 'no_relation' as const} : {}),
-            };
-            state = {
-              ...state,
-              steps: state.steps.map((s, i) => (i === index ? step : s)),
-            };
-            await save();
-            // Paid verification may finish after a pause or an owner's new decision.
-            task = requireOperationValue(
-              await this.repository.read(this.workspaceId, taskId),
-            );
-            const denied = await this.checkAutomation(task);
-            if (task.pauseRequested || this.stopping() || denied) {
-              state = {
-                ...state,
-                status: task.cancelRequested ? 'cancelled' : 'paused',
-                ...(denied ? {errorCode: denied} : {}),
-              };
-              await save();
-              return;
-            }
-          }
-          if (
-            task.request.kind === 'document' &&
             step.kind === 'split' &&
             proposal?.splitPayload &&
             proposal.status !== 'accepted'
           ) {
             const tags = await this.actions.tagCallEstimate(proposal);
-            const recalls =
-              task.request.maxRelations > 0 &&
-              (task.request.maxRelationCandidates ?? 0) > 0
-                ? await this.actions.recallCallEstimate(proposal)
-                : 0;
-            const relations =
-              task.request.maxRelations > 0
-                ? (task.request.maxRelationCandidates ??
-                  task.request.maxRelations)
-                : 0;
-            // Reserve room for the planned stages before materializing many Entries.
-            // This is an estimate without retries; it never raises the frozen budget.
-            if (
-              state.calls +
-                tags +
-                recalls +
-                relations +
-                (state.relationReviewRequired
-                  ? Math.min(relations, task.request.maxRelations)
-                  : 0) >
-              task.request.maxModelCalls
-            )
+            if (state.calls + tags > task.request.maxModelCalls)
               throw new OperationError(
                 'rejected',
                 'insufficient_document_call_budget',
@@ -1083,12 +935,16 @@ export class AgentTaskService {
         state = {
           ...state,
           status:
-            error instanceof OperationError &&
-            [
-              'intake_held',
-              'intake_blocked',
-              'ai_relation_review_uncertain',
-            ].includes(error.code)
+            (error instanceof OperationError &&
+              [
+                'intake_held',
+                'intake_blocked',
+                'ai_relation_review_uncertain',
+              ].includes(error.code)) ||
+            (error instanceof OperationError &&
+              state.steps.some(
+                (s) => !s.complete && s.sourceSplit?.outcome === 'review',
+              ))
               ? 'paused'
               : 'failed',
           errorCode: safeCode(
@@ -1161,6 +1017,7 @@ export class AgentTaskService {
     for (const task of new Map(
       [...tasks, ...retries].map((t) => [t.taskId, t]),
     ).values()) {
+      if (isLegacyDocumentTask(task)) continue;
       if (this.#running.size >= 32) break;
       const retry = task.state.automaticRetry;
       if (
@@ -1269,6 +1126,7 @@ function safeCode(value: unknown) {
 
 export function taskNeedsRestart(task: AgentTask): boolean {
   if (
+    isLegacyDocumentTask(task) ||
     task.request.kind !== 'document' ||
     task.state.status !== 'failed' ||
     task.state.supersededBy
@@ -1311,4 +1169,15 @@ function clearRetryWait(state: AgentTaskState): AgentTaskState {
   const automaticRetry = {...state.automaticRetry};
   delete automaticRetry.notBefore;
   return {...state, automaticRetry};
+}
+export function isLegacyDocumentTask(task: AgentTask): boolean {
+  return (
+    task.request.kind === 'document' &&
+    task.state.workflow !== DOCUMENT_WORKFLOW
+  );
+}
+
+function assertCurrentDocumentWorkflow(task: AgentTask) {
+  if (isLegacyDocumentTask(task))
+    throw new OperationError('rejected', 'legacy_document_task');
 }

@@ -939,6 +939,49 @@ it('keeps a substantive product explanation and an editorial directory when mark
   ).toHaveLength(2);
 });
 
+it('attaches misclassified link and book appendices without losing coverage or merging independent articles', async () => {
+  const sections = [
+    {
+      ordinal: 0,
+      text: '## Pressure valve\n\nA valve releases excess pressure through an outlet.',
+    },
+    {
+      ordinal: 1,
+      text: '# Reading links\n\n- External guide [https://example.invalid/a](https://example.invalid/a)\n\n- Another title [https://example.invalid/b](https://example.invalid/b)',
+    },
+    {
+      ordinal: 2,
+      text: '# Queue Book\n\nChapter 3 of my [Queue Book](https://example.invalid/book) is now available in early access.',
+    },
+    {
+      ordinal: 3,
+      text: '## Cache policy\n\nThe cache expires records using a reference counter.',
+    },
+  ];
+  const fetcher = vi.fn<OpenAiFetch>(() =>
+    Promise.resolve(
+      responseEnvelope({
+        summary: 'Independent articles with appendices.',
+        groups: sections.map(({ordinal}) => ({
+          titlePath: `Generated ${ordinal.toString()}`,
+          startOrdinal: ordinal,
+          role: 'content',
+          context: 'self',
+        })),
+      }),
+    ),
+  );
+  const result = await new ResponsesEntrySplitProvider(
+    BASE_CONFIG,
+    fetcher,
+  ).proposeSplit(sections);
+  expect(result.groups).toEqual([
+    {titlePath: 'Pressure valve', startOrdinal: 0, endOrdinal: 2},
+    {titlePath: 'Cache policy', startOrdinal: 3, endOrdinal: 3},
+  ]);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+
 it('retains the 64-Entry capacity when a collection also has framing spans', async () => {
   const texts = [
     'An editorial preface.',

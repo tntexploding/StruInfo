@@ -1,4 +1,5 @@
 import {describe, expect, it, vi} from 'vitest';
+import type {StructuredAnnotations} from '../entries/structured_annotations.js';
 
 import type {
   CurrentInformationEntry,
@@ -16,6 +17,41 @@ const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 const ENTRY_ID = '22222222-2222-4222-8222-222222222222';
 
 describe('AiTagProposalService', () => {
+  it.each(['unknown', 'none'] as const)(
+    'persists a valid %s result without forcing legacy labels',
+    async (status) => {
+      const f = createFixture(false);
+      const annotations: StructuredAnnotations = {
+        schemaVersion: 1,
+        vocabularyRevision: 1,
+        dimensions: [],
+        inputRevision: 1,
+        inputBodySha256: f.current.value.bodySha256,
+        origin: 'ai',
+        originVersion: 'synthetic.v1',
+        status,
+        note: 'Insufficient evidence',
+        readingState: 'unread',
+        labels: [],
+        claims: [],
+      };
+      f.proposeTags.mockResolvedValueOnce({
+        summary: 'No invented labels',
+        contentKeywords: [],
+        typeKeyword: 'knowledge_explanation',
+        domains: [],
+        annotations,
+      });
+      await f.service.start(ENTRY_ID, 'annotations-' + status);
+      const [proposal] = await f.service.listForEntry(ENTRY_ID);
+      expect(proposal?.tagPayload?.annotations).toEqual(annotations);
+      await f.service.accept(ENTRY_ID, proposal?.proposalId ?? '');
+      expect(f.current.value.annotations).toEqual(annotations);
+      expect(f.current.value.contentKeywords).toEqual([]);
+      expect(f.current.value.domains).toEqual([]);
+      expect(f.proposeTags).toHaveBeenCalledTimes(1);
+    },
+  );
   it.each([false, true])(
     'compares persisted tag values independently of key order, preserving actual changes: %s',
     async (changed) => {
@@ -390,7 +426,7 @@ function run(runId: string, idempotencyKey: string): Readonly<ProcessingRun> {
 }
 
 function batchFixture() {
-  const selected = [0, 1, 2, 3].map((index) => ({
+  const selected = Array.from({length: 8}, (_, index) => ({
     ...entry(false),
     entryId: `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
   }));
@@ -425,7 +461,7 @@ function batchFixture() {
 it('persists independent tag proposals from one bounded call and reuses them idempotently', async () => {
   const f = batchFixture();
   const results = await f.service.startBatch(f.requests);
-  expect(results).toHaveLength(4);
+  expect(results).toHaveLength(8);
   expect(f.proposeTagsBatch).toHaveBeenCalledTimes(1);
   expect(f.proposeTags).not.toHaveBeenCalled();
   expect(results.map(({run}) => run.proposals[0]?.targetEntryId)).toEqual(
@@ -521,3 +557,46 @@ function entry(isPrivate: boolean): Readonly<CurrentInformationEntry> {
     }),
   });
 }
+
+it('retains a manual annotation set when a later internal tag proposal is accepted', async () => {
+  const f = createFixture(false);
+  const manual: StructuredAnnotations = {
+    schemaVersion: 1,
+    vocabularyRevision: 0,
+    dimensions: [],
+    inputRevision: 1,
+    inputBodySha256: f.current.value.bodySha256,
+    origin: 'manual',
+    originVersion: 'manual.v1',
+    status: 'none',
+    note: 'Owner reviewed',
+    readingState: 'read',
+    labels: [],
+    claims: [],
+  };
+  await f.entries.reviseEntry({
+    workspaceId: WORKSPACE_ID,
+    entryId: ENTRY_ID,
+    expectedRevision: 1,
+    revisionId: '00000000-0000-4000-8000-000000000002',
+    value: {...f.current.value, annotations: manual},
+  });
+  f.proposeTags.mockResolvedValueOnce({
+    summary: 'Synthetic AI result',
+    contentKeywords: [],
+    typeKeyword: 'knowledge_explanation',
+    domains: [],
+    annotations: {
+      ...manual,
+      inputRevision: 2,
+      origin: 'ai',
+      note: 'AI uncertain',
+      status: 'unknown',
+    },
+  });
+  await f.service.start(ENTRY_ID, 'preserve-manual-annotations');
+  const proposal = (await f.service.listForEntry(ENTRY_ID))[0];
+  if (!proposal) throw new Error('missing proposal');
+  await f.service.accept(ENTRY_ID, proposal.proposalId);
+  expect(f.current.value.annotations).toEqual(manual);
+});

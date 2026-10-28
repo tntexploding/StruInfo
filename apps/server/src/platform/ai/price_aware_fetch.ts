@@ -9,11 +9,14 @@ export function priceAwareFetch(
   },
   fetcher: typeof fetch = globalThis.fetch,
   usage?: ModelUsageJournal,
+  sharedQueue?: AiWorkQueue,
 ): typeof fetch {
-  const queue = new AiWorkQueue(
-    async () =>
-      (await service.executionSettings?.())?.maxConcurrentRequests ?? 1,
-  );
+  const queue =
+    sharedQueue ??
+    new AiWorkQueue(
+      async () =>
+        (await service.executionSettings?.())?.maxConcurrentRequests ?? 1,
+    );
   return async (input, init) => {
     await service.assertAllowed();
     return queue.run(async () => {

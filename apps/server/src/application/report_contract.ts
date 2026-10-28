@@ -1,3 +1,4 @@
+import {annotationFilterSchema} from '../modules/entries/structured_annotations.js';
 import {z} from 'zod';
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/u);
@@ -5,6 +6,13 @@ const boundedTerms = z.array(z.string().trim().min(1).max(100)).max(16);
 export const reportRequestSchema = z
   .object({
     kind: z.enum(['daily', 'weekly', 'monthly', 'topic']),
+    cutoff: z.iso.datetime().optional(),
+    annotationFilter: annotationFilterSchema.optional(),
+    topicIds: z.array(z.uuid()).max(16).optional(),
+    batchId: z
+      .string()
+      .regex(/^[a-zA-Z0-9_-]{1,100}$/u)
+      .optional(),
     composition: z.enum(['ai', 'collection']).optional(),
     date,
     timeZone: z.string().trim().min(1).max(80),
@@ -33,6 +41,12 @@ export const reportSourceSchema = z
     publishedDate: date.optional(),
     publicationInferred: z.boolean().optional(),
     excerpt: z.string().max(1200),
+    frozenText: z
+      .string()
+      .max(24000)
+      .refine((s) => Array.from(s).length <= 12000)
+      .optional(),
+    textTruncated: z.boolean().optional(),
     keywords: z.array(z.string().max(120)).max(64),
     reason: z.string().max(500),
   })
@@ -158,7 +172,7 @@ export interface ReportProvider {
       | 'receivedDate'
       | 'publishedDate'
       | 'publicationInferred'
-    > & {text: string})[];
+    > & {text: string; textTruncated?: boolean})[];
   }): Promise<ReportStory>;
 }
 export const reportEditSchema = z

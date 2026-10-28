@@ -1,6 +1,12 @@
+import {useDatabaseResearch} from './use_database_research.js';
+import {ContentDialog} from '../components/content_dialog.js';
+import {DatabaseScopeControls} from './database_scope_controls.js';
+import {DatabaseResearchResults} from './database_research.js';
+import {VisualSettings} from './visual_settings.js';
+import {DatabaseWorkspaceFrame} from '../components/database_workspace_frame.js';
+import {ContentTopicsPanel} from './content_topics_panel.js';
 import {createPortal} from 'react-dom';
 import {FloatingToolPanel} from '../components/floating_tool_panel.js';
-import {sourceDisplayName} from '../components/reading_text.js';
 import {InformationEntryTranslation} from './information_entry_translation.js';
 import type {EntryTranslationServices} from './use_entry_translation.js';
 import {
@@ -12,36 +18,33 @@ import {
   type EntryMarkdownExportServices,
 } from './information_entry_markdown_export.js';
 import {InformationEntryRestoredSelection} from './information_entry_restored_selection.js';
-import {useEffect, useState, type ReactNode, type SyntheticEvent} from 'react';
+import {
+  useEffect,
+  useState,
+  type ReactNode,
+  type SyntheticEvent,
+  type CSSProperties,
+} from 'react';
 
 import {
   type EntryQueryContext,
   type InformationEntry,
-  ENTRY_DOMAIN_KEYWORDS,
-  ENTRY_TYPE_KEYWORDS,
-  type EntryDomainKeyword,
-  type EntryTypeKeyword,
   type EvidenceSnapshotSummary,
   type ReviewPreferencesResponse,
 } from '../api/m1c_api_contract.js';
 import type {Loadable} from '../components/product_types.js';
 import {
-  InformationEntryPrivacyScope,
   InformationEntryReadOnlyDetail,
   InformationEntryResults,
   type InformationEntryServices,
 } from './information_entry_components.js';
-import {DOMAIN_LABELS, TYPE_LABELS} from './information_entry_shared.js';
 import {
   InformationEntryRetrievalOptions,
-  InformationEntryAdvancedSearchFields,
   InformationEntryTextSearchOptions,
 } from './information_entry_search_controls.js';
 import {InformationEntrySearchIndexPanel} from './information_entry_search_index_panel.js';
 import {InformationEntryQueryComparison} from './information_entry_query_comparison.js';
 import {InformationEntryExploration} from './information_entry_exploration.js';
-import {InformationEntryQuerySynthesis} from './information_entry_query_synthesis.js';
-import type {InformationEntryQuerySynthesisAction} from './use_information_entry_query_synthesis.js';
 import {
   EMPTY_INFORMATION_ENTRY_COMPARISON_STATE,
   clearInformationEntryComparisons,
@@ -64,6 +67,7 @@ export interface InformationEntryQueryWorkspaceProps
     Partial<EntrySavedQueryServices>,
     Partial<EntryMarkdownExportServices> {
   readonly renderGraph?: (entry: Readonly<InformationEntry>) => ReactNode;
+  readonly reports?: ReactNode;
   readonly initialContext?: Readonly<EntryQueryContext> | undefined;
   readonly onContextChange?: (context: Readonly<EntryQueryContext>) => void;
   readonly onOpenGraph?: (entry: Readonly<InformationEntry>) => void;
@@ -73,13 +77,13 @@ export interface InformationEntryQueryWorkspaceProps
   readonly onLoadSearchIndex?: InformationEntryServices['onLoadSearchIndex'];
   readonly onRefreshSearchIndex?: InformationEntryServices['onRefreshSearchIndex'];
   readonly onRebuildSearchIndex?: InformationEntryServices['onRebuildSearchIndex'];
-  readonly onSynthesize: InformationEntryQuerySynthesisAction;
   readonly reviewPreferences: Loadable<Readonly<ReviewPreferencesResponse>>;
   readonly snapshots: readonly Readonly<EvidenceSnapshotSummary>[];
 }
 
 export function InformationEntryQueryWorkspace({
   renderGraph,
+  reports,
   onPreviewMarkdownExport,
   onGenerateMarkdownExport,
   initialContext,
@@ -98,12 +102,38 @@ export function InformationEntryQueryWorkspace({
   onSearch,
   onRefreshSearchIndex,
   onRebuildSearchIndex,
-  onSynthesize,
   reviewPreferences,
   snapshots,
 }: InformationEntryQueryWorkspaceProps) {
+  const [searchElement, setSearchElement] = useState<HTMLDivElement | null>(
+    null,
+  );
+  const [searchHeight, setSearchHeight] = useState(186);
+  useEffect(() => {
+    if (!searchElement) return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry)
+        setSearchHeight(
+          entry.borderBoxSize[0]?.blockSize ?? entry.contentRect.height,
+        );
+    });
+    observer.observe(searchElement);
+    return () => {
+      observer.disconnect();
+    };
+  }, [searchElement]);
   const [readingMode, setReadingMode] = useState<'search' | 'ask'>('search');
   const [showGraph, setShowGraph] = useState(false);
+  const [topicsOpen, setTopicsOpen] = useState(false);
+  const [searched, setSearched] = useState(
+    Boolean(initialContext?.query.text) ||
+      Boolean(initialContext?.selectedEntryId),
+  );
+  const [configOpen, setConfigOpen] = useState(false);
+  const [evidenceMode, setEvidenceMode] = useState<'local' | 'web' | 'mixed'>(
+    'local',
+  );
+  const [webQuery, setWebQuery] = useState('');
   const [toolbarContainer, setToolbarContainer] =
     useState<HTMLDivElement | null>(null);
   const controller = useInformationEntryController({
@@ -111,9 +141,18 @@ export function InformationEntryQueryWorkspace({
       ? {}
       : {initialQueryContext: initialContext}),
     autoSearchDelayMs: 300,
+    autoSearch:
+      searched && readingMode === 'search' && evidenceMode === 'local',
     onSearch,
   });
   const [semanticIndexReady, setSemanticIndexReady] = useState(false);
+  const research = useDatabaseResearch({
+    operation: readingMode,
+    mode: evidenceMode,
+    text: controller.query,
+    webQuery,
+    query: controller.searchRequest,
+  });
   const [pendingContext, setPendingContext] = useState<
     Readonly<EntryQueryContext> | undefined
   >(initialContext?.query.includePrivate ? initialContext : undefined);
@@ -138,6 +177,7 @@ export function InformationEntryQueryWorkspace({
     );
   }, [currentQuery, currentSelection, onContextChange, pendingContext]);
   function applyContext(context: Readonly<EntryQueryContext>) {
+    setSearched(true);
     setPendingContext(undefined);
     setResumeEntryId(context.selectedEntryId);
     controller.restoreQueryContext(context);
@@ -171,7 +211,9 @@ export function InformationEntryQueryWorkspace({
       : undefined;
   function submitSearch(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
-    void controller.executeSearch();
+    setSearched(true);
+    if (readingMode === 'ask' || evidenceMode !== 'local') void research.run();
+    else if (searched) void controller.executeSearch();
   }
 
   function setSelectedAssociationAnchor(): void {
@@ -226,406 +268,361 @@ export function InformationEntryQueryWorkspace({
 
   return (
     <div
-      className="workspace-view entry-workspace workflow-stage-workspace"
+      className="workspace-view reading-sample database-blank database-options db-main"
       data-workflow-page="query"
+      style={
+        {'--db-search-space': `${String(searchHeight + 34)}px`} as CSSProperties
+      }
     >
-      <header className="workflow-page-heading">
-        <div>
-          <h1>数据阅览</h1>
-          <p>搜索已入库的资料、查看联系，或向 AI 提问并核对出处。</p>
-        </div>
-        <div
-          className="reading-segments reading-mode-switch"
-          role="group"
-          aria-label="阅览方式"
-        >
-          <button
-            aria-pressed={readingMode === 'search'}
-            onClick={() => {
-              setReadingMode('search');
-            }}
-          >
-            搜索与关系图
-          </button>
-          <button
-            aria-pressed={readingMode === 'ask'}
-            onClick={() => {
-              setReadingMode('ask');
-            }}
-          >
-            向资料提问
-          </button>
-        </div>
-      </header>
-
-      <details className="workflow-mode-summary" aria-label="查询页操作指南">
-        <summary>操作指南 · 查询条目</summary>
-        <span>1. 输入关键词，按需展开筛选</span>
-        <span>2. 从结果列表选择一个条目</span>
-        <span>3. 阅读正文并查看来源</span>
-      </details>
-
-      {pendingContext === undefined ? null : (
-        <section className="query-context-notice" aria-label="重新选择隐私范围">
-          <strong>此查询包含隐私范围</strong>
-          <p>打开前请选择本次可见范围。隐私内容需要单独勾选。</p>
-          <div className="entry-command-actions">
-            <button
-              type="button"
-              className="primary-action"
-              onClick={() => {
-                applyContext(pendingContext);
+      <DatabaseWorkspaceFrame
+        searched={searched}
+        reports={reports}
+        categories={
+          <DatabaseScopeControls
+            controller={controller}
+            snapshots={snapshots}
+            saved={
+              onLoadSavedQueries && onWriteSavedQuery ? (
+                <InformationEntrySavedQueries
+                  embedded
+                  context={{
+                    query: currentQuery,
+                    ...(currentSelection
+                      ? {selectedEntryId: currentSelection}
+                      : {}),
+                  }}
+                  onLoad={onLoadSavedQueries}
+                  onWrite={onWriteSavedQuery}
+                  onOpen={openContext}
+                />
+              ) : (
+                <p>查询保存暂不可用。</p>
+              )
+            }
+          />
+        }
+      >
+        <div className="search-module" ref={setSearchElement}>
+          <h1>数据库</h1>
+          <form className="search-form" role="search" onSubmit={submitSearch}>
+            <span className="search-symbol" aria-hidden="true">
+              ⌕
+            </span>
+            <input
+              id="search-input"
+              type="search"
+              maxLength={readingMode === 'ask' ? 600 : 300}
+              aria-label="关键词或问题"
+              placeholder={
+                readingMode === 'ask' ? '输入想了解的问题' : '输入关键词'
+              }
+              value={controller.query}
+              onChange={(e) => {
+                controller.setQuery(e.target.value);
               }}
-            >
-              按保存的隐私范围打开
-            </button>
-            <button
-              type="button"
-              className="secondary-action"
-              onClick={() => {
-                applyContext({
-                  ...pendingContext,
-                  query: {
-                    ...pendingContext.query,
-                    includePrivate: false,
-                    onlyPrivate: false,
-                  },
-                });
-              }}
-            >
-              仅公开范围打开
-            </button>
-            <button
-              type="button"
-              className="secondary-action"
-              onClick={() => {
-                setPendingContext(undefined);
-              }}
-            >
-              取消打开
-            </button>
-          </div>
-        </section>
-      )}
-      {controller.view.status !== 'error' ? null : (
-        <div className="query-context-notice">
-          <div className="entry-command-actions">
-            {controller.retrievalMode === 'lexical' ? null : (
+            />
+            {controller.query ? (
               <button
+                className="clear-query"
                 type="button"
-                className="secondary-action"
+                aria-label="清空搜索"
                 onClick={() => {
-                  controller.setRetrievalMode('lexical');
+                  controller.setQuery('');
                 }}
               >
-                改用文字查询
+                ×
               </button>
-            )}
-            {controller.advancedFilters.association === undefined ? null : (
+            ) : null}
+            <button
+              className="primary-action submit-search"
+              disabled={
+                research.busy ||
+                (readingMode === 'ask' && !aiQuerySynthesisEnabled)
+              }
+              type="submit"
+            >
+              {research.busy
+                ? '查询中…'
+                : readingMode === 'ask'
+                  ? '提问'
+                  : '搜索'}
+            </button>
+          </form>
+          <div className="search-secondary">
+            <div className="query-mode" role="group" aria-label="查询操作">
               <button
                 type="button"
-                className="secondary-action"
-                onClick={clearAssociationAnchor}
-              >
-                清除关联中心后查询
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-      <section
-        className="reading-answer-workspace"
-        hidden={readingMode !== 'ask'}
-      >
-        <InformationEntryQuerySynthesis
-          retrieveForQuestion
-          enabled={aiQuerySynthesisEnabled}
-          retrievalMode={
-            semanticSearchEnabled && semanticIndexReady ? 'hybrid' : 'lexical'
-          }
-          includePrivate={controller.includePrivate}
-          onlyPrivate={controller.onlyPrivate}
-          resultCount={
-            controller.view.status === 'ready'
-              ? controller.view.response.totalCount
-              : 0
-          }
-          searchRequest={controller.searchRequest}
-          onOpenEvidence={onOpenEvidence}
-          onSynthesize={onSynthesize}
-        />
-      </section>
-      <div className="query-studio-grid" hidden={readingMode !== 'search'}>
-        <div className="query-studio-toolbar">
-          <form
-            className="query-studio-form"
-            role="search"
-            onSubmit={submitSearch}
-          >
-            <section className="query-studio-search" aria-label="主搜索">
-              <label className="field entry-search-query">
-                <span className="query-search-label">
-                  搜索信息条目{' '}
-                  <span
-                    className="record-count"
-                    role="status"
-                    aria-live="polite"
-                  >
-                    {controller.searchDirty
-                      ? '条件已更改'
-                      : controller.view.status === 'ready'
-                        ? controller.includePrivate
-                          ? `${controller.view.response.totalCount.toString()} 条 · ${controller.view.response.privateDocuments.totalCount.toString()} 份完整隐私文档`
-                          : `${controller.view.response.totalCount.toString()} 条`
-                        : controller.view.status === 'loading'
-                          ? '正在搜索…'
-                          : '搜索失败'}
-                  </span>
-                </span>
-                <input
-                  type="search"
-                  value={controller.query}
-                  onChange={(event) => {
-                    controller.setQuery(event.currentTarget.value);
-                  }}
-                  placeholder="输入标题、正文或标签；留空浏览全部条目"
-                />
-              </label>
-              <button
-                className="primary-action entry-query-action"
-                type="submit"
+                aria-pressed={readingMode === 'search'}
+                onClick={() => {
+                  setReadingMode('search');
+                  if (evidenceMode === 'mixed') setEvidenceMode('local');
+                }}
               >
                 搜索
-              </button>{' '}
-            </section>
-          </form>
-          <aside
-            className="query-studio-settings workspace-page-actions ef-glass"
-            aria-label="搜索与显示设置"
-            data-floating-tool-group
-          >
-            <FloatingToolPanel
-              className="query-filter-drawer"
-              title="筛选与匹配方式"
+              </button>
+              <button
+                type="button"
+                aria-pressed={readingMode === 'ask'}
+                onClick={() => {
+                  setReadingMode('ask');
+                }}
+              >
+                AI 提问
+              </button>
+            </div>
+            <button
+              className="search-config-toggle"
+              aria-expanded={configOpen}
+              onClick={() => {
+                setConfigOpen(true);
+              }}
             >
-              <div className="query-filter-drawer__body">
+              搜索设置 ⌄
+            </button>
+          </div>
+          {pendingContext ? (
+            <section
+              className="query-notice"
+              role="region"
+              aria-label="重新选择隐私范围"
+            >
+              <span>此查询包含私密资料。</span>
+              <button
+                className="text-action"
+                onClick={() => {
+                  applyContext(pendingContext);
+                }}
+              >
+                按保存范围打开
+              </button>
+              <button
+                className="text-action"
+                onClick={() => {
+                  applyContext({
+                    ...pendingContext,
+                    query: {
+                      ...pendingContext.query,
+                      includePrivate: false,
+                      onlyPrivate: false,
+                    },
+                  });
+                }}
+              >
+                仅公开资料
+              </button>
+            </section>
+          ) : null}
+        </div>
+        <section
+          className="result-space"
+          aria-label="查询结果"
+          hidden={!searched}
+        >
+          <header className="result-heading">
+            <h2>
+              {readingMode === 'ask' ? '回答与引用' : '查询结果'}
+              {readingMode === 'search' &&
+              evidenceMode === 'local' &&
+              controller.view.status === 'ready'
+                ? ' · ' + String(controller.view.response.totalCount) + ' 条'
+                : ''}
+            </h2>
+            <span>
+              {evidenceMode === 'local'
+                ? '库内资料'
+                : evidenceMode === 'web'
+                  ? '网页资料'
+                  : '库内＋网页'}
+            </span>
+            <div ref={setToolbarContainer} />
+            <FloatingToolPanel
+              title="主题与联系"
+              preferredWidth={720}
+              onOpenChange={setTopicsOpen}
+            >
+              <ContentTopicsPanel
+                active={topicsOpen}
+                {...(selectedItem ? {entry: selectedItem.entry} : {})}
+                onRead={(id) => {
+                  setShowGraph(false);
+                  setResumeEntryId(id);
+                  controller.setSelectedEntryId(id);
+                }}
+              />
+            </FloatingToolPanel>
+          </header>
+          {readingMode === 'ask' || evidenceMode !== 'local' ? (
+            <DatabaseResearchResults
+              value={research}
+              onRead={(id) => {
+                setReadingMode('search');
+                setEvidenceMode('local');
+                setResumeEntryId(id);
+                controller.setSelectedEntryId(id);
+              }}
+            />
+          ) : (
+            <>
+              <section className="query-studio-results">
+                {controller.view.status === 'ready' &&
+                controller.includePrivate ? (
+                  <PrivateDocumentResults
+                    items={controller.view.response.privateDocuments.items}
+                    totalCount={
+                      controller.view.response.privateDocuments.totalCount
+                    }
+                    onOpenEvidence={onOpenEvidence}
+                  />
+                ) : null}
+
+                {controller.view.status !== 'ready' ||
+                controller.searchDirty ||
+                resumeEntryId === undefined ||
+                controller.selectedEntryId !== resumeEntryId ||
+                controller.selectedEntry !== undefined ||
+                onReadQueryContext === undefined ? null : (
+                  <InformationEntryRestoredSelection
+                    key={comparisonScopeKey + resumeEntryId}
+                    entryId={resumeEntryId}
+                    includePrivate={controller.includePrivate}
+                    onlyPrivate={controller.onlyPrivate}
+                    onRead={onReadQueryContext}
+                    onOpenEvidence={onOpenEvidence}
+                    {...(onOpenGraph === undefined ? {} : {onOpenGraph})}
+                  />
+                )}
+
+                {showGraph && selectedItem && renderGraph ? (
+                  <div
+                    className="reading-graph-frame"
+                    key={comparisonScopeKey + selectedItem.entry.entryId}
+                  >
+                    {renderGraph(selectedItem.entry)}
+                  </div>
+                ) : null}
+                <div className="reading-results-view" hidden={showGraph}>
+                  <InformationEntryQueryResults
+                    key={comparisonScopeKey}
+                    comparisonScopeKey={comparisonScopeKey}
+                    toolbarContainer={toolbarContainer}
+                    displayControls={displayControls}
+                    {...(onPreviewMarkdownExport === undefined
+                      ? {}
+                      : {onPreviewMarkdownExport})}
+                    {...(onGenerateMarkdownExport === undefined
+                      ? {}
+                      : {onGenerateMarkdownExport})}
+                    controller={controller}
+                    selectedItem={selectedItem}
+                    onAssociationToggle={(enabled) => {
+                      if (enabled) {
+                        setSelectedAssociationAnchor();
+                      } else {
+                        clearAssociationAnchor();
+                      }
+                    }}
+                    onOpenEvidence={onOpenEvidence}
+                    onExplore={onExplore}
+                    onReviseExplorationPolicy={onReviseExplorationPolicy}
+                    reviewPreferences={reviewPreferences}
+                    onReplaceAssociationAnchor={setSelectedAssociationAnchor}
+                    {...(translationServices === undefined
+                      ? {}
+                      : {translationServices})}
+                  />
+                </div>
+              </section>
+            </>
+          )}
+        </section>
+      </DatabaseWorkspaceFrame>
+      <ContentDialog
+        open={configOpen}
+        title="搜索设置"
+        onClose={() => {
+          setConfigOpen(false);
+        }}
+        className="blank-config"
+      >
+        <div className="config-form">
+          <label className="sample-field">
+            <span>资料来源</span>
+            <select
+              value={evidenceMode}
+              onChange={(e) => {
+                setEvidenceMode(e.target.value as typeof evidenceMode);
+              }}
+            >
+              <option value="local">库内资料</option>
+              <option value="web">网页资料</option>
+              {readingMode === 'ask' ? (
+                <option value="mixed">库内＋网页</option>
+              ) : null}
+            </select>
+          </label>
+          {evidenceMode !== 'web' ? (
+            <>
+              <InformationEntryRetrievalOptions
+                mode={controller.retrievalMode}
+                semanticAvailable={semanticSearchEnabled}
+                semanticReady={semanticIndexReady}
+                publicScope={
+                  !controller.includePrivate && !controller.onlyPrivate
+                }
+                queryPresent={Boolean(controller.query.trim())}
+                onChange={controller.setRetrievalMode}
+              />
+              <details className="nested-options">
+                <summary>文字匹配 ⌄</summary>
                 <InformationEntryTextSearchOptions
                   mode={controller.textMode}
                   fields={controller.textFields}
                   onModeChange={controller.setTextMode}
                   onFieldsChange={controller.setTextFields}
                 />
-                <InformationEntryRetrievalOptions
-                  mode={controller.retrievalMode}
-                  semanticAvailable={semanticSearchEnabled}
-                  semanticReady={semanticIndexReady}
-                  publicScope={
-                    !controller.includePrivate && !controller.onlyPrivate
-                  }
-                  queryPresent={controller.query.trim() !== ''}
-                  onChange={controller.setRetrievalMode}
-                />
-                <label className="field entry-source-filter">
-                  <span>来源文档</span>
-                  <select
-                    value={controller.snapshotId}
-                    onChange={(event) => {
-                      controller.setSnapshotId(event.currentTarget.value);
-                    }}
-                  >
-                    <option value="">全部来源文档</option>
-                    {snapshots.map((snapshot) => (
-                      <option
-                        key={snapshot.snapshotId}
-                        value={snapshot.snapshotId}
-                      >
-                        {sourceDisplayName(snapshot)}
-                        {snapshot.isPrivate === true ? '（私密）' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field entry-type-filter">
-                  <span>类型关键词</span>
-                  <select
-                    value={controller.typeKeyword}
-                    onChange={(event) => {
-                      controller.setTypeKeyword(
-                        event.currentTarget.value as '' | EntryTypeKeyword,
-                      );
-                    }}
-                  >
-                    <option value="">全部类型</option>
-                    {ENTRY_TYPE_KEYWORDS.map((keyword) => (
-                      <option key={keyword} value={keyword}>
-                        {TYPE_LABELS[keyword]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="field entry-domain-filter">
-                  <span>领域关键词</span>
-                  <select
-                    value={controller.domainKeyword}
-                    onChange={(event) => {
-                      controller.setDomainKeyword(
-                        event.currentTarget.value as '' | EntryDomainKeyword,
-                      );
-                    }}
-                  >
-                    <option value="">全部领域</option>
-                    {ENTRY_DOMAIN_KEYWORDS.map((keyword) => (
-                      <option key={keyword} value={keyword}>
-                        {DOMAIN_LABELS[keyword]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <InformationEntryAdvancedSearchFields
-                  snapshots={snapshots}
-                  typeKeyword={controller.typeKeyword}
-                  domainKeyword={controller.domainKeyword}
-                  filters={controller.advancedFilters}
-                  onChange={controller.setAdvancedFilters}
-                />
-                <InformationEntryPrivacyScope
-                  includePrivate={controller.includePrivate}
-                  onlyPrivate={controller.onlyPrivate}
-                  onChange={controller.setPrivacyScope}
-                />
-                <div className="entry-command-actions">
-                  <button
-                    className="primary-action"
-                    type="button"
-                    onClick={(event) => {
-                      event.currentTarget
-                        .closest<HTMLElement>('[popover]')
-                        ?.hidePopover();
-                      void controller.executeSearch();
-                    }}
-                  >
-                    应用筛选并搜索
-                  </button>
-                  <button
-                    className="secondary-action"
-                    type="button"
-                    onClick={controller.clearSearchFilters}
-                  >
-                    清除筛选
-                  </button>
-                </div>
-              </div>
-            </FloatingToolPanel>
-            <FloatingToolPanel
-              title="查询管理"
-              className="query-management"
-              preferredWidth={600}
-            >
-              <p className="field-help">保存常用的查询条件，或检查搜索索引。</p>
-              {onLoadSavedQueries === undefined ||
-              onWriteSavedQuery === undefined ? null : (
-                <InformationEntrySavedQueries
-                  embedded
-                  context={{
-                    query: currentQuery,
-                    ...(currentSelection === undefined
-                      ? {}
-                      : {selectedEntryId: currentSelection}),
-                  }}
-                  onLoad={onLoadSavedQueries}
-                  onWrite={onWriteSavedQuery}
-                  onOpen={openContext}
-                />
-              )}
-              <FloatingToolPanel embedded title="索引维护">
-                {onLoadSearchIndex === undefined ||
-                onRebuildSearchIndex === undefined ? null : (
-                  <InformationEntrySearchIndexPanel
-                    semanticEnabled={semanticSearchEnabled}
-                    onLoad={onLoadSearchIndex}
-                    onReadyChange={setSemanticIndexReady}
-                    {...(onRefreshSearchIndex === undefined
-                      ? {}
-                      : {onRefresh: onRefreshSearchIndex})}
-                    onRebuild={onRebuildSearchIndex}
-                  />
-                )}
-              </FloatingToolPanel>
-            </FloatingToolPanel>
-            <div
-              className="query-reading-tools-slot"
-              ref={setToolbarContainer}
-            />
-          </aside>
-        </div>
-
-        <section className="query-studio-results">
-          {controller.view.status === 'ready' && controller.includePrivate ? (
-            <PrivateDocumentResults
-              items={controller.view.response.privateDocuments.items}
-              totalCount={controller.view.response.privateDocuments.totalCount}
-              onOpenEvidence={onOpenEvidence}
-            />
+              </details>
+            </>
           ) : null}
-
-          {controller.view.status !== 'ready' ||
-          controller.searchDirty ||
-          resumeEntryId === undefined ||
-          controller.selectedEntryId !== resumeEntryId ||
-          controller.selectedEntry !== undefined ||
-          onReadQueryContext === undefined ? null : (
-            <InformationEntryRestoredSelection
-              key={comparisonScopeKey + resumeEntryId}
-              entryId={resumeEntryId}
-              includePrivate={controller.includePrivate}
-              onlyPrivate={controller.onlyPrivate}
-              onRead={onReadQueryContext}
-              onOpenEvidence={onOpenEvidence}
-              {...(onOpenGraph === undefined ? {} : {onOpenGraph})}
-            />
-          )}
-
-          {showGraph && selectedItem && renderGraph ? (
-            <div
-              className="reading-graph-frame"
-              key={comparisonScopeKey + selectedItem.entry.entryId}
-            >
-              {renderGraph(selectedItem.entry)}
-            </div>
+          {evidenceMode !== 'local' ? (
+            <label className="sample-field">
+              <span>公开搜索词</span>
+              <input
+                maxLength={128}
+                value={webQuery}
+                onChange={(e) => {
+                  setWebQuery(e.target.value);
+                }}
+                placeholder="填写用于联网的关键词"
+              />
+              <small>库内筛选只对库内资料生效。</small>
+            </label>
           ) : null}
-          <div className="reading-results-view" hidden={showGraph}>
-            <InformationEntryQueryResults
-              key={comparisonScopeKey}
-              comparisonScopeKey={comparisonScopeKey}
-              toolbarContainer={toolbarContainer}
-              displayControls={displayControls}
-              {...(onPreviewMarkdownExport === undefined
-                ? {}
-                : {onPreviewMarkdownExport})}
-              {...(onGenerateMarkdownExport === undefined
-                ? {}
-                : {onGenerateMarkdownExport})}
-              controller={controller}
-              selectedItem={selectedItem}
-              onAssociationToggle={(enabled) => {
-                if (enabled) {
-                  setSelectedAssociationAnchor();
-                } else {
-                  clearAssociationAnchor();
-                }
+          {onLoadSearchIndex && onRebuildSearchIndex ? (
+            <details className="nested-options">
+              <summary>索引维护 ⌄</summary>
+              <InformationEntrySearchIndexPanel
+                semanticEnabled={semanticSearchEnabled}
+                onLoad={onLoadSearchIndex}
+                onReadyChange={setSemanticIndexReady}
+                {...(onRefreshSearchIndex
+                  ? {onRefresh: onRefreshSearchIndex}
+                  : {})}
+                onRebuild={onRebuildSearchIndex}
+              />
+            </details>
+          ) : null}
+          <footer className="config-footer">
+            <button
+              className="primary-action compact-action"
+              onClick={() => {
+                setConfigOpen(false);
               }}
-              onOpenEvidence={onOpenEvidence}
-              onExplore={onExplore}
-              onReviseExplorationPolicy={onReviseExplorationPolicy}
-              reviewPreferences={reviewPreferences}
-              onReplaceAssociationAnchor={setSelectedAssociationAnchor}
-              {...(translationServices === undefined
-                ? {}
-                : {translationServices})}
-            />
-          </div>
-        </section>
-      </div>
+            >
+              完成
+            </button>
+          </footer>
+        </div>
+      </ContentDialog>
     </div>
   );
 }
@@ -823,12 +820,40 @@ function InformationEntryQueryResults({
       <FloatingToolPanel title="阅读与导出" preferredWidth={600}>
         {displayControls}
         {['language', 'export', 'tools'].map(renderSidebarSection)}
+        <details>
+          <summary>字号与正文宽度</summary>
+          <VisualSettings readingOnly />
+        </details>
       </FloatingToolPanel>
     </aside>
   );
 
   return (
     <div className="query-reading-layout">
+      {controller.view.status === 'error' ? (
+        <div className="query-error-actions">
+          {controller.retrievalMode !== 'lexical' ? (
+            <button
+              className="secondary-action"
+              onClick={() => {
+                controller.setRetrievalMode('lexical');
+              }}
+            >
+              改用文字查询
+            </button>
+          ) : null}
+          {controller.advancedFilters.association ? (
+            <button
+              className="secondary-action"
+              onClick={() => {
+                onAssociationToggle(false);
+              }}
+            >
+              清除关联中心后查询
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <InformationEntryResults
         ariaLabel="条目查询结果"
         layoutName="query"

@@ -1,3 +1,4 @@
+import {annotationFilterSchema} from './structured_annotations.js';
 import {
   ENTRY_CHUNK_MODES,
   ENTRY_DOMAIN_KEYWORDS,
@@ -21,6 +22,9 @@ export function decodeEntrySearchBody(
   body: unknown,
 ): Readonly<InformationEntrySearchRequest> | undefined {
   if (!isRecord(body)) return undefined;
+  const annotationFilter = annotationFilterSchema
+    .optional()
+    .safeParse(body.annotationFilter);
   const textValue = optionalBoundedText(body.text, ENTRY_SEARCH_TEXT_LIMIT);
   const retrievalMode = body.retrievalMode ?? 'lexical';
   const textMode = body.textMode ?? 'substring';
@@ -44,6 +48,7 @@ export function decodeEntrySearchBody(
   const association = decodeEntrySearchAssociation(body.association);
   const after = decodeEntrySearchCursor(body.after);
   if (
+    !annotationFilter.success ||
     textValue === null ||
     typeof retrievalMode !== 'string' ||
     !ENTRY_RETRIEVAL_MODES.includes(
@@ -95,6 +100,15 @@ export function decodeEntrySearchBody(
     return undefined;
   }
   return Object.freeze({
+    ...(annotationFilter.data
+      ? {
+          annotationFilter: Object.fromEntries(
+            Object.entries(annotationFilter.data).filter(
+              ([, v]) => v !== undefined,
+            ),
+          ),
+        }
+      : {}),
     ...(textValue === undefined
       ? {}
       : {

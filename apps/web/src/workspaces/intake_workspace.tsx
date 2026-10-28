@@ -1,3 +1,4 @@
+import {SourceReceivingSummary} from './source_receiving_fields.js';
 import {FloatingToolPanel} from '../components/floating_tool_panel.js';
 import {SourceHistoryWorkspace} from './source_history_workspace.js';
 import {DocumentIntakePanel} from './document_intake_panel.js';
@@ -43,12 +44,18 @@ const KINDS: Record<string, string> = {
 };
 export function IntakeWorkspace({
   api,
+  embedded = false,
+  initialIncludePrivate = false,
+  initialSourceId,
   ...props
 }: MaterialsWorkspaceProps & {
   api: Pick<M1cApiClient, 'loadEvidenceSnapshot'>;
+  embedded?: boolean;
+  initialIncludePrivate?: boolean;
+  initialSourceId?: string;
 }) {
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [includePrivate, setIncludePrivate] = useState(false);
+  const [includePrivate, setIncludePrivate] = useState(initialIncludePrivate);
   const {sources, origins, byId, received, error, ready, reload} =
     useIntakeDirectory(props, includePrivate);
   const [translations, setTranslations] = useState<
@@ -57,8 +64,9 @@ export function IntakeWorkspace({
   const [translatedDocument, setTranslatedDocument] = useState<string>();
   const [translating, setTranslating] = useState(false);
   const translationLock = useRef(false);
+  const [channel, setChannel] = useState('all');
   const [sourceId, setSourceId] = useState(
-    props.reviewTarget?.subscriptionId ?? 'all',
+    initialSourceId ?? props.reviewTarget?.subscriptionId ?? 'all',
   );
   const [selectedId, setSelectedId] = useState(
     props.reviewTarget?.snapshotId ?? '',
@@ -94,7 +102,13 @@ export function IntakeWorkspace({
   const matchesSource = (id: string, key = sourceId) =>
     matchesIntakeSource(origins.get(id), key, subscriptionIds);
   const sourceDocuments = received.filter((s) => matchesSource(s.snapshotId));
-  const documents = sourceDocuments
+  const channelDocuments = sourceDocuments.filter(
+    (s) =>
+      channel === 'all' ||
+      (byId.get(s.snapshotId)?.value.reception?.channel ?? 'unknown') ===
+        channel,
+  );
+  const documents = channelDocuments
     .filter(
       (s) =>
         filter === 'all' ||
@@ -130,7 +144,7 @@ export function IntakeWorkspace({
       props.onRefresh();
     },
   );
-  const pending = sourceDocuments.filter(
+  const pending = channelDocuments.filter(
     (s) => byId.get(s.snapshotId)?.value.receipt === 'pending',
   );
   const history = sourceDocuments
@@ -231,10 +245,10 @@ export function IntakeWorkspace({
     } catch (e) {
       setMessage('已完成 ' + String(saved) + ' 份。' + aiError(e));
     } finally {
-      lock.current = false;
-      setBusy(false);
       await reload();
       props.onRefresh();
+      lock.current = false;
+      setBusy(false);
     }
   }
   const chooseSource = (id: string) => {
@@ -367,6 +381,13 @@ export function IntakeWorkspace({
               preview.previews.get(selected.snapshotId)?.source.kind ?? ''
             ] ?? '订阅资料')
           : ''}
+        {' · ' +
+          {
+            history: '历史补收',
+            live: '订阅检查',
+            manual: '手动放入',
+            unknown: '早期接收记录',
+          }[selectedRecord?.value.reception?.channel ?? 'unknown']}
         {' · 接收于 '}
         {new Date(selected.capturedAt).toLocaleString('zh-CN')}
         {safeReadingLink(selected.canonicalUri) ? (
@@ -417,7 +438,7 @@ export function IntakeWorkspace({
     );
   return (
     <section
-      className="workspace-view journey-workspace intake-journey"
+      className={`workspace-view journey-workspace intake-journey ${embedded ? 'intake-journey--embedded' : ''}`}
       aria-label="文档入口"
     >
       <header className="workflow-page-heading">
@@ -446,6 +467,23 @@ export function IntakeWorkspace({
         </div>
       </header>
       {error ? <p role="alert">{error}</p> : null}
+      <label className="intake-channel-filter">
+        接收渠道{' '}
+        <select
+          value={channel}
+          onChange={(e) => {
+            setChannel(e.currentTarget.value);
+            setPage(0);
+            setChecked(new Set());
+          }}
+        >
+          <option value="all">全部</option>
+          <option value="live">订阅检查</option>
+          <option value="history">历史补收</option>
+          <option value="manual">手动放入</option>
+          <option value="unknown">早期记录（未标记）</option>
+        </select>
+      </label>
       <TwoPane
         name="intake"
         left={
@@ -602,10 +640,11 @@ export function IntakeWorkspace({
                     </button>
                     {sourceId === s.subscriptionId ? (
                       <div className="journey-source-detail">
+                        <SourceReceivingSummary status={s.receivingStatus} />
                         <p>
                           {KINDS[s.kind] ?? s.kind} ·{' '}
                           {s.enabled
-                            ? '每 ' + String(s.intervalMinutes) + ' 分钟检查'
+                            ? '检查间隔 ' + String(s.intervalMinutes) + ' 分钟'
                             : '接收已暂停'}
                         </p>
                         <p>
@@ -866,7 +905,7 @@ export function IntakeWorkspace({
                   )
                 }
               >
-                审核完成 → 在工作台打开
+                在文档阅读中打开
               </button>
             ) : null}
             <footer className="journey-floating-bar">
@@ -889,8 +928,11 @@ export function IntakeWorkspace({
                   >
                     {checked.size ? '拒绝所选' : '拒绝'}
                   </button>
-                  <details className="journey-action-menu">
-                    <summary>更多</summary>
+                  <FloatingToolPanel
+                    title="更多接收操作"
+                    className="journey-action-menu"
+                    preferredWidth={380}
+                  >
                     <div>
                       <button
                         disabled={!selected}
@@ -926,7 +968,7 @@ export function IntakeWorkspace({
                         恢复为待审
                       </button>
                     </div>
-                  </details>
+                  </FloatingToolPanel>
                 </div>
                 <p
                   className="intake-action-hint"
@@ -982,8 +1024,11 @@ export function IntakeWorkspace({
                   >
                     {ai.busy ? '正在提交…' : '交给 AI 审核并整理'}
                   </button>
-                  <details className="journey-action-menu">
-                    <summary>摘要</summary>
+                  <FloatingToolPanel
+                    title="摘要设置"
+                    className="journey-action-menu"
+                    preferredWidth={380}
+                  >
                     <div>
                       <label>
                         <input
@@ -1014,7 +1059,7 @@ export function IntakeWorkspace({
                         {checked.size ? '生成所选摘要' : '生成本篇摘要'}
                       </button>
                     </div>
-                  </details>
+                  </FloatingToolPanel>
                 </div>
                 <p className="intake-action-hint" id="intake-ai-explanation">
                   先由 AI

@@ -1,3 +1,4 @@
+import {structuredAnnotationsSchema} from '../../../modules/entries/structured_annotations.js';
 import {
   ENTRY_DOMAIN_KEYWORDS,
   ENTRY_TYPE_KEYWORDS,
@@ -115,11 +116,12 @@ const READ_PROPOSAL_INPUTS_SQL = sql(
 );
 
 const READ_TAG_PAYLOADS_SQL = sql(
-  'SELECT proposal_id::text, expected_entry_revision, provider_model,',
-  '  prompt_version, type_keyword, type_custom_name',
-  'FROM struinfo.processing_tag_proposal',
-  'WHERE workspace_id = $1 AND proposal_id = ANY($2::uuid[])',
-  'ORDER BY proposal_id',
+  'SELECT p.proposal_id::text, expected_entry_revision, provider_model,',
+  '  prompt_version, type_keyword, type_custom_name, a.value_text AS annotation_text',
+  'FROM struinfo.processing_tag_proposal AS p',
+  'LEFT JOIN struinfo.processing_tag_annotation_payload AS a ON a.workspace_id = p.workspace_id AND a.proposal_id = p.proposal_id',
+  'WHERE p.workspace_id = $1 AND p.proposal_id = ANY($2::uuid[])',
+  'ORDER BY p.proposal_id',
 );
 
 const READ_TAG_KEYWORDS_SQL = sql(
@@ -652,6 +654,13 @@ async function loadTagPayloads(
     const proposalId = canonicalUuid(row.proposal_id);
     const typeCustomName = optionalText(row.type_custom_name);
     const payload = Object.freeze({
+      ...(row.annotation_text == null
+        ? {}
+        : {
+            annotations: structuredAnnotationsSchema.parse(
+              JSON.parse(text(row.annotation_text)),
+            ),
+          }),
       expectedEntryRevision: integer(row.expected_entry_revision, 1),
       providerModel: text(row.provider_model),
       promptVersion: text(row.prompt_version),
@@ -703,6 +712,11 @@ async function insertTagPayload(
       ])
     ).rowCount,
   );
+  if (payload.annotations)
+    await client.query(
+      'INSERT INTO struinfo.processing_tag_annotation_payload (workspace_id, proposal_id, value_text) VALUES ($1, $2, $3)',
+      [workspaceId, proposalId, JSON.stringify(payload.annotations)],
+    );
   for (const [ordinal, keyword] of payload.contentKeywords.entries()) {
     if (
       informationEntrySearchKey(keyword.displayValue) !==

@@ -85,6 +85,9 @@ export function renderReportMarkdown(report: ReportRecord) {
       (state.request.timeField === 'received' ? '接收日期' : '发布日期') +
       '）。',
     '',
+    ...(state.sources.some((s) => s.textTruncated)
+      ? ['部分长资料使用固定摘录，完整正文见来源。', '']
+      : []),
     '选材：' +
       String(state.sources.length) +
       ' / ' +

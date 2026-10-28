@@ -2,9 +2,9 @@
 
 Package manifests and `pnpm-lock.yaml` select the installed versions. The SPDX inventory and `THIRD_PARTY_NOTICES.md` record their sources and legal material. StruInfo uses MIT; each third-party package retains its own license.
 
-## Current release: v0.4.0
+## Current release: v0.5.0
 
-The [October 19 security repair](evidence/maintenance-security-2026-10-19.md) updates five runtime packages, Vitest and its matching packages, brace-expansion and source-map-js to fixed versions. It removes seven transitive packages no longer selected by Multer. The npm SPDX inventory contains 373 dependency identities for the selected Windows x64 and Linux x64/glibc build closure, plus the application root. The Alpine runtime uses its JavaScript production subset without native bindings.
+This release includes the [October 28 security repair](evidence/security-reconciliation-2026-10-28.json). MCP, Vite, Vitest, request parsers and their selected dependencies move to patched versions. The npm SPDX inventory contains 373 dependency identities for Windows x64 and Linux x64/glibc, plus the application root. The Alpine runtime uses its JavaScript production subset without native bindings.
 
 | Component      | Version or reference                                           |
 | -------------- | -------------------------------------------------------------- |

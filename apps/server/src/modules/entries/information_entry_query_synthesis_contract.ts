@@ -40,6 +40,10 @@ export class AiQuerySynthesisProviderError extends Error {
 }
 
 export interface InformationEntryQuerySynthesisProviderEvidence {
+  readonly origin?: 'local' | 'web';
+  readonly url?: string;
+  readonly retrievedAt?: string;
+  readonly contentKind?: 'body' | 'summary';
   readonly handle: string;
   readonly titlePath: string;
   readonly excerpt: string;

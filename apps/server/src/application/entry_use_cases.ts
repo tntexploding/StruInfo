@@ -1,3 +1,4 @@
+import type {AnnotationVocabulary} from '../modules/entries/structured_annotations.js';
 import type {ConfirmedEntryAlias} from '../modules/entries/information_entry_search_aliases.js';
 import {
   ENTRY_TEXT_SEARCH_FIELDS,
@@ -57,6 +58,7 @@ export interface EntryRevisionRequest {
   readonly annotation: Readonly<ManualEntryAnnotationInput>;
 }
 export interface EntryUseCasesDependencies {
+  readonly annotationVocabulary?: () => Promise<AnnotationVocabulary>;
   readonly stageDocument?: (snapshotId: string) => Promise<void>;
   readonly knowledgeEntries?: InformationEntryRepositoryPort;
   readonly blobStore: BlobStore;
@@ -195,13 +197,16 @@ export class EntryUseCases {
       undefined,
       translations,
       aliases,
+      await this.#dependencies.annotationVocabulary?.(),
     );
-    const privateDocuments = await this.#searchPrivateDocuments(
-      request,
-      entries,
-      associationSnapshot,
-      aliases,
-    );
+    const privateDocuments = request.annotationFilter
+      ? {totalCount: 0, items: []}
+      : await this.#searchPrivateDocuments(
+          request,
+          entries,
+          associationSnapshot,
+          aliases,
+        );
     return {
       status: 'ok' as const,
       ...result,

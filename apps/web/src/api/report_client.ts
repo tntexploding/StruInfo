@@ -1,4 +1,9 @@
+import type {AnnotationFilter} from './annotation_contract.js';
 export interface ReportRequest {
+  batchId?: string;
+  cutoff?: string;
+  topicIds?: string[];
+  annotationFilter?: AnnotationFilter;
   kind: 'daily' | 'weekly' | 'monthly' | 'topic';
   composition?: 'ai' | 'collection';
   date: string;
