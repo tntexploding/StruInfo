@@ -3,6 +3,10 @@
 - Status: Accepted by owner
 - Date: 2026-09-19
 
+For publication versions created under P1, [ADR 0088](0088-confirmed-content-and-deferred-organization.md)
+replaces mutable-row hydration with confirmed reading and separate organization.
+Historical tasks retain the sequence and budgets recorded here.
+
 ## Decision
 
 One bounded document task continues from intake approval through split, tags,

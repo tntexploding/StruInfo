@@ -2,7 +2,7 @@
 
 - Foundation task: `M0-S-FOUNDATION-MAINT-001`
 - Dependency increments: `M1A-MD-DEP-MAINT-001`, `M1E-5B-DOCUMENT-IMPORT`, `M1I-2-RSS-ATOM`, `UI-READING-20260908` (existing parser reuse)
-- Tracked lock SHA-256: `22122B993A5053AA40EBD5FC57AF0A76BCDB7B1DC18A3CE90EEB06A28EF5E058`
+- Tracked lock SHA-256: `F8B15C7B52742152D32B9509D6332DF524EEBCAF5111C8580A831C63415C728C`
 - M1I-2 pre-increment lock SHA-256: `10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A`
 - M1E-5B pre-increment lock SHA-256: `99F261C35311919380BF6AEF018E0B2A9D076DC7937A5EDE1E0D7F26F56192A0`
 - Foundation pre-M1A lock SHA-256: `A783E1C5B2DADD8B653D8E16446847530473D5569BB08830D7FC03D79400880B`
@@ -60,10 +60,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `@nestjs/core@11.1.28` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/nestjs__core@11.1.28/LICENSE` |
 | `@nestjs/platform-express@11.1.28` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/nestjs__platform-express@11.1.28/LICENSE` |
 | `@nodable/entities@3.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm-source/nodable__entities@3.0.0/canonical-MIT.txt` (DECLARED_SPDX_WITH_CANONICAL_TEXT) |
-| `@oxc-project/types@0.143.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/oxc-project__types@0.143.0/LICENSE` |
 | `@playwright/test@1.62.1` | development | `Apache-2.0` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/playwright__test@1.62.1/LICENSE`<br>`docs/dependencies/licenses/npm/playwright__test@1.62.1/NOTICE` |
-| `@rolldown/binding-linux-x64-gnu@1.2.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/rolldown@1.2.3/LICENSE` (EXACT_VERSION_MAIN_PACKAGE_LEGAL_TEXT) |
-| `@rolldown/binding-win32-x64-msvc@1.2.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/rolldown@1.2.3/LICENSE` (EXACT_VERSION_MAIN_PACKAGE_LEGAL_TEXT) |
 | `@rolldown/pluginutils@1.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/rolldown__pluginutils@1.0.1/LICENSE` |
 | `@standard-schema/spec@1.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/standard-schema__spec@1.1.0/LICENSE` |
 | `@tokenizer/inflate@0.4.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/tokenizer__inflate@0.4.1/LICENSE` |
@@ -101,13 +98,6 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `@typescript-eslint/utils@8.66.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/typescript-eslint__utils@8.66.0/LICENSE` |
 | `@typescript-eslint/visitor-keys@8.66.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/typescript-eslint__visitor-keys@8.66.0/LICENSE` |
 | `@vitejs/plugin-react@6.0.5` | development | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitejs__plugin-react@6.0.5/LICENSE` |
-| `@vitest/expect@4.1.11` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest__expect@4.1.11/LICENSE` |
-| `@vitest/mocker@4.1.11` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest__mocker@4.1.11/LICENSE` |
-| `@vitest/pretty-format@4.1.11` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest__pretty-format@4.1.11/LICENSE` |
-| `@vitest/runner@4.1.11` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest__runner@4.1.11/LICENSE` |
-| `@vitest/snapshot@4.1.11` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest__snapshot@4.1.11/LICENSE` |
-| `@vitest/spy@4.1.11` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest__spy@4.1.11/LICENSE` |
-| `@vitest/utils@4.1.11` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest__utils@4.1.11/LICENSE` |
 | `accepts@2.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/accepts@2.0.0/LICENSE` |
 | `acorn-jsx@5.3.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/acorn-jsx@5.3.2/LICENSE` |
 | `acorn@8.18.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/acorn@8.18.0/LICENSE` |
@@ -117,7 +107,6 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `assertion-error@2.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/assertion-error@2.0.1/LICENSE` |
 | `balanced-match@4.0.4` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/balanced-match@4.0.4/LICENSE.md` |
 | `baseline-browser-mapping@2.11.12` | transitive | `Apache-2.0` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/baseline-browser-mapping@2.11.12/LICENSE.txt` |
-| `body-parser@2.3.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/body-parser@2.3.0/LICENSE` |
 | `brace-expansion@5.0.12` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/brace-expansion@5.0.12/LICENSE` |
 | `browserslist@4.28.7` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/browserslist@4.28.7/LICENSE` |
 | `busboy@1.6.0` | transitive | `(MIT)` | CONDITIONAL_REVIEW | `docs/dependencies/licenses/npm/busboy@1.6.0/mscdex-busboy-9aadb7a__LICENSE` |
@@ -262,7 +251,6 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `mime-types@3.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/mime-types@3.0.2/LICENSE` |
 | `minimatch@10.2.6` | transitive | `BlueOak-1.0.0` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/minimatch@10.2.6/LICENSE.md` |
 | `ms@2.1.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ms@2.1.3/license.md` |
-| `multer@2.4.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/multer@2.4.0/LICENSE` |
 | `nanoid@3.3.18` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/nanoid@3.3.18/LICENSE` |
 | `natural-compare@1.4.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm-source/natural-compare@1.4.0/canonical-MIT.txt` (SOURCE_LEGAL_TEXT_RETAINED) |
 | `negotiator@1.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/negotiator@1.0.0/LICENSE` |
@@ -306,13 +294,11 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `prettier@3.9.6` | development | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/prettier@3.9.6/LICENSE`<br>`docs/dependencies/licenses/npm/prettier@3.9.6/THIRD-PARTY-NOTICES.md` |
 | `proxy-addr@2.0.8` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/proxy-addr@2.0.8/LICENSE` |
 | `punycode@2.3.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/punycode@2.3.1/LICENSE-MIT.txt` |
-| `qs@6.16.0` | transitive | `BSD-3-Clause` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/qs@6.16.0/LICENSE.md` |
 | `range-parser@1.3.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/range-parser@1.3.0/LICENSE` |
 | `raw-body@3.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/raw-body@3.0.2/LICENSE` |
 | `react-dom@19.2.8` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/react-dom@19.2.8/LICENSE` |
 | `react@19.2.8` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/react@19.2.8/LICENSE` |
 | `reflect-metadata@0.2.2` | runtime | `Apache-2.0` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/reflect-metadata@0.2.2/LICENSE` |
-| `rolldown@1.2.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/rolldown@1.2.3/LICENSE`<br>`docs/dependencies/licenses/npm/rolldown@1.2.3/THIRD-PARTY-LICENSE` |
 | `router@2.2.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/router@2.2.0/LICENSE` |
 | `rxjs@7.8.2` | runtime | `Apache-2.0` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/rxjs@7.8.2/LICENSE.txt` |
 | `safer-buffer@2.1.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/safer-buffer@2.1.2/LICENSE` |
@@ -362,8 +348,6 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `update-browserslist-db@1.3.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/update-browserslist-db@1.3.0/LICENSE` |
 | `uri-js@4.4.1` | transitive | `BSD-2-Clause` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/uri-js@4.4.1/LICENSE` |
 | `vary@1.1.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vary@1.1.2/LICENSE` |
-| `vite@8.2.1` | development | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vite@8.2.1/LICENSE.md` |
-| `vitest@4.1.11` | development | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest@4.1.11/LICENSE.md` |
 | `which@2.0.2` | transitive | `ISC` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/which@2.0.2/LICENSE` |
 | `why-is-node-running@2.3.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/why-is-node-running@2.3.0/LICENSE` |
 | `word-wrap@1.2.5` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/word-wrap@1.2.5/LICENSE` |
@@ -373,15 +357,36 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `yallist@3.1.1` | transitive | `ISC` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/yallist@3.1.1/LICENSE` |
 | `yocto-queue@0.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/yocto-queue@0.1.0/license` |
 | `zod-validation-error@4.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/zod-validation-error@4.0.2/LICENSE` |
-| `zod@4.4.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/zod@4.4.3/LICENSE` |
+| `@modelcontextprotocol/sdk@1.32.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/modelcontextprotocol__sdk@1.32.0/LICENSE` |
+| `@oxc-project/types@0.155.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/oxc-project__types@0.155.0/LICENSE` |
+| `@rolldown/binding-linux-x64-gnu@1.2.15` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/rolldown@1.2.15/LICENSE`, `docs/dependencies/licenses/npm/rolldown@1.2.15/THIRD-PARTY-LICENSE` |
+| `@rolldown/binding-win32-x64-msvc@1.2.15` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/rolldown@1.2.15/LICENSE`, `docs/dependencies/licenses/npm/rolldown@1.2.15/THIRD-PARTY-LICENSE` |
+| `@vitest/expect@4.1.12` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest__expect@4.1.12/LICENSE` |
+| `@vitest/mocker@4.1.12` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest__mocker@4.1.12/LICENSE` |
+| `@vitest/pretty-format@4.1.12` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest__pretty-format@4.1.12/LICENSE` |
+| `@vitest/runner@4.1.12` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest__runner@4.1.12/LICENSE` |
+| `@vitest/snapshot@4.1.12` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest__snapshot@4.1.12/LICENSE` |
+| `@vitest/spy@4.1.12` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest__spy@4.1.12/LICENSE` |
+| `@vitest/utils@4.1.12` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest__utils@4.1.12/LICENSE` |
+| `body-parser@2.4.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/body-parser@2.4.0/LICENSE` |
+| `content-type@2.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/content-type@2.1.0/LICENSE` |
+| `fast-uri@3.1.9` | transitive | `BSD-3-Clause` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fast-uri@3.1.9/LICENSE` |
+| `hono@4.13.11` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/hono@4.13.11/LICENSE` |
+| `ip-address@10.7.4` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ip-address@10.7.4/LICENSE` |
+| `multer@2.5.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/multer@2.5.0/LICENSE` |
+| `qs@6.16.1` | transitive | `BSD-3-Clause` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/qs@6.16.1/LICENSE.md` |
+| `rolldown@1.2.15` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/rolldown@1.2.15/LICENSE`, `docs/dependencies/licenses/npm/rolldown@1.2.15/THIRD-PARTY-LICENSE` |
+| `vite@8.2.4` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vite@8.2.4/LICENSE.md` |
+| `vitest@4.1.12` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/vitest@4.1.12/LICENSE.md` |
+| `zod@4.6.6` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/zod@4.6.6/LICENSE` |
 
 ## Conditional and reconciliation notes
 
 - `@esbuild/linux-x64@0.28.1`: ROUTINE_REVIEW; expression=`MIT`; source reconciliation=true.
 - `@esbuild/win32-x64@0.28.1`: ROUTINE_REVIEW; expression=`MIT`; source reconciliation=true.
 - `@humanfs/types@0.15.0`: ROUTINE_REVIEW; expression=`Apache-2.0`; source reconciliation=true.
-- `@rolldown/binding-linux-x64-gnu@1.2.3`: ROUTINE_REVIEW; expression=`MIT`; source reconciliation=true.
-- `@rolldown/binding-win32-x64-msvc@1.2.3`: ROUTINE_REVIEW; expression=`MIT`; source reconciliation=true.
+- `@rolldown/binding-linux-x64-gnu@1.2.15`: ROUTINE_REVIEW; expression=`MIT`; source reconciliation=true.
+- `@rolldown/binding-win32-x64-msvc@1.2.15`: ROUTINE_REVIEW; expression=`MIT`; source reconciliation=true.
 - `@tokenizer/token@0.3.0`: ROUTINE_REVIEW; expression=`MIT`; source reconciliation=true.
 - `busboy@1.6.0`: CONDITIONAL_REVIEW; expression=`(MIT)`; source reconciliation=true.
 - `caniuse-lite@1.0.30001809`: CONDITIONAL_REVIEW; expression=`CC-BY-4.0`; source reconciliation=false.
@@ -501,19 +506,14 @@ Official MCP TypeScript SDK 1.30.0 implements the stdio protocol. Zod 4.4.3 is a
 | Package | Role | SPDX license | Review | Legal material |
 | --- | --- | --- | --- | --- |
 | `@hono/node-server@2.1.1` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/@hono__node-server@2.1.1/LICENSE` |
-| `@modelcontextprotocol/sdk@1.31.0` | direct runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/@modelcontextprotocol__sdk@1.31.0/LICENSE` |
 | `ajv-formats@3.0.1` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ajv-formats@3.0.1/LICENSE` |
 | `ajv@8.20.0` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ajv@8.20.0/LICENSE` |
 | `eventsource-parser@3.1.1` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/eventsource-parser@3.1.1/LICENSE` |
 | `eventsource@3.0.7` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/eventsource@3.0.7/LICENSE` |
 | `express-rate-limit@8.7.0` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/express-rate-limit@8.7.0/license` |
-| `fast-uri@3.1.8` | transitive runtime | `BSD-3-Clause` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fast-uri@3.1.8/LICENSE` |
-| `hono@4.13.7` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/hono@4.13.7/LICENSE` |
-| `ip-address@10.7.1` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ip-address@10.7.1/LICENSE` |
 | `jose@6.2.12` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/jose@6.2.12/LICENSE.md` |
 | `json-schema-traverse@1.0.0` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/json-schema-traverse@1.0.0/LICENSE` |
 | `json-schema-typed@8.0.2` | transitive runtime | `BSD-2-Clause` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/json-schema-typed@8.0.2/LICENSE.md` |
 | `pkce-challenge@5.0.1` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/pkce-challenge@5.0.1/LICENSE` |
 | `require-from-string@2.0.2` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/require-from-string@2.0.2/license` |
 | `zod-to-json-schema@3.25.2` | transitive runtime | `ISC` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/zod-to-json-schema@3.25.2/LICENSE` |
-| `zod@4.1.12` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/zod@4.1.12/LICENSE` |

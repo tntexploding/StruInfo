@@ -137,6 +137,7 @@ interface Session {
   };
 }
 interface Dependencies {
+  receiptSources?: () => Promise<ReadonlyMap<string, string>>;
   sources: () => Promise<readonly ReviewSourceSubscription[]>;
   snapshots: () => Promise<readonly EvidenceSnapshotSummary[]>;
   reader: SourceHistoryReader;
@@ -331,7 +332,8 @@ export class SourceHistoryService {
       const request = historySchemas.history_select.parse(input);
       const counts = new Map<string, number>();
       const selected = rows.filter((a) => {
-        if (existing.has(historyIdentity(a.url))) return false;
+        if (existing.has(this.receiptKey(a.subscriptionId, a.url)))
+          return false;
         const count = counts.get(a.subscriptionId) ?? 0;
         if (
           request.perSourceLimit !== undefined &&
@@ -367,7 +369,9 @@ export class SourceHistoryService {
       offset,
       articles: rows.slice(offset, offset + 50).map((a) => ({
         ...a,
-        existingSnapshotId: existing.get(historyIdentity(a.url)),
+        existingSnapshotId: existing.get(
+          this.receiptKey(a.subscriptionId, a.url),
+        ),
       })),
     };
   }
@@ -390,7 +394,11 @@ export class SourceHistoryService {
       const source = configured.find(
         (s) => s.subscriptionId === selection.subscriptionId && !s.isPrivate,
       );
-      if (!source || (source.kind !== 'rss_atom' && source.kind !== 'web'))
+      if (
+        !source ||
+        source.receiving?.history === 'none' ||
+        (source.kind !== 'rss_atom' && source.kind !== 'web')
+      )
         throw new OperationError('invalid_input', 'history_source_unsupported');
       const base = source.kind === 'rss_atom' ? source.feedUrl : source.pageUrl;
       const archive = selection.archiveUrl
@@ -456,7 +464,12 @@ export class SourceHistoryService {
         : source?.kind === 'web'
           ? source.pageUrl
           : undefined;
-    if (!state || !source || base !== state.base)
+    if (
+      !state ||
+      !source ||
+      source.receiving?.history === 'none' ||
+      base !== state.base
+    )
       throw new OperationError('conflict', 'history_source_changed');
     return source;
   }
@@ -596,12 +609,22 @@ export class SourceHistoryService {
       errors: s.failed.slice(-6).map((f) => ({url: f.page.url, code: f.code})),
     }));
   }
+  private receiptKey(subscriptionId: string, url: string) {
+    return (
+      (this.deps.receiptSources ? subscriptionId : '*') +
+      '\0' +
+      historyIdentity(url)
+    );
+  }
   private async existing() {
     const map = new Map<string, string>();
+    const origins = await this.deps.receiptSources?.();
     for (const s of await this.deps.snapshots())
       if (!s.isPrivate && s.canonicalUri) {
         try {
-          map.set(historyIdentity(s.canonicalUri), s.snapshotId);
+          const source = origins?.get(s.snapshotId);
+          if (origins && !source) continue;
+          map.set(this.receiptKey(source ?? '*', s.canonicalUri), s.snapshotId);
         } catch {
           /* Legacy non-URL evidence. */
         }
@@ -637,7 +660,9 @@ export class SourceHistoryService {
       try {
         const item = this.item(session, id),
           source = await this.currentSource(session, item.subscriptionId);
-        const prior = existing.get(historyIdentity(item.url));
+        const prior = existing.get(
+          this.receiptKey(item.subscriptionId, item.url),
+        );
         if (prior) {
           results.push({id, status: 'existing', snapshotId: prior});
           continue;
@@ -652,14 +677,22 @@ export class SourceHistoryService {
         )
           throw new OperationError('conflict', 'history_selection_changed');
         const canonical = historyIdentity(result.document.canonicalUri),
-          duplicate = existing.get(canonical);
+          duplicate = existing.get(
+            this.receiptKey(item.subscriptionId, canonical),
+          );
         if (duplicate) {
           results.push({id, status: 'existing', snapshotId: duplicate});
           continue;
         }
         const imported = await this.deps.importArticle(source, result.document);
-        existing.set(canonical, imported.snapshotId);
-        existing.set(historyIdentity(item.url), imported.snapshotId);
+        existing.set(
+          this.receiptKey(item.subscriptionId, canonical),
+          imported.snapshotId,
+        );
+        existing.set(
+          this.receiptKey(item.subscriptionId, item.url),
+          imported.snapshotId,
+        );
         results.push({
           id,
           status: imported.outcome === 'created' ? 'imported' : 'existing',

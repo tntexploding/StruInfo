@@ -1,15 +1,13 @@
 import {useReloadNavigation} from './components/use_reload_navigation.js';
 import {InformationEntrySourceReviewWorkspace} from './workspaces/information_entry_source_review_workspace.js';
 import {WorkspaceToolPanel} from './components/workspace_tool_panel.js';
-import {IntakeWorkspace} from './workspaces/intake_workspace.js';
+import {SourceManagementWorkspace} from './workspaces/source_management_workspace.js';
 import type {InboxReviewTarget} from './workspaces/inbox_review_state.js';
-import {ReportWorkspace} from './workspaces/report_workspace.js';
-import {AiWorkflowPanel} from './workspaces/ai_workflow_panel.js';
+import {DatabaseReports} from './workspaces/database_reports.js';
+import {AiAutomationSettings} from './workspaces/ai_automation_settings.js';
 import {WorkspaceUiProvider} from './components/workspace_ui_context.js';
 import {SettingsWorkspace} from './workspaces/settings_workspace.js';
 import {InformationEntrySplitRule} from './workspaces/information_entry_split_rule.js';
-import {InformationEntryPreferenceProfilePanel} from './workspaces/information_entry_preference_profile_panel.js';
-import {InformationEntryAutomationPolicyPanel} from './workspaces/information_entry_automation_policy_panel.js';
 import {AiExecutionSettings} from './workspaces/ai_execution_settings.js';
 import {AiPriceSettings} from './workspaces/ai_price_settings.js';
 import {
@@ -35,13 +33,9 @@ import type {
   InformationEntryKnowledgeGraphResponse,
   InformationEntryMaterializeResponse,
   InformationEntryDocumentListResponse,
-  InformationEntryPreferenceProfileResponse,
-  InformationEntryPreferenceSuggestionResponse,
-  InformationEntryPreferenceTrialResponse,
   InformationEntryRestructureApplyResponse,
   InformationEntryRestructurePreviewResponse,
   InformationEntrySearchResponse,
-  InformationEntryQuerySynthesisResponse,
   InformationDocumentTagWriteResponse,
   InformationDocumentWorkingCopyCommitResponse,
   InformationDocumentWorkingCopyResponse,
@@ -49,8 +43,6 @@ import type {
   ProcessingRunCancelResponse,
   ProcessingRunListResponse,
   DocumentImportResponse,
-  EntryPreferenceProfile,
-  EntryPreferenceRule,
   EntrySplitRuleApplyResponse,
   EntrySplitRuleProfileResponse,
   EntrySplitRuleProfileWriteResponse,
@@ -126,6 +118,9 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
   const [queryContext, setQueryContext] =
     useState<Readonly<EntryQueryContext>>();
   const [sourceReviewOpen, setSourceReviewOpen] = useState(false);
+  const [reportContainer, setReportContainer] = useState<HTMLDivElement | null>(
+    null,
+  );
   const [activeSection, setActiveSection] = useReloadNavigation();
   const [inboxReviewTarget, setInboxReviewTarget] =
     useState<InboxReviewTarget>();
@@ -144,11 +139,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
   const [reviewPreferencesOverride, setReviewPreferencesOverride] = useState<
     Readonly<ReviewPreferencesWrite> | undefined
   >();
-  const [entryPreferenceProfile, setEntryPreferenceProfile] = useState<
-    Loadable<Readonly<InformationEntryPreferenceProfileResponse>>
-  >({status: 'loading'});
   const reviewPreferencesRequestId = useRef(0);
-  const entryPreferenceProfileRequestId = useRef(0);
   const [evidencePanel, setEvidencePanel] = useState<EvidencePanelState>({
     status: 'closed',
   });
@@ -244,135 +235,17 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
     [apiClient],
   );
 
-  const refreshEntryPreferenceProfile = useCallback(
-    async (signal?: AbortSignal) => {
-      const requestId = ++entryPreferenceProfileRequestId.current;
-      try {
-        const response = await apiClient.loadInformationEntryPreferenceProfile(
-          signal === undefined ? undefined : {signal},
-        );
-        if (
-          !signal?.aborted &&
-          requestId === entryPreferenceProfileRequestId.current
-        ) {
-          setEntryPreferenceProfile({status: 'ready', value: response.body});
-        }
-      } catch {
-        if (
-          !signal?.aborted &&
-          requestId === entryPreferenceProfileRequestId.current
-        ) {
-          setEntryPreferenceProfile({
-            status: 'error',
-            message: '无法读取外部偏好规则；逐条评分和标签编辑仍可继续使用。',
-          });
-        }
-      }
-    },
-    [apiClient],
-  );
-
-  const saveEntryPreferenceProfile = useCallback(
-    async (
-      body: Readonly<{
-        expectedRevision: number;
-        enabled: boolean;
-        rules: readonly Readonly<EntryPreferenceRule>[];
-      }>,
-    ) => {
-      const requestId = ++entryPreferenceProfileRequestId.current;
-      const response =
-        await apiClient.saveInformationEntryPreferenceProfile(body);
-      if (
-        requestId === entryPreferenceProfileRequestId.current &&
-        (response.body.status === 'applied' ||
-          response.body.status === 'unchanged')
-      ) {
-        setEntryPreferenceProfile({
-          status: 'ready',
-          value: {status: 'ok', profile: response.body.profile},
-        });
-      }
-      return response;
-    },
-    [apiClient],
-  );
-
-  const suggestEntryPreferenceProfile = useCallback(
-    (
-      includePrivate: boolean,
-    ): Promise<M1cHttpResponse<InformationEntryPreferenceSuggestionResponse>> =>
-      apiClient.suggestInformationEntryPreferenceProfile(includePrivate),
-    [apiClient],
-  );
-
-  const trialEntryPreferenceProfile = useCallback(
-    (
-      body: Readonly<{
-        includePrivate: boolean;
-        expectedProfileRevision: number;
-        profile: Readonly<EntryPreferenceProfile>;
-      }>,
-    ): Promise<M1cHttpResponse<InformationEntryPreferenceTrialResponse>> =>
-      apiClient.trialInformationEntryPreferenceProfile(body),
-    [apiClient],
-  );
-
-  const loadEntryAutomationPolicy = useCallback(
-    () => apiClient.loadInformationEntryAutomationPolicy(),
-    [apiClient],
-  );
-
-  const saveEntryAutomationPolicy = useCallback(
-    (
-      body: Parameters<M1cApiClient['saveInformationEntryAutomationPolicy']>[0],
-    ) => apiClient.saveInformationEntryAutomationPolicy(body),
-    [apiClient],
-  );
-
-  const trialEntryAutomationPolicy = useCallback(
-    (
-      body: Parameters<
-        M1cApiClient['trialInformationEntryAutomationPolicy']
-      >[0],
-    ) => apiClient.trialInformationEntryAutomationPolicy(body),
-    [apiClient],
-  );
-
-  const executeEntryAutomation = useCallback(
-    (body: Parameters<M1cApiClient['executeInformationEntryAutomation']>[0]) =>
-      apiClient.executeInformationEntryAutomation(body),
-    [apiClient],
-  );
-
-  const listEntryAutomationExecutions = useCallback(
-    (limit?: number) =>
-      apiClient.listInformationEntryAutomationExecutions(limit),
-    [apiClient],
-  );
-
-  const loadEntryAutomationExecution = useCallback(
-    (runId: string) => apiClient.loadInformationEntryAutomationExecution(runId),
-    [apiClient],
-  );
-
   useEffect(() => {
     const controller = new AbortController();
     globalThis.queueMicrotask(() => {
       void refreshWorkspace(controller.signal);
       void refreshEvidence(controller.signal);
       void refreshReviewPreferences(controller.signal);
-      void refreshEntryPreferenceProfile(controller.signal);
     });
     return () => {
       controller.abort();
     };
-  }, [
-    refreshEntryPreferenceProfile,
-    refreshEvidence,
-    refreshReviewPreferences,
-    refreshWorkspace,
-  ]);
+  }, [refreshEvidence, refreshReviewPreferences, refreshWorkspace]);
 
   const openEvidence = useCallback(
     async (
@@ -564,15 +437,6 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
         signal,
         expectedTranslatedAt,
       }),
-    [apiClient],
-  );
-
-  const synthesizeInformationEntryQuery = useCallback(
-    (
-      body: unknown,
-      signal: AbortSignal,
-    ): Promise<M1cHttpResponse<InformationEntryQuerySynthesisResponse>> =>
-      apiClient.synthesizeInformationEntryQuery(body, {signal}),
     [apiClient],
   );
 
@@ -1019,40 +883,13 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
                   onRebuild={rebuildInformationEntryAssociations}
                   onReload={refreshReviewPreferences}
                 />
-                <InformationEntryPreferenceProfilePanel
-                  state={entryPreferenceProfile}
-                  onReload={() => {
-                    void refreshEntryPreferenceProfile();
-                  }}
-                  onSave={saveEntryPreferenceProfile}
-                  onSuggest={suggestEntryPreferenceProfile}
-                  onTrial={trialEntryPreferenceProfile}
-                />
-                <InformationEntryAutomationPolicyPanel
-                  enabled={
-                    workspace.status === 'ready' &&
-                    workspace.value.capabilities.includes('entry_automation')
-                  }
-                  onLoad={loadEntryAutomationPolicy}
-                  onSave={saveEntryAutomationPolicy}
-                  onTrial={trialEntryAutomationPolicy}
-                  onExecute={executeEntryAutomation}
-                  onListRuns={listEntryAutomationExecutions}
-                  onLoadRun={loadEntryAutomationExecution}
-                />
               </>
             }
             ai={
               <>
                 <AiExecutionSettings />
                 <AiPriceSettings />
-                <AiWorkflowPanel
-                  documents={snapshotValues}
-                  onOpenDocument={(id) => {
-                    openDocument(id, false);
-                  }}
-                />
-                <section className="ai-connection-settings settings-group">
+                <section className="ai-connection-settings setting-card full-width">
                   <h2>模型接入</h2>
                   <p>
                     可配置 OpenAI 或 DeepSeek 服务。下方显示各项功能是否已接通。
@@ -1110,6 +947,7 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
                 </section>
               </>
             }
+            automation={<AiAutomationSettings />}
             maintenance={
               <MaterialsWorkspace
                 {...materialServices}
@@ -1140,20 +978,15 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
           />
         ) : null}
         {activeSection === 'import' ? (
-          <IntakeWorkspace
+          <SourceManagementWorkspace
             {...materialServices}
             onImport={(body) => importDocument(body, {openEvidence: false})}
             api={apiClient}
             reviewTarget={inboxReviewTarget}
           />
         ) : null}
-        <ReportWorkspace
-          active={activeSection === 'reports'}
-          onOpenSource={(snapshotId) => {
-            openDocument(snapshotId, false);
-          }}
-        />
-        {activeSection === 'query' && sourceReviewOpen ? (
+        {(activeSection === 'query' || activeSection === 'reports') &&
+        sourceReviewOpen ? (
           <div className="query-source-review">
             <WorkspaceToolPanel
               title="关系来源核对"
@@ -1176,8 +1009,19 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
             </WorkspaceToolPanel>
           </div>
         ) : null}
-        {activeSection === 'query' ? (
+        <DatabaseReports
+          container={reportContainer}
+          active={activeSection === 'query' || activeSection === 'reports'}
+          initiallyOpen={activeSection === 'reports'}
+          onOpenSource={(id) => {
+            openDocument(id, false);
+          }}
+        />
+        {activeSection === 'query' || activeSection === 'reports' ? (
           <InformationEntryQueryWorkspace
+            reports={
+              <div className="database-report-host" ref={setReportContainer} />
+            }
             renderGraph={(entry) => (
               <div className="reading-graph">
                 <button
@@ -1228,7 +1072,6 @@ export function App({apiClient, healthClient, transportMode}: AppProps) {
               onRead: readEntryTranslation,
               onGenerate: generateEntryTranslation,
             }}
-            onSynthesize={synthesizeInformationEntryQuery}
             onOpenEvidence={(snapshotId, fragmentId, includePrivate) =>
               void openEvidence(
                 snapshotId,

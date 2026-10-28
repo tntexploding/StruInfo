@@ -1,4 +1,8 @@
 import {
+  frozenSourceSplitSchema,
+  sourceSplitDecisionSchema,
+} from '../modules/entries/source_split_recipe.js';
+import {
   MAXIMUM_AI_SPLIT_ENTRIES,
   MAXIMUM_AI_SPLIT_FRAGMENTS,
 } from '../modules/processing/ai_split_proposal.js';
@@ -42,7 +46,8 @@ export const agentRelationResultSchema = z
     direction: z.enum(['symmetric', 'low_to_high', 'high_to_low']),
   })
   .strict();
-export const agentTaskRequestSchema = z
+/** Historical task payloads remain readable; active writes use the schema below. */
+export const storedAgentTaskRequestSchema = z
   .discriminatedUnion('kind', [
     z
       .object({
@@ -96,7 +101,7 @@ export const agentTaskRequestSchema = z
           .min(1)
           .max(MAXIMUM_AI_SPLIT_ENTRIES)
           .default(12),
-        maxRelations: z.number().int().min(0).max(8).default(4),
+        maxRelations: z.number().int().min(0).max(8).default(0),
         maxModelCalls: z.number().int().min(1).max(64).default(24),
         intake: intakePolicySchema.optional(),
         maxRelationCandidates: z.number().int().min(0).max(24).optional(),
@@ -126,9 +131,17 @@ export const agentTaskRequestSchema = z
     (request) => Buffer.byteLength(JSON.stringify(request), 'utf8') <= 32_768,
     {message: 'Task request exceeds the 32 KiB storage limit.'},
   );
-export type AgentTaskRequest = z.infer<typeof agentTaskRequestSchema>;
+export const agentTaskRequestSchema = storedAgentTaskRequestSchema.refine(
+  (request) =>
+    request.kind !== 'document' ||
+    (request.maxRelations === 0 && !request.maxRelationCandidates),
+  {message: 'Document publication does not run relations. Use a topic job.'},
+);
+export type AgentTaskRequest = z.infer<typeof storedAgentTaskRequestSchema>;
+export const DOCUMENT_WORKFLOW = 'confirmed-content-v1' as const;
 export const agentTaskStepSchema = z
   .object({
+    sourceSplit: sourceSplitDecisionSchema.optional(),
     kind: z.enum(['intake', 'split', 'tags', 'recall', 'relation']),
     targetId: id,
     relatedEntryId: id.optional(),
@@ -153,6 +166,8 @@ export const agentTaskStepSchema = z
 export type AgentTaskStep = z.infer<typeof agentTaskStepSchema>;
 export const agentTaskStateSchema = z
   .object({
+    workflow: z.literal(DOCUMENT_WORKFLOW).optional(),
+    sourceSplit: frozenSourceSplitSchema.optional(),
     status: z.enum([
       'queued',
       'running',

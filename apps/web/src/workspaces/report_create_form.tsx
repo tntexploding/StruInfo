@@ -1,3 +1,4 @@
+import {AnnotationSearchFields} from './annotation_search_fields.js';
 import {useRef, useState} from 'react';
 import {
   reportCommand,
@@ -164,6 +165,12 @@ export function ReportCreateForm({
       </p>
       <details className="report-options">
         <summary>选材范围与调用额度</summary>
+        <AnnotationSearchFields
+          value={request.annotationFilter}
+          onChange={(value) => {
+            update({annotationFilter: value});
+          }}
+        />
         <div className="report-form-grid">
           <label className="field">
             话题包含

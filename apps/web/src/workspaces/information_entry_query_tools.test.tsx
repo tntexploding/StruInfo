@@ -201,15 +201,6 @@ describe('M1F-2 query result tools', () => {
             },
           })
         }
-        onSynthesize={() =>
-          Promise.resolve({
-            statusCode: 503,
-            body: {
-              status: 'failed',
-              issue: {code: 'ai_provider_not_configured'},
-            },
-          })
-        }
         onSearch={() =>
           Promise.resolve({
             statusCode: 200,
@@ -225,26 +216,15 @@ describe('M1F-2 query result tools', () => {
       />,
     );
 
-    expect(markup).toContain('查询条目');
-    expect(markup).toContain('输入关键词，按需展开筛选');
-    expect(markup).toContain('从结果列表选择一个条目');
-    expect(markup).toContain('阅读正文并查看来源');
-    expect(markup).toContain('role="status"');
-    expect(markup).toContain('正在搜索…');
-    expect(markup).toContain('搜索与显示设置');
-    expect(markup).toContain('结果操作');
-    expect(markup).toContain('结果比较');
-    expect(markup).toContain('先选择一条查询结果');
-    expect(markup).toContain('向资料提问');
-    expect(markup).toContain('AI 未启用');
-    expect(markup).toContain('探索推荐');
-    expect(markup).toContain('搜索结果保留');
-    expect(markup).toContain('启用独立探索');
-    expect(markup).toContain('当前页探索份额');
-    expect(markup).toContain('邻域扩展');
-    expect(markup).toContain('跨领域连接');
-    expect(markup).toContain('偶然发现');
-    expect(markup).toContain('选择一个查询结果后，可以生成探索推荐');
+    expect(markup).toContain('<h1>数据库</h1>');
+    expect(markup).toContain('内容范围');
+    expect(markup).toContain('分类与标签');
+    expect(markup).toContain('输入关键词');
+    expect(markup).toContain('搜索设置');
+    expect(markup).toContain('AI 提问');
+    expect(markup).toContain('报告');
+    expect(markup).toContain('data-view="idle"');
+    expect(markup).not.toContain('正在搜索…');
   });
 });
 

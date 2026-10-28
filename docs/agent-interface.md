@@ -1,5 +1,37 @@
 # AI 自动处理与外部 Agent 接口
 
+P6 新增 `research_status`、`web_search`、`research_answer`、`web_capture` 和 `report_pipeline_status`。
+这些操作与 `/api/v1/research/commands` 共用用例。搜索／问答要求现有 `models.use` 授权和所有者开启联网，保存要求 `sources.capture`。
+搜索词须显式给出；不自动传送库内正文，隐私查询禁止出站。结果只有正文才可保存到待审核。
+定时配置、通知设置和站内发布为 owner-only。详见[联网研究与报告](network-research-and-reports.md)。
+
+## 主题与重点联系（P5）
+
+`topics_list` 读取主题和归组状态，`topics_preview` 只读计算候选与本组输入；均不调用模型。
+`topic_save` 修改主题范围，`topic_member_set` 固定或排除成员，`topic_relation_set` 保存具体联系及屏蔽状态。
+读取需要 `entries.search` 和 `relations.read`，Agent 写入还需要 `agent.relations`。
+修改需提供主题 `expectedVersion`，成员和联系依据需提供正文修订及原句，不能覆盖人工决定。
+仅已确认公开内容参与归组；旧草稿、隐私或撤回内容不通过缓存泄露。
+内置模型 `topic_job_start`、`topic_job_control` 仅开放给所有者 HTTP，使用既有预算和全局门禁。
+完整用法见[主题与重点联系](content-topics.md)。旧文档任务接口与执行顺序保持兼容。
+
+## 结构化标注（P4）
+
+`annotation_vocabulary` 读取公共标注词表；`entry_annotations_read` 读取当前条目与标注草稿。
+`entry_annotations_save` 需要 `agent.tags`、条目修订和词表修订，隐私访问仍单独授权。
+每项标签和明确观点必须提供本条正文的范围与逐字引用，外部 Agent 不能覆盖人工标注。
+保存产生草稿；通过 P1 `document_publish` 确认后进入查询。
+`entries_search` 的 `annotationFilter` 支持维度、词条、标注状态和阅读状态，确认别名与同义关系参与检索。
+词表编辑仅所有者 HTTP 开放，不增加 Agent 配置权限。详见[结构化标注](structured-annotations.md)。
+
+## 来源拆分方案（P3）
+
+`split_recipes_read` 返回当前文档可用的来源／格式方案，`split_recipe_preview` 只计算切点，
+两者需要 `documents.read`。`split_recipe_apply` 应用已启用方案，还需要 `agent.split`；
+写入携带目录 `expectedRevision`，随后使用原有确认接口发布。已有条目或人工修改不会被覆盖。
+保存、试读、启停及 AI 建议由所有者操作，不开放给外部 Agent。
+完整字段、匹配顺序和恢复边界见[来源拆分方案](source-splitting.md)。
+
 ## 跨模型处理规范（2026-10-12）
 
 外部 Agent 在整理前调用 `processing_standard`。省略参数返回完整规范，

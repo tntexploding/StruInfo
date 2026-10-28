@@ -116,6 +116,14 @@ describe('LocalReviewPreferencesStore', () => {
         revision: 0,
         subscriptions: [],
       },
+      sourceSplitRecipes: {revision: 0, recipes: []},
+      annotationVocabulary: {
+        revision: 0,
+        dimensions: [],
+        terms: [],
+        aliases: [],
+        relations: [],
+      },
       entryPreferenceProfile: {
         revision: 0,
         enabled: false,

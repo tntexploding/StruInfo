@@ -1,4 +1,4 @@
-/* Direct reuse: accepted overview-motion.js makeRay; TypeScript/DOM string conversions only. */
+/* Direct reuse: accepted content-ui-study/vendor/approved_effect_ray.js; TypeScript declarations only. */
 interface Point {
   x: number;
   y: number;
@@ -21,12 +21,12 @@ export function makeApprovedRay(
     `M ${String(a.x)} ${String(a.y)} L ${String(b.x)} ${String(b.y)}`;
   const defs = document.createElementNS(ns, 'defs');
   const bounds = svg.viewBox.baseVal;
-  defs.innerHTML = `<linearGradient id="${id}-fade" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="black"/><stop offset="1" stop-color="white"/></linearGradient><linearGradient id="${id}-tip" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9ed3e9" stop-opacity="0"/><stop offset="0.5" stop-color="#9ed3e9" stop-opacity="0.65"/><stop offset="1" stop-color="#e8f8ff"/></linearGradient><mask id="${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="${String(bounds.width)}" height="${String(bounds.height)}" style="mask-type:luminance"><rect width="${String(bounds.width)}" height="${String(bounds.height)}" fill="url(#${id}-fade)"/></mask>`;
+  defs.innerHTML = `<linearGradient id="${id}-fade" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="black"/><stop offset="1" stop-color="white"/></linearGradient><linearGradient id="${id}-tip" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9ed3e9" stop-opacity="0"/><stop offset="0.3" stop-color="#9ed3e9" stop-opacity="0.08"/><stop offset="0.7" stop-color="#9ed3e9" stop-opacity="0.5"/><stop offset="1" stop-color="#e8f8ff"/></linearGradient><radialGradient id="${id}-halo"><stop stop-color="#e8f8ff" stop-opacity=".85"/><stop offset=".25" stop-color="#9ed3e9" stop-opacity=".45"/><stop offset="1" stop-color="#9ed3e9" stop-opacity="0"/></radialGradient><mask id="${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="${String(bounds.width)}" height="${String(bounds.height)}" style="mask-type:luminance"><rect width="${String(bounds.width)}" height="${String(bounds.height)}" fill="url(#${id}-fade)"/></mask>`;
   svg.append(defs);
   const group = document.createElementNS(ns, 'g');
   group.classList.add('ef-energy-ray', `ef-energy-${kind}`);
   group.setAttribute('mask', `url(#${id})`);
-  group.innerHTML = `<g class="ef-energy-charge"><path class="ef-energy-soft"/><path class="ef-energy-body"/><path class="ef-energy-core"/></g><g class="ef-energy-packet"><path class="ef-energy-soft"/><path class="ef-energy-body"/><path class="ef-energy-core"/><circle class="ef-energy-head"/></g>`;
+  group.innerHTML = `<g class="ef-energy-charge"><path class="ef-energy-soft"/><path class="ef-energy-body"/><path class="ef-energy-core"/></g><g class="ef-energy-packet"><path class="ef-energy-aura"/><path class="ef-energy-soft"/><path class="ef-energy-body"/><path class="ef-energy-core"/><circle class="ef-energy-head"/></g>`;
   svg.append(group);
   const charge = group.querySelector<SVGGElement>('.ef-energy-charge');
   const packet = group.querySelector<SVGGElement>('.ef-energy-packet');
@@ -38,7 +38,8 @@ export function makeApprovedRay(
     1,
     Math.max(0.6, length / (kind === 'stat' ? 320 : 55)),
   );
-  const widths = (kind === 'stat' ? [12, 4.2, 1.5] : [8, 3.6, 1.4]).map(
+  const chargeWidths = [12, 4.2, 1.5].map((width) => width * scale);
+  const widths = (kind === 'stat' ? [46, 24, 9, 2.6] : [16, 10, 4.2, 1.6]).map(
     (width) => width * scale,
   );
   const fade = defs.querySelector<SVGLinearGradientElement>(`#${id}-fade`),
@@ -48,6 +49,13 @@ export function makeApprovedRay(
   const head = packet.querySelector('circle');
   if (!fade || !tip || !head) throw new Error('Missing approved ray masks');
   packetPaths.forEach((el) => (el.style.stroke = `url(#${id}-tip)`));
+  packet.style.filter = 'brightness(2)';
+  const aura = packet.querySelector<SVGPathElement>('.ef-energy-aura');
+  if (!aura) throw new Error('Missing approved ray aura');
+  aura.style.filter = `blur(${String(kind === 'stat' ? 14 : 6)}px)`;
+  aura.style.strokeOpacity = '0.3';
+  head.style.fill = `url(#${id}-halo)`;
+  head.style.filter = 'blur(1.5px)';
   const wake = (p: number) => {
     const start = point(p),
       softness = Math.min(12, length * 0.08);
@@ -59,17 +67,22 @@ export function makeApprovedRay(
   const draw = (phase: 'gather' | 'flight', p: number, energy = 0) => {
     if (phase === 'gather') {
       wake(-0.2);
-      // 100% is the normal thin guide; the final 400 ms doubles its light, not its width.
-      charge.style.opacity = String(kind === 'stat' ? 0.38 * energy : 0);
+      // Charging stays at or below half of the reference brightness.
+      const light = Math.max(0, Math.min(0.5, energy));
+      group.dataset.phase = 'gather';
+      group.dataset.energy = String(light);
+      charge.style.opacity = String(kind === 'stat' ? 0.38 * light : 0);
       chargePaths.forEach(
         (el, i) =>
-          (el.style.strokeWidth = `${String((widths[i] ?? 0) * 0.6)}px`),
+          (el.style.strokeWidth = `${String((chargeWidths[i] ?? 0) * (0.55 + light * 0.3))}px`),
       );
       packet.style.opacity = '0';
       return;
     }
+    group.dataset.phase = 'flight';
+    group.dataset.energy = '2';
     const span =
-      Math.min(kind === 'stat' ? 84 : 32, length * 0.3) / Math.max(1, length);
+      Math.min(kind === 'stat' ? 170 : 36, length * 0.65) / Math.max(1, length);
     const tail = Math.max(0, p - span * Math.sin(Math.PI * p));
     // A tapered packet clears its wake completely; no full-width luminous tube remains.
     wake(tail);
@@ -89,7 +102,7 @@ export function makeApprovedRay(
     });
     head.setAttribute('cx', String(end.x));
     head.setAttribute('cy', String(end.y));
-    head.setAttribute('r', String(1.7 * scale));
+    head.setAttribute('r', String((kind === 'stat' ? 18 : 6) * scale));
     group.dataset.head = p.toFixed(4);
     group.dataset.tail = tail.toFixed(4);
   };

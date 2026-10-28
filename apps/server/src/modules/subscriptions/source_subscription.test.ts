@@ -126,7 +126,6 @@ describe('SourceSubscriptionService', () => {
         profile: 'commonmark-v1',
         sourceAlias: 'synthetic-source',
         isPrivate: false,
-        routeAfterImport: false,
         intervalMinutes: 1_440,
       },
     ]);
@@ -405,7 +404,6 @@ describe('SourceSubscriptionService', () => {
         profile: 'commonmark-v1',
         sourceAlias: 'manual-only',
         isPrivate: false,
-        routeAfterImport: false,
         intervalMinutes: 15,
       },
       {
@@ -418,7 +416,6 @@ describe('SourceSubscriptionService', () => {
         profile: 'commonmark-v1',
         sourceAlias: 'scheduled-source',
         isPrivate: false,
-        routeAfterImport: false,
         intervalMinutes: 15,
       },
     ]);
@@ -434,241 +431,218 @@ describe('SourceSubscriptionService', () => {
     ).toEqual([{status: 'failed', errorCode: 'source_import_unavailable'}]);
   });
 
-  it.each([false, true])(
-    'chooses one first structure path for a changed Git source (%s)',
-    async (owned) => {
-      const text = '# Synthetic section\n\nSynthetic body.\n';
-      const textBytes = new TextEncoder().encode(text);
-      const textSha256 = createHash('sha256').update(textBytes).digest('hex');
-      const snapshotId = '44444444-4444-4444-8444-444444444444';
-      const fragmentId = '66666666-6666-4666-8666-666666666666';
-      const snapshot: EvidenceSnapshotReadState = {
-        workspaceId: WORKSPACE_ID,
-        snapshotId,
-        resourceId: '33333333-3333-4333-8333-333333333333',
-        resourceKind: 'git_file',
-        sourceKey: 'synthetic-source',
-        capturedAt: '2026-08-25T08:00:00.000Z',
-        fragmentCount: 1,
-        rawSha256: textSha256,
-        canonicalContentSha256: textSha256,
-        canonicalizationVersion: 'utf8-lf-v1',
-        mediaType: 'text/markdown',
-        structures: [
-          {
-            structureId: '55555555-5555-4555-8555-555555555555',
-            parserName: 'synthetic',
-            parserVersion: '1',
-            textNormalizationVersion: 'utf8-lf-v1',
-            structureSha256: textSha256,
-            textBlob: {
-              algorithm: 'sha256',
-              digest: textSha256,
-              byteLength: textBytes.byteLength,
-            },
-            fragments: [
-              {
-                fragmentId,
-                structureId: '55555555-5555-4555-8555-555555555555',
-                nodeId: '77777777-7777-4777-8777-777777777777',
-                nodeKind: 'section',
-                codePointRange: {start: 0, end: Array.from(text).length},
-                selectedTextSha256: textSha256,
-              },
-            ],
-          },
-        ],
-      };
-      const preferences = memoryPreferences(automationPreferences());
-      const processing = memoryProcessingRuns();
-      const entries = new MemoryMaterializedEntries();
-      const automation = new MemoryAutomationExecution();
-      const imported = vi.fn((): Promise<ImportMarkdownEvidenceResult> =>
-        Promise.resolve({
-          status: 'created',
-          workspaceId: WORKSPACE_ID,
-          commandIdempotencyKey: 'synthetic',
-          resourceId: snapshot.resourceId,
-          snapshotId,
-          structureId: snapshot.structures[0]?.structureId ?? '',
-          fragmentIds: Object.freeze([fragmentId]),
-          mediaAssetIds: Object.freeze([]),
-        }),
-      );
-      const service = new SourceSubscriptionService({
-        workspaceId: WORKSPACE_ID,
-        preferences,
-        ownsAutomaticSnapshot: () => Promise.resolve(owned),
-        processing,
-        reader: {
-          read: () =>
-            Promise.resolve({
-              commitSha: COMMIT_SHA,
-              sourceUtf8: textBytes,
-              canonicalUri: `https://github.com/example/project/blob/${COMMIT_SHA}/docs/source.md`,
-            }),
-        },
-        blobStore: {
-          put: () => Promise.reject(new Error('unexpected Blob write')),
-          read: () => Promise.resolve(textBytes),
-        },
-        evidence: {
-          saveCapture: () =>
-            Promise.reject(new Error('unexpected Evidence write')),
-        },
-        evidenceRead: {
-          listSnapshots: () => Promise.resolve([snapshot]),
-          loadSnapshot: () => Promise.resolve(snapshot),
-        },
-        entries,
-        automationExecutions: automation,
-        importEvidence: imported,
-        now: () => '2026-08-25T08:00:00.000Z',
-      });
-      await service.replace(0, [
+  it('leaves Git content as receipt evidence even with historical routing preferences', async () => {
+    const text = '# Synthetic section\n\nSynthetic body.\n';
+    const textBytes = new TextEncoder().encode(text);
+    const textSha256 = createHash('sha256').update(textBytes).digest('hex');
+    const snapshotId = '44444444-4444-4444-8444-444444444444';
+    const fragmentId = '66666666-6666-4666-8666-666666666666';
+    const snapshot: EvidenceSnapshotReadState = {
+      workspaceId: WORKSPACE_ID,
+      snapshotId,
+      resourceId: '33333333-3333-4333-8333-333333333333',
+      resourceKind: 'git_file',
+      sourceKey: 'synthetic-source',
+      capturedAt: '2026-08-25T08:00:00.000Z',
+      fragmentCount: 1,
+      rawSha256: textSha256,
+      canonicalContentSha256: textSha256,
+      canonicalizationVersion: 'utf8-lf-v1',
+      mediaType: 'text/markdown',
+      structures: [
         {
-          subscriptionId: SUBSCRIPTION_ID,
-          label: 'Synthetic routed source',
-          enabled: false,
-          repositoryUri: 'https://github.com/example/project',
-          repositoryRef: 'main',
-          repositoryPath: 'docs/source.md',
-          profile: 'commonmark-v1',
-          sourceAlias: 'synthetic-source',
-          isPrivate: false,
-          routeAfterImport: true,
-          intervalMinutes: 1_440,
+          structureId: '55555555-5555-4555-8555-555555555555',
+          parserName: 'synthetic',
+          parserVersion: '1',
+          textNormalizationVersion: 'utf8-lf-v1',
+          structureSha256: textSha256,
+          textBlob: {
+            algorithm: 'sha256',
+            digest: textSha256,
+            byteLength: textBytes.byteLength,
+          },
+          fragments: [
+            {
+              fragmentId,
+              structureId: '55555555-5555-4555-8555-555555555555',
+              nodeId: '77777777-7777-4777-8777-777777777777',
+              nodeKind: 'section',
+              codePointRange: {start: 0, end: Array.from(text).length},
+              selectedTextSha256: textSha256,
+            },
+          ],
         },
-      ]);
-
-      const result = await service.runNow(SUBSCRIPTION_ID, 'routed-check');
-
-      if (owned) {
-        expect(result).not.toHaveProperty('automationRunId');
-        expect(entries.values).toHaveLength(0);
-      } else {
-        expect(result).toMatchObject({
-          outcome: 'imported',
-          snapshotId,
-          automationRunId: automation.current?.runId,
-          materializedEntryCount: 1,
-        });
-        expect(entries.values).toHaveLength(1);
-        expect(automation.current).toMatchObject({
-          status: 'succeeded',
-          claims: [{status: 'completed', entryId: entries.values[0]?.entryId}],
-        });
-      }
-      expect((await service.list()).subscriptions[0]?.cursor).toMatchObject({
-        commitSha: COMMIT_SHA,
-      });
-    },
-  );
-
-  it.each([false, true])(
-    'imports RSS before cursor settlement and respects automatic ownership (%s)',
-    async (owned) => {
-      const preferences = memoryPreferences();
-      const processing = memoryProcessingRuns();
-      const connector = {
-        connectorId: 'builtin.rss-atom.v1',
-        read: vi.fn(() =>
+      ],
+    };
+    const preferences = memoryPreferences(automationPreferences());
+    const processing = memoryProcessingRuns();
+    const entries = new MemoryMaterializedEntries();
+    const automation = new MemoryAutomationExecution();
+    const imported = vi.fn((): Promise<ImportMarkdownEvidenceResult> =>
+      Promise.resolve({
+        status: 'created',
+        workspaceId: WORKSPACE_ID,
+        commandIdempotencyKey: 'synthetic',
+        resourceId: snapshot.resourceId,
+        snapshotId,
+        structureId: snapshot.structures[0]?.structureId ?? '',
+        fragmentIds: Object.freeze([fragmentId]),
+        mediaAssetIds: Object.freeze([]),
+      }),
+    );
+    const service = new SourceSubscriptionService({
+      workspaceId: WORKSPACE_ID,
+      preferences,
+      processing,
+      reader: {
+        read: () =>
           Promise.resolve({
-            status: 'changed' as const,
-            cursor: 'synthetic-cursor-v1',
-            documents: Object.freeze([
-              Object.freeze({
-                externalId: 'synthetic-feed-item-1',
-                version: 'version-1',
-                canonicalUri: 'https://example.invalid/items/1',
-                mediaType: 'application/rss+xml',
-                profile: 'commonmark-v1' as const,
-                sourceUtf8: new TextEncoder().encode('# First\n'),
-              }),
-              Object.freeze({
-                externalId: 'synthetic-feed-item-2',
-                version: 'version-1',
-                canonicalUri: 'https://example.invalid/items/2',
-                mediaType: 'application/rss+xml',
-                profile: 'commonmark-v1' as const,
-                sourceUtf8: new TextEncoder().encode('# Second\n'),
-              }),
-            ]),
+            commitSha: COMMIT_SHA,
+            sourceUtf8: textBytes,
+            canonicalUri: `https://github.com/example/project/blob/${COMMIT_SHA}/docs/source.md`,
           }),
-        ),
-      };
-      const importConnectorDocuments = vi.fn(() =>
+      },
+      blobStore: {
+        put: () => Promise.reject(new Error('unexpected Blob write')),
+        read: () => Promise.resolve(textBytes),
+      },
+      evidence: {
+        saveCapture: () =>
+          Promise.reject(new Error('unexpected Evidence write')),
+      },
+      evidenceRead: {
+        listSnapshots: () => Promise.resolve([snapshot]),
+        loadSnapshot: () => Promise.resolve(snapshot),
+      },
+      importEvidence: imported,
+      now: () => '2026-08-25T08:00:00.000Z',
+    });
+    await service.replace(0, [
+      {
+        subscriptionId: SUBSCRIPTION_ID,
+        label: 'Synthetic routed source',
+        enabled: false,
+        repositoryUri: 'https://github.com/example/project',
+        repositoryRef: 'main',
+        repositoryPath: 'docs/source.md',
+        profile: 'commonmark-v1',
+        sourceAlias: 'synthetic-source',
+        isPrivate: false,
+        intervalMinutes: 1_440,
+      },
+    ]);
+
+    const result = await service.runNow(SUBSCRIPTION_ID, 'routed-check');
+
+    expect(result).toMatchObject({outcome: 'imported', snapshotId});
+    expect(result).not.toHaveProperty('automationRunId');
+    expect(result).not.toHaveProperty('materializedEntryCount');
+    expect(entries.values).toHaveLength(0);
+    expect(automation.current).toBeUndefined();
+    expect((await service.list()).subscriptions[0]?.cursor).toMatchObject({
+      commitSha: COMMIT_SHA,
+    });
+  });
+
+  it('imports RSS receipt evidence before cursor settlement', async () => {
+    const preferences = memoryPreferences();
+    const processing = memoryProcessingRuns();
+    const connector = {
+      connectorId: 'builtin.rss-atom.v1',
+      read: vi.fn(() =>
         Promise.resolve({
-          status: 'complete' as const,
+          status: 'changed' as const,
+          cursor: 'synthetic-cursor-v1',
           documents: Object.freeze([
             Object.freeze({
               externalId: 'synthetic-feed-item-1',
-              resourceId: '33333333-3333-4333-8333-333333333333',
-              snapshotId: '44444444-4444-4444-8444-444444444444',
-              outcome: 'created' as const,
+              version: 'version-1',
+              canonicalUri: 'https://example.invalid/items/1',
+              mediaType: 'application/rss+xml',
+              profile: 'commonmark-v1' as const,
+              sourceUtf8: new TextEncoder().encode('# First\n'),
             }),
             Object.freeze({
               externalId: 'synthetic-feed-item-2',
-              resourceId: '55555555-5555-4555-8555-555555555555',
-              snapshotId: '66666666-6666-4666-8666-666666666666',
-              outcome: 'created' as const,
+              version: 'version-1',
+              canonicalUri: 'https://example.invalid/items/2',
+              mediaType: 'application/rss+xml',
+              profile: 'commonmark-v1' as const,
+              sourceUtf8: new TextEncoder().encode('# Second\n'),
             }),
           ]),
         }),
-      );
-      const gitReader = {read: vi.fn()};
-      const service = new SourceSubscriptionService({
-        workspaceId: WORKSPACE_ID,
-        preferences,
-        processing,
-        reader: gitReader,
-        ownsAutomaticSnapshot: () => Promise.resolve(owned),
-        connectors: new SourceConnectorRegistry([connector]),
-        blobStore: {
-          put: () => Promise.reject(new Error('unexpected Blob write')),
-          read: () => Promise.reject(new Error('unexpected Blob read')),
-        },
-        evidence: {
-          saveCapture: () =>
-            Promise.reject(new Error('unexpected Evidence write')),
-        },
-        importConnectorDocuments,
-        now: () => '2026-08-25T08:00:00.000Z',
-      });
-      await service.replace(0, [
-        {
-          kind: 'rss_atom',
-          subscriptionId: SUBSCRIPTION_ID,
-          label: 'Synthetic Feed',
-          enabled: false,
-          feedUrl: 'https://example.invalid/feed.xml',
-          itemLimit: 20,
-          sourceAlias: 'synthetic-feed',
-          isPrivate: false,
-          routeAfterImport: owned,
-          intervalMinutes: 60,
-        },
-      ]);
-
-      await expect(
-        service.runNow(SUBSCRIPTION_ID, 'rss-check'),
-      ).resolves.toMatchObject({
-        outcome: 'imported',
-        importedDocumentCount: 2,
-        snapshotId: '44444444-4444-4444-8444-444444444444',
-        snapshotIds: [
-          '44444444-4444-4444-8444-444444444444',
-          '66666666-6666-4666-8666-666666666666',
-        ],
-      });
-      expect(gitReader.read).not.toHaveBeenCalled();
-      expect(importConnectorDocuments).toHaveBeenCalledTimes(1);
-      expect((await service.list()).subscriptions[0]).toMatchObject({
+      ),
+    };
+    const importConnectorDocuments = vi.fn(() =>
+      Promise.resolve({
+        status: 'complete' as const,
+        documents: Object.freeze([
+          Object.freeze({
+            externalId: 'synthetic-feed-item-1',
+            resourceId: '33333333-3333-4333-8333-333333333333',
+            snapshotId: '44444444-4444-4444-8444-444444444444',
+            outcome: 'created' as const,
+          }),
+          Object.freeze({
+            externalId: 'synthetic-feed-item-2',
+            resourceId: '55555555-5555-4555-8555-555555555555',
+            snapshotId: '66666666-6666-4666-8666-666666666666',
+            outcome: 'created' as const,
+          }),
+        ]),
+      }),
+    );
+    const gitReader = {read: vi.fn()};
+    const service = new SourceSubscriptionService({
+      workspaceId: WORKSPACE_ID,
+      preferences,
+      processing,
+      reader: gitReader,
+      connectors: new SourceConnectorRegistry([connector]),
+      blobStore: {
+        put: () => Promise.reject(new Error('unexpected Blob write')),
+        read: () => Promise.reject(new Error('unexpected Blob read')),
+      },
+      evidence: {
+        saveCapture: () =>
+          Promise.reject(new Error('unexpected Evidence write')),
+      },
+      importConnectorDocuments,
+      now: () => '2026-08-25T08:00:00.000Z',
+    });
+    await service.replace(0, [
+      {
         kind: 'rss_atom',
-        cursor: {connectorCursor: 'synthetic-cursor-v1'},
-      });
-    },
-  );
+        subscriptionId: SUBSCRIPTION_ID,
+        label: 'Synthetic Feed',
+        enabled: false,
+        feedUrl: 'https://example.invalid/feed.xml',
+        itemLimit: 20,
+        sourceAlias: 'synthetic-feed',
+        isPrivate: false,
+        intervalMinutes: 60,
+      },
+    ]);
+
+    await expect(
+      service.runNow(SUBSCRIPTION_ID, 'rss-check'),
+    ).resolves.toMatchObject({
+      outcome: 'imported',
+      importedDocumentCount: 2,
+      snapshotId: '44444444-4444-4444-8444-444444444444',
+      snapshotIds: [
+        '44444444-4444-4444-8444-444444444444',
+        '66666666-6666-4666-8666-666666666666',
+      ],
+    });
+    expect(gitReader.read).not.toHaveBeenCalled();
+    expect(importConnectorDocuments).toHaveBeenCalledTimes(1);
+    expect((await service.list()).subscriptions[0]).toMatchObject({
+      kind: 'rss_atom',
+      cursor: {connectorCursor: 'synthetic-cursor-v1'},
+    });
+  });
 
   it('passes declarative JSON mappings to the connector and commits its cursor last', async () => {
     const preferences = memoryPreferences();
@@ -750,7 +724,6 @@ describe('SourceSubscriptionService', () => {
         },
         sourceAlias: 'synthetic-json',
         isPrivate: false,
-        routeAfterImport: false,
         intervalMinutes: 60,
       },
     ]);
@@ -897,7 +870,6 @@ describe('SourceSubscriptionService', () => {
         additionalPaths: ['/about'],
         sourceAlias: 'synthetic-web',
         isPrivate: false,
-        routeAfterImport: false,
         intervalMinutes: 60,
       },
       {
@@ -909,7 +881,6 @@ describe('SourceSubscriptionService', () => {
         configurationRef: 'profile.default',
         sourceAlias: 'synthetic-plugin',
         isPrivate: true,
-        routeAfterImport: false,
         intervalMinutes: 120,
       },
     ]);
@@ -1233,7 +1204,6 @@ function rssConfiguration(subscriptionId = SUBSCRIPTION_ID) {
     itemLimit: 20,
     sourceAlias: 'synthetic-feed',
     isPrivate: false,
-    routeAfterImport: false,
     intervalMinutes: 60,
   };
 }

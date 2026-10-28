@@ -1,19 +1,18 @@
 import type {DocumentPublicationService} from './document_publication.js';
+import type {SourceSplitService} from './source_split_service.js';
+import {SOURCE_RECIPE_SPLIT_VERSION} from '../modules/entries/source_split_recipe.js';
 import {
   tagBatchEntrySize,
-  tagBatchPrefix,
-} from '../modules/processing/ai_tag_batch.js';
+  entryBatchPrefix,
+  entryBatchCallEstimate,
+  entryBatchSizeForAttempt,
+  MAXIMUM_TAG_BATCH_CHARACTERS,
+} from '../modules/processing/ai_entry_batch.js';
 import {MAXIMUM_AI_SPLIT_ENTRIES} from '../modules/processing/ai_split_proposal.js';
 import type {DocumentIntakeService} from './document_intake_service.js';
 import type {DocumentIntelligenceProvider} from './document_intake_contract.js';
-import {
-  intakeSnapshotIds,
-  intakeTargetSnapshot,
-} from './document_intake_contract.js';
-import {
-  recallRelationCandidates,
-  type RecallAlias,
-} from './relation_candidate_recall.js';
+import {intakeTargetSnapshot} from './document_intake_contract.js';
+import type {RecallAlias} from './relation_candidate_recall.js';
 import type {BlobStore} from '../storage/blob_store.js';
 import {AiSplitProposalService} from '../modules/processing/ai_split_proposal_service.js';
 import {
@@ -51,6 +50,7 @@ import {OperationError} from './operation_error.js';
 
 export interface AgentTaskActionsDependencies {
   readonly publication?: DocumentPublicationService;
+  readonly sourceSplit?: SourceSplitService;
   readonly knowledgeEntries?: InformationEntryRepositoryPort;
   readonly workspaceId: string;
   readonly intake?: DocumentIntakeService;
@@ -70,50 +70,54 @@ export interface AgentTaskActionsDependencies {
 }
 export class AgentTaskActions {
   public constructor(private readonly deps: AgentTaskActionsDependencies) {}
+  public freezeSourceSplit(request: AgentTaskRequest) {
+    return request.kind === 'document'
+      ? this.deps.sourceSplit?.freeze(request.snapshotId)
+      : undefined;
+  }
+  public decideSourceSplit(task: AgentTask, step: AgentTaskStep) {
+    return requireOperationValue(this.deps.sourceSplit).decide(
+      step.targetId,
+      requireOperationValue(task.state.sourceSplit),
+    );
+  }
+  public async applySourceSplit(task: AgentTask, step: AgentTaskStep) {
+    const request = task.request;
+    if (request.kind !== 'document')
+      throw new OperationError('rejected', 'task_state_incomplete');
+    const recipe = requireOperationValue(
+      task.state.sourceSplit?.recipes.find(
+        (r) => r.recipeId === step.sourceSplit?.recipeId,
+      ),
+    );
+    await requireOperationValue(this.deps.sourceSplit).apply(
+      step.targetId,
+      recipe,
+      false,
+      true,
+      (rows) => {
+        if (rows.length > request.maxEntries)
+          throw new OperationError('rejected', 'recipe_entry_capacity');
+        const tags = this.deps.tags?.supportsTagBatch
+          ? entryBatchCallEstimate(
+              rows,
+              tagBatchEntrySize,
+              MAXIMUM_TAG_BATCH_CHARACTERS,
+            )
+          : rows.length;
+        if (task.state.calls + tags > request.maxModelCalls)
+          throw new OperationError(
+            'rejected',
+            'insufficient_document_call_budget',
+          );
+      },
+    );
+  }
   public get model() {
     return this.deps.split?.model;
   }
   public get intakeModel() {
     return this.deps.intelligence?.model;
-  }
-  public reviewRunId(step: AgentTaskStep, proposalId: string, key: string) {
-    return deriveProcessingRunId(
-      this.deps.workspaceId,
-      [
-        'ai-association-review',
-        ...[step.targetId, requireOperationValue(step.relatedEntryId)].sort(),
-        proposalId,
-        key,
-      ].join(':'),
-    );
-  }
-  public loadRelationReview(step: AgentTaskStep) {
-    return step.reviewRunId
-      ? this.deps.associationProcessing.loadRun(
-          this.deps.workspaceId,
-          step.reviewRunId,
-        )
-      : Promise.resolve(undefined);
-  }
-  public async reviewRelation(
-    task: AgentTask,
-    step: AgentTaskStep,
-    proposalId: string,
-    key: string,
-  ) {
-    const relatedId = requireOperationValue(step.relatedEntryId);
-    if (
-      (await this.entry(step.targetId)).revision !== step.expectedRevision ||
-      (await this.entry(relatedId)).revision !== step.expectedRelatedRevision ||
-      (await this.overrideRevision(step.targetId, relatedId)) !==
-        step.expectedOverrideRevision
-    )
-      throw new OperationError('conflict', 'stale_relation_revision');
-    const service = requireOperationValue(this.services(task).relations);
-    if (!service.supportsReview || !service.review)
-      throw new OperationError('rejected', 'relation_review_unavailable');
-    return (await service.review(step.targetId, relatedId, proposalId, key))
-      .run;
   }
   public async reviewCheckpointCurrent(task: AgentTask, version: number) {
     if (task.request.kind !== 'document') return true;
@@ -145,8 +149,7 @@ export class AgentTaskActions {
     if (request.kind === 'document' || request.kind === 'split') {
       if (
         request.kind === 'document' &&
-        (!this.deps.tags ||
-          (!request.reprocess && (!this.deps.split || !this.deps.relations)))
+        (!this.deps.tags || (!request.reprocess && !this.deps.split))
       )
         throw new OperationError('rejected', 'ai_not_configured');
       const snapshot = await this.deps.evidence.loadSnapshot(
@@ -416,30 +419,6 @@ export class AgentTaskActions {
       );
     return intakeTargetSnapshot(record);
   }
-  public async recallSteps(task: AgentTask): Promise<AgentTaskStep[]> {
-    if (
-      task.request.kind !== 'document' ||
-      !task.request.maxRelationCandidates ||
-      !task.request.maxRelations
-    )
-      return [];
-    return Promise.all(
-      task.state.steps
-        .filter((s) => s.kind === 'tags' && s.complete)
-        .map(async (s) => {
-          const entry = await this.entry(s.targetId);
-          if (entry.revision !== (s.expectedRevision ?? 0) + 1)
-            throw new OperationError('conflict', 'document_changed_after_tags');
-          return {
-            kind: 'recall' as const,
-            targetId: entry.entryId,
-            expectedRevision: entry.revision,
-            attempt: 0,
-            complete: false,
-          };
-        }),
-    );
-  }
   public async tagGroup(
     task: AgentTask,
     first: AgentTaskStep,
@@ -455,7 +434,7 @@ export class AgentTaskActions {
     const entries = new Map(
       (await this.entries()).map((entry) => [entry.entryId, entry]),
     );
-    const maximum = first.attempt === 0 ? 4 : first.attempt === 1 ? 2 : 1;
+    const maximum = entryBatchSizeForAttempt(first.attempt);
     for (const step of task.state.steps) {
       if (
         step.kind !== 'tags' ||
@@ -473,9 +452,10 @@ export class AgentTaskActions {
       candidates.push({step, entry});
       if (candidates.length >= maximum) break;
     }
-    const group = tagBatchPrefix(
+    const group = entryBatchPrefix(
       candidates,
       ({entry}) => tagBatchEntrySize(entry),
+      MAXIMUM_TAG_BATCH_CHARACTERS,
       maximum,
     ).map(({step}) => step);
     return group[0]?.targetId === first.targetId ? group : [first];
@@ -518,115 +498,11 @@ export class AgentTaskActions {
     );
     const entries = prepareAiSplitInformationEntries(snapshot, payload.entries);
     if (!entries) throw new OperationError('rejected', 'ai_proposal_invalid');
-    let offset = 0;
-    let calls = 0;
-    while (offset < entries.length) {
-      offset += tagBatchPrefix(entries.slice(offset), tagBatchEntrySize).length;
-      calls++;
-    }
-    return calls;
-  }
-  public async recallGroup(
-    task: AgentTask,
-    first: AgentTaskStep,
-  ): Promise<AgentTaskStep[]> {
-    if (!this.deps.intelligence?.planRecalls) return [first];
-    const candidates = task.state.steps.filter(
-      (s) =>
-        s.kind === 'recall' &&
-        !s.complete &&
-        !s.recallPlan &&
-        s.attempt < 3 &&
-        s.attempt === first.attempt,
+    return entryBatchCallEstimate(
+      entries,
+      tagBatchEntrySize,
+      MAXIMUM_TAG_BATCH_CHARACTERS,
     );
-    const group: AgentTaskStep[] = [];
-    const entries = new Map(
-      (await this.entries()).map((entry) => [entry.entryId, entry]),
-    );
-    let length = 0;
-    // Retry a smaller response after a failed batch, without renewing attempts
-    // or the document's call allowance. The last attempt uses the single-entry
-    // provider contract instead of repeating the same complex batch response.
-    const batchSize = first.attempt === 0 ? 4 : first.attempt === 1 ? 2 : 1;
-    for (const step of candidates.slice(0, batchSize)) {
-      const entry = entries.get(step.targetId);
-      if (!entry)
-        throw new OperationError('not_found', 'public_entry_not_found');
-      if (entry.revision !== step.expectedRevision)
-        throw new OperationError('conflict', 'stale_entry_revision');
-      const size = Array.from(
-        JSON.stringify({
-          title: entry.value.titlePath,
-          body: entry.value.body,
-          keywords: entry.value.contentKeywords,
-        }),
-      ).length;
-      if (group.length && length + size > 120_000) break;
-      group.push(step);
-      length += size;
-    }
-    return group.length && group[0]?.targetId === first.targetId
-      ? group
-      : [first];
-  }
-  public async recallGroupPlans(steps: readonly AgentTaskStep[]) {
-    if (steps.length === 1)
-      return [await this.recall(requireOperationValue(steps[0]))];
-    const entries = new Map(
-      (await this.entries()).map((entry) => [entry.entryId, entry]),
-    );
-    const inputs = steps.map((step) => {
-      const entry = entries.get(step.targetId);
-      if (!entry)
-        throw new OperationError('not_found', 'public_entry_not_found');
-      if (entry.revision !== step.expectedRevision)
-        throw new OperationError('conflict', 'stale_entry_revision');
-      return {
-        title: entry.value.titlePath,
-        body: entry.value.body,
-        keywords: entry.value.contentKeywords.map((k) => k.displayValue),
-      };
-    });
-    const intelligence = requireOperationValue(this.deps.intelligence);
-    if (!intelligence.planRecalls)
-      throw new OperationError('rejected', 'recall_batch_unavailable');
-    return intelligence.planRecalls(inputs);
-  }
-  public async recallCallEstimate(proposal: ProcessingProposal) {
-    const count = proposal.splitPayload?.entries.length ?? 0;
-    if (
-      !this.deps.intelligence?.planRecalls ||
-      !this.deps.blobStore ||
-      !proposal.targetSnapshotId
-    )
-      return count;
-    const source = await this.deps.evidence.loadSnapshot(
-      this.deps.workspaceId,
-      proposal.targetSnapshotId,
-    );
-    if (!source || source.isPrivate)
-      throw new OperationError('not_found', 'public_snapshot_not_found');
-    const snapshot = await materializeEvidenceSnapshot(
-      source,
-      this.deps.blobStore,
-    );
-    // Short collections fit a four-item request including metadata. For long
-    // sources reserve the conservative per-entry bound before materialization.
-    return Array.from(
-      JSON.stringify(snapshot.structures[0]?.normalizedText ?? ''),
-    ).length <= 100_000
-      ? Math.ceil(count / 4)
-      : count;
-  }
-  public async recall(step: AgentTaskStep) {
-    const entry = await this.entry(step.targetId);
-    if (entry.revision !== step.expectedRevision)
-      throw new OperationError('conflict', 'stale_entry_revision');
-    return requireOperationValue(this.deps.intelligence).planRecall({
-      title: entry.value.titlePath,
-      body: entry.value.body,
-      keywords: entry.value.contentKeywords.map((k) => k.displayValue),
-    });
   }
   private documentTarget(task: AgentTask) {
     return requireOperationValue(
@@ -755,11 +631,6 @@ export class AgentTaskActions {
         proposal.proposalId,
       );
     } else {
-      if (task.state.relationReviewRequired && step.reviewRunId) {
-        const original = (await this.loadRun(step))?.proposals[0];
-        if (!original || original.status === 'rejected')
-          throw new OperationError('conflict', 'ai_proposal_invalid');
-      }
       const payload = proposal.associationPayload;
       const lowFirst =
         step.targetId < requireOperationValue(step.relatedEntryId);
@@ -796,7 +667,13 @@ export class AgentTaskActions {
         entries.some(
           (e) =>
             e.revision !== 1 ||
-            e.value.splitRuleVersion !== 'struinfo.entry-split.ai-group.v1',
+            (e.value.splitRuleVersion !== 'struinfo.entry-split.ai-group.v1' &&
+              !(
+                task.state.steps.some(
+                  (s) =>
+                    s.kind === 'split' && s.sourceSplit?.outcome === 'rule',
+                ) && e.value.splitRuleVersion === SOURCE_RECIPE_SPLIT_VERSION
+              )),
         ))
     )
       throw new OperationError('conflict', 'document_structure_changed');
@@ -808,160 +685,6 @@ export class AgentTaskActions {
       complete: false,
     }));
   }
-  public async relationSteps(task: AgentTask): Promise<AgentTaskStep[]> {
-    if (task.request.kind !== 'document') return [];
-    const request = task.request;
-    const raw = await this.entries();
-    const selected = raw.filter(
-      (e) => e.snapshotId === this.documentTarget(task),
-    );
-    const published = this.deps.knowledgeEntries
-      ? await this.deps.knowledgeEntries.loadCurrentEntries(
-          this.deps.workspaceId,
-          false,
-        )
-      : raw;
-    const all = [
-      ...new Map(
-        [...published, ...selected].map((entry) => [entry.entryId, entry]),
-      ).values(),
-    ];
-    const tagged = task.state.steps.filter(
-      (step) => step.kind === 'tags' && step.complete,
-    );
-    if (
-      selected.length !== tagged.length ||
-      selected.some(
-        (entry) =>
-          !tagged.some(
-            (step) =>
-              step.targetId === entry.entryId &&
-              entry.revision === (step.expectedRevision ?? 0) + 1,
-          ),
-      )
-    ) {
-      throw new OperationError('conflict', 'document_changed_after_tags');
-    }
-    const candidates: {
-      a: CurrentInformationEntry;
-      b: CurrentInformationEntry;
-      score: number;
-      reasons?: string[];
-    }[] = [];
-    const overrides = (
-      await this.deps.associations.loadAssociationSnapshot(
-        this.deps.workspaceId,
-        false,
-      )
-    ).overrides;
-    const seen = new Set<string>();
-    if (request.maxRelationCandidates !== undefined) {
-      const aliases = (await this.deps.aliases?.()) ?? [];
-      const records = (await this.deps.intake?.list()) ?? [];
-      const excludedSnapshots = new Set(
-        records.flatMap((r) =>
-          intakeSnapshotIds(r).filter(
-            (id) =>
-              r.value.decision !== 'admitted' || id !== intakeTargetSnapshot(r),
-          ),
-        ),
-      );
-      const excluded = new Set(
-        all
-          .filter((e) => excludedSnapshots.has(e.snapshotId))
-          .map((e) => e.entryId),
-      );
-      for (const a of selected) {
-        const plan = task.state.steps.find(
-          (s) => s.kind === 'recall' && s.targetId === a.entryId && s.complete,
-        )?.recallPlan;
-        if (
-          request.maxRelationCandidates > 0 &&
-          request.maxRelations > 0 &&
-          !plan
-        )
-          throw new OperationError('rejected', 'task_state_incomplete');
-        const pairExcluded = new Set([
-          ...excluded,
-          ...overrides
-            .filter(
-              (o) => o.entryLowId === a.entryId || o.entryHighId === a.entryId,
-            )
-            .map((o) =>
-              o.entryLowId === a.entryId ? o.entryHighId : o.entryLowId,
-            ),
-        ]);
-        for (const hit of recallRelationCandidates(
-          a,
-          all,
-          plan,
-          aliases,
-          request.maxRelations ? request.maxRelationCandidates : 0,
-          pairExcluded,
-        )) {
-          const key = [a.entryId, hit.entry.entryId].sort().join(':');
-          if (!seen.has(key)) {
-            candidates.push({
-              a,
-              b: hit.entry,
-              score: hit.score,
-              reasons: [...hit.reasons],
-            });
-            seen.add(key);
-          }
-        }
-      }
-    } else
-      for (const a of selected)
-        for (const b of all) {
-          if (a.entryId === b.entryId) continue;
-          // Different captures of the same source are versions, not related topics.
-          if (
-            a.snapshotId !== b.snapshotId &&
-            a.canonicalUri !== undefined &&
-            a.canonicalUri === b.canonicalUri
-          )
-            continue;
-          const [low, high] = [a.entryId, b.entryId].sort();
-          if (!low || !high)
-            throw new OperationError('rejected', 'invalid_relation_pair');
-          const key = low + ':' + high;
-          if (
-            seen.has(key) ||
-            overrides.some(
-              (o) => o.entryLowId === low && o.entryHighId === high,
-            )
-          )
-            continue;
-          seen.add(key);
-          const terms = new Set(
-            a.value.contentKeywords.map((t) => t.normalizedValue),
-          );
-          const score = b.value.contentKeywords.filter((t) =>
-            terms.has(t.normalizedValue),
-          ).length;
-          if (score > 0) candidates.push({a, b, score});
-        }
-    return candidates
-      .sort(
-        (x, y) =>
-          y.score - x.score ||
-          x.a.entryId.localeCompare(y.a.entryId) ||
-          x.b.entryId.localeCompare(y.b.entryId),
-      )
-      .slice(0, request.maxRelationCandidates ?? request.maxRelations)
-      .map(({a, b, reasons}) => ({
-        ...(reasons ? {candidateReasons: reasons} : {}),
-        kind: 'relation',
-        targetId: a.entryId,
-        relatedEntryId: b.entryId,
-        expectedRevision: a.revision,
-        expectedRelatedRevision: b.revision,
-        expectedOverrideRevision: 0,
-        attempt: 0,
-        complete: false,
-      }));
-  }
   private services(task: AgentTask) {
     const request = task.request;
     if (request.kind === 'intake')
@@ -970,7 +693,7 @@ export class AgentTaskActions {
       return {
         split: this.deps.split,
         tags: this.deps.tags,
-        relations: this.deps.relations,
+        relations: undefined,
       };
     const metadata = {
       providerKey: 'external-agent-v1' as const,

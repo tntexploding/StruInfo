@@ -5,7 +5,6 @@ import {type EvidenceSnapshot} from '../api/m1c_api_contract.js';
 import {READY_HEALTH_FIXTURE} from '../health/mock_health_client.js';
 import {InformationEntryPrivacyScope} from '../workspaces/information_entry_components.js';
 import {InformationEntryTextSearchOptions} from '../workspaces/information_entry_search_controls.js';
-import {InformationEntryPreferenceProfilePanel} from '../workspaces/information_entry_preference_profile_panel.js';
 import {AssociationPolicyPanel} from '../workspaces/association_policy_panel.js';
 import {PrivateDocumentResults} from '../workspaces/private_document_results.js';
 
@@ -81,12 +80,12 @@ describe('M1D product workspaces', () => {
     );
 
     expect(markup).toContain('总览');
-    expect(markup).toContain('文档入口');
-    expect(markup).toContain('工作台');
-    expect(markup).toContain('报告');
-    expect(markup).toContain('数据阅览');
+    expect(markup).toContain('源管理');
+    expect(markup).toContain('文档阅读');
+    expect(markup).not.toContain('>报告</strong>');
+    expect(markup).toContain('数据库');
     expect(markup).toContain('设置');
-    expect(markup.indexOf('工作台')).toBeLessThan(markup.indexOf('数据阅览'));
+    expect(markup.indexOf('文档阅读')).toBeLessThan(markup.indexOf('数据库'));
     expect(markup).not.toContain('M1D / FLOW');
     expect(markup).toContain('<dd>未配置</dd>');
     expect(markup).not.toContain('TRACEABLE CORE · MANUAL AUTHORITY');
@@ -192,13 +191,14 @@ describe('M1D product workspaces', () => {
       />,
     );
 
-    expect(markup).toContain('文档处理流程');
+    expect(markup).toContain('处理流程');
     expect(markup).toContain('任务队列');
-    expect(markup).toContain('AI 消息');
-    expect(markup).toContain('当前项目数据');
+    expect(markup).toContain('AI 中控');
+    expect(markup).toContain('全部消息');
+    expect(markup).toContain('内容统计');
     expect(markup).toContain('来源片段');
-    expect(markup).toContain('最近文档');
-    expect(markup).toContain('查看待办资料与处理进度');
+    expect(markup).not.toContain('最近文档');
+    expect(markup).toContain('接收资料，整理内容，查询与阅读。');
     expect(markup).not.toContain('<main class="workflow-overview__main"');
   });
 
@@ -249,71 +249,5 @@ describe('M1D product workspaces', () => {
     expect(privateDocuments).toContain('完整隐私文档');
     expect(privateDocuments).not.toContain('独立于 Entry');
     expect(privateDocuments).toContain('查看完整隐私文档');
-  });
-
-  it('renders the explainable Entry preference profile as a secondary Tags tool', () => {
-    const profile = {
-      revision: 2,
-      enabled: false,
-      rules: [
-        {
-          ruleId: '77777777-7777-4777-8777-777777777777',
-          dimension: 'usefulness' as const,
-          featureKind: 'content_keyword' as const,
-          featureIdentity: 'postgresql',
-          displayValue: 'PostgreSQL',
-          effect: 'prefer' as const,
-          weight: 4 as const,
-        },
-      ],
-    };
-    const markup = renderToStaticMarkup(
-      <InformationEntryPreferenceProfilePanel
-        state={{status: 'ready', value: {status: 'ok', profile}}}
-        onReload={() => undefined}
-        onSave={() =>
-          Promise.resolve({
-            statusCode: 200,
-            body: {status: 'unchanged', profile},
-          })
-        }
-        onSuggest={(includePrivate) =>
-          Promise.resolve({
-            statusCode: 200,
-            body: {
-              status: 'ok',
-              includePrivate,
-              visibleEntryCount: 0,
-              totalCandidateCount: 0,
-              truncated: false,
-              candidates: [],
-            },
-          })
-        }
-        onTrial={({includePrivate}) =>
-          Promise.resolve({
-            statusCode: 200,
-            body: {
-              status: 'complete',
-              profile,
-              includePrivate,
-              visibleEntryCount: 0,
-              evaluatedEntryCount: 0,
-              truncated: false,
-              items: [],
-            },
-          })
-        }
-      />,
-    );
-
-    expect(markup).toContain('偏好规则');
-    expect(markup).not.toContain('SECONDARY / PREFERENCE PROFILE');
-    expect(markup).not.toContain('origin-label');
-    expect(markup).toContain('手动新增规则');
-    expect(markup).toContain('根据评分生成规则建议');
-    expect(markup).toContain('试运行');
-    expect(markup).toContain('本次建议与试运行包含隐私条目');
-    expect(markup).toContain('条目由你确认修改');
   });
 });

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0 - 2026-10-28
+
+- Completes the refactored receiving, source recipes, annotations, topics and research/report pipeline.
+- Separates confirmed publication from bounded background topic and relationship work.
+- Reuses the five accepted prototypes with live application contracts.
+- Retires old entry automation, preference scoring APIs and legacy document-task execution. Keeps historical backup readers.
+- Includes migrations 000040–000043 and processing bundle v19; network and schedule automation remain opt-in.
+
+See [v0.5.0 release notes](docs/releases/v0.5.0.md) for upgrade steps.
+
 ## 0.4.0 - 2026-10-19
 
 - Adds multi-channel historical discovery, source feedback and editable introductions.

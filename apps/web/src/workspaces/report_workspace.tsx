@@ -1,4 +1,6 @@
-import {useState} from 'react';
+import {ReportPipelinePanel} from './report_pipeline_panel.js';
+import {FloatingToolPanel} from '../components/floating_tool_panel.js';
+import {useEffect, useRef, useState} from 'react';
 import {
   REPORT_STATUS,
   reportError,
@@ -21,11 +23,25 @@ const REPORT_KIND = {
 export function ReportWorkspace({
   active,
   onOpenSource,
+  initialReportId,
+  selectionRequest = 0,
 }: {
   active: boolean;
+  initialReportId?: string | undefined;
+  selectionRequest?: number;
   onOpenSource: (snapshotId: string) => void;
 }) {
   const reports = useReports(active);
+  const openReport = reports.open;
+  const clearReport = reports.clear;
+  const lastSelection = useRef(-1);
+  useEffect(() => {
+    if (!active || lastSelection.current === selectionRequest) return;
+    lastSelection.current = selectionRequest;
+    if (initialReportId) void openReport(initialReportId);
+    else clearReport();
+  }, [active, initialReportId, selectionRequest, openReport, clearReport]);
+  const [pipelineOpen, setPipelineOpen] = useState(false);
   const [editingReport, setEditingReport] = useState<ReportRecord>();
   const [editorOpen, setEditorOpen] = useState(false);
   const view = reports.value,
@@ -52,6 +68,17 @@ export function ReportWorkspace({
           <p>选择资料生成日报、周报或专题报告，查看进度并导出。</p>
         </div>
         <div className="workspace-page-actions ef-glass">
+          <FloatingToolPanel
+            title="定时与通知"
+            preferredWidth={820}
+            onOpenChange={setPipelineOpen}
+          >
+            <ReportPipelinePanel
+              active={active && pipelineOpen}
+              {...(view?.report ? {report: view.report} : {})}
+              onReport={(id) => void reports.open(id)}
+            />
+          </FloatingToolPanel>
           <button
             className="secondary-action"
             disabled={reports.busy}

@@ -83,7 +83,6 @@ function subscription(): Readonly<ReviewGitSourceSubscription> {
     profile: 'commonmark-v1',
     sourceAlias: 'synthetic',
     isPrivate: false,
-    routeAfterImport: false,
     intervalMinutes: 1_440,
   });
 }

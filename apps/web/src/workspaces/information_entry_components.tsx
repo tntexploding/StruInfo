@@ -566,6 +566,8 @@ function matchReasonLabel(value: string): string {
       return '中文译文标题';
     case 'translation_body':
       return '中文译文正文';
+    case 'structured_annotation':
+      return '结构化标注';
     case 'content_keyword_alias':
       return '确认别名（标签）';
     case 'content_keyword':

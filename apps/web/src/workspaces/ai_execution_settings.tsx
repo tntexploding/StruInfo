@@ -1,3 +1,8 @@
+import {
+  SettingCard,
+  SettingRow,
+  SettingSwitch,
+} from '../components/setting_controls.js';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {aiPriceCommand, type AiPriceStatus} from '../api/ai_price_client.js';
 import './ai_price_settings.css';
@@ -66,81 +71,61 @@ export function AiExecutionSettings({
     (concurrency !== (status.policy.maxConcurrentRequests ?? 1) ||
       retries !== (status.policy.automaticRetryLimit ?? 0));
   return (
-    <section
-      className="ai-price-settings"
-      aria-labelledby="ai-execution-title"
-      aria-busy={busy}
-    >
-      <div className="ai-price-heading">
-        <div>
-          <h2 id="ai-execution-title">AI 运行与恢复</h2>
-          <p>设置同时调用 AI 的数量，以及失败后的自动重试次数。</p>
-        </div>
-        <button
-          type="button"
-          className="secondary-action"
-          disabled={!status || busy}
-          onClick={() => void save('ai_operations_save')}
-        >
-          {status?.policy.operationsAllowed === false
-            ? '允许 AI 操作'
-            : '暂停 AI 操作'}
-        </button>
-      </div>
-      <div className="ai-execution-fields">
-        <label className="field">
-          <span>最大模型并发数</span>
+    <SettingCard title="AI 运行与恢复" className="ai-card">
+      <SettingRow
+        title="允许 AI 操作"
+        hint="暂停后不再发出新请求，已发出的请求继续完成。"
+      >
+        {(id) => (
+          <SettingSwitch
+            id={id}
+            checked={status?.policy.operationsAllowed !== false}
+            disabled={!status || busy}
+            onChange={() => void save('ai_operations_save')}
+          />
+        )}
+      </SettingRow>
+      <SettingRow title="最大模型并发数" hint="文档、翻译、问答和报告共用。">
+        {(id) => (
           <select
-            aria-label="最大模型并发数"
-            aria-describedby="ai-concurrency-help"
+            id={id}
             value={concurrency}
             disabled={!status || busy}
             onChange={(e) => {
-              setConcurrency(Number(e.target.value));
+              setConcurrency(Number(e.currentTarget.value));
             }}
           >
             {[1, 2, 3, 4].map((n) => (
-              <option value={n} key={n}>
-                {n} 个同时调用{n === 1 ? '（默认）' : ''}
+              <option key={n} value={n}>
+                {n} 个同时调用
               </option>
             ))}
           </select>
-          <small id="ai-concurrency-help">
-            文档处理、翻译、问答和报告共用此上限。已发出的请求继续完成。
-          </small>
-        </label>
-        <label className="field">
-          <span>每篇文档自动断点重试</span>
+        )}
+      </SettingRow>
+      <SettingRow
+        title="每篇文档自动断点重试"
+        hint="用于新任务，仍使用任务原有预算。"
+      >
+        {(id) => (
           <select
-            aria-label="每篇文档自动断点重试"
-            aria-describedby="ai-retry-help"
+            id={id}
             value={retries}
             disabled={!status || busy}
             onChange={(e) => {
-              setRetries(Number(e.target.value));
+              setRetries(Number(e.currentTarget.value));
             }}
           >
             {[0, 1, 2].map((n) => (
-              <option value={n} key={n}>
-                {n === 0 ? '关闭（默认）' : '最多 ' + String(n) + ' 次'}
+              <option key={n} value={n}>
+                {n === 0 ? '关闭' : '最多 ' + String(n) + ' 次'}
               </option>
             ))}
           </select>
-          <small id="ai-retry-help">
-            新任务使用此次数。调低或关闭时，等待重试的任务也会受限。
-          </small>
-        </label>
-      </div>
-      <p className="field-hint">
-        超时、临时服务异常或返回格式错误时，分别等待 1 分钟、2
-        分钟后重试。从未完成的步骤继续，使用原有预算，并遵守 AI 开关和价格时段。
-      </p>
-      <p className="field-hint">
-        人工暂停、审核暂缓、容量不足及历史失败任务需手动处理。报告和即时工具也需手动重试。
-      </p>
-      <div className="ai-price-actions">
+        )}
+      </SettingRow>
+      <div className="settings-card-actions">
         <button
-          type="button"
           className="primary-action"
           disabled={!dirty || busy}
           onClick={() => void save('ai_execution_save')}
@@ -148,23 +133,18 @@ export function AiExecutionSettings({
           保存运行设置
         </button>
         <button
-          type="button"
-          className="secondary-action"
+          className="text-action"
           disabled={busy}
           onClick={() =>
-            void load()
-              .then(() => {
-                setMessage('已重新读取，当前草稿保留。');
-              })
-              .catch(() => {
-                setMessage('读取失败，请重试。');
-              })
+            void load().catch(() => {
+              setMessage('读取失败，请重试。');
+            })
           }
         >
           重新读取运行设置
         </button>
       </div>
       <p role="status">{message || (dirty ? '有未保存的修改' : '')}</p>
-    </section>
+    </SettingCard>
   );
 }

@@ -81,9 +81,9 @@ function fixture() {
           model: p.settings.model,
           request: {
             kind: 'document',
+            maxRelations: 0,
             snapshotId: id,
             maxEntries: p.settings.maxEntries,
-            maxRelations: p.settings.maxRelations,
             maxModelCalls: p.settings.maxModelCalls,
           },
           state: {status: 'queued', calls: 0, phase: 'split', steps: []},
@@ -320,9 +320,9 @@ describe('new-material ingestion policy and queue', () => {
         model: p.settings.model,
         request: {
           kind: 'document',
+          maxRelations: 0,
           snapshotId: id,
           maxEntries: 12,
-          maxRelations: 4,
           maxModelCalls: 24,
         },
         state: {status: 'queued', phase: 'split', calls: 0, steps: []},

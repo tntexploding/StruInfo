@@ -134,6 +134,13 @@ describe('M1C local HTTP transport', () => {
     });
     expect(uiWrite.status).toBe(409);
     expect(interfaceWrites).toEqual([{revision: 0}]);
+    for (const path of [
+      'entries/automation/policy',
+      'entries/automation/executions',
+      'entries/preferences/profile',
+    ]) {
+      expect((await fetch(base + '/api/v1/' + path)).status).toBe(404);
+    }
     const workspaceResponse = await fetch(`${base}/api/v1/workspace`);
     expect(workspaceResponse.status).toBe(200);
     expect(workspaceResponse.headers.get('cache-control')).toBe('no-store');
@@ -477,91 +484,6 @@ function stubApi(
       Promise.resolve(result(200, {status: 'previewed'})),
     applyInformationEntrySplitRule: () =>
       Promise.resolve(result(201, {status: 'created'})),
-    loadInformationEntryPreferenceProfile: () =>
-      Promise.resolve(
-        result(200, {
-          status: 'ok',
-          profile: {revision: 0, enabled: false, rules: []},
-        }),
-      ),
-    saveInformationEntryPreferenceProfile: () =>
-      Promise.resolve(
-        result(200, {
-          status: 'unchanged',
-          profile: {revision: 0, enabled: false, rules: []},
-        }),
-      ),
-    suggestInformationEntryPreferenceProfile: () =>
-      Promise.resolve(
-        result(200, {
-          status: 'ok',
-          includePrivate: false,
-          visibleEntryCount: 0,
-          totalCandidateCount: 0,
-          truncated: false,
-          candidates: [],
-        }),
-      ),
-    trialInformationEntryPreferenceProfile: () =>
-      Promise.resolve(
-        result(200, {
-          status: 'complete',
-          profile: {revision: 0, enabled: false, rules: []},
-          includePrivate: false,
-          visibleEntryCount: 0,
-          evaluatedEntryCount: 0,
-          truncated: false,
-          items: [],
-        }),
-      ),
-    loadInformationEntryAutomationPolicy: () =>
-      Promise.resolve(
-        result(200, {
-          status: 'ok',
-          policy: {
-            revision: 0,
-            enabled: false,
-            paused: false,
-            profileRevision: 0,
-            minimumMatchedRuleCount: 1,
-            advanceThresholds: {
-              usefulness: 3,
-              interest: 3,
-              requiredDimensions: 1,
-            },
-            deferThresholds: {
-              usefulness: 3,
-              interest: 3,
-              requiredDimensions: 1,
-            },
-            budgets: {
-              maximumEntriesPerRun: 100,
-              maximumAdvanceCandidatesPerRun: 25,
-              maximumDeferCandidatesPerRun: 25,
-            },
-            failureMode: 'pause',
-          },
-          profile: {revision: 0, enabled: false, ruleCount: 0},
-        }),
-      ),
-    saveInformationEntryAutomationPolicy: () =>
-      Promise.resolve(result(200, {status: 'unchanged'})),
-    trialInformationEntryAutomationPolicy: () =>
-      Promise.resolve(result(200, {status: 'complete', items: []})),
-    executeInformationEntryAutomation: () =>
-      Promise.resolve(result(409, {status: 'not_ready', reason: 'disabled'})),
-    listInformationEntryAutomationExecutions: () =>
-      Promise.resolve(result(200, {status: 'ok', executions: []})),
-    loadInformationEntryAutomationExecution: () =>
-      Promise.resolve(result(404, {status: 'not_found'})),
-    listInformationEntryAutomationWorkQueue: () =>
-      Promise.resolve(
-        result(200, {status: 'ok', includePrivate: false, items: []}),
-      ),
-    updateInformationEntryAutomationWorkItem: () =>
-      Promise.resolve(result(404, {status: 'not_found'})),
-    executeInformationEntryAutomationWorkItemAction: () =>
-      Promise.resolve(result(404, {status: 'not_found'})),
     importMarkdown: () => Promise.resolve(result(201, {status: 'created'})),
     importDocument: () => Promise.resolve(result(201, {status: 'created'})),
     materializeInformationEntries: () =>

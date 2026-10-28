@@ -1,3 +1,4 @@
+import {structuredAnnotationsSchema} from '../../../modules/entries/structured_annotations.js';
 import {
   ENTRY_ANNOTATION_ORIGINS,
   ENTRY_CHUNK_MODES,
@@ -50,10 +51,12 @@ const CURRENT_ENTRY_SELECT = sql(
   '  e.snapshot_id::text, e.current_revision, e.current_revision_id::text,',
   '  e.document_order, e.title_path, e.body, e.body_sha256, e.chunk_mode,',
   '  e.split_rule_version, e.is_private, e.type_keyword, e.type_custom_name,',
-  '  e.usefulness_score, e.interest_score,',
+  '  e.usefulness_score, e.interest_score, annotation.value_text AS annotation_text,',
   '  source.source_key, source.canonical_uri, snapshot.captured_at,',
   '  snapshot.published_at',
   'FROM struinfo.information_entry AS e',
+  'LEFT JOIN struinfo.information_entry_annotation AS annotation',
+  '  ON annotation.workspace_id = e.workspace_id AND annotation.entry_id = e.entry_id',
   'JOIN struinfo.resource AS source',
   '  ON source.workspace_id = e.workspace_id AND source.resource_id = e.resource_id',
   'JOIN struinfo.snapshot AS snapshot',
@@ -891,6 +894,10 @@ export async function replaceEntryChildren(
   await client.query<Row>(DELETE_FRAGMENT_INPUTS_SQL, [workspaceId, entryId]);
   await client.query<Row>(DELETE_CONTENT_KEYWORDS_SQL, [workspaceId, entryId]);
   await client.query<Row>(DELETE_DOMAIN_KEYWORDS_SQL, [workspaceId, entryId]);
+  await client.query(
+    'DELETE FROM struinfo.information_entry_annotation WHERE workspace_id = $1 AND entry_id = $2',
+    [workspaceId, entryId],
+  );
   await insertEntryChildren(client, workspaceId, entryId, value);
 }
 
@@ -905,6 +912,16 @@ async function insertEntryChildren(
     value.fragmentRanges.length !== value.fragmentIds.length
   ) {
     throw new PostgresAdapterError();
+  }
+  if (value.annotations) {
+    await client.query(
+      'INSERT INTO struinfo.information_entry_annotation (workspace_id, entry_id, value_text) VALUES ($1, $2, $3)',
+      [
+        workspaceId,
+        entryId,
+        JSON.stringify(structuredAnnotationsSchema.parse(value.annotations)),
+      ],
+    );
   }
   for (const [index, fragmentId] of value.fragmentIds.entries()) {
     const result = await client.query<Row>(INSERT_FRAGMENT_INPUT_SQL, [
@@ -1088,6 +1105,13 @@ function mapRevisionValue(
     throw new PostgresAdapterError();
   }
   return Object.freeze({
+    ...(row.annotation_text == null
+      ? {}
+      : {
+          annotations: structuredAnnotationsSchema.parse(
+            JSON.parse(text(row.annotation_text)),
+          ),
+        }),
     documentOrder: integer(row.document_order),
     titlePath: text(row.title_path),
     body: text(row.body),

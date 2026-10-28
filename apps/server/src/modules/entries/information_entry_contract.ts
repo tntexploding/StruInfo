@@ -1,3 +1,7 @@
+import type {
+  StructuredAnnotations,
+  AnnotationFilter,
+} from './structured_annotations.js';
 export const ENTRY_TYPE_KEYWORDS = [
   'factual_material',
   'knowledge_explanation',
@@ -56,6 +60,7 @@ export interface EntryDomainAssignment {
 }
 
 export interface InformationEntryRevisionValue {
+  readonly annotations?: StructuredAnnotations;
   readonly documentOrder: number;
   readonly titlePath: string;
   readonly body: string;
@@ -158,6 +163,7 @@ export interface InformationEntryRevisionWrite {
 }
 
 export interface InformationEntrySearchRequest {
+  readonly annotationFilter?: AnnotationFilter;
   readonly text?: string;
   readonly retrievalMode?: EntryRetrievalMode;
   readonly textMode?: EntryTextSearchMode;
@@ -192,6 +198,7 @@ export type InformationEntryMatchReason =
   | 'body'
   | 'translation_title'
   | 'translation_body'
+  | 'structured_annotation'
   | 'content_keyword_alias'
   | 'content_keyword'
   | 'type_keyword'

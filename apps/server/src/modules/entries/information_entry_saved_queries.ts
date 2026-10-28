@@ -23,6 +23,7 @@ export const DEFAULT_ENTRY_SAVED_QUERIES: Readonly<EntrySavedQueries> =
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const QUERY_FIELDS = [
+  'annotationFilter',
   'text',
   'retrievalMode',
   'textMode',

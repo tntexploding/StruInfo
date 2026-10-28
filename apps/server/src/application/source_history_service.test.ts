@@ -1,4 +1,5 @@
 import {describe, it, expect, vi} from 'vitest';
+import {DEFAULT_SOURCE_RECEIVING} from '../modules/subscriptions/source_receiving.js';
 import {SourceHistoryService} from './source_history_service.js';
 import {AgentCommands} from './agent_commands.js';
 import {ExecutionAuthority} from './execution_authority.js';
@@ -24,7 +25,6 @@ const source = (
   sourceAlias: 'synthetic',
   enabled: false,
   isPrivate: false,
-  routeAfterImport: false,
   intervalMinutes: 60,
   feedUrl: 'https://example.invalid/feed',
   itemLimit: 5,
@@ -38,7 +38,7 @@ const row = (
   access: 'unknown',
   ...(date ? {publishedAt: date} : {}),
 });
-function fixture() {
+function fixture(scopedReceipts = false) {
   let sources: ReviewSourceSubscription[] = [source(A), source(B)];
   const snapshots: EvidenceSnapshotSummary[] = [];
   const read = vi.fn<SourceHistoryReader['read']>().mockResolvedValue({
@@ -94,6 +94,23 @@ function fixture() {
     },
   );
   const service = new SourceHistoryService({
+    ...(scopedReceipts
+      ? {
+          receiptSources: () =>
+            Promise.resolve(
+              new Map(
+                snapshots.flatMap((snapshot) => {
+                  const origin = sources.find(
+                    (s) => s.label === snapshot.sourceKey,
+                  );
+                  return origin
+                    ? [[snapshot.snapshotId, origin.subscriptionId] as const]
+                    : [];
+                }),
+              ),
+            ),
+        }
+      : {}),
     sources: () => Promise.resolve(sources),
     snapshots: () => Promise.resolve(snapshots),
     reader: {read, article},
@@ -141,6 +158,47 @@ function fixture() {
   };
 }
 describe('owner history backfill', () => {
+  it('keeps independent source receipts and never advances live cursors', async () => {
+    const f = fixture(true);
+    const configured = [A, B].map((id) => ({
+      ...source(id),
+      cursor: {connectorCursor: 'live-unchanged'},
+      receiving: DEFAULT_SOURCE_RECEIVING,
+    }));
+    const before = JSON.stringify(configured);
+    f.setSources(configured);
+    const sessionId = await f.open();
+    for (const subscriptionId of [A, B])
+      await f.service.execute('history_scan', {sessionId, subscriptionId});
+    const rows = (await f.list(sessionId)).articles.filter((a) =>
+      a.url.endsWith('first'),
+    );
+    expect(rows).toHaveLength(2);
+    for (const row of rows) await f.importRows({sessionId, ids: [row.id]});
+    expect(f.importer).toHaveBeenCalledTimes(2);
+    await f.importRows({sessionId, ids: [required(rows[0]).id]});
+    expect(f.importer).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(configured)).toBe(before);
+  });
+  it('blocks history discovery and an existing session when the owner disables it', async () => {
+    const f = fixture();
+    const sessionId = await f.open();
+    await f.service.execute('history_scan', {sessionId, subscriptionId: A});
+    const item = required((await f.list(sessionId)).articles[0]);
+    f.setSources(
+      [A, B].map((id) => ({
+        ...source(id),
+        receiving: {...DEFAULT_SOURCE_RECEIVING, history: 'none'},
+      })),
+    );
+    await expect(f.open()).rejects.toMatchObject({
+      code: 'history_source_unsupported',
+    });
+    await expect(
+      f.service.execute('history_preview', {sessionId, id: item.id}),
+    ).rejects.toMatchObject({code: 'history_source_changed'});
+    expect(f.article).not.toHaveBeenCalled();
+  });
   it('restores an expired selection without fetching or importing, and retains duplicate checks', async () => {
     const f = fixture(),
       sessionId = await f.open();

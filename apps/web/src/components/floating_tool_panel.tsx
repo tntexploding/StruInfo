@@ -12,12 +12,14 @@ export function FloatingToolPanel({
   className = '',
   preferredWidth = 640,
   embedded = false,
+  onOpenChange,
   children,
 }: {
   readonly title: string;
   readonly className?: string;
   readonly preferredWidth?: number;
   readonly embedded?: boolean;
+  readonly onOpenChange?: (open: boolean) => void;
   readonly children: ReactNode;
 }) {
   const id = useId();
@@ -86,10 +88,12 @@ export function FloatingToolPanel({
 
   if (embedded) {
     return (
-      <details className={`floating-tool-section ${className}`}>
-        <summary role="button">{title}</summary>
+      <section
+        className={`floating-tool-section ${className}`}
+        aria-label={title}
+      >
         <div className="floating-tool-section__body">{children}</div>
-      </details>
+      </section>
     );
   }
 
@@ -121,6 +125,7 @@ export function FloatingToolPanel({
           if (event.target !== event.currentTarget) return;
           const isOpen = event.newState === 'open';
           setOpen(isOpen);
+          onOpenChange?.(isOpen);
           if (
             !isOpen &&
             (document.activeElement === document.body ||

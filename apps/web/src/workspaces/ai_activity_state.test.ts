@@ -51,7 +51,6 @@ function data(tasks: AiTask[] = []): AiActivityData {
           manualUploads: false,
           model: 'synthetic-model',
           maxEntries: 12,
-          maxRelations: 4,
           maxModelCalls: 24,
           maxDocumentsPerDay: 10,
         },
@@ -545,4 +544,21 @@ it('shows scheduled checkpoint recovery as queued, and disabled retry as paused'
     state: 'paused',
     detail: '自动重试已关闭，等待手动继续',
   });
+});
+
+it('shows publication independently of relationship work for new tasks', () => {
+  const stages = articleStages(
+    task({
+      request: {kind: 'document', snapshotId: 'synthetic-document'},
+      state: {
+        workflow: 'confirmed-content-v1',
+        status: 'succeeded',
+        phase: 'complete',
+        calls: 2,
+        steps: [],
+      },
+    }),
+  );
+  expect(stages.map((s) => s.label)).toEqual(['审核', '结构', '标签', '入库']);
+  expect(stages.at(-1)?.state).toBe('done');
 });

@@ -18,6 +18,10 @@ semantics, API versioning, deployment, and cloud-to-local communication.
 
 ## Records
 
+- [0090: Versioned source splitting recipes](0090-versioned-source-split-recipes.md)
+
+- [0089: Source receiving strategies](0089-source-receiving-strategies.md)
+
 | ADR | Status | Decision |
 | --- | --- | --- |
 | [0001](0001-typescript-modular-monolith.md) | Accepted | TypeScript modular monolith and toolchain |
@@ -425,3 +429,17 @@ ADR 0071 adds local matching over valid cached translations while retaining one 
 - [ADR 0085: Document-centred processing and publication](0085-document-publication-lifecycle.md)
 
 - [ADR 0086: Explicit Batch Document Recovery](0086-batch-document-recovery.md)
+
+- [ADR 0087: Source feedback and AI execution](0087-source-feedback-and-ai-execution.md)
+
+- [ADR 0088: Confirmed content and deferred organization](0088-confirmed-content-and-deferred-organization.md)
+
+- [ADR 0091: Evidence-bound structured annotations](0091-evidence-bound-structured-annotations.md) — P4 labels, claims, vocabulary and confirmation.
+
+- [ADR 0092: Bounded background topics and selective relations](0092-bounded-background-topics.md) — P5 candidate recall, topic evidence, independent jobs and costs.
+
+- [0093：联网证据与报告发布](0093-explicit-web-evidence-and-report-publication.md)
+
+- [ADR 0089：来源接收策略](0089-source-receiving-strategies.md)
+- [ADR 0090：来源拆分方案](0090-versioned-source-split-recipes.md)
+- [ADR 0094：活动流程与五页交付](0094-active-content-workflow-and-prototype-delivery.md)
