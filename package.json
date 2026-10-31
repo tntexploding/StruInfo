@@ -56,8 +56,6 @@
     "@playwright/test": "1.62.1",
     "@types/node": "24.13.3",
     "eslint": "10.8.1",
-    "eslint-plugin-react-hooks": "7.1.1",
-    "eslint-plugin-react-refresh": "0.5.3",
     "globals": "17.9.0",
     "prettier": "3.9.6",
     "tsx": "4.23.11",

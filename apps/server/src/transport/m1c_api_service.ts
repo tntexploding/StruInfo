@@ -1,7 +1,10 @@
 import type {InformationEntryRepositoryPort} from '../modules/entries/information_entry_repository.js';
 import {searchCurrentInformationEntries} from '../modules/entries/information_entry_search.js';
 import {Buffer} from 'node:buffer';
-import {DocumentUseCases} from '../application/document_use_cases.js';
+import {
+  DocumentUseCases,
+  type DocumentBrowseOptions,
+} from '../application/document_use_cases.js';
 import {
   EntryUseCases,
   type EntryRevisionRequest,
@@ -307,7 +310,9 @@ export interface M1cApiServicePort {
   ): Promise<M1cHttpResult>;
   listInformationEntryDocuments(
     includePrivate?: unknown,
+    options?: unknown,
   ): Promise<M1cHttpResult>;
+  readOverviewSummary(): Promise<M1cHttpResult>;
   aggregateInformationDocumentTags(
     snapshotId: string,
     body: unknown,
@@ -2575,14 +2580,92 @@ export class M1cApiService implements M1cApiServicePort {
     }
   }
 
+  public async readOverviewSummary(): Promise<M1cHttpResult> {
+    try {
+      const [summary, preferences] = await Promise.all([
+        this.#documents.summary(),
+        this.#dependencies.reviewPreferences.load(
+          this.#dependencies.workspaceId,
+        ),
+      ]);
+      const {tagNames, ...metrics} = summary;
+      return httpResult(200, {
+        ...metrics,
+        tags: new Set([
+          ...tagNames,
+          ...(preferences.annotationVocabulary?.terms.map((t) => t.label) ??
+            []),
+        ]).size,
+      });
+    } catch {
+      return repositoryFailure();
+    }
+  }
+
   public async listInformationEntryDocuments(
     includePrivate: unknown = false,
+    query: unknown = {},
   ): Promise<M1cHttpResult> {
     if (typeof includePrivate !== 'boolean') {
       return inputFailure('query.includePrivate');
     }
     try {
-      return httpResult(200, await this.#documents.list(includePrivate));
+      if (typeof query !== 'object' || query === null)
+        return inputFailure('query');
+      const q = query as Record<string, unknown>;
+      const limit = q.limit === undefined ? undefined : Number(q.limit);
+      if (
+        limit !== undefined &&
+        (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+      )
+        return inputFailure('query.limit');
+      if (q.q !== undefined && (typeof q.q !== 'string' || q.q.length > 200))
+        return inputFailure('query.q');
+      if (
+        q.snapshotId !== undefined &&
+        (typeof q.snapshotId !== 'string' || !CANONICAL_UUID.test(q.snapshotId))
+      )
+        return inputFailure('query.snapshotId');
+      let after: DocumentBrowseOptions['after'];
+      if (
+        q.type !== undefined &&
+        (typeof q.type !== 'string' || q.type.length > 120)
+      )
+        return inputFailure('query.type');
+      if (
+        q.readingState !== undefined &&
+        (typeof q.readingState !== 'string' ||
+          !['unread', 'reading', 'read'].includes(q.readingState))
+      )
+        return inputFailure('query.readingState');
+      if (q.afterCapturedAt !== undefined || q.afterSnapshotId !== undefined) {
+        if (
+          typeof q.afterCapturedAt !== 'string' ||
+          !Number.isFinite(Date.parse(q.afterCapturedAt)) ||
+          typeof q.afterSnapshotId !== 'string' ||
+          !CANONICAL_UUID.test(q.afterSnapshotId)
+        )
+          return inputFailure('query.after');
+        after = {
+          capturedAt: new Date(q.afterCapturedAt).toISOString(),
+          snapshotId: q.afterSnapshotId,
+        };
+      }
+      return httpResult(
+        200,
+        await this.#documents.list(includePrivate, false, {
+          ...(limit === undefined ? {} : {limit}),
+          ...(typeof q.q === 'string' ? {query: q.q} : {}),
+          ...(typeof q.type === 'string' ? {type: q.type} : {}),
+          ...(typeof q.readingState === 'string'
+            ? {readingState: q.readingState}
+            : {}),
+          ...(typeof q.snapshotId === 'string'
+            ? {snapshotId: q.snapshotId}
+            : {}),
+          ...(after ? {after} : {}),
+        }),
+      );
     } catch (error) {
       if (error instanceof OperationError) return operationFailure(error);
       return repositoryFailure();

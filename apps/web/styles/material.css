@@ -1,0 +1,260 @@
+/* Glass and edge light copied from the accepted effects source. */
+@layer foundation {
+/* Declarations copied from accepted effects.css; application selector aliases only. */
+.ef-app
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ) {
+  position: relative;
+  --ef-edge: var(--ink);
+  transition:
+    transform 220ms var(--ef-ease),
+    background-color 320ms ease-out;
+}
+.ef-app .primary-action {
+  --ef-edge: var(--accent);
+}
+.ef-app [data-ai-action='true'] {
+  --ef-edge: var(--ai);
+}
+.ef-app
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ):not(:disabled):active {
+  transform: scale(0.98);
+}
+body[data-effects='on'][data-glow='on']
+  :is(.ef-app, .ef-panel, .ef-material-board)
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ):not(:disabled) {
+  border-color: color-mix(in srgb, var(--ef-edge) 75%, transparent);
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--ef-edge) 20%, transparent),
+    inset 0 0 8px color-mix(in srgb, var(--ef-edge) 5%, transparent);
+}
+body[data-effects='on'][data-glow='on']
+  :is(.ef-app, .ef-panel, .ef-material-board)
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  )::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--ef-edge);
+  border-radius: inherit;
+  box-shadow:
+    0 0 12px color-mix(in srgb, var(--ef-edge) 50%, transparent),
+    0 0 28px color-mix(in srgb, var(--ef-edge) 23%, transparent),
+    inset 0 0 10px color-mix(in srgb, var(--ef-edge) 8%, transparent);
+  opacity: calc(0.22 * var(--ef-strength));
+  pointer-events: none;
+  transition: opacity 360ms ease-in-out;
+}
+body[data-effects='on'][data-glow='on']
+  :is(.ef-app, .ef-panel, .ef-material-board)
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ):is(.primary, .ai, .primary-action, [data-ai-action='true'])::after {
+  opacity: calc(0.5 * var(--ef-strength));
+}
+body[data-effects='on'][data-glow='on']
+  :is(.ef-app, .ef-panel, .ef-material-board)
+  :is(
+    .mock-button,
+    .primary-action,
+    .secondary-action,
+    .row-action,
+    .icon-action
+  ):is(:hover, :focus-visible)::after {
+  opacity: calc(0.85 * var(--ef-strength));
+}
+body[data-effects='on'][data-glass='on']
+  :is(
+    .ef-glass,
+    .floating-tool-panel__surface,
+    .workspace-tool-panel,
+    .overview-queue-dialog,
+    .document-queue-dialog,
+    .source-quality-dialog,
+    .history-preview,
+    .report-edit-workbench,
+    .reading-segments,
+    .journey-query-mode
+  ) {
+  background:
+    linear-gradient(
+      130deg,
+      #ffffff20,
+      #ffffff03 35%,
+      transparent 60%,
+      #ffffff16
+    ),
+    rgb(30 33 36 / 0.32);
+  border: 1px solid rgb(238 237 231 / 0.54);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  backdrop-filter: blur(12px) saturate(150%);
+  box-shadow:
+    inset 1px 1px 0 #ffffff91,
+    inset -1px -1px 0 #ffffff21,
+    0 16px 36px #0006;
+}
+body[data-effects='on'][data-glass='on']
+  :is(
+    .ef-glass,
+    .floating-tool-panel__surface,
+    .workspace-tool-panel,
+    .overview-queue-dialog,
+    .document-queue-dialog,
+    .source-quality-dialog,
+    .history-preview,
+    .report-edit-workbench,
+    .reading-segments,
+    .journey-query-mode
+  )::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 20% 0%, #ffffff1f, transparent 60%);
+  border-top: 1px solid #ffffff70;
+  border-left: 1px solid #ffffff30;
+}
+@keyframes ef-breathe {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+@keyframes ef-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  body[data-effects='on'][data-glass='on']
+    :is(
+      .ef-glass,
+      .floating-tool-panel__surface,
+      .workspace-tool-panel,
+      .overview-queue-dialog,
+      .document-queue-dialog,
+      .source-quality-dialog,
+      .history-preview,
+      .report-edit-workbench,
+      .reading-segments,
+      .journey-query-mode
+    ) {
+    background: var(--raised);
+    backdrop-filter: none;
+  }
+}
+@supports not (backdrop-filter: blur(1px)) {
+  body[data-effects='on'][data-glass='on']
+    :is(
+      .ef-glass,
+      .floating-tool-panel__surface,
+      .workspace-tool-panel,
+      .overview-queue-dialog,
+      .document-queue-dialog,
+      .source-quality-dialog,
+      .history-preview,
+      .report-edit-workbench,
+      .reading-segments,
+      .journey-query-mode
+    ) {
+    background: var(--raised);
+  }
+}
+@media (max-height: 980px) {
+}
+
+/* Declarations copied from accepted effects-flow.css; application selector aliases only. */
+@keyframes ef-stat-receive {
+  0% {
+    color: var(--ai);
+    transform: translateY(4px);
+    text-shadow: 0 0 12px #9ed3e980;
+  }
+  35% {
+    transform: translateY(0);
+    color: var(--ai);
+  }
+  100% {
+    color: var(--ink);
+    text-shadow: none;
+  }
+}
+@keyframes ef-delta-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  20%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+}
+@keyframes ef-stat-underline {
+  0% {
+    opacity: 0;
+    transform: scaleX(0.3);
+  }
+  25% {
+    opacity: 0.9;
+    transform: scaleX(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+@media (max-height: 980px) {
+}
+@media (prefers-reduced-motion: reduce) {
+}
+@media (max-width: 1350px) {
+}
+
+/* Accepted reader controls from effects.css; product class / pressed-state aliases. */
+.ef-app
+  .journey-floating-bar
+  > .journey-action-group:not(.journey-ai-actions)
+  .secondary-action {
+  background: transparent;
+}
+
+}

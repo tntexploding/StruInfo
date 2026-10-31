@@ -1,14 +1,12 @@
 # StruInfo 运行配置与数据根
 
-## DeepSeek 峰谷开关（ADR 0082）
+系统助手使用独立的 `STRUIINFO_ASSISTANT_TOKEN_FILE` 密钥配置。未配置时助手接口关闭。[配置与接口](system-assistant.md)。
+
+## 价格时段
 
 在「设置 → AI 接入 → DeepSeek 峰谷价格」启用，仅在低价时段发起请求。配置为外部偏好中的 `aiPricePolicy`（`revision`、`enabled`），按版本原子保存并随个人数据包迁移；旧配置默认关闭。无需改密钥、模型或重启服务。
-北京时间周一至周五 09:00–12:00、14:00–18:00 为高峰，其余时间和周末为低价。依据 [DeepSeek 官方说明](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)，核对日期 2026-09-14。规则版本固定且界面可见，价格调整后应更新规则。
+价格时段以应用内保存的规则为准。规则版本在设置页显示。
 文档和报告的价格等待在低价时段由有界分钟轮询恢复；普通重启保留等待，数据包恢复不自动执行。不会新建报告、扩大 Agent grants 或开启原本关闭的自动处理。
-
-- 状态：外部工作区选择、严格 secret 文件注入、M1M 维护运行及 M2-P0E 外部审阅工作区已实现
-- 最近更新：2026-09-12
-- 对应决策：[ADR 0006](adr/0006-external-configuration-and-personal-data-isolation.md)
 
 ## 1. 边界
 
@@ -70,7 +68,7 @@ query/fragment 覆盖或含糊的 authority。这样既支持本机 `localhost`�
 
 配置文件上限为 64 KiB，必须是现存普通文件和有效 UTF-8。错误信息只报告字段或合同问题，不回显数据库地址、未知字段名、配置内容或个人路径。
 
-ADR 0075 增加默认关闭的 Agent 入口。非秘密字段 `STRUIINFO_AGENT_ID` 与 `STRUIINFO_AGENT_GRANTS` 可保存在外部配置文件：启用时必须提供身份名，grants 默认为 `read`，可显式加入 `capture`、`structure`、`annotate`、`process` 或 `automate`。`STRUIINFO_AGENT_TOKEN` 必须通过进程环境，或互斥的 `STRUIINFO_AGENT_TOKEN_FILE` 注入，不能写入 runtime.env。缺少令牌时保持关闭；完整参数、数据库授权和 MCP 启动方式见 [Agent 接入说明](agent-interface.md)。
+Agent 入口默认关闭。非秘密字段 `STRUIINFO_AGENT_ID` 与 `STRUIINFO_AGENT_GRANTS` 可保存在外部配置文件：启用时必须提供身份名，grants 默认为 `read`，可显式加入 `capture`、`structure`、`annotate`、`process` 或 `automate`。`STRUIINFO_AGENT_TOKEN` 必须通过进程环境，或互斥的 `STRUIINFO_AGENT_TOKEN_FILE` 注入，不能写入 runtime.env。缺少令牌时保持关闭；完整参数、数据库授权和 MCP 启动方式见 [Agent 接入说明](agent-interface.md)。
 
 ### DeepSeek
 
@@ -113,7 +111,7 @@ DeepSeek 固定请求 `https://api.deepseek.com/responses`，保留 JSON Schema�
 
 发布采用同目录临时文件和原子硬链接；相同内容幂等去重，已有或读取中的字节必须重新通过长度与摘要校验，损坏会作为可见错误返回。当前端口只负责不可变字节，不授予工作区访问权，也不是 HTTP/WS 接口；逻辑 Blob 记录、工作区所有权、引用、保留和删除授权由后续数据库与应用层实现。
 
-当前 64 MiB 是适配器安全默认值，尚未成为外部运行配置项。工作区 Bundle 已具有 16 MiB 默认预算的 v1 规范 JSON reader/writer、`exports/` 文件落盘和同 ID 空库恢复用例；M1M 的 `maintenance backup/restore` 复用完整个人数据包，把当前 66 表、引用 Blob 和偏好写入 `backups/`，并只恢复到同 workspace 空数据库。自动保留、异地复制与非空合并仍未实现；详见[工作区 Bundle 合同](workspace-bundle-contract.md)和[生产运行与维护](production-operations.md)。
+备份内容与恢复条件见[备份内容](workspace-bundle-contract.md)。
 
 M2-P0E 的临时 Codex 审阅文件只允许落在 `exports/codex-work/` 的直接子文件中。程序生成稳定的
 `<packetId>.codex-review.json` 与 `<packetId>.codex-result.json`，拒绝 symlink/junction、路径片段、

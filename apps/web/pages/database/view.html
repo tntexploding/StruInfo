@@ -1,0 +1,61 @@
+<main class="db-main">
+ <div class="db-layout" id="db-layout" data-view="idle">
+  <aside class="side-region side-left" aria-label="内容范围">
+   <button class="side-opener" data-side="left" aria-controls="scope-panel" aria-expanded="true" aria-label="展开内容范围" hidden><span data-icon="folder"></span><span>范围</span></button>
+   <section class="side-panel" id="scope-panel">
+    <header><h2>内容范围</h2><button class="collapse-button" data-side="left" aria-controls="scope-panel" aria-expanded="true" aria-label="收起内容范围"><span data-icon="chevron"></span></button></header>
+    <form id="scope-form" class="side-scroll"><details class="filter-group"><summary>分类与标签<span data-icon="chevron"></span></summary><div class="filter-fields"><label class="sample-field"><span>内容类型</span><select name="typeKeyword"><option value="">全部类型</option><option value="factual_material">纪实资料</option><option value="knowledge_explanation">知识解释</option><option value="operating_guideline">操作规范</option><option value="investigation_analysis">调查分析</option><option value="argument">观点论证</option><option value="personal_experience">个人体验</option><option value="interactive_collaboration">互动协作</option><option value="public_communication">公共传播</option><option value="literary_creation">文学创作</option><option value="other">其他</option></select></label><label class="sample-field"><span>类型名称</span><input name="typeCustomName" maxlength="80" hidden></label><label class="sample-field"><span>领域</span><select name="domainKeyword"><option value="">全部领域</option><option value="mathematics_formal">数理与形式系统</option><option value="nature_environment">自然与环境</option><option value="engineering_computing">工程、计算与技术</option><option value="life_health">生命、医学与健康</option><option value="society_public_affairs">社会与公共事务</option><option value="economy_business">经济、商业与组织</option><option value="law_policy_governance">法律、政策与治理</option><option value="humanities_history">人文、历史与思想</option><option value="language_education">语言、传播与教育</option><option value="culture_arts">文化、艺术与娱乐</option><option value="daily_life">日常生活、个人与家庭</option><option value="other">其他</option></select></label><label class="sample-field"><span>领域名称</span><input name="domainCustomName" maxlength="80" hidden></label><label class="sample-field"><span>标签</span><input name="contentKeyword" maxlength="80" placeholder="输入标签词"></label><details class="nested-options"><summary>结构化标注<span data-icon="chevron"></span></summary><div class="filter-fields"><label class="sample-field"><span>标注维度</span><select name="dimensionId" disabled><option value="">暂无维度</option></select></label><label class="sample-field"><span>词条</span><select name="termId" disabled><option value="">暂无词条</option></select></label></div></details></div></details><details class="filter-group"><summary>来源<span data-icon="chevron"></span></summary><div class="filter-fields"><label class="sample-field"><span>来源</span><select name="sourceKey" disabled><option value="">全部来源</option></select></label></div></details><details class="filter-group"><summary>时间<span data-icon="chevron"></span></summary><div class="filter-fields"><label class="sample-field"><span>日期依据</span><select name="timeField"><option value="published">发布日期</option><option value="captured">接收日期</option></select></label><label class="sample-field"><span>从</span><input name="timeFrom" type="date"></label><label class="sample-field"><span>至</span><input name="timeTo" type="date"></label></div></details><details class="filter-group"><summary>阅读状态<span data-icon="chevron"></span></summary><div class="filter-fields"><label class="sample-field"><span>阅读状态</span><select name="readingState"><option value="">全部</option><option value="unread">未读</option><option value="reading">在读</option><option value="read">已读</option><option value="archived">已归档</option></select></label></div></details><details class="filter-group"><summary>保存的查询<span data-icon="chevron"></span></summary><div class="filter-fields"><div id="saved-list" class="saved-list"><p class="field-note">暂无保存的查询</p></div><button class="secondary-action compact-action" id="save-query" type="button"><span data-icon="plus"></span>保存当前条件</button></div></details><details class="filter-group"><summary>更多筛选<span data-icon="chevron"></span></summary><div class="filter-fields"><label class="sample-field"><span>查看范围</span><select name="privacy"><option value="public">仅公开资料</option><option value="include">包含隐私资料</option><option value="only">仅隐私资料</option></select></label><p class="field-note">隐私资料仅支持本地文字搜索。</p></div></details></form>
+    <footer class="scope-footer"><span id="filter-count">全部公开资料</span><button class="quiet-button" id="clear-filters">清除筛选</button></footer>
+   </section>
+  </aside>
+  <section class="search-stage" id="search-stage" aria-label="搜索与结果">
+   <div class="search-module" id="search-module">
+    <h1>数据库</h1>
+    <form class="search-form" id="search-form" role="search">
+     <span class="search-symbol" data-icon="search"></span>
+     <input id="search-input" type="text" maxlength="300" aria-label="关键词或问题" placeholder="输入关键词" autocomplete="off">
+     <button class="clear-query" id="clear-query" type="button" aria-label="清空搜索" hidden><span data-icon="close"></span></button>
+     <button class="primary-action submit-search" id="query-submit" type="submit">搜索</button>
+    </form>
+    <div class="search-secondary">
+     <div class="query-mode" role="group" aria-label="查询操作"><button type="button" data-mode="search" aria-pressed="true">搜索</button><button type="button" data-mode="ask" aria-pressed="false">AI 提问</button></div>
+     <button class="search-config-toggle" id="config-toggle" popovertarget="search-config" aria-expanded="false"><span data-icon="filter"></span><span id="config-label">搜索设置</span><span class="config-chevron" data-icon="chevron"></span></button>
+    </div>
+    <p class="query-notice" id="query-notice" role="status" hidden></p>
+   </div>
+   <section class="result-space" id="result-space" aria-label="查询结果" hidden>
+    <header class="result-heading"><h2 id="result-title">查询结果</h2><span id="result-scope">库内资料</span></header>
+    <div class="result-rule"></div>
+    <div class="result-empty"><span data-icon="search"></span><p id="result-note">请输入关键词。</p><span id="result-explanation">此处展示搜索结果。</span></div>
+    <div class="result-tools" id="result-tools"><button class="quiet-button" disabled title="选中条目后可查看">查看联系</button><button class="quiet-button" disabled title="勾选资料后可生成报告">用所选资料生成报告</button></div>
+   </section>
+  </section>
+  <aside class="side-region side-right" aria-label="报告">
+   <button class="side-opener" data-side="right" aria-controls="reports-panel" aria-expanded="true" aria-label="展开报告" hidden><span data-icon="report"></span><span>报告</span></button>
+   <section class="side-panel" id="reports-panel">
+    <header><h2>报告</h2><button class="collapse-button" data-side="right" aria-controls="reports-panel" aria-expanded="true" aria-label="收起报告"><span data-icon="chevron"></span></button></header>
+    <div class="report-side-actions"><button class="secondary-action compact-action" id="new-report"><span data-icon="plus"></span>新建报告</button></div>
+    <div class="side-scroll report-history"><h3>已有报告</h3><p class="field-note">暂无报告</p></div>
+    <footer class="scope-footer report-footer"><button class="quiet-button" id="open-schedule"><span data-icon="clock"></span>定时生成</button><button class="quiet-button" id="report-actions" aria-label="管理报告">管理报告</button></footer>
+   </section>
+  </aside>
+ </div>
+ </main>
+<div id="search-config" class="ef-glass blank-config" popover="auto" role="dialog" aria-labelledby="config-title">
+ <header><h2 id="config-title">搜索设置</h2><button id="close-config" class="config-close" popovertarget="search-config" popovertargetaction="hide" aria-label="收起搜索设置"><span data-icon="close"></span></button></header>
+ <form id="query-options" class="config-form">
+  <label class="sample-field"><span>资料来源</span><select id="evidence-mode" name="evidenceMode"><option value="local">库内资料</option><option value="web">网页资料</option><option value="mixed" id="mixed-option" hidden disabled>库内＋网页</option></select></label>
+  <div id="local-options" class="config-section">
+   <label class="sample-field"><span>搜索方式</span><select name="retrievalMode"><option value="lexical">文字搜索</option><option value="semantic" disabled>内容相似 · 需语义服务</option><option value="hybrid" disabled>综合搜索 · 需语义服务</option></select></label>
+   <details class="nested-options" id="matching-details"><summary>文字匹配<span data-icon="chevron"></span></summary><div class="filter-fields">
+    <label class="sample-field"><span>匹配方式</span><select name="textMode"><option value="substring">包含文字</option><option value="exact">精确一致</option><option value="fuzzy">近似匹配</option></select></label>
+    <fieldset class="inline-checks"><legend>搜索字段</legend><label><input type="checkbox" name="textFields" value="title" checked>标题</label><label><input type="checkbox" name="textFields" value="body" checked>正文</label><label><input type="checkbox" name="textFields" value="tags" checked>标签</label></fieldset>
+   </div></details>
+  </div>
+  <label class="sample-field" id="web-query-field" hidden><span>公开搜索词</span><input id="web-query" name="webQuery" maxlength="128" placeholder="输入用于联网的关键词"><small>库内筛选只对库内资料生效。</small></label>
+  <p class="field-note" id="web-note" hidden>联网功能需在设置中开启。</p>
+  <footer class="config-footer"><button class="secondary-action compact-action" type="button" id="reset-search-options">恢复默认</button><button class="primary-action compact-action" type="submit">应用</button></footer>
+ </form>
+</div>
+
+<dialog id="sample-dialog" class="ef-glass options-dialog" aria-labelledby="sample-dialog-title"><header class="options-dialog-head"><h2 id="sample-dialog-title"></h2><button class="config-close" id="dialog-close" aria-label="关闭浮窗"><span data-icon="close"></span></button></header><div class="options-dialog-body" id="sample-dialog-body"></div></dialog>

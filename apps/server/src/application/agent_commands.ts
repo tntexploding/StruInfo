@@ -95,7 +95,7 @@ const cursor = z
     entryId: id,
   })
   .strict();
-const inboxOwnerSchemas = {
+export const inboxOwnerSchemas = {
   intake_origins: z
     .object({
       snapshotIds: z.array(id).min(1).max(100),
@@ -383,6 +383,15 @@ export class AgentCommands {
         if (!this.deps.aiPrice)
           throw new OperationError('rejected', 'ai_price_unavailable');
         return this.deps.aiPrice.save(this.authority, input, 'execution');
+      case 'ai_queue_save':
+      case 'assistant_settings_save':
+        if (!this.deps.aiPrice)
+          throw new OperationError('rejected', 'ai_price_unavailable');
+        return this.deps.aiPrice.save(
+          this.authority,
+          input,
+          name === 'ai_queue_save' ? 'queue' : 'assistant',
+        );
       case 'ai_price_save':
         if (!this.deps.aiPrice)
           throw new OperationError('rejected', 'ai_price_unavailable');

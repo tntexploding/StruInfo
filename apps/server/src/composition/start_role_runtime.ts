@@ -1,4 +1,9 @@
 import {modelUsageScope} from '../platform/ai/model_usage_scope.js';
+import {SystemAssistant} from '../application/system_assistant.js';
+import {createAssistantCommandTools} from '../application/assistant_tools.js';
+import {createAssistantApiTools} from '../transport/assistant_api_tools.js';
+import {LocalAssistantSessionStore} from '../storage/assistant_session_store.js';
+import {ResponsesAssistantProvider} from '../platform/ai/responses_assistant_provider.js';
 import {decodeEntrySearchBody} from '../modules/entries/information_entry_search_request.js';
 import {ResearchService} from '../application/research_service.js';
 import {ReportPipeline} from '../application/report_pipeline.js';
@@ -432,7 +437,7 @@ export async function startRoleRuntime(
     vocabulary: async () =>
       (await storage.reviewPreferences.load(config.workspaceId))
         .annotationVocabulary ?? EMPTY_ANNOTATION_VOCABULARY,
-    checkModelCall: () => aiPrice.assertAllowed(),
+    checkModelCall: () => aiPrice.assertBackgroundAllowed(),
     executionSettings: () => aiPrice.executionSettings(),
     ...(config.aiProposalProvider
       ? {
@@ -536,8 +541,8 @@ export async function startRoleRuntime(
     entries: knowledgeEntries,
     evidence: repositories.evidenceRead,
     intake,
-    checkModelCall: () => aiPrice.assertAllowed(),
-    checkOperations: () => aiPrice.assertOperationsAllowed(),
+    checkModelCall: () => aiPrice.assertBackgroundAllowed(),
+    checkOperations: () => aiPrice.assertBackgroundOperationsAllowed(),
     ...(config.aiProposalProvider
       ? {
           provider: new ResponsesReportProvider(
@@ -593,9 +598,9 @@ export async function startRoleRuntime(
     }),
     (task) => ingestion.guard(task),
     {
-      check: () => aiPrice.assertAllowed(),
+      check: () => aiPrice.assertBackgroundAllowed(),
       executionSettings: () => aiPrice.executionSettings(),
-      checkOperations: () => aiPrice.assertOperationsAllowed(),
+      checkOperations: () => aiPrice.assertBackgroundOperationsAllowed(),
       canResume: async (task) =>
         task.actorKind !== 'external_agent' ||
         (config.agentInterface?.identity === task.actorId &&
@@ -965,10 +970,47 @@ export async function startRoleRuntime(
         }
       : {}),
   };
+  const assistantHttp =
+    config.assistantToken && api
+      ? {
+          token: config.assistantToken,
+          service: new SystemAssistant({
+            store: new LocalAssistantSessionStore(
+              config.dataRoot + '/assistant/' + config.workspaceId,
+            ),
+            tools: {
+              ...createAssistantCommandTools(
+                agentHttp.owner,
+                aiPrice,
+                ExecutionAuthority.owner(config.workspaceId),
+              ),
+              ...createAssistantApiTools(api),
+            },
+            ...(config.aiProposalProvider
+              ? {
+                  provider: new ResponsesAssistantProvider(
+                    config.aiProposalProvider,
+                    priceAwareFetch(
+                      {
+                        assertAllowed: () => aiPrice.assertAssistantAllowed(),
+                        executionSettings: () => aiPrice.executionSettings(),
+                      },
+                      globalThis.fetch,
+                      usageJournal,
+                      sharedAiQueue,
+                    ),
+                  ),
+                }
+              : {}),
+            checkModelCall: () => aiPrice.assertAssistantAllowed(),
+          }),
+        }
+      : undefined;
   starters.push(() =>
     Promise.resolve({
       name: 'agent-tasks',
       stopAccepting: () => {
+        assistantHttp?.service.stop();
         agentTasks.stop();
         reports.stop();
         reportPipeline.stop();
@@ -978,6 +1020,7 @@ export async function startRoleRuntime(
           agentTasks.drain(),
           reports.drain(),
           topics.drain(),
+          assistantHttp?.service.settle(),
         ]);
       },
       close: () => {
@@ -989,6 +1032,7 @@ export async function startRoleRuntime(
     listenerFactory.start({
       health,
       ...(api === undefined ? {} : {api, agentHttp}),
+      ...(api !== undefined && assistantHttp ? {assistantHttp} : {}),
       host: address.host,
       port: address.port,
     }),

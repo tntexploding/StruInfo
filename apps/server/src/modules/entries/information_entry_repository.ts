@@ -45,6 +45,25 @@ export interface InformationEntryEmptySnapshotMaterializeResult {
 }
 
 export interface InformationEntryRepositoryPort {
+  loadDocumentEntryCounts?(
+    workspaceId: string,
+    includePrivate: boolean,
+  ): Promise<
+    readonly Readonly<{
+      snapshotId: string;
+      entryCount: number;
+      annotatedEntryCount: number;
+      title?: string;
+      types?: readonly string[];
+      readingState?: string;
+    }>[]
+  >;
+  loadCurrentEntriesForSnapshot?(
+    workspaceId: string,
+    includePrivate: boolean,
+    snapshotId: string,
+  ): Promise<readonly Readonly<CurrentInformationEntry>[]>;
+
   materializeEntries(
     entries: readonly Readonly<InformationEntryMaterializeRow>[],
   ): Promise<Readonly<InformationEntryMaterializeResult>>;

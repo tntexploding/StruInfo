@@ -38,6 +38,7 @@ export interface AgentInterfaceConfig {
 }
 
 export interface RuntimeConfig {
+  readonly assistantToken?: string;
   readonly agentInterface?: AgentInterfaceConfig;
   readonly role: ProcessRole;
   readonly database: Readonly<PostgresConnectionConfig>;
@@ -129,7 +130,14 @@ export function parseRuntimeConfig(
   );
 
   const agentInterface = parseAgentInterface(environment);
+  const assistantToken = environment.STRUIINFO_ASSISTANT_TOKEN;
+  if (
+    assistantToken !== undefined &&
+    !/^[A-Za-z0-9_-]{32,256}$/u.test(assistantToken)
+  )
+    throw new ConfigurationError('Invalid system assistant token.');
   return Object.freeze({
+    ...(assistantToken ? {assistantToken} : {}),
     ...(agentInterface ? {agentInterface} : {}),
     role,
     database,

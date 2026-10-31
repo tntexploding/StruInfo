@@ -20,18 +20,11 @@ export default defineConfig({
   use: {
     baseURL: liveBaseUrl,
     browserName: 'chromium',
-    channel: 'chrome',
+    channel: process.env.STRUIINFO_BROWSER_CHANNEL ?? 'chrome',
     trace: 'retain-on-failure',
     actionTimeout: 5_000,
     navigationTimeout: 10_000,
   },
-  projects: [
-    {
-      name: 'm1c-product-shell',
-      testMatch: '**/m1c-product-workspaces.spec.ts',
-      use: {baseURL: liveBaseUrl},
-    },
-  ],
   webServer: {
     command: `node node_modules/vite/bin/vite.js apps/web --host 127.0.0.1 --port ${configuredPort} --strictPort`,
     url: liveBaseUrl,

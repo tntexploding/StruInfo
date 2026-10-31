@@ -33,503 +33,7 @@
       "licenseDeclared": "MIT",
       "copyrightText": "NOASSERTION",
       "primaryPackagePurpose": "APPLICATION",
-      "comment": "v0.5.0 dependency closure with the October 28 security reconciliation. OS packages are scanned separately."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-2c8152c2f849b2d0",
-      "name": "@babel/code-frame",
-      "versionInfo": "7.29.7",
-      "downloadLocation": "https://registry.npmjs.org/@babel/code-frame/-/code-frame-7.29.7.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "FA8B176FA0B5D1D72B41AD33443F1F4F75933157A45010DFFB51719F40C19C67"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "02EA7B69439FA5B01483644E38937A230E5FF43301973BB4988926FE66A52D014DFD84203B8F300A3D0AC5ADEC10726F3D5160EEC891FAA4489F05DDDAA8502B"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Fcode-frame@7.29.7"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-60db870160902cae",
-      "name": "@babel/compat-data",
-      "versionInfo": "7.29.7",
-      "downloadLocation": "https://registry.npmjs.org/@babel/compat-data/-/compat-data-7.29.7.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "0CF63B5ED704654BDC7574BE035883B2EB3F8872C795A6B8DBB690CB7A3D54B9"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "968713910C8ABF0204801CD5AE7F3AF7779B73DEC5D94F191E36D7C035C9E459F64C2A4DC1394A71A28B91D1E8A7973F89C38513BAADED0F490B986728D6BA1A"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Fcompat-data@7.29.7"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-46a08ec2c1b0660a",
-      "name": "@babel/core",
-      "versionInfo": "7.29.7",
-      "downloadLocation": "https://registry.npmjs.org/@babel/core/-/core-7.29.7.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "46DD458B3D2BC29DAA0E9E01F13B399AB544A8013F27AC6C51B56B831C8A0ED3"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "4601C10AFB636CE2B681748D04D22436811CF6AA1512D6AEDE18FC804A8A42E2F71D90226CA6AB585108DCB7E6E8460A90B6A53A1F1E4AB8FD6FE721F47FD504"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Fcore@7.29.7"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-169b6512996e3524",
-      "name": "@babel/generator",
-      "versionInfo": "7.29.8",
-      "downloadLocation": "https://registry.npmjs.org/@babel/generator/-/generator-7.29.8.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "B5CED4FD7C23A580549182676C43C03A8731B9625E66270F443AB27CD21B502D"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "8196DEA6C761DD60ED8192962FEBD33E1EF52D206B9BF638FD00D905509C61F99E4C412EA0E630952CBE1B54AD7C983EFD9CB9E74BBFDD30136E6EEA0DB6CCB6"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Fgenerator@7.29.8"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-9a58c5bae0546a5d",
-      "name": "@babel/helper-compilation-targets",
-      "versionInfo": "7.29.7",
-      "downloadLocation": "https://registry.npmjs.org/@babel/helper-compilation-targets/-/helper-compilation-targets-7.29.7.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "5B5446F3D32B10BA38CB308AF5F65E76AFCDDAACD7B817E71055A6DE6AB934E0"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "C1E9BA59A063E0D69561574D84B3CF55A7044BA649F8A0417D2913303DD86716CFDEB9B70E2F39B4953996369436168ECA7B7E023D31AEE858BB3401B7C9FBD6"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Fhelper-compilation-targets@7.29.7"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-db34a35b3be924a7",
-      "name": "@babel/helper-globals",
-      "versionInfo": "7.29.7",
-      "downloadLocation": "https://registry.npmjs.org/@babel/helper-globals/-/helper-globals-7.29.7.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "94FB962C489AAE2C4E5581F1494721083DC76DDDD7C703314DD4D7FF965D2A3F"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "DE7415500B6F90A1FDCDA85F5A0C3DE8973FB853A68C0084D64433F3613696A5A61C1823CDB365B02DB69EE4137DA86659E42D4EAE6743FE0D9DDD80D708F8CC"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Fhelper-globals@7.29.7"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-382f28c3d2c03477",
-      "name": "@babel/helper-module-imports",
-      "versionInfo": "7.29.7",
-      "downloadLocation": "https://registry.npmjs.org/@babel/helper-module-imports/-/helper-module-imports-7.29.7.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "4BDF46CF597B875CE16770F151159CA34F96C20BA3C112DC8D7F6C6D6CCE770C"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "7A31F0AD0418726F719D38AF4A19F62033A5233227377E005EC92FABD42272F0AD133AB5573725BBFB4A17C26AD4283C246D862FAFC49A382C093EE55DEA44DE"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Fhelper-module-imports@7.29.7"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-f2782f850d57c5d9",
-      "name": "@babel/helper-module-transforms",
-      "versionInfo": "7.29.7",
-      "downloadLocation": "https://registry.npmjs.org/@babel/helper-module-transforms/-/helper-module-transforms-7.29.7.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "DBB3B9B10B0A2828F5AF58A6317685B1A150464C6BD54995069C526ABA45E6E4"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "50F5154B25DB3A1EB6ECA8822064128305B319E04A2E4689F4F24476B9E0230312CF12D1E234B8F9FD5FD636FB57305B83C9C52DA628B6F54F1424EA76B99302"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Fhelper-module-transforms@7.29.7"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-04c944deddaf678e",
-      "name": "@babel/helper-string-parser",
-      "versionInfo": "7.29.7",
-      "downloadLocation": "https://registry.npmjs.org/@babel/helper-string-parser/-/helper-string-parser-7.29.7.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "124565ECD300D7187973060BA6B1D1C4F296E55F0489DDFD6AF794F516FED127"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "3DBE628CFAD9F3D1831FCDB6DCBE143FC8BA400A56C6CD3845B3D02537960D5D3F91E476137E8C78A9F2AFA2D899452FA91448F88BFCED2B85D56E84AC837363"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Fhelper-string-parser@7.29.7"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-00b659115b7ee636",
-      "name": "@babel/helper-validator-identifier",
-      "versionInfo": "7.29.7",
-      "downloadLocation": "https://registry.npmjs.org/@babel/helper-validator-identifier/-/helper-validator-identifier-7.29.7.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "7A31904BC45F1BB232D5E5DD797D12296F4A27FB4BF0F6D517827700F997DC1F"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "A9E8711A4463E7987F7DFF0431A27E71887268A947231A980E7EBCDB0403ED1369F54BA3390B07A20DAE4B4AF6BF3AF8A56FAC5DFF7435E79ACA370D697DDF16"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Fhelper-validator-identifier@7.29.7"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-da8328c677507e6d",
-      "name": "@babel/helper-validator-option",
-      "versionInfo": "7.29.7",
-      "downloadLocation": "https://registry.npmjs.org/@babel/helper-validator-option/-/helper-validator-option-7.29.7.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "E32D8FF2CC0455C5210F92F0844D2CB6E1D61B83EE17D7B328FE410F9021E4CD"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "37D644AEB0FEC96E607820ED06A9CEA31991F3EB4D2A21AEC4A943A6E2717ECAA96B674571EC5ACE218013FAA81CB8830EB79534CBA9C46992A0D972BEC03783"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Fhelper-validator-option@7.29.7"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-831345a8ec21c581",
-      "name": "@babel/helpers",
-      "versionInfo": "7.29.7",
-      "downloadLocation": "https://registry.npmjs.org/@babel/helpers/-/helpers-7.29.7.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | Copyright (c) 2014-present, Facebook, Inc. (ONLY ./src/helpers/regenerator* files) | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "87DCD8372E8F2D0225DE852C9F810C23712616CC2681556F8F4292535B7E42C6"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "D64DA500644C7C74DCC2E35870235499A51F7E642FF0A58C7E1DA225451E465C25C07E0574D1BB99F3C8D7434F7CB1C9153844E13CABE26BFB9133593A23EE06"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Fhelpers@7.29.7"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-97c0bc9baaf8e5c7",
-      "name": "@babel/parser",
-      "versionInfo": "7.29.8",
-      "downloadLocation": "https://registry.npmjs.org/@babel/parser/-/parser-7.29.8.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (C) 2012-2014 by various contributors (see AUTHORS) | The above copyright notice and this permission notice shall be included in | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "20F1459B23066BA65D0DEC68EE59FF5E2284C72FE22F98A7153A6CCCEF903C80"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "13C953018341D4A5BE147F95189B993358A8031D84EA8565BD0151ADFE4FF19666B222576000FDBD3155EF2C84511373821D5D16A319B8EEAD53070045BA8508"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Fparser@7.29.8"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-a226ca8d0afdc3c6",
-      "name": "@babel/template",
-      "versionInfo": "7.29.7",
-      "downloadLocation": "https://registry.npmjs.org/@babel/template/-/template-7.29.7.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "5E0EE28D5536E986CF5FF2DA0F096FB84810D9136C2A64C6C78A6B495A0E7764"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "A6EABE19FDF9A08DB815E375D4B92851016ABFDBB035E5A9C57662FC98B7AD1228280CCA9F145A67E1A48F4BCA4BD6428931127E783537D2F23B25EFA3E9BE1A"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Ftemplate@7.29.7"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-312274327df74c3f",
-      "name": "@babel/traverse",
-      "versionInfo": "7.29.8",
-      "downloadLocation": "https://registry.npmjs.org/@babel/traverse/-/traverse-7.29.8.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "CF16861F356FD766361BA4D85D5462B6320E0E59F05CB55C762D8F5DFF83E234"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "239CFB1F76DFFF8D64B6C3552EDA4DD3001ADF7E8792A20743906E3CB1214E4B758D54B266978D288CD38045A69718DD83CD51D0881409C684F8E93736FADF66"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Ftraverse@7.29.8"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-95b409a45bd5db81",
-      "name": "@babel/types",
-      "versionInfo": "7.29.8",
-      "downloadLocation": "https://registry.npmjs.org/@babel/types/-/types-7.29.8.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014-present Sebastian McKenzie and other contributors | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "514A4ED09355FE1417F03E89C5A5F518745E2EB75A4069D25B55A3E7298069DE"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "563D6317770F7F183B3807E823B42754A2E820B966D8917DA67547AD7F2AC7B0073226164FE343000EE30A194D8114B85932DCFDF0F59572E63E2C65BA3FB71A"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40babel%2Ftypes@7.29.8"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "v0.5.0 dependency closure after frontend replacement. OS packages are scanned separately."
     },
     {
       "SPDXID": "SPDXRef-Package-26b7dc550e7b7546",
@@ -1053,99 +557,6 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-145bee95e17934f7",
-      "name": "@jridgewell/gen-mapping",
-      "versionInfo": "0.3.13",
-      "downloadLocation": "https://registry.npmjs.org/@jridgewell/gen-mapping/-/gen-mapping-0.3.13.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright 2024 Justin Ridgewell <justin@ridgewell.name> | The above copyright notice and this permission notice shall be included in | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "BC16F658C1F6D63E0C8738AB881D03F49F1955D8F853CDCB8F7D315CF62F0082"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "DA492DFFB9E227A32010FC45D1B61D43A7AD65A03E7D0BC370B29C921CB5C8840ECDAA0A8C10634A3EB7FDA2D58D8137AA146DE5DBCCFAE5327C283A50A0816C"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40jridgewell%2Fgen-mapping@0.3.13"
-        }
-      ],
-      "supplier": "Person: jridgewell",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-43ae96c027a14eaa",
-      "name": "@jridgewell/remapping",
-      "versionInfo": "2.3.5",
-      "downloadLocation": "https://registry.npmjs.org/@jridgewell/remapping/-/remapping-2.3.5.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright 2024 Justin Ridgewell <justin@ridgewell.name> | The above copyright notice and this permission notice shall be included in | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "70B16782A39AD16672E47C33473559A25BFF9640214DF91CB9DD153005D71A02"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "2C8F6EFFE95A606E03B354C3292256D983EB22571560EC22D9F502EB1078DE5B9E0A383157895F7CE0990AD605887E9334E5FEB50297C7DED3E082876E1C8711"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40jridgewell%2Fremapping@2.3.5"
-        }
-      ],
-      "supplier": "Person: jridgewell",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-3ba312251f16b899",
-      "name": "@jridgewell/resolve-uri",
-      "versionInfo": "3.1.2",
-      "downloadLocation": "https://registry.npmjs.org/@jridgewell/resolve-uri/-/resolve-uri-3.1.2.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright 2019 Justin Ridgewell <jridgewell@google.com> | The above copyright notice and this permission notice shall be included in | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "DB52F9F62558BAAB13353DD39E3200750FC33E6A129A575B46226F493776E230"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "6D12128022233F6D3FB5B5923D63048B9E1054F45913192E0FD9492FE508C542ADC15240F305B54EB6F58CCB354455E8D42053359FF98690BD42F98A59DA292B"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40jridgewell%2Fresolve-uri@3.1.2"
-        }
-      ],
-      "supplier": "Person: jridgewell",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
       "SPDXID": "SPDXRef-Package-7cc6a7e89395742a",
       "name": "@jridgewell/sourcemap-codec",
       "versionInfo": "1.5.5",
@@ -1169,37 +580,6 @@
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
           "referenceLocator": "pkg:npm/%40jridgewell%2Fsourcemap-codec@1.5.5"
-        }
-      ],
-      "supplier": "Person: jridgewell",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-91e8c3876d1a4a45",
-      "name": "@jridgewell/trace-mapping",
-      "versionInfo": "0.3.31",
-      "downloadLocation": "https://registry.npmjs.org/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright 2024 Justin Ridgewell <justin@ridgewell.name> | The above copyright notice and this permission notice shall be included in | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "C64C71A119630D5ABE8246889EDF334B2CA9DDAD094E20D623332956B1453CCF"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "CF3351F9275048327373C8E869E3FC410A0242BF0DB98C76748232B65D507811191C9F6E5BA85E6ECAD881BCFC849C1441AA374D608CB667D5F0DBB5B7038B03"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40jridgewell%2Ftrace-mapping@0.3.31"
         }
       ],
       "supplier": "Person: jridgewell",
@@ -2163,68 +1543,6 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-57ae4ebd6f409a46",
-      "name": "@types/react-dom",
-      "versionInfo": "19.2.4",
-      "downloadLocation": "https://registry.npmjs.org/@types/react-dom/-/react-dom-19.2.4.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) Microsoft Corporation. | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "5F51889BC70428E43EE5A5E098E22C1673F1721D0251540E0A3CD3D6CCEB37A5"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "06C73E407829F8FFC5D365C3CCD098F639D934252E2E48B7E8A4FB54AAD35D72DD1DFFAF1CC3599D6D6B56EE43356FEB08AF9FC9ADC3013C926CB338CA1B4A53"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40types%2Freact-dom@19.2.4"
-        }
-      ],
-      "supplier": "Person: types",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=development; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-231c43c28c7240ad",
-      "name": "@types/react",
-      "versionInfo": "19.2.18",
-      "downloadLocation": "https://registry.npmjs.org/@types/react/-/react-19.2.18.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) Microsoft Corporation. | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "BD54A5FE6A083D480A3AB03972CBBA7742DA4DA5035BB5BD5B53B374CC97C374"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "027CDB04446CACB2AD9365D27D36D844B8D03DDCB5D7A4ADCB8ABE4FE069DC80B897A8CD06FADE54F0079A9ABDAA15D033B09764F8CB56618CC3DB32FA1C50DF"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40types%2Freact@19.2.18"
-        }
-      ],
-      "supplier": "Person: types",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=development; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
       "SPDXID": "SPDXRef-Package-add282409d752e8d",
       "name": "@types/send",
       "versionInfo": "1.2.1",
@@ -2626,37 +1944,6 @@
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-3ef253900d11cffa",
-      "name": "@vitejs/plugin-react",
-      "versionInfo": "6.0.5",
-      "downloadLocation": "https://registry.npmjs.org/@vitejs/plugin-react/-/plugin-react-6.0.5.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2019-present, Yuxi (Evan) You and Vite contributors | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "96D735925FD2271314E8EF52B4FD024B634E29D3B73F919A7A12B6F589FD9353"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "04E5739DEFCD2F5EB6B0C7517AC076E6652FFAF58C17936802335FD3D4DE1A513B669B33656483DF08A7C9C89C2C9C3BDB2795B280A7FF690E844B82BC44A130"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40vitejs%2Fplugin-react@6.0.5"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=development; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
       "SPDXID": "SPDXRef-Package-ca4d522860df0100",
@@ -3170,37 +2457,6 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-92d4798544083393",
-      "name": "baseline-browser-mapping",
-      "versionInfo": "2.11.12",
-      "downloadLocation": "https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.11.12.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "Apache-2.0",
-      "copyrightText": "\"Licensor\" shall mean the copyright owner or entity authorized by | the copyright owner that is granting the License. | copyright notice that is included in or attached to the work | submitted to Licensor for inclusion in the Work by the copyright owner | the copyright owner. For the purposes of this definition, \"submitted\" | designated in writing by the copyright owner as \"Not a Contribution.\" | 2. Grant of Copyright License. Subject to the terms and conditions of | copyright license to reproduce, prepare Derivative Works of, | that You distribute, all copyright, patent, trademark, and | You may add Your own copyright statement to Your modifications and | same \"printed page\" as the copyright notice for easier | Copyright [yyyy] [name of copyright owner]",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "098485F264AED6C9FE41FB004436D5C55C9E12450ADA929837740614587DDFB2"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "AFB5A75489AF542785A5FD833977F2E3568F5B378D8371FF0365F874A9B2D502F4312CB293F7BBCFC8A127737A367D8FB1D864565AA711F9D41386B4E4FD9A4C"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/baseline-browser-mapping@2.11.12"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
       "SPDXID": "SPDXRef-Package-7a0002a2b6f3e70a",
       "name": "body-parser",
       "versionInfo": "2.4.0",
@@ -3261,37 +2517,6 @@
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "Exact security repair for v0.4.0; registry and downloaded archive integrity verified; no install lifecycle."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-9cffd247ee4e3e7e",
-      "name": "browserslist",
-      "versionInfo": "4.28.7",
-      "downloadLocation": "https://registry.npmjs.org/browserslist/-/browserslist-4.28.7.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright 2014 Andrey Sitnik <andrey@sitnik.es> and other contributors | The above copyright notice and this permission notice shall be included in all | COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "66DAF576E768FD818214B29A82EB6F8F81E2737C612C320E9AFA328871AB0997"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "271575DE136B171AA339CF1A9516EAF5D2B530CEFD3445D8A666B6076278C00B69592E7320420AA963C60A5ECDE28ED473B07B8ADCA587B4AE0EE8C04D1CB24F"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/browserslist@4.28.7"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
       "SPDXID": "SPDXRef-Package-94aafce41be14b3f",
@@ -3416,37 +2641,6 @@
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-0b2baab066f37b7c",
-      "name": "caniuse-lite",
-      "versionInfo": "1.0.30001809",
-      "downloadLocation": "https://registry.npmjs.org/caniuse-lite/-/caniuse-lite-1.0.30001809.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "CC-BY-4.0",
-      "copyrightText": "original works of authorship and other material subject to copyright | copyright and certain other rights. Our licenses are | limitation to copyright. More considerations for licensors: | copyright--then that use is not regulated by the license. Our | licenses grant only permissions under copyright and certain | reasons, including because others have copyright or other | a. Adapted Material means material subject to Copyright and Similar | permission under the Copyright and Similar Rights held by the | b. Adapter's License means the license You apply to Your Copyright | c. Copyright and Similar Rights means copyright and/or similar rights | closely related to copyright including, without limitation, | specified in Section 2(b)(1)-(2) are not Copyright and Similar | fulfilling obligations under Article 11 of the WIPO Copyright | any other exception or limitation to Copyright and Similar Rights | all Copyright and Similar Rights that apply to Your use of the | j. Sui Generis Database Rights means rights other than copyright | ii. a copyright notice; | Rights include other Copyright and Similar Rights. | a. This Public License applies for the term of the Copyright and",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "31AA93F13FFD7FEF90B767B1B33F92DC251B4578F17764A44A72BA759528364D"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "C71595CB093A6BA02B964FA1CA67B27329FF560A847CB0F1BA9BE11FFC62639489FF5F249A2F68E8C88EDF6D03094CF2A4E4472EDBE1D08E22D38B5484234735"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/caniuse-lite@1.0.30001809"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=CONDITIONAL_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
       "SPDXID": "SPDXRef-Package-558bd039a17f505e",
@@ -3821,37 +3015,6 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-d75166202534f28b",
-      "name": "csstype",
-      "versionInfo": "3.2.3",
-      "downloadLocation": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2017-2018 Fredrik Nicol | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "F3501F8EE1C73F7568FECB22C11231162C0467E59262461DA5579519307427A3"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "CF51C629C632DB103C00641FC2B9F43C0CBE3C1ED7FC64A3DD45495BDA8ACA7E37C566BE825E675E6538AAA2CC4735952C50BC2AEB145FC4FFD240A2398A4021"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/csstype@3.2.3"
-        }
-      ],
-      "supplier": "Person: faddee",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
       "SPDXID": "SPDXRef-Package-6390bf853aed627e",
       "name": "debug",
       "versionInfo": "4.4.3",
@@ -4162,37 +3325,6 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-1d7c2e4221141baa",
-      "name": "electron-to-chromium",
-      "versionInfo": "1.5.402",
-      "downloadLocation": "https://registry.npmjs.org/electron-to-chromium/-/electron-to-chromium-1.5.402.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "ISC",
-      "copyrightText": "Copyright 2018 Kilian Valkhof | Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "49B6B90C18D39090CC70364DAEC1B1992B2A249A22B4A7D569317C71BA742F75"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "FE83A931A3D3E9883EEBFD57421C883E5CE08FB61EF737FE9CD336521E8E704D86DA8369B566B315AFAA0763DDAAA6EC73D2A7203CE0027B6860DD1D6F0397C0"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/electron-to-chromium@1.5.402"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
       "SPDXID": "SPDXRef-Package-177948a319ae0aee",
       "name": "encodeurl",
       "versionInfo": "2.0.0",
@@ -4410,37 +3542,6 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-b3de18c50ccfaa74",
-      "name": "escalade",
-      "versionInfo": "3.2.0",
-      "downloadLocation": "https://registry.npmjs.org/escalade/-/escalade-3.2.0.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) Luke Edwards <luke.edwards05@gmail.com> (lukeed.com) | The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. | THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "BA2755AFC0E6C6705326711FD218EBE107A527ECCBD6485155FDE98ED000BEE7"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "5948F6AA5C5A42D3B883A3EAE5CDBD193716183C9DF22B4BF334E58A98040B3DC97AC02288E2A8B5DF0953AA2D0773C00A01BAC64254C9585BA0C4BE6E37BF8C"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/escalade@3.2.0"
-        }
-      ],
-      "supplier": "Person: lukeed",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
       "SPDXID": "SPDXRef-Package-5463e0a52abb42be",
       "name": "escape-html",
       "versionInfo": "1.0.3",
@@ -4501,68 +3602,6 @@
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-3ad7eac62a0faa4c",
-      "name": "eslint-plugin-react-hooks",
-      "versionInfo": "7.1.1",
-      "downloadLocation": "https://registry.npmjs.org/eslint-plugin-react-hooks/-/eslint-plugin-react-hooks-7.1.1.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) Meta Platforms, Inc. and affiliates. | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "FB92ECD0F8F216877C48283971879BC29041F1D0A39554BA5F0FE0B2FD85DF53"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "7F623B1B0E896EF09EC732089EE49B6697DD438E03EE2A9D597D3514A2EFACF82AC6813BA0C8FC72539FB68F14EAF622CF8C9DE682AEDFDAD149539ED7346ED2"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/eslint-plugin-react-hooks@7.1.1"
-        }
-      ],
-      "supplier": "Person: react-bot",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=development; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-9f23972b1c8c9f0e",
-      "name": "eslint-plugin-react-refresh",
-      "versionInfo": "0.5.3",
-      "downloadLocation": "https://registry.npmjs.org/eslint-plugin-react-refresh/-/eslint-plugin-react-refresh-0.5.3.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) Arnaud Barré (https://github.com/ArnaudBarre) | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "92B5C0F5C6BDCB74C9D139B2C8FDF40D366EDEDC0B774909DB2A2FC88C03B9D6"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "E443262C257DF0F8B8A3F7FFDC33FFBFFB4DA8B1CC21CF48F0B28294D0D6859F494E1A3CF7F910722B425D004C1BBB007D544AD087B74F61033B3A7561762254"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/eslint-plugin-react-refresh@0.5.3"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=development; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
       "SPDXID": "SPDXRef-Package-1242bb0a22570534",
@@ -5560,37 +4599,6 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-c49cbe8d63515db5",
-      "name": "gensync",
-      "versionInfo": "1.0.0-beta.2",
-      "downloadLocation": "https://registry.npmjs.org/gensync/-/gensync-1.0.0-beta.2.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright 2018 Logan Smyth <loganfsmyth@gmail.com> | The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. | THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "DF9F92EF26A35D4F92CB8A73415DFEA8DADAF294A03E60E4D176DF82F38D17C9"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "DE137B35AB2462F3032D0639E609D6DCD43E99EB0401EA53AA583E5446E3EF3CEA10C055361CDC19861EA85A3F4E5633E9E42215CA751DCB0264EFA71A04BCCE"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/gensync@1.0.0-beta.2"
-        }
-      ],
-      "supplier": "Person: loganfsmyth",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
       "SPDXID": "SPDXRef-Package-ed58a6c65bdcf204",
       "name": "get-intrinsic",
       "versionInfo": "1.3.0",
@@ -5803,68 +4811,6 @@
         }
       ],
       "supplier": "Person: ljharb",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-0f43c9c4c5c611e4",
-      "name": "hermes-estree",
-      "versionInfo": "0.25.1",
-      "downloadLocation": "https://registry.npmjs.org/hermes-estree/-/hermes-estree-0.25.1.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) Meta Platforms, Inc. and affiliates. | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "49B0A9DB41F743B59375E355AA9489A97C51AC9A655107DE83140FC03BE2F7CC"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "D3052809C2E9FB912FE690D6D8EAE21C2D8C2426F02F0B91C7E800A8C4CE9062892620422E3B6BBF2E0F5941A7E8C21579F79C469CE8399FD457A88674EAFE0B"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/hermes-estree@0.25.1"
-        }
-      ],
-      "supplier": "Person: hermes-team",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-7829711fb3b7a322",
-      "name": "hermes-parser",
-      "versionInfo": "0.25.1",
-      "downloadLocation": "https://registry.npmjs.org/hermes-parser/-/hermes-parser-0.25.1.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) Meta Platforms, Inc. and affiliates. | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "7409882D0F91DD29136253684981098674F39E8FCEBDE12F2559035518A43CAA"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "EA9123AAE1F7AEA688E9C6005D83DCCFD312E2B63A4789E0460AE07C3B21469B54648737970D0C0882481838FDFBE99FC923AE3D31C1E27AD25BDF410AF38F20"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/hermes-parser@0.25.1"
-        }
-      ],
-      "supplier": "Person: hermes-team",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
@@ -6383,68 +5329,6 @@
       "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
     },
     {
-      "SPDXID": "SPDXRef-Package-f4371f095c6f087c",
-      "name": "js-tokens",
-      "versionInfo": "4.0.0",
-      "downloadLocation": "https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2014, 2015, 2016, 2017, 2018 Simon Lydell | The above copyright notice and this permission notice shall be included in | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "D884C7A2D8ADB5568C1272D92B4F9C62707F4226CF9E7B22E7B957C7361E3C53"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "45D2547E5704DDC5332A232A420B02BB4E853EEF5474824ED1B7986CF84737893A6A9809B627DCA02B53F5B7313A9601B690F690233A49BCE0E026AEB16FCF29"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/js-tokens@4.0.0"
-        }
-      ],
-      "supplier": "Person: lydell",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-ea0becb009dc00e5",
-      "name": "jsesc",
-      "versionInfo": "3.1.0",
-      "downloadLocation": "https://registry.npmjs.org/jsesc/-/jsesc-3.1.0.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright Mathias Bynens <https://mathiasbynens.be/> | The above copyright notice and this permission notice shall be | NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "0C712225CCCA9A70BF83F2AC2F52A268C858C7DF3B3DF196F1623239D80D3C09"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "FEC33774ED853B35E3290849BA8D10D7BDF07F628EA3CB7823CBC7CBA945F69A14A7B6CA4F4FCD1C4F1F3D7DB73F07E19F291FAA70B6C51C4E9D5C395EE18868"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/jsesc@3.1.0"
-        }
-      ],
-      "supplier": "Person: mathias",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
       "SPDXID": "SPDXRef-Package-adbc921fc34de3b1",
       "name": "json-buffer",
       "versionInfo": "3.0.1",
@@ -6583,37 +5467,6 @@
         }
       ],
       "supplier": "Person: samn",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-16281c6ea25e0cec",
-      "name": "json5",
-      "versionInfo": "2.2.3",
-      "downloadLocation": "https://registry.npmjs.org/json5/-/json5-2.2.3.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2012-2018 Aseem Kishore, and [others]. | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "08AFB33DB600D11FC89B98FAC4054F19D5D3E0FE527063116150E1ECC2D2377B"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "5E63967BB7B21D81F5E1C2DD54FA3283E18E1F7AD85FEF8AA73AF2949C125BDF2DDCD93E53C5CE97C15628E830B7375BF255C67FACD8C035337873167F16ACCA"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/json5@2.2.3"
-        }
-      ],
-      "supplier": "Person: jordanbtucker",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
@@ -6831,37 +5684,6 @@
         }
       ],
       "supplier": "Person: sindresorhus",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-fe7f0a2f2cf4c92f",
-      "name": "lru-cache",
-      "versionInfo": "5.1.1",
-      "downloadLocation": "https://registry.npmjs.org/lru-cache/-/lru-cache-5.1.1.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "ISC",
-      "copyrightText": "Copyright (c) Isaac Z. Schlueter and Contributors | copyright notice and this permission notice appear in all copies.",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "B11E78819544A6606E3317647A5593C102EA38D3C5AFAE62CD63F9C2C369485A"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "2A9340450037230BFE8D3034BAD51555BAE1F8996BAF516FD1EE7A186CC014E5CDEDD93F16F89A0D6F0B1E62B9D8395C1F858FDA7EA023CBCDD5A7AC045828F7"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/lru-cache@5.1.1"
-        }
-      ],
-      "supplier": "Person: isaacs",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
@@ -8071,37 +6893,6 @@
         }
       ],
       "supplier": "Person: wesleytodd",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-a14ab6b7dba8e872",
-      "name": "node-releases",
-      "versionInfo": "2.0.53",
-      "downloadLocation": "https://registry.npmjs.org/node-releases/-/node-releases-2.0.53.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) 2017 Sergey Rubanov (https://github.com/chicoxyzzy) | The above copyright notice and this permission notice shall be included in | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "725122FF2B5634D447DFAD1635312F16B737BDF6C1726165B4CE0336A20ED89A"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "0FD50E9981B7507D55F84356E7AB79417070270D58118D7CAEE55EBACF3D470F92C888233E408EF386D1CCEDEE348628B096CDC2269B5959F8F28DEE24B8F115"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/node-releases@2.0.53"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
@@ -9430,68 +8221,6 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-774924c5059b7f08",
-      "name": "react-dom",
-      "versionInfo": "19.2.8",
-      "downloadLocation": "https://registry.npmjs.org/react-dom/-/react-dom-19.2.8.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) Meta Platforms, Inc. and affiliates. | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "1FFC99AF594271B41835004A9B6789A832EACC5D153169F3BFBD1F76F9547DBB"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "AD5A6B8A67C6046DC347E4EAD08406D834F93F12AD8755881839A3E723E6973AF86017BBBB213E0EEE2856A4C35D948718619746D4C910649278FC9008C06095"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/react-dom@19.2.8"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "LIBRARY",
-      "comment": "Role=runtime; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-f0ed5178d6d7db28",
-      "name": "react",
-      "versionInfo": "19.2.8",
-      "downloadLocation": "https://registry.npmjs.org/react/-/react-19.2.8.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) Meta Platforms, Inc. and affiliates. | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "94C6B9E0785854D2E5D9628CEC05C33ED017B6A9002AF5E8778D4134E9ADA611"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "3D66980352FFABDBB6BBBC58422F98DCBDD87E789EED7C8B79A248095D4C183E8BA6BB01C5C02A1A3632AF4798DE9F9076C03EC7F22B92DE1089FF03EB7F926F"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/react@19.2.8"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "LIBRARY",
-      "comment": "Role=runtime; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
       "SPDXID": "SPDXRef-Package-0b12b1e085f0c45d",
       "name": "reflect-metadata",
       "versionInfo": "0.2.2",
@@ -9667,68 +8396,6 @@
         }
       ],
       "supplier": "Person: chalker",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-e21311c62741b359",
-      "name": "scheduler",
-      "versionInfo": "0.27.0",
-      "downloadLocation": "https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright (c) Meta Platforms, Inc. and affiliates. | The above copyright notice and this permission notice shall be included in all | AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "AB26CE35CE4032F04B78CFC5BBB4CFE13358E9FE7A5433A8AA6315C3DEBC5095"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "78DBFE5AB55B2AED5FDEF6D8253FF1B62179B320391CF20CB5FF48818FE72A0D2C5AACC0504BEA63FC66ECE71973FA9A7CBC7F88EF4580E99E480A78BF9B62FD"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/scheduler@0.27.0"
-        }
-      ],
-      "supplier": "Person: react-bot",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-8b8f657069cf84b7",
-      "name": "semver",
-      "versionInfo": "6.3.1",
-      "downloadLocation": "https://registry.npmjs.org/semver/-/semver-6.3.1.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "ISC",
-      "copyrightText": "Copyright (c) Isaac Z. Schlueter and Contributors | copyright notice and this permission notice appear in all copies.",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "3C9B042A38E099CBD00A9BD792042AEFB62A70B3F0F1BA1A3CBDDF07E5EB1230"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "051ED5BC30951CEFAADB10445AC9314BA0C9135A919DBEC3C7352BA206FBD425A849F89C07162C88019DF8A9749A6ABF329AC6F7202B464CAB4314CEE978CCCC"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/semver@6.3.1"
-        }
-      ],
-      "supplier": "Person: lukekarrys",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
@@ -11001,37 +9668,6 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-19480e2d21fd1902",
-      "name": "update-browserslist-db",
-      "versionInfo": "1.3.0",
-      "downloadLocation": "https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.3.0.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright 2022 Andrey Sitnik <andrey@sitnik.es> and other contributors | The above copyright notice and this permission notice shall be included in all | COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "245E63DBED99687ABB42B6E21D54D48532E256B7FF90BD95E43760D32B1B8798"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "C7F33AAB7C3861BA7DD4235A4B84BAF549E58AA477073469393E8B59B92C8ED8744BFFA385F68F26C5A3B7F4DEC294FC8FD78B2288D47F98EBDBD59EC6D1EBA0"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/update-browserslist-db@1.3.0"
-        }
-      ],
-      "supplier": "Person: GitHub Actions",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
       "SPDXID": "SPDXRef-Package-9cc71211156a831c",
       "name": "uri-js",
       "versionInfo": "4.4.1",
@@ -11338,37 +9974,6 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-63b110ffd1871214",
-      "name": "yallist",
-      "versionInfo": "3.1.1",
-      "downloadLocation": "https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "ISC",
-      "copyrightText": "Copyright (c) Isaac Z. Schlueter and Contributors | copyright notice and this permission notice appear in all copies.",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "50F14AE6CFE8360CB2259BA3E93305E069036F13251D69D3CBEE9E1D4775CA04"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "6B850641A58F1F9F663975189C01B67B09DC412E22E05E374EFDC9A0033EB365430264BD36C2BC1A90CC2EB0873E4B054FB8772BA4CEA14367DA96FB4685F1E2"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/yallist@3.1.1"
-        }
-      ],
-      "supplier": "Person: isaacs",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
-    },
-    {
       "SPDXID": "SPDXRef-Package-1acee86624de4982",
       "name": "yocto-queue",
       "versionInfo": "0.1.0",
@@ -11423,37 +10028,6 @@
       ],
       "primaryPackagePurpose": "LIBRARY",
       "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
-    },
-    {
-      "SPDXID": "SPDXRef-Package-c8082691c7c2811c",
-      "name": "zod-validation-error",
-      "versionInfo": "4.0.2",
-      "downloadLocation": "https://registry.npmjs.org/zod-validation-error/-/zod-validation-error-4.0.2.tgz",
-      "filesAnalyzed": false,
-      "licenseConcluded": "NOASSERTION",
-      "licenseDeclared": "MIT",
-      "copyrightText": "Copyright 2022 Causaly, Inc <front-end@causaly.com> | The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. | THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
-      "checksums": [
-        {
-          "algorithm": "SHA256",
-          "checksumValue": "CA7BAA23B9AF99D900AF973A75A45F11C8762E1134327D74452A9B7790129EB2"
-        },
-        {
-          "algorithm": "SHA512",
-          "checksumValue": "43AFE764B7BA8F1B94F34A9BFF8B89E2DE6FD95119E389734233C385824DCED450E30C9673A545DC3DCA6FF7C0B8F7AD6509E14B78676A309FF42B167AC8212D"
-        }
-      ],
-      "externalRefs": [
-        {
-          "referenceCategory": "PACKAGE-MANAGER",
-          "referenceType": "purl",
-          "referenceLocator": "pkg:npm/zod-validation-error@4.0.2"
-        }
-      ],
-      "supplier": "Person: jmike",
-      "originator": "NOASSERTION",
-      "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
       "SPDXID": "SPDXRef-Package-924ff20fc2135421",
@@ -11609,16 +10183,6 @@
       "relatedSpdxElement": "SPDXRef-Package-fa74be298a38f8f9"
     },
     {
-      "spdxElementId": "SPDXRef-Package-145bee95e17934f7",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-7cc6a7e89395742a"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-145bee95e17934f7",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-91e8c3876d1a4a45"
-    },
-    {
       "spdxElementId": "SPDXRef-Package-14b712f555f9c18b",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-0b12b1e085f0c45d"
@@ -11652,46 +10216,6 @@
       "spdxElementId": "SPDXRef-Package-14b712f555f9c18b",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-defade41b43da025"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-169b6512996e3524",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-145bee95e17934f7"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-169b6512996e3524",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-91e8c3876d1a4a45"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-169b6512996e3524",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-95b409a45bd5db81"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-169b6512996e3524",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-97c0bc9baaf8e5c7"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-169b6512996e3524",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-ea0becb009dc00e5"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-19480e2d21fd1902",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-7c5f372425355293"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-19480e2d21fd1902",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-9cffd247ee4e3e7e"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-19480e2d21fd1902",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-b3de18c50ccfaa74"
     },
     {
       "spdxElementId": "SPDXRef-Package-19afb85871ec6753",
@@ -11772,11 +10296,6 @@
       "spdxElementId": "SPDXRef-Package-21fa83bc6eb30084",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-6e887f47565bc6bc"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-231c43c28c7240ad",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-d75166202534f28b"
     },
     {
       "spdxElementId": "SPDXRef-Package-23d4e7a3725d7eaf",
@@ -12034,21 +10553,6 @@
       "relatedSpdxElement": "SPDXRef-Package-f1f46f476947407d"
     },
     {
-      "spdxElementId": "SPDXRef-Package-2c8152c2f849b2d0",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-00b659115b7ee636"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-2c8152c2f849b2d0",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-7c5f372425355293"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-2c8152c2f849b2d0",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-f4371f095c6f087c"
-    },
-    {
       "spdxElementId": "SPDXRef-Package-2e2f4a17d827779e",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-645b141d3027520f"
@@ -12062,41 +10566,6 @@
       "spdxElementId": "SPDXRef-Package-3081140538322aaf",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-9c728cf87aba8556"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-312274327df74c3f",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-169b6512996e3524"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-312274327df74c3f",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-2c8152c2f849b2d0"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-312274327df74c3f",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-6390bf853aed627e"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-312274327df74c3f",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-95b409a45bd5db81"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-312274327df74c3f",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-97c0bc9baaf8e5c7"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-312274327df74c3f",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-a226ca8d0afdc3c6"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-312274327df74c3f",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-db34a35b3be924a7"
     },
     {
       "spdxElementId": "SPDXRef-Package-33cdb6733f581f32",
@@ -12219,16 +10688,6 @@
       "relatedSpdxElement": "SPDXRef-Package-ff66c592f0719517"
     },
     {
-      "spdxElementId": "SPDXRef-Package-382f28c3d2c03477",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-312274327df74c3f"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-382f28c3d2c03477",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-95b409a45bd5db81"
-    },
-    {
       "spdxElementId": "SPDXRef-Package-390fd69f2035b583",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-4609144d3832c8d2"
@@ -12267,36 +10726,6 @@
       "spdxElementId": "SPDXRef-Package-39bc23881427250b",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-ea581d0a380b9b1b"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-3ad7eac62a0faa4c",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-26bcf01493b221be"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-3ad7eac62a0faa4c",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-46a08ec2c1b0660a"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-3ad7eac62a0faa4c",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-7829711fb3b7a322"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-3ad7eac62a0faa4c",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-924ff20fc2135421"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-3ad7eac62a0faa4c",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-97c0bc9baaf8e5c7"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-3ad7eac62a0faa4c",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-c8082691c7c2811c"
     },
     {
       "spdxElementId": "SPDXRef-Package-3b191f266597788f",
@@ -12369,16 +10798,6 @@
       "relatedSpdxElement": "SPDXRef-Package-e500ed061b70ae87"
     },
     {
-      "spdxElementId": "SPDXRef-Package-3ef253900d11cffa",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-3f649c36a41c36c4"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-3ef253900d11cffa",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-8e3254f5f0b57f28"
-    },
-    {
       "spdxElementId": "SPDXRef-Package-4009fd307a1c4ee1",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-924ff20fc2135421"
@@ -12399,16 +10818,6 @@
       "relatedSpdxElement": "SPDXRef-Package-c78ef7160e212e79"
     },
     {
-      "spdxElementId": "SPDXRef-Package-43ae96c027a14eaa",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-145bee95e17934f7"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-43ae96c027a14eaa",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-91e8c3876d1a4a45"
-    },
-    {
       "spdxElementId": "SPDXRef-Package-4609144d3832c8d2",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-645b141d3027520f"
@@ -12417,81 +10826,6 @@
       "spdxElementId": "SPDXRef-Package-4609144d3832c8d2",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-83de3b394293d96f"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-16281c6ea25e0cec"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-169b6512996e3524"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-2c8152c2f849b2d0"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-312274327df74c3f"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-43ae96c027a14eaa"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-46e32cfc12079a57"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-6390bf853aed627e"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-831345a8ec21c581"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-8b8f657069cf84b7"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-95b409a45bd5db81"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-97c0bc9baaf8e5c7"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-9a58c5bae0546a5d"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-a226ca8d0afdc3c6"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-c49cbe8d63515db5"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-46a08ec2c1b0660a",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-f2782f850d57c5d9"
     },
     {
       "spdxElementId": "SPDXRef-Package-4eb560c0557e5532",
@@ -12562,11 +10896,6 @@
       "spdxElementId": "SPDXRef-Package-5604666a6cfc959e",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-9681d29ff1b83571"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-57ae4ebd6f409a46",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-231c43c28c7240ad"
     },
     {
       "spdxElementId": "SPDXRef-Package-5a71f2b741944bf1",
@@ -12984,21 +11313,6 @@
       "relatedSpdxElement": "SPDXRef-Package-2fb14d3728e4ebf3"
     },
     {
-      "spdxElementId": "SPDXRef-Package-774924c5059b7f08",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-e21311c62741b359"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-774924c5059b7f08",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-f0ed5178d6d7db28"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-7829711fb3b7a322",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-0f43c9c4c5c611e4"
-    },
-    {
       "spdxElementId": "SPDXRef-Package-7a0002a2b6f3e70a",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-1fd87d3dab5d902c"
@@ -13132,16 +11446,6 @@
       "spdxElementId": "SPDXRef-Package-81c7dfd40d2f80b9",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-d73964c6d2eb87ae"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-831345a8ec21c581",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-95b409a45bd5db81"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-831345a8ec21c581",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-a226ca8d0afdc3c6"
     },
     {
       "spdxElementId": "SPDXRef-Package-831b3320b7064460",
@@ -13369,59 +11673,9 @@
       "relatedSpdxElement": "SPDXRef-Package-ed58a6c65bdcf204"
     },
     {
-      "spdxElementId": "SPDXRef-Package-91e8c3876d1a4a45",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-3ba312251f16b899"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-91e8c3876d1a4a45",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-7cc6a7e89395742a"
-    },
-    {
       "spdxElementId": "SPDXRef-Package-94aafce41be14b3f",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-5c3ef43d098411e4"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-95b409a45bd5db81",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-00b659115b7ee636"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-95b409a45bd5db81",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-04c944deddaf678e"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-97c0bc9baaf8e5c7",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-95b409a45bd5db81"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-9a58c5bae0546a5d",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-60db870160902cae"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-9a58c5bae0546a5d",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-8b8f657069cf84b7"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-9a58c5bae0546a5d",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-9cffd247ee4e3e7e"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-9a58c5bae0546a5d",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-da8328c677507e6d"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-9a58c5bae0546a5d",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-fe7f0a2f2cf4c92f"
     },
     {
       "spdxElementId": "SPDXRef-Package-9c728cf87aba8556",
@@ -13449,31 +11703,6 @@
       "relatedSpdxElement": "SPDXRef-Package-3fe331f5536b7243"
     },
     {
-      "spdxElementId": "SPDXRef-Package-9cffd247ee4e3e7e",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-0b2baab066f37b7c"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-9cffd247ee4e3e7e",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-19480e2d21fd1902"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-9cffd247ee4e3e7e",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-1d7c2e4221141baa"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-9cffd247ee4e3e7e",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-92d4798544083393"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-9cffd247ee4e3e7e",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-a14ab6b7dba8e872"
-    },
-    {
       "spdxElementId": "SPDXRef-Package-9d9dd0c0dbaa9921",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-645b141d3027520f"
@@ -13497,26 +11726,6 @@
       "spdxElementId": "SPDXRef-Package-9d9dd0c0dbaa9921",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-fbcd0551973fc2c6"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-9f23972b1c8c9f0e",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-26bcf01493b221be"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-a226ca8d0afdc3c6",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-2c8152c2f849b2d0"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-a226ca8d0afdc3c6",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-95b409a45bd5db81"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-a226ca8d0afdc3c6",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-97c0bc9baaf8e5c7"
     },
     {
       "spdxElementId": "SPDXRef-Package-a2e515768834b0a4",
@@ -13937,11 +12146,6 @@
       "spdxElementId": "SPDXRef-Package-c7ba7fa49676d626",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-49c008fbe904ad51"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-c8082691c7c2811c",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-924ff20fc2135421"
     },
     {
       "spdxElementId": "SPDXRef-Package-c90baa3b36b65fd3",
@@ -14534,26 +12738,6 @@
       "relatedSpdxElement": "SPDXRef-Package-f6a7778b783cd75c"
     },
     {
-      "spdxElementId": "SPDXRef-Package-f2782f850d57c5d9",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-00b659115b7ee636"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-f2782f850d57c5d9",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-312274327df74c3f"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-f2782f850d57c5d9",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-382f28c3d2c03477"
-    },
-    {
-      "spdxElementId": "SPDXRef-Package-f2782f850d57c5d9",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-46a08ec2c1b0660a"
-    },
-    {
       "spdxElementId": "SPDXRef-Package-f81853d706008d16",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-2c0bb5dc6b12bfe2"
@@ -14624,11 +12808,6 @@
       "relatedSpdxElement": "SPDXRef-Package-e500ed061b70ae87"
     },
     {
-      "spdxElementId": "SPDXRef-Package-fe7f0a2f2cf4c92f",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-63b110ffd1871214"
-    },
-    {
       "spdxElementId": "SPDXRef-Package-fee6bcdc2771c9ac",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-1a2f07d7379e3c7a"
@@ -14651,22 +12830,7 @@
     {
       "spdxElementId": "SPDXRef-RootPackage",
       "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-231c43c28c7240ad"
-    },
-    {
-      "spdxElementId": "SPDXRef-RootPackage",
-      "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-39bc23881427250b"
-    },
-    {
-      "spdxElementId": "SPDXRef-RootPackage",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-3ef253900d11cffa"
-    },
-    {
-      "spdxElementId": "SPDXRef-RootPackage",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-57ae4ebd6f409a46"
     },
     {
       "spdxElementId": "SPDXRef-RootPackage",
@@ -14682,11 +12846,6 @@
       "spdxElementId": "SPDXRef-RootPackage",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-7683462a532876db"
-    },
-    {
-      "spdxElementId": "SPDXRef-RootPackage",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-774924c5059b7f08"
     },
     {
       "spdxElementId": "SPDXRef-RootPackage",
@@ -14752,11 +12911,6 @@
       "spdxElementId": "SPDXRef-RootPackage",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-ee88de6c3106a9e2"
-    },
-    {
-      "spdxElementId": "SPDXRef-RootPackage",
-      "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-f0ed5178d6d7db28"
     }
   ]
 }

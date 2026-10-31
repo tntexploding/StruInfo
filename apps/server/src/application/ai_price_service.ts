@@ -45,10 +45,26 @@ export class AiPriceService {
       throw new AiOperationsPausedError();
     if (status.blocked) throw new AiPriceWindowClosedError();
   }
+  public async assertBackgroundOperationsAllowed() {
+    const {policy} = await this.status();
+    if (policy.operationsAllowed === false || policy.backgroundPaused)
+      throw new AiOperationsPausedError();
+  }
+  public async assertBackgroundAllowed() {
+    await this.assertBackgroundOperationsAllowed();
+    await this.assertAllowed();
+  }
+  public async assertAssistantAllowed() {
+    const status = await this.status();
+    if (status.policy.operationsAllowed === false)
+      throw new AiOperationsPausedError();
+    if (status.blocked && status.policy.assistantPriceRestricted !== false)
+      throw new AiPriceWindowClosedError();
+  }
   public async save(
     authority: ExecutionAuthority,
     input: unknown,
-    operationsOnly: boolean | 'execution' = false,
+    operationsOnly: boolean | 'execution' | 'assistant' | 'queue' = false,
   ) {
     if (
       authority.identity.kind !== 'owner' ||
@@ -56,19 +72,29 @@ export class AiPriceService {
     )
       throw new OperationError('forbidden', 'ai_price_owner_required');
     const schema =
-      operationsOnly === 'execution'
+      operationsOnly === 'queue'
         ? aiPricePolicySchema.pick({revision: true}).extend({
-            maxConcurrentRequests:
-              aiPricePolicySchema.shape.maxConcurrentRequests.unwrap(),
-            automaticRetryLimit:
-              aiPricePolicySchema.shape.automaticRetryLimit.unwrap(),
+            backgroundPaused:
+              aiPricePolicySchema.shape.backgroundPaused.unwrap(),
           })
-        : operationsOnly
+        : operationsOnly === 'assistant'
           ? aiPricePolicySchema.pick({revision: true}).extend({
-              operationsAllowed:
-                aiPricePolicySchema.shape.operationsAllowed.unwrap(),
+              assistantPriceRestricted:
+                aiPricePolicySchema.shape.assistantPriceRestricted.unwrap(),
             })
-          : aiPricePolicySchema.pick({revision: true, enabled: true});
+          : operationsOnly === 'execution'
+            ? aiPricePolicySchema.pick({revision: true}).extend({
+                maxConcurrentRequests:
+                  aiPricePolicySchema.shape.maxConcurrentRequests.unwrap(),
+                automaticRetryLimit:
+                  aiPricePolicySchema.shape.automaticRetryLimit.unwrap(),
+              })
+            : operationsOnly
+              ? aiPricePolicySchema.pick({revision: true}).extend({
+                  operationsAllowed:
+                    aiPricePolicySchema.shape.operationsAllowed.unwrap(),
+                })
+              : aiPricePolicySchema.pick({revision: true, enabled: true});
     const parsed = schema.safeParse(input);
     if (!parsed.success || parsed.data.revision >= 2147483646)
       throw new OperationError('invalid_input', 'invalid_ai_price_policy');

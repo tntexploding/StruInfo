@@ -62,6 +62,9 @@ export interface InformationEntryDocumentView {
   readonly fragmentCount: number;
   readonly entryCount: number;
   readonly annotatedEntryCount: number;
+  readonly title?: string;
+  readonly types?: readonly string[];
+  readonly readingState?: string;
   readonly currentTags?: Readonly<CurrentInformationDocumentTags>;
   readonly workingCopy?: Readonly<{
     readonly sourceSnapshotId: string;
