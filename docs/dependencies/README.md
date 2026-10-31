@@ -17,7 +17,7 @@ This release includes the [October 28 security repair](evidence/security-reconci
 
 ## Ownership and install policy
 
-Runtime dependencies belong to the workspace that imports them. Root packages are development tools. The backend uses Nest/Express, PostgreSQL/Drizzle, pg-boss, the official MCP SDK and bounded document parsers; the frontend uses React/Vite and the existing Markdown parser. Model requests use the existing HTTP adapters, without an additional vendor SDK.
+Runtime dependencies belong to the workspace that imports them. Root packages are development tools. The backend uses Nest/Express, PostgreSQL/Drizzle, pg-boss, the official MCP SDK and bounded document parsers; the frontend uses the approved HTML/CSS/JavaScript pages and Vite. Model requests use the existing HTTP adapters, without an additional vendor SDK.
 
 `pnpm-workspace.yaml` controls exact versions, overrides, a 24-hour minimum release age, store integrity, lock revalidation, strict peer dependencies and lifecycle denial. Frozen installation uses `--ignore-scripts`. The optional PDF Canvas package is excluded. These controls were retained during the security repair.
 

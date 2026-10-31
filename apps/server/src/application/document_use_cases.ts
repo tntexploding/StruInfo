@@ -45,6 +45,14 @@ export interface DocumentUseCasesDependencies {
   readonly informationDocumentWorkingCopyRepository: InformationDocumentWorkingCopyRepositoryPort;
 }
 
+export interface DocumentBrowseOptions {
+  readonly limit?: number;
+  readonly query?: string;
+  readonly type?: string;
+  readonly readingState?: string;
+  readonly snapshotId?: string;
+  readonly after?: Readonly<{capturedAt: string; snapshotId: string}>;
+}
 export class DocumentUseCases {
   readonly #dependencies: Readonly<DocumentUseCasesDependencies>;
   readonly #authority: ExecutionAuthority;
@@ -76,12 +84,19 @@ export class DocumentUseCases {
     }
     return {
       status: 'ok' as const,
-      entries: (
-        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#authority.workspaceId,
-          includePrivate,
-        )
-      ).filter((entry) => entry.snapshotId === snapshotId),
+      entries: this.#dependencies.informationEntryRepository
+        .loadCurrentEntriesForSnapshot
+        ? await this.#dependencies.informationEntryRepository.loadCurrentEntriesForSnapshot(
+            this.#authority.workspaceId,
+            includePrivate,
+            snapshotId,
+          )
+        : (
+            await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+              this.#authority.workspaceId,
+              includePrivate,
+            )
+          ).filter((entry) => entry.snapshotId === snapshotId),
       snapshot: await materializeEvidenceSnapshot(
         snapshot,
         this.#dependencies.blobStore,
@@ -95,18 +110,19 @@ export class DocumentUseCases {
       sections: providerSections(orderedSectionFragments(snapshot), snapshot),
     };
   }
-  public async list(includePrivate = false, includeInbox = false) {
+  public async list(
+    includePrivate = false,
+    includeInbox = false,
+    options: DocumentBrowseOptions = {},
+  ) {
     this.#authority.require('documents.read', includePrivate);
 
-    const [snapshots, entries, currentTags, workingCopies, intake] =
+    const [snapshots, entryCounts, currentTags, workingCopies, intake] =
       await Promise.all([
         this.#dependencies.evidenceReadRepository.listSnapshots(
           this.#authority.workspaceId,
         ),
-        this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#authority.workspaceId,
-          includePrivate,
-        ),
+        this.documentEntryCounts(includePrivate),
         this.#dependencies.informationDocumentTagRepository.loadCurrentDocumentTags(
           this.#authority.workspaceId,
           includePrivate,
@@ -152,14 +168,15 @@ export class DocumentUseCases {
     const receivedByBody = new Map(
       intake.map((record) => [intakeTargetSnapshot(record), record.snapshotId]),
     );
-    const documents = snapshots
+    const countsBySnapshot = new Map(
+      entryCounts.map((row) => [row.snapshotId, row]),
+    );
+    let documents = snapshots
       .filter((snapshot) => !evidenceCopies.has(snapshot.snapshotId))
       .filter((snapshot) => includeInbox || !inboxOnly.has(snapshot.snapshotId))
       .filter((snapshot) => includePrivate || snapshot.isPrivate !== true)
       .map((snapshot): Readonly<InformationEntryDocumentView> => {
-        const documentEntries = entries.filter(
-          (entry) => entry.snapshotId === snapshot.snapshotId,
-        );
+        const counts = countsBySnapshot.get(snapshot.snapshotId);
         const tags = currentTags.find(
           (candidate) => candidate.snapshotId === snapshot.snapshotId,
         );
@@ -173,13 +190,11 @@ export class DocumentUseCases {
           (origin !== snapshot.snapshotId ? origin : undefined);
         return Object.freeze({
           ...snapshot,
-          entryCount: documentEntries.length,
-          annotatedEntryCount: documentEntries.filter(
-            (entry) =>
-              entry.value.contentKeywords.length > 0 ||
-              entry.value.typeKeyword !== undefined ||
-              entry.value.domains.length > 0,
-          ).length,
+          entryCount: counts?.entryCount ?? 0,
+          annotatedEntryCount: counts?.annotatedEntryCount ?? 0,
+          ...(counts?.title ? {title: counts.title} : {}),
+          types: counts?.types ?? [],
+          readingState: counts?.readingState ?? 'unread',
           ...(tags === undefined ? {} : {currentTags: tags}),
           ...(workingCopy === undefined ? {} : {workingCopy}),
           ...(derivedFromSnapshotId === undefined
@@ -187,10 +202,145 @@ export class DocumentUseCases {
             : {derivedFromSnapshotId}),
         });
       });
+    const facets = {
+      types: [...new Set(documents.flatMap((d) => d.types ?? []))].sort(),
+      sources: [...new Set(documents.map((d) => d.sourceKey))].sort(),
+    };
+    const type = options.type;
+    if (type) documents = documents.filter((d) => d.types?.includes(type));
+    if (options.readingState)
+      documents = documents.filter(
+        (d) => d.readingState === options.readingState,
+      );
+    if (options.snapshotId)
+      documents = documents.filter((d) => d.snapshotId === options.snapshotId);
+    if (options.query) {
+      const query = options.query.toLocaleLowerCase();
+      documents = documents.filter((d) =>
+        [
+          d.title,
+          d.sourceKey,
+          d.canonicalUri,
+          ...(d.currentTags?.value.tags.map((t) => t.displayValue) ?? []),
+        ]
+          .join(' ')
+          .toLocaleLowerCase()
+          .includes(query),
+      );
+    }
+    const totalCount = documents.length;
+    documents.sort(
+      (a, b) =>
+        b.capturedAt.localeCompare(a.capturedAt) ||
+        a.snapshotId.localeCompare(b.snapshotId),
+    );
+    if (options.after) {
+      const after = options.after;
+      documents = documents.filter(
+        (d) =>
+          d.capturedAt < after.capturedAt ||
+          (d.capturedAt === after.capturedAt &&
+            d.snapshotId > after.snapshotId),
+      );
+    }
+    const hasMore =
+      options.limit !== undefined && documents.length > options.limit;
+    if (options.limit !== undefined)
+      documents = documents.slice(0, options.limit);
+    const last = documents.at(-1);
     return {
       status: 'ok' as const,
-      totalCount: documents.length,
+      totalCount,
+      facets,
       documents: Object.freeze(documents),
+      ...(hasMore && last
+        ? {
+            nextCursor: {
+              capturedAt: last.capturedAt,
+              snapshotId: last.snapshotId,
+            },
+          }
+        : {}),
+    };
+  }
+  private async documentEntryCounts(includePrivate: boolean) {
+    const repo = this.#dependencies.informationEntryRepository;
+    if (repo.loadDocumentEntryCounts)
+      return repo.loadDocumentEntryCounts(
+        this.#authority.workspaceId,
+        includePrivate,
+      );
+    const result = new Map<
+      string,
+      {
+        snapshotId: string;
+        entryCount: number;
+        annotatedEntryCount: number;
+        title?: string;
+        types: string[];
+        readingState: string;
+      }
+    >();
+    for (const e of await repo.loadCurrentEntries(
+      this.#authority.workspaceId,
+      includePrivate,
+    )) {
+      const row = result.get(e.snapshotId) ?? {
+        snapshotId: e.snapshotId,
+        entryCount: 0,
+        annotatedEntryCount: 0,
+        title: e.value.titlePath,
+        types: [],
+        readingState: 'unread',
+      };
+      row.entryCount++;
+      if (
+        e.value.contentKeywords.length ||
+        e.value.typeKeyword !== undefined ||
+        e.value.domains.length
+      )
+        row.annotatedEntryCount++;
+      const type = e.value.typeCustomName ?? e.value.typeKeyword;
+      if (type && !row.types.includes(type)) row.types.push(type);
+      const reading = e.value.annotations?.readingState ?? 'unread';
+      row.readingState =
+        row.entryCount === 1
+          ? reading
+          : row.readingState === reading
+            ? reading
+            : 'reading';
+      result.set(e.snapshotId, row);
+    }
+    return [...result.values()];
+  }
+  public async summary() {
+    const [all, intake] = await Promise.all([
+      this.list(false, true),
+      this.#dependencies.documentIntakeRepository?.list() ?? [],
+    ]);
+    const pending = new Set(
+      intake
+        .filter((r) => r.value.receipt === 'pending')
+        .map(intakeTargetSnapshot),
+    );
+    return {
+      status: 'ok',
+      documents: all.totalCount,
+      entries: all.documents.reduce((n, d) => n + d.entryCount, 0),
+      tagNames: [
+        ...new Set(
+          all.documents.flatMap(
+            (d) => d.currentTags?.value.tags.map((t) => t.displayValue) ?? [],
+          ),
+        ),
+      ],
+      pendingCount: all.documents.filter((d) => pending.has(d.snapshotId))
+        .length,
+      recentDocuments: all.documents.slice(0, 100).map((d) => ({
+        snapshotId: d.snapshotId,
+        sourceKey: d.sourceKey,
+        canonicalUri: d.canonicalUri,
+      })),
     };
   }
   public async materialize(input: DocumentSplitRequest) {

@@ -1,4 +1,8 @@
 import {agentHttpMiddleware, type AgentHttpOptions} from './agent_http.js';
+import {
+  assistantHttpMiddleware,
+  type AssistantHttpOptions,
+} from './assistant_http.js';
 import {NestFactory} from '@nestjs/core';
 import type {INestApplication} from '@nestjs/common';
 import type {NestExpressApplication} from '@nestjs/platform-express';
@@ -36,6 +40,7 @@ export interface HealthListenerFactory {
     readonly health: OperationalHealthService;
     readonly api?: M1cApiServicePort;
     readonly agentHttp?: AgentHttpOptions;
+    readonly assistantHttp?: AssistantHttpOptions;
     readonly host: string;
     readonly port: number;
     readonly webRoot?: string;
@@ -47,6 +52,7 @@ export class NestHealthListenerFactory implements HealthListenerFactory {
     readonly health: OperationalHealthService;
     readonly api?: M1cApiServicePort;
     readonly agentHttp?: AgentHttpOptions;
+    readonly assistantHttp?: AssistantHttpOptions;
     readonly host: string;
     readonly port: number;
     readonly webRoot?: string;
@@ -76,6 +82,7 @@ export async function createNestRuntimeHttpApplication(options: {
   readonly health: OperationalHealthService;
   readonly api?: M1cApiServicePort;
   readonly agentHttp?: AgentHttpOptions;
+  readonly assistantHttp?: AssistantHttpOptions;
   readonly webRoot?: string;
 }): Promise<NestExpressApplication> {
   const application = await NestFactory.create<NestExpressApplication>(
@@ -98,6 +105,7 @@ export async function createNestRuntimeHttpApplication(options: {
   );
   if (options.agentHttp)
     application.use(agentHttpMiddleware(options.agentHttp));
+  application.use(assistantHttpMiddleware(options.assistantHttp));
   if (options.api !== undefined) {
     application.useStaticAssets(
       options.webRoot ?? DEFAULT_WEB_APPLICATION_ROOT,

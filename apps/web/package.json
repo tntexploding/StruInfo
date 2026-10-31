@@ -11,17 +11,8 @@
   "scripts": {
     "build": "vite build"
   },
-  "dependencies": {
-    "mdast-util-from-markdown": "2.0.3",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
-  },
   "devDependencies": {
     "@types/node": "24.13.3",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.4",
-    "@vitejs/plugin-react": "6.0.5",
-    "tsx": "4.23.11",
     "vite": "8.2.4"
   }
 }

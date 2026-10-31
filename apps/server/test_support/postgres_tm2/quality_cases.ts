@@ -178,8 +178,13 @@ async function executeArtifactGovernanceCase(
   const packageBytes = await readFile('package.json');
   const lockBytes = await readFile('pnpm-lock.yaml');
   const noticeBytes = await readFile('THIRD_PARTY_NOTICES.md');
-  const contractBytes = await readFile(
-    'docs/postgresql-knowledge-adapter-contract.md',
+  const requiredDocs = await Promise.all(
+    [
+      'AGENTS.md',
+      'docs/project.md',
+      'docs/frontend-design-specification.md',
+      'CONTRIBUTING.md',
+    ].map((path) => readFile(path, 'utf8')),
   );
   const migrationFiles = [
     '000001_create_application_schema.sql',
@@ -207,8 +212,8 @@ async function executeArtifactGovernanceCase(
       '81a5923fbba80292159b9d2537850d5b7fd9ebee86be501393da076ecc29b41e',
     /^[0-9a-f]{64}$/u.test(sha(lockBytes)) &&
       /^[0-9a-f]{64}$/u.test(sha(noticeBytes)),
-    sha(contractBytes) ===
-      '4280a6f390ec8a8fe16ae7124642f6e2ddf8daf1e70d8d361b007bcac5771f9f',
+    requiredDocs.reduce((total, text) => total + Array.from(text).length, 0) <=
+      5000,
     migrationBytes.every((bytes) => bytes.byteLength > 0),
   ];
   assertCondition(

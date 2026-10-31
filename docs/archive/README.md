@@ -1,7 +1,14 @@
-# Archived Product Documents
+# 技术历史归档
 
-Files in this directory preserve major superseded product directions. They are
-historical context, not current requirements.
+[下载归档](technical-history-20261028.zip)
 
-Use `docs/product-requirements.md` and Git history for the current product truth
-and ordinary revisions.
+归档日期：2026-10-28。来源提交：fb066c3。
+包含清理前的 144 份项目文档，保留原路径与原始字节。
+内容包括仓库规则、阶段授权、技术路线、ADR、界面方案及交付记录。
+
+归档中的开发要求和阶段授权停止生效。当前约束见仓库根目录 AGENTS.md。
+日常开发只查当前文档。追溯时从压缩包提取所需文件。
+
+本次清理将重复规则合并为四份短文档，移除活动目录中的历史方案。
+原文、数据、代码、法律材料和 Git 历史保留。
+归档已经逐文件比对原字节。必读文本按原始 Unicode 字符计数，上限 5000。

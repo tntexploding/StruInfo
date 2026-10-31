@@ -1,0 +1,21 @@
+<aside id="assistant-panel" class="assistant-panel" aria-labelledby="assistant-title">
+<header class="assistant-head">
+<div class="assistant-identity"><span class="assistant-mark"><span data-icon="bolt"></span></span><div><h2 id="assistant-title">系统助手</h2><p id="session-title">新对话</p></div></div>
+<div class="assistant-tools" role="group" aria-label="助手窗口操作">
+<button class="icon-action" id="new-chat" title="新建对话" aria-label="新建对话"><span data-icon="plus"></span></button>
+<button class="icon-action" id="history" title="历史对话" aria-label="历史对话" aria-haspopup="dialog"><span data-icon="clock"></span></button>
+<button class="icon-action" id="expand" title="展开助手" aria-label="展开助手" aria-pressed="false"><span data-icon="external"></span></button>
+<button class="icon-action" id="close-assistant" title="收起助手" aria-label="收起助手"><span data-icon="close"></span></button>
+</div>
+</header>
+<div class="conversation" id="conversation" role="log" aria-label="助手对话" aria-live="polite" aria-relevant="additions text"></div>
+<div class="composer-area">
+<div class="attachment-row" id="attachment-row" hidden><button id="attached-document" class="attachment-chip" title="打开参考文档"><span data-icon="file"></span><span id="attachment-label"></span><span data-icon="external"></span></button><button id="remove-attachment" class="icon-action" aria-label="移除参考文档" title="移除参考文档"><span data-icon="close"></span></button></div>
+<form class="composer ef-glass" id="composer">
+<label for="message" class="sr-only">发送给助手的指令</label>
+<textarea id="message" rows="2" placeholder="查找资料，或输入操作指令…" maxlength="8000"></textarea>
+<div class="composer-bottom"><button class="attachment-action" id="attach-document" type="button" aria-haspopup="dialog"><span data-icon="plus"></span>附加文档</button><span id="composer-hint">Enter 发送</span><button class="icon-action send-button" data-ai-action="true" id="send" type="submit" aria-label="发送" title="发送 · Shift + Enter 换行"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 20V4m-6 6 6-6 6 6"/></svg></button><button class="stop-action" id="stop" type="button" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>停止本次操作</button></div>
+</form>
+<p id="assistant-status" class="assistant-status" role="status" aria-live="polite" hidden></p>
+</div>
+</aside>

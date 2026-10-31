@@ -1,0 +1,92 @@
+/* Framework §3/5. Control geometry is shared; page CSS owns only placement. */
+:is(.primary-action,.secondary-action,.icon-action,.compact-button,.compact-action,.quiet-button,.top-action,.sample-button,.record-tools,.close-dialog){position:relative;isolation:isolate;display:inline-flex;align-items:center;justify-content:center;gap:8px;width:auto;max-width:100%;min-height:44px;padding:8px 16px;border:1px solid var(--control);border-radius:12px;font:500 16px/1.5 var(--font);white-space:normal;vertical-align:middle}
+:is(.primary-action,.compact-button.primary){background:var(--accent);color:var(--onAccent);border-color:var(--accent)}
+:is(.secondary-action,.compact-button,.compact-action,.top-action){background:var(--raised);color:var(--ink)}
+.icon-action,.record-tools,.close-dialog{min-width:44px;padding:8px}
+.quiet-button{background:transparent;border-color:transparent}
+:is(.primary-action,.secondary-action,.icon-action,.compact-button,.compact-action,.quiet-button,.top-action)::after{inset:0;border-radius:inherit;pointer-events:none}
+button:disabled{opacity:.55;cursor:default}
+/* Focus uses the visible control's shape, including compound and nonrectangular controls. */
+:is(button,a,input,select,textarea,summary,[tabindex]):focus-visible{
+  outline:2px solid var(--focus);
+  outline-offset:2px;
+}
+:is(.record-search input,#search-input,.picker-search input):focus-visible,
+:is(#source-wheel,.record-sector,.column-divider,.ov-step>button):focus-visible{
+  outline:none;
+}
+:is(.record-top:has(.record-search input:focus-visible),.search-form:has(#search-input:focus-visible),.picker-search:has(input:focus-visible)),
+.ov-step>button:focus-visible .flow-node{
+  outline:2px solid var(--focus);
+  outline-offset:2px;
+}
+:is(.record-sector:focus-visible,#source-wheel:focus-visible .record-sector.selected) .sector-face{
+  stroke:var(--focus);
+  stroke-width:2;
+  vector-effect:non-scaling-stroke;
+}
+.column-divider[aria-orientation=vertical]:focus-visible::after{
+  content:'';
+  position:absolute;
+  width:4px;
+  height:42px;
+  left:calc(50% - 2px);
+  top:calc(50% - 21px);
+  border-radius:4px;
+  background:var(--focus);
+}
+.column-divider[aria-orientation=horizontal]::before{content:'';position:absolute}
+.column-divider[aria-orientation=horizontal]:focus-visible::before{
+  outline:2px solid var(--focus);
+  outline-offset:2px;
+}
+:is(.reading-scroll,.reading-section):focus-visible{outline-offset:-2px}
+
+:is(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]),select){min-height:44px;font-size:16px;line-height:1.5;border-radius:10px;border-color:var(--control);color:var(--ink);background:var(--bg);max-width:100%}
+textarea{font-size:16px;line-height:1.6;color:var(--ink);background:var(--bg);border-color:var(--control);border-radius:10px}
+input[type=checkbox]:not(.switch):not([role=switch]),input[type=radio]{accent-color:var(--accent);width:20px;height:20px;flex:none;margin:0}
+input[type=range]{accent-color:var(--accent);min-height:32px;max-width:240px}
+label{font-size:15px}
+dialog{position:fixed;inset:0;margin:auto;max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);border:1px solid var(--control);border-radius:20px;background:var(--raised);color:var(--ink);font-size:16px;overflow:auto}
+dialog::backdrop{background:#0007}
+dialog :is(.dialog-head,.dialog-heading,.settings-dialog-head){position:sticky;top:0;z-index:2}
+dialog :is(.dialog-footer,.editor-footer){position:sticky;bottom:0;z-index:2}
+:is(.switch-label,.toggle-row){min-height:44px}
+button svg,[data-icon] svg{width:20px;height:20px}
+.text-button{position:relative;display:inline-flex;align-items:center;gap:8px;min-height:44px;font-size:14px}
+.glass-group{width:max-content;max-width:100%;padding:4px;border-radius:16px;gap:4px}
+.glass-group button{position:relative;min-height:44px;font-size:16px;padding:8px 14px;border-radius:12px}
+.glass-group button::before,.glass-group button::after{inset:0;border-radius:inherit}
+.status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted);flex:none}
+.status-dot.good{background:var(--good)}.status-dot.bad{background:var(--bad)}.status-dot.ai{background:var(--ai)}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media(forced-colors:active){body{--focus:Highlight}button,a,input,select,textarea{box-shadow:none!important}button,[aria-current=page]{border:1px solid ButtonText}button:focus-visible,a:focus-visible{outline:2px solid Highlight}}
+
+/* The accepted settings switch is shared by source and settings forms. */
+input.switch[type=checkbox]{appearance:none;position:relative;display:block;width:42px;height:26px;min-height:26px;min-width:42px;flex:0 0 42px;border-radius:18px;border:1px solid var(--muted);background:var(--raised);cursor:pointer;padding:0;margin:0;transition:background .2s,border-color .2s}
+input.switch[type=checkbox]::before{content:'';display:block;position:absolute;left:3px;top:50%;width:18px;height:18px;box-sizing:border-box;transform:translateY(-50%);border-radius:50%;background:var(--ink);box-shadow:0 1px 3px #0004;transition:left .22s cubic-bezier(.2,.8,.2,1),background .2s}
+input.switch[type=checkbox]:checked{background:var(--switch-accent,var(--accent));border-color:var(--switch-accent,var(--accent))}
+input.switch[type=checkbox]:checked::before{left:calc(100% - 21px);background:var(--switch-on,var(--onAccent))}
+input.switch[type=checkbox]:disabled{opacity:.5;cursor:not-allowed}
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap;border:0}
+
+/* The approved shared shell supplies the hero mark's material, never its dimensions. */
+.hero-mark{display:grid;place-items:center;flex:none;background:linear-gradient(145deg,#fcebc3,#e7c172 58%,#c29b52);color:#30291c;border:1px solid #ffe7ac8c;text-shadow:0 1px #fff3}
+.page-root{background:var(--bg);color:var(--ink)}
+.record-top input,#search-input{background:transparent;border:0;border-radius:0;box-shadow:none;outline-offset:2px}
+#search-input{flex:1;width:100%}
+:where([data-theme=light]) .ef-glass{background:linear-gradient(135deg,#ffffffcf,#ecebe5d9);color:var(--ink);border-color:#7778;box-shadow:inset 0 1px #fff,0 10px 28px #29231c18}
+:where([data-theme=light]) :is(.flow-node,.search-box){background:linear-gradient(145deg,#fff,#eeedeb)!important;color:var(--ink);border-color:#7778;box-shadow:inset 0 1px #fff,0 4px 12px #00000010}
+:where([data-theme=light]) .ai-settings{background:color-mix(in srgb,var(--ai) 5%,var(--surface))!important}
+:where([data-theme=light]) :is(.setting-field,.field-heading,.ai-settings h3,.task-copy strong,.notice-item p,.list-empty strong){color:var(--ink)}
+.page--database>main{padding-top:24px}
+@media(max-width:899px){.page--database>main{padding-top:16px}}
+
+.page--sources .record-search input{background:transparent;border:0}
+.page--database main.db-main{padding-top:24px;padding-bottom:24px}
+.page--database .db-layout{--left:var(--left-width,208px);--right:var(--right-width,232px)}
+.page--database .db-layout.left-closed{--left:52px}.page--database .db-layout.right-closed{--right:52px}
+.page--database .db-divider{position:absolute;top:0;bottom:0;width:12px}
+.page--database .side-left .db-divider{right:-18px}.page--database .side-right .db-divider{left:-18px}
+.page--database .left-closed .side-left .db-divider,.page--database .right-closed .side-right .db-divider{display:none}
+@media(max-width:950px){.page--database .db-divider{display:none}.page--database main.db-main{padding-top:16px;padding-bottom:16px}}

@@ -1,0 +1,28 @@
+<main class="reading-main mode-margin">
+<header class="reading-heading"><div><h1>文档阅读</h1><p>阅读原文，查看分段、标签与联系。</p></div><span class="header-note">全文与旁注</span></header>
+<section class="reading-frame" aria-label="文档阅读工作区">
+<div class="reading-toolbar">
+<button id="choose-document" class="document-switch secondary-action" aria-haspopup="dialog"><span data-icon="folder"></span><span><b>选择文档</b><small id="current-document"></small></span><span data-icon="down"></span></button>
+<div class="reading-tools"><label class="read-state-label"><span class="sr-only">阅读状态</span><select id="read-state" aria-label="阅读状态"><option value="unread">未读</option><option value="reading">正在读</option><option value="read">已读</option></select></label><span class="tool-divider"></span><button id="reading-options" class="secondary-action" aria-haspopup="dialog"><span data-icon="settings"></span><span>阅读设置</span></button><button id="edit-document" class="secondary-action" aria-haspopup="dialog"><span data-icon="edit"></span><span>编辑</span></button></div>
+</div>
+<div id="draft-bar" class="draft-bar" hidden><span><i></i>有未保存的修改</span><div><button id="discard-draft" class="text-button">撤销修改</button><button id="confirm-draft" class="secondary-action">保存修改</button><button id="publish-document" class="primary-action">发布到数据库</button><button id="save-relations" class="secondary-action">保存联系</button></div></div>
+<div id="reading-stage" data-layout="A"></div>
+<footer class="reading-status"><span id="reading-position"></span><span id="reading-extent"></span></footer>
+</section>
+</main>
+<dialog id="document-picker" class="ef-glass" aria-labelledby="picker-title">
+<header class="dialog-head"><div><small id="picker-caption">按标题、来源或标签查找</small><h2 id="picker-title">选择文档</h2></div><button class="icon-action" data-close="document-picker" aria-label="关闭文档选择"><span data-icon="close"></span></button></header>
+<label class="picker-search"><span class="sr-only">查找文档</span><span data-icon="search"></span><input id="document-search" type="search" placeholder="标题、来源或标签"></label>
+<div id="picker-filters" class="picker-filters"><label>类型<select id="type-filter"><option value="">全部类型</option></select></label><label>阅读状态<select id="state-filter"><option value="">全部</option><option value="unread">未读</option><option value="reading">正在读</option><option value="read">已读</option></select></label><label><input type="checkbox" id="private-scope"> 包含隐私文档</label><span id="picker-count"></span></div>
+<div id="picker-results"></div><div class="picker-pagination"><button id="more-documents" class="secondary-action" hidden>加载更多</button></div>
+</dialog>
+
+<dialog id="reading-options-dialog" class="ef-glass" aria-labelledby="options-title">
+<header class="dialog-head"><div><small>当前浏览器记住设置</small><h2 id="options-title">阅读设置</h2></div><button class="icon-action" data-close="reading-options-dialog" aria-label="关闭阅读设置"><span data-icon="close"></span></button></header><div id="reading-options-content"></div>
+</dialog>
+
+<dialog id="document-editor" class="ef-glass" aria-labelledby="editor-title">
+<header class="dialog-head"><div><small id="editor-document-name"></small><h2 id="editor-title">编辑文档</h2></div><button class="icon-action" data-close="document-editor" aria-label="关闭文档编辑"><span data-icon="close"></span></button></header>
+<div id="editor-tabs" class="glass-group ef-glass" role="tablist" aria-label="编辑内容"><button role="tab" id="tab-structure" data-edit="structure" aria-controls="editor-fields">分段</button><button role="tab" id="tab-tags" data-edit="tags" aria-controls="editor-fields">标签</button><button role="tab" id="tab-relations" data-edit="relations" aria-controls="editor-fields">联系</button></div>
+<form id="editor-form"><div id="editor-fields" role="tabpanel" tabindex="0"></div><footer class="editor-footer"><small>保存草稿后，可保存修改并发布到数据库。</small><div><button type="button" class="secondary-action" data-close="document-editor">取消</button><button class="primary-action" type="submit">保存草稿</button></div></footer></form>
+</dialog>

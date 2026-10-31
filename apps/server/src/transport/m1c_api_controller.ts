@@ -684,15 +684,22 @@ export class M1cApiController {
     );
   }
 
+  @Get('entry-documents/summary')
+  public async overviewSummary(@Res() response: Response): Promise<void> {
+    writeLocalApiResponse(response, await this.#service.readOverviewSummary());
+  }
+
   @Get('entry-documents')
   public async informationEntryDocuments(
     @Query('includePrivate') includePrivate: string | undefined,
+    @Query() options: Record<string, unknown>,
     @Res() response: Response,
   ): Promise<void> {
     writeLocalApiResponse(
       response,
       await this.#service.listInformationEntryDocuments(
         parseOptionalBooleanQuery(includePrivate),
+        options,
       ),
     );
   }

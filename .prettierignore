@@ -10,13 +10,12 @@ THIRD_PARTY_NOTICES.md
 docs/dependencies/licenses/
 docs/dependencies/sbom/
 
-# Canonical legacy documents are outside this task's formatting scope.
-docs/adr/README.md
+# Historical documents are stored as an archive.
 docs/archive/
-docs/decision-log.md
-docs/development-outline.md
-docs/open-source-policy.md
-docs/product-requirements.md
-docs/sample-intake-template.md
 
 .playwright-cli/
+
+# Keep the approved prototype assets in their original format.
+apps/web/**/*.css
+apps/web/**/*.html
+apps/web/vendor/*.js

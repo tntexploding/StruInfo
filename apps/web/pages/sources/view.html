@@ -1,0 +1,24 @@
+<main id="workspace" tabindex="-1">
+    <header class="map-heading"><div><h1>源管理</h1><p>选择来源，安排接收和处理。</p></div></header>
+    <section id="sources" class="source-layout" aria-label="源管理布局">
+      <aside class="record-stage" aria-label="来源选择区">
+        <div id="source-wheel" class="source-wheel" tabindex="0" aria-label="唱片选择器，滚轮或上下方向键切换来源">
+          <svg class="record-svg" id="record-svg" aria-label="唱片式来源选择器"><defs><radialGradient id="record-vinyl"><stop offset="0" stop-color="#272728"/><stop offset=".5" stop-color="#18181a"/><stop offset="1" stop-color="#222224"/></radialGradient><linearGradient id="record-face" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#303033"/><stop offset="1" stop-color="#232326"/></linearGradient><linearGradient id="record-selected" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#4c4432"/><stop offset=".5" stop-color="#353129"/><stop offset="1" stop-color="#2e2b25"/></linearGradient><filter id="record-shadow" x="-30%" y="-40%" width="180%" height="200%"><feDropShadow dx="0" dy="7" stdDeviation="8" flood-color="#000000" flood-opacity=".5"/></filter></defs><g id="record-base"></g><g id="record-ticks"></g><g id="source-cards"></g><g id="record-front"></g><path id="record-pointer" class="record-pointer"/></svg>
+        </div>
+        <div class="record-floating record-top ef-glass" aria-label="唱片顶部悬浮条">
+          <label class="record-search"><span data-icon="search"></span><input id="source-search" type="search" placeholder="来源搜索" aria-label="来源搜索"></label><button class="record-tools" data-panel="selector" aria-label="筛选与排序" aria-haspopup="dialog"><span data-icon="sliders"></span></button>
+        </div>
+        <div class="record-floating record-bottom ef-glass" aria-label="唱片底部悬浮条"><button data-mode="new"><span data-icon="plus"></span>添加来源</button><span class="bar-divider"></span><button data-mode="manual"><span data-icon="file"></span>手动放入</button></div>
+        <div class="record-caption"><span>来源选择</span><small>滚轮 · 拖动 · ↑ ↓</small></div>
+      </aside>
+      <section class="source-detail-map" id="source-detail" aria-label="所选来源设置">
+        <header class="selected-source"><div><span class="selection-dot"></span><h2 id="selection-title">所选来源</h2></div></header>
+        <div id="source-settings-view" class="editor-regions"></div>
+        <div id="alternate-view" class="alternate-view" hidden></div>
+        <footer class="source-save" aria-label="来源设置操作"><span id="save-state">读取中</span><button class="compact-button" data-action="cancel-source">取消修改</button><button class="compact-button primary" data-action="save">保存来源</button></footer>
+<section class="source-bottom ef-glass" id="receipt-dock" aria-label="底部接收与记录"><div class="dock-resize" id="dock-resize"></div><button class="recent-trigger" aria-expanded="false" aria-controls="dock-content"><span data-icon="history"></span><span>接收记录与计划</span><small></small><span class="dock-state">展开</span><span class="dock-chevron" data-icon="up"></span></button><div class="dock-content" id="dock-content" inert aria-hidden="true"></div></section>
+      </section>
+    </section>
+  </main>
+<dialog class="layout-dialog ef-glass" id="layout-dialog" aria-labelledby="dialog-title"><header class="dialog-heading"><div><nav id="dialog-path" aria-label="设置层级"></nav><h2 id="dialog-title" tabindex="-1"></h2></div><button class="close-dialog" aria-label="关闭浮窗"><span data-icon="close"></span></button></header><div id="dialog-content"></div></dialog>
+<span class="sr-only" id="announcement" role="status" aria-live="polite"></span>

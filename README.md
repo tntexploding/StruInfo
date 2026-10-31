@@ -1,132 +1,42 @@
 # StruInfo
 
-**把订阅和文档整理成可以检索、追溯和复用的个人知识库。**
+自托管的个人文档知识库。接收资料，整理文档，检索内容，生成报告。
 
-[![Quality](https://github.com/tntexploding/StruInfo/actions/workflows/quality.yml/badge.svg)](https://github.com/tntexploding/StruInfo/actions/workflows/quality.yml)
-[![Security](https://github.com/tntexploding/StruInfo/actions/workflows/maintenance-security.yml/badge.svg)](https://github.com/tntexploding/StruInfo/actions/workflows/maintenance-security.yml)
-[![MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[安装](docs/getting-started.md) · [AI 与 MCP](docs/agent-interface.md) · [备份与升级](docs/production-operations.md) · [开发规则](AGENTS.md)
 
-[安装](docs/getting-started.md) · [AI 与 MCP](docs/agent-interface.md) · [备份与升级](docs/production-operations.md) · [更新说明](docs/releases/v0.5.0.md) · [参与开发](CONTRIBUTING.md)
+## 使用
 
-StruInfo 是自托管的个人文档工作区。订阅来源、上传文档、审核内容，然后在同一处阅读、拆分、打标签和建立联系。整理好的内容可以用于搜索、知识库问答和日报、周报、月报、专题报告。
+| 页面     | 操作                                     |
+| -------- | ---------------------------------------- |
+| 总览     | 查看统计、任务和消息，控制 AI            |
+| 源管理   | 添加来源、手动导入、安排接收、审核资料   |
+| 文档阅读 | 阅读原文，修改段落、标签与联系，确认发布 |
+| 数据库   | 分类搜索、知识库问答、联网研究、生成报告 |
+| 设置     | 调整外观、模型、规则、词表和通知         |
 
-原文与整理结果分别保存，每个条目都能回到出处。你可以手动整理，也可以配置 AI 完成接收审核到入库的流程。外部 Agent 可以通过 MCP 操作同一套接口。
+文档经过审核、拆分和标注后确认发布。
+主题与重点联系在后台单独处理。
+手动操作与 AI 共用接口，原文、草稿和确认版本分别保存。
 
-## 可以做什么
+## 运行
 
-| 你的任务                                                    | 在哪里操作                           |
-| ----------------------------------------------------------- | ------------------------------------ |
-| 查看统计、处理进度和系统消息；允许或停止 AI，继续或取消任务 | **总览**                             |
-| 添加 RSS、网页、仓库或接口来源，设置接收时间和来源优先级    | **源管理**                           |
-| 上传文件或粘贴文字                                          | **源管理 → 唱片底部的手动放入**      |
-| 审核收到的正文、按时间补收往期                              | **源管理 → 底部接收记录 / 往期补收** |
-| 阅读原文与旁注，调整拆分、标签、观点和联系，确认发布        | **文档阅读 → 编辑**                  |
-| 分类搜索、知识库问答、联系图、联网研究                      | **数据库**                           |
-| 生成日报、周报、月报、专题报告或资料摘录                    | **数据库 → 报告侧栏**                |
-| 调整词表、AI 并发与重试、价格时段、自动处理和外观           | **设置**                             |
+使用 Docker Compose 和 PostgreSQL 18。
+配置、密钥、原文、个人偏好与备份保存于仓库外。
+首次部署步骤见[安装指南](docs/getting-started.md)。
+当前源码版本为 v0.5.0。已有实例升级时显式选择同一版本的应用与维护镜像。
 
-界面支持深浅色、可调列宽、阅读字体和光效设置。刷新保留当前页面，新打开项目进入总览。
+AI、自动接收、联网和定时功能按配置启用。
+报告支持站内发布、Markdown 导出和浏览器打印 PDF。
+PDF 导入需要文本层。当前运行范围为单所有者、单实例。
+界面样式统一及退役代码清理仍有待办，见[项目说明](docs/project.md)。
 
-## 从第一篇文档开始
+## 按需说明
 
-1. 在源管理添加来源或手动放入文件，打开底部接收记录查看正文。
-2. 选择接受、拒绝，或让 AI 审核。不确定的内容会保留原因，等待你决定。
-3. 在文档阅读中整理分段和标注，点击**确认入库**。启用 AI 后，新任务完成审核、拆分和标注后自动确认。
-4. 在数据库搜索已确认内容。之后的人工修改保留为草稿，查询继续使用上次确认的版本。
-5. 按需查找主题候选、组织主题和重点联系；或在报告侧栏生成报告。
+- 来源：[接收配置](docs/source-receiving.md)、[往期补收](docs/source-history.md)、[拆分方案](docs/source-splitting.md)。
+- 整理：[自动处理](docs/ingestion-automation.md)、[结构化标注](docs/structured-annotations.md)、[主题与联系](docs/content-topics.md)。
+- 使用：[系统助手](docs/system-assistant.md)、[联网与报告](docs/network-research-and-reports.md)、[AI 与外部 Agent](docs/agent-interface.md)。
+- 运维：[配置](docs/runtime-configuration.md)、[备份与升级](docs/production-operations.md)、[Windows 启停](docs/windows-instance-control.md)。
+- 开发：[贡献指南](CONTRIBUTING.md)、[依赖记录](docs/dependencies/README.md)。
+- 许可：[MIT](LICENSE)、[第三方声明](THIRD_PARTY_NOTICES.md)。
 
-连贯文章保持完整，合集按独立内容拆分。来源拆分方案先试读再启用；格式变化保留原文并提示复核。
-**基础发布与主题整理分开执行。** 主题任务使用独立预算，归组失败不影响已发布内容。
-隐私文档使用手动处理，查看时需明确选择包含隐私内容。
-
-## 安装与启动
-
-推荐使用 **Docker Compose + PostgreSQL 18**，以 `all` 单实例运行。应用、数据库和持久数据分开保存。
-
-[首次安装指南](docs/getting-started.md)包含数据库角色、配置、迁移和启动步骤。已有实例请按 [v0.5.0 升级说明](docs/releases/v0.5.0.md)先备份再升级。
-
-配置完成后的常用命令：
-
-```bash
-# 启动
-docker compose -f compose.production.yaml up -d app
-# 检查
-docker compose -f compose.production.yaml ps
-# 查看日志
-docker compose -f compose.production.yaml logs --tail 100 app
-# 停止
-docker compose -f compose.production.yaml stop app
-```
-
-默认访问地址是 <http://127.0.0.1:3000>；通过 `STRUIINFO_HTTP_PORT` 可以更换宿主端口。Windows 可使用[独立启动器](docs/windows-instance-control.md)管理已配置的实例。
-
-StruInfo 面向单个所有者。远程使用时，通过带认证的 HTTPS 反向代理、VPN 或 SSH 隧道访问。应用自身不提供多用户登录，端口应保持在回环或受信任私网内。
-
-## AI 怎么使用
-
-AI 默认不配置。安装完成后，按[模型配置说明](docs/runtime-configuration.md#deepseek)设置 DeepSeek 或 OpenAI 的模型与外部密钥文件，再在设置中选择允许的操作。
-
-- **手动触发**：选择文档，执行审核、整理、翻译、问答或报告。
-- **自动处理**：为选定来源启用新资料策略，按文档完成审核、拆分、标注和确认发布。
-- **运行限制**：遵守全局允许/拒绝、并发、每篇调用上限、有限重试和价格时段。
-- **人工优先**：拒绝、暂缓和手动修改不会被自动任务覆盖。失败任务保留断点；总览显示原因和可用操作。
-
-模型调用可能产生费用。自动处理范围、重试额度和价格时段由你配置；没有模型也能完成导入、手动整理、词法搜索和资料摘录。语义向量检索需要另行配置 Embedding 模型。
-
-外部 Agent 有独立令牌和授权。可以只读，也可以授予导入、拆分、标签和联系写入；不需要让 Agent 操作界面。连接示例和工具列表见 [Agent / MCP 接口](docs/agent-interface.md)。
-
-## 数据与备份
-
-- PostgreSQL 保存文档结构、条目、标签、联系和任务。
-- 仓库外的数据目录保存原文、个人偏好、导出和备份。
-- 密钥通过环境或独立文件注入，不写入仓库、镜像或前端。
-- 备份包含数据库中的工作区数据及引用的原文字节。恢复目标必须是同一工作区的空库。
-
-升级前停写并创建、校验备份。数据库与数据目录需要一起保护，不能只备份镜像。完整命令见[运行与维护](docs/production-operations.md)。
-
-## 使用范围
-
-- 支持 RSS/Atom、公开 GitHub Markdown、声明式 JSON API、受限网页和受信任连接器。往期补收依据来源公开目录，不能保证覆盖网站的全部历史。
-- PDF 需要文本层；当前不提供 OCR、音视频转写或付费内容解锁。
-- AI 问答和报告提供原文引用，仍需结合来源核对。报告支持 Markdown 下载和浏览器打印 PDF，未内置外部推送渠道。
-- 当前运行方式是单所有者、单实例；多租户、集群写入和跨工作区合并不在支持范围。
-
-## 开发与验证
-
-要求 Node.js `>=24.18.0`、Corepack 和 pnpm `11.20.0`：
-
-```bash
-git clone https://github.com/tntexploding/StruInfo.git
-cd StruInfo
-corepack enable
-pnpm install --frozen-lockfile --ignore-scripts
-pnpm verify
-```
-
-`verify` 执行格式、静态检查、类型检查、单元/集成测试、构建和制品检查。另可运行：
-
-```bash
-pnpm test:publication                 # 临时空库的发布、主题与恢复验收
-pnpm test:e2e                         # 使用本机已安装的 Chrome
-pnpm performance:m2-p0d -- --smoke    # 使用 Docker 创建临时 PostgreSQL
-pnpm audit --prod --audit-level low
-```
-
-这些检查使用合成数据。真实资料、模型密钥和实例记录保存在仓库外。项目结构和贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-## 更多说明
-
-- [历史补收](docs/source-history.md)
-- [订阅与自动处理](docs/ingestion-automation.md)
-- [运行配置](docs/runtime-configuration.md)
-- [安装、备份与维护](docs/production-operations.md)
-- [架构](docs/knowledge-core-architecture.md) · [实现记录](docs/current-project-state.md) · [路线图](docs/roadmap.md)
-- [MIT 许可证](LICENSE) · [第三方声明](THIRD_PARTY_NOTICES.md)
-
-来源的检查窗口、一次采集、重试等待和接收渠道见[来源配置与接收管理](docs/source-receiving.md)。这些设置存于个人工作区。
-
-### 联网研究与定时报告
-
-新内容系统提供 DeepSeek 网页搜索、库内／混合问答、显式保存待审核，以及按时区生成日报、周报、月报。
-报告固定引用版本，可发布为站内通知或导出 Markdown／PDF。联网和定时运行默认关闭，需在设置中明确启用。
-配置入口和边界见[联网研究与报告](docs/network-research-and-reports.md)。
+[历史技术文档](docs/archive/README.md)已归档。

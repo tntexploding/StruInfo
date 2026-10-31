@@ -39,6 +39,7 @@ const FILE_CONFIG_KEYS = [
 ] as const;
 const FILE_CONFIG_KEY_SET = new Set<string>(FILE_CONFIG_KEYS);
 const ENVIRONMENT_ONLY_KEYS = new Set([
+  'STRUIINFO_ASSISTANT_TOKEN',
   'DATABASE_URL',
   'OPENAI_API_KEY',
   'DEEPSEEK_API_KEY',
@@ -204,6 +205,7 @@ function mergeRuntimeEnvironment(
   processEnvironment: Readonly<Record<string, string | undefined>>,
 ): Readonly<Record<string, string | undefined>> {
   const merged: Record<string, string | undefined> = {
+    STRUIINFO_ASSISTANT_TOKEN: processEnvironment.STRUIINFO_ASSISTANT_TOKEN,
     DATABASE_URL: processEnvironment.DATABASE_URL,
     OPENAI_API_KEY: processEnvironment.OPENAI_API_KEY,
     DEEPSEEK_API_KEY: processEnvironment.DEEPSEEK_API_KEY,

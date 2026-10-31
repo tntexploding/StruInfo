@@ -7,6 +7,8 @@ export const aiPricePolicySchema = z
     revision: z.number().int().min(0).max(2147483646),
     enabled: z.boolean(),
     operationsAllowed: z.boolean().optional(),
+    backgroundPaused: z.boolean().optional(),
+    assistantPriceRestricted: z.boolean().optional(),
     maxConcurrentRequests: z.number().int().min(1).max(4).optional(),
     automaticRetryLimit: z.number().int().min(0).max(2).optional(),
   })

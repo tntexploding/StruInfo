@@ -1,0 +1,8 @@
+.window-drag-handle{cursor:grab;touch-action:none;user-select:none}
+.window-drag-handle:focus-visible{outline:2px solid var(--focus);outline-offset:-4px;border-radius:inherit}
+.window-moving,.window-moving .window-drag-handle{cursor:grabbing;user-select:none}
+.window-resize{position:absolute;right:3px;bottom:3px;z-index:5;width:26px;height:26px;display:grid;place-items:center;padding:3px;border:0;border-radius:7px;background:transparent;color:var(--muted);cursor:nwse-resize;touch-action:none;opacity:.7}
+.window-resize:hover,.window-resize:focus-visible{opacity:1;color:var(--ai);background:var(--aiSoft)}
+.window-resize svg{width:18px;height:18px;pointer-events:none}
+.window-reset.icon-action{min-width:36px;min-height:36px;width:36px;height:36px;padding:8px;border-radius:10px}
+.window-reset svg{width:18px;height:18px}

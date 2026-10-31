@@ -33,7 +33,9 @@ import {OperationError} from './operation_error.js';
 const id = z.uuid(),
   version = z.number().int().nonnegative();
 export const topicCommandSchemas = {
-  topics_list: z.object({entryId: id.optional()}).strict(),
+  topics_list: z
+    .object({entryId: id.optional(), snapshotId: id.optional()})
+    .strict(),
   topics_preview: topicScopeSchema,
   topic_save: z
     .object({
@@ -154,6 +156,11 @@ export class TopicService {
         this.deps.repository.list('job'),
       ]);
       const protectedPairs = new Set(await this.protectedPairs([...ids]));
+      const selectedIds = new Set(
+        entries
+          .filter((e) => !req.snapshotId || e.snapshotId === req.snapshotId)
+          .map((e) => e.entryId),
+      );
       return {
         budget:
           authority.identity.kind === 'owner'
@@ -163,6 +170,9 @@ export class TopicService {
           .filter(
             (t) =>
               this.visible(t, ids) &&
+              (!req.snapshotId ||
+                (t.value.kind === 'topic' &&
+                  t.value.members.some((m) => selectedIds.has(m.entryId)))) &&
               (!req.entryId ||
                 (t.value.kind === 'topic' &&
                   t.value.members.some((m) => m.entryId === req.entryId))),
@@ -188,6 +198,13 @@ export class TopicService {
               t.value.kind === 'topic'
                 ? t.value.members.map((m) => ({
                     entryId: m.entryId,
+                    ...(req.snapshotId
+                      ? {
+                          snapshotId: entries.find(
+                            (e) => e.entryId === m.entryId,
+                          )?.snapshotId,
+                        }
+                      : {}),
                     title: entries.find((e) => e.entryId === m.entryId)?.value
                       .titlePath,
                     stale:

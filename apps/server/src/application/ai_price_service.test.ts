@@ -207,3 +207,38 @@ it('saves bounded execution settings independently and preserves them through pr
     ),
   ).rejects.toMatchObject({code: 'ai_price_owner_required'});
 });
+
+it('pauses background work independently, retains assistant price preference and keeps the global gate effective', async () => {
+  const f = fixture(),
+    owner = ExecutionAuthority.owner(W);
+  await f.service.save(owner, {revision: 0, backgroundPaused: true}, 'queue');
+  await expect(f.service.assertBackgroundAllowed()).rejects.toMatchObject({
+    code: 'ai_operations_paused',
+  });
+  await expect(f.service.assertAssistantAllowed()).resolves.toBeUndefined();
+  await f.service.save(owner, {revision: 1, enabled: true});
+  f.clock('2026-09-14T01:00:00Z');
+  await expect(f.service.assertAssistantAllowed()).rejects.toMatchObject({
+    code: AI_PRICE_WAIT,
+  });
+  await f.service.save(
+    owner,
+    {revision: 2, assistantPriceRestricted: false},
+    'assistant',
+  );
+  await expect(f.service.assertAssistantAllowed()).resolves.toBeUndefined();
+  await expect(f.service.assertAllowed()).rejects.toMatchObject({
+    code: AI_PRICE_WAIT,
+  });
+  await f.service.save(owner, {revision: 3, operationsAllowed: false}, true);
+  await expect(f.service.assertAssistantAllowed()).rejects.toMatchObject({
+    code: 'ai_operations_paused',
+  });
+  expect(
+    (await new AiPriceService(W, f.store, provider).status()).policy,
+  ).toMatchObject({
+    backgroundPaused: true,
+    assistantPriceRestricted: false,
+    operationsAllowed: false,
+  });
+});
