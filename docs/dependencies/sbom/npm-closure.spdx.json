@@ -6713,35 +6713,31 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-7dfd90b95b048a79",
+      "SPDXID": "SPDXRef-Package-40e123d5da6d4a82",
       "name": "minimatch",
-      "versionInfo": "10.2.6",
-      "downloadLocation": "https://registry.npmjs.org/minimatch/-/minimatch-10.2.6.tgz",
+      "versionInfo": "11.0.1",
+      "downloadLocation": "https://registry.npmjs.org/minimatch/-/minimatch-11.0.1.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "BlueOak-1.0.0",
       "copyrightText": "## Copyright | copyright in it.",
       "checksums": [
         {
-          "algorithm": "SHA256",
-          "checksumValue": "5A3D2C8074A28229665727E47B8A1090941856A7962905EFE05D20D3760355F8"
-        },
-        {
           "algorithm": "SHA512",
-          "checksumValue": "BE92D012CF952C2AF59D4D015D2D3B99A628170943007D209E042EBADB71230BAD0C510C1EAD9B957FBCBE98310DD2B72753F08C22627A9EFB3A2B536782E5D4"
+          "checksumValue": "B7E567E835F8C0F0B14B6DF2D370B4BA117B4B58E98B519FA8FAE79448A9089680DB292235B3245650EEB59B66BCB7D171437A47C018565CD3B10AD3E116682D"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/minimatch@10.2.6"
+          "referenceLocator": "pkg:npm/minimatch@11.0.1"
         }
       ],
       "supplier": "Person: isaacs",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
+      "comment": "Exact npm archive and BlueOak-1.0.0 license verified for GHSA-g3hv-75wg-m249 repair."
     },
     {
       "SPDXID": "SPDXRef-Package-2083576c5af80549",
@@ -10060,6 +10056,30 @@
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "SOURCE",
       "comment": "October 28 security reconciliation; exact archive legal material: docs/dependencies/licenses/npm/zod@4.6.6/"
+    },
+    {
+      "name": "@isaacs/nonrecursive-glob-match",
+      "filesAnalyzed": false,
+      "licenseConcluded": "NOASSERTION",
+      "copyrightText": "NOASSERTION",
+      "SPDXID": "SPDXRef-Package-148b23d9b678e141",
+      "versionInfo": "1.1.0",
+      "downloadLocation": "https://registry.npmjs.org/@isaacs/nonrecursive-glob-match/-/nonrecursive-glob-match-1.1.0.tgz",
+      "licenseDeclared": "BlueOak-1.0.0",
+      "checksums": [
+        {
+          "algorithm": "SHA512",
+          "checksumValue": "18F9BF0DBBE4E512E68519F15C86BB9D3A4AD31B65E04D308F432C96CB8D889D45211394FB6FBD960502FDD805EC4CB84025A17C4B20C6294C44C09D1CF7C37F"
+        }
+      ],
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:npm/%40isaacs%2Fnonrecursive-glob-match@1.1.0"
+        }
+      ],
+      "comment": "Exact npm archive and BlueOak-1.0.0 license verified for GHSA-g3hv-75wg-m249 repair."
     }
   ],
   "relationships": [
@@ -10446,7 +10466,7 @@
     {
       "spdxElementId": "SPDXRef-Package-26bcf01493b221be",
       "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-7dfd90b95b048a79"
+      "relatedSpdxElement": "SPDXRef-Package-40e123d5da6d4a82"
     },
     {
       "spdxElementId": "SPDXRef-Package-26bcf01493b221be",
@@ -10771,7 +10791,7 @@
     {
       "spdxElementId": "SPDXRef-Package-3e54aeb1e745a025",
       "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-7dfd90b95b048a79"
+      "relatedSpdxElement": "SPDXRef-Package-40e123d5da6d4a82"
     },
     {
       "spdxElementId": "SPDXRef-Package-3e54aeb1e745a025",
@@ -11429,7 +11449,7 @@
       "relatedSpdxElement": "SPDXRef-Package-e5f02a509c431155"
     },
     {
-      "spdxElementId": "SPDXRef-Package-7dfd90b95b048a79",
+      "spdxElementId": "SPDXRef-Package-40e123d5da6d4a82",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-8678db7ff88f0a72"
     },
@@ -12011,7 +12031,7 @@
     {
       "spdxElementId": "SPDXRef-Package-c4003c9d3aa0b670",
       "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-7dfd90b95b048a79"
+      "relatedSpdxElement": "SPDXRef-Package-40e123d5da6d4a82"
     },
     {
       "spdxElementId": "SPDXRef-Package-c4003c9d3aa0b670",
@@ -12912,6 +12932,11 @@
       "spdxElementId": "SPDXRef-RootPackage",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-ee88de6c3106a9e2"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-40e123d5da6d4a82",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-148b23d9b678e141"
     }
   ]
 }
