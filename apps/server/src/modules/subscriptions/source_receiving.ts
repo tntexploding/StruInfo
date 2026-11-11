@@ -53,6 +53,7 @@ export const DEFAULT_SOURCE_RECEIVING: SourceReceiving = Object.freeze({
 export const sourceCheckStateSchema = z
   .object({
     failures: z.number().int().min(0).max(1000),
+    hasMore: z.boolean().optional(),
     errorCode: z
       .string()
       .regex(/^[a-z_]+$/u)
@@ -63,6 +64,7 @@ export const sourceCheckStateSchema = z
   .strict();
 export type SourceCheckState = Readonly<{
   failures: number;
+  hasMore?: boolean;
   errorCode?: string;
   lastNewAt?: string;
 }>;
@@ -70,6 +72,10 @@ export type SourceCheckState = Readonly<{
 export const receptionSchema = z
   .object({
     channel: z.enum(['live', 'history', 'manual']),
+    historyImportKey: z
+      .string()
+      .regex(/^[a-f0-9-]{36}:[a-f0-9]{64}$/u)
+      .optional(),
     strategy: sourceReceivingSchema.optional(),
   })
   .strict();
@@ -105,13 +111,18 @@ export function sourceSchedule(
   if (!source.enabled) return {nextCheckAt: null, reason: 'disabled'};
   if (strategy.schedule.mode === 'manual')
     return {nextCheckAt: null, reason: 'manual'};
-  if (strategy.schedule.mode === 'once' && source.lastSuccessAt)
+  if (
+    strategy.schedule.mode === 'once' &&
+    source.lastSuccessAt &&
+    !source.checkState?.hasMore
+  )
     return {nextCheckAt: null, reason: 'collected'};
   if ((source.checkState?.failures ?? 0) > strategy.retryLimit)
     return {nextCheckAt: null, reason: 'exhausted'};
   const current = Date.parse(now);
   let due = source.lastAttemptAt
-    ? Date.parse(source.lastAttemptAt) + source.intervalMinutes * 60_000
+    ? Date.parse(source.lastAttemptAt) +
+      (source.checkState?.hasMore ? 1 : source.intervalMinutes) * 60_000
     : 0;
   let reason: SourceScheduleStatus['reason'] = 'interval';
   if (strategy.schedule.mode === 'window') {

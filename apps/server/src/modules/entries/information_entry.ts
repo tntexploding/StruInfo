@@ -56,15 +56,8 @@ export interface MaterializedEvidenceSnapshot {
 
 export interface ManualEntryAnnotationInput {
   readonly body: string;
-  readonly contentKeywords: readonly string[];
-  readonly typeKeyword: EntryTypeKeyword;
-  readonly typeCustomName?: string;
   readonly usefulnessScore?: EntryAssessmentScore;
   readonly interestScore?: EntryAssessmentScore;
-  readonly domains: readonly Readonly<{
-    keyword: EntryDomainKeyword;
-    customName?: string;
-  }>[];
 }
 
 export interface AiEntryTagAnnotationInput {
@@ -582,64 +575,35 @@ export function prepareManualEntryRevision(
   input: Readonly<ManualEntryAnnotationInput>,
 ): Readonly<InformationEntryRevisionValue> | undefined {
   const body = normalizeBody(input.body);
-  const contentKeywords = normalizeContentKeywords(
-    input.contentKeywords,
-    'manual',
-    ENTRY_MANUAL_ORIGIN_VERSION,
-  );
-  const type = normalizeType(input.typeKeyword, input.typeCustomName);
-  const domains = normalizeDomains(
-    input.domains,
-    'manual',
-    ENTRY_MANUAL_ORIGIN_VERSION,
-  );
   if (
     body === undefined ||
-    contentKeywords === undefined ||
-    type === undefined ||
-    domains === undefined ||
     !isAssessmentScore(input.usefulnessScore) ||
     !isAssessmentScore(input.interestScore)
-  ) {
+  )
     return undefined;
-  }
-  return Object.freeze({
-    ...(current.value.annotations
-      ? {annotations: current.value.annotations}
-      : {}),
-    documentOrder: current.value.documentOrder,
-    titlePath: current.value.titlePath,
+  return {
+    ...current.value,
     body,
     bodySha256: informationEntryBodySha256(body),
-    chunkMode: current.value.chunkMode,
-    splitRuleVersion: current.value.splitRuleVersion,
-    isPrivate: current.value.isPrivate,
-    typeKeyword: type.keyword,
-    ...(type.customName === undefined ? {} : {typeCustomName: type.customName}),
     ...(input.usefulnessScore === undefined
-      ? current.value.usefulnessScore === undefined
-        ? {}
-        : {usefulnessScore: current.value.usefulnessScore}
+      ? {}
       : {usefulnessScore: input.usefulnessScore}),
     ...(input.interestScore === undefined
-      ? current.value.interestScore === undefined
-        ? {}
-        : {interestScore: current.value.interestScore}
-      : {interestScore: input.interestScore}),
-    contentKeywords,
-    domains,
-    fragmentIds: current.value.fragmentIds,
-    ...(current.value.fragmentRanges === undefined
       ? {}
-      : {fragmentRanges: current.value.fragmentRanges}),
-  });
+      : {interestScore: input.interestScore}),
+  };
 }
-
 export function prepareAiEntryTagRevision(
   current: Readonly<CurrentInformationEntry>,
   input: Readonly<AiEntryTagAnnotationInput>,
   allowEmpty = false,
 ): Readonly<InformationEntryRevisionValue> | undefined {
+  // Historical keyword proposals cannot replace the unified label set.
+  if (
+    current.value.annotations &&
+    current.value.annotations.originVersion !== 'reading-state.v1'
+  )
+    return undefined;
   const originVersion = input.originVersion.trim().normalize('NFC');
   if (originVersion.length === 0 || Array.from(originVersion).length > 512) {
     return undefined;

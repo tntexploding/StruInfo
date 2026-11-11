@@ -3,6 +3,7 @@ import {deriveUuidV5} from '../../modules/entries/information_entry_identity.js'
 import {type CurrentInformationEntry} from '../../modules/entries/information_entry_contract.js';
 import {
   structuredAnnotationsSchema,
+  canonicalAnnotationTerm,
   validateAnnotationEvidence,
   type AnnotationVocabulary,
 } from '../../modules/entries/structured_annotations.js';
@@ -45,8 +46,11 @@ export const annotationResponseSchema = z
   })
   .strict();
 export const ANNOTATION_INSTRUCTIONS =
-  'Also return annotations using only the supplied dimensions. Labels distinguish form, domain, concrete entity, issue, purpose and conditions. Select known termId only for the same identity and meaning; otherwise use null and describe the sense. Do not merge homonyms, related concepts or broader terms. Quote exact contiguous text from this Entry body for each label and explicit claim. Never borrow collection prefaces, links or neighbouring items. Record author stance as supports, opposes or reports; do not judge truth. Unknown speaker, time and conditions use empty strings. Use unknown, partial or none when justified; empty arrays are valid. Do not invent labels to fill dimensions. Manual annotations are protected.';
-export function annotationModelContext(vocabulary: AnnotationVocabulary) {
+  'Return annotations using only the supplied dimensions. Labels distinguish form, domain, concrete entity, issue, purpose and conditions. Select known termId only for the same identity and meaning; otherwise use null and describe the sense. Do not merge homonyms, related concepts or broader terms. Quote exact contiguous text from this Entry body for each label and explicit claim. Never borrow collection prefaces, links or neighbouring items. Record author stance as supports, opposes or reports; do not judge truth. Unknown speaker, time and conditions use empty strings. Use unknown, partial or none when justified; empty arrays are valid. Do not invent labels to fill dimensions. Manual annotations are protected.';
+export function annotationModelContext(
+  vocabulary: AnnotationVocabulary,
+  entries: readonly CurrentInformationEntry[] = [],
+) {
   // Vocabulary is explicit public configuration; never load private document tags here.
   const dimensions = vocabulary.dimensions.filter((d) => d.enabled);
   const context = {
@@ -55,7 +59,29 @@ export function annotationModelContext(vocabulary: AnnotationVocabulary) {
     terms: [] as AnnotationVocabulary['terms'],
   };
   // The catalog is shared by a batch; it cannot consume the whole request allowance.
-  for (const term of vocabulary.terms) {
+  const texts = entries
+    .map((e) => entryTagSubject(e))
+    .map((s) => (s.titlePath + '\n' + s.body).normalize('NFKC').toLowerCase());
+  const aliases = new Map<string, string[]>();
+  for (const a of vocabulary.aliases)
+    if (a.status === 'confirmed')
+      aliases.set(a.termId, [...(aliases.get(a.termId) ?? []), a.text]);
+  const score = (term: AnnotationVocabulary['terms'][number]) => {
+    const words = [term.label, ...(aliases.get(term.id) ?? [])];
+    return texts.reduce(
+      (sum, text) =>
+        sum +
+        words.filter((word) =>
+          text.includes(word.normalize('NFKC').toLowerCase()),
+        ).length,
+      0,
+    );
+  };
+  const relevant = vocabulary.terms
+    .map((term) => ({term, score: score(term)}))
+    .filter((t) => t.score > 0)
+    .sort((a, b) => b.score - a.score || a.term.id.localeCompare(b.term.id));
+  for (const {term} of relevant) {
     if (!dimensions.some((d) => d.id === term.dimensionId)) continue;
     context.terms.push(term);
     if (Array.from(JSON.stringify(context)).length > 24_000) {
@@ -82,7 +108,10 @@ export function decodeAnnotationResponse(
     const start = Array.from(entry.value.body.slice(0, index)).length;
     return {start, end: start + Array.from(text).length, quote: text};
   };
-  const context = annotationModelContext(vocabulary);
+  const context = {
+    dimensions: vocabulary.dimensions.filter((d) => d.enabled),
+    terms: vocabulary.terms,
+  };
   const annotations = structuredAnnotationsSchema.parse({
     schemaVersion: 1,
     vocabularyRevision: vocabulary.revision,
@@ -90,11 +119,11 @@ export function decodeAnnotationResponse(
     inputRevision: entry.revision,
     inputBodySha256: entry.value.bodySha256,
     origin: 'ai',
-    originVersion: 'structured-tags.v1',
+    originVersion: 'unified-tags.v1',
     status: parsed.status,
     note: parsed.note,
     readingState: entry.value.annotations?.readingState ?? 'unread',
-    labels: parsed.labels.map((l, index) => {
+    labels: parsed.labels.map((l) => {
       const known = context.terms.find((t) => t.id === l.termId);
       if (
         l.termId &&
@@ -108,15 +137,15 @@ export function decodeAnnotationResponse(
         wording: l.wording,
         primary: l.primary,
         evidence: evidence(l.quote),
-        term: known ?? {
-          id: deriveUuidV5(
-            entry.revisionId,
-            `annotation:${index.toString()}:${l.dimensionId}:${l.label}:${l.meaning}`,
-          ),
-          dimensionId: l.dimensionId,
-          label: l.label,
-          meaning: l.meaning,
-        },
+        term: canonicalAnnotationTerm(
+          known ?? {
+            id: deriveUuidV5(l.dimensionId, l.label),
+            dimensionId: l.dimensionId,
+            label: l.label,
+            meaning: l.meaning,
+          },
+          vocabulary,
+        ),
       };
     }),
     claims: parsed.claims.map(({quote: text, ...claim}) => ({

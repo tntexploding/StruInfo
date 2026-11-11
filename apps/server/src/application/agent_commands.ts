@@ -42,11 +42,7 @@ import {
   reportReadCommandSchemas,
 } from './report_commands.js';
 import type {ReportService} from './report_service.js';
-import {
-  ENTRY_TEXT_SEARCH_MODES,
-  ENTRY_TYPE_KEYWORDS,
-  ENTRY_DOMAIN_KEYWORDS,
-} from '../modules/entries/index.js';
+import {ENTRY_TEXT_SEARCH_MODES} from '../modules/entries/index.js';
 import {
   captureTextSchema,
   publicSubscriptionSchema,
@@ -95,7 +91,7 @@ const cursor = z
     entryId: id,
   })
   .strict();
-const inboxOwnerSchemas = {
+export const inboxOwnerSchemas = {
   intake_origins: z
     .object({
       snapshotIds: z.array(id).min(1).max(100),
@@ -202,10 +198,6 @@ export const agentCommandSchemas = {
       text: z.string().max(ENTRY_SEARCH_TEXT_LIMIT).default(''),
       textMode: z.enum(ENTRY_TEXT_SEARCH_MODES).optional(),
       sourceKey: z.string().max(2048).optional(),
-      typeKeyword: z.enum(ENTRY_TYPE_KEYWORDS).optional(),
-      typeCustomName: z.string().max(80).optional(),
-      domainKeyword: z.enum(ENTRY_DOMAIN_KEYWORDS).optional(),
-      domainCustomName: z.string().max(80).optional(),
       time: z
         .object({
           field: z.enum(['captured', 'published']),
@@ -249,6 +241,7 @@ export const agentCommandSchemas = {
       expectedVersion: z.number().int().min(1),
       action: z.enum(['pause', 'resume', 'cancel']),
       regenerateSplit: z.boolean().optional(),
+      reviewSplit: z.enum(['current_recipe', 'ai_once']).optional(),
     })
     .strict(),
 };
@@ -345,8 +338,17 @@ export class AgentCommands {
       if (this.authority.identity.kind !== 'owner')
         throw new OperationError('forbidden', 'operation_not_authorized');
       this.authority.require(
-        name === 'history_import' ? 'sources.capture' : 'documents.read',
+        name === 'history_import' || name === 'history_run'
+          ? 'sources.capture'
+          : 'documents.read',
       );
+      if (
+        name === 'history_run' &&
+        historySchemas.history_run.safeParse(input).data?.action === 'process'
+      ) {
+        this.authority.require('models.use');
+        this.authority.require('ingestion.manage');
+      }
       if (!this.deps.sourceHistory)
         throw new OperationError('rejected', 'history_unavailable');
       return this.deps.sourceHistory.execute(
@@ -383,6 +385,15 @@ export class AgentCommands {
         if (!this.deps.aiPrice)
           throw new OperationError('rejected', 'ai_price_unavailable');
         return this.deps.aiPrice.save(this.authority, input, 'execution');
+      case 'ai_queue_save':
+      case 'assistant_settings_save':
+        if (!this.deps.aiPrice)
+          throw new OperationError('rejected', 'ai_price_unavailable');
+        return this.deps.aiPrice.save(
+          this.authority,
+          input,
+          name === 'ai_queue_save' ? 'queue' : 'assistant',
+        );
       case 'ai_price_save':
         if (!this.deps.aiPrice)
           throw new OperationError('rejected', 'ai_price_unavailable');
@@ -554,7 +565,6 @@ export class AgentCommands {
                     {
                       kind: 'document',
                       snapshotId: record.snapshotId,
-                      maxEntries: status.policy.settings.maxEntries,
                       maxModelCalls: status.policy.settings.maxModelCalls,
                       intake: status.policy.settings.intake ?? {
                         fetchFullText: true,
@@ -737,6 +747,7 @@ export class AgentCommands {
           request.expectedVersion,
           request.action,
           request.regenerateSplit,
+          request.reviewSplit,
         );
       }
       default:

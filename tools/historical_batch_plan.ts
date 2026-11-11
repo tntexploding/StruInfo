@@ -26,9 +26,9 @@ export interface BatchManifest {
   excluded: {id: string; url: string; subscriptionId: string; reason: string}[];
   reserve: Candidate[];
   task: {
-    maxEntries: number;
-    maxRelations: number;
-    maxRelationCandidates: number;
+    maxEntries?: number;
+    maxRelations?: number;
+    maxRelationCandidates?: number;
     maxModelCalls: number;
   };
 }
@@ -153,14 +153,14 @@ export function prepareManifest(input: PreparationInput): BatchManifest {
         });
     }
   const manifest: BatchManifest = {
-    format: 'struinfo.historical-batch.v1',
+    format: 'struinfo.historical-batch.v2',
     id: input.id,
     workspaceId: input.workspaceId,
     from: input.from,
     to: input.to,
     batchSize: input.batchSize,
     sources: input.sources,
-    task: input.task,
+    task: {maxModelCalls: input.task.maxModelCalls},
     articles,
     reserve,
     excluded,
@@ -171,7 +171,9 @@ export function prepareManifest(input: PreparationInput): BatchManifest {
 
 export function validateManifest(m: BatchManifest): void {
   if (
-    m.format !== 'struinfo.historical-batch.v1' ||
+    !['struinfo.historical-batch.v1', 'struinfo.historical-batch.v2'].includes(
+      m.format,
+    ) ||
     !/^[a-zA-Z0-9_-]{1,30}$/u.test(m.id) ||
     !/^[a-f0-9-]{36}$/u.test(m.workspaceId) ||
     !validDay(m.from) ||
@@ -184,18 +186,13 @@ export function validateManifest(m: BatchManifest): void {
     throw new Error('invalid_manifest');
   const t = m.task;
   if (
-    ![
-      t.maxEntries,
-      t.maxRelations,
-      t.maxRelationCandidates,
-      t.maxModelCalls,
-    ].every(Number.isInteger) ||
-    t.maxEntries < 1 ||
-    t.maxEntries > 64 ||
-    t.maxRelations < 0 ||
-    t.maxRelations > 8 ||
-    t.maxRelationCandidates < 0 ||
-    t.maxRelationCandidates > 24 ||
+    (m.format === 'struinfo.historical-batch.v1' &&
+      (!Number.isInteger(t.maxEntries) ||
+        (t.maxEntries ?? 0) < 1 ||
+        (t.maxEntries ?? 65) > 64)) ||
+    (m.format === 'struinfo.historical-batch.v2' &&
+      Object.keys(t).some((k) => k !== 'maxModelCalls')) ||
+    !Number.isInteger(t.maxModelCalls) ||
     t.maxModelCalls < 1 ||
     t.maxModelCalls > 64
   )

@@ -11,24 +11,6 @@ import {
   type TopicRecord,
   topicPair,
 } from './content_topics.js';
-function words(text: string): Set<string> {
-  return new Set(
-    (
-      text
-        .normalize('NFKC')
-        .toLowerCase()
-        .match(/[a-z0-9][a-z0-9_+.-]{2,}|[\p{Script=Han}]{2,}/gu) ?? []
-    )
-      .flatMap((w) =>
-        /\p{Script=Han}/u.test(w)
-          ? Array.from({length: Math.max(1, w.length - 1)}, (_, i) =>
-              w.slice(i, i + 2),
-            )
-          : [w],
-      )
-      .slice(0, 4096),
-  );
-}
 export function topicLabels(
   entry: CurrentInformationEntry,
   vocabulary: AnnotationVocabulary,
@@ -108,23 +90,6 @@ export function selectTopicCandidates(
     for (const n of next)
       neighbors.set(n.id, Math.max(n.n, neighbors.get(n.id) ?? 0));
   }
-  const seedWords = words(seed.value.titlePath + ' ' + seed.value.body);
-  const wordFreq = new Map<string, number>();
-  const entryWords = new Map(
-    visible.map((e) => [
-      e.entryId,
-      words(e.value.titlePath + ' ' + e.value.body),
-    ]),
-  );
-  for (const ws of entryWords.values())
-    for (const w of ws)
-      if (seedWords.has(w)) wordFreq.set(w, (wordFreq.get(w) ?? 0) + 1);
-  const discriminating = [...seedWords]
-    .sort(
-      (a, b) =>
-        (wordFreq.get(a) ?? 0) - (wordFreq.get(b) ?? 0) || a.localeCompare(b),
-    )
-    .slice(0, 64);
   const conditions = new Set(
     seedLabels.filter((l) => l.role === 'condition').map((l) => l.id),
   );
@@ -158,9 +123,6 @@ export function selectTopicCandidates(
       continue;
     const common = ls.filter((l) => seedTerms.has(l.id));
     const near = ls.filter((l) => !seedTerms.has(l.id) && neighbors.has(l.id));
-    const lexical = discriminating.filter((w) =>
-      entryWords.get(e.entryId)?.has(w),
-    );
     const weighted = common.reduce(
       (s, l) =>
         s +
@@ -169,16 +131,9 @@ export function selectTopicCandidates(
       0,
     );
     const samples = Math.max(0, ...near.map((l) => neighbors.get(l.id) ?? 0));
-    const lexicalScore =
-      lexical.reduce(
-        (s, w) => s + Math.log(1 + visible.length / (wordFreq.get(w) ?? 1)),
-        0,
-      ) / 12;
     const score =
-      weighted +
-      Math.min(0.8, near.length * 0.12) * (samples < 2 ? 0.25 : 1) +
-      Math.min(2, lexicalScore);
-    if (!common.length && !near.length && lexical.length < 2) continue;
+      weighted + Math.min(0.8, near.length * 0.12) * (samples < 2 ? 0.25 : 1);
+    if (!common.length && !near.length) continue;
     candidates.push({
       entryId: e.entryId,
       revision: e.revision,
@@ -191,9 +146,6 @@ export function selectTopicCandidates(
           : []),
         ...(near.length
           ? ['相关标注：' + near.map((l) => l.label).join('、')]
-          : []),
-        ...(lexical.length
-          ? ['正文词语：' + lexical.slice(0, 5).join('、')]
           : []),
       ],
       samples,

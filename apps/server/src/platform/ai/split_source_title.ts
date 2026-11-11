@@ -54,6 +54,7 @@ export function splitSourceTitle(
     .map((section) => section.text)
     .join('\n');
   const lines = withoutPublicationContext(text).split('\n');
+  const proposedKey = titleKey(group.titlePath);
   const candidates: {
     text: string;
     level: number;
@@ -93,7 +94,16 @@ export function splitSourceTitle(
     const followedByLink =
       !next.startsWith('[![') &&
       /^(?:<?https?:\/\/|\[[^\]]+\]\(https?:\/\/)/u.test(next);
-    const label = heading ?? namedLink ?? (followedByLink ? line : undefined);
+    const namedInSource =
+      !bodyStarted &&
+      Boolean(candidates.at(-1)?.level) &&
+      !isReferenceOnly(line) &&
+      !/^(?:[-*>#]|\d+[).、])\s/u.test(line) &&
+      titleKey(line) === proposedKey;
+    const label =
+      heading ??
+      namedLink ??
+      (followedByLink || namedInSource ? line : undefined);
     if (
       !label ||
       /^https?:\/\//u.test(label) ||
@@ -117,14 +127,23 @@ export function splitSourceTitle(
   // Use the proposed subject only when the final source contains that heading.
   // This lets the article outrank its attached cover without trusting outside titles.
   const heading =
-    topHeadings.find(
-      (candidate) => titleKey(candidate.text) === titleKey(group.titlePath),
-    ) ?? topHeadings[0];
+    topHeadings.find((candidate) => titleKey(candidate.text) === proposedKey) ??
+    topHeadings[0];
   const linked = candidates.find(
     (candidate) => candidate.level === 0 && candidate.leading,
   );
+  // An item immediately below its column heading takes precedence when its
+  // own URL follows or the proposed title matches that source line exactly.
+  const columnItem =
+    heading &&
+    linked &&
+    linked.line > heading.line &&
+    lines.slice(heading.line + 1, linked.line).every((line) => !line.trim()) &&
+    !/^\d+\s*[.)、]/u.test(heading.text);
   const selected =
-    heading && (!CATEGORY.test(heading.text) || !linked) ? heading : linked;
+    heading && !columnItem && (!CATEGORY.test(heading.text) || !linked)
+      ? heading
+      : linked;
   // Preserve a correct "category: item" title when both parts occur in the source.
   if (selected === linked && linked) {
     const proposed = /^(.*?)[:：]\s*(.+)$/u.exec(group.titlePath);

@@ -1,5 +1,19 @@
 import type {InformationEntrySearchRequest} from './information_entry_contract.js';
 import {decodeEntrySearchBody} from './information_entry_search_request.js';
+import {z} from 'zod';
+
+export const entryAggregationSchema = z
+  .object({
+    topicIds: z.array(z.uuid()).max(32),
+    entryIds: z.array(z.uuid()),
+    updatedAt: z.iso.datetime(),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      new Set(value.entryIds).size === value.entryIds.length &&
+      new Set(value.topicIds).size === value.topicIds.length,
+  );
 
 export const MAX_ENTRY_SAVED_QUERIES = 20;
 export type EntrySavedQueryConditions = Omit<
@@ -12,6 +26,7 @@ export interface EntrySavedQuery {
   readonly name: string;
   readonly query: Readonly<EntrySavedQueryConditions>;
   readonly selectedEntryId?: string;
+  readonly aggregation?: z.infer<typeof entryAggregationSchema>;
 }
 export interface EntrySavedQueries {
   readonly version: 1;
@@ -47,7 +62,13 @@ export function decodeEntrySavedQuery(
   value: unknown,
 ): Readonly<EntrySavedQuery> | undefined {
   if (
-    !closed(value, ['viewId', 'name', 'query', 'selectedEntryId']) ||
+    !closed(value, [
+      'viewId',
+      'name',
+      'query',
+      'selectedEntryId',
+      'aggregation',
+    ]) ||
     typeof value.viewId !== 'string' ||
     !UUID.test(value.viewId) ||
     typeof value.name !== 'string' ||
@@ -57,6 +78,10 @@ export function decodeEntrySavedQuery(
   )
     return undefined;
   const name = value.name.trim().normalize('NFC');
+  const aggregation = entryAggregationSchema
+    .optional()
+    .safeParse(value.aggregation);
+  if (!aggregation.success) return undefined;
   if (name === '' || Array.from(name).length > 80) return undefined;
   if (
     !closed(value.query, QUERY_FIELDS) ||
@@ -82,6 +107,7 @@ export function decodeEntrySavedQuery(
     viewId: value.viewId,
     name,
     query: Object.freeze(query),
+    ...(aggregation.data ? {aggregation: aggregation.data} : {}),
     ...(value.selectedEntryId === undefined
       ? {}
       : {selectedEntryId: value.selectedEntryId}),

@@ -23,8 +23,13 @@ const EXACT_ALLOWED_PATHS = new Set([
   'README.md',
   'THIRD_PARTY_NOTICES.md',
   'apps/server/package.json',
-  'apps/web/dist/favicon.svg',
   'apps/web/dist/index.html',
+  'apps/web/dist/fonts/NotoSansSC.woff2',
+  'apps/web/dist/fonts/NotoSerifSC.woff2',
+  'apps/web/dist/fonts/NotoSansSC-OFL.txt',
+  'apps/web/dist/fonts/NotoSerifSC-OFL.txt',
+  'apps/web/dist/fonts/sources.json',
+  'apps/web/dist/fonts/README.md',
   'apps/web/package.json',
   'package.json',
   'packages/contracts/package.json',
@@ -41,8 +46,13 @@ const REQUIRED_EXACT_PATHS = [
   'apps/server/dist/entrypoints/prepare_queue.js',
   'apps/server/migrations/000001_create_application_schema.sql',
   'apps/server/package.json',
-  'apps/web/dist/favicon.svg',
   'apps/web/dist/index.html',
+  'apps/web/dist/fonts/NotoSansSC.woff2',
+  'apps/web/dist/fonts/NotoSerifSC.woff2',
+  'apps/web/dist/fonts/NotoSansSC-OFL.txt',
+  'apps/web/dist/fonts/NotoSerifSC-OFL.txt',
+  'apps/web/dist/fonts/sources.json',
+  'apps/web/dist/fonts/README.md',
   'apps/web/package.json',
   'package.json',
   'packages/contracts/json-schema/workspace-bundle.v1.schema.json',
@@ -145,6 +155,11 @@ export function assertNoForbiddenArtifactContent(
   path: string,
   bytes: Uint8Array,
 ): void {
+  if (/^apps\/web\/dist\/fonts\/Noto(?:Sans|Serif)SC\.woff2$/u.test(path)) {
+    if (new TextDecoder().decode(bytes.slice(0, 4)) !== 'wOF2')
+      throw new ApplicationArtifactError('A bundled font is not WOFF2.');
+    return;
+  }
   if (!TEXT_AUDIT_PATH_PATTERNS.some((pattern) => pattern.test(path))) {
     return;
   }
@@ -334,7 +349,7 @@ function isAllowedArtifactPath(path: string): boolean {
       path,
     ) ||
     /^apps\/server\/migrations\/[0-9]{6}_[a-z0-9_]+\.sql$/u.test(path) ||
-    /^apps\/web\/dist\/assets\/[A-Za-z0-9_-]+\.(?:css|js)$/u.test(path) ||
+    /^apps\/web\/dist\/assets\/[A-Za-z0-9_/-]+\.(?:css|js)$/u.test(path) ||
     /^packages\/contracts\/(?:json-schema|openapi)\/[A-Za-z0-9_./-]+\.json$/u.test(
       path,
     ) ||

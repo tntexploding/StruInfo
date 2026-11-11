@@ -36,9 +36,9 @@ export const READ_POSTGRES_OPERATIONAL_STATUS_SQL = [
   '  (SELECT count(*)::text FROM struinfo.processing_run WHERE workspace_id = $1) AS processing_run_count,',
   "  (SELECT count(*)::text FROM struinfo.processing_run WHERE workspace_id = $1 AND status = 'failed') AS failed_processing_run_count,",
   "  (SELECT count(*)::text FROM struinfo.processing_run WHERE workspace_id = $1 AND status = 'running' AND updated_at < CURRENT_TIMESTAMP - ($2::integer * INTERVAL '1 minute')) AS stale_running_processing_run_count,",
-  "  (SELECT count(*)::text FROM struinfo.processing_bulk_ingestion_batch WHERE workspace_id = $1 AND status = 'failed') AS failed_bulk_ingestion_batch_count,",
+  "  (SELECT count(*)::text FROM struinfo.processing_agent_task WHERE workspace_id = $1 AND state_text::jsonb->>'workflow' = 'confirmed-content-v1' AND state_text::jsonb->>'status' = 'failed') AS failed_document_task_count,",
   "  (SELECT count(*)::text FROM struinfo.processing_proposal WHERE workspace_id = $1 AND status = 'pending_review') AS pending_proposal_count,",
-  "  (SELECT count(*)::text FROM struinfo.processing_entry_automation_work_item WHERE workspace_id = $1 AND state = 'pending') AS pending_owner_work_item_count",
+  "  (SELECT count(*)::text FROM struinfo.processing_document_intake WHERE workspace_id = $1 AND state_text::jsonb->>'receipt' = 'pending') AS pending_intake_review_count",
 ].join('\n');
 
 interface OperationalStatusRow extends Readonly<Record<string, unknown>> {
@@ -54,9 +54,9 @@ interface OperationalStatusRow extends Readonly<Record<string, unknown>> {
   readonly processing_run_count: unknown;
   readonly failed_processing_run_count: unknown;
   readonly stale_running_processing_run_count: unknown;
-  readonly failed_bulk_ingestion_batch_count: unknown;
+  readonly failed_document_task_count: unknown;
   readonly pending_proposal_count: unknown;
-  readonly pending_owner_work_item_count: unknown;
+  readonly pending_intake_review_count: unknown;
 }
 
 export class PostgresOperationalStatusReader {
@@ -116,9 +116,9 @@ function mapOperationalStatus(
     staleRunningProcessingRunCount: count(
       row.stale_running_processing_run_count,
     ),
-    failedBulkIngestionBatchCount: count(row.failed_bulk_ingestion_batch_count),
+    failedDocumentTaskCount: count(row.failed_document_task_count),
     pendingProposalCount: count(row.pending_proposal_count),
-    pendingOwnerWorkItemCount: count(row.pending_owner_work_item_count),
+    pendingIntakeReviewCount: count(row.pending_intake_review_count),
   });
 }
 

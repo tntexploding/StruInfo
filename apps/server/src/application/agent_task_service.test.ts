@@ -216,6 +216,23 @@ function fixture(
   };
 }
 describe('bounded Agent tasks', () => {
+  it('freezes the active budget and preserves it when the same request is replayed', async () => {
+    let budget = 'first-batch';
+    const f = fixture(undefined, {
+      check: () => Promise.resolve(),
+      canResume: () => true,
+      currentBudgetId: () => Promise.resolve(budget),
+      withBudget: (_id, run) => run(),
+    });
+    const request = {kind: 'document', snapshotId: S};
+    const task = await f.service.start(owner, 'budget-binding', request);
+    await f.done(task.taskId);
+    expect(task.request).toMatchObject({budgetId: 'first-batch'});
+    budget = 'second-batch';
+    expect(
+      (await f.service.start(owner, 'budget-binding', request)).request,
+    ).toMatchObject({budgetId: 'first-batch'});
+  });
   it('publishes confirmed content without recall or relation calls', async () => {
     const f = fixture();
     f.actions.relationSteps.mockRejectedValue(
@@ -293,6 +310,42 @@ describe('bounded Agent tasks', () => {
     expect(result.state).toMatchObject({status: 'succeeded', calls: 1});
     expect(result.state.steps.map((s) => s.kind)).toEqual(['tags']);
     expect(f.actions.publish).toHaveBeenCalledOnce();
+  });
+  it('freezes each source entry limit across admissions and idempotent replay', async () => {
+    const f = fixture();
+    const input = {kind: 'document', snapshotId: S, maxModelCalls: 4};
+    f.actions.decideSourceSplit.mockResolvedValue({
+      outcome: 'review',
+      reason: 'recipe_format_mismatch',
+    });
+    const frozen: FrozenSourceSplit = {
+      engine: SOURCE_SPLIT_ENGINE,
+      catalogRevision: 1,
+      recipes: [],
+    };
+    f.actions.freezeSourceSplit.mockResolvedValue({
+      ...frozen,
+      sourceEntryLimit: 4,
+    });
+    const short = await f.service.start(owner, 'short-format', input);
+    expect(short.request).toMatchObject({maxEntries: 4});
+    await f.done(short.taskId);
+    f.actions.freezeSourceSplit.mockResolvedValue({
+      ...frozen,
+      sourceEntryLimit: 48,
+    });
+    expect(
+      (await f.service.start(owner, 'short-format', input)).request,
+    ).toMatchObject({maxEntries: 4});
+    const weekly = await f.service.start(owner, 'weekly-format', input);
+    expect(weekly.request).toMatchObject({maxEntries: 48});
+    await f.done(weekly.taskId);
+    const bounded = await f.service.start(owner, 'bounded', {
+      ...input,
+      maxEntries: 20,
+    });
+    expect(bounded.request).toMatchObject({maxEntries: 20});
+    await f.done(bounded.taskId);
   });
   it.each(['rule', 'review', 'ai'] as const)(
     'freezes source rules and handles %s without losing task gates or budgets',
@@ -1154,6 +1207,9 @@ it('publishes only after every document stage, and resumes publication without a
   expect(stopped.state.steps.every((step) => step.complete)).toBe(true);
   const calls = stopped.state.calls;
   await f.service.control(owner, started.taskId, stopped.version, 'resume');
+  await vi.waitFor(() => {
+    expect(f.rows.get(started.taskId)?.state.status).toBe('succeeded');
+  });
   const completed = await f.done(started.taskId);
   expect(completed.state).toMatchObject({
     status: 'succeeded',

@@ -1,7 +1,7 @@
 import {describe, expect, it} from 'vitest';
 
 import {createReviewPreferences} from '../storage/review_preferences_store.js';
-import {DEFAULT_ENTRY_CLASSIFICATION_PROFILE} from '../modules/entries/information_entry_deterministic_classification.js';
+
 import type {JsonValue} from '../serialization/canonical_json.js';
 import {
   PERSONAL_DATA_BUNDLE_CODEC,
@@ -35,17 +35,7 @@ describe('personal data Bundle preference compatibility', () => {
       revision: 0,
       views: [],
     });
-    expect(decoded.reviewPreferences.entryPreferenceProfile).toEqual({
-      revision: 0,
-      enabled: false,
-      rules: [],
-    });
-    expect(decoded.reviewPreferences.entryAutomationPolicy).toMatchObject({
-      revision: 0,
-      enabled: false,
-      paused: false,
-      profileRevision: 0,
-    });
+
     expect(decoded.reviewPreferences.entrySplitRuleProfile).toEqual({
       revision: 0,
       mode: 'one_section',
@@ -53,9 +43,6 @@ describe('personal data Bundle preference compatibility', () => {
       maximumGroupCodePoints: 4000,
       maximumFragmentsPerGroup: 8,
     });
-    expect(decoded.reviewPreferences.entryClassificationProfile).toEqual(
-      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
-    );
   });
 
   it('round-trips saved query conditions and rejects persisted result/cursor payloads', () => {
@@ -121,58 +108,11 @@ describe('personal data Bundle preference compatibility', () => {
         undefined,
         undefined,
         {
-          revision: 1,
-          enabled: true,
-          rules: [
-            {
-              ruleId: '44444444-4444-4444-8444-444444444444',
-              dimension: 'interest',
-              featureKind: 'type',
-              featureIdentity: 'investigation_analysis',
-              displayValue: '调查分析',
-              effect: 'prefer',
-              weight: 4,
-            },
-          ],
-        },
-        {
-          revision: 2,
-          enabled: true,
-          paused: false,
-          profileRevision: 1,
-          minimumMatchedRuleCount: 1,
-          advanceThresholds: {
-            usefulness: 4,
-            interest: 3,
-            requiredDimensions: 1,
-          },
-          deferThresholds: {
-            usefulness: 5,
-            interest: 4,
-            requiredDimensions: 2,
-          },
-          budgets: {
-            maximumEntriesPerRun: 20,
-            maximumAdvanceCandidatesPerRun: 5,
-            maximumDeferCandidatesPerRun: 4,
-          },
-          failureMode: 'pause',
-        },
-        {
           revision: 3,
           mode: 'merge_short_adjacent',
           minimumGroupCodePoints: 250,
           maximumGroupCodePoints: 2500,
           maximumFragmentsPerGroup: 6,
-        },
-        {
-          format: 'struinfo.entry-classification-profile',
-          version: 1,
-          revision: 4,
-          aliases: [{source: '容器平台', canonical: 'Docker'}],
-          typeMappings: [{term: '动手实验', keyword: 'operating_guideline'}],
-          domainMappings: [{term: 'Docker', keyword: 'engineering_computing'}],
-          exclusions: ['广告'],
         },
       ),
     });
@@ -182,89 +122,9 @@ describe('personal data Bundle preference compatibility', () => {
       payload as JsonValue,
     ) as Readonly<PersonalDataBundleSection>;
 
-    expect(decoded.reviewPreferences.entryPreferenceProfile).toEqual(
-      section.reviewPreferences.entryPreferenceProfile,
-    );
-    expect(decoded.reviewPreferences.entryAutomationPolicy).toEqual(
-      section.reviewPreferences.entryAutomationPolicy,
-    );
     expect(decoded.reviewPreferences.entrySplitRuleProfile).toEqual(
       section.reviewPreferences.entrySplitRuleProfile,
     );
-    expect(decoded.reviewPreferences.entryClassificationProfile).toEqual(
-      section.reviewPreferences.entryClassificationProfile,
-    );
-  });
-
-  it('rejects malformed profile state instead of silently dropping it', () => {
-    expect(() =>
-      PERSONAL_DATA_BUNDLE_CODEC.decode({
-        schemaVersion: PERSONAL_DATA_BUNDLE_SCHEMA,
-        blobs: [],
-        reviewPreferences: {
-          format: 'struinfo.review-preferences',
-          version: 1,
-          workspaceId: WORKSPACE_ID,
-          quickTags: [],
-          automaticKeywords: {
-            enabled: true,
-            includeLinkDomains: false,
-            excludedKeywords: [],
-          },
-          vocabulary: {aliases: []},
-          entryPreferenceProfile: {
-            revision: 1,
-            enabled: true,
-            rules: [],
-            unknown: true,
-          },
-        },
-      }),
-    ).toThrow('The personal-data Bundle section is invalid.');
-  });
-
-  it('rejects malformed automation policy state instead of dropping it', () => {
-    expect(() =>
-      PERSONAL_DATA_BUNDLE_CODEC.decode({
-        schemaVersion: PERSONAL_DATA_BUNDLE_SCHEMA,
-        blobs: [],
-        reviewPreferences: {
-          format: 'struinfo.review-preferences',
-          version: 1,
-          workspaceId: WORKSPACE_ID,
-          quickTags: [],
-          automaticKeywords: {
-            enabled: true,
-            includeLinkDomains: false,
-            excludedKeywords: [],
-          },
-          vocabulary: {aliases: []},
-          entryAutomationPolicy: {
-            revision: 1,
-            enabled: true,
-            paused: false,
-            profileRevision: 1,
-            minimumMatchedRuleCount: 1,
-            advanceThresholds: {
-              usefulness: 3,
-              interest: 3,
-              requiredDimensions: 1,
-            },
-            deferThresholds: {
-              usefulness: 3,
-              interest: 3,
-              requiredDimensions: 1,
-            },
-            budgets: {
-              maximumEntriesPerRun: 10,
-              maximumAdvanceCandidatesPerRun: 3,
-              maximumDeferCandidatesPerRun: 3,
-            },
-            failureMode: 'continue',
-          },
-        },
-      }),
-    ).toThrow('The personal-data Bundle section is invalid.');
   });
 });
 
@@ -303,7 +163,7 @@ it('round-trips page layout separately from privacy and defaults older packages'
   const legacy = PERSONAL_DATA_BUNDLE_CODEC.decode({
     ...section,
     reviewPreferences: older,
-  }) as Readonly<PersonalDataBundleSection>;
+  } as unknown as JsonValue) as Readonly<PersonalDataBundleSection>;
   expect(legacy.reviewPreferences.uiPreferences?.revision).toBe(0);
   expect(() =>
     PERSONAL_DATA_BUNDLE_CODEC.decode({
@@ -312,6 +172,6 @@ it('round-trips page layout separately from privacy and defaults older packages'
         ...reviewPreferences,
         uiPreferences: {...ui, includePrivate: true},
       },
-    }),
+    } as unknown as JsonValue),
   ).toThrow();
 });

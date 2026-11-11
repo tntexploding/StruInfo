@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {deriveUuidV5} from '../entries/index.js';
 import {
   importMarkdownEvidence,
+  materializeEvidenceSnapshot,
   type EvidenceRepositoryPort,
   type EvidenceReadRepositoryPort,
   type PublicationInput,
@@ -65,6 +66,7 @@ export interface SourceConnectorCapability extends SourceConnectorDescriptor {
 }
 
 export interface SourceConnectorDocument {
+  readonly accessRestriction?: 'paid';
   readonly externalId: string;
   readonly version: string;
   readonly canonicalUri: string;
@@ -78,10 +80,11 @@ export interface SourceConnectorDocument {
 }
 
 export type SourceConnectorReadResult =
-  | Readonly<{status: 'unchanged'; cursor: string}>
+  | Readonly<{status: 'unchanged'; cursor: string; hasMore?: boolean}>
   | Readonly<{
       status: 'changed';
       cursor: string;
+      hasMore?: boolean;
       documents: readonly Readonly<SourceConnectorDocument>[];
     }>;
 
@@ -196,6 +199,10 @@ function decodeConnectorDescriptor(
 }
 
 export interface SourceConnectorImportDependencies {
+  readonly latestHistorySnapshot?: (
+    sourceId: string,
+    uri: string,
+  ) => Promise<string | undefined>;
   readonly evidenceRead?: EvidenceReadRepositoryPort;
   readonly blobStore: BlobStore;
   readonly evidenceRepository: EvidenceRepositoryPort;
@@ -231,6 +238,36 @@ export type SourceConnectorImportResult =
         | 'persistence_failed'
         | 'connector_result_invalid';
     }>;
+
+// RSS wraps its body in a title and a source link. An archived page can also
+// contain a repeated heading, a publication date and a trailing navigation link.
+function containsFeedBody(original: string, incoming: string) {
+  const feed = incoming.split('\n\n');
+  const title = feed.shift();
+  if (
+    !title?.startsWith('# ') ||
+    !feed.pop()?.startsWith('[查看原始条目](') ||
+    !feed.length
+  )
+    return false;
+  const page = original.trim().split('\n\n');
+  if (page.shift() !== title) return false;
+  if (page[0] === title) page.shift();
+  if (
+    /^(?:[A-Za-z]{3,9} \d{1,2}, \d{4}|\d{4}[-/.年]\d{1,2}[-/.月]\d{1,2}日?)$/u.test(
+      page[0] ?? '',
+    )
+  )
+    page.shift();
+  if (
+    page.length === feed.length + 1 &&
+    /^\[[^\]\n]+\]\([^\s]+\)$/u.test(page.at(-1) ?? '')
+  )
+    page.pop();
+  return (
+    page.length === feed.length && page.every((p, index) => p === feed[index])
+  );
+}
 
 /**
  * Imports a validated changed batch one document at a time. Cursor advancement
@@ -287,7 +324,7 @@ export async function importSourceConnectorDocuments(
       resourceId,
       `struinfo:source-connector-snapshot:v1:${legacyContentIdentity}`,
     );
-    const previous =
+    let previous =
       (await dependencies.evidenceRead?.loadSnapshot(
         input.workspaceId,
         snapshotId,
@@ -296,12 +333,41 @@ export async function importSourceConnectorDocuments(
         input.workspaceId,
         legacySnapshotId,
       ));
+    if (
+      !previous &&
+      !input.isPrivate &&
+      dependencies.evidenceRead &&
+      dependencies.latestHistorySnapshot &&
+      (input.connectorId === 'builtin.rss-atom.v1' ||
+        input.connectorId === 'builtin.web.v1')
+    ) {
+      const id = await dependencies.latestHistorySnapshot(
+        input.subscriptionId,
+        document.canonicalUri,
+      );
+      const saved = id
+        ? await dependencies.evidenceRead.loadSnapshot(input.workspaceId, id)
+        : undefined;
+      if (saved && !saved.isPrivate) {
+        const original = (
+          await materializeEvidenceSnapshot(saved, dependencies.blobStore)
+        ).structures[0]?.normalizedText;
+        const incoming = new TextDecoder().decode(document.sourceUtf8).trim();
+        if (
+          original &&
+          (original.trim() === incoming ||
+            (input.connectorId === 'builtin.rss-atom.v1' &&
+              containsFeedBody(original, incoming)))
+        )
+          previous = saved;
+      }
+    }
     if (previous) {
       if (Boolean(previous.isPrivate) !== input.isPrivate)
         return {status: 'failed', documentIndex, code: 'conflict'};
       importedDocuments.push({
         externalId: document.externalId,
-        resourceId,
+        resourceId: previous.resourceId,
         snapshotId: previous.snapshotId,
         outcome: 'existing',
       });
@@ -371,18 +437,26 @@ export async function importSourceConnectorDocuments(
 function decodeConnectorResult(
   value: unknown,
 ): Readonly<SourceConnectorReadResult> {
-  if (!isRecord(value) || !boundedText(value.cursor, MAX_CURSOR_CODE_POINTS)) {
+  if (
+    !isRecord(value) ||
+    !boundedText(value.cursor, MAX_CURSOR_CODE_POINTS) ||
+    (value.hasMore !== undefined && typeof value.hasMore !== 'boolean')
+  ) {
     throw new SourceConnectorError('connector_result_invalid');
   }
   if (value.status === 'unchanged') {
-    if (!exactKeys(value, ['cursor', 'status'])) {
+    if (!exactOptionalKeys(value, ['cursor', 'status', 'hasMore'])) {
       throw new SourceConnectorError('connector_result_invalid');
     }
-    return Object.freeze({status: 'unchanged' as const, cursor: value.cursor});
+    return Object.freeze({
+      status: 'unchanged' as const,
+      cursor: value.cursor,
+      ...(value.hasMore ? {hasMore: true} : {}),
+    });
   }
   if (
     value.status !== 'changed' ||
-    !exactKeys(value, ['cursor', 'documents', 'status']) ||
+    !exactOptionalKeys(value, ['cursor', 'documents', 'status', 'hasMore']) ||
     !Array.isArray(value.documents) ||
     value.documents.length < 1 ||
     value.documents.length > MAX_SOURCE_CONNECTOR_DOCUMENTS
@@ -408,6 +482,7 @@ function decodeConnectorResult(
     status: 'changed' as const,
     cursor: value.cursor,
     documents: Object.freeze(documents),
+    ...(value.hasMore ? {hasMore: true} : {}),
   });
 }
 
@@ -419,6 +494,7 @@ function decodeConnectorDocument(
   }
   if (
     !exactOptionalKeys(value, [
+      'accessRestriction',
       'canonicalUri',
       'externalId',
       'mediaType',
@@ -428,6 +504,8 @@ function decodeConnectorDocument(
       'sourceUtf8',
       'version',
     ]) ||
+    (value.accessRestriction !== undefined &&
+      value.accessRestriction !== 'paid') ||
     !boundedText(value.externalId, MAX_DOCUMENT_ID_CODE_POINTS) ||
     !boundedText(value.version, MAX_DOCUMENT_VERSION_CODE_POINTS) ||
     !validHttpsUri(value.canonicalUri) ||
@@ -456,6 +534,9 @@ function decodeConnectorDocument(
   }
   return Object.freeze({
     externalId: value.externalId,
+    ...(value.accessRestriction === 'paid'
+      ? {accessRestriction: 'paid' as const}
+      : {}),
     version: value.version,
     canonicalUri: value.canonicalUri,
     mediaType: value.mediaType,

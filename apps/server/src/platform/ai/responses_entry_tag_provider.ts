@@ -6,7 +6,11 @@ import {
   annotationModelContext,
   decodeAnnotationResponse,
 } from './annotation_response.js';
-import type {AnnotationVocabulary} from '../../modules/entries/structured_annotations.js';
+import {
+  EMPTY_ANNOTATION_VOCABULARY,
+  withDefaultAnnotationDimensions,
+  type AnnotationVocabulary,
+} from '../../modules/entries/structured_annotations.js';
 import {documentProcessingInstructions} from '../../modules/processing/document_processing_standard.js';
 import {parseResponseJson} from './response_json.js';
 import {entryTagSubject} from './entry_tag_subject.js';
@@ -21,12 +25,7 @@ import {
   responsesOptions,
   responsesPromptVersion,
 } from './responses_configuration.js';
-import {
-  ENTRY_DOMAIN_KEYWORDS,
-  ENTRY_TYPE_KEYWORDS,
-  informationEntrySearchKey,
-  type CurrentInformationEntry,
-} from '../../modules/entries/index.js';
+import {type CurrentInformationEntry} from '../../modules/entries/index.js';
 import {
   AiTagProposalProviderError,
   type AiTagProposalProviderPort,
@@ -40,11 +39,9 @@ import {
   RESPONSE_METADATA_INSTRUCTIONS,
 } from './responses_metadata.js';
 
-export const OPENAI_TAG_PROMPT_VERSION = 'struinfo.openai-entry-tags.v11';
+export const OPENAI_TAG_PROMPT_VERSION = 'struinfo.openai-entry-tags.v12';
 
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
-const TYPE_VALUES = [...ENTRY_TYPE_KEYWORDS];
-const DOMAIN_VALUES = [...ENTRY_DOMAIN_KEYWORDS];
 
 export type OpenAiFetch = (
   input: string | URL | Request,
@@ -79,10 +76,9 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
     if (entry.value.isPrivate) {
       throw new AiTagProposalProviderError('ai_provider_rejected');
     }
-    const vocabulary = await this.vocabulary?.();
-    const active = vocabulary?.dimensions.some((d) => d.enabled)
-      ? vocabulary
-      : undefined;
+    const active = withDefaultAnnotationDimensions(
+      (await this.vocabulary?.()) ?? EMPTY_ANNOTATION_VOCABULARY,
+    );
     return decodePayload(
       await this.request(createRequest(this.#config, entry, active)),
       entry,
@@ -103,27 +99,19 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
         MAXIMUM_TAG_BATCH_CHARACTERS
     )
       throw new AiTagProposalProviderError('ai_provider_rejected');
-    const vocabulary = await this.vocabulary?.();
-    const active = vocabulary?.dimensions.some((d) => d.enabled)
-      ? vocabulary
-      : undefined;
-    const requests = entries.map((entry) =>
-      createRequest(this.#config, entry, active),
+    const active = withDefaultAnnotationDimensions(
+      (await this.vocabulary?.()) ?? EMPTY_ANNOTATION_VOCABULARY,
     );
-    const first = requests[0];
-    if (!first) fail();
+    const firstEntry = entries[0];
+    if (!firstEntry) fail();
+    const first = createRequest(this.#config, firstEntry, active);
     const input = JSON.stringify({
-      ...(active ? {annotationVocabulary: annotationModelContext(active)} : {}),
-      items: entries.map((entry, index) => {
-        const subject = JSON.parse(String(requests[index]?.input)) as Record<
-          string,
-          unknown
-        >;
-        delete subject.annotationVocabulary;
+      annotationVocabulary: annotationModelContext(active, entries),
+      items: entries.map((entry) => {
         return {
           entryId: entry.entryId,
           expectedRevision: entry.revision,
-          ...subject,
+          ...entryTagSubject(entry),
         };
       }),
     });
@@ -133,20 +121,13 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
       ...first,
       max_output_tokens: Math.max(
         this.#config.maxOutputTokens,
-        entries.length * 1000 + 128,
+        entries.length * 2048 + 128,
       ),
       instructions: [
-        ...(active
-          ? [
-              ANNOTATION_INSTRUCTIONS,
-              'Each tags object also contains annotations as specified in the response schema.',
-            ]
-          : []),
+        ANNOTATION_INSTRUCTIONS,
         documentProcessingInstructions('tags'),
         sourceProcessingInstructions('tags'),
-        active
-          ? 'Return one JSON object with items. Each item contains entryId, expectedRevision and tags. Each tags object contains summary, contentKeywords, type, domains and annotations, using the exact response schema. No fences or extra fields.'
-          : 'Return exactly one JSON object {"items":[{"entryId":"...","expectedRevision":1,"tags":{"summary":"...","contentKeywords":["..."],"type":{"keyword":"...","customName":null},"domains":[{"keyword":"...","customName":null}]}}]}. No fences or extra fields. domains is always an array. Use customName only for other; otherwise null.',
+        'Return one JSON object with items. Each item contains entryId, expectedRevision and tags. Each tags object contains summary and annotations. Use the exact response schema. No extra fields.',
         'Return every supplied entryId and expectedRevision exactly once. Each tags object describes only that Entry. Never pool keywords across items, borrow a neighbouring item subject, or tag the collection preface or advertisements. Existing tags are hints, not evidence.',
         RESPONSE_METADATA_INSTRUCTIONS,
       ].join(' '),
@@ -273,40 +254,23 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
 function createRequest(
   config: Readonly<AiProposalProviderConfig>,
   entry: Readonly<CurrentInformationEntry>,
-  vocabulary?: AnnotationVocabulary,
+  vocabulary: AnnotationVocabulary,
 ) {
-  const subject = entryTagSubject(entry);
-  return Object.freeze({
+  return {
     model: config.model,
     ...responsesOptions(config),
     store: false,
-    max_output_tokens: config.maxOutputTokens,
+    max_output_tokens: Math.max(config.maxOutputTokens, 2176),
     instructions: [
       documentProcessingInstructions('tags'),
       sourceProcessingInstructions('tags'),
-      'Use customName only when keyword is other; otherwise return null.',
-      ...(vocabulary ? [ANNOTATION_INSTRUCTIONS] : []),
-      vocabulary
-        ? 'Return one JSON object with summary, contentKeywords, type, domains and annotations using the exact response schema. No fences or extra fields.'
-        : 'Return one JSON object with summary, contentKeywords, type and domains. No Markdown fences, comments, $schema or placeholder fields. domains MUST be an array of objects even for ONE domain; type is one object. Do not put a quotation mark after an array closing bracket.',
-      'Shape example for a synthetic database-index explanation only: {"summary":"解释数据库索引的查找机制","contentKeywords":["数据库索引"],"type":{"keyword":"knowledge_explanation","customName":null},"domains":[{"keyword":"engineering_computing","customName":null}]}. This example shows JSON structure, not tags or taxonomy to copy into unrelated material. Select all values from the current Entry and allowed enums.',
+      ANNOTATION_INSTRUCTIONS,
+      'Return exactly one JSON object with summary and annotations. No extra fields.',
       RESPONSE_METADATA_INSTRUCTIONS,
     ].join(' '),
     input: JSON.stringify({
-      ...subject,
-      ...(vocabulary
-        ? {annotationVocabulary: annotationModelContext(vocabulary)}
-        : {}),
-      existingContentKeywords: (subject.documentContext ||
-      subject.body !== entry.value.body
-        ? []
-        : entry.value.contentKeywords
-      ).map((keyword) => keyword.displayValue),
-      existingType: entry.value.typeKeyword ?? null,
-      existingDomains: entry.value.domains.map((domain) => ({
-        keyword: domain.keyword,
-        customName: domain.customName ?? null,
-      })),
+      ...entryTagSubject(entry),
+      annotationVocabulary: annotationModelContext(vocabulary, [entry]),
     }),
     text: {
       format: {
@@ -316,54 +280,16 @@ function createRequest(
         schema: {
           type: 'object',
           additionalProperties: false,
-          required: [
-            'summary',
-            'contentKeywords',
-            'type',
-            'domains',
-            ...(vocabulary ? ['annotations'] : []),
-          ],
+          required: ['summary', 'annotations'],
           properties: {
-            ...(vocabulary
-              ? {annotations: z.toJSONSchema(annotationResponseSchema)}
-              : {}),
             summary: {type: 'string', minLength: 1, maxLength: 240},
-            contentKeywords: {
-              type: 'array',
-              minItems: vocabulary ? 0 : 1,
-              maxItems: 12,
-              items: {type: 'string', minLength: 1, maxLength: 80},
-            },
-            type: {
-              type: 'object',
-              additionalProperties: false,
-              required: ['keyword', 'customName'],
-              properties: {
-                keyword: {type: 'string', enum: TYPE_VALUES},
-                customName: {type: ['string', 'null'], maxLength: 80},
-              },
-            },
-            domains: {
-              type: 'array',
-              minItems: vocabulary ? 0 : 1,
-              maxItems: 3,
-              items: {
-                type: 'object',
-                additionalProperties: false,
-                required: ['keyword', 'customName'],
-                properties: {
-                  keyword: {type: 'string', enum: DOMAIN_VALUES},
-                  customName: {type: ['string', 'null'], maxLength: 80},
-                },
-              },
-            },
+            annotations: z.toJSONSchema(annotationResponseSchema),
           },
         },
       },
     },
-  });
+  };
 }
-
 function extractOutputText(value: unknown): string {
   if (
     !isRecord(value) ||
@@ -399,98 +325,24 @@ function extractOutputText(value: unknown): string {
 
 function decodePayload(
   value: unknown,
-  entry?: CurrentInformationEntry,
-  vocabulary?: AnnotationVocabulary,
+  entry: CurrentInformationEntry,
+  vocabulary: AnnotationVocabulary,
 ): Readonly<AiTagProposalProviderResult> {
-  if (
-    !isClosedRecord(value, [
-      'summary',
-      'contentKeywords',
-      'type',
-      'domains',
-      ...(vocabulary ? ['annotations'] : []),
-    ])
-  )
-    fail();
+  if (!isClosedRecord(value, ['summary', 'annotations'])) fail();
   const summary = boundedText(value.summary, 240);
-  if (
-    !Array.isArray(value.contentKeywords) ||
-    value.contentKeywords.length < (vocabulary ? 0 : 1) ||
-    value.contentKeywords.length > 12
-  )
-    fail();
-  const contentKeywords = value.contentKeywords.map((item) =>
-    boundedText(item, 80),
-  );
-  const identities = contentKeywords.map(informationEntrySearchKey);
-  if (new Set(identities).size !== identities.length) fail();
-  const type = decodeFixedOrOther(value.type, ENTRY_TYPE_KEYWORDS);
-  if (
-    !Array.isArray(value.domains) ||
-    value.domains.length < (vocabulary ? 0 : 1) ||
-    value.domains.length > 3
-  )
-    fail();
-  const domains = value.domains.map((item) =>
-    decodeFixedOrOther(item, ENTRY_DOMAIN_KEYWORDS),
-  );
-  const domainIdentities = domains.map(
-    (domain) =>
-      `${domain.keyword}:${informationEntrySearchKey(domain.customName ?? '')}`,
-  );
-  if (new Set(domainIdentities).size !== domainIdentities.length) fail();
-  let annotations;
-  if (vocabulary && entry) {
-    try {
-      annotations = decodeAnnotationResponse(
+  try {
+    return {
+      summary,
+      annotations: decodeAnnotationResponse(
         value.annotations,
         entry,
         vocabulary,
-      );
-    } catch {
-      fail();
-    }
-  }
-  return Object.freeze({
-    ...(annotations ? {annotations} : {}),
-    summary,
-    contentKeywords: Object.freeze(contentKeywords),
-    typeKeyword: type.keyword,
-    ...(type.customName === undefined ? {} : {typeCustomName: type.customName}),
-    domains: Object.freeze(
-      domains.map((domain) =>
-        Object.freeze({
-          keyword: domain.keyword,
-          ...(domain.customName === undefined
-            ? {}
-            : {customName: domain.customName}),
-        }),
       ),
-    ),
-  });
-}
-
-function decodeFixedOrOther<T extends string>(
-  value: unknown,
-  allowed: readonly T[],
-): Readonly<{keyword: T; customName?: string}> {
-  if (
-    !isClosedRecord(value, ['keyword', 'customName']) ||
-    typeof value.keyword !== 'string' ||
-    !allowed.includes(value.keyword as T)
-  )
-    fail();
-  const keyword = value.keyword as T;
-  if (keyword === 'other') {
-    return Object.freeze({
-      keyword,
-      customName: boundedText(value.customName, 80),
-    });
+    };
+  } catch {
+    return fail();
   }
-  if (value.customName !== null) fail();
-  return Object.freeze({keyword});
 }
-
 function boundedText(value: unknown, maximum: number): string {
   const normalized = responseMetadata(value, maximum);
   if (normalized === undefined) fail();

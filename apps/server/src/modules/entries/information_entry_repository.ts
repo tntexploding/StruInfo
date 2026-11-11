@@ -1,3 +1,4 @@
+import type {AnnotationTerm} from './structured_annotations.js';
 import type {
   CurrentInformationEntry,
   InformationEntryTypeReviewRequest,
@@ -45,6 +46,28 @@ export interface InformationEntryEmptySnapshotMaterializeResult {
 }
 
 export interface InformationEntryRepositoryPort {
+  /** Distinct current public terms; no article bodies. */
+  loadAnnotationTerms?(workspaceId: string): Promise<AnnotationTerm[]>;
+  loadDocumentEntryCounts?(
+    workspaceId: string,
+    includePrivate: boolean,
+  ): Promise<
+    readonly Readonly<{
+      snapshotId: string;
+      entryCount: number;
+      annotatedEntryCount: number;
+      title?: string;
+      types?: readonly string[];
+      tagNames?: readonly string[];
+      readingState?: string;
+    }>[]
+  >;
+  loadCurrentEntriesForSnapshot?(
+    workspaceId: string,
+    includePrivate: boolean,
+    snapshotId: string,
+  ): Promise<readonly Readonly<CurrentInformationEntry>[]>;
+
   materializeEntries(
     entries: readonly Readonly<InformationEntryMaterializeRow>[],
   ): Promise<Readonly<InformationEntryMaterializeResult>>;

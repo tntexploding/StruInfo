@@ -26,6 +26,7 @@ import {
   type TopicProvider,
 } from '../modules/entries/content_topics.js';
 import {prepareTopicInput} from '../modules/entries/topic_candidates.js';
+import type {CurrentInformationEntry} from '../modules/entries/information_entry_contract.js';
 import type {ExecutionAuthority} from './execution_authority.js';
 import type {DocumentPublicationRepository} from './document_publication_contract.js';
 import {OperationError} from './operation_error.js';
@@ -33,7 +34,9 @@ import {OperationError} from './operation_error.js';
 const id = z.uuid(),
   version = z.number().int().nonnegative();
 export const topicCommandSchemas = {
-  topics_list: z.object({entryId: id.optional()}).strict(),
+  topics_list: z
+    .object({entryId: id.optional(), snapshotId: id.optional()})
+    .strict(),
   topics_preview: topicScopeSchema,
   topic_save: z
     .object({
@@ -92,26 +95,37 @@ interface Dependencies {
   provider?: TopicProvider;
   sourceGuidance?: (snapshotId: string) => Promise<string>;
   checkModelCall: () => Promise<void>;
-  executionSettings: () => Promise<{automaticRetryLimit: number}>;
+  executionSettings: () => Promise<{
+    automaticRetryLimit: number;
+    maxConcurrentRequests?: number;
+  }>;
 }
 export class TopicService {
   private readonly running = new Map<string, Promise<void>>();
   private closing = false;
+  private dispatching = false;
+  private concurrency = 1;
   constructor(private readonly deps: Dependencies) {}
   private current() {
     return this.deps.entries.loadCurrentEntries(this.deps.workspaceId, false);
   }
   private async protectedPairs(ids: readonly string[]) {
     const a = this.deps.associations;
-    if (!a) return [];
-    const snapshot = await (a.loadAssociationSnapshotForEntries?.(
-      this.deps.workspaceId,
-      false,
-      ids,
-    ) ?? a.loadAssociationSnapshot(this.deps.workspaceId, false));
-    return snapshot.overrides
-      .filter((o) => o.value.isBlocked || o.value.graph?.origin === 'user')
-      .map((o) => topicPair(o.entryLowId, o.entryHighId));
+    if (!a || !ids.length) return [];
+    const uniqueIds = [...new Set(ids)],
+      pairs = new Set<string>();
+    for (let offset = 0; offset < uniqueIds.length; offset += 100) {
+      const snapshot = await (a.loadAssociationSnapshotForEntries?.(
+        this.deps.workspaceId,
+        false,
+        uniqueIds.slice(offset, offset + 100),
+      ) ?? a.loadAssociationSnapshot(this.deps.workspaceId, false));
+      for (const o of snapshot.overrides)
+        if (o.value.isBlocked || o.value.graph?.origin === 'user')
+          pairs.add(topicPair(o.entryLowId, o.entryHighId));
+      if (!a.loadAssociationSnapshotForEntries) break;
+    }
+    return [...pairs];
   }
   private visible(row: TopicRecord, ids: ReadonlySet<string>) {
     const refs =
@@ -153,49 +167,72 @@ export class TopicService {
         this.deps.repository.list('topic'),
         this.deps.repository.list('job'),
       ]);
-      const protectedPairs = new Set(await this.protectedPairs([...ids]));
+      const selectedIds = new Set(
+        entries
+          .filter((e) => !req.snapshotId || e.snapshotId === req.snapshotId)
+          .map((e) => e.entryId),
+      );
+      const selectedTopics = topics.filter(
+        (t) =>
+          this.visible(t, ids) &&
+          (!req.snapshotId ||
+            (t.value.kind === 'topic' &&
+              t.value.members.some((m) => selectedIds.has(m.entryId)))) &&
+          (!req.entryId ||
+            (t.value.kind === 'topic' &&
+              t.value.members.some((m) => m.entryId === req.entryId))),
+      );
+      const protectedPairs = new Set(
+        await this.protectedPairs(
+          selectedTopics.flatMap((t) =>
+            t.value.kind === 'topic'
+              ? t.value.relations.flatMap((r) =>
+                  r.origin === 'ai' ? [r.from.entryId, r.to.entryId] : [],
+                )
+              : [],
+          ),
+        ),
+      );
       return {
         budget:
           authority.identity.kind === 'owner'
             ? ((await this.deps.budgetStatus?.().catch(() => null)) ?? null)
             : null,
-        topics: topics
-          .filter(
-            (t) =>
-              this.visible(t, ids) &&
-              (!req.entryId ||
-                (t.value.kind === 'topic' &&
-                  t.value.members.some((m) => m.entryId === req.entryId))),
-          )
-          .map((t) => ({
-            ...t,
-            value:
-              t.value.kind === 'topic'
-                ? {
-                    ...t.value,
-                    relations: t.value.relations.filter(
-                      (r) =>
-                        r.origin !== 'ai' ||
-                        !protectedPairs.has(
-                          topicPair(r.from.entryId, r.to.entryId),
-                        ),
-                    ),
-                  }
-                : t.value,
-            stale:
-              t.value.kind === 'topic' && topicSummaryStale(t.value, entries),
-            entries:
-              t.value.kind === 'topic'
-                ? t.value.members.map((m) => ({
-                    entryId: m.entryId,
-                    title: entries.find((e) => e.entryId === m.entryId)?.value
-                      .titlePath,
-                    stale:
-                      entries.find((e) => e.entryId === m.entryId)?.revision !==
-                      m.revision,
-                  }))
-                : [],
-          })),
+        topics: selectedTopics.map((t) => ({
+          ...t,
+          value:
+            t.value.kind === 'topic'
+              ? {
+                  ...t.value,
+                  relations: t.value.relations.filter(
+                    (r) =>
+                      r.origin !== 'ai' ||
+                      !protectedPairs.has(
+                        topicPair(r.from.entryId, r.to.entryId),
+                      ),
+                  ),
+                }
+              : t.value,
+          stale:
+            t.value.kind === 'topic' && topicSummaryStale(t.value, entries),
+          entries:
+            t.value.kind === 'topic'
+              ? t.value.members.map((m) => ({
+                  entryId: m.entryId,
+                  ...(req.snapshotId
+                    ? {
+                        snapshotId: entries.find((e) => e.entryId === m.entryId)
+                          ?.snapshotId,
+                      }
+                    : {}),
+                  title: entries.find((e) => e.entryId === m.entryId)?.value
+                    .titlePath,
+                  stale:
+                    entries.find((e) => e.entryId === m.entryId)?.revision !==
+                    m.revision,
+                }))
+              : [],
+        })),
         jobs: jobs
           .filter(
             (j) =>
@@ -251,30 +288,7 @@ export class TopicService {
         if (!this.deps.provider)
           throw new OperationError('rejected', 'model_unavailable');
         const prepared = await this.prepare(r.scope);
-        const fingerprint = topicFingerprint(prepared.input);
-        const jobId = deriveProcessingRunId(
-          this.deps.workspaceId,
-          'topics:' + fingerprint,
-        );
-        const existing = await this.deps.repository.read(jobId);
-        if (existing) return {jobId, reused: true};
-        const settings = await this.deps.executionSettings();
-        const job: TopicJob = {
-          kind: 'job',
-          ...prepared,
-          fingerprint,
-          budgetId: r.budgetId,
-          status: 'queued',
-          attempts: 0,
-          maxAttempts: 1 + Math.min(2, settings.automaticRetryLimit),
-          usage: [],
-          appliedTopicIds: [],
-        };
-        const saved = await this.deps.repository.save([
-          {id: jobId, expectedVersion: 0, value: job},
-        ]);
-        this.schedule(jobId);
-        return {jobId, reused: !saved};
+        return this.enqueue(prepared, r.budgetId);
       }
       const r = topicOwnerSchemas.topic_job_control.parse(input);
       await this.deps.repository.withLock(async () => {
@@ -440,9 +454,12 @@ export class TopicService {
       !(job.status === 'failed' && job.errorCode !== 'ai_provider_unavailable')
     );
   }
-  private async prepare(scope: z.infer<typeof topicScopeSchema>) {
+  private async prepare(
+    scope: z.infer<typeof topicScopeSchema>,
+    current?: readonly CurrentInformationEntry[],
+  ) {
     try {
-      const entries = await this.current(),
+      const entries = current ?? (await this.current()),
         ids = new Set(entries.map((e) => e.entryId));
       const topics = (await this.deps.repository.list('topic')).filter((t) =>
         this.visible(t, ids),
@@ -514,17 +531,196 @@ export class TopicService {
       throw new OperationError('conflict', 'topic_version_changed');
   }
   private schedule(id: string) {
-    if (this.closing || this.running.has(id)) return;
+    if (
+      this.closing ||
+      this.running.has(id) ||
+      this.running.size >= this.concurrency
+    )
+      return;
     const work = this.run(id)
       .catch(() => undefined)
       .finally(() => this.running.delete(id));
     this.running.set(id, work);
   }
+  private async enqueue(
+    prepared: ReturnType<typeof prepareTopicInput>,
+    budgetId: string,
+    publicationId?: string,
+  ) {
+    const fingerprint = topicFingerprint(prepared.input);
+    const jobId = deriveProcessingRunId(
+      this.deps.workspaceId,
+      'topics:' + fingerprint,
+    );
+    const existing = await this.deps.repository.read(jobId);
+    if (existing) return {jobId, reused: true};
+    const settings = await this.deps.executionSettings();
+    this.concurrency = settings.maxConcurrentRequests ?? 1;
+    const job: TopicJob = {
+      kind: 'job',
+      ...prepared,
+      fingerprint,
+      budgetId,
+      ...(publicationId ? {publicationId} : {}),
+      status: 'queued',
+      attempts: 0,
+      maxAttempts: 1 + Math.min(2, settings.automaticRetryLimit),
+      usage: [],
+      appliedTopicIds: [],
+      ...(prepared.input.entries.length === 1
+        ? {result: {topics: [], relations: [], note: '没有符合条件的候选。'}}
+        : {}),
+    };
+    const saved = await this.deps.repository.save([
+      {id: jobId, expectedVersion: 0, value: job},
+    ]);
+    this.schedule(jobId);
+    return {jobId, reused: !saved};
+  }
+  private async dispatchPublications() {
+    if (
+      this.dispatching ||
+      !this.deps.publications?.organizationWork ||
+      !this.deps.provider
+    )
+      return;
+    this.dispatching = true;
+    try {
+      const budget = await this.deps.budgetStatus?.();
+      if (!budget || budget.paused || budget.remainingCny <= 0) return;
+      await this.deps.checkModelCall();
+      const publications = await this.deps.publications.organizationWork(
+        4,
+        budget.batchId,
+      );
+      if (!publications.length) return;
+      const entries = await this.current();
+      const jobs = await this.deps.repository.list('job');
+      let started = 0;
+      for (const publication of publications) {
+        const visible = publication.entries.every((e) =>
+          entries.some(
+            (v) => v.entryId === e.entryId && v.revision === e.revision,
+          ),
+        );
+        if (!visible) continue;
+        for (const entry of publication.entries) {
+          const existing = jobs.find(
+            (r) =>
+              r.value.kind === 'job' &&
+              r.value.input.scope.entryId === entry.entryId &&
+              r.value.input.entries.some(
+                (e) =>
+                  e.entryId === entry.entryId && e.revision === entry.revision,
+              ),
+          );
+          if (existing?.value.kind === 'job') {
+            if (existing.value.status === 'succeeded')
+              await this.syncPublication(existing.value, 'succeeded');
+            else if (existing.value.status === 'failed')
+              await this.syncPublication(
+                existing.value,
+                'failed',
+                existing.value.errorCode ?? 'topic_job_failed',
+              );
+            else if (['cancelled', 'paused'].includes(existing.value.status))
+              await this.syncPublication(existing.value, 'paused');
+            if (
+              ['failed', 'cancelled', 'paused'].includes(existing.value.status)
+            )
+              break;
+            continue;
+          }
+          if (started >= this.concurrency) return;
+          try {
+            const prepared = await this.prepare(
+              topicScopeSchema.parse({entryId: entry.entryId}),
+              entries,
+            );
+            await this.enqueue(
+              prepared,
+              budget.batchId,
+              publication.publicationId,
+            );
+            started++;
+          } catch (error) {
+            if (isAiDispatchWait(error)) throw error;
+            const latest = await this.deps.publications.read(
+              publication.documentId,
+            );
+            if (latest?.publicationId === publication.publicationId)
+              await this.deps.publications.transitionOrganization({
+                publicationId: latest.publicationId,
+                expectedVersion: latest.organization.version,
+                from: latest.organization.status,
+                to: 'failed',
+                errorCode:
+                  error instanceof OperationError &&
+                  /^[a-z0-9_]{1,160}$/.test(error.code)
+                    ? error.code
+                    : 'topic_input_invalid',
+              });
+            break;
+          }
+        }
+      }
+    } catch (error) {
+      if (!isAiDispatchWait(error)) throw error;
+    } finally {
+      this.dispatching = false;
+    }
+  }
   async poll() {
     if (this.closing) return;
+    this.concurrency =
+      (await this.deps.executionSettings()).maxConcurrentRequests ?? 1;
+    await this.dispatchPublications();
+    const jobs = await this.deps.repository.list('job');
+    for (const row of jobs) {
+      if (
+        row.value.kind === 'job' &&
+        row.value.status === 'running' &&
+        this.canResume(row)
+      ) {
+        await this.deps.repository.save([
+          {
+            id: row.id,
+            expectedVersion: row.version,
+            value: {...row.value, status: 'queued'},
+          },
+        ]);
+      } else if (
+        row.value.kind === 'job' &&
+        row.value.status === 'running' &&
+        !this.running.has(row.id) &&
+        Date.now() - Date.parse(row.updatedAt) >= 20 * 60_000 &&
+        !row.value.result &&
+        row.value.attempts >= row.value.maxAttempts
+      ) {
+        if (
+          await this.deps.repository.save([
+            {
+              id: row.id,
+              expectedVersion: row.version,
+              value: {
+                ...row.value,
+                status: 'failed',
+                errorCode: 'topic_attempts_exhausted',
+              },
+            },
+          ])
+        )
+          await this.syncPublication(
+            row.value,
+            'failed',
+            'topic_attempts_exhausted',
+          );
+      }
+    }
     for (const row of (await this.deps.repository.list('job'))
       .filter((r) => r.value.kind === 'job' && r.value.status === 'queued')
-      .slice(-4))
+      .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
+      .slice(0, this.concurrency))
       this.schedule(row.id);
   }
   async drain() {
@@ -792,6 +988,7 @@ export class TopicService {
     if (!repo?.forSnapshot || !seed) return;
     let p = await repo.forSnapshot(seed.snapshotId);
     if (
+      (job.publicationId && p?.publicationId !== job.publicationId) ||
       !p?.entries.some(
         (e) => e.entryId === seed.entryId && e.revision === seed.revision,
       )

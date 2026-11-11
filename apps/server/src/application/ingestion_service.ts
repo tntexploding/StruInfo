@@ -182,7 +182,6 @@ export class IngestionService {
     )
       return 'ingestion_model_changed';
     if (
-      task.request.maxEntries > current.settings.maxEntries ||
       task.request.maxModelCalls > current.settings.maxModelCalls ||
       JSON.stringify(task.request.intake) !==
         JSON.stringify(
@@ -308,7 +307,6 @@ export class IngestionService {
     if (item.policy.settings.model !== current.settings.model)
       throw new OperationError('conflict', 'ingestion_model_changed');
     if (
-      item.policy.settings.maxEntries > current.settings.maxEntries ||
       item.policy.settings.maxModelCalls > current.settings.maxModelCalls ||
       JSON.stringify(item.policy.settings.intake) !==
         JSON.stringify(current.settings.intake)

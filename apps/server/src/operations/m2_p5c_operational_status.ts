@@ -17,9 +17,9 @@ export interface M2P5cDatabaseObservation {
   readonly processingRunCount: number;
   readonly failedProcessingRunCount: number;
   readonly staleRunningProcessingRunCount: number;
-  readonly failedBulkIngestionBatchCount: number;
+  readonly failedDocumentTaskCount: number;
   readonly pendingProposalCount: number;
-  readonly pendingOwnerWorkItemCount: number;
+  readonly pendingIntakeReviewCount: number;
 }
 
 export interface M2P5cFilesystemObservation {
@@ -133,7 +133,7 @@ export async function observeM2P5cOperationalStatus(
       database = Object.freeze({status: 'ready' as const, metrics});
       if (
         metrics.failedProcessingRunCount > 0 ||
-        metrics.failedBulkIngestionBatchCount > 0
+        metrics.failedDocumentTaskCount > 0
       ) {
         alerts.push(alert('processing_failures_present', 'warning'));
       }

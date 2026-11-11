@@ -3,122 +3,30 @@ import type {ExecutionAuthority} from './execution_authority.js';
 import {OperationError} from './operation_error.js';
 import type {DocumentIntakeService} from './document_intake_service.js';
 import type {DocumentIntakeRepository} from './document_intake_contract.js';
-import type {CurrentInformationEntry} from '../modules/entries/index.js';
 import type {AgentTask} from './agent_task_contract.js';
 import {
   intakeSnapshotIds,
   intakeTargetSnapshot,
-  type IntakeRecord,
 } from './document_intake_contract.js';
 import type {InformationEntryRepositoryPort} from '../modules/entries/information_entry_repository.js';
 import type {DocumentPublicationRepository} from './document_publication_contract.js';
 
-/** Evidence and workbench reads remain complete. Knowledge consumers see finished documents. */
-export function unpublishedSnapshots(
-  records: readonly IntakeRecord[],
-  tasks: readonly AgentTask[],
-  entries: readonly CurrentInformationEntry[] = [],
-): ReadonlySet<string> {
-  const roots = new Map<string, string>();
-  const publications = new Map(
-    records.flatMap((record) =>
-      record.value.publication
-        ? [[record.snapshotId, record.value.publication] as const]
-        : [],
-    ),
-  );
-  const bySnapshot = new Map<string, CurrentInformationEntry[]>();
-  for (const entry of entries)
-    bySnapshot.set(entry.snapshotId, [
-      ...(bySnapshot.get(entry.snapshotId) ?? []),
-      entry,
-    ]);
-  const blocked = new Set<string>();
-  for (const record of records) {
-    const ids = intakeSnapshotIds(record);
-    for (const id of ids) roots.set(id, record.snapshotId);
-    const publication = record.value.publication;
-    const current = bySnapshot.get(intakeTargetSnapshot(record)) ?? [];
-    const unchanged =
-      !publication ||
-      (current.length === publication.entries.length &&
-        current.every((entry) =>
-          publication.entries.some(
-            (version) =>
-              version.entryId === entry.entryId &&
-              version.revision === entry.revision,
-          ),
-        ));
-    const admitted =
-      unchanged &&
-      record.value.decision === 'admitted' &&
-      (!record.value.receipt || record.value.receipt === 'accepted');
-    for (const id of ids)
-      if (!admitted || id !== intakeTargetSnapshot(record)) blocked.add(id);
-  }
-  const latest = new Map<string, AgentTask>();
-  for (const task of tasks) {
-    if (task.request.kind !== 'document') continue;
-    const root = roots.get(task.request.snapshotId) ?? task.request.snapshotId;
-    const previous = latest.get(root);
-    if (
-      !previous ||
-      task.createdAt > previous.createdAt ||
-      (task.createdAt === previous.createdAt && task.taskId > previous.taskId)
-    )
-      latest.set(root, task);
-  }
-  for (const [root, task] of latest) {
-    const publication = publications.get(root);
-    if (
-      task.state.status === 'succeeded' ||
-      (publication &&
-        publication.origin !== 'internal_ai' &&
-        publication.confirmedAt >= task.updatedAt)
-    )
-      continue;
-    blocked.add(root);
-    for (const [id, parent] of roots) if (parent === root) blocked.add(id);
-    for (const step of task.state.steps)
-      if (step.kind === 'split') blocked.add(step.targetId);
-  }
-  return blocked;
-}
-
-/** This read view deliberately omits the unfiltered browse acceleration. */
 export function publishedEntryRepository(
   raw: InformationEntryRepositoryPort,
-  exclusions: (
-    entries: readonly CurrentInformationEntry[],
-  ) => Promise<ReadonlySet<string>>,
-  publications?: DocumentPublicationRepository,
+  publications: DocumentPublicationRepository,
 ): InformationEntryRepositoryPort {
-  async function load(workspaceId: string, includePrivate: boolean) {
-    const entries = await raw.loadCurrentEntries(workspaceId, includePrivate);
-    const blocked = await exclusions(entries);
-    const confirmed = await publications?.loadPublished(
-      workspaceId,
-      includePrivate,
-    );
-    return [
-      ...entries.filter(
-        (entry) =>
-          !blocked.has(entry.snapshotId) &&
-          !confirmed?.managedSnapshotIds.has(entry.snapshotId),
-      ),
-      ...(confirmed?.entries ?? []),
-    ];
-  }
   return {
     materializeEntries: (rows) => raw.materializeEntries(rows),
     reviseEntry: (write) => raw.reviseEntry(write),
     async loadCurrentEntries(workspaceId, includePrivate) {
-      return load(workspaceId, includePrivate);
+      return (await publications.loadPublished(workspaceId, includePrivate))
+        .entries;
     },
     async loadCurrentEntriesByIds(workspaceId, includePrivate, ids) {
-      return (await load(workspaceId, includePrivate)).filter((entry) =>
-        ids.includes(entry.entryId),
-      );
+      if (!ids.length) return [];
+      return (
+        await publications.loadPublished(workspaceId, includePrivate, ids)
+      ).entries;
     },
   };
 }
@@ -145,7 +53,7 @@ export class DocumentPublicationService {
     private readonly intake: DocumentIntakeService,
     private readonly entries: InformationEntryRepositoryPort,
     private readonly tasks: () => Promise<readonly AgentTask[]>,
-    private readonly publications?: DocumentPublicationRepository,
+    private readonly publications: DocumentPublicationRepository,
   ) {}
   public async status(authority: ExecutionAuthority, snapshotId: string) {
     if (authority.workspaceId !== this.workspaceId)
@@ -153,20 +61,24 @@ export class DocumentPublicationService {
     authority.require('documents.read');
     await this.intake.publicSnapshot(snapshotId);
     const record = await this.intake.record(snapshotId);
-    const confirmed = await this.publications?.read(
+    const confirmed = await this.publications.read(
       record?.snapshotId ?? snapshotId,
     );
     const readable =
       confirmed &&
       (
-        await this.publications?.loadPublished(this.workspaceId, false)
-      )?.entries.some((entry) => entry.snapshotId === confirmed.snapshotId);
+        await this.publications.loadPublished(
+          this.workspaceId,
+          false,
+          confirmed.entries.map((e) => e.entryId),
+        )
+      ).entries.some((entry) => entry.snapshotId === confirmed.snapshotId);
     return {
       snapshotId,
       visibility: readable ? 'published' : 'unpublished',
       hasDraft: record?.value.publication?.draft === true,
       confirmed: confirmed ?? null,
-      organizationExecution: 'deferred' as const,
+      organizationExecution: confirmed?.organization.status ?? 'unpublished',
     };
   }
   public async stage(
@@ -294,33 +206,29 @@ export class DocumentPublicationService {
         }),
         publication,
       };
-      if (this.publications) {
-        const committed = await this.publications.commit({
-          documentId: root,
-          snapshotId: target,
-          expectedIntakeVersion: current?.version ?? 0,
-          intake: nextIntake,
-          expectedEntries: expected,
-        });
-        if (committed.status === 'not_admitted')
-          throw new OperationError('rejected', 'document_not_admitted');
-        if (committed.status !== 'published')
-          throw new OperationError('conflict', 'stale_document_publication');
-        return {
-          status: 'published' as const,
-          snapshotId: target,
-          publication: {
-            ...publication,
-            confirmedAt: committed.publication.confirmedAt,
-          },
-          confirmedVersion: committed.publication,
-        };
-      }
-      if (
-        !(await this.repository.save(root, current?.version ?? 0, nextIntake))
-      )
-        throw new OperationError('conflict', 'stale_intake_version');
-      return {status: 'published' as const, snapshotId: target, publication};
+      const committed = await this.publications.commit({
+        ...(task?.request.kind === 'document' && task.request.budgetId
+          ? {organizationBudgetId: task.request.budgetId}
+          : {}),
+        documentId: root,
+        snapshotId: target,
+        expectedIntakeVersion: current?.version ?? 0,
+        intake: nextIntake,
+        expectedEntries: expected,
+      });
+      if (committed.status === 'not_admitted')
+        throw new OperationError('rejected', 'document_not_admitted');
+      if (committed.status !== 'published')
+        throw new OperationError('conflict', 'stale_document_publication');
+      return {
+        status: 'published' as const,
+        snapshotId: target,
+        publication: {
+          ...publication,
+          confirmedAt: committed.publication.confirmedAt,
+        },
+        confirmedVersion: committed.publication,
+      };
     });
   }
 }

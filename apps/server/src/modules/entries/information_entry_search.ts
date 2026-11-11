@@ -1,6 +1,6 @@
+import {entryTagWords} from './entry_tags.js';
 import {
   EMPTY_ANNOTATION_VOCABULARY,
-  annotationSearchWords,
   matchesAnnotationFilter,
   type AnnotationVocabulary,
 } from './structured_annotations.js';
@@ -105,6 +105,7 @@ export function searchCurrentInformationEntries(
       entry,
       request,
       expanded.contentKeyword,
+      vocabulary,
     );
     if (filterReasons === undefined) return [];
     const association = associationMatches?.get(entry.entryId);
@@ -245,15 +246,16 @@ function structuralFilterReasons(
   entry: Readonly<CurrentInformationEntry>,
   request: Readonly<InformationEntrySearchRequest>,
   aliases: readonly string[],
+  vocabulary: AnnotationVocabulary,
 ): InformationEntryFilterReason[] | undefined {
   const reasons: InformationEntryFilterReason[] = [];
   if (request.contentKeyword !== undefined) {
     const expected = informationEntrySearchKey(request.contentKeyword);
     if (
-      !entry.value.contentKeywords.some(
-        (keyword) =>
-          keyword.normalizedValue === expected ||
-          aliases.includes(keyword.normalizedValue),
+      !entryTagWords(entry.value, vocabulary).some(
+        (word) =>
+          informationEntrySearchKey(word) === expected ||
+          aliases.includes(informationEntrySearchKey(word)),
       )
     ) {
       return undefined;
@@ -269,23 +271,44 @@ function structuralFilterReasons(
     reasons.push('document');
   }
   if (request.typeKeyword !== undefined) {
-    if (entry.value.typeKeyword !== request.typeKeyword) return undefined;
+    const annotation = entry.value.annotations;
+    const migrated =
+      annotation?.inputBodySha256 === entry.value.bodySha256
+        ? annotation.labels.find(
+            (l) => 'legacy' in l && l.legacy.source === 'type',
+          )
+        : undefined;
+    const type =
+      migrated && 'legacy' in migrated
+        ? migrated.legacy.key
+        : entry.value.typeKeyword;
+    if (type !== request.typeKeyword) return undefined;
     if (
       request.typeCustomName !== undefined &&
-      informationEntrySearchKey(entry.value.typeCustomName ?? '') !==
-        informationEntrySearchKey(request.typeCustomName)
+      informationEntrySearchKey(
+        migrated?.term.label ?? entry.value.typeCustomName ?? '',
+      ) !== informationEntrySearchKey(request.typeCustomName)
     ) {
       return undefined;
     }
     reasons.push('type');
   }
   if (request.domainKeyword !== undefined) {
+    const annotation = entry.value.annotations;
+    const assignments =
+      annotation?.inputBodySha256 === entry.value.bodySha256
+        ? annotation.labels.flatMap((l) =>
+            'legacy' in l && l.legacy.source === 'domain'
+              ? [{keyword: l.legacy.key, customName: l.term.label}]
+              : [],
+          )
+        : entry.value.domains;
     const domains =
       request.domainScope === 'primary'
-        ? entry.value.domains.slice(0, 1)
+        ? assignments.slice(0, 1)
         : request.domainScope === 'secondary'
-          ? entry.value.domains.slice(1)
-          : entry.value.domains;
+          ? assignments.slice(1)
+          : assignments;
     if (
       !domains.some(
         (domain) =>
@@ -378,31 +401,16 @@ function matchInformationEntryText(
       addReason('translation_body', [currentTranslation.body]);
   }
   if (selected.has('tags')) {
-    if (entry.value.annotations?.inputBodySha256 === entry.value.bodySha256)
-      addReason(
-        'structured_annotation',
-        annotationSearchWords(entry.value.annotations, vocabulary),
-      );
+    const words = entryTagWords(entry.value, vocabulary);
     if (
-      entry.value.contentKeywords.some((keyword) =>
-        aliases.includes(keyword.normalizedValue),
-      )
+      words.some((word) => aliases.includes(informationEntrySearchKey(word)))
     ) {
       reasons.push('content_keyword_alias');
-      score = Math.max(score, 10_000);
+      score = Math.max(score, 10000);
     }
     addReason(
-      'content_keyword',
-      entry.value.contentKeywords.map((keyword) => keyword.normalizedValue),
-    );
-    if (entry.value.typeKeyword !== undefined) {
-      addReason('type_keyword', [
-        entry.value.typeCustomName ?? entry.value.typeKeyword,
-      ]);
-    }
-    addReason(
-      'domain_keyword',
-      entry.value.domains.map((domain) => domain.customName ?? domain.keyword),
+      entry.value.annotations ? 'structured_annotation' : 'content_keyword',
+      words,
     );
   }
 

@@ -14,6 +14,58 @@ function reader(fetcher: typeof fetch) {
   );
 }
 describe('public source history reader', () => {
+  it('includes archived cards in inert HTML templates and rejects challenge pages', async () => {
+    const r = reader(
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          response(
+            '<template><a href="/posts/12"><h3>Older issue</h3><span>2020/12/01</span><p>Description</p></a></template>',
+            'text/html',
+          ),
+        )
+        .mockResolvedValueOnce(
+          response('<title>Are we human?</title>', 'text/html'),
+        ),
+    );
+    const page = {kind: 'html' as const, url: 'https://example.invalid/'};
+    expect((await r.read(page, BASE)).articles).toEqual([
+      {
+        url: 'https://example.invalid/posts/12',
+        title: 'Older issue',
+        publishedAt: '2020-12-01T00:00:00.000Z',
+        dateInferred: false,
+        access: 'unknown',
+      },
+    ]);
+    await expect(r.read(page, BASE)).rejects.toThrow(
+      'history_access_challenge',
+    );
+  });
+  it('reads archive article cards and dates without collecting community navigation', async () => {
+    const r = reader(
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          response(
+            '<nav><a href="/p/community/">Community</a></nav><article><a href="/p/first/">Image</a><h3><a href="/p/first/">First article</a></h3><time datetime="2023-02-23T17:53:03Z">Feb 23</time></article><a href="/archive/?page=2" rel="next">Next</a><a href="/posts/287">Weekly issue</a>',
+            'text/html',
+          ),
+        ),
+    );
+    const result = await r.read(
+      {kind: 'html', url: 'https://example.invalid/archive/'},
+      BASE,
+    );
+    expect(result.articles.map((a) => a.title)).toEqual([
+      'First article',
+      'Weekly issue',
+    ]);
+    expect(result.articles[0]?.publishedAt).toBe('2023-02-23T17:53:03.000Z');
+    expect(result.next).toEqual([
+      {kind: 'html', url: 'https://example.invalid/archive/?page=2'},
+    ]);
+  });
   it('does not mistake a platform link in an article for the feed generator', async () => {
     const r = reader(
       vi

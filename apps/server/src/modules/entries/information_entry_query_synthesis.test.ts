@@ -115,11 +115,12 @@ describe('InformationEntryQuerySynthesisService', () => {
     expect(result.evidence).toHaveLength(1);
     expect(result.evidence[0]).toMatchObject({
       entryId: original.entryId,
-      contentKeywords: ['合成关键词'],
+      contentKeywords: ['合成关键词', 'knowledge_explanation'],
     });
     expect(result.evidence[0]?.excerpt).toBe(original.value.body);
     expect(synthesize.mock.calls[0]?.[1]?.[0]?.contentKeywords).toEqual([
       '合成关键词',
+      'knowledge_explanation',
     ]);
   });
 

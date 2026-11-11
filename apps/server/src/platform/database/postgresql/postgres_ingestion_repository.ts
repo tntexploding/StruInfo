@@ -109,17 +109,40 @@ export class PostgresIngestionRepository implements IngestionRepository {
     limit: number,
   ): Promise<readonly IngestionItem[]> {
     const result = await this.pool.query(
-      `WITH eligible AS (
+      `WITH reviewed AS (
+      SELECT DISTINCT ON (d.state_text::jsonb->'captureOrigin'->>'subscriptionId', COALESCE(r.canonical_uri,s.snapshot_id::text))
+        d.state_text::jsonb->'captureOrigin'->>'subscriptionId' AS source_id, d.updated_at,
+        CASE
+          WHEN (d.state_text::jsonb->>'receiptOrigin'='manual' AND d.state_text::jsonb->>'receipt'='rejected')
+            OR (d.state_text::jsonb->>'origin'='manual' AND d.state_text::jsonb->>'decision'='blocked') THEN false
+          WHEN (d.state_text::jsonb->>'receiptOrigin'='manual' AND d.state_text::jsonb->>'receipt'='accepted')
+            OR d.state_text::jsonb->>'decision'='admitted' THEN true
+          ELSE false END AS accepted
+      FROM struinfo.processing_document_intake d
+      JOIN struinfo.snapshot s USING(workspace_id,snapshot_id)
+      JOIN struinfo.resource r USING(workspace_id,resource_id)
+      WHERE d.workspace_id=$1 AND NOT r.is_private AND d.state_text::jsonb->'captureOrigin'->>'kind'='subscription'
+        AND ((d.state_text::jsonb->>'receiptOrigin'='manual' AND d.state_text::jsonb->>'receipt' IN ('accepted','rejected'))
+          OR (d.state_text::jsonb->>'origin'='manual' AND d.state_text::jsonb->>'decision' IN ('admitted','blocked'))
+          OR (d.state_text::jsonb ? 'assessment' AND d.state_text::jsonb->>'decision' IN ('admitted','held','blocked')))
+      ORDER BY d.state_text::jsonb->'captureOrigin'->>'subscriptionId', COALESCE(r.canonical_uri,s.snapshot_id::text),s.captured_at DESC,d.updated_at DESC
+    ), recent AS (
+      SELECT *, row_number() OVER (PARTITION BY source_id ORDER BY updated_at DESC) AS n FROM reviewed
+    ), trust AS (
+      SELECT source_id, (count(*) FILTER (WHERE accepted)+2.0)/(count(*)+4.0) AS score FROM recent WHERE n<=20 GROUP BY source_id
+    ), eligible AS (
       SELECT i.*, d.state_text::jsonb->'reception' AS reception,
         r.source_key AS source_label,
         EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP-i.created_at))/3600
           + CASE d.state_text::jsonb->'reception'->'strategy'->>'urgency' WHEN 'high' THEN 24 WHEN 'low' THEN -12 ELSE 0 END
           + (COALESCE((d.state_text::jsonb->'reception'->'strategy'->>'preference')::int,50)-50)/5.0
+          + 24*(COALESCE(trust.score,0.5)-0.5)
           - CASE WHEN d.state_text::jsonb->'reception'->>'channel'='history' THEN 12 ELSE 0 END AS priority
       FROM struinfo.processing_ingestion_item i
       JOIN struinfo.snapshot s USING(workspace_id,snapshot_id)
       JOIN struinfo.resource r USING(workspace_id,resource_id)
       LEFT JOIN struinfo.processing_document_intake d ON d.workspace_id=i.workspace_id AND d.snapshot_id=i.snapshot_id
+      LEFT JOIN trust ON trust.source_id=i.subscription_id::text
       WHERE i.workspace_id=$1 AND i.status IN ('pending','running') AND NOT r.is_private
         AND (i.task_id IS NOT NULL OR (COALESCE(d.state_text::jsonb->>'receipt','') <> 'rejected'
           AND COALESCE(d.state_text::jsonb->>'deferProcessing','') <> 'true'))

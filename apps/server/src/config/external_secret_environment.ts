@@ -4,6 +4,7 @@ import {isAbsolute} from 'node:path';
 import {ConfigurationError} from './runtime_config.js';
 
 export const EXTERNAL_SECRET_FILE_VARIABLES = Object.freeze({
+  STRUIINFO_ASSISTANT_TOKEN: 'STRUIINFO_ASSISTANT_TOKEN_FILE',
   DATABASE_URL: 'DATABASE_URL_FILE',
   OPENAI_API_KEY: 'OPENAI_API_KEY_FILE',
   DEEPSEEK_API_KEY: 'DEEPSEEK_API_KEY_FILE',

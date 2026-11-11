@@ -1,4 +1,7 @@
-import {validateAnnotationEvidence} from '../entries/structured_annotations.js';
+import {
+  validateAnnotationEvidence,
+  generatedAnnotationsSchema,
+} from '../entries/structured_annotations.js';
 import {isDeepStrictEqual} from 'node:util';
 import {assertProcessingTagProposalPayload} from './processing.js';
 import {
@@ -9,7 +12,6 @@ import {
 
 import {
   deriveInformationEntryRevisionId,
-  informationEntrySearchKey,
   prepareAiEntryTagRevision,
   type CurrentInformationEntry,
   type InformationEntryRepositoryPort,
@@ -433,10 +435,15 @@ export class AiTagProposalService implements AiTagProposalServicePort {
   async #loadEntry(
     entryId: string,
   ): Promise<Readonly<CurrentInformationEntry>> {
-    const entries = await this.#dependencies.entries.loadCurrentEntries(
+    const entries = await (this.#dependencies.entries.loadCurrentEntriesByIds?.(
       this.#dependencies.workspaceId,
       true,
-    );
+      [entryId],
+    ) ??
+      this.#dependencies.entries.loadCurrentEntries(
+        this.#dependencies.workspaceId,
+        true,
+      ));
     const entry = entries.find((candidate) => candidate.entryId === entryId);
     if (entry === undefined) {
       throw new AiTagProposalServiceError('ai_entry_not_found');
@@ -450,51 +457,26 @@ function toStoredPayload(
   provider: AiTagProposalProviderPort,
   generated: Awaited<ReturnType<AiTagProposalProviderPort['proposeTags']>>,
 ): Readonly<ProcessingTagProposalPayload> {
-  return Object.freeze({
-    ...(generated.annotations ? {annotations: generated.annotations} : {}),
+  if (
+    !generatedAnnotationsSchema.safeParse(generated.annotations).success ||
+    generated.annotations.origin !== 'ai' ||
+    generated.annotations.inputRevision !== entry.revision ||
+    generated.annotations.inputBodySha256 !== entry.value.bodySha256 ||
+    !validateAnnotationEvidence(generated.annotations, entry.value.body)
+  )
+    throw new AiTagProposalServiceError('ai_provider_invalid_response');
+  return {
+    annotations: generated.annotations,
     expectedEntryRevision: entry.revision,
     providerModel: provider.model,
     promptVersion: provider.promptVersion,
-    contentKeywords: Object.freeze(
-      generated.contentKeywords.map((displayValue) =>
-        Object.freeze({
-          displayValue,
-          normalizedValue: informationEntrySearchKey(displayValue),
-        }),
-      ),
-    ),
-    typeKeyword: generated.typeKeyword,
-    ...(generated.typeCustomName === undefined
-      ? {}
-      : {typeCustomName: generated.typeCustomName}),
-    domains: Object.freeze(
-      generated.domains.map((domain) => Object.freeze({...domain})),
-    ),
-  });
+  };
 }
 
 function entryValueFromProposal(
   entry: Readonly<CurrentInformationEntry>,
   payload: Readonly<ProcessingTagProposalPayload>,
 ) {
-  const value = prepareAiEntryTagRevision(
-    entry,
-    {
-      contentKeywords: payload.contentKeywords.map(
-        (keyword) => keyword.displayValue,
-      ),
-      typeKeyword: payload.typeKeyword,
-      ...(payload.typeCustomName === undefined
-        ? {}
-        : {typeCustomName: payload.typeCustomName}),
-      domains: payload.domains,
-      originVersion: originVersion(payload),
-    },
-    payload.annotations !== undefined,
-  );
-  if (value === undefined) {
-    throw new AiTagProposalServiceError('ai_proposal_invalid');
-  }
   if (payload.annotations) {
     if (
       payload.annotations.inputRevision !== payload.expectedEntryRevision ||
@@ -502,14 +484,36 @@ function entryValueFromProposal(
       !validateAnnotationEvidence(payload.annotations, entry.value.body)
     )
       throw new AiTagProposalServiceError('ai_proposal_invalid');
-    return {
-      ...value,
-      annotations:
-        entry.value.annotations?.origin === 'manual'
-          ? entry.value.annotations
-          : payload.annotations,
+    // Human decisions remain authoritative, including historical manual labels.
+    if (
+      entry.value.annotations?.origin === 'manual' ||
+      ((!entry.value.annotations ||
+        entry.value.annotations.originVersion === 'reading-state.v1') &&
+        (entry.value.contentKeywords.some((t) => t.origin === 'manual') ||
+          entry.value.domains.some((d) => d.origin === 'manual')))
+    )
+      return entry.value;
+    const value = {
+      ...entry.value,
+      annotations: payload.annotations,
+      contentKeywords: [],
+      domains: [],
     };
+    delete value.typeKeyword;
+    delete value.typeCustomName;
+    return value;
   }
+  // Recovery of persisted pre-unification proposals only.
+  if (!('contentKeywords' in payload))
+    throw new AiTagProposalServiceError('ai_proposal_invalid');
+  const value = prepareAiEntryTagRevision(entry, {
+    contentKeywords: payload.contentKeywords.map((t) => t.displayValue),
+    typeKeyword: payload.typeKeyword,
+    ...(payload.typeCustomName ? {typeCustomName: payload.typeCustomName} : {}),
+    domains: payload.domains,
+    originVersion: originVersion(payload),
+  });
+  if (!value) throw new AiTagProposalServiceError('ai_proposal_invalid');
   return value;
 }
 
@@ -518,9 +522,11 @@ function isAcceptedTagState(
   payload: Readonly<ProcessingTagProposalPayload>,
 ): boolean {
   if (
-    entry.revision !== payload.expectedEntryRevision + 1 ||
-    entry.value.typeKeyword !== payload.typeKeyword ||
-    entry.value.typeCustomName !== payload.typeCustomName
+    entry.revision !== payload.expectedEntryRevision + 1 &&
+    !(
+      entry.revision === payload.expectedEntryRevision &&
+      isDeepStrictEqual(entry.value, entryValueFromProposal(entry, payload))
+    )
   ) {
     return false;
   }

@@ -11,10 +11,8 @@ import type {
   EvidenceRepositoryPort,
 } from '../modules/evidence/index.js';
 import type {
-  CurrentInformationDocumentTags,
   CurrentInformationEntry,
   InformationDocumentWorkingCopy,
-  InformationDocumentTagWrite,
   InformationEntryAssociationOverrideWrite,
   InformationEntryAssociationProjection,
   InformationEntryMaterializeRow,
@@ -24,20 +22,16 @@ import type {
 } from '../modules/entries/index.js';
 import {
   InformationEntryRetrievalServiceError,
-  DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
   DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
 } from '../modules/entries/index.js';
 import type {BlobIdentity, BlobStore} from '../storage/blob_store.js';
 import {
   createReviewPreferences,
-  DEFAULT_ENTRY_AUTOMATION_POLICY,
-  DEFAULT_ENTRY_PREFERENCE_PROFILE,
   DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
   DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
-  type EntryPreferenceProfile,
   type ReviewPreferences,
   type ReviewAssociationPolicyPreferences,
   type ReviewAutomaticKeywordPreferences,
@@ -152,11 +146,7 @@ describe('M1cApiService', () => {
     expect(
       await service.writeEntrySavedQuery({...write, name: 'Stale'}),
     ).toMatchObject({statusCode: 409});
-    expect(
-      await service.saveReviewPreferences({
-        quickTags: ['Synthetic changed sibling'],
-      }),
-    ).toMatchObject({statusCode: 200});
+
     expect((await service.loadEntrySavedQueries()).body).toMatchObject({
       savedQueries: {revision: 1, views: [{name: write.name, query}]},
     });
@@ -324,130 +314,6 @@ describe('M1cApiService', () => {
     });
   });
 
-  it('loads and saves workspace-scoped review quick tags', async () => {
-    let quickTags: readonly string[] = [];
-    let automaticKeywords: Readonly<ReviewAutomaticKeywordPreferences> = {
-      enabled: true,
-      includeLinkDomains: false,
-      excludedKeywords: [],
-    };
-    let vocabulary: Readonly<ReviewVocabularyPreferences> = {aliases: []};
-    let associationPolicy: Readonly<ReviewAssociationPolicyPreferences> =
-      DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES;
-    const load = vi.fn((workspaceId: string) =>
-      Promise.resolve({
-        format: 'struinfo.review-preferences' as const,
-        version: 1 as const,
-        workspaceId,
-        quickTags,
-        automaticKeywords,
-        vocabulary,
-        associationPolicy,
-      }),
-    );
-    const save = vi.fn(
-      (
-        workspaceId: string,
-        next: readonly string[],
-        nextAutomaticKeywords: Readonly<ReviewAutomaticKeywordPreferences>,
-        nextVocabulary: Readonly<ReviewVocabularyPreferences>,
-        nextAssociationPolicy: Readonly<ReviewAssociationPolicyPreferences> = associationPolicy,
-      ) => {
-        quickTags = next;
-        automaticKeywords = nextAutomaticKeywords;
-        vocabulary = nextVocabulary;
-        associationPolicy = nextAssociationPolicy;
-        return Promise.resolve({
-          format: 'struinfo.review-preferences' as const,
-          version: 1 as const,
-          workspaceId,
-          quickTags,
-          automaticKeywords,
-          vocabulary,
-          associationPolicy,
-        });
-      },
-    );
-    const service = createService({reviewPreferences: {load, save}});
-
-    await expect(service.loadReviewPreferences()).resolves.toMatchObject({
-      statusCode: 200,
-      body: {
-        status: 'ok',
-        workspaceId: WORKSPACE_ID,
-        quickTags: [],
-        automaticKeywords: {
-          enabled: true,
-          includeLinkDomains: false,
-          excludedKeywords: [],
-        },
-        vocabulary: {aliases: []},
-        associationPolicy: DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
-      },
-    });
-    await expect(
-      service.saveReviewPreferences({
-        quickTags: ['实用工具', '命令行'],
-        automaticKeywords: {
-          enabled: true,
-          includeLinkDomains: false,
-          excludedKeywords: ['广告'],
-        },
-        vocabulary: {
-          aliases: [{source: 'Synthetic CLI', canonical: '工具'}],
-        },
-      }),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {quickTags: ['实用工具', '命令行']},
-    });
-    expect(load).toHaveBeenCalledTimes(2);
-    expect(load).toHaveBeenNthCalledWith(1, WORKSPACE_ID);
-    expect(load).toHaveBeenNthCalledWith(2, WORKSPACE_ID);
-    expect(save).toHaveBeenCalledExactlyOnceWith(
-      WORKSPACE_ID,
-      ['实用工具', '命令行'],
-      {
-        enabled: true,
-        includeLinkDomains: false,
-        excludedKeywords: ['广告'],
-      },
-      {
-        aliases: [{source: 'Synthetic CLI', canonical: '工具'}],
-      },
-      DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
-      DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
-      DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
-      DEFAULT_ENTRY_PREFERENCE_PROFILE,
-      DEFAULT_ENTRY_AUTOMATION_POLICY,
-      DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
-      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
-      DEFAULT_ENTRY_SAVED_QUERIES,
-      DEFAULT_WORKSPACE_UI_PREFERENCES,
-      {revision: 0, enabled: false},
-      {revision: 0, recipes: []},
-      {revision: 0, dimensions: [], terms: [], aliases: [], relations: []},
-    );
-  });
-
-  it('rejects invalid quick tags without touching personal storage', async () => {
-    const save = vi.fn(() => Promise.reject(new Error('unexpected save')));
-    const service = createService({
-      reviewPreferences: {
-        load: () => Promise.reject(new Error('unexpected load')),
-        save,
-      },
-    });
-
-    await expect(
-      service.saveReviewPreferences({quickTags: ['duplicate', 'DUPLICATE']}),
-    ).resolves.toMatchObject({
-      statusCode: 422,
-      body: {issue: {path: 'body.quickTags'}},
-    });
-    expect(save).not.toHaveBeenCalled();
-  });
-
   it('versions association weights in external personal preferences and rejects stale writes', async () => {
     let policy: Readonly<ReviewAssociationPolicyPreferences> =
       DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES;
@@ -522,10 +388,7 @@ describe('M1cApiService', () => {
       },
       DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
       DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
-      DEFAULT_ENTRY_PREFERENCE_PROFILE,
-      DEFAULT_ENTRY_AUTOMATION_POLICY,
       DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
-      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       DEFAULT_ENTRY_SAVED_QUERIES,
       DEFAULT_WORKSPACE_UI_PREFERENCES,
       {revision: 0, enabled: false},
@@ -555,21 +418,7 @@ describe('M1cApiService', () => {
   it('versions the external exploration policy and preserves it across unrelated preference writes', async () => {
     let explorationPolicy: Readonly<ReviewExplorationPolicyPreferences> =
       DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES;
-    const entryPreferenceProfile = Object.freeze({
-      revision: 2,
-      enabled: true,
-      rules: Object.freeze([
-        Object.freeze({
-          ruleId: '44444444-4444-4444-8444-444444444444',
-          dimension: 'usefulness' as const,
-          featureKind: 'content_keyword' as const,
-          featureIdentity: 'postgresql',
-          displayValue: 'PostgreSQL',
-          effect: 'prefer' as const,
-          weight: 5 as const,
-        }),
-      ]),
-    });
+
     const load = vi.fn((workspaceId: string) =>
       Promise.resolve({
         format: 'struinfo.review-preferences' as const,
@@ -580,7 +429,6 @@ describe('M1cApiService', () => {
         vocabulary: DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
         associationPolicy: DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
         explorationPolicy,
-        entryPreferenceProfile,
       }),
     );
     const save = vi.fn(
@@ -592,7 +440,6 @@ describe('M1cApiService', () => {
         associationPolicy: Readonly<ReviewAssociationPolicyPreferences>,
         nextExplorationPolicy: Readonly<ReviewExplorationPolicyPreferences>,
         sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences> = DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
-        nextEntryPreferenceProfile: Readonly<EntryPreferenceProfile> = DEFAULT_ENTRY_PREFERENCE_PROFILE,
       ) => {
         explorationPolicy = nextExplorationPolicy;
         return Promise.resolve({
@@ -605,7 +452,6 @@ describe('M1cApiService', () => {
           associationPolicy,
           explorationPolicy,
           sourceSubscriptions,
-          entryPreferenceProfile: nextEntryPreferenceProfile,
         });
       },
     );
@@ -632,31 +478,6 @@ describe('M1cApiService', () => {
         },
       },
     });
-    expect(save).toHaveBeenLastCalledWith(
-      WORKSPACE_ID,
-      ['保留标签'],
-      DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
-      DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
-      DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
-      {
-        revision: 1,
-        enabled: true,
-        resultShare: 30,
-        neighborExpansion: true,
-        crossDomain: false,
-        serendipity: true,
-      },
-      DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
-      entryPreferenceProfile,
-      DEFAULT_ENTRY_AUTOMATION_POLICY,
-      DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
-      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
-      DEFAULT_ENTRY_SAVED_QUERIES,
-      DEFAULT_WORKSPACE_UI_PREFERENCES,
-      {revision: 0, enabled: false},
-      {revision: 0, recipes: []},
-      {revision: 0, dimensions: [], terms: [], aliases: [], relations: []},
-    );
 
     await expect(
       service.reviseInformationEntryExplorationPolicy({
@@ -695,35 +516,6 @@ describe('M1cApiService', () => {
       statusCode: 422,
       body: {issue: {path: 'body'}},
     });
-
-    await expect(
-      service.saveReviewPreferences({
-        quickTags: ['新快捷标记'],
-        automaticKeywords: DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
-        vocabulary: DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
-      }),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {explorationPolicy: {revision: 1, resultShare: 30}},
-    });
-    expect(save).toHaveBeenLastCalledWith(
-      WORKSPACE_ID,
-      ['新快捷标记'],
-      DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
-      DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
-      DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
-      explorationPolicy,
-      DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
-      entryPreferenceProfile,
-      DEFAULT_ENTRY_AUTOMATION_POLICY,
-      DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
-      DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
-      DEFAULT_ENTRY_SAVED_QUERIES,
-      DEFAULT_WORKSPACE_UI_PREFERENCES,
-      {revision: 0, enabled: false},
-      {revision: 0, recipes: []},
-      {revision: 0, dimensions: [], terms: [], aliases: [], relations: []},
-    );
   });
 
   it('loads and saves one versioned external Entry split rule profile', async () => {
@@ -2591,182 +2383,6 @@ describe('M1cApiService', () => {
     });
   });
 
-  it('aggregates versioned Document tags and exposes Document to Entry navigation counts', async () => {
-    const blobs = new MemoryBlobStore();
-    const normalizedText = 'PostgreSQL PostgreSQL and TypeScript\n';
-    const identity = await blobs.put(new TextEncoder().encode(normalizedText));
-    const snapshot = Object.freeze({
-      workspaceId: WORKSPACE_ID,
-      snapshotId: SNAPSHOT_ID,
-      resourceId: RESOURCE_ID,
-      resourceKind: 'manual_text' as const,
-      sourceKey: 'manual:document-tags',
-      capturedAt: '2040-01-02T03:04:05.000Z',
-      fragmentCount: 0,
-      rawSha256: identity.digest,
-      canonicalContentSha256: identity.digest,
-      canonicalizationVersion: 'utf8-lf-v1',
-      structures: Object.freeze([
-        Object.freeze({
-          structureId: STRUCTURE_ID,
-          parserName: 'struinfo-commonmark',
-          parserVersion: '1',
-          textNormalizationVersion: 'utf8-lf-v1',
-          structureSha256: 'b'.repeat(64),
-          textBlob: identity,
-          fragments: Object.freeze([]),
-        }),
-      ]),
-    });
-    const entry: Readonly<CurrentInformationEntry> = Object.freeze({
-      workspaceId: WORKSPACE_ID,
-      entryId: '00000000-0000-4000-8000-000000000011',
-      resourceId: RESOURCE_ID,
-      snapshotId: SNAPSHOT_ID,
-      revision: 2,
-      revisionId: '00000000-0000-4000-8000-000000000012',
-      sourceKey: snapshot.sourceKey,
-      capturedAt: snapshot.capturedAt,
-      value: Object.freeze({
-        documentOrder: 0,
-        titlePath: 'Synthetic database note',
-        body: normalizedText,
-        bodySha256: identity.digest,
-        chunkMode: 'split' as const,
-        splitRuleVersion: 'struinfo.entry-split.section.v1',
-        isPrivate: false,
-        typeKeyword: 'knowledge_explanation' as const,
-        contentKeywords: Object.freeze([
-          Object.freeze({
-            displayValue: 'PostgreSQL',
-            normalizedValue: 'postgresql',
-            origin: 'manual' as const,
-            originVersion: 'manual-entry-editor.v1',
-          }),
-          Object.freeze({
-            displayValue: 'TypeScript',
-            normalizedValue: 'typescript',
-            origin: 'manual' as const,
-            originVersion: 'manual-entry-editor.v1',
-          }),
-        ]),
-        domains: Object.freeze([
-          Object.freeze({
-            keyword: 'engineering_computing' as const,
-            origin: 'manual' as const,
-            originVersion: 'manual-entry-editor.v1',
-          }),
-        ]),
-        fragmentIds: Object.freeze([]),
-      }),
-    });
-    let currentTags: Readonly<CurrentInformationDocumentTags> | undefined;
-    const writeDocumentTags = vi.fn(
-      (write: Readonly<InformationDocumentTagWrite>) => {
-        currentTags = Object.freeze({
-          workspaceId: write.workspaceId,
-          resourceId: write.resourceId,
-          snapshotId: write.snapshotId,
-          revision: write.expectedRevision + 1,
-          revisionId: write.revisionId,
-          value: write.value,
-        });
-        return Promise.resolve('applied' as const);
-      },
-    );
-    const service = createService({
-      blobStore: blobs,
-      evidenceReadRepository: {
-        listSnapshots: () => Promise.resolve([snapshot]),
-        loadSnapshot: () => Promise.resolve(snapshot),
-      },
-      informationEntryRepository: {
-        materializeEntries: () =>
-          Promise.resolve({outcome: 'existing', createdCount: 0}),
-        materializeEntriesIfSnapshotEmpty: () =>
-          Promise.resolve({outcome: 'existing', createdCount: 0}),
-        reviseEntry: () => Promise.resolve('not_found'),
-        loadCurrentEntries: () => Promise.resolve([entry]),
-      },
-      informationDocumentTagRepository: {
-        writeDocumentTags,
-        loadCurrentDocumentTags: () =>
-          Promise.resolve(currentTags === undefined ? [] : [currentTags]),
-      },
-    });
-
-    await expect(
-      service.aggregateInformationDocumentTags(SNAPSHOT_ID, {
-        expectedRevision: 0,
-      }),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {
-        status: 'applied',
-        documentTags: {
-          revision: 1,
-          value: {
-            revisionKind: 'aggregate',
-            entryCount: 1,
-            tags: [
-              {
-                displayValue: 'PostgreSQL',
-                fullTextOccurrences: 2,
-                entryCoverageCount: 1,
-              },
-              {
-                displayValue: 'TypeScript',
-                fullTextOccurrences: 1,
-                entryCoverageCount: 1,
-              },
-            ],
-          },
-        },
-      },
-    });
-    await expect(
-      service.listInformationEntryDocuments(),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {
-        status: 'ok',
-        documents: [
-          {
-            snapshotId: SNAPSHOT_ID,
-            entryCount: 1,
-            annotatedEntryCount: 1,
-            currentTags: {revision: 1},
-          },
-        ],
-      },
-    });
-    await expect(
-      service.reviseInformationDocumentTags(SNAPSHOT_ID, {
-        expectedRevision: 1,
-        tags: ['Database systems'],
-      }),
-    ).resolves.toMatchObject({
-      statusCode: 200,
-      body: {
-        status: 'applied',
-        documentTags: {
-          revision: 2,
-          value: {
-            revisionKind: 'manual',
-            tags: [
-              {
-                displayValue: 'Database systems',
-                fullTextOccurrences: 0,
-                entryCoverageCount: 0,
-              },
-            ],
-          },
-        },
-      },
-    });
-    expect(writeDocumentTags).toHaveBeenCalledTimes(2);
-  });
-
   it('exports and restores the selected workspace through the external Bundle boundary', async () => {
     const summary = Object.freeze({
       fileName: 'synthetic.workspace-bundle.json',
@@ -3268,7 +2884,9 @@ describe('M1E provider-neutral processing API', () => {
       body: {status: 'accepted'},
     });
     expect(listForSnapshot).toHaveBeenCalledWith(SNAPSHOT_ID);
-    expect(accept).toHaveBeenCalledWith(SNAPSHOT_ID, proposal.proposalId);
+    expect(accept).toHaveBeenCalledWith(SNAPSHOT_ID, proposal.proposalId, {
+      beforeWrite: expect.any(Function) as unknown,
+    });
   });
 
   it('keeps AI tag routes visibly unavailable without Provider configuration', async () => {
@@ -3652,7 +3270,8 @@ describe('Entry translation HTTP boundary', () => {
         privateDocuments: {totalCount: 0, items: []},
       },
     });
-    expect(loadEntries).toHaveBeenCalledTimes(1);
+    expect(loadEntries).toHaveBeenCalledWith(WORKSPACE_ID, true);
+    expect(loadEntries).toHaveBeenCalledWith(WORKSPACE_ID, false);
     expect(loadTranslations).toHaveBeenCalledTimes(1);
     await expect(
       service.searchInformationEntries({...request, onlyPrivate: true}),

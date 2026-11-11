@@ -1,3 +1,4 @@
+import {entryTagWords} from './entry_tags.js';
 import {createHash} from 'node:crypto';
 
 import {informationEntrySearchKey} from './information_entry.js';
@@ -62,16 +63,7 @@ export function prepareInformationEntrySearchProjection(
   if (entry.value.isPrivate) {
     throw new Error('Private Entries cannot enter the derived search index.');
   }
-  const tags = [
-    ...(entry.value.annotations?.inputBodySha256 === entry.value.bodySha256
-      ? entry.value.annotations.labels.flatMap((l) => [l.term.label, l.wording])
-      : []),
-    ...entry.value.contentKeywords.map((keyword) => keyword.displayValue),
-    ...(entry.value.typeKeyword === undefined
-      ? []
-      : [entry.value.typeCustomName ?? entry.value.typeKeyword]),
-    ...entry.value.domains.map((domain) => domain.customName ?? domain.keyword),
-  ];
+  const tags = entryTagWords(entry.value);
   const tagText = tags.join(' ');
   const fields = Object.freeze({
     title: entry.value.titlePath,
@@ -101,16 +93,7 @@ export function informationEntryEmbeddingInput(
 ): string {
   if (entry.value.isPrivate)
     throw new Error('Private Entries cannot enter the derived search index.');
-  const tags = [
-    ...(entry.value.annotations?.inputBodySha256 === entry.value.bodySha256
-      ? entry.value.annotations.labels.flatMap((l) => [l.term.label, l.wording])
-      : []),
-    ...entry.value.contentKeywords.map((keyword) => keyword.displayValue),
-    ...(entry.value.typeKeyword === undefined
-      ? []
-      : [entry.value.typeCustomName ?? entry.value.typeKeyword]),
-    ...entry.value.domains.map((domain) => domain.customName ?? domain.keyword),
-  ];
+  const tags = entryTagWords(entry.value);
   const tagText = tags.join(' ');
   // Reserve metadata before body text. Ordinary labels remain complete; when
   // metadata alone is extreme, retain a preview of EVERY tag rather than dropping

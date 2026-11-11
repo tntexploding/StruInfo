@@ -1,4 +1,12 @@
+import {
+  validateAnnotationEvidence,
+  unifyAnnotationTerms,
+  withDefaultAnnotationDimensions,
+  EMPTY_ANNOTATION_VOCABULARY,
+  type AnnotationVocabulary,
+} from '../modules/entries/structured_annotations.js';
 import type {DocumentPublicationService} from './document_publication.js';
+import {withSourceProcessing} from './source_processing_scope.js';
 import type {SourceSplitService} from './source_split_service.js';
 import {SOURCE_RECIPE_SPLIT_VERSION} from '../modules/entries/source_split_recipe.js';
 import {
@@ -16,7 +24,6 @@ import type {RecallAlias} from './relation_candidate_recall.js';
 import type {BlobStore} from '../storage/blob_store.js';
 import {AiSplitProposalService} from '../modules/processing/ai_split_proposal_service.js';
 import {
-  prepareAiEntryTagRevision,
   prepareAiSplitInformationEntries,
   prepareInformationEntryGraphRelation,
 } from '../modules/entries/index.js';
@@ -49,6 +56,7 @@ import type {
 import {OperationError} from './operation_error.js';
 
 export interface AgentTaskActionsDependencies {
+  readonly vocabulary?: () => Promise<AnnotationVocabulary>;
   readonly publication?: DocumentPublicationService;
   readonly sourceSplit?: SourceSplitService;
   readonly knowledgeEntries?: InformationEntryRepositoryPort;
@@ -71,7 +79,7 @@ export interface AgentTaskActionsDependencies {
 export class AgentTaskActions {
   public constructor(private readonly deps: AgentTaskActionsDependencies) {}
   public freezeSourceSplit(request: AgentTaskRequest) {
-    return request.kind === 'document'
+    return request.kind === 'document' || request.kind === 'split'
       ? this.deps.sourceSplit?.freeze(request.snapshotId)
       : undefined;
   }
@@ -197,18 +205,15 @@ export class AgentTaskActions {
         throw new OperationError('conflict', 'stale_entry_revision');
       if (
         request.kind === 'tags' &&
-        !prepareAiEntryTagRevision(entry, {
-          contentKeywords: request.result.contentKeywords,
-          typeKeyword: request.result.typeKeyword,
-          ...(request.result.typeCustomName
-            ? {typeCustomName: request.result.typeCustomName}
-            : {}),
-          domains: request.result.domains.map((d) => ({
-            keyword: d.keyword,
-            ...(d.customName ? {customName: d.customName} : {}),
-          })),
-          originVersion: 'external-agent:struinfo.agent-tool.v1',
-        })
+        (!('annotations' in request.result) ||
+          request.result.annotations.inputRevision !== entry.revision ||
+          request.result.annotations.inputBodySha256 !==
+            entry.value.bodySha256 ||
+          request.result.annotations.origin !== 'ai' ||
+          !validateAnnotationEvidence(
+            request.result.annotations,
+            entry.value.body,
+          ))
       )
         throw new OperationError('invalid_input', 'invalid_agent_tags');
       if (
@@ -345,7 +350,7 @@ export class AgentTaskActions {
     await this.intakeTarget(task);
   }
   public async publish(task: AgentTask) {
-    await this.deps.publication?.completeTask(task);
+    await requireOperationValue(this.deps.publication).completeTask(task);
   }
   public async validateRecovery(task: AgentTask) {
     if (task.request.kind !== 'document')
@@ -562,10 +567,31 @@ export class AgentTaskActions {
   }
   public async generate(task: AgentTask, step: AgentTaskStep, key: string) {
     const services = this.services(task);
-    if (step.kind === 'split')
-      return (
-        await requireOperationValue(services.split).start(step.targetId, key)
-      ).run;
+    if (step.kind === 'split') {
+      const recipe =
+        step.sourceSplit?.reason === 'recipe_ready'
+          ? task.state.sourceSplit?.recipes.find(
+              (r) => r.recipeId === step.sourceSplit?.recipeId,
+            )
+          : undefined;
+      const profile = task.state.sourceSplit?.processingProfile;
+      return withSourceProcessing(
+        {
+          ...profile,
+          ...(task.request.kind === 'document'
+            ? {maxEntriesPerDocument: task.request.maxEntries}
+            : {}),
+          split: [profile?.split, recipe?.method].filter(Boolean).join('\n'),
+        },
+        async () =>
+          (
+            await requireOperationValue(services.split).start(
+              step.targetId,
+              key,
+            )
+          ).run,
+      );
+    }
     // Versions are frozen when a step is planned, before any generation call.
     const entry = await this.entry(step.targetId);
     if (entry.revision !== step.expectedRevision)
@@ -604,7 +630,8 @@ export class AgentTaskActions {
         proposal.splitPayload.entries.length >
           (task.request.kind === 'document'
             ? task.request.maxEntries
-            : MAXIMUM_AI_SPLIT_ENTRIES)
+            : (task.state.sourceSplit?.sourceEntryLimit ??
+              MAXIMUM_AI_SPLIT_ENTRIES))
       )
         throw new OperationError('rejected', 'entry_budget_exceeded');
       if (task.request.kind === 'split')
@@ -612,6 +639,13 @@ export class AgentTaskActions {
       await requireOperationValue(services.split).accept(
         step.targetId,
         proposal.proposalId,
+        {
+          maxEntries:
+            task.request.kind === 'document'
+              ? task.request.maxEntries
+              : (task.state.sourceSplit?.sourceEntryLimit ??
+                MAXIMUM_AI_SPLIT_ENTRIES),
+        },
       );
     } else if (step.kind === 'tags') {
       if (proposal.tagPayload?.expectedEntryRevision !== step.expectedRevision)
@@ -722,23 +756,39 @@ export class AgentTaskActions {
             ...this.deps,
             provider: {
               ...metadata,
-              proposeTags: (entry) => {
+              proposeTags: async (entry) => {
                 if (entry.revision !== request.expectedRevision)
                   return Promise.reject(
                     new OperationError('conflict', 'stale_entry_revision'),
                   );
-                return Promise.resolve({
+                if (!('annotations' in request.result))
+                  throw new OperationError(
+                    'rejected',
+                    'legacy_tag_task_read_only',
+                  );
+                const vocabulary = withDefaultAnnotationDimensions(
+                  (await this.deps.vocabulary?.()) ??
+                    EMPTY_ANNOTATION_VOCABULARY,
+                );
+                if (
+                  request.result.annotations.dimensions.some(
+                    (d) =>
+                      !vocabulary.dimensions.some(
+                        (v) => v.id === d.id && v.role === d.role,
+                      ),
+                  )
+                )
+                  throw new OperationError(
+                    'invalid_input',
+                    'annotation_dimension_invalid',
+                  );
+                return {
                   summary: request.result.summary,
-                  contentKeywords: request.result.contentKeywords,
-                  typeKeyword: request.result.typeKeyword,
-                  domains: request.result.domains.map((d) => ({
-                    keyword: d.keyword,
-                    ...(d.customName ? {customName: d.customName} : {}),
-                  })),
-                  ...(request.result.typeCustomName
-                    ? {typeCustomName: request.result.typeCustomName}
-                    : {}),
-                });
+                  annotations: unifyAnnotationTerms(
+                    request.result.annotations,
+                    vocabulary,
+                  ),
+                };
               },
             },
           }),

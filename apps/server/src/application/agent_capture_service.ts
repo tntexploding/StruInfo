@@ -221,9 +221,13 @@ export class AgentCaptureService {
     } as SourceSubscriptionWrite;
     try {
       const saved = await this.deps.subscriptions.replace(expectedRevision, [
-        ...current.subscriptions.filter(
-          (s) => s.subscriptionId !== request.subscriptionId,
-        ),
+        ...current.subscriptions
+          .filter((s) => s.subscriptionId !== request.subscriptionId)
+          .map((source) => {
+            const write = {...source};
+            delete write.routeAfterImport;
+            return write;
+          }),
         next,
       ]);
       return {

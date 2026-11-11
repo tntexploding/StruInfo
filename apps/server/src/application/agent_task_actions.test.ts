@@ -6,6 +6,10 @@ import {
   type SourceSplitDefinition,
 } from '../modules/entries/source_split_recipe.js';
 import {createHash} from 'node:crypto';
+import {
+  EMPTY_ANNOTATION_VOCABULARY,
+  withDefaultAnnotationDimensions,
+} from '../modules/entries/structured_annotations.js';
 import type {AiTagProposalServicePort} from '../modules/processing/ai_tag_proposal_service.js';
 import type {DocumentIntakeService} from './document_intake_service.js';
 import {describe, it, expect, vi} from 'vitest';
@@ -309,15 +313,42 @@ function fixture(isPrivate = false) {
     evidence: {loadSnapshot: vi.fn(() => Promise.resolve({isPrivate: true}))},
     blobStore: {read: vi.fn()},
   } as unknown as AgentTaskActionsDependencies;
+  const dimension = requireOperationValue(
+    withDefaultAnnotationDimensions(EMPTY_ANNOTATION_VOCABULARY).dimensions[0],
+  );
   const request: AgentTaskRequest = {
     kind: 'tags',
     entryId: E,
     expectedRevision: 1,
     result: {
       summary: 'Synthetic classification',
-      contentKeywords: ['Synthetic'],
-      typeKeyword: 'knowledge_explanation',
-      domains: [{keyword: 'engineering_computing'}],
+      annotations: {
+        schemaVersion: 1,
+        vocabularyRevision: 0,
+        dimensions: [dimension],
+        inputRevision: 1,
+        inputBodySha256: current.value.bodySha256,
+        origin: 'ai',
+        originVersion: 'synthetic-external-agent',
+        status: 'complete',
+        note: '',
+        readingState: 'unread',
+        labels: [
+          {
+            dimensionId: dimension.id,
+            term: {
+              id: E,
+              dimensionId: dimension.id,
+              label: 'Synthetic',
+              meaning: 'Synthetic evidence',
+            },
+            wording: 'Synthetic',
+            primary: true,
+            evidence: {start: 0, end: 9, quote: 'Synthetic'},
+          },
+        ],
+        claims: [],
+      },
     },
   };
   const task = {
@@ -516,9 +547,15 @@ describe('Agent actions reuse actual proposal acceptance', () => {
     expect(f.current.revision).toBe(2);
     expect(f.current.value.body).toBe(source);
     expect(f.current.value.fragmentIds).toEqual(fragments);
-    expect(f.current.value.contentKeywords[0]).toMatchObject({
+    expect(f.current.value.annotations).toMatchObject({
       origin: 'ai',
-      originVersion: 'external-agent:external-agent:struinfo.agent-tool.v1',
+      inputBodySha256: f.current.value.bodySha256,
+      labels: [
+        {
+          wording: 'Synthetic',
+          evidence: {start: 0, end: 9, quote: 'Synthetic'},
+        },
+      ],
     });
     await actions.accept(f.task, f.step, {...proposal, status: 'accepted'});
     expect(f.reviseEntry).toHaveBeenCalledTimes(1);

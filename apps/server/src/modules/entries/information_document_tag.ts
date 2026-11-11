@@ -1,3 +1,4 @@
+import {entryTagWords} from './entry_tags.js';
 import {TextEncoder} from 'node:util';
 
 import type {
@@ -31,7 +32,10 @@ export function prepareAggregatedInformationDocumentTags(
   >();
   for (const entry of entries) {
     const seen = new Set<string>();
-    for (const keyword of entry.value.contentKeywords) {
+    for (const keyword of entryTagWords(entry.value).map((displayValue) => ({
+      displayValue,
+      normalizedValue: informationEntrySearchKey(displayValue),
+    }))) {
       if (seen.has(keyword.normalizedValue)) continue;
       seen.add(keyword.normalizedValue);
       const current = candidates.get(keyword.normalizedValue);

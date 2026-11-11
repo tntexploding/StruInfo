@@ -1,0 +1,14 @@
+[
+  {
+    "family": "NotoSansSC",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf",
+    "sha256": "1a414fd6f3ce6d3e9500be0e4ec841bea704164b3b54593d3be0e114d1d7ae8c",
+    "bytes": 7782284
+  },
+  {
+    "family": "NotoSerifSC",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifsc/NotoSerifSC%5Bwght%5D.ttf",
+    "sha256": "a6d74c81e3a1a1700f5ae97abf5df0015f08f16b62bced267b8a8c0265004f14",
+    "bytes": 11032292
+  }
+]

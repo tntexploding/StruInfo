@@ -16,7 +16,15 @@ export function sourceProcessingInstructions(
   stage: 'split' | 'tags' | 'relations',
 ): string {
   const instruction = scope.getStore()?.[stage]?.trim();
-  return instruction
-    ? `Owner source-specific guidance (subordinate to the evidence, coverage, privacy and output-schema requirements above):\n${instruction}`
-    : '';
+  const cap = scope.getStore()?.maxEntriesPerDocument;
+  return [
+    stage === 'split' && cap
+      ? `This document permits up to ${String(cap)} entries. Keep independent units and complete coverage. Excess units require review.`
+      : '',
+    instruction
+      ? `Owner source-specific guidance (subordinate to the evidence, coverage, privacy and output-schema requirements above):\n${instruction}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }

@@ -94,6 +94,8 @@ describe('closed document intelligence adapter', () => {
     const draft = {
       name: '合成周刊方案',
       explanation: '按独立条目拆分，需要核对。',
+      method: '按独立编号条目分组，附录保留在末项。',
+      execution: 'rule',
       settings: {
         template: 'numbered',
         headingLevel: 2,
@@ -103,6 +105,7 @@ describe('closed document intelligence adapter', () => {
         maximumEntries: 32,
         minimumBodyCharacters: 20,
         onMismatch: 'review',
+        allowNumberReset: false,
       },
     };
     const fetcher = vi
@@ -120,6 +123,34 @@ describe('closed document intelligence adapter', () => {
         text: '# Synthetic weekly\n\nPublic synthetic sample.',
       }),
     ).toEqual(draft);
+    const body = fetcher.mock.calls[0]?.[1]?.body;
+    if (typeof body !== 'string') throw new Error('missing recipe request');
+    const request = JSON.parse(body) as {
+      instructions: string;
+      text: {
+        format: {
+          schema: {
+            required: string[];
+            properties: Record<string, unknown> & {
+              settings: {
+                required: string[];
+                properties: Record<string, unknown>;
+              };
+            };
+          };
+        };
+      };
+    };
+    expect(request.instructions).toContain(
+      documentProcessingInstructions('split'),
+    );
+    const schema = request.text.format.schema;
+    expect([...schema.required].sort()).toEqual(
+      Object.keys(schema.properties).sort(),
+    );
+    expect([...schema.properties.settings.required].sort()).toEqual(
+      Object.keys(schema.properties.settings.properties).sort(),
+    );
     await expect(
       provider.suggestSplitRecipe({text: 'Synthetic sample.'}),
     ).rejects.toMatchObject({code: 'ai_provider_invalid_response'});

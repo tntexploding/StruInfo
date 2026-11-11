@@ -56,6 +56,24 @@ function substantialReceivedBody(text: string): boolean {
   );
 }
 
+// A subscription invitation alone does not describe a restricted article.
+function paidPreview(text: string): boolean {
+  const tail = text.slice(-3000).replace(/\[([^\]]+)\]\([^)]*\)/gu, '$1');
+  return /(?:^|\n)\s*(?:This (?:post|article) is for (?:paid|paying) subscribers|This (?:post|article) has bonus content for paid subscribers|Subscribe to (?:read|continue reading) (?:the rest|this (?:post|article))|(?:本文|本篇|剩余内容|以下内容).{0,20}(?:仅限付费|付费订阅后|付费会员可读))/imu.test(
+    tail,
+  );
+}
+
+function continuationNotice(text: string): boolean {
+  const tail = text
+    .slice(-900)
+    .replace(/\[([^\]]+)\]\([^)]*\)/gu, '$1')
+    .trim();
+  return /(?:read more|continue reading|阅读全文|阅读原文|查看全文)[\s.…。>»→]*$/iu.test(
+    tail,
+  );
+}
+
 /** Evidence capture and current routing decisions are deliberately separate. */
 export class DocumentIntakeService {
   public constructor(
@@ -311,6 +329,8 @@ export class DocumentIntakeService {
         return current;
       }
       const received = await this.sourceText(root);
+      if (!options && paidPreview(received.text))
+        return this.holdRestricted(root, current, root);
       const key =
         'intake-fulltext:' +
         root +
@@ -325,7 +345,8 @@ export class DocumentIntakeService {
         if (
           !options &&
           received.syndicated &&
-          substantialReceivedBody(received.text)
+          substantialReceivedBody(received.text) &&
+          !continuationNotice(received.text)
         ) {
           if (
             !(await this.deps.repository.save(
@@ -350,11 +371,15 @@ export class DocumentIntakeService {
             'forbidden',
             'private_model_transfer_forbidden',
           );
+        let restricted = current?.value.restrictedSnapshotId === preparedId;
         if (!previous) {
           const fetched = await this.deps.readWeb(root, snapshot.canonicalUri);
           if (fetched.status !== 'changed' || fetched.documents.length !== 1)
             throw new OperationError('rejected', 'intake_fulltext_unavailable');
           const doc = requireOperationValue(fetched.documents[0]);
+          restricted =
+            doc.accessRestriction === 'paid' ||
+            paidPreview(new TextDecoder().decode(doc.sourceUtf8));
           const resourceId = deriveProcessingRunId(
             this.deps.workspaceId,
             key + ':resource',
@@ -394,7 +419,7 @@ export class DocumentIntakeService {
               ...(doc.rawSourceBytes
                 ? {rawSourceBytes: doc.rawSourceBytes}
                 : {}),
-              documentBaseUri: snapshot.canonicalUri,
+              documentBaseUri: doc.canonicalUri,
               gitObservations: [],
             },
           );
@@ -402,9 +427,10 @@ export class DocumentIntakeService {
             throw new OperationError('rejected', 'intake_capture_failed');
         }
         // A source switch chooses evidence to review, never an admission decision.
-        const bodySource = options
-          ? 'web_article'
-          : await this.preferredBody(root, preparedId);
+        const bodySource =
+          options || restricted
+            ? 'web_article'
+            : await this.preferredBody(root, preparedId);
         if (options)
           await this.deps.assertBodyChangeAllowed(
             current ? intakeSnapshotIds(current) : [root],
@@ -415,20 +441,29 @@ export class DocumentIntakeService {
           current.value.preparedSnapshotId !== preparedId
         )
           history.push(current.value.preparedSnapshotId);
+        const value: IntakeRecordValue = {
+          ...this.pendingBody(
+            current,
+            bodySource,
+            bodySource === 'received'
+              ? '网页正文不足，改用已接收正文等待审核。'
+              : '网页正文已获取，等待审核。',
+          ),
+          preparedSnapshotId: preparedId,
+          ...(restricted
+            ? {
+                restrictedSnapshotId: preparedId,
+                decision: 'held' as const,
+                reason: '该文章需要付费订阅，现有内容为预览，已停止自动处理。',
+              }
+            : {}),
+          ...(history.length ? {previousPreparedSnapshotIds: history} : {}),
+        };
+        if (!restricted) delete value.restrictedSnapshotId;
         const saved = await this.deps.repository.save(
           root,
           current?.version ?? 0,
-          {
-            ...this.pendingBody(
-              current,
-              bodySource,
-              bodySource === 'received'
-                ? '网页正文不足，改用已接收正文等待审核。'
-                : '网页正文已获取，等待审核。',
-            ),
-            preparedSnapshotId: preparedId,
-            ...(history.length ? {previousPreparedSnapshotIds: history} : {}),
-          },
+          value,
         );
         if (!saved)
           throw new OperationError('conflict', 'stale_intake_version');
@@ -442,6 +477,7 @@ export class DocumentIntakeService {
         // selection must not silently switch, and neither path admits material.
         const canReviewReceived =
           !options &&
+          !continuationNotice(received.text) &&
           readableParagraphSizes(received.text).reduce((a, b) => a + b, 0) >=
             80;
         const value: IntakeRecordValue = canReviewReceived
@@ -484,6 +520,22 @@ export class DocumentIntakeService {
     delete value.policy;
     delete value.model;
     return value;
+  }
+
+  private async holdRestricted(
+    root: string,
+    current: IntakeRecord | undefined,
+    selected: string,
+  ) {
+    const value: IntakeRecordValue = {
+      ...this.pendingBody(current, current?.value.bodySource ?? 'received', ''),
+      decision: 'held',
+      restrictedSnapshotId: selected,
+      reason: '该文章需要付费订阅，现有内容为预览，已停止自动处理。',
+    };
+    if (!(await this.deps.repository.save(root, current?.version ?? 0, value)))
+      throw new OperationError('conflict', 'stale_intake_version');
+    return this.record(root);
   }
 
   private async sourceText(snapshotId: string) {
@@ -548,6 +600,20 @@ export class DocumentIntakeService {
       current?.value.decision === 'held'
     )
       return current;
+    const selected = current ? intakeTargetSnapshot(current) : snapshotId;
+    const source = await this.sourceText(selected);
+    const restriction = current?.value.restrictedSnapshotId;
+    if (
+      (restriction &&
+        (restriction === current.snapshotId ||
+          restriction === current.value.preparedSnapshotId)) ||
+      paidPreview(source.text)
+    )
+      return this.holdRestricted(
+        current?.snapshotId ?? snapshotId,
+        current,
+        selected,
+      );
     if (
       current?.value.assessment &&
       JSON.stringify(current.value.policy) === JSON.stringify(policy)
@@ -555,9 +621,6 @@ export class DocumentIntakeService {
       return current;
     if (!this.deps.provider)
       throw new OperationError('rejected', 'ai_not_configured');
-    const source = await this.sourceText(
-      current ? intakeTargetSnapshot(current) : snapshotId,
-    );
     const examples = selectManualIntakeExamples(
       await this.list(),
       await this.deps.evidence.listSnapshots(this.deps.workspaceId),

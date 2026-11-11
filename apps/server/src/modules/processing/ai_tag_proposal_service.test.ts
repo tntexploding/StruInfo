@@ -1,206 +1,136 @@
+import assert from 'node:assert/strict';
 import {describe, expect, it, vi} from 'vitest';
 import type {StructuredAnnotations} from '../entries/structured_annotations.js';
+import {prepareAiEntryTagRevision} from '../entries/information_entry.js';
 
 import type {
   CurrentInformationEntry,
   InformationEntryRepositoryPort,
 } from '../entries/index.js';
 import type {AiTagProposalProviderPort} from './ai_tag_proposal.js';
-import {
-  AiTagProposalService,
-  AiTagProposalServiceError,
-} from './ai_tag_proposal_service.js';
+import {AiTagProposalService} from './ai_tag_proposal_service.js';
 import type {ProcessingProposal, ProcessingRun} from './processing_contract.js';
 import type {AiTagProposalRepositoryPort} from './processing_repository.js';
 
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 const ENTRY_ID = '22222222-2222-4222-8222-222222222222';
 
-describe('AiTagProposalService', () => {
-  it.each(['unknown', 'none'] as const)(
-    'persists a valid %s result without forcing legacy labels',
-    async (status) => {
-      const f = createFixture(false);
-      const annotations: StructuredAnnotations = {
-        schemaVersion: 1,
-        vocabularyRevision: 1,
-        dimensions: [],
-        inputRevision: 1,
-        inputBodySha256: f.current.value.bodySha256,
-        origin: 'ai',
-        originVersion: 'synthetic.v1',
-        status,
-        note: 'Insufficient evidence',
-        readingState: 'unread',
-        labels: [],
-        claims: [],
-      };
-      f.proposeTags.mockResolvedValueOnce({
-        summary: 'No invented labels',
-        contentKeywords: [],
-        typeKeyword: 'knowledge_explanation',
-        domains: [],
-        annotations,
-      });
-      await f.service.start(ENTRY_ID, 'annotations-' + status);
-      const [proposal] = await f.service.listForEntry(ENTRY_ID);
-      expect(proposal?.tagPayload?.annotations).toEqual(annotations);
-      await f.service.accept(ENTRY_ID, proposal?.proposalId ?? '');
-      expect(f.current.value.annotations).toEqual(annotations);
-      expect(f.current.value.contentKeywords).toEqual([]);
-      expect(f.current.value.domains).toEqual([]);
-      expect(f.proposeTags).toHaveBeenCalledTimes(1);
-    },
-  );
-  it.each([false, true])(
-    'compares persisted tag values independently of key order, preserving actual changes: %s',
-    async (changed) => {
-      const fixture = createFixture(false);
-      fixture.proposeTags.mockResolvedValueOnce({
-        summary: 'Synthetic custom type',
-        contentKeywords: ['Synthetic'],
+describe('unified tag proposal writes', () => {
+  it('writes only annotations, preserves raw text and reuses an accepted result', async () => {
+    const f = createFixture(false);
+    const body = f.current.value.body;
+    await f.service.start(ENTRY_ID, 'one');
+    const [p] = await f.service.listForEntry(ENTRY_ID);
+    expect(p?.tagPayload).not.toHaveProperty('contentKeywords');
+    await f.service.accept(ENTRY_ID, required(p).proposalId);
+    expect(f.current.value.body).toBe(body);
+    expect(f.current.value.annotations?.labels).toHaveLength(1);
+    expect(f.current.value.contentKeywords).toEqual([]);
+    expect(f.current.value.domains).toEqual([]);
+    expect(f.current.value.typeKeyword).toBeUndefined();
+    expect(
+      prepareAiEntryTagRevision(f.current, {
+        originVersion: 'old-maintenance',
         typeKeyword: 'other',
-        typeCustomName: 'Synthetic collection',
-        domains: [{keyword: 'engineering_computing'}],
-      });
-      vi.spyOn(fixture.entries, 'loadCurrentEntries').mockImplementation(() => {
-        const current = fixture.current;
-        if (current.revision === 1) return Promise.resolve([current]);
-        return Promise.resolve([
-          {
-            ...current,
-            value: {
-              typeCustomName: 'Synthetic collection',
-              ...current.value,
-              ...(changed ? {typeCustomName: 'Owner correction'} : {}),
-            },
-          },
-        ]);
-      });
-      await fixture.service.start(ENTRY_ID, 'ordered-custom-type');
-      const [proposal] = await fixture.service.listForEntry(ENTRY_ID);
-      const accept = () =>
-        fixture.service.accept(ENTRY_ID, proposal?.proposalId ?? '');
-      if (changed) {
-        await expect(accept()).rejects.toMatchObject({
-          code: 'stale_entry_revision',
-        });
-      } else {
-        await expect(accept()).resolves.toMatchObject({outcome: 'accepted'});
-        await expect(accept()).resolves.toMatchObject({outcome: 'unchanged'});
-      }
-      expect(fixture.proposeTags).toHaveBeenCalledTimes(1);
-      expect(fixture.reviseEntry).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it('creates a reviewable proposal and applies it only through Entry revision', async () => {
-    const fixture = createFixture(false);
-
-    const started = await fixture.service.start(ENTRY_ID, 'synthetic-request');
-    expect(started.outcome).toBe('created');
-    expect(started.run.status).toBe('succeeded');
-    expect(fixture.proposeTags).toHaveBeenCalledTimes(1);
-    const [proposal] = await fixture.service.listForEntry(ENTRY_ID);
-    expect(proposal).toMatchObject({
-      kind: 'tags',
-      status: 'pending_review',
-      targetEntryId: ENTRY_ID,
-      tagPayload: {
-        expectedEntryRevision: 1,
-        providerModel: 'gpt-5-mini',
-      },
+        typeCustomName: 'Legacy',
+        contentKeywords: ['Legacy'],
+        domains: [],
+      }),
+    ).toBeUndefined();
+    await f.service.accept(ENTRY_ID, required(p).proposalId);
+    expect(f.proposeTags).toHaveBeenCalledTimes(1);
+    expect(f.reviseEntry).toHaveBeenCalledTimes(1);
+  });
+  it('retains manual labels', async () => {
+    const f = createFixture(false);
+    const a = {...labelsFor(f.current), origin: 'manual' as const};
+    await f.entries.reviseEntry({
+      workspaceId: WORKSPACE_ID,
+      entryId: ENTRY_ID,
+      expectedRevision: 1,
+      revisionId: ENTRY_ID,
+      value: {...f.current.value, annotations: a},
     });
-    expect(fixture.current.revision).toBe(1);
-
-    const accepted = await fixture.service.accept(
-      ENTRY_ID,
-      proposal?.proposalId ?? '',
-    );
-    expect(accepted.outcome).toBe('accepted');
-    expect(accepted.proposal.status).toBe('accepted');
-    expect(fixture.reviseEntry).toHaveBeenCalledTimes(1);
-    expect(fixture.current).toMatchObject({
-      revision: 2,
+    await f.service.start(ENTRY_ID, 'manual');
+    const [p] = await f.service.listForEntry(ENTRY_ID);
+    await f.service.accept(ENTRY_ID, required(p).proposalId);
+    expect(f.current.value.annotations).toEqual(a);
+  });
+  it('rejects foreign evidence without writing a proposal', async () => {
+    const f = createFixture(false);
+    const a = labelsFor(f.current);
+    const label = required(a.labels[0]);
+    assert('evidence' in label);
+    label.evidence.quote = 'foreign body';
+    f.proposeTags.mockResolvedValue({summary: 'invalid', annotations: a});
+    const result = await f.service.start(ENTRY_ID, 'invalid');
+    expect(result.run.status).toBe('failed');
+    expect(await f.service.listForEntry(ENTRY_ID)).toEqual([]);
+  });
+  it('preserves a historical manual domain when adding unified tags', async () => {
+    const f = createFixture(false);
+    await f.entries.reviseEntry({
+      workspaceId: WORKSPACE_ID,
+      entryId: ENTRY_ID,
+      expectedRevision: 1,
+      revisionId: ENTRY_ID,
       value: {
-        typeKeyword: 'knowledge_explanation',
-        contentKeywords: [
+        ...f.current.value,
+        domains: [
           {
-            displayValue: 'PostgreSQL',
-            origin: 'ai',
-            originVersion: 'openai:gpt-5-mini:struinfo.openai-entry-tags.v1',
+            keyword: 'other',
+            customName: 'Manual domain',
+            origin: 'manual',
+            originVersion: 'owner',
           },
         ],
       },
     });
+    await f.service.start(ENTRY_ID, 'manual-domain');
+    const [p] = await f.service.listForEntry(ENTRY_ID);
+    await f.service.accept(ENTRY_ID, required(p).proposalId);
+    expect(f.current.value.domains[0]?.customName).toBe('Manual domain');
+    expect(f.current.value.annotations).toBeUndefined();
   });
-
-  it('rejects a proposal without changing the Entry', async () => {
-    const fixture = createFixture(false);
-    await fixture.service.start(ENTRY_ID, 'reject-request');
-    const [proposal] = await fixture.service.listForEntry(ENTRY_ID);
-
-    const rejected = await fixture.service.reject(
-      ENTRY_ID,
-      proposal?.proposalId ?? '',
-    );
-    expect(rejected).toMatchObject({outcome: 'rejected'});
-    expect(rejected.proposal.status).toBe('rejected');
-    expect(fixture.reviseEntry).not.toHaveBeenCalled();
-    expect(fixture.current.revision).toBe(1);
-  });
-
-  it('keeps the stored DeepSeek origin when accepting after the configured provider changes', async () => {
-    const fixture = createFixture(false, {
-      providerKey: 'deepseek-responses-v1',
-      model: 'deepseek-flash',
-      promptVersion: 'struinfo.deepseek-entry-tags.v1',
+  it('keeps private content away from the provider', async () => {
+    const f = createFixture(true);
+    await expect(f.service.start(ENTRY_ID, 'private')).rejects.toMatchObject({
+      code: 'ai_private_entry_forbidden',
     });
-    await fixture.service.start(ENTRY_ID, 'deepseek-request');
-    const [proposal] = await fixture.service.listForEntry(ENTRY_ID);
-    const service = new AiTagProposalService({
+    expect(f.proposeTags).not.toHaveBeenCalled();
+  });
+  it('does not apply a proposal over a later edit', async () => {
+    const f = createFixture(false);
+    await f.service.start(ENTRY_ID, 'stale');
+    const [p] = await f.service.listForEntry(ENTRY_ID);
+    await f.entries.reviseEntry({
       workspaceId: WORKSPACE_ID,
-      entries: fixture.entries,
-      processing: fixture.processing,
-      provider: {
-        ...fixture.provider,
-        providerKey: 'openai-responses-v1',
-        model: 'gpt-5-mini',
-        promptVersion: 'struinfo.openai-entry-tags.v1',
+      entryId: ENTRY_ID,
+      expectedRevision: 1,
+      revisionId: ENTRY_ID,
+      value: {
+        ...f.current.value,
+        body: 'Owner edit',
+        bodySha256: 'b'.repeat(64),
       },
     });
-
-    const accepted = await service.accept(ENTRY_ID, proposal?.proposalId ?? '');
-    expect(accepted.outcome).toBe('accepted');
-    const annotations = [
-      ...fixture.current.value.contentKeywords,
-      ...fixture.current.value.domains,
-    ];
-    expect(annotations.length).toBeGreaterThan(0);
-    for (const annotation of annotations) {
-      expect(annotation.originVersion).toBe(
-        'deepseek:deepseek-flash:struinfo.deepseek-entry-tags.v1',
-      );
-    }
-    expect(
-      (await service.accept(ENTRY_ID, proposal?.proposalId ?? '')).outcome,
-    ).toBe('unchanged');
-    expect(fixture.reviseEntry).toHaveBeenCalledTimes(1);
-  });
-
-  it('never invokes the Provider for a private Entry', async () => {
-    const fixture = createFixture(true);
-
     await expect(
-      fixture.service.start(ENTRY_ID, 'private-request'),
-    ).rejects.toEqual(
-      new AiTagProposalServiceError('ai_private_entry_forbidden'),
-    );
-    expect(fixture.proposeTags).not.toHaveBeenCalled();
-    expect(fixture.runs.size).toBe(0);
+      f.service.accept(ENTRY_ID, required(p).proposalId),
+    ).rejects.toMatchObject({code: 'ai_proposal_invalid'});
+    expect(f.current.value.body).toBe('Owner edit');
+  });
+  it('allows unknown without fabricated labels', async () => {
+    const f = createFixture(false);
+    f.proposeTags.mockResolvedValue({
+      summary: 'Unknown',
+      annotations: {...labelsFor(f.current), status: 'unknown', labels: []},
+    });
+    await f.service.start(ENTRY_ID, 'unknown');
+    const [p] = await f.service.listForEntry(ENTRY_ID);
+    await f.service.accept(ENTRY_ID, required(p).proposalId);
+    expect(f.current.value.annotations?.labels).toEqual([]);
   });
 });
-
 function createFixture(
   isPrivate: boolean,
   providerConfig: Partial<
@@ -364,17 +294,8 @@ function createFixture(
     decideProposal,
   };
 
-  const proposeTags = vi.fn<AiTagProposalProviderPort['proposeTags']>(() =>
-    Promise.resolve(
-      Object.freeze({
-        summary: 'Synthetic tags',
-        contentKeywords: Object.freeze(['PostgreSQL']),
-        typeKeyword: 'knowledge_explanation' as const,
-        domains: Object.freeze([
-          Object.freeze({keyword: 'engineering_computing' as const}),
-        ]),
-      }),
-    ),
+  const proposeTags = vi.fn<AiTagProposalProviderPort['proposeTags']>((e) =>
+    Promise.resolve({summary: 'Synthetic tags', annotations: labelsFor(e)}),
   );
   const provider = {
     providerKey: 'openai-responses-v1' as const,
@@ -425,114 +346,6 @@ function run(runId: string, idempotencyKey: string): Readonly<ProcessingRun> {
   });
 }
 
-function batchFixture() {
-  const selected = Array.from({length: 8}, (_, index) => ({
-    ...entry(false),
-    entryId: `22222222-2222-4222-8222-${String(index).padStart(12, '0')}`,
-  }));
-  const proposeTagsBatch = vi.fn<
-    NonNullable<AiTagProposalProviderPort['proposeTagsBatch']>
-  >(() =>
-    Promise.resolve(
-      selected.map((item) => ({
-        entryId: item.entryId,
-        expectedRevision: item.revision,
-        result: {
-          summary: 'Synthetic batch',
-          contentKeywords: ['Queue'],
-          typeKeyword: 'knowledge_explanation',
-          domains: [{keyword: 'engineering_computing'}],
-        },
-      })),
-    ),
-  );
-  const fixture = createFixture(false, {proposeTagsBatch});
-  vi.spyOn(fixture.entries, 'loadCurrentEntries').mockImplementation(() =>
-    Promise.resolve(selected),
-  );
-  const requests = selected.map((item) => ({
-    entryId: item.entryId,
-    expectedRevision: item.revision,
-    requestKey: 'batch-synthetic',
-  }));
-  return {...fixture, selected, requests, proposeTagsBatch};
-}
-
-it('persists independent tag proposals from one bounded call and reuses them idempotently', async () => {
-  const f = batchFixture();
-  const results = await f.service.startBatch(f.requests);
-  expect(results).toHaveLength(8);
-  expect(f.proposeTagsBatch).toHaveBeenCalledTimes(1);
-  expect(f.proposeTags).not.toHaveBeenCalled();
-  expect(results.map(({run}) => run.proposals[0]?.targetEntryId)).toEqual(
-    f.selected.map((item) => item.entryId),
-  );
-  expect(
-    results.every(
-      ({run}) => run.proposals[0]?.tagPayload?.expectedEntryRevision === 1,
-    ),
-  ).toBe(true);
-  expect(f.reviseEntry).not.toHaveBeenCalled();
-  const again = await f.service.startBatch(f.requests);
-  expect(again.every((result) => result.outcome === 'existing')).toBe(true);
-  expect(f.proposeTagsBatch).toHaveBeenCalledTimes(1);
-});
-
-it.each(['missing', 'duplicate', 'stale', 'invalid-tags'] as const)(
-  'does not save any tag proposal for an invalid batch: %s',
-  async (problem) => {
-    const f = batchFixture();
-    const generated = [...(await f.proposeTagsBatch(f.selected))];
-    f.proposeTagsBatch.mockClear();
-    const first = generated[0];
-    if (!first) throw new Error('fixture');
-    if (problem === 'missing') generated.pop();
-    if (problem === 'duplicate') generated[1] = first;
-    if (problem === 'stale')
-      generated[1] = {
-        ...first,
-        entryId: f.selected[1]?.entryId ?? '',
-        expectedRevision: 9,
-      };
-    if (problem === 'invalid-tags')
-      generated[3] = {
-        ...first,
-        entryId: f.selected[3]?.entryId ?? '',
-        result: {...first.result, contentKeywords: []},
-      };
-    f.proposeTagsBatch.mockResolvedValueOnce(generated);
-    await expect(f.service.startBatch(f.requests)).rejects.toHaveProperty(
-      'code',
-    );
-    expect(f.appendTagProposal).not.toHaveBeenCalled();
-    expect(f.reviseEntry).not.toHaveBeenCalled();
-  },
-);
-
-it('does not send a stale revision and does not overwrite an edit during batch generation', async () => {
-  const f = batchFixture();
-  const first = f.selected[0];
-  if (!first) throw new Error('fixture');
-  f.selected[0] = {...first, revision: 2};
-  await expect(f.service.startBatch(f.requests)).rejects.toMatchObject({
-    code: 'stale_entry_revision',
-  });
-  expect(f.proposeTagsBatch).not.toHaveBeenCalled();
-  f.selected[0] = first;
-  const results = await f.proposeTagsBatch(f.selected);
-  f.proposeTagsBatch.mockImplementationOnce(() => {
-    f.selected[0] = {...first, revision: 2};
-    return Promise.resolve(results);
-  });
-  const saved = await f.service.startBatch(f.requests);
-  expect(saved[0]?.run).toMatchObject({
-    status: 'failed',
-    errorCode: 'stale_entry_revision',
-    proposals: [],
-  });
-  expect(f.reviseEntry).not.toHaveBeenCalled();
-});
-
 function entry(isPrivate: boolean): Readonly<CurrentInformationEntry> {
   return Object.freeze({
     workspaceId: WORKSPACE_ID,
@@ -558,45 +371,48 @@ function entry(isPrivate: boolean): Readonly<CurrentInformationEntry> {
   });
 }
 
-it('retains a manual annotation set when a later internal tag proposal is accepted', async () => {
-  const f = createFixture(false);
-  const manual: StructuredAnnotations = {
+function labelsFor(e: CurrentInformationEntry): StructuredAnnotations {
+  const dimension = {
+    id: '11111111-1111-4111-8111-111111111119',
+    name: '议题',
+    role: 'issue' as const,
+    description: '',
+    enabled: true,
+  };
+  return {
     schemaVersion: 1,
     vocabularyRevision: 0,
-    dimensions: [],
-    inputRevision: 1,
-    inputBodySha256: f.current.value.bodySha256,
-    origin: 'manual',
-    originVersion: 'manual.v1',
-    status: 'none',
-    note: 'Owner reviewed',
-    readingState: 'read',
-    labels: [],
+    dimensions: [dimension],
+    inputRevision: e.revision,
+    inputBodySha256: e.value.bodySha256,
+    origin: 'ai',
+    originVersion: 'synthetic.unified',
+    status: 'complete',
+    note: '',
+    readingState: 'unread',
     claims: [],
+    labels: [
+      {
+        dimensionId: dimension.id,
+        term: {
+          id: '11111111-1111-4111-8111-111111111118',
+          dimensionId: dimension.id,
+          label: 'Synthetic',
+          meaning: 'synthetic test',
+        },
+        wording: 'Synthetic',
+        primary: true,
+        evidence: {
+          start: 0,
+          end: Array.from(e.value.body).length,
+          quote: e.value.body,
+        },
+      },
+    ],
   };
-  await f.entries.reviseEntry({
-    workspaceId: WORKSPACE_ID,
-    entryId: ENTRY_ID,
-    expectedRevision: 1,
-    revisionId: '00000000-0000-4000-8000-000000000002',
-    value: {...f.current.value, annotations: manual},
-  });
-  f.proposeTags.mockResolvedValueOnce({
-    summary: 'Synthetic AI result',
-    contentKeywords: [],
-    typeKeyword: 'knowledge_explanation',
-    domains: [],
-    annotations: {
-      ...manual,
-      inputRevision: 2,
-      origin: 'ai',
-      note: 'AI uncertain',
-      status: 'unknown',
-    },
-  });
-  await f.service.start(ENTRY_ID, 'preserve-manual-annotations');
-  const proposal = (await f.service.listForEntry(ENTRY_ID))[0];
-  if (!proposal) throw new Error('missing proposal');
-  await f.service.accept(ENTRY_ID, proposal.proposalId);
-  expect(f.current.value.annotations).toEqual(manual);
-});
+}
+
+function required<T>(value: T | undefined): T {
+  assert(value !== undefined);
+  return value;
+}

@@ -9,6 +9,36 @@ import {
 const source: SourceScheduleInput = {enabled: true, intervalMinutes: 60};
 const now = '2026-10-24T03:00:00.000Z';
 describe('source receiving schedules', () => {
+  it('continues a partial batch after one minute while preserving pauses and failure backoff', () => {
+    const pending = {
+      ...source,
+      intervalMinutes: 1440,
+      lastAttemptAt: now,
+      lastSuccessAt: now,
+      checkState: {failures: 0, hasMore: true},
+    };
+    expect(sourceSchedule(pending, now).nextCheckAt).toBe(
+      '2026-10-24T03:01:00.000Z',
+    );
+    expect(sourceSchedule({...pending, enabled: false}, now).reason).toBe(
+      'disabled',
+    );
+    expect(
+      sourceSchedule(
+        {...pending, checkState: {...pending.checkState, failures: 1}},
+        now,
+      ).reason,
+    ).toBe('backoff');
+    expect(
+      sourceSchedule(
+        {
+          ...pending,
+          receiving: {...DEFAULT_SOURCE_RECEIVING, schedule: {mode: 'once'}},
+        },
+        now,
+      ).reason,
+    ).toBe('interval');
+  });
   it('keeps legacy intervals and never enables paused/manual/finished static sources', () => {
     expect(sourceSchedule(source, now).reason).toBe('due');
     expect(sourceSchedule({...source, enabled: false}, now)).toEqual({

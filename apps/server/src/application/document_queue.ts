@@ -259,7 +259,6 @@ export class DocumentQueue {
               ...(item.expectedVersion
                 ? {expectedReceiptVersion: item.expectedVersion}
                 : {}),
-              maxEntries: settings.maxEntries,
               maxModelCalls: settings.maxModelCalls,
               intake: settings.intake ?? {fetchFullText: true},
             },

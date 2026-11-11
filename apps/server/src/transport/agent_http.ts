@@ -100,6 +100,8 @@ export function agentHttpMiddleware(options: AgentHttpOptions) {
                 'ai_price_save',
                 'ai_operations_save',
                 'ai_execution_save',
+                'ai_queue_save',
+                'assistant_settings_save',
               ]
             : reports
               ? REPORT_OPERATIONS

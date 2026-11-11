@@ -61,6 +61,7 @@ import {
   assertM1eProcessingWorkspace,
   createEmptyM1eProcessingSnapshot,
   M1E_PROCESSING_BUNDLE_CODEC,
+  M1E_PROCESSING_VERSION_NINETEEN_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_EIGHT_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_TEN_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_ELEVEN_BUNDLE_CODEC,
@@ -213,6 +214,7 @@ const BUNDLE_CODECS = Object.freeze([
   M1E_PROCESSING_VERSION_TWELVE_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_NINE_BUNDLE_CODEC,
   M1E_PROCESSING_BUNDLE_CODEC,
+  M1E_PROCESSING_VERSION_NINETEEN_BUNDLE_CODEC,
   PERSONAL_DATA_BUNDLE_CODEC,
 ]);
 
@@ -604,10 +606,7 @@ async function saveReviewPreferences(
     preferences.associationPolicy,
     preferences.explorationPolicy,
     preferences.sourceSubscriptions,
-    preferences.entryPreferenceProfile,
-    preferences.entryAutomationPolicy,
     preferences.entrySplitRuleProfile,
-    preferences.entryClassificationProfile,
     preferences.entrySavedQueries,
     preferences.uiPreferences,
     preferences.aiPricePolicy,

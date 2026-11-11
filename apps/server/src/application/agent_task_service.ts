@@ -1,5 +1,6 @@
 import {withSourceProcessing} from './source_processing_scope.js';
 import {createHash} from 'node:crypto';
+import {isDeepStrictEqual} from 'node:util';
 import {AiWorkQueue} from './ai_work_queue.js';
 import {isNoRelationRun} from '../modules/processing/ai_association_proposal.js';
 import {deriveProcessingRunId} from '../modules/processing/processing_identity.js';
@@ -10,6 +11,7 @@ import {
 } from '../modules/processing/ai_price_policy.js';
 import {
   agentTaskRequestSchema,
+  storedAgentTaskRequestSchema,
   DOCUMENT_WORKFLOW,
   type AgentTask,
   type AgentTaskRepository,
@@ -41,6 +43,8 @@ export class AgentTaskService {
       check: () => Promise<void>;
       checkOperations?: () => Promise<void>;
       canResume: (task: AgentTask) => boolean | Promise<boolean>;
+      withBudget?: (id: string, run: () => Promise<void>) => Promise<void>;
+      currentBudgetId?: () => Promise<string | undefined>;
       executionSettings?: () => Promise<{
         maxConcurrentRequests: number;
         automaticRetryLimit: number;
@@ -66,7 +70,9 @@ export class AgentTaskService {
     const parsed = agentTaskRequestSchema.safeParse(input);
     if (!parsed.success)
       throw new OperationError('invalid_input', 'invalid_task_request');
-    const request = parsed.data;
+    const request = storedAgentTaskRequestSchema.parse(parsed.data);
+    const requestedLimit =
+      parsed.data.kind === 'document' ? parsed.data.maxEntries : undefined;
     if (
       request.kind === 'document' &&
       request.reprocess &&
@@ -107,10 +113,34 @@ export class AgentTaskService {
     );
     const existing = await this.repository.read(this.workspaceId, taskId);
     if (existing) {
-      if (JSON.stringify(existing.request) !== JSON.stringify(request))
+      if (request.kind === 'document' && existing.request.kind === 'document') {
+        if (!request.budgetId && existing.request.budgetId)
+          request.budgetId = existing.request.budgetId;
+        request.maxEntries =
+          requestedLimit === undefined
+            ? existing.request.maxEntries
+            : Math.min(
+                requestedLimit,
+                existing.state.sourceSplit?.sourceEntryLimit ?? requestedLimit,
+              );
+      }
+      if (!isDeepStrictEqual(existing.request, request))
         throw new OperationError('conflict', 'idempotency_conflict');
       return existing;
     }
+    const sourceSplit = await this.actions.freezeSourceSplit(request);
+    if (request.kind === 'document' && !request.budgetId) {
+      const budgetId = await this.priceGate?.currentBudgetId?.();
+      if (budgetId) request.budgetId = budgetId;
+    }
+    if (
+      request.kind === 'document' &&
+      sourceSplit?.sourceEntryLimit !== undefined
+    )
+      request.maxEntries = Math.min(
+        requestedLimit ?? sourceSplit.sourceEntryLimit,
+        sourceSplit.sourceEntryLimit,
+      );
     await this.actions.preflight(request);
     const first: AgentTaskStep =
       request.kind === 'document' ||
@@ -145,7 +175,6 @@ export class AgentTaskService {
               complete: false,
             };
     const now = new Date().toISOString();
-    const sourceSplit = await this.actions.freezeSourceSplit(request);
     const retryLimit =
       (await this.priceGate?.executionSettings?.())?.automaticRetryLimit ?? 0;
     const task: AgentTask = {
@@ -206,7 +235,7 @@ export class AgentTaskService {
         : task;
     await this.repository.create(initialized);
     const saved = await this.read(authority, taskId);
-    if (JSON.stringify(saved.request) !== JSON.stringify(request))
+    if (!isDeepStrictEqual(saved.request, request))
       throw new OperationError('conflict', 'idempotency_conflict');
     this.launch(taskId);
     return saved;
@@ -370,8 +399,97 @@ export class AgentTaskService {
     expectedVersion: number,
     action: 'pause' | 'resume' | 'cancel',
     regenerateSplit = false,
+    reviewSplit?: 'current_recipe' | 'ai_once',
   ): Promise<Awaited<ReturnType<AgentTaskService['read']>>> {
     this.authorize(authority);
+    if (reviewSplit) {
+      if (
+        authority.identity.kind !== 'owner' ||
+        action !== 'resume' ||
+        regenerateSplit
+      )
+        throw new OperationError('forbidden', 'split_replan_owner_required');
+      authority.require('models.use');
+      const version = await this.repository.withLock(
+        this.workspaceId,
+        taskId,
+        async () => {
+          const task = await this.read(authority, taskId);
+          if (task.version !== expectedVersion)
+            throw new OperationError('conflict', 'stale_task_version');
+          assertCurrentDocumentWorkflow(task);
+          const step = task.state.steps.find((s) => !s.complete),
+            prior = task.state.sourceSplit;
+          if (
+            task.request.kind !== 'document' ||
+            task.state.status !== 'paused' ||
+            !prior ||
+            task.cancelRequested ||
+            task.state.supersededBy ||
+            this.#running.has(taskId) ||
+            step?.kind !== 'split' ||
+            step.runId ||
+            step.attempt !== 0 ||
+            step.sourceSplit?.outcome !== 'review'
+          )
+            throw new OperationError('conflict', 'recipe_review_unavailable');
+          await this.actions.validateRecovery(task);
+          let frozen = prior,
+            decision = {
+              ...step.sourceSplit,
+              outcome: 'ai' as const,
+              reason: 'recipe_owner_ai_review',
+            } as typeof step.sourceSplit;
+          if (reviewSplit === 'current_recipe') {
+            const fresh = requireOperationValue(
+              await this.actions.freezeSourceSplit({
+                ...task.request,
+                snapshotId: step.targetId,
+              }),
+            );
+            frozen = {
+              ...fresh,
+              ...(prior.processingProfile
+                ? {
+                    processingProfile: {
+                      ...prior.processingProfile,
+                      splitRouting: fresh.processingProfile?.splitRouting,
+                    },
+                  }
+                : {}),
+            };
+            decision = await this.actions.decideSourceSplit(
+              {...task, state: {...task.state, sourceSplit: frozen}},
+              step,
+            );
+            if (decision.reason !== 'recipe_ready')
+              throw new OperationError('rejected', 'recipe_review_unresolved');
+          }
+          const reviewed = {
+            ...step,
+            sourceSplit: decision,
+            splitReview: {
+              action: reviewSplit,
+              previous: step.sourceSplit,
+              previousCatalogRevision: prior.catalogRevision,
+              at: new Date().toISOString(),
+            },
+          };
+          await this.repository.saveState(this.workspaceId, taskId, {
+            ...task.state,
+            sourceSplit: {
+              ...frozen,
+              ...(prior.sourceEntryLimit === undefined
+                ? {}
+                : {sourceEntryLimit: prior.sourceEntryLimit}),
+            },
+            steps: task.state.steps.map((s) => (s === step ? reviewed : s)),
+          });
+          return (await this.read(authority, taskId)).version;
+        },
+      );
+      return this.control(authority, taskId, version, 'resume');
+    }
     if (regenerateSplit) {
       if (action !== 'resume' || authority.identity.kind !== 'owner')
         throw new OperationError('forbidden', 'split_replan_owner_required');
@@ -1097,7 +1215,14 @@ export class AgentTaskService {
           )
             return;
         }
-        await this.execute(taskId);
+        const task = await this.repository.read(this.workspaceId, taskId);
+        if (task?.request.kind === 'document' && task.request.budgetId) {
+          if (!this.priceGate?.withBudget)
+            throw new OperationError('rejected', 'ai_batch_budget_paused');
+          await this.priceGate.withBudget(task.request.budgetId, () =>
+            this.execute(taskId),
+          );
+        } else await this.execute(taskId);
       })
       .catch(() => {
         this.#interrupted.add(taskId);

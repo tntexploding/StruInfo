@@ -1,4 +1,7 @@
-import {structuredAnnotationsSchema} from '../../../modules/entries/structured_annotations.js';
+import {
+  annotationTermSchema,
+  structuredAnnotationsSchema,
+} from '../../../modules/entries/structured_annotations.js';
 import {
   ENTRY_ANNOTATION_ORIGINS,
   ENTRY_CHUNK_MODES,
@@ -567,6 +570,91 @@ export class PostgresInformationEntryRepository
             appliedCount === 0 ? ('unchanged' as const) : ('applied' as const),
           appliedCount,
         });
+      },
+    );
+  }
+
+  public async loadDocumentEntryCounts(
+    workspaceIdInput: string,
+    includePrivate: boolean,
+  ) {
+    const result = await this.#pool.query<Row>(
+      `SELECT e.snapshot_id::text,
+      count(*)::integer AS entry_count,
+      jsonb_agg(CASE WHEN a.value_text::jsonb->>'inputBodySha256'=e.body_sha256 AND a.value_text::jsonb->>'originVersion'<>'reading-state.v1'
+        THEN (SELECT jsonb_agg(l->'term'->>'label') FROM jsonb_array_elements(a.value_text::jsonb->'labels') l)
+        WHEN a.value_text IS NULL OR a.value_text::jsonb->>'originVersion'='reading-state.v1'
+        THEN (SELECT jsonb_agg(k.display_value) FROM struinfo.information_entry_content_keyword k WHERE k.workspace_id=e.workspace_id AND k.entry_id=e.entry_id)
+        ELSE '[]'::jsonb END) AS tag_groups,
+      (array_agg(e.title_path ORDER BY e.document_order,e.entry_id))[1] AS title,
+      array_remove(array_agg(DISTINCT coalesce((SELECT l->'term'->>'label' FROM jsonb_array_elements(a.value_text::jsonb->'labels') l
+        WHERE a.value_text::jsonb->>'inputBodySha256'=e.body_sha256 AND l->>'dimensionId' IN
+          (SELECT d->>'id' FROM jsonb_array_elements(a.value_text::jsonb->'dimensions') d WHERE d->>'role'='form') LIMIT 1),
+        e.type_custom_name,e.type_keyword)),NULL) AS types,
+      CASE WHEN bool_and(coalesce(a.value_text::jsonb->>'readingState','unread')='read') THEN 'read'
+        WHEN bool_or(coalesce(a.value_text::jsonb->>'readingState','unread') IN ('reading','read')) THEN 'reading' ELSE 'unread' END AS reading_state,
+      count(*) FILTER (WHERE (a.value_text::jsonb->>'inputBodySha256'=e.body_sha256 AND a.value_text::jsonb->>'status' IN ('complete','partial','none')) OR e.type_keyword IS NOT NULL
+        OR EXISTS (SELECT 1 FROM struinfo.information_entry_content_keyword k WHERE k.workspace_id=e.workspace_id AND k.entry_id=e.entry_id)
+        OR EXISTS (SELECT 1 FROM struinfo.information_entry_domain_keyword d WHERE d.workspace_id=e.workspace_id AND d.entry_id=e.entry_id))::integer AS annotated_entry_count
+      FROM struinfo.information_entry e
+      LEFT JOIN struinfo.information_entry_annotation a ON a.workspace_id=e.workspace_id AND a.entry_id=e.entry_id
+      WHERE e.workspace_id=$1 AND e.is_current_structure AND ($2::boolean OR NOT e.is_private)
+      GROUP BY e.snapshot_id`,
+      [canonicalUuid(workspaceIdInput), includePrivate],
+    );
+    return result.rows.map((row) => ({
+      snapshotId: text(row.snapshot_id),
+      entryCount: integer(row.entry_count, 0),
+      annotatedEntryCount: integer(row.annotated_entry_count, 0),
+      ...(optionalText(row.title) ? {title: text(row.title)} : {}),
+      types: Array.isArray(row.types) ? row.types.map(text) : [],
+      tagNames: [
+        ...new Set(
+          Array.isArray(row.tag_groups)
+            ? row.tag_groups.flatMap((group: unknown) =>
+                Array.isArray(group) ? group.map(text) : [],
+              )
+            : [],
+        ),
+      ],
+      readingState: text(row.reading_state),
+    }));
+  }
+
+  public async loadAnnotationTerms(workspaceId: string) {
+    const result = await this.#pool.query(
+      `SELECT DISTINCT label->'term' AS term
+       FROM struinfo.information_entry_annotation a
+       JOIN struinfo.information_entry e ON e.workspace_id=a.workspace_id AND e.entry_id=a.entry_id
+       CROSS JOIN LATERAL jsonb_array_elements(a.value_text::jsonb->'labels') AS label
+       WHERE e.workspace_id=$1 AND e.is_current_structure AND NOT e.is_private
+       AND a.value_text::jsonb->>'inputBodySha256'=e.body_sha256`,
+      [workspaceId],
+    );
+    return result.rows.map((row) => annotationTermSchema.parse(row.term));
+  }
+
+  public async loadCurrentEntriesForSnapshot(
+    workspaceIdInput: string,
+    includePrivate: boolean,
+    snapshotIdInput: string,
+  ) {
+    const workspaceId = canonicalUuid(workspaceIdInput),
+      snapshotId = canonicalUuid(snapshotIdInput);
+    return runPostgresTransaction(
+      this.#pool,
+      'repeatable_read_only',
+      async (client) => {
+        const result = await client.query<Row>(
+          'SELECT entry_id::text FROM struinfo.information_entry WHERE workspace_id=$1 AND snapshot_id=$2 AND is_current_structure AND ($3::boolean OR NOT is_private)',
+          [workspaceId, snapshotId, includePrivate],
+        );
+        return loadCurrentInformationEntriesByIds(
+          client,
+          workspaceId,
+          includePrivate,
+          result.rows.map((row) => text(row.entry_id)),
+        );
       },
     );
   }

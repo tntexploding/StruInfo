@@ -275,7 +275,7 @@ export class JsonApiSourceConnector implements SourceConnectorPort {
     }
     if (
       addresses.length === 0 ||
-      addresses.some((address) => isBlockedAddress(address))
+      addresses.some((address) => isBlockedJsonApiAddress(address))
     ) {
       throw new SourceConnectorError('connector_result_invalid');
     }
@@ -510,7 +510,7 @@ function projectRecord(
   });
 }
 
-function readPath(value: unknown, path: string): unknown {
+export function readPath(value: unknown, path: string): unknown {
   if (path === '') return value;
   let current = value;
   for (const segment of path.split('.')) {
@@ -792,11 +792,11 @@ function isBlockedHostname(hostname: string): boolean {
     normalized === 'localhost' ||
     normalized.endsWith('.localhost') ||
     normalized.endsWith('.local') ||
-    (isIP(normalized) !== 0 && isBlockedAddress(normalized))
+    (isIP(normalized) !== 0 && isBlockedJsonApiAddress(normalized))
   );
 }
 
-function isBlockedAddress(address: string): boolean {
+export function isBlockedJsonApiAddress(address: string): boolean {
   const family = isIP(address);
   if (family === 4) {
     const octets = address.split('.').map(Number);

@@ -1,5 +1,12 @@
 import {z} from 'zod';
+import {MAXIMUM_AI_SPLIT_ENTRIES} from '../processing/ai_split_proposal.js';
 import {sourceProcessingProfileSchema} from '../subscriptions/source_processing_profile.js';
+import {DEFAULT_SOURCE_SPLIT_ROUTING} from '../subscriptions/source_processing_profile.js';
+import {
+  inspectSourceStructure,
+  scoreSourceStructure,
+  sourceStructureMatchSchema,
+} from './source_split_structure.js';
 
 export const SOURCE_SPLIT_ENGINE = 'struinfo.source-split.v1';
 export const SOURCE_RECIPE_SPLIT_VERSION =
@@ -14,6 +21,7 @@ export const sourceSplitSettingsSchema = z
     maximumEntries: z.number().int().min(1).max(64),
     minimumBodyCharacters: z.number().int().min(0).max(2000),
     onMismatch: z.enum(['review', 'ai']),
+    allowNumberReset: z.boolean().optional(),
   })
   .strict()
   .refine(
@@ -32,7 +40,10 @@ export const sourceSplitDefinitionSchema = z
       z.object({kind: z.literal('document'), snapshotId: z.uuid()}).strict(),
     ]),
     settings: sourceSplitSettingsSchema,
-    origin: z.enum(['manual', 'model']),
+    origin: z.enum(['manual', 'model', 'verified_rule']),
+    match: sourceStructureMatchSchema.optional(),
+    method: z.string().trim().max(2000).optional(),
+    execution: z.enum(['rule', 'ai']).optional(),
   })
   .strict();
 export type SourceSplitDefinition = z.infer<typeof sourceSplitDefinitionSchema>;
@@ -47,6 +58,7 @@ export const sourceSplitTrialSchema = z
     entryCount: z.number().int().min(0).max(64),
     reason: z.string().max(120),
     checkedAt: z.iso.datetime(),
+    score: z.number().min(0).max(100).optional(),
   })
   .strict();
 export const sourceSplitRecipeSchema = sourceSplitDefinitionSchema
@@ -65,6 +77,27 @@ export const sourceSplitCatalogSchema = z
   .object({
     revision: z.number().int().min(0),
     recipes: z.array(sourceSplitRecipeSchema).max(128),
+    observations: z
+      .array(
+        z
+          .object({
+            snapshotId: z.uuid(),
+            sourceId: z.uuid(),
+            recipeId: z.uuid().optional(),
+            recipeRevision: z.number().int().min(1).optional(),
+            format: z.string().max(40),
+            score: z.number().min(0).max(100),
+            low: z.boolean(),
+            quality: z
+              .enum(['good', 'boundary', 'title', 'context'])
+              .optional(),
+            reason: z.string().max(120),
+            checkedAt: z.iso.datetime(),
+          })
+          .strict(),
+      )
+      .max(12800)
+      .optional(),
   })
   .strict()
   .refine(
@@ -78,6 +111,12 @@ export const EMPTY_SOURCE_SPLIT_CATALOG: SourceSplitCatalog = {
 };
 export const frozenSourceSplitSchema = z
   .object({
+    sourceEntryLimit: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAXIMUM_AI_SPLIT_ENTRIES)
+      .optional(),
     engine: z.literal(SOURCE_SPLIT_ENGINE),
     catalogRevision: z.number().int().min(0),
     recipes: z.array(sourceSplitDefinitionSchema).max(128),
@@ -90,6 +129,22 @@ export const sourceSplitDecisionSchema = z
     outcome: z.enum(['rule', 'ai', 'review']),
     recipeId: z.uuid().optional(),
     reason: z.string().max(120),
+    score: z.number().min(0).max(100).optional(),
+    margin: z.number().min(0).max(100).optional(),
+    format: z.string().max(40).optional(),
+    candidates: z
+      .array(
+        z
+          .object({
+            recipeId: z.uuid(),
+            score: z.number().min(0).max(100),
+            eligible: z.boolean(),
+            reason: z.string().max(120),
+          })
+          .strict(),
+      )
+      .max(128)
+      .optional(),
   })
   .strict();
 export type SourceSplitDecision = z.infer<typeof sourceSplitDecisionSchema>;
@@ -182,9 +237,10 @@ export function planSourceSplit(
       offset = end;
       continue;
     }
-    const numbered = /^ {0,3}(?:#{1,6}\s+)?(\d{1,4})[.)、]\s+(.+)$/u.exec(line);
+    const numbered =
+      /^ {0,3}(?:#{1,6}\s+)?(\d{1,4})(?:[.)]\s+|、\s*)(.+)$/u.exec(line);
     const directory =
-      /^ {0,3}(?:#{1,6}\s+|\d{1,4}[.)、]\s+)\[([^\]]+)\]\(https?:\/\/[^\s)]+\)/u.exec(
+      /^ {0,3}(?:#{1,6}\s+|\d{1,4}(?:[.)]\s+|、\s*))\[([^\]]+)\]\(https?:\/\/[^\s)]+\)/u.exec(
         line,
       );
     if (settings.template === 'headings' && level === settings.headingLevel)
@@ -213,10 +269,14 @@ export function planSourceSplit(
   if (
     settings.template === 'numbered' &&
     cuts.some(
-      (cut, i) => i > 0 && cut.number !== (cuts[i - 1]?.number ?? 0) + 1,
+      (cut, i) =>
+        i > 0 &&
+        cut.number !== (cuts[i - 1]?.number ?? 0) + 1 &&
+        !(settings.allowNumberReset && cut.number === 1),
     )
   )
     return review('recipe_number_sequence_changed');
+  if (fence) return review('recipe_unclosed_code');
   if (
     cuts.length < settings.minimumEntries ||
     cuts.length > settings.maximumEntries
@@ -285,33 +345,90 @@ export function planSourceSplit(
     : review('recipe_coverage_invalid');
 }
 
+export function evaluateSourceSplit(
+  text: string,
+  recipe: SourceSplitDefinition,
+) {
+  const structure = inspectSourceStructure(text);
+  const plan = planSourceSplit(
+    text,
+    recipe.execution === 'ai'
+      ? {
+          ...recipe.settings,
+          template: 'whole',
+          minimumEntries: 1,
+          maximumEntries: 1,
+        }
+      : recipe.settings,
+  );
+  if (recipe.execution === 'ai' && plan.outcome === 'ready') {
+    plan.groups = [];
+    plan.completeCoverage = false;
+    plan.reason = 'recipe_ai_required';
+  }
+  const implicit =
+    recipe.scope.kind === 'document'
+      ? 100
+      : recipe.settings.template === 'whole'
+        ? structure.sectionCount < 2
+          ? 100
+          : 60
+        : structure.format.startsWith(recipe.settings.template + ':')
+          ? 100
+          : 50;
+  const measured = recipe.match
+    ? scoreSourceStructure(structure, recipe.match)
+    : {score: implicit, checks: []};
+  return {...measured, plan, format: structure.format};
+}
+
 export function chooseSourceSplit(
   text: string,
   frozen: FrozenSourceSplit,
 ): SourceSplitDecision {
   if (!frozen.recipes.length)
     return {outcome: 'ai', reason: 'recipe_not_configured'};
-  const title = normalized(
-    titleText(text.split('\n').find((line) => line.trim()) ?? ''),
+  const policy =
+    frozen.processingProfile?.splitRouting ?? DEFAULT_SOURCE_SPLIT_ROUTING;
+  const overrides = frozen.recipes.filter((r) => r.scope.kind === 'document');
+  const ranked = (overrides.length ? overrides : frozen.recipes)
+    .map((recipe) => ({recipe, ...evaluateSourceSplit(text, recipe)}))
+    .sort(
+      (a, b) =>
+        b.score - a.score || a.recipe.recipeId.localeCompare(b.recipe.recipeId),
+    );
+  const eligible = ranked.filter(
+    (r) =>
+      r.plan.outcome === 'ready' &&
+      r.score >= (r.recipe.match?.minimumScore ?? policy.minimumScore),
   );
-  const matching = frozen.recipes.filter((r) =>
-    r.settings.titleIncludes.every((term) => title.includes(normalized(term))),
-  );
-  const score = (r: SourceSplitDefinition) =>
-    (r.scope.kind === 'document' ? 100 : 0) +
-    r.settings.titleIncludes.length * 10 +
-    (r.settings.template === 'whole' ? 0 : 1);
-  matching.sort((a, b) => score(b) - score(a));
-  const best = matching[0];
-  if (!best || (matching[1] && score(best) === score(matching[1])))
-    return {
-      outcome: 'review',
-      reason: best ? 'recipe_match_ambiguous' : 'recipe_format_mismatch',
-    };
-  const plan = planSourceSplit(text, best.settings);
+  const best = eligible[0] ?? ranked[0];
+  if (!best) return {outcome: 'ai', reason: 'recipe_not_configured'};
+  const rival = ranked.find((r) => r !== best && r.plan.outcome === 'ready');
+  const margin = rival ? Math.max(0, best.score - rival.score) : 100;
+  const reason =
+    best.plan.outcome !== 'ready'
+      ? best.plan.reason
+      : !eligible.length
+        ? 'recipe_low_match'
+        : margin < policy.minimumMargin
+          ? 'recipe_match_ambiguous'
+          : 'recipe_ready';
   return {
-    outcome: plan.outcome === 'ready' ? 'rule' : best.settings.onMismatch,
-    recipeId: best.recipeId,
-    reason: plan.reason,
+    outcome:
+      reason === 'recipe_ready'
+        ? (best.recipe.execution ?? 'rule')
+        : best.recipe.settings.onMismatch,
+    recipeId: best.recipe.recipeId,
+    score: best.score,
+    margin,
+    format: best.format,
+    reason,
+    candidates: ranked.map((r) => ({
+      recipeId: r.recipe.recipeId,
+      score: r.score,
+      eligible: eligible.includes(r),
+      reason: r.plan.reason,
+    })),
   };
 }

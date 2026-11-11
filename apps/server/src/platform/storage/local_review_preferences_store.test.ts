@@ -11,7 +11,7 @@ import {
   reviseEntrySavedQueries,
 } from '../../modules/entries/information_entry_saved_queries.js';
 import {patchReviewPreferences} from '../../storage/review_preferences_store.js';
-import {DEFAULT_ENTRY_CLASSIFICATION_PROFILE} from '../../modules/entries/information_entry_deterministic_classification.js';
+
 import {LocalReviewPreferencesStore} from './local_review_preferences_store.js';
 
 const roots: string[] = [];
@@ -124,38 +124,6 @@ describe('LocalReviewPreferencesStore', () => {
         aliases: [],
         relations: [],
       },
-      entryPreferenceProfile: {
-        revision: 0,
-        enabled: false,
-        rules: [],
-      },
-      entryAutomationPolicy: {
-        revision: 0,
-        enabled: false,
-        paused: false,
-        profileRevision: 0,
-        minimumMatchedRuleCount: 1,
-        advanceThresholds: {
-          usefulness: 3,
-          interest: 3,
-          requiredDimensions: 1,
-        },
-        deferThresholds: {
-          usefulness: 3,
-          interest: 3,
-          requiredDimensions: 1,
-        },
-        budgets: {
-          maximumEntriesPerRun: 100,
-          maximumAdvanceCandidatesPerRun: 25,
-          maximumDeferCandidatesPerRun: 25,
-        },
-        advanceActions: {
-          deterministicTags: false,
-          rebuildAssociations: false,
-        },
-        failureMode: 'pause',
-      },
       entrySplitRuleProfile: {
         revision: 0,
         mode: 'one_section',
@@ -163,7 +131,6 @@ describe('LocalReviewPreferencesStore', () => {
         maximumGroupCodePoints: 4000,
         maximumFragmentsPerGroup: 8,
       },
-      entryClassificationProfile: DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       entrySavedQueries: {version: 1, revision: 0, views: []},
       uiPreferences: {
         revision: 0,
@@ -204,49 +171,6 @@ describe('LocalReviewPreferencesStore', () => {
         minimumGroupCodePoints: 250,
         maximumGroupCodePoints: 2500,
         maximumFragmentsPerGroup: 6,
-      },
-    });
-  });
-
-  it('stores classification aliases, mappings and exclusions outside the database', async () => {
-    const {store} = createStore();
-
-    await store.update(WORKSPACE_A, (current) =>
-      Object.freeze({
-        next: patchReviewPreferences(current, {
-          entryClassificationProfile: Object.freeze({
-            format: 'struinfo.entry-classification-profile',
-            version: 1,
-            revision: 1,
-            aliases: Object.freeze([
-              Object.freeze({source: '容器平台', canonical: 'Docker'}),
-            ]),
-            typeMappings: Object.freeze([
-              Object.freeze({
-                term: '动手实验',
-                keyword: 'operating_guideline',
-              }),
-            ]),
-            domainMappings: Object.freeze([
-              Object.freeze({
-                term: 'Docker',
-                keyword: 'engineering_computing',
-              }),
-            ]),
-            exclusions: Object.freeze(['广告']),
-          }),
-        }),
-        result: undefined,
-      }),
-    );
-
-    await expect(store.load(WORKSPACE_A)).resolves.toMatchObject({
-      entryClassificationProfile: {
-        revision: 1,
-        aliases: [{source: '容器平台', canonical: 'Docker'}],
-        typeMappings: [{term: '动手实验', keyword: 'operating_guideline'}],
-        domainMappings: [{term: 'Docker', keyword: 'engineering_computing'}],
-        exclusions: ['广告'],
       },
     });
   });
@@ -400,53 +324,6 @@ describe('LocalReviewPreferencesStore', () => {
           },
         ],
       },
-      {
-        revision: 2,
-        enabled: true,
-        rules: [
-          {
-            ruleId: '44444444-4444-4444-8444-444444444444',
-            dimension: 'usefulness',
-            featureKind: 'content_keyword',
-            featureIdentity: 'postgresql',
-            displayValue: 'PostgreSQL',
-            effect: 'prefer',
-            weight: 5,
-          },
-          {
-            ruleId: '55555555-5555-4555-8555-555555555555',
-            dimension: 'interest',
-            featureKind: 'domain',
-            featureIdentity: 'culture_arts',
-            displayValue: '文化与艺术',
-            effect: 'deprioritize',
-            weight: 2,
-          },
-        ],
-      },
-      {
-        revision: 3,
-        enabled: true,
-        paused: false,
-        profileRevision: 2,
-        minimumMatchedRuleCount: 2,
-        advanceThresholds: {
-          usefulness: 6,
-          interest: 4,
-          requiredDimensions: 2,
-        },
-        deferThresholds: {
-          usefulness: 5,
-          interest: 3,
-          requiredDimensions: 1,
-        },
-        budgets: {
-          maximumEntriesPerRun: 40,
-          maximumAdvanceCandidatesPerRun: 10,
-          maximumDeferCandidatesPerRun: 8,
-        },
-        failureMode: 'pause',
-      },
     );
 
     await expect(store.load(WORKSPACE_A)).resolves.toMatchObject({
@@ -485,53 +362,6 @@ describe('LocalReviewPreferencesStore', () => {
           },
         ],
       },
-      entryPreferenceProfile: {
-        revision: 2,
-        enabled: true,
-        rules: [
-          {
-            ruleId: '44444444-4444-4444-8444-444444444444',
-            dimension: 'usefulness',
-            featureKind: 'content_keyword',
-            featureIdentity: 'postgresql',
-            displayValue: 'PostgreSQL',
-            effect: 'prefer',
-            weight: 5,
-          },
-          {
-            ruleId: '55555555-5555-4555-8555-555555555555',
-            dimension: 'interest',
-            featureKind: 'domain',
-            featureIdentity: 'culture_arts',
-            displayValue: '文化与艺术',
-            effect: 'deprioritize',
-            weight: 2,
-          },
-        ],
-      },
-      entryAutomationPolicy: {
-        revision: 3,
-        enabled: true,
-        paused: false,
-        profileRevision: 2,
-        minimumMatchedRuleCount: 2,
-        advanceThresholds: {
-          usefulness: 6,
-          interest: 4,
-          requiredDimensions: 2,
-        },
-        deferThresholds: {
-          usefulness: 5,
-          interest: 3,
-          requiredDimensions: 1,
-        },
-        budgets: {
-          maximumEntriesPerRun: 40,
-          maximumAdvanceCandidatesPerRun: 10,
-          maximumDeferCandidatesPerRun: 8,
-        },
-        failureMode: 'pause',
-      },
     });
     await expect(store.load(WORKSPACE_B)).resolves.toMatchObject({
       workspaceId: WORKSPACE_B,
@@ -547,12 +377,11 @@ describe('LocalReviewPreferencesStore', () => {
     expect(text).toContain('\n  "associationPolicy": {\n');
     expect(text).toContain('\n  "explorationPolicy": {\n');
     expect(text).toContain('\n  "sourceSubscriptions": {\n');
-    expect(text).toContain('\n  "entryPreferenceProfile": {\n');
-    expect(text).toContain('\n  "entryAutomationPolicy": {\n');
+
     expect(text).toContain('\n    "revision": 3,\n');
   });
 
-  it('loads an existing v1 quick-tag file with safe keyword defaults', async () => {
+  it('reads legacy aliases without re-enabling retired keyword generation', async () => {
     const {root, store} = createStore();
     writeFileSync(
       join(root, `${WORKSPACE_A}.review-preferences.json`),
@@ -573,7 +402,7 @@ describe('LocalReviewPreferencesStore', () => {
     await expect(store.load(WORKSPACE_A)).resolves.toMatchObject({
       quickTags: ['synthetic'],
       automaticKeywords: {
-        enabled: true,
+        enabled: false,
         includeLinkDomains: false,
         excludedKeywords: [],
       },
@@ -599,86 +428,6 @@ describe('LocalReviewPreferencesStore', () => {
         revision: 0,
         subscriptions: [],
       },
-      entryPreferenceProfile: {
-        revision: 0,
-        enabled: false,
-        rules: [],
-      },
-      entryAutomationPolicy: {
-        revision: 0,
-        enabled: false,
-        paused: false,
-      },
-    });
-  });
-
-  it('serializes sibling preference updates without losing either field', async () => {
-    const {store} = createStore();
-    const profileUpdate = store.update(WORKSPACE_A, (current) => ({
-      next: patchReviewPreferences(current, {
-        entryPreferenceProfile: {
-          revision: 1,
-          enabled: true,
-          rules: [
-            {
-              ruleId: '44444444-4444-4444-8444-444444444444',
-              dimension: 'usefulness',
-              featureKind: 'content_keyword',
-              featureIdentity: 'postgresql',
-              displayValue: 'PostgreSQL',
-              effect: 'prefer',
-              weight: 5,
-            },
-          ],
-        },
-      }),
-      result: 'profile',
-    }));
-    const subscriptionUpdate = store.update(WORKSPACE_A, (current) => ({
-      next: patchReviewPreferences(current, {
-        sourceSubscriptions: {
-          revision: 1,
-          subscriptions: [
-            {
-              subscriptionId: '33333333-3333-4333-8333-333333333333',
-              label: 'Synthetic source',
-              enabled: false,
-              repositoryUri: 'https://github.com/example/project',
-              repositoryRef: 'main',
-              repositoryPath: 'docs/source.md',
-              profile: 'commonmark-v1',
-              sourceAlias: 'synthetic-source',
-              isPrivate: false,
-              routeAfterImport: false,
-              intervalMinutes: 1_440,
-              cursor: {
-                commitSha: '1'.repeat(40),
-                sourceSha256: '2'.repeat(64),
-              },
-            },
-          ],
-        },
-      }),
-      result: 'subscription',
-    }));
-
-    await expect(
-      Promise.all([profileUpdate, subscriptionUpdate]),
-    ).resolves.toMatchObject([{result: 'profile'}, {result: 'subscription'}]);
-    await expect(store.load(WORKSPACE_A)).resolves.toMatchObject({
-      entryPreferenceProfile: {revision: 1, enabled: true},
-      sourceSubscriptions: {
-        revision: 1,
-        subscriptions: [
-          {
-            subscriptionId: '33333333-3333-4333-8333-333333333333',
-            cursor: {
-              commitSha: '1'.repeat(40),
-              sourceSha256: '2'.repeat(64),
-            },
-          },
-        ],
-      },
     });
   });
 
@@ -701,81 +450,6 @@ describe('LocalReviewPreferencesStore', () => {
     await expect(store.save(WORKSPACE_A, ['one', 'ONE'])).rejects.toMatchObject(
       {code: 'preferences_invalid'},
     );
-  });
-
-  it('rejects non-canonical or open preference profile rules', async () => {
-    const {root, store} = createStore();
-    writeFileSync(
-      join(root, WORKSPACE_A + '.review-preferences.json'),
-      JSON.stringify({
-        format: 'struinfo.review-preferences',
-        version: 1,
-        workspaceId: WORKSPACE_A,
-        quickTags: [],
-        entryPreferenceProfile: {
-          revision: 1,
-          enabled: true,
-          rules: [
-            {
-              ruleId: '44444444-4444-4444-8444-444444444444',
-              dimension: 'usefulness',
-              featureKind: 'content_keyword',
-              featureIdentity: 'PostgreSQL',
-              displayValue: 'PostgreSQL',
-              effect: 'prefer',
-              weight: 5,
-              unknown: true,
-            },
-          ],
-        },
-      }),
-      'utf8',
-    );
-
-    await expect(store.load(WORKSPACE_A)).rejects.toMatchObject({
-      code: 'preferences_invalid',
-    });
-  });
-
-  it('rejects malformed external automation policy state', async () => {
-    const {root, store} = createStore();
-    writeFileSync(
-      join(root, WORKSPACE_A + '.review-preferences.json'),
-      JSON.stringify({
-        format: 'struinfo.review-preferences',
-        version: 1,
-        workspaceId: WORKSPACE_A,
-        quickTags: [],
-        entryAutomationPolicy: {
-          revision: 1,
-          enabled: true,
-          paused: false,
-          profileRevision: 1,
-          minimumMatchedRuleCount: 1,
-          advanceThresholds: {
-            usefulness: 3,
-            interest: 3,
-            requiredDimensions: 1,
-          },
-          deferThresholds: {
-            usefulness: 3,
-            interest: 3,
-            requiredDimensions: 1,
-          },
-          budgets: {
-            maximumEntriesPerRun: 10,
-            maximumAdvanceCandidatesPerRun: 11,
-            maximumDeferCandidatesPerRun: 5,
-          },
-          failureMode: 'pause',
-        },
-      }),
-      'utf8',
-    );
-
-    await expect(store.load(WORKSPACE_A)).rejects.toMatchObject({
-      code: 'preferences_invalid',
-    });
   });
 });
 

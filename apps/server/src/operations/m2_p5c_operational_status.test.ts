@@ -23,9 +23,9 @@ const DATABASE: Readonly<M2P5cDatabaseObservation> = Object.freeze({
   processingRunCount: 6,
   failedProcessingRunCount: 0,
   staleRunningProcessingRunCount: 0,
-  failedBulkIngestionBatchCount: 0,
+  failedDocumentTaskCount: 0,
   pendingProposalCount: 1,
-  pendingOwnerWorkItemCount: 2,
+  pendingIntakeReviewCount: 2,
 });
 
 describe('M2-P5C operational status', () => {
@@ -73,7 +73,7 @@ describe('M2-P5C operational status', () => {
           ...DATABASE,
           failedProcessingRunCount: 2,
           staleRunningProcessingRunCount: 1,
-          failedBulkIngestionBatchCount: 1,
+          failedDocumentTaskCount: 1,
           currentSearchProjectionCount: 4,
           missingSearchProjectionCount: 1,
         }),

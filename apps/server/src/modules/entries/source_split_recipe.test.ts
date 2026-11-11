@@ -2,12 +2,18 @@ import {describe, expect, it} from 'vitest';
 import {randomUUID} from 'node:crypto';
 import {
   chooseSourceSplit,
+  evaluateSourceSplit,
   planSourceSplit,
   SOURCE_SPLIT_ENGINE,
   type SourceSplitSettings,
   type SourceSplitDefinition,
   type FrozenSourceSplit,
 } from './source_split_recipe.js';
+import {
+  inspectSourceStructure,
+  learnSourceStructure,
+  scoreSourceStructure,
+} from './source_split_structure.js';
 
 const whole: SourceSplitSettings = {
   template: 'whole',
@@ -37,6 +43,91 @@ const definition = (settings = collection): SourceSplitDefinition => ({
 });
 
 describe('source-bound split templates', () => {
+  it('keeps semantic strategies on the AI route without inventing rule cuts', () => {
+    const recipe = {
+      ...definition(collection),
+      execution: 'ai' as const,
+      match: learnSourceStructure([digest]),
+    };
+    expect(evaluateSourceSplit(digest, recipe)).toMatchObject({
+      score: 100,
+      plan: {
+        outcome: 'ready',
+        reason: 'recipe_ai_required',
+        groups: [],
+        completeCoverage: false,
+      },
+    });
+    expect(
+      chooseSourceSplit(digest, {
+        engine: SOURCE_SPLIT_ENGINE,
+        catalogRevision: 1,
+        recipes: [recipe],
+      }),
+    ).toMatchObject({outcome: 'ai', reason: 'recipe_ready', score: 100});
+    const numbered =
+      '# Collection\n\n1、First\nComplete first entry.\n\n2、Second\nComplete second entry.\n\n1、Third\nComplete third entry.';
+    expect(inspectSourceStructure(numbered).format).toBe('numbered:0');
+    expect(planSourceSplit(numbered, collection).reason).toBe(
+      'recipe_number_sequence_changed',
+    );
+    expect(
+      planSourceSplit(numbered, {...collection, allowNumberReset: true}).groups,
+    ).toHaveLength(3);
+  });
+  it('scores learned structure rather than topics and keeps equal candidates ambiguous', () => {
+    const learned = definition({...collection, onMismatch: 'ai'});
+    learned.match = learnSourceStructure([
+      digest,
+      digest.replaceAll('存储', '园艺'),
+    ]);
+    const coherent = definition(whole);
+    coherent.match = learnSourceStructure([
+      '# A guide\n\nA continuous explanation.',
+      '# Another\n\nAnother continuous explanation.',
+    ]);
+    const frozen: FrozenSourceSplit = {
+      engine: SOURCE_SPLIT_ENGINE,
+      catalogRevision: 1,
+      recipes: [learned, coherent],
+    };
+    expect(
+      chooseSourceSplit(digest.replaceAll('协议', '植物'), frozen),
+    ).toMatchObject({recipeId: learned.recipeId, score: 100, outcome: 'rule'});
+    expect(
+      chooseSourceSplit('# A continuous guide\n\nComplete text.', frozen)
+        .recipeId,
+    ).toBe(coherent.recipeId);
+    expect(
+      chooseSourceSplit(digest, {
+        ...frozen,
+        recipes: [learned, {...learned, recipeId: randomUUID()}],
+      }),
+    ).toMatchObject({outcome: 'ai', reason: 'recipe_match_ambiguous'});
+    expect(JSON.stringify(learned.match)).not.toContain('存储');
+    expect(
+      scoreSourceStructure(
+        inspectSourceStructure('# A\n\n## Section\n\nText\n\n## Next\n\nText'),
+        learned.match,
+      ).score,
+    ).toBeLessThan(80);
+  });
+  it('treats coverage and unclosed code as hard failures even with a perfect structural score', () => {
+    const recipe = definition({...collection, onMismatch: 'ai'});
+    recipe.match = learnSourceStructure([digest]);
+    const broken = digest + '\n```js\nconst incomplete = true;';
+    expect(
+      chooseSourceSplit(broken, {
+        engine: SOURCE_SPLIT_ENGINE,
+        catalogRevision: 1,
+        recipes: [recipe],
+      }),
+    ).toMatchObject({
+      outcome: 'ai',
+      reason: 'recipe_unclosed_code',
+      score: 100,
+    });
+  });
   it('keeps a coherent tutorial and a short plain-text brief intact', () => {
     for (const text of [
       '# Guide\n\n## Preparation\n\nStep one depends on this preparation.\n\n## Results\n\nThese results follow that step.',

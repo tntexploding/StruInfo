@@ -1,0 +1,14 @@
+<main class="settings-main">
+<header class="settings-heading"><div><h1>设置</h1><p>外观、AI 和数据管理。</p></div></header>
+<div class="settings-layout">
+<nav id="settings-nav" class="settings-nav" aria-label="设置分类"></nav>
+<section class="settings-editor" aria-labelledby="settings-title">
+<header class="settings-editor-head"><div><h2 id="settings-title" tabindex="-1"></h2><p id="settings-subtitle"></p></div><span id="change-state" aria-live="polite">读取中</span></header>
+<form id="settings-form"><div id="settings-content" class="settings-content"></div><footer id="settings-footer" class="settings-footer"><span id="save-hint">切换分类会保留未保存的修改。</span><div><button id="revert-settings" class="secondary-action" type="button" disabled>撤销修改</button><button id="save-settings" class="primary-action" type="submit" disabled>保存设置</button></div></footer></form>
+</section>
+</div>
+</main>
+<dialog id="settings-dialog" class="settings-dialog ef-glass" aria-labelledby="dialog-title">
+<header class="settings-dialog-head"><div><span id="dialog-parent"></span><h2 id="dialog-title"></h2></div><button class="icon-action" id="close-dialog" aria-label="关闭设置窗口"><span data-icon="close"></span></button></header>
+<form id="dialog-form"><div id="dialog-content"></div><footer class="dialog-footer"><p id="dialog-note">修改先保留在当前分类，保存后生效。</p><div><button id="dialog-cancel" class="secondary-action" type="button">取消</button><button id="dialog-apply" class="primary-action" type="submit">保留修改</button></div></footer></form>
+</dialog>

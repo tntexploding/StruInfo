@@ -40,4 +40,48 @@ AI 建议先形成可编辑草稿，人可以修改。生效方案随新任务�
 同一来源的相同正文版本不重复生成内容；正文变化保存新版本，原文和人工决定保留。
 不同来源提供相同文字仍保留各自来源，主题组织时再处理重复贡献。
 
+## 正文与访问限制
+
+RSS 和网页接收支持同站路径、`www` 地址迁移，最多跟随三次跳转。每次检查目标地址，跨站跳转仍需更新来源配置。
+开启全文补取后，标题、摘要和末尾带“阅读全文”的预览会获取文章页。完整的订阅正文直接保留。
+明确的付费提示或网页付费标记会转为待核对，停止自动审核与整理。长预览同样过滤，普通订阅邀请保留。
+原始响应、补取正文与人工决定分别保存。人工仍可明确接受或拒绝。
+
+## Git 文档
+
+路径可以填单个 Markdown 文件，或以 `/` 结尾的目录，如 `book/`。目录包含子目录的 Markdown 文件，每个文件独立保存原文和来源。
+一次最多接收 64 个变化文件，4 路下载。超过一批时保存进度，下次检查继续同一提交。目录读取使用固定提交和文件版本，无变化时跳过正文下载。删除上游文件不会删除已接收资料。
+单文件上限 1 MiB。目录索引超过上限或被 GitHub 截断时停止，不把不完整目录记为完成。
+
+## MCP 接收器
+
+接入类型选择“MCP / 插件”，接收器选择“MCP 接收器”。组件标识为 `plugin.mcp-receiver.v1`。
+配置引用填环境变量名，例如 `SOURCE_MCP`。用 `SOURCE_MCP_FILE=/run/secrets/source_mcp` 指向只读挂载的 JSON 文件，也支持直接在 `SOURCE_MCP` 中保存 JSON。
+
+```json
+{
+  "serverUrl": "https://mcp.example.org/mcp",
+  "headers": {"Authorization": "Bearer REPLACE_WITH_OWNER_TOKEN"},
+  "tool": "list_documents",
+  "arguments": {"limit": 20},
+  "recordsPath": "data.items",
+  "externalIdPath": "id",
+  "titlePath": "title",
+  "bodyPath": "content",
+  "canonicalUriPath": "url",
+  "publishedAtPath": "time",
+  "recordLimit": 32,
+  "pagination": {
+    "cursorArgument": "cursor",
+    "nextCursorPath": "data.next_cursor",
+    "hasMorePath": "data.has_more"
+  }
+}
+```
+
+服务地址、工具、参数和字段映射均保存在个人配置中。仅调用配置指定的接收工具。支持 HTTPS Streamable HTTP、JSON 与事件流响应；每次最多保存 32 条，按标识和内容版本去重。
+正文格式 `bodyFormat` 可选 text、html、markdown。缺少原文链接时可配置含 `{id}` 的 `canonicalUriTemplate`。无时区日期使用配置中的 `timeZoneOffset`；默认 UTC。`success` 可指定响应成功条件，如 `{"path":"status","value":200}`。
+`pagination` 可省略。配置后按由新到旧的目录续拉，读到上次接收位置停止；首次接入只接收当前页。每次最多读取三页、保存 32 条，未完成的页码和位置随成功批次保存，下一分钟继续。失败保留上次进度，暂停和重试限制继续有效。接收器只调用指定工具。个人配置及密钥保存在仓库外，随部署挂载到运行接收任务的服务。
+金十可配置为此接收器的一个来源，工具及字段见[官方接入说明](https://mcp.jin10.com/app/doc.html)。
+
 来源与个人方案保存在仓库外工作区，随个人数据包备份。仓库保存组件、模板和合成示例。

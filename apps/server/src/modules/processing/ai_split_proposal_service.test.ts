@@ -31,6 +31,24 @@ const SECTION_A = 'Synthetic public section A.';
 const SECTION_B = 'Synthetic public section B.';
 
 describe('AiSplitProposalService', () => {
+  it('checks the source limit before staging a directly accepted proposal', async () => {
+    const f = createFixture(false, [SECTION_A, SECTION_B], 1);
+    f.proposeSplit.mockResolvedValue({
+      summary: 'Two separate items',
+      groups: [
+        {titlePath: 'A', startOrdinal: 0, endOrdinal: 0},
+        {titlePath: 'B', startOrdinal: 1, endOrdinal: 1},
+      ],
+    });
+    await f.service.start(SNAPSHOT_ID, 'direct-source-cap');
+    const [proposal] = await f.service.listForSnapshot(SNAPSHOT_ID);
+    const beforeWrite = vi.fn(() => Promise.resolve());
+    await expect(
+      f.service.accept(SNAPSHOT_ID, proposal?.proposalId ?? '', {beforeWrite}),
+    ).rejects.toMatchObject({code: 'entry_budget_exceeded'});
+    expect(beforeWrite).not.toHaveBeenCalled();
+    expect(f.currentEntries).toHaveLength(0);
+  });
   it('creates a reviewable grouping and materializes exact Fragment text only after acceptance', async () => {
     const fixture = createFixture(false);
 
@@ -181,7 +199,11 @@ describe('AiSplitProposalService', () => {
   });
 });
 
-function createFixture(isPrivate: boolean, texts = [SECTION_A, SECTION_B]) {
+function createFixture(
+  isPrivate: boolean,
+  texts = [SECTION_A, SECTION_B],
+  limit?: number,
+) {
   const snapshot = evidenceSnapshot(isPrivate, texts);
   let currentEntries: readonly Readonly<CurrentInformationEntry>[] = [];
   const runs = new Map<string, Readonly<ProcessingRun>>();
@@ -322,6 +344,7 @@ function createFixture(isPrivate: boolean, texts = [SECTION_A, SECTION_B]) {
   } satisfies AiSplitProposalProviderPort;
   const service = new AiSplitProposalService({
     workspaceId: WORKSPACE_ID,
+    sourceEntryLimit: () => Promise.resolve(limit),
     blobStore,
     evidence,
     entries,

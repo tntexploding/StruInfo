@@ -127,9 +127,11 @@ export interface PublicationStatus {
     status: OrganizationStatus;
     version: number;
     errorCode: string | null;
+    budgetId?: string;
   };
 }
 export interface PublicationCommit {
+  readonly organizationBudgetId?: string;
   readonly documentId: string;
   readonly snapshotId: string;
   readonly expectedIntakeVersion: number;
@@ -137,8 +139,6 @@ export interface PublicationCommit {
   readonly expectedEntries: readonly {entryId: string; revision: number}[];
 }
 export interface PublishedContentView {
-  // Include hidden publications here as well, so legacy fallback cannot reveal drafts.
-  readonly managedSnapshotIds: ReadonlySet<string>;
   readonly entries: readonly CurrentInformationEntry[];
 }
 export interface DocumentPublicationRepository {
@@ -153,7 +153,12 @@ export interface DocumentPublicationRepository {
   loadPublished(
     workspaceId: string,
     includePrivate: boolean,
+    entryIds?: readonly string[],
   ): Promise<PublishedContentView>;
+  organizationWork?(
+    limit: number,
+    budgetId: string,
+  ): Promise<readonly PublicationStatus[]>;
   /** Internal worker checkpoint only. Does not dispatch a model or authorize work. */
   transitionOrganization(input: {
     publicationId: string;
