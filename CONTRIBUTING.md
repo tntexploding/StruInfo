@@ -26,7 +26,6 @@ pnpm install --frozen-lockfile --ignore-scripts
 pnpm verify
 pnpm test:e2e
 pnpm test:publication
-pnpm performance:m2-p0d -- --smoke
 pnpm audit --prod --audit-level low
 docker build --tag struinfo:review .
 ```

@@ -38,3 +38,5 @@ overrides:
   zod: 4.6.6
   body-parser: 2.4.0
   hono: 4.13.11
+  # GHSA-rmxm-3fg6-px4f: static path decoding in the MCP HTTP adapter.
+  '@hono/node-server': 2.1.3

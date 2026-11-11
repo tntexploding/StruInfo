@@ -1,3 +1,8 @@
+import {
+  entryTagWords,
+  entryTagDetails,
+  tagCategories,
+} from '../../runtime/tags.js';
 import {documentPage} from './api.js';
 import {documentRead} from './api.js';
 import {pageContext} from '../../runtime/route.js';
@@ -38,7 +43,7 @@ const words = (s) => [
       .filter(Boolean),
   ),
 ];
-function entryAt(d, index) {
+export function entryAt(d, index) {
   const r = d.ranges?.[index];
   if (!r) return;
   return (
@@ -64,27 +69,13 @@ function entryAt(d, index) {
 }
 function annotate(d) {
   annotations[d.id] = d.paragraphs.map((_, i) => {
-    const a = entryAt(d, i)?.value.annotations;
-    const v = entryAt(d, i)?.value;
-    const result = {
-      domain: v?.domains.map((d) => d.customName || d.keyword).join('、') || '',
-      subject: v?.contentKeywords.map((t) => t.displayValue).join('、') || '',
-      purpose: '',
-    };
-    if (a) {
-      for (const [key, role] of [
-        ['domain', 'domain'],
-        ['subject', 'issue'],
-        ['purpose', 'purpose'],
-      ]) {
-        const ids = a.dimensions
-          .filter((d) => d.role === role)
-          .map((d) => d.id);
-        const labels = a.labels
-          .filter((l) => ids.includes(l.dimensionId))
-          .map((l) => l.wording);
-        if (labels.length) result[key] = labels.join('、');
-      }
+    const value = entryAt(d, i)?.value;
+    const result = value ? entryTagDetails(value) : {};
+    if (value && !value.annotations) {
+      result.issue = entryTagWords(value).join('、');
+      result.domain = value.domains
+        .map((d) => d.customName || d.keyword)
+        .join('、');
     }
     return result;
   });
@@ -123,16 +114,17 @@ export async function loadDocument(id) {
     return [m?.[1] || '', m ? r.text.slice(m[0].length) : r.text];
   });
   d.title = text.match(/^#\s+([^\n]+)/u)?.[1] || titleOf(d.summaryRecord);
-  d.tags = d.summaryRecord.currentTags?.value.tags.map((t) =>
-    typeof t === 'string' ? t : t.displayValue,
-  ) || [
-    ...new Set(
-      result.entries.flatMap((e) =>
-        e.value.contentKeywords.map((t) => t.displayValue),
-      ),
-    ),
+  d.tags = [...new Set(result.entries.flatMap((e) => entryTagWords(e.value)))];
+  d.tags = [
+    ...new Set([
+      ...d.tags,
+      ...(d.summaryRecord.currentTags?.value.tags || [])
+        .filter((t) => t.origin === 'manual')
+        .map((t) => t.displayValue),
+    ]),
   ];
   d.type =
+    result.entries.map((e) => entryTagDetails(e.value).form).find(Boolean) ||
     result.entries[0]?.value.typeCustomName ||
     result.entries[0]?.value.typeKeyword ||
     '文档';
@@ -251,7 +243,7 @@ export function documentById(id) {
   });
   return {
     ...d,
-    tags: c.tags || d.tags,
+    tags: d.tags,
     groups,
     paragraphs: groups.map((g) => [
       g.title,
@@ -261,17 +253,25 @@ export function documentById(id) {
 }
 export function sectionAnnotations(d, index) {
   const c = config(d.id),
-    values = d.groups[index].indices.map((i) => ({
-      ...annotations[d.id]?.[i],
-      ...c.sectionTags?.[i],
-    }));
+    values = d.groups[index].indices.map((i) => {
+      const entry = entryAt(original(d.id), i);
+      const draft = Object.entries(c.sectionAnnotations || {}).find(
+        ([start]) =>
+          entryAt(original(d.id), Number(start))?.entryId === entry?.entryId,
+      )?.[1];
+      if (!draft) return annotations[d.id]?.[i] || {};
+      return entryTagDetails({
+        ...entry.value,
+        annotations: {
+          ...draft,
+          dimensions: tagDimensions(),
+          inputBodySha256: entry.value.bodySha256,
+        },
+      });
+    });
   const join = (key) =>
     [...new Set(values.flatMap((v) => words(v[key])))].join('、');
-  return {
-    domain: join('domain'),
-    subject: join('subject'),
-    purpose: join('purpose'),
-  };
+  return Object.fromEntries(tagCategories.map(([role]) => [role, join(role)]));
 }
 export function docLinks(id) {
   return (
@@ -352,7 +352,7 @@ export const draftNote = (id) => {
     ? `确认后生成 ${plan.resultingEntryCount} 个条目，${plan.annotationReviewCount} 个标注需复核，${plan.collapsedRelationshipCount + plan.conflictingRelationshipCount} 条联系受影响。`
     : '修改尚未确认';
 };
-function annotationDraft(entry) {
+export function annotationDraft(entry) {
   const a = entry.value.annotations;
   return {
     status: a?.status || 'partial',
@@ -362,6 +362,7 @@ function annotationDraft(entry) {
     claims: structuredClone(a?.claims || []),
   };
 }
+export const tagDimensions = () => vocabulary?.dimensions || [];
 async function saveAnnotation(entry, annotation) {
   const result = await ingestion('entry_annotations_save', {
     entryId: entry.entryId,
@@ -402,97 +403,19 @@ export async function saveChanges(id) {
     delete change.starts;
     delete change.plan;
   }
-  if (change.tags) {
-    await request(
-      `entry-documents/${id}/tags`,
-      {
-        expectedRevision: d.summaryRecord.currentTags?.revision || 0,
-        includePrivate: privateScope,
-        tags: change.tags,
-      },
-      'PUT',
-    );
-    delete change.tags;
-  }
   const fresh = await documentRead(id, privateScope);
   base.entries = fresh.entries;
-  if (change.sectionTags || change.readingState) {
-    const next = structuredClone(vocabulary);
-    for (const tags of Object.values(change.sectionTags || {})) {
-      for (const [key, role, label] of [
-        ['domain', 'domain', '领域'],
-        ['subject', 'issue', '议题'],
-        ['purpose', 'purpose', '用途'],
-      ]) {
-        let dimension = next.dimensions.find((d) => d.role === role);
-        if (!dimension) {
-          dimension = {
-            id: crypto.randomUUID(),
-            name: label,
-            role,
-            description: '',
-            enabled: true,
-          };
-          next.dimensions.push(dimension);
-        }
-        for (const word of words(tags[key]))
-          if (
-            !next.terms.some(
-              (t) => t.label === word && t.dimensionId === dimension.id,
-            )
-          )
-            next.terms.push({
-              id: crypto.randomUUID(),
-              dimensionId: dimension.id,
-              label: word,
-              meaning: '',
-            });
-      }
-    }
-    if (JSON.stringify(next) !== JSON.stringify(vocabulary))
-      vocabulary = (
-        await ingestion('annotation_vocabulary_save', {
-          expectedRevision: vocabulary.revision,
-          vocabulary: next,
-        })
-      ).vocabulary;
-    const updates = new Map();
-    for (const [index, tags] of Object.entries(change.sectionTags || {})) {
-      const entry = entryAt(d, Number(index));
-      if (!entry) throw new Error('这段原文尚未生成条目，请先确认分段');
-      const a = updates.get(entry.entryId) || annotationDraft(entry);
-      for (const [key, role] of [
-        ['domain', 'domain'],
-        ['subject', 'issue'],
-        ['purpose', 'purpose'],
-      ]) {
-        const dimension = vocabulary.dimensions.find((d) => d.role === role);
-        a.labels = a.labels.filter((l) => l.dimensionId !== dimension.id);
-        const quote = Array.from(entry.value.body).slice(0, 500).join('');
-        for (const word of words(tags[key])) {
-          const term = vocabulary.terms.find(
-            (t) => t.dimensionId === dimension.id && t.label === word,
-          );
-          a.labels.push({
-            dimensionId: dimension.id,
-            term,
-            wording: word,
-            primary: true,
-            evidence: {start: 0, end: Array.from(quote).length, quote},
-          });
-        }
-      }
-      updates.set(entry.entryId, a);
-    }
+  if (change.sectionAnnotations || change.readingState) {
     for (const entry of fresh.entries) {
-      const a = updates.get(entry.entryId) || annotationDraft(entry);
+      const changed = Object.entries(change.sectionAnnotations || {}).find(
+        ([i]) => entryAt(d, Number(i))?.entryId === entry.entryId,
+      )?.[1];
+      if (!changed && !change.readingState) continue;
+      const a = changed ? structuredClone(changed) : annotationDraft(entry);
       if (change.readingState) a.readingState = change.readingState;
-      if (updates.has(entry.entryId) || change.readingState) {
-        await saveAnnotation(entry, a);
-        base.entries = (await documentRead(id, privateScope)).entries;
-      }
+      await saveAnnotation(entry, a);
     }
-    delete change.sectionTags;
+    delete change.sectionAnnotations;
     delete change.readingState;
   }
   await reloadDocument(id);
@@ -623,10 +546,14 @@ function remember(d) {
         : d.sourceKey,
     date: new Date(d.capturedAt).toLocaleDateString(),
     type: d.types?.join('、') || '文档',
-    tags:
-      d.currentTags?.value.tags.map((t) =>
-        typeof t === 'string' ? t : t.displayValue,
-      ) || [],
+    tags: [
+      ...new Set([
+        ...(d.tagNames || []),
+        ...(d.currentTags?.value.tags.map((t) =>
+          typeof t === 'string' ? t : t.displayValue,
+        ) || []),
+      ]),
+    ],
     summary: '',
     paragraphs: [[titleOf(d), '']],
     summaryRecord: d,

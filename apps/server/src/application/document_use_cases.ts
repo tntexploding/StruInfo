@@ -1,3 +1,4 @@
+import {entryTagWords} from '../modules/entries/entry_tags.js';
 import {
   orderedSectionFragments,
   providerSections,
@@ -194,6 +195,7 @@ export class DocumentUseCases {
           annotatedEntryCount: counts?.annotatedEntryCount ?? 0,
           ...(counts?.title ? {title: counts.title} : {}),
           types: counts?.types ?? [],
+          tagNames: counts?.tagNames ?? [],
           readingState: counts?.readingState ?? 'unread',
           ...(tags === undefined ? {} : {currentTags: tags}),
           ...(workingCopy === undefined ? {} : {workingCopy}),
@@ -221,6 +223,7 @@ export class DocumentUseCases {
           d.title,
           d.sourceKey,
           d.canonicalUri,
+          ...(d.tagNames ?? []),
           ...(d.currentTags?.value.tags.map((t) => t.displayValue) ?? []),
         ]
           .join(' ')
@@ -278,6 +281,7 @@ export class DocumentUseCases {
         annotatedEntryCount: number;
         title?: string;
         types: string[];
+        tagNames: string[];
         readingState: string;
       }
     >();
@@ -291,16 +295,29 @@ export class DocumentUseCases {
         annotatedEntryCount: 0,
         title: e.value.titlePath,
         types: [],
+        tagNames: [],
         readingState: 'unread',
       };
       row.entryCount++;
+      row.tagNames = [...new Set([...row.tagNames, ...entryTagWords(e.value)])];
       if (
+        e.value.annotations?.inputBodySha256 === e.value.bodySha256 ||
         e.value.contentKeywords.length ||
         e.value.typeKeyword !== undefined ||
         e.value.domains.length
       )
         row.annotatedEntryCount++;
-      const type = e.value.typeCustomName ?? e.value.typeKeyword;
+      const a = e.value.annotations;
+      const type =
+        (a?.inputBodySha256 === e.value.bodySha256
+          ? a.labels.find((l) =>
+              a.dimensions.some(
+                (d) => d.id === l.dimensionId && d.role === 'form',
+              ),
+            )?.term.label
+          : undefined) ??
+        e.value.typeCustomName ??
+        e.value.typeKeyword;
       if (type && !row.types.includes(type)) row.types.push(type);
       const reading = e.value.annotations?.readingState ?? 'unread';
       row.readingState =
@@ -314,9 +331,19 @@ export class DocumentUseCases {
     return [...result.values()];
   }
   public async summary() {
-    const [all, intake] = await Promise.all([
+    const [all, intake, terms] = await Promise.all([
       this.list(false, true),
       this.#dependencies.documentIntakeRepository?.list() ?? [],
+      this.#dependencies.informationEntryRepository.loadAnnotationTerms?.(
+        this.#authority.workspaceId,
+      ) ??
+        this.#dependencies.informationEntryRepository
+          .loadCurrentEntries(this.#authority.workspaceId, false)
+          .then((entries) =>
+            entries.flatMap((e) =>
+              entryTagWords(e.value).map((label) => ({label})),
+            ),
+          ),
     ]);
     const pending = new Set(
       intake
@@ -328,11 +355,12 @@ export class DocumentUseCases {
       documents: all.totalCount,
       entries: all.documents.reduce((n, d) => n + d.entryCount, 0),
       tagNames: [
-        ...new Set(
-          all.documents.flatMap(
+        ...new Set([
+          ...terms.map((t) => t.label),
+          ...all.documents.flatMap(
             (d) => d.currentTags?.value.tags.map((t) => t.displayValue) ?? [],
           ),
-        ),
+        ]),
       ],
       pendingCount: all.documents.filter((d) => pending.has(d.snapshotId))
         .length,

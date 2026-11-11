@@ -96,7 +96,6 @@ export const settingsEndpoints = [
       'manualUploads',
       'subscriptionIds',
       'maxDocumentsPerDay',
-      'maxEntries',
       'maxModelCalls',
       'review',
       'intake',
@@ -125,28 +124,12 @@ export const settingsEndpoints = [
     version: 'expectedRevision',
   },
   {
-    id: 'review',
-    section: 'vocabulary',
-    location: '本地建议 → 快捷标签 / 原有标签别名',
-    method: 'PUT',
-    path: '/api/v1/preferences/review',
-    read: 'GET /api/v1/preferences/review',
-    fields: [
-      'quickTags',
-      'excludedKeywords',
-      'automaticKeywords',
-      'includeLinkDomains',
-      'localAliases',
-    ],
-    version: null,
-  },
-  {
     id: 'association',
     section: 'vocabulary',
     location: '本地建议 → 相似联系',
     method: 'PUT',
     path: '/api/v1/entries/associations/policy',
-    read: 'GET /api/v1/preferences/review → associationPolicy',
+    read: 'GET /api/v1/preferences/recommendations → associationPolicy',
     fields: ['weights'],
     version: 'expectedRevision',
   },
@@ -156,7 +139,7 @@ export const settingsEndpoints = [
     location: '本地建议 → 探索推荐',
     method: 'PUT',
     path: '/api/v1/entries/exploration/policy',
-    read: 'GET /api/v1/preferences/review → explorationPolicy',
+    read: 'GET /api/v1/preferences/recommendations → explorationPolicy',
     fields: ['exploration'],
     version: 'expectedRevision',
   },
@@ -236,7 +219,6 @@ export function prepareSettingsRequest(id, d, c) {
       manualUploads,
       subscriptionIds,
       maxDocumentsPerDay,
-      maxEntries,
       maxModelCalls,
     } = d;
     const settings = {
@@ -246,7 +228,6 @@ export function prepareSettingsRequest(id, d, c) {
       subscriptionIds: [...subscriptionIds],
       model: c.model || '',
       maxDocumentsPerDay,
-      maxEntries,
       maxModelCalls,
     };
     if (d.review)
@@ -293,16 +274,6 @@ export function prepareSettingsRequest(id, d, c) {
       },
     });
   }
-  if (id === 'review')
-    return put('preferences/review', {
-      quickTags: list(d.quickTags),
-      automaticKeywords: {
-        enabled: d.automaticKeywords,
-        includeLinkDomains: d.includeLinkDomains,
-        excludedKeywords: list(d.excludedKeywords),
-      },
-      vocabulary: {aliases: structuredClone(d.localAliases)},
-    });
   if (id === 'association')
     return put('entries/associations/policy', {
       expectedRevision: revision(c.association.revision, id),

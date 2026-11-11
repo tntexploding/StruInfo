@@ -2,7 +2,7 @@
 
 - Foundation task: `M0-S-FOUNDATION-MAINT-001`
 - Dependency increments: `M1A-MD-DEP-MAINT-001`, `M1E-5B-DOCUMENT-IMPORT`, `M1I-2-RSS-ATOM`, `UI-READING-20260908` (existing parser reuse)
-- Tracked lock SHA-256: `CD89EB9F5DDA113C807C7D86C748FB3DE0025091DE8818635432A1A27E01D9A3`
+- Tracked lock SHA-256: `CA27FAAFF99760D3B0CB049B8533018A72F6B073D0E65F2606AA1A84B77206DC`
 - M1I-2 pre-increment lock SHA-256: `10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A`
 - M1E-5B pre-increment lock SHA-256: `99F261C35311919380BF6AEF018E0B2A9D076DC7937A5EDE1E0D7F26F56192A0`
 - Foundation pre-M1A lock SHA-256: `A783E1C5B2DADD8B653D8E16446847530473D5569BB08830D7FC03D79400880B`
@@ -39,7 +39,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `@nestjs/common@11.1.28` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/nestjs__common@11.1.28/LICENSE` |
 | `@nestjs/core@11.1.28` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/nestjs__core@11.1.28/LICENSE` |
 | `@nestjs/platform-express@11.1.28` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/nestjs__platform-express@11.1.28/LICENSE` |
-| `@nodable/entities@3.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm-source/nodable__entities@3.0.0/canonical-MIT.txt` (DECLARED_SPDX_WITH_CANONICAL_TEXT) |
+| `@nodable/entities@3.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm-source/nodable__entities@3.1.0/canonical-MIT.txt` (DECLARED_SPDX_WITH_CANONICAL_TEXT) |
 | `@playwright/test@1.62.1` | development | `Apache-2.0` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/playwright__test@1.62.1/LICENSE`<br>`docs/dependencies/licenses/npm/playwright__test@1.62.1/NOTICE` |
 | `@rolldown/pluginutils@1.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/rolldown__pluginutils@1.0.1/LICENSE` |
 | `@standard-schema/spec@1.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/standard-schema__spec@1.1.0/LICENSE` |
@@ -136,7 +136,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `fast-levenshtein@2.0.6` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fast-levenshtein@2.0.6/LICENSE.md` |
 | `fast-safe-stringify@2.1.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fast-safe-stringify@2.1.1/LICENSE` |
 | `fast-xml-builder@1.3.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fast-xml-builder@1.3.1/LICENSE` |
-| `fast-xml-parser@5.11.0` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fast-xml-parser@5.11.0/LICENSE` |
+| `fast-xml-parser@5.12.0` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fast-xml-parser@5.12.0/LICENSE` |
 | `fdir@6.5.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fdir@6.5.0/LICENSE` |
 | `file-entry-cache@8.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/file-entry-cache@8.0.0/LICENSE` |
 | `file-type@21.3.4` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/file-type@21.3.4/license` |
@@ -165,7 +165,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `is-extglob@2.1.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/is-extglob@2.1.1/LICENSE` |
 | `is-glob@4.0.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/is-glob@4.0.3/LICENSE` |
 | `is-promise@4.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/is-promise@4.0.0/LICENSE` |
-| `is-unsafe@2.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/is-unsafe@2.0.2/LICENSE` |
+| `is-unsafe@2.0.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/is-unsafe@2.0.3/LICENSE` |
 | `isexe@2.0.0` | transitive | `ISC` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/isexe@2.0.0/LICENSE` |
 | `iterare@1.2.1` | transitive | `ISC` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/iterare@1.2.1/LICENSE.txt` |
 | `json-buffer@3.0.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/json-buffer@3.0.1/LICENSE` |
@@ -279,7 +279,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `statuses@2.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/statuses@2.0.2/LICENSE` |
 | `std-env@4.2.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/std-env@4.2.0/LICENCE` |
 | `streamsearch@1.1.0` | transitive | `(MIT)` | CONDITIONAL_REVIEW | `docs/dependencies/licenses/npm/streamsearch@1.1.0/mscdex-streamsearch-b9e9b39__LICENSE` |
-| `strnum@2.4.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/strnum@2.4.2/LICENSE` |
+| `strnum@2.5.1` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/strnum@2.5.1/LICENSE` |
 | `strtok3@10.3.5` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/strtok3@10.3.5/LICENSE.txt` |
 | `tagged-tag@1.0.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/tagged-tag@1.0.0/license` |
 | `tinybench@2.9.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/tinybench@2.9.0/LICENSE` |
@@ -459,7 +459,7 @@ Official MCP TypeScript SDK 1.30.0 implements the stdio protocol. Zod 4.4.3 is a
 
 | Package | Role | SPDX license | Review | Legal material |
 | --- | --- | --- | --- | --- |
-| `@hono/node-server@2.1.1` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/@hono__node-server@2.1.1/LICENSE` |
+| `@hono/node-server@2.1.3` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/@hono__node-server@2.1.3/LICENSE` |
 | `ajv-formats@3.0.1` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ajv-formats@3.0.1/LICENSE` |
 | `ajv@8.20.0` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ajv@8.20.0/LICENSE` |
 | `eventsource-parser@3.1.1` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/eventsource-parser@3.1.1/LICENSE` |

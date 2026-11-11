@@ -192,3 +192,26 @@ it('does not promote a subheading or later external title that matches the model
     ).toBe('Queue control');
   }
 });
+
+it('keeps a proposed item name printed directly below an unnumbered column heading', () => {
+  const input = [
+    {
+      ordinal: 0,
+      text: '## Weekend notes\n\nReading orbital maps\n A short guide to reading the maps.',
+    },
+  ];
+  expect(
+    splitSourceTitle(input, {
+      startOrdinal: 0,
+      endOrdinal: 0,
+      titlePath: 'Reading orbital maps',
+    }),
+  ).toBe('Reading orbital maps');
+  expect(
+    splitSourceTitle(input, {
+      startOrdinal: 0,
+      endOrdinal: 0,
+      titlePath: 'Unprinted book title',
+    }),
+  ).toBe('Weekend notes');
+});

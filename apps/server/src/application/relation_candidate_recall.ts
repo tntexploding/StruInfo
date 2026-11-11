@@ -1,3 +1,4 @@
+import {entryTagWords} from '../modules/entries/entry_tags.js';
 import type {CurrentInformationEntry} from '../modules/entries/index.js';
 import type {RelationRecallPlan} from './document_intake_contract.js';
 
@@ -47,20 +48,20 @@ export function recallRelationCandidates(
     return !whole || whole.snapshotId === e.snapshotId;
   });
   const concepts = [...(plan?.concepts ?? [])];
-  for (const keyword of anchor.value.contentKeywords) {
-    const term = recallKey(keyword.displayValue);
+  for (const keyword of entryTagWords(anchor.value)) {
+    const term = recallKey(keyword);
     if (
       !concepts.some((c) =>
         [c.term, ...c.variants].some((v) => recallKey(v) === term),
       )
     )
-      concepts.push({term: keyword.displayValue, variants: []});
+      concepts.push({term: keyword, variants: []});
   }
   const anchorWords = recallKey(
     [
       anchor.value.titlePath,
       readingWords(anchor.value.body),
-      ...anchor.value.contentKeywords.map((k) => k.displayValue),
+      ...entryTagWords(anchor.value),
     ].join(' '),
   );
   const groups = concepts.map((concept) => {
@@ -95,7 +96,7 @@ export function recallRelationCandidates(
   });
   const documents = corpus.map((entry) => ({
     entry,
-    tags: entry.value.contentKeywords.map((k) => recallKey(k.displayValue)),
+    tags: entryTagWords(entry.value).map(recallKey),
     title: recallKey(entry.value.titlePath),
     body: recallKey(readingWords(entry.value.body)),
   }));

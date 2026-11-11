@@ -101,3 +101,6 @@
 
 }
 }
+
+.tag-editor-row{border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:16px}.tag-editor-row .text-button{margin-top:8px}.tag-editor-row textarea{width:100%;resize:vertical}
+.tag-editor-row .structured-fields>label:last-child{grid-column:auto}

@@ -16,11 +16,12 @@ import {
   ENTRY_DOMAIN_KEYWORDS,
 } from '../modules/entries/index.js';
 
+import {generatedAnnotationsSchema} from '../modules/entries/structured_annotations.js';
 const id = z
   .string()
   .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u);
 const version = z.number().int().min(1).max(2147483646);
-export const agentTagResultSchema = z
+const legacyAgentTagResultSchema = z
   .object({
     summary: z.string().trim().min(1).max(240),
     contentKeywords: z.array(z.string().trim().min(1).max(120)).max(24),
@@ -39,6 +40,12 @@ export const agentTagResultSchema = z
       .max(3),
   })
   .strict();
+export const agentTagResultSchema = z
+  .object({
+    summary: z.string().trim().min(1).max(240),
+    annotations: generatedAnnotationsSchema,
+  })
+  .strict();
 export const agentRelationResultSchema = z
   .object({
     summary: z.string().trim().min(1).max(240),
@@ -47,7 +54,7 @@ export const agentRelationResultSchema = z
   })
   .strict();
 /** Historical task payloads remain readable; active writes use the schema below. */
-export const storedAgentTaskRequestSchema = z
+const taskRequest = z
   .discriminatedUnion('kind', [
     z
       .object({
@@ -92,6 +99,10 @@ export const storedAgentTaskRequestSchema = z
     z
       .object({
         kind: z.literal('document'),
+        budgetId: z
+          .string()
+          .regex(/^[a-zA-Z0-9_-]{1,100}$/u)
+          .optional(),
         reprocess: z.literal('tags').optional(),
         expectedReceiptVersion: version.optional(),
         snapshotId: id,
@@ -100,7 +111,7 @@ export const storedAgentTaskRequestSchema = z
           .int()
           .min(1)
           .max(MAXIMUM_AI_SPLIT_ENTRIES)
-          .default(12),
+          .optional(),
         maxRelations: z.number().int().min(0).max(8).default(0),
         maxModelCalls: z.number().int().min(1).max(64).default(24),
         intake: intakePolicySchema.optional(),
@@ -112,7 +123,7 @@ export const storedAgentTaskRequestSchema = z
         kind: z.literal('tags'),
         entryId: id,
         expectedRevision: version,
-        result: agentTagResultSchema,
+        result: z.union([agentTagResultSchema, legacyAgentTagResultSchema]),
       })
       .strict(),
     z
@@ -131,17 +142,36 @@ export const storedAgentTaskRequestSchema = z
     (request) => Buffer.byteLength(JSON.stringify(request), 'utf8') <= 32_768,
     {message: 'Task request exceeds the 32 KiB storage limit.'},
   );
-export const agentTaskRequestSchema = storedAgentTaskRequestSchema.refine(
-  (request) =>
-    request.kind !== 'document' ||
-    (request.maxRelations === 0 && !request.maxRelationCandidates),
-  {message: 'Document publication does not run relations. Use a topic job.'},
+export const storedAgentTaskRequestSchema = taskRequest.transform((request) =>
+  request.kind === 'document'
+    ? {...request, maxEntries: request.maxEntries ?? 12}
+    : request,
 );
+export const agentTaskRequestSchema = taskRequest
+  .refine(
+    (request) =>
+      request.kind !== 'document' ||
+      (request.maxRelations === 0 && !request.maxRelationCandidates),
+    {message: 'Document publication does not run relations. Use a topic job.'},
+  )
+  .refine(
+    (request) => request.kind !== 'tags' || 'annotations' in request.result,
+    {message: 'Use unified annotations for tag writes.'},
+  );
 export type AgentTaskRequest = z.infer<typeof storedAgentTaskRequestSchema>;
 export const DOCUMENT_WORKFLOW = 'confirmed-content-v1' as const;
 export const agentTaskStepSchema = z
   .object({
     sourceSplit: sourceSplitDecisionSchema.optional(),
+    splitReview: z
+      .object({
+        action: z.enum(['current_recipe', 'ai_once']),
+        previous: sourceSplitDecisionSchema,
+        previousCatalogRevision: z.number().int().min(0),
+        at: z.iso.datetime(),
+      })
+      .strict()
+      .optional(),
     kind: z.enum(['intake', 'split', 'tags', 'recall', 'relation']),
     targetId: id,
     relatedEntryId: id.optional(),

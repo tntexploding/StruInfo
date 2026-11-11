@@ -155,7 +155,8 @@ summary::-webkit-details-marker{display:none}
 .dialog-form .form-status{font-size:14px;line-height:1.65;color:var(--muted);padding:11px 13px;border-left:2px solid #9ed3e966;background:#9ed3e908;margin:0}
 .dialog-form .minor-heading{font-size:14px;color:var(--muted);font-weight:400;margin:0}
 .dialog-form .action-list{display:flex;flex-wrap:wrap;gap:9px}
-.saved-list{display:flex;flex-direction:column;gap:6px}
+.saved-list{display:flex;flex-direction:column;gap:6px;min-width:0}
+.saved-count{flex:none;color:var(--muted);font-size:12px;white-space:nowrap}
 .saved-row{display:flex;align-items:center;gap:3px;min-width:0}
 :scope.database-options .saved-open{min-width:0;flex:1;border:0;background:transparent;color:var(--ink);font-size:14px;text-align:left;padding:7px 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 :scope.database-options .saved-more{flex:none;min-width:28px;padding:4px}

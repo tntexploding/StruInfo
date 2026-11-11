@@ -77,7 +77,7 @@ export function splitReadingPackets(
   const hasChapters =
     fragments.filter((f) => /^\s*#{1,6}\s+/u.test(f.selectedText)).length > 1;
   const numbered = (text: string) =>
-    /^\s*(?:(?:\d{1,3}[、.)．]|[（(]\d{1,3}[)）])\s*\S|[-+*]\s+\[[^\]\n]+\]\()/u.test(
+    /^\s*(?:(?:\d{1,3}[、.)．]|[（(]\d{1,3}[)）])(?:\s*\S|[ \t]*$)|[-+*]\s+\[[^\]\n]+\]\()/u.test(
       text,
     );
   const hasNumberedItems =

@@ -1,3 +1,4 @@
+import {entryTagWords} from '../modules/entries/entry_tags.js';
 import type {CurrentInformationEntry} from '../modules/entries/index.js';
 import type {IntakeRecord} from './document_intake_contract.js';
 import {intakeTargetSnapshot} from './document_intake_contract.js';
@@ -115,7 +116,7 @@ export function selectReportSources(
       [
         entry.value.titlePath,
         entry.value.body,
-        ...entry.value.contentKeywords.map((k) => k.displayValue),
+        ...entryTagWords(entry.value),
       ].join(' '),
     );
     const matching = request.topics.filter((t) => text.includes(fold(t)));
@@ -162,9 +163,7 @@ export function selectReportSources(
           ? {publishedDate, publicationInferred: publication?.inferred ?? false}
           : {}),
         excerpt: entry.value.body.slice(0, 1200),
-        keywords: entry.value.contentKeywords
-          .slice(0, 64)
-          .map((k) => k.displayValue),
+        keywords: entryTagWords(entry.value).slice(0, 64),
         reason: (
           '本周期已放行' +
           (matching.length ? '；命中话题：' + matching.join('、') : '') +

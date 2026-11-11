@@ -31,7 +31,6 @@ export const defaults = {
     manualUploads: false,
     subscriptionIds: [],
     maxDocumentsPerDay: 10,
-    maxEntries: 12,
     maxModelCalls: 24,
     review: true,
     intake: {
@@ -46,10 +45,6 @@ export const defaults = {
     terms: [],
     aliases: [],
     relations: [],
-    quickTags: '',
-    excludedKeywords: '',
-    automaticKeywords: true,
-    includeLinkDomains: false,
     weights: {content: 60, type: 20, domain: 20, threshold: 30},
   },
   network: {

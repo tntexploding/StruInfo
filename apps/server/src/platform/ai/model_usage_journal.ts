@@ -95,6 +95,7 @@ export class LocalModelUsageJournal implements ModelUsageJournal {
       return {
         batchId: budget.batchId,
         paused: budget.paused || this.failedPauseBatch === budget.batchId,
+        model: budget.model,
         limitCny: budget.limitCny,
         remainingCny: Math.max(0, budget.limitCny - chargedNanoCny / 1e9),
       };
@@ -157,7 +158,7 @@ export class LocalModelUsageJournal implements ModelUsageJournal {
         reservedNanoCny,
       };
       await this.append(record);
-      await modelUsageScope.getStore()?.record({
+      await modelUsageScope.getStore()?.record?.({
         id: record.id,
         batchId: record.batchId,
         reservedNanoCny: record.reservedNanoCny,
@@ -203,7 +204,7 @@ export class LocalModelUsageJournal implements ModelUsageJournal {
           : ticket.record.reservedNanoCny,
       };
       await this.append(settlement);
-      await modelUsageScope.getStore()?.record({
+      await modelUsageScope.getStore()?.record?.({
         id: ticket.record.id,
         batchId: ticket.record.batchId,
         reservedNanoCny: ticket.record.reservedNanoCny,

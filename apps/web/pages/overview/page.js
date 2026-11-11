@@ -28,6 +28,7 @@ export async function mount() {
     animation,
     polling = false,
     inventoryAt = 0,
+    splitQualityAt = 0,
     taskSignature = '';
   const state = {stage: 0, running: false};
   const readCache = {};
@@ -160,6 +161,16 @@ export async function mount() {
           tone: 'warn',
         });
     }
+    for (const q of data.splitQuality?.sources || []) {
+      items.push({
+        id: 'recipe:' + q.subscriptionId,
+        title: `${q.label}：拆分模板需要复核`,
+        body: `最近 ${q.count} 篇，结构异常 ${q.low} 篇，人工标记 ${q.qualityIssues} 篇。`,
+        action: '查看模板',
+        icon: 'sources',
+        tone: 'warn',
+      });
+    }
     for (const n of data.pipeline.notices || []) {
       if (!n.value.read)
         items.push({
@@ -287,6 +298,18 @@ export async function mount() {
           {sources: []},
         ],
         [
+          'splitQuality',
+          '模板匹配',
+          () =>
+            Date.now() - splitQualityAt < 60000
+              ? readCache.splitQuality.value
+              : ingestion('split_source_status').then((value) => {
+                  splitQualityAt = Date.now();
+                  return value;
+                }),
+          {sources: []},
+        ],
+        [
           'pipeline',
           '报告消息',
           () => research('report_pipeline_status'),
@@ -315,10 +338,18 @@ export async function mount() {
           });
         if (!readCache[key]) readCache[key] = {value: fallback, at: 0};
       });
-      const {jobs, pricing, reportList, topicList, policy, quality, pipeline} =
-        Object.fromEntries(
-          Object.entries(readCache).map(([k, v]) => [k, v.value]),
-        );
+      const {
+        jobs,
+        pricing,
+        reportList,
+        topicList,
+        policy,
+        quality,
+        splitQuality,
+        pipeline,
+      } = Object.fromEntries(
+        Object.entries(readCache).map(([k, v]) => [k, v.value]),
+      );
       const signature = JSON.stringify([
         jobs.map((t) => [t.taskId, t.version]),
         topicList.jobs.map((t) => [t.id, t.version]),
@@ -374,6 +405,7 @@ export async function mount() {
         topics: topicList,
         ingestion: policy,
         quality,
+        splitQuality,
         pipeline,
       };
       const metrics = {
@@ -474,9 +506,15 @@ export async function mount() {
     const done = terminal(t),
       running = taskState(t) === 'running';
     const action = t.kind ? 'resume' : running ? 'pause' : 'resume';
-    const controls = done
-      ? ''
-      : `${t.kind && running ? '' : `<button class="secondary-action" data-task-action="${action}">${action === 'pause' ? '暂停' : '从断点继续'}</button>`}<button class="danger-text" data-task-action="cancel">取消任务</button>`;
+    const reviewStep =
+      t.state?.status === 'paused' &&
+      t.state?.steps.find((s) => !s.complete)?.sourceSplit?.outcome ===
+        'review';
+    const controls = reviewStep
+      ? '<button class="secondary-action" data-task-action="current_recipe">按已核对模板继续</button><button class="secondary-action" data-task-action="ai_once">仅此篇交 AI 拆分</button><button class="danger-text" data-task-action="cancel">取消任务</button>'
+      : done
+        ? ''
+        : `${t.kind && running ? '' : `<button class="secondary-action" data-task-action="${action}">${action === 'pause' ? '暂停' : '从断点继续'}</button>`}<button class="danger-text" data-task-action="cancel">取消任务</button>`;
     $('#dialog-eyebrow').textContent = '任务详情';
     dialog(
       taskTitle(t),
@@ -503,7 +541,9 @@ export async function mount() {
                   await tasks('task_control', {
                     taskId: t.taskId,
                     expectedVersion: t.version,
-                    action,
+                    ...(['current_recipe', 'ai_once'].includes(action)
+                      ? {action: 'resume', reviewSplit: action}
+                      : {action}),
                   });
                 closeDialog();
                 await refresh();
@@ -514,6 +554,10 @@ export async function mount() {
   }
   function showMessage(id) {
     if (id === 'intake') location.assign('#/sources');
+    else if (id.startsWith('recipe:'))
+      location.assign(
+        '#/sources?source=' + encodeURIComponent(id.slice(7)) + '&panel=recipe',
+      );
     else if (id.startsWith('source:'))
       location.assign('#/sources?source=' + encodeURIComponent(id.slice(7)));
     else if (id.startsWith('notice:')) {

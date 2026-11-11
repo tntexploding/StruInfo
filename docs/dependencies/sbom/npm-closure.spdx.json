@@ -5,7 +5,7 @@
   "name": "StruInfo-v0.5.0-npm-closure",
   "documentNamespace": "https://struinfo.invalid/spdx/releases/v0.5.0/npm-closure",
   "creationInfo": {
-    "created": "2026-10-28T00:00:00Z",
+    "created": "2026-11-11T00:00:00Z",
     "creators": [
       "Tool: StruInfo M0-S Maintenance audit-npm-closure.mjs",
       "Tool: M0-S-FOUNDATION-MAINT-001 exact-closure materialization",
@@ -15,7 +15,8 @@
       "Tool: StruInfo M1I-2 RSS/Atom exact dependency materialization",
       "Tool: ADR 0075 MCP dependency and installed-license review",
       "Tool: StruInfo v0.4.0 exact security repair reconciliation",
-      "Tool: StruInfo v0.5.0 exact security repair reconciliation"
+      "Tool: StruInfo v0.5.0 exact security repair reconciliation",
+      "Tool: StruInfo security update 2026-11-11"
     ],
     "licenseListVersion": "3.27"
   },
@@ -377,10 +378,10 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-4066fb30cdc5308f",
+      "SPDXID": "SPDXRef-Package-8761dcd4e55ab671",
       "name": "@hono/node-server",
-      "versionInfo": "2.1.1",
-      "downloadLocation": "https://registry.npmjs.org/@hono/node-server/-/node-server-2.1.1.tgz",
+      "versionInfo": "2.1.3",
+      "downloadLocation": "https://registry.npmjs.org/@hono/node-server/-/node-server-2.1.3.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "MIT",
       "licenseDeclared": "MIT",
@@ -388,18 +389,18 @@
       "checksums": [
         {
           "algorithm": "SHA512",
-          "checksumValue": "10BB9E8648F954205D804C3DCECFA2BE42B0CB3CD409242E13DE989A23EF9F51020686427336C55C92DE106313623A613FA832761E291CCA8460F54C61456042"
+          "checksumValue": "4C0FFF9D632A3E16DF75F9DE00293AB796BD7AA6D2F6500110FC8A9F4FF16536A1DC7DD4D9769583CE6B245974FC5CA2B74239E766031E05C65527F71B0A9B53"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40hono%2Fnode-server@2.1.1"
+          "referenceLocator": "pkg:npm/%40hono%2Fnode-server@2.1.3"
         }
       ],
       "primaryPackagePurpose": "LIBRARY",
-      "comment": "ADR 0075 MCP dependency increment. Integrity recorded from the pnpm lock; installed package license text reviewed and retained."
+      "comment": "Security update; exact archive integrity and MIT license checked."
     },
     {
       "SPDXID": "SPDXRef-Package-70b26b91b2ae2357",
@@ -741,10 +742,10 @@
       "comment": "Role=runtime; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-169a06c5cb51bd34",
+      "SPDXID": "SPDXRef-Package-e011163aa7fb0e26",
       "name": "@nodable/entities",
-      "versionInfo": "3.0.0",
-      "downloadLocation": "https://registry.npmjs.org/@nodable/entities/-/entities-3.0.0.tgz",
+      "versionInfo": "3.1.0",
+      "downloadLocation": "https://registry.npmjs.org/@nodable/entities/-/entities-3.1.0.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -752,20 +753,20 @@
       "checksums": [
         {
           "algorithm": "SHA512",
-          "checksumValue": "F0BF7115E4D82A19B8F717C8CA9A1ED96E705759BFDD9E7C913FBB911F40F0EC85C5C3DDB88E159B1694310C8A62B4635282CB497BFA10A2880F94EF8FD71457"
+          "checksumValue": "2EC4BF0E31EBFAE0CCEB8EC6AEEFDC03CF89DDADC77E1B6DC0228BCAEA3237BC974C50B1281B5280C401BEB5BDC8D3DADBFCC345436E18F687E50505A1AE1AAD"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/%40nodable%2Fentities@3.0.0"
+          "referenceLocator": "pkg:npm/%40nodable%2Fentities@3.1.0"
         }
       ],
       "supplier": "Person: Amit Gupta",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "LIBRARY",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact lock integrity admitted by M1I-2; canonical SPDX MIT text retained because the exact tarball declares MIT but omits a legal file."
+      "comment": "Security update; exact archive integrity and MIT license checked."
     },
     {
       "SPDXID": "SPDXRef-Package-6d5ede40eaa9142c",
@@ -4262,10 +4263,10 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact lock integrity admitted by M1I-2; exact package legal text retained."
     },
     {
-      "SPDXID": "SPDXRef-Package-c364b9175ee3728b",
+      "SPDXID": "SPDXRef-Package-4641954963c41c0d",
       "name": "fast-xml-parser",
-      "versionInfo": "5.11.0",
-      "downloadLocation": "https://registry.npmjs.org/fast-xml-parser/-/fast-xml-parser-5.11.0.tgz",
+      "versionInfo": "5.12.0",
+      "downloadLocation": "https://registry.npmjs.org/fast-xml-parser/-/fast-xml-parser-5.12.0.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -4273,20 +4274,20 @@
       "checksums": [
         {
           "algorithm": "SHA512",
-          "checksumValue": "F481B132ABEA2CE9EA3FE1208B59EA0C72AFE64F1A67BAFD9F9E7C7A7C5CB9C9B254610134F014F8C3A0FFC8CF212EEB3BBB12AB88059B5FE71ED89AB9B32BBB"
+          "checksumValue": "FE95F1441B70C58F70F33ED86E0B2F20F3DC3EF143B136C8916C134098733493E8923F936CDE9FB6672FE23FE91100EF3823672860F3BA4E41A36A288083A216"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/fast-xml-parser@5.11.0"
+          "referenceLocator": "pkg:npm/fast-xml-parser@5.12.0"
         }
       ],
       "supplier": "Person: Amit Gupta",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "LIBRARY",
-      "comment": "Role=runtime; category=ROUTINE_REVIEW; exact lock integrity admitted by M1I-2; exact package legal text retained."
+      "comment": "Security update; exact archive integrity and MIT license checked."
     },
     {
       "SPDXID": "SPDXRef-Package-0e7b031c61139b98",
@@ -5215,10 +5216,10 @@
       "comment": "Role=transitive; category=ROUTINE_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-2d2d5a7dff943340",
+      "SPDXID": "SPDXRef-Package-d04877bc6b06a653",
       "name": "is-unsafe",
-      "versionInfo": "2.0.2",
-      "downloadLocation": "https://registry.npmjs.org/is-unsafe/-/is-unsafe-2.0.2.tgz",
+      "versionInfo": "2.0.3",
+      "downloadLocation": "https://registry.npmjs.org/is-unsafe/-/is-unsafe-2.0.3.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -5226,20 +5227,20 @@
       "checksums": [
         {
           "algorithm": "SHA512",
-          "checksumValue": "1E06C81CF047D0A1C709C8CB7C6B02BE1B4F4D5C636806655E3C1DCFBFC6402E344A349EE2C7D0B1AAFC279545A3C24E49B6AB92957438B1BDE5B6DA35DF5A01"
+          "checksumValue": "6419657330823B6EBBBE07456FA4EADE9BFE2E11DA0A218C76BF99B2E2FE3A8A6BB8083B4BEDD90ECD6F0F444F0B4B92AE48F36EB6B16868ED5F5601C633DE15"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/is-unsafe@2.0.2"
+          "referenceLocator": "pkg:npm/is-unsafe@2.0.3"
         }
       ],
       "supplier": "Person: Amit Gupta",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "LIBRARY",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact lock integrity admitted by M1I-2; exact package legal text retained."
+      "comment": "Security update; exact archive integrity and MIT license checked."
     },
     {
       "SPDXID": "SPDXRef-Package-2f62e711a6921973",
@@ -8959,10 +8960,10 @@
       "comment": "Role=transitive; category=CONDITIONAL_REVIEW; exact tarball identity accepted by M0-S review; legal material retained under docs/dependencies/licenses/npm/."
     },
     {
-      "SPDXID": "SPDXRef-Package-6a66b39366647f25",
+      "SPDXID": "SPDXRef-Package-6c1f5ab8c6265950",
       "name": "strnum",
-      "versionInfo": "2.4.2",
-      "downloadLocation": "https://registry.npmjs.org/strnum/-/strnum-2.4.2.tgz",
+      "versionInfo": "2.5.1",
+      "downloadLocation": "https://registry.npmjs.org/strnum/-/strnum-2.5.1.tgz",
       "filesAnalyzed": false,
       "licenseConcluded": "NOASSERTION",
       "licenseDeclared": "MIT",
@@ -8970,20 +8971,20 @@
       "checksums": [
         {
           "algorithm": "SHA512",
-          "checksumValue": "AC31B7021E13574935856BCB4B3919B4C98B37DF9E4BE877927AB830FE80E36637621E6A18D9CE52CD63264A12AFC146E5DB0BDBC73B2A0908073484CA4AADBB"
+          "checksumValue": "50CE274CB5B34220C1B1E571506C4DD30273224D1453CF508BBA4A5F3F6A212A3E961BE2262913BA2901B0AFE8151969BD81EF49DCF44D5A0BC90FAC129630C4"
         }
       ],
       "externalRefs": [
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:npm/strnum@2.4.2"
+          "referenceLocator": "pkg:npm/strnum@2.5.1"
         }
       ],
       "supplier": "Person: Amit Gupta",
       "originator": "NOASSERTION",
       "primaryPackagePurpose": "LIBRARY",
-      "comment": "Role=transitive; category=ROUTINE_REVIEW; exact lock integrity admitted by M1I-2; exact package legal text retained."
+      "comment": "Security update; exact archive integrity and MIT license checked."
     },
     {
       "SPDXID": "SPDXRef-Package-1e612c025c4297ca",
@@ -10803,7 +10804,7 @@
       "relatedSpdxElement": "SPDXRef-Package-924ff20fc2135421"
     },
     {
-      "spdxElementId": "SPDXRef-Package-4066fb30cdc5308f",
+      "spdxElementId": "SPDXRef-Package-8761dcd4e55ab671",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-a4e0483403655610"
     },
@@ -11168,7 +11169,7 @@
       "relatedSpdxElement": "SPDXRef-Package-f81853d706008d16"
     },
     {
-      "spdxElementId": "SPDXRef-Package-6a66b39366647f25",
+      "spdxElementId": "SPDXRef-Package-6c1f5ab8c6265950",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-2b5e47d1a6760af8"
     },
@@ -11973,32 +11974,32 @@
       "relatedSpdxElement": "SPDXRef-Package-1acee86624de4982"
     },
     {
-      "spdxElementId": "SPDXRef-Package-c364b9175ee3728b",
+      "spdxElementId": "SPDXRef-Package-4641954963c41c0d",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-0447a2a1fcf2973c"
     },
     {
-      "spdxElementId": "SPDXRef-Package-c364b9175ee3728b",
+      "spdxElementId": "SPDXRef-Package-4641954963c41c0d",
       "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-169a06c5cb51bd34"
+      "relatedSpdxElement": "SPDXRef-Package-e011163aa7fb0e26"
     },
     {
-      "spdxElementId": "SPDXRef-Package-c364b9175ee3728b",
+      "spdxElementId": "SPDXRef-Package-4641954963c41c0d",
       "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-2d2d5a7dff943340"
+      "relatedSpdxElement": "SPDXRef-Package-d04877bc6b06a653"
     },
     {
-      "spdxElementId": "SPDXRef-Package-c364b9175ee3728b",
+      "spdxElementId": "SPDXRef-Package-4641954963c41c0d",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-398504df69b728f0"
     },
     {
-      "spdxElementId": "SPDXRef-Package-c364b9175ee3728b",
+      "spdxElementId": "SPDXRef-Package-4641954963c41c0d",
       "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-6a66b39366647f25"
+      "relatedSpdxElement": "SPDXRef-Package-6c1f5ab8c6265950"
     },
     {
-      "spdxElementId": "SPDXRef-Package-c364b9175ee3728b",
+      "spdxElementId": "SPDXRef-Package-4641954963c41c0d",
       "relationshipType": "DEPENDS_ON",
       "relatedSpdxElement": "SPDXRef-Package-be3871a10cfeb99e"
     },
@@ -12505,7 +12506,7 @@
     {
       "spdxElementId": "SPDXRef-Package-e9209062eb98dc73",
       "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-4066fb30cdc5308f"
+      "relatedSpdxElement": "SPDXRef-Package-8761dcd4e55ab671"
     },
     {
       "spdxElementId": "SPDXRef-Package-e9209062eb98dc73",
@@ -12875,7 +12876,7 @@
     {
       "spdxElementId": "SPDXRef-RootPackage",
       "relationshipType": "DEPENDS_ON",
-      "relatedSpdxElement": "SPDXRef-Package-c364b9175ee3728b"
+      "relatedSpdxElement": "SPDXRef-Package-4641954963c41c0d"
     },
     {
       "spdxElementId": "SPDXRef-RootPackage",

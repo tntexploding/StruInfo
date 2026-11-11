@@ -1,3 +1,4 @@
+import {entryTagWords} from '../../modules/entries/entry_tags.js';
 import {sourceProcessingInstructions} from '../../application/source_processing_scope.js';
 import {documentProcessingInstructions} from '../../modules/processing/document_processing_standard.js';
 import {parseResponseJson} from './response_json.js';
@@ -275,9 +276,7 @@ function providerEntry(
       .map((p) => p.text),
     passages: passages.filter((p) => p.role === 'content'),
     contentKeywords:
-      subject.body !== entry.value.body
-        ? []
-        : entry.value.contentKeywords.map((keyword) => keyword.displayValue),
+      subject.body !== entry.value.body ? [] : entryTagWords(entry.value),
     typeKeyword: entry.value.typeKeyword ?? null,
     domains: entry.value.domains.map((domain) => ({
       keyword: domain.keyword,

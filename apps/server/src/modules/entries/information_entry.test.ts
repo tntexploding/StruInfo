@@ -461,46 +461,6 @@ describe('InformationEntry', () => {
       ]),
     ).toBeUndefined();
   });
-  it('normalizes manual keywords independently and preserves immutable source facts', () => {
-    const current = currentEntry({isPrivate: true});
-    const revision = prepareManualEntryRevision(current, {
-      body: 'Revised body',
-      contentKeywords: [' PostgreSQL ', 'e\u0301'],
-      typeKeyword: 'other',
-      typeCustomName: ' Synthetic Type ',
-      domains: [
-        {keyword: 'engineering_computing'},
-        {keyword: 'other', customName: ' Synthetic Domain '},
-      ],
-    });
-
-    expect(revision).toMatchObject({
-      documentOrder: current.value.documentOrder,
-      titlePath: current.value.titlePath,
-      body: 'Revised body',
-      chunkMode: 'split',
-      isPrivate: true,
-      typeKeyword: 'other',
-      typeCustomName: 'Synthetic Type',
-      fragmentIds: current.value.fragmentIds,
-      contentKeywords: [
-        {displayValue: 'PostgreSQL', normalizedValue: 'postgresql'},
-        {displayValue: 'é', normalizedValue: 'é'},
-      ],
-      domains: [
-        {keyword: 'engineering_computing'},
-        {keyword: 'other', customName: 'Synthetic Domain'},
-      ],
-    });
-    expect(
-      prepareManualEntryRevision(current, {
-        body: 'Revised body',
-        contentKeywords: ['ABC', 'abc'],
-        typeKeyword: 'factual_material',
-        domains: [{keyword: 'engineering_computing'}],
-      }),
-    ).toBeUndefined();
-  });
 
   it('searches body and three keyword dimensions while hiding private Entries by default', () => {
     const publicEntry = currentEntry();
@@ -666,3 +626,11 @@ function commonMarkSnapshot(
     ],
   });
 }
+
+it('body edits retain existing labels', () => {
+  const current = currentEntry();
+  const value = prepareManualEntryRevision(current, {body: 'Revised source'});
+  expect(value?.contentKeywords).toEqual(current.value.contentKeywords);
+  expect(value?.domains).toEqual(current.value.domains);
+  expect(value?.body).toBe('Revised source');
+});

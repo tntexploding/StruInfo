@@ -68,7 +68,6 @@ function fixture(
           modelConfigured: true,
           policy: {
             settings: {
-              maxEntries: 64,
               maxRelations: 4,
               maxModelCalls: 24,
               intake: {fetchFullText: true},
@@ -153,7 +152,6 @@ describe('owner document queue', () => {
       owner,
       expect.stringContaining('backlog-'),
       expect.objectContaining({
-        maxEntries: 64,
         maxModelCalls: 24,
         intake: {fetchFullText: true},
       }),

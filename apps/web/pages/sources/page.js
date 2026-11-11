@@ -8,10 +8,7 @@ import {
   renderReceipts,
   selectReceipt,
   reviewReceipt,
-  receipts,
   checkSource,
-  searchHistory,
-  importHistory,
 } from './receipts.js';
 import {icon} from '../../data.js';
 import {
@@ -19,6 +16,7 @@ import {
   initial,
   persist,
   kinds,
+  connectionAddress,
   sources,
   resetSource,
   sourceRecord,
@@ -26,12 +24,16 @@ import {
 } from './store.js';
 import {settingsMarkup, manualMarkup} from './forms.js';
 import {panels} from './panels.js';
+import {sourceRecipePanel} from './recipes.js';
+import {historyPanel} from './history.js';
 import {mountRecord} from './record.js';
 import {notice as notify} from '../../shared/notice.js';
 import {bindDialog} from '../../shared/dialog.js';
 const page = pageContext('sources');
 export async function mount() {
   let sourcesLoaded = false;
+  let recipePanel;
+  let history;
   const $ = (s, r = page.root) => r.querySelector(s),
     $$ = (s, r = page.root) => [...r.querySelectorAll(s)];
   const extra = {
@@ -185,8 +187,12 @@ export async function mount() {
       render();
     }
   }
-  function openPanel(id, trigger) {
+  async function openPanel(id, trigger) {
     if (!panels[id]) return;
+    if (id === 'recipe' && (mode !== 'source' || !currentState().saved)) {
+      notify('先保存来源设置，再管理模板');
+      return;
+    }
     const panel = panels[id];
     $('#dialog-title').textContent = panel.title;
     $('#dialog-path').textContent = panel.parent;
@@ -194,6 +200,34 @@ export async function mount() {
     dialog.dataset.panel = id;
     icons(dialog);
     sourceDialog.open(trigger);
+    recipePanel = undefined;
+    history = undefined;
+    if (id === 'history') {
+      history = historyPanel($('#dialog-content'), current);
+      await attempt(() => history.load(), notify);
+    }
+    if (id === 'recipe') {
+      recipePanel = sourceRecipePanel({
+        root: $('#dialog-content'),
+        sourceId: current,
+        state: currentState(),
+        ingestion,
+        notify,
+        saveSettings: async (policy) => {
+          currentState().splitRouting = policy;
+          dirty();
+          await persist(current);
+          render();
+        },
+      });
+      await attempt(
+        () => recipePanel.load(),
+        (message) => {
+          $('#dialog-content').textContent = message;
+          notify(message);
+        },
+      );
+    }
   }
   dockTrigger.onclick = async () => {
     setDock(!dock.classList.contains('is-open'));
@@ -214,6 +248,7 @@ export async function mount() {
     }
   });
   page.on(document, 'input', (event) => {
+    recipePanel?.changed(event.target);
     const el = event.target,
       key = el.dataset.field;
     if (!key || key.startsWith('manual')) return;
@@ -236,12 +271,15 @@ export async function mount() {
       draft.connection = draft.connectionDrafts[el.value] || {};
 
       $('#connection-kind').textContent = kinds[el.value];
-      $('#connection-address').textContent =
-        currentState().connection.url ||
-        currentState().connection.component ||
-        '地址待填写';
+      $('#connection-address').textContent = connectionAddress(currentState());
     }
   });
+  page.poll(
+    async () => {
+      if (dialog.open && history) await attempt(() => history.poll(), notify);
+    },
+    () => 2500,
+  );
   page.on(document, 'change', (event) => {
     if (event.target.id === 'motion-toggle') {
       document.body.classList.toggle('no-motion', !event.target.checked);
@@ -250,18 +288,26 @@ export async function mount() {
     if (event.target.matches('#upload-field input'))
       $('#manual-feedback').textContent =
         `已选择 ${event.target.files.length} 个文件`;
-    if (event.target.matches('[name="history-result"]'))
-      $('#history-add').disabled = !$('[name="history-result"]:checked');
+    if (history && dialog.contains(event.target))
+      void attempt(() => history.change(event.target), notify);
   });
   page.on(document, 'click', async (event) => {
     const target = event.target.closest('button');
     if (!target) return;
+    if (target.dataset.history && history) {
+      await attempt(() => history.action(target.dataset.history), notify);
+      return;
+    }
+    if (target.dataset.recipeAction && recipePanel) {
+      await attempt(() => recipePanel.action(target), notify);
+      return;
+    }
     if (target.hasAttribute('data-close')) {
       sourceDialog.close();
       return;
     }
     if (target.dataset.panel) {
-      openPanel(target.dataset.panel, target);
+      await openPanel(target.dataset.panel, target);
       return;
     }
     if (target.dataset.mode) {
@@ -327,22 +373,6 @@ export async function mount() {
         dirty();
         notify('简介已生成，请保存');
       }, notify);
-    if (action === 'generate-plan')
-      await attempt(async () => {
-        if (!receipts().length)
-          await renderReceipts(current, dockBody, privateScope());
-        const doc = receipts()[0];
-        if (!doc) throw new Error('收到文档后才能生成拆分方案');
-        const out = await ingestion('split_recipe_suggest', {
-          snapshotId: doc.snapshotId,
-          includePrivate: false,
-        });
-        s.split = out.rationale || out.description || out.name || '';
-        s.rules = JSON.stringify(out.settings, null, 2);
-        $('#split-text').value = [s.split, s.rules].filter(Boolean).join('\n');
-        dirty();
-        notify('拆分建议已生成，请检查并保存');
-      }, notify);
     if (action === 'save-connection') {
       const invalid = $$('#dialog-content input').find(
         (i) => !i.checkValidity(),
@@ -354,19 +384,10 @@ export async function mount() {
       $$('[data-connection]').forEach(
         (i) => (s.connection[i.dataset.connection] = i.value),
       );
-      $('#connection-address').textContent =
-        s.connection.url || s.connection.component || '地址待填写';
+      $('#connection-address').textContent = connectionAddress(s);
       dirty();
       sourceDialog.close();
       notify('参数已填入草稿');
-    }
-    if (action === 'save-recipe') {
-      s.split = $('#recipe-text').value;
-      s.rules = $('#recipe-rules').value;
-      $('#split-text').value = s.split;
-      dirty();
-      sourceDialog.close();
-      notify('方案已填入草稿');
     }
     if (action === 'cancel-source') {
       resetSource(current);
@@ -438,19 +459,15 @@ export async function mount() {
       );
       sourceDialog.close();
     }
-    if (action === 'history-search')
-      await attempt(() => searchHistory(dialog), notify);
-    if (action === 'history-add')
-      await attempt(async () => {
-        const count = await importHistory(dialog);
-        notify(`已补收 ${count} 篇`);
-        sourceDialog.close();
-      }, notify);
     if (action === 'check-now')
       await attempt(async () => {
-        await checkSource(current);
+        const result = await checkSource(current);
         await renderReceipts(current, dockBody, privateScope());
-        notify('检查已完成');
+        notify(
+          result.status === 'imported'
+            ? `新接收 ${result.importedDocumentCount ?? 1} 篇`
+            : '没有新资料',
+        );
       }, notify);
     if (action === 'manual-import')
       await attempt(async () => {
@@ -508,7 +525,8 @@ export async function mount() {
       return;
     }
     showMode('source');
-    navigate('sources', {source: current}, true);
+    if (routeParams().get('source') !== current)
+      navigate('sources', {source: current}, true);
   });
   icons();
   $('#source-settings-view').innerHTML = '<p role="status">正在读取来源…</p>';
@@ -536,6 +554,7 @@ export async function mount() {
       $('#sources').dataset.selection = current || '';
       document.dispatchEvent(new Event('source-layout-reload'));
       showMode(sources.length ? 'source' : 'empty');
+      page.onRoute?.(routeParams());
     } catch (error) {
       if (error.name !== 'AbortError') {
         $('#selection-title').textContent = '来源读取失败';
@@ -560,6 +579,14 @@ export async function mount() {
       document.dispatchEvent(
         new CustomEvent('source-layout-focus', {detail: selected}),
       );
+    }
+    if (
+      selected === current &&
+      states[current]?.saved &&
+      params.get('panel') === 'recipe' &&
+      !dialog.open
+    ) {
+      void openPanel('recipe', $('[data-panel="recipe"]'));
     }
   };
 }

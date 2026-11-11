@@ -70,6 +70,135 @@ describe('GithubGitSourceSubscriptionReader', () => {
       SourceSubscriptionReaderError,
     );
   });
+
+  it('receives a directory in pinned batches, limits concurrency and skips an unchanged commit', async () => {
+    const files = Array.from({length: 70}, (_, index) => ({
+      path: `docs/${String(index).padStart(3, '0')}.md`,
+      type: 'blob',
+      mode: '100644',
+      size: 4,
+      sha: index.toString(16).padStart(40, '0'),
+    }));
+    let active = 0;
+    let peak = 0;
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes('/commits?')) return jsonResponse([{sha: COMMIT_SHA}]);
+      if (url.includes('/git/trees/'))
+        return jsonResponse({
+          truncated: false,
+          tree: [
+            ...files,
+            {
+              path: 'README.md',
+              type: 'blob',
+              mode: '100644',
+              size: 4,
+              sha: COMMIT_SHA,
+            },
+            {
+              path: 'docs/link.md',
+              type: 'blob',
+              mode: '120000',
+              size: 4,
+              sha: COMMIT_SHA,
+            },
+          ],
+        });
+      expect(url).toContain(`/${COMMIT_SHA}/docs/`);
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      active--;
+      return new Response('# A\n');
+    });
+    const reader = new GithubGitSourceSubscriptionReader({fetch: fetcher});
+    const source = {...subscription(), repositoryPath: 'docs/'};
+    const first = await reader.readDirectory(source);
+    expect(first.status).toBe('changed');
+    if (first.status !== 'changed') throw new Error('expected documents');
+    expect(first.documents).toHaveLength(64);
+    expect(peak).toBe(4);
+    fetcher.mockClear();
+    const second = await reader.readDirectory({
+      ...source,
+      cursor: {connectorCursor: first.cursor},
+    });
+    expect(second.status).toBe('changed');
+    if (second.status !== 'changed') throw new Error('expected documents');
+    expect(second.documents).toHaveLength(6);
+    expect(second.documents[0]?.externalId).toBe('docs/064.md');
+    expect(
+      fetcher.mock.calls.some(([url]) =>
+        (url instanceof Request ? url.url : String(url)).includes('/commits?'),
+      ),
+    ).toBe(false);
+    fetcher.mockClear();
+    expect(
+      await reader.readDirectory({
+        ...source,
+        cursor: {connectorCursor: second.cursor},
+      }),
+    ).toMatchObject({status: 'unchanged'});
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('downloads only changed Markdown blobs and rejects a truncated tree', async () => {
+    const prior = 'b'.repeat(40);
+    const source = {
+      ...subscription(),
+      repositoryPath: 'docs/',
+      cursor: {
+        connectorCursor: Buffer.from(
+          JSON.stringify({version: 1, completed: prior}),
+        ).toString('base64url'),
+      },
+    };
+    const fetcher = vi.fn<typeof fetch>((input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.includes('/commits?'))
+        return Promise.resolve(jsonResponse([{sha: COMMIT_SHA}]));
+      if (url.includes('/git/trees/'))
+        return Promise.resolve(
+          jsonResponse({
+            truncated: false,
+            tree: [
+              {
+                path: 'docs/old.md',
+                type: 'blob',
+                mode: '100644',
+                size: 4,
+                sha: prior,
+              },
+              {
+                path: 'docs/change.md',
+                type: 'blob',
+                mode: '100644',
+                size: 4,
+                sha: url.includes(prior) ? prior : COMMIT_SHA,
+              },
+            ],
+          }),
+        );
+      expect(url).toContain('/docs/change.md');
+      return Promise.resolve(new Response('# A\n'));
+    });
+    const reader = new GithubGitSourceSubscriptionReader({fetch: fetcher});
+    const result = await reader.readDirectory(source);
+    expect(result.status === 'changed' && result.documents.length).toBe(1);
+    fetcher.mockImplementation((input) =>
+      Promise.resolve(
+        (input instanceof Request ? input.url : String(input)).includes(
+          '/commits?',
+        )
+          ? jsonResponse([{sha: COMMIT_SHA}])
+          : jsonResponse({tree: [], truncated: true}),
+      ),
+    );
+    await expect(reader.readDirectory(source)).rejects.toMatchObject({
+      code: 'source_too_large',
+    });
+  });
 });
 
 function subscription(): Readonly<ReviewGitSourceSubscription> {

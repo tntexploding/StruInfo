@@ -276,7 +276,8 @@ describe('complete InformationEntry search', () => {
     );
     expect(page.totalCount).toBe(3);
     expect(page.items[0]?.entry.entryId).toBe(first.entryId);
-    expect(page.nextCursor?.matchReasonCount).toBe(5);
+    // Title, body and the unified tag field each contribute once.
+    expect(page.nextCursor?.matchReasonCount).toBe(3);
     const decoded = decodeEntrySearchBody({...request, after: page.nextCursor});
     expect(decoded).toBeDefined();
     if (decoded === undefined)
@@ -290,9 +291,9 @@ describe('complete InformationEntry search', () => {
     );
     expect(next.items).toHaveLength(1);
     expect(next.items[0]?.entry.entryId).toBe(second.entryId);
-    expect(next.items[0]?.matchReasons).toHaveLength(7);
+    expect(next.items[0]?.matchReasons).toHaveLength(5);
     expect(next.items[0]?.textMatch?.score).toBe(10_000);
-    expect(next.nextCursor?.matchReasonCount).toBe(5);
+    expect(next.nextCursor?.matchReasonCount).toBe(3);
     const lastRequest = decodeEntrySearchBody({
       ...request,
       after: next.nextCursor,

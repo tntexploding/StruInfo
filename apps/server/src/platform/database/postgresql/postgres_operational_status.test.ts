@@ -39,9 +39,9 @@ describe('Postgres operational status reader', () => {
       processingRunCount: 6,
       failedProcessingRunCount: 1,
       staleRunningProcessingRunCount: 2,
-      failedBulkIngestionBatchCount: 3,
+      failedDocumentTaskCount: 3,
       pendingProposalCount: 4,
-      pendingOwnerWorkItemCount: 5,
+      pendingIntakeReviewCount: 5,
     });
     expect(client.calls).toEqual([
       {sql: BEGIN_REPEATABLE_READ_ONLY_SQL, parameters: []},
@@ -89,9 +89,9 @@ function operationalRow(): Readonly<Record<string, unknown>> {
     processing_run_count: '6',
     failed_processing_run_count: '1',
     stale_running_processing_run_count: '2',
-    failed_bulk_ingestion_batch_count: '3',
+    failed_document_task_count: '3',
     pending_proposal_count: '4',
-    pending_owner_work_item_count: '5',
+    pending_intake_review_count: '5',
   });
 }
 

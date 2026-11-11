@@ -6,7 +6,7 @@ import {
   prepareAiEntryTagRevision,
   type CurrentInformationEntry,
 } from '../entries/index.js';
-import type {ProcessingTagProposalPayload} from './processing_contract.js';
+import type {LegacyProcessingTagProposalPayload} from './processing_contract.js';
 import {assertProcessingTagProposalPayload} from './processing.js';
 
 const current: CurrentInformationEntry = {
@@ -35,7 +35,7 @@ const current: CurrentInformationEntry = {
 function payload(
   keywords: number,
   domains: number,
-): ProcessingTagProposalPayload {
+): LegacyProcessingTagProposalPayload {
   return {
     expectedEntryRevision: 1,
     providerModel: 'external-agent',
@@ -57,7 +57,7 @@ function payload(
   };
 }
 
-function request(value: ProcessingTagProposalPayload) {
+function request(value: LegacyProcessingTagProposalPayload) {
   return {
     kind: 'tags',
     entryId: '11111111-1111-4111-8111-111111111111',
@@ -82,7 +82,7 @@ describe('external tag proposal capacity through persistence', () => {
     (keywords, domains) => {
       const value = payload(keywords, domains);
       expect(agentTaskRequestSchema.safeParse(request(value)).success).toBe(
-        true,
+        false,
       );
       expect(() => {
         assertProcessingTagProposalPayload(value);

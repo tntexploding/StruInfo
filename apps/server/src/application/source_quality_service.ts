@@ -58,6 +58,15 @@ export class SourceQualityService {
       ),
       snapshots,
     );
+    const graded = distinctReviewedDocuments(
+      records.filter(
+        (record) =>
+          manualIntakeDecision(record) !== undefined ||
+          (Boolean(record.value.assessment) &&
+            ['admitted', 'held', 'blocked'].includes(record.value.decision)),
+      ),
+      snapshots,
+    );
     const sources = (catalog?.subscriptions ?? [])
       .filter((s) => !s.isPrivate)
       .map((source) => {
@@ -105,6 +114,21 @@ export class SourceQualityService {
           };
         });
         const issues = samples.filter((s) => s.outcome !== 'accepted');
+        const scored = graded
+          .filter(
+            ({record}) => intakeSourceId(record) === source.subscriptionId,
+          )
+          .slice(0, SOURCE_QUALITY_WINDOW);
+        const acceptedReviews = scored.filter(({record}) => {
+          const manual = manualIntakeDecision(record);
+          return (
+            manual === 'accept' ||
+            (!manual && record.value.decision === 'admitted')
+          );
+        }).length;
+        const trustScore = Math.round(
+          (100 * (acceptedReviews + 2)) / (scored.length + 4),
+        );
         const newIssues = issues.filter(
           (s) => !source.qualityReview?.documentKeys.includes(s.documentKey),
         );
@@ -113,6 +137,8 @@ export class SourceQualityService {
           label: source.label,
           enabled: source.enabled,
           reviewed: samples.length,
+          trustScore,
+          scoredReviews: scored.length,
           accepted: samples.length - issues.length,
           manualRejected: samples.filter((s) => s.outcome === 'manual_rejected')
             .length,

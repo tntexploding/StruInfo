@@ -13,7 +13,7 @@ export async function loadSettings(onGroup = () => {}, only) {
     ai: () => price('ai_price_status'),
     ing: () => ingestion('ingestion_status'),
     words: () => ingestion('annotation_vocabulary'),
-    review: () => request('preferences/review'),
+    review: () => request('preferences/recommendations'),
     net: () => research('research_status'),
     split: () => request('entries/split-rules/profile'),
     workspace: () => request('workspace'),
@@ -93,11 +93,6 @@ export async function loadSettings(onGroup = () => {}, only) {
       context.association = review.associationPolicy;
       context.exploration = review.explorationPolicy;
       Object.assign(s.vocabulary, words.vocabulary, {
-        quickTags: review.quickTags.join('\n'),
-        automaticKeywords: review.automaticKeywords.enabled,
-        includeLinkDomains: review.automaticKeywords.includeLinkDomains,
-        excludedKeywords: review.automaticKeywords.excludedKeywords.join('\n'),
-        localAliases: review.vocabulary.aliases,
         weights: {
           content: review.associationPolicy.contentWeight,
           type: review.associationPolicy.typeWeight,

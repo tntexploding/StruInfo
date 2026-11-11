@@ -144,22 +144,13 @@ export class M1cApiController {
     );
   }
 
-  @Get('preferences/review')
-  public async reviewPreferences(@Res() response: Response): Promise<void> {
-    writeLocalApiResponse(
-      response,
-      await this.#service.loadReviewPreferences(),
-    );
-  }
-
-  @Put('preferences/review')
-  public async saveReviewPreferences(
-    @Body() body: unknown,
+  @Get('preferences/recommendations')
+  public async recommendationPreferences(
     @Res() response: Response,
   ): Promise<void> {
     writeLocalApiResponse(
       response,
-      await this.#service.saveReviewPreferences(body),
+      await this.#service.loadRecommendationPreferences(),
     );
   }
 
@@ -339,6 +330,17 @@ export class M1cApiController {
     writeLocalApiResponse(
       response,
       await this.#service.writeEntrySavedQuery(body),
+    );
+  }
+
+  @Post('entries/aggregations/read')
+  public async readEntryAggregation(
+    @Body() body: unknown,
+    @Res() response: Response,
+  ): Promise<void> {
+    writeLocalApiResponse(
+      response,
+      await this.#service.readEntryAggregation(body),
     );
   }
 
@@ -701,30 +703,6 @@ export class M1cApiController {
         parseOptionalBooleanQuery(includePrivate),
         options,
       ),
-    );
-  }
-
-  @Post('entry-documents/:snapshotId/tags/aggregate')
-  public async aggregateInformationDocumentTags(
-    @Param('snapshotId') snapshotId: string,
-    @Body() body: unknown,
-    @Res() response: Response,
-  ): Promise<void> {
-    writeLocalApiResponse(
-      response,
-      await this.#service.aggregateInformationDocumentTags(snapshotId, body),
-    );
-  }
-
-  @Put('entry-documents/:snapshotId/tags')
-  public async reviseInformationDocumentTags(
-    @Param('snapshotId') snapshotId: string,
-    @Body() body: unknown,
-    @Res() response: Response,
-  ): Promise<void> {
-    writeLocalApiResponse(
-      response,
-      await this.#service.reviseInformationDocumentTags(snapshotId, body),
     );
   }
 

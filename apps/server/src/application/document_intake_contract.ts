@@ -95,6 +95,7 @@ export const intakeRecordValueSchema = z
       .max(8)
       .optional(),
     preparedSnapshotId: z.uuid().optional(),
+    restrictedSnapshotId: z.uuid().optional(),
     bodySource: z.enum(['received', 'web_article']).optional(),
     previousPreparedSnapshotIds: z.array(z.uuid()).max(16).optional(),
     preparation: z.enum(['received', 'web_article']).default('received'),

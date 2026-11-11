@@ -4,6 +4,7 @@ import {isIP} from 'node:net';
 
 import {XMLParser, XMLValidator} from 'fast-xml-parser';
 import {parseFragment, type DefaultTreeAdapterTypes} from 'parse5';
+import {readSourceResponse} from './source_redirect.js';
 
 import {projectStructuredDocument} from '../../modules/evidence/index.js';
 import {
@@ -94,23 +95,21 @@ export class RssAtomSourceConnector implements SourceConnectorPort {
     if (feedUrl === undefined) {
       throw new SourceConnectorError('connector_result_invalid');
     }
-    await this.#admitPublicHost(feedUrl.hostname);
     const previousCursor = decodeCursor(request.previousCursor);
     if (request.previousCursor !== undefined && previousCursor === undefined) {
       throw new SourceConnectorError('connector_result_invalid');
     }
 
-    let response: Response;
-    try {
-      response = await this.#fetch(feedUrl, {
+    const {response, url: resolvedUrl} = await readSourceResponse(
+      feedUrl,
+      {
         method: 'GET',
-        redirect: 'error',
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
         headers: requestHeaders(previousCursor),
-      });
-    } catch {
-      throw new SourceConnectorError('connector_unavailable');
-    }
+      },
+      this.#fetch,
+      (host) => this.#admitPublicHost(host),
+    );
 
     if (response.status === 304 && previousCursor !== undefined) {
       return Object.freeze({
@@ -154,7 +153,7 @@ export class RssAtomSourceConnector implements SourceConnectorPort {
     if (feedText === undefined || /<!DOCTYPE\b/iu.test(feedText)) {
       throw new SourceConnectorError('connector_result_invalid');
     }
-    const parsedItems = parseFeed(feedText, feedUrl.toString());
+    const parsedItems = parseFeed(feedText, resolvedUrl.toString());
     const currentItems = parsedItems.slice(0, configuration.itemLimit);
     // A temporarily empty feed must not forget the last successfully read items.
     const currentTokens =

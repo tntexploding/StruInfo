@@ -1,9 +1,5 @@
 import type {StructuredAnnotations} from '../entries/structured_annotations.js';
-import type {
-  CurrentInformationEntry,
-  EntryDomainKeyword,
-  EntryTypeKeyword,
-} from '../entries/index.js';
+import type {CurrentInformationEntry} from '../entries/index.js';
 
 export type AiTagProposalProviderErrorCode =
   | 'ai_operations_paused'
@@ -25,15 +21,8 @@ export class AiTagProposalProviderError extends Error {
 }
 
 export interface AiTagProposalProviderResult {
-  readonly annotations?: StructuredAnnotations;
+  readonly annotations: StructuredAnnotations;
   readonly summary: string;
-  readonly contentKeywords: readonly string[];
-  readonly typeKeyword: EntryTypeKeyword;
-  readonly typeCustomName?: string;
-  readonly domains: readonly Readonly<{
-    keyword: EntryDomainKeyword;
-    customName?: string;
-  }>[];
 }
 
 export interface AiTagProposalProviderPort {

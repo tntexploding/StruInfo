@@ -46,6 +46,7 @@ import {
   SourceConnectorError,
   type SourceConnectorCapability,
   type SourceConnectorRegistry,
+  type SourceConnectorReadResult,
 } from './source_connector.js';
 
 const CANONICAL_UUID =
@@ -133,6 +134,9 @@ export interface GitSourceSubscriptionReaderPort {
   read(
     subscription: Readonly<ReviewGitSourceSubscription>,
   ): Promise<Readonly<GitSourceSubscriptionRead>>;
+  readDirectory?(
+    subscription: Readonly<ReviewGitSourceSubscription>,
+  ): Promise<Readonly<SourceConnectorReadResult>>;
 }
 
 export type SourceSubscriptionReaderErrorCode =
@@ -221,6 +225,10 @@ export interface SourceSubscriptionServiceDependencies {
   ) => EvidenceRepositoryPort;
   readonly pendingCounts?: () => Promise<Readonly<Record<string, number>>>;
   readonly evidenceRead?: EvidenceReadRepositoryPort;
+  readonly latestHistorySnapshot?: (
+    sourceId: string,
+    uri: string,
+  ) => Promise<string | undefined>;
   readonly importEvidence?: typeof importMarkdownEvidence;
   readonly importConnectorDocuments?: typeof importSourceConnectorDocuments;
   readonly now?: () => string;
@@ -533,7 +541,8 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
         subscription.kind === 'rss_atom' ||
         subscription.kind === 'json_api' ||
         subscription.kind === 'web' ||
-        subscription.kind === 'plugin'
+        subscription.kind === 'plugin' ||
+        subscription.repositoryPath.endsWith('/')
       ) {
         return await this.#runConnectorSubscription(
           subscription,
@@ -543,12 +552,16 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
         );
       }
       const read = await this.#dependencies.reader.read(subscription);
+      const previousFile =
+        subscription.cursor && 'commitSha' in subscription.cursor
+          ? subscription.cursor
+          : undefined;
       const sourceSha256 = createHash('sha256')
         .update(read.sourceUtf8)
         .digest('hex');
       if (
-        subscription.cursor?.commitSha === read.commitSha ||
-        subscription.cursor?.sourceSha256 === sourceSha256
+        previousFile?.commitSha === read.commitSha ||
+        previousFile?.sourceSha256 === sourceSha256
       ) {
         await this.#recordSubscriptionState(subscription, identity, {
           checkState: {
@@ -655,6 +668,7 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
               (subscription.checkState?.failures ?? 0) + 1,
             ),
             errorCode: code,
+            ...(subscription.checkState?.hasMore ? {hasMore: true} : {}),
             ...(subscription.checkState?.lastNewAt
               ? {lastNewAt: subscription.checkState.lastNewAt}
               : {}),
@@ -682,26 +696,18 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
   }
 
   async #runConnectorSubscription(
-    subscription: Readonly<
-      | ReviewRssSourceSubscription
-      | ReviewJsonApiSourceSubscription
-      | ReviewWebSourceSubscription
-      | ReviewPluginSourceSubscription
-    >,
+    subscription: Readonly<ReviewSourceSubscription>,
     configurationIdentity: string,
     runId: string,
     attemptAt: string,
   ): Promise<Readonly<SourceSubscriptionRunResult>> {
     const connectors = this.#dependencies.connectors;
-    if (connectors === undefined) {
-      throw new SourceSubscriptionServiceError('source_unavailable');
-    }
     const connectorId = connectorIdFor(subscription);
     const sourceLabel = connectorSourceLabel(subscription);
     if (
       subscription.kind === 'plugin' &&
       !connectors
-        .capabilities()
+        ?.capabilities()
         .some(
           (capability) =>
             capability.connectorId === connectorId &&
@@ -711,17 +717,28 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
     ) {
       throw new SourceSubscriptionServiceError('source_unavailable');
     }
-    const read = await connectors.read(connectorId, {
-      subscriptionId: subscription.subscriptionId,
-      configuration: connectorConfiguration(subscription),
-      ...(subscription.cursor === undefined
-        ? {}
-        : {previousCursor: subscription.cursor.connectorCursor}),
-    });
+    let read: Readonly<SourceConnectorReadResult>;
+    if ('repositoryUri' in subscription) {
+      const reader = this.#dependencies.reader;
+      if (!reader.readDirectory)
+        throw new SourceSubscriptionServiceError('source_unavailable');
+      read = await reader.readDirectory(subscription);
+    } else {
+      if (!connectors)
+        throw new SourceSubscriptionServiceError('source_unavailable');
+      read = await connectors.read(connectorId, {
+        subscriptionId: subscription.subscriptionId,
+        configuration: connectorConfiguration(subscription),
+        ...(subscription.cursor === undefined
+          ? {}
+          : {previousCursor: subscription.cursor.connectorCursor}),
+      });
+    }
     if (read.status === 'unchanged') {
       await this.#recordSubscriptionState(subscription, configurationIdentity, {
         checkState: {
           failures: 0,
+          ...(read.hasMore ? {hasMore: true} : {}),
           ...(subscription.checkState?.lastNewAt
             ? {lastNewAt: subscription.checkState.lastNewAt}
             : {}),
@@ -770,6 +787,9 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
         ...(this.#dependencies.evidenceRead
           ? {evidenceRead: this.#dependencies.evidenceRead}
           : {}),
+        ...(this.#dependencies.latestHistorySnapshot
+          ? {latestHistorySnapshot: this.#dependencies.latestHistorySnapshot}
+          : {}),
       },
       {
         workspaceId: this.#dependencies.workspaceId,
@@ -788,10 +808,14 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
           : 'source_import_rejected',
       );
     }
+    const created = imported.documents.filter(
+      (d) => d.outcome === 'created',
+    ).length;
     await this.#recordSubscriptionState(subscription, configurationIdentity, {
       checkState: {
         failures: 0,
-        ...(imported.documents.some((d) => d.outcome === 'created')
+        ...(read.hasMore ? {hasMore: true} : {}),
+        ...(created
           ? {lastNewAt: attemptAt}
           : subscription.checkState?.lastNewAt
             ? {lastNewAt: subscription.checkState.lastNewAt}
@@ -805,7 +829,7 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
     await this.#completeRun(
       runId,
       3,
-      `已保存 ${String(imported.documents.length)} 个${sourceLabel}，等待接收审核`,
+      `新增 ${String(created)} 个${sourceLabel}，已有 ${String(imported.documents.length - created)} 个`,
       imported.documents.length,
       read.documents.length,
     );
@@ -813,12 +837,12 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
       imported.documents.map((document) => document.snapshotId),
     );
     return Object.freeze({
-      outcome: 'imported' as const,
+      outcome: created ? ('imported' as const) : ('unchanged' as const),
       runId,
       subscriptionId: subscription.subscriptionId,
       ...(snapshotIds[0] === undefined ? {} : {snapshotId: snapshotIds[0]}),
       snapshotIds,
-      importedDocumentCount: imported.documents.length,
+      importedDocumentCount: created,
     });
   }
 
@@ -1101,7 +1125,8 @@ function copySourceSubscriptionWithState(
     subscription.kind === 'rss_atom' ||
     subscription.kind === 'json_api' ||
     subscription.kind === 'web' ||
-    subscription.kind === 'plugin'
+    subscription.kind === 'plugin' ||
+    subscription.repositoryPath.endsWith('/')
   ) {
     if (
       state.cursor !== undefined &&
@@ -1200,30 +1225,22 @@ function connectorConfiguration(
 }
 
 function connectorIdFor(
-  subscription: Readonly<
-    | ReviewRssSourceSubscription
-    | ReviewJsonApiSourceSubscription
-    | ReviewWebSourceSubscription
-    | ReviewPluginSourceSubscription
-  >,
+  subscription: Readonly<ReviewSourceSubscription>,
 ): string {
   if (subscription.kind === 'rss_atom') return RSS_ATOM_CONNECTOR_ID;
   if (subscription.kind === 'json_api') return JSON_API_CONNECTOR_ID;
   if (subscription.kind === 'web') return WEB_CONNECTOR_ID;
-  return subscription.connectorId;
+  if (subscription.kind === 'plugin') return subscription.connectorId;
+  return 'builtin.github-directory.v1';
 }
 
 function connectorSourceLabel(
-  subscription: Readonly<
-    | ReviewRssSourceSubscription
-    | ReviewJsonApiSourceSubscription
-    | ReviewWebSourceSubscription
-    | ReviewPluginSourceSubscription
-  >,
+  subscription: Readonly<ReviewSourceSubscription>,
 ): string {
   if (subscription.kind === 'rss_atom') return 'Feed 条目';
   if (subscription.kind === 'json_api') return 'JSON API 记录';
   if (subscription.kind === 'web') return '网页';
+  if (subscription.kind !== 'plugin') return 'Git 文档';
   return '插件来源文档';
 }
 

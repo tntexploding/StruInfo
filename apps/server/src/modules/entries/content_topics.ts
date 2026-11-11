@@ -147,6 +147,7 @@ export type TopicUsage = z.infer<typeof topicUsageSchema>;
 export const topicJobSchema = z
   .object({
     kind: z.literal('job'),
+    publicationId: id.optional(),
     input: topicInputSchema,
     fingerprint: z.string().length(64),
     candidates: z.array(

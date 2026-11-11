@@ -4,6 +4,7 @@ import {
   assertM1eProcessingWorkspace,
   createEmptyM1eProcessingSnapshot,
   M1E_PROCESSING_BUNDLE_SCHEMA,
+  M1E_PROCESSING_VERSION_NINETEEN_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_SEVENTEEN_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_FOURTEEN_BUNDLE_CODEC,
   M1E_PROCESSING_VERSION_FIFTEEN_BUNDLE_CODEC,
@@ -35,6 +36,32 @@ import {
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('M1E processing Bundle section', () => {
+  it('reads v19 organization rows without inventing a batch budget', () => {
+    const upgraded = M1E_PROCESSING_VERSION_NINETEEN_BUNDLE_CODEC.decode({
+      schemaVersion: 'struinfo.m1e-processing.v19',
+      tables: M1E_PROCESSING_TABLES.map((t) => ({
+        name: t.name,
+        rows:
+          t.name === 'document_organization_work'
+            ? [
+                {
+                  workspace_id: WORKSPACE_ID,
+                  publication_id: WORKSPACE_ID,
+                  status: 'pending',
+                  current_version: 1,
+                  error_code: null,
+                  updated_at: '2040-01-01T00:00:00.000Z',
+                },
+              ]
+            : [],
+      })),
+    });
+    expect(
+      normalizeM1eProcessingSnapshot(upgraded).tables.find(
+        (t) => t.name === 'document_organization_work',
+      )?.rows[0]?.budget_id,
+    ).toBeNull();
+  });
   it('upgrades v17 with no topics or task authority', () => {
     const upgraded = M1E_PROCESSING_VERSION_SEVENTEEN_BUNDLE_CODEC.decode({
       schemaVersion: 'struinfo.m1e-processing.v17',

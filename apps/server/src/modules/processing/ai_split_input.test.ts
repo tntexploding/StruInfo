@@ -196,34 +196,37 @@ it('can use exact whole evidence for fragmented charts without invalidating olde
 });
 
 // A long digest must keep independent numbered starts available to the model.
-it('retains item boundaries beyond 128 evidence blocks without enlarging the model packet limit', () => {
-  const texts = ['# Synthetic digest', '## Tools'];
-  for (let item = 1; item <= 30; item++)
-    texts.push(
-      String(item) + '、Synthetic tool',
-      'Purpose.',
-      'Implementation.',
-      'Evidence.',
-      'Limitations.',
-    );
-  let offset = 0;
-  const fragments = texts.map((selectedText, i) => {
-    const f = {
-      fragmentId: String(i),
-      structureId: 's',
-      nodeKind: selectedText.startsWith('#') ? 'heading' : 'paragraph',
-      codePointRange: {start: offset, end: offset + selectedText.length},
-      selectedText,
-    };
-    offset += selectedText.length + 2;
-    return f;
-  });
-  const packets = splitReadingPackets(fragments);
-  expect(fragments.length).toBeGreaterThan(128);
-  expect(packets).toHaveLength(32);
-  expect(packets.slice(2).every((p) => p.length === 5)).toBe(true);
-  expect(packets.flat()).toEqual(fragments);
-});
+it.each(['Synthetic tool', ''])(
+  'retains large-collection boundaries with numbered line content %j',
+  (suffix) => {
+    const texts = ['# Synthetic digest', '## Tools'];
+    for (let item = 1; item <= 30; item++)
+      texts.push(
+        String(item) + '、' + suffix,
+        'Purpose.',
+        'Implementation.',
+        'Evidence.',
+        'Limitations.',
+      );
+    let offset = 0;
+    const fragments = texts.map((selectedText, i) => {
+      const f = {
+        fragmentId: String(i),
+        structureId: 's',
+        nodeKind: selectedText.startsWith('#') ? 'heading' : 'paragraph',
+        codePointRange: {start: offset, end: offset + selectedText.length},
+        selectedText,
+      };
+      offset += selectedText.length + 2;
+      return f;
+    });
+    const packets = splitReadingPackets(fragments);
+    expect(fragments.length).toBeGreaterThan(128);
+    expect(packets).toHaveLength(32);
+    expect(packets.slice(2).every((p) => p.length === 5)).toBe(true);
+    expect(packets.flat()).toEqual(fragments);
+  },
+);
 
 it('keeps unnumbered linked company starts available in a large monthly collection', () => {
   const texts = ['# Synthetic monthly roundup', '## Instruments'];

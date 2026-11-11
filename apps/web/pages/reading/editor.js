@@ -6,7 +6,9 @@ import {
   articles,
   original,
   config,
-  annotations,
+  annotationDraft,
+  entryAt,
+  tagDimensions,
   docLinks,
   saveDraft,
   loadDocument,
@@ -31,41 +33,83 @@ const editorDialog = bindDialog($('#document-editor'), {
     touched = false;
   },
 });
-const split = (value) =>
-  [
-    ...new Set(
-      value
-        .split(/[，,\n、]/)
-        .map((x) => x.trim())
-        .filter(Boolean),
-    ),
-  ].slice(0, 24);
-
 function capture() {
-  if (!context || !fieldChanged) return;
-  fieldChanged = false;
-  if (kind === 'structure')
-    working.starts = [
-      0,
-      ...[...page.root.querySelectorAll('[name="split-start"]:checked')].map(
-        (n) => Number(n.value),
-      ),
-    ];
-  if (kind === 'tags') {
-    if (scope === 'document')
-      working.tags = split($('#document-tags-input').value);
-    else {
-      working.sectionTags = {
-        ...working.sectionTags,
-        [scope]: {
-          domain: $('#tag-domain').value.trim(),
-          subject: $('#tag-subject').value.trim(),
-          purpose: $('#tag-purpose').value.trim(),
+  if (!context || !fieldChanged) return true;
+  try {
+    if (kind === 'structure')
+      working.starts = [
+        0,
+        ...[...page.root.querySelectorAll('[name="split-start"]:checked')].map(
+          (n) => Number(n.value),
+        ),
+      ];
+    if (kind === 'tags' && scope !== 'document') {
+      const entry = entryAt(original(context.id), Number(scope));
+      if (!entry) return;
+      const a = annotationDraft(entry);
+      a.labels = [...page.root.querySelectorAll('[data-tag-row]')].map(
+        (row) => {
+          const val = (name) =>
+            row.querySelector('[name=' + name + ']').value.trim();
+          const dimensionId = val('dimension'),
+            label = val('label'),
+            meaning = val('meaning'),
+            quote = val('quote');
+          const old = a.labels.find(
+            (l) =>
+              l.dimensionId === dimensionId &&
+              l.term.label === label &&
+              l.term.meaning === meaning,
+          );
+          const at = entry.value.body.indexOf(quote);
+          if (!quote && old?.legacy) return old;
+          if (!label || !quote || at < 0)
+            throw new Error('请填写标签，并从本条原文中复制依据。');
+          if (!old && entry.value.body.includes(quote, at + 1))
+            throw new Error('依据重复出现，请复制更完整的原文片段。');
+          const start = Array.from(entry.value.body.slice(0, at)).length;
+          return {
+            dimensionId,
+            term: old?.term || {
+              id: crypto.randomUUID(),
+              dimensionId,
+              label,
+              meaning,
+            },
+            wording: label,
+            primary: old?.primary ?? true,
+            evidence:
+              old?.evidence?.quote === quote
+                ? old.evidence
+                : {start, end: start + Array.from(quote).length, quote},
+          };
         },
-      };
+      );
+      a.status = a.labels.some((l) => l.legacy)
+        ? 'partial'
+        : a.labels.length || a.claims.length
+          ? 'complete'
+          : 'none';
+      working.sectionAnnotations = {...working.sectionAnnotations, [scope]: a};
     }
+    fieldChanged = false;
+    return true;
+  } catch (error) {
+    showEditorError(error);
+    return false;
   }
 }
+function showEditorError(error) {
+  let p = $('#editor-error');
+  if (!p) {
+    p = document.createElement('p');
+    p.id = 'editor-error';
+    p.setAttribute('role', 'alert');
+    $('#editor-fields').prepend(p);
+  }
+  p.textContent = error.message;
+}
+
 function setTabs() {
   for (const button of $('#editor-tabs').querySelectorAll('[role=tab]')) {
     const active = button.dataset.edit === kind;
@@ -102,54 +146,67 @@ function structureFields() {
 }
 function tagsFields() {
   const d = original(context.id);
+  const starts = d.starts || [0];
+  if (scope === 'document' || !starts.includes(Number(scope)))
+    scope = String(starts[0]);
+  const entry = entryAt(d, Number(scope));
   const select =
-    '<label class="editor-field scope-field">标注范围<select id="tag-scope"><option value="document">整篇文档</option>' +
-    d.paragraphs
+    '<label class="editor-field scope-field">条目<select id="tag-scope">' +
+    starts
       .map(
-        (p, i) =>
+        (i) =>
           '<option value="' +
           i +
           '">' +
-          (i + 1) +
-          '. ' +
-          esc(p[0]) +
+          esc(
+            entryAt(d, i)?.value.titlePath ||
+              d.paragraphs[i][0] ||
+              '条目 ' + (i + 1),
+          ) +
           '</option>',
       )
       .join('') +
     '</select></label>';
-  if (scope === 'document')
-    return (
-      select +
-      '<label class="editor-field">文档标签<textarea id="document-tags-input" rows="3" maxlength="600" placeholder="用逗号分隔">' +
-      esc((working.tags || d.tags).join('，')) +
-      '</textarea></label><p class="field-hint">用逗号或换行分隔。重复标签会合并。</p>'
-    );
-  const a = {
-    ...annotations[d.id]?.[Number(scope)],
-    ...working.sectionTags?.[scope],
-  };
+  if (!entry)
+    return select + '<p class="field-hint">请先确认分段，再编辑标签。</p>';
+  const a = working.sectionAnnotations?.[scope] || annotationDraft(entry);
   return (
     select +
-    '<div class="structured-fields">' +
-    [
-      ['domain', '领域', '半导体'],
-      ['subject', '主题', 'HBM、先进封装'],
-      ['purpose', '用途', '理解系统取舍'],
-    ]
+    '<p class="field-hint">文档标签由各条目汇总。新增或修改标签时，请提供本条原文依据。</p><div id="tag-rows">' +
+    a.labels.map((l, i) => tagRow(l, i)).join('') +
+    '</div><button type="button" class="secondary-action" id="add-tag">' +
+    icon('plus') +
+    ' 添加标签</button>'
+  );
+}
+function tagRow(l, i) {
+  return (
+    '<section class="tag-editor-row" data-tag-row><div class="structured-fields"><label class="editor-field">类别<select name="dimension">' +
+    tagDimensions()
       .map(
-        ([key, label, placeholder]) =>
-          '<label class="editor-field">' +
-          label +
-          '<input id="tag-' +
-          key +
-          '" value="' +
-          esc(a[key] || '') +
-          '" maxlength="160" placeholder="' +
-          placeholder +
-          '"></label>',
+        (d) =>
+          '<option value="' +
+          d.id +
+          '" ' +
+          (d.id === l.dimensionId ? 'selected' : '') +
+          '>' +
+          esc(d.name) +
+          '</option>',
       )
       .join('') +
-    '</div>'
+    '</select></label><label class="editor-field">标签<input name="label" maxlength="120" required value="' +
+    esc(l.term.label) +
+    '"></label><label class="editor-field">含义（同名词需区分）<input name="meaning" maxlength="400" value="' +
+    esc(l.term.meaning) +
+    '"></label><label class="editor-field">原文依据<textarea name="quote" rows="2" maxlength="2000" required>' +
+    esc(l.evidence?.quote || '') +
+    '</textarea>' +
+    (l.legacy
+      ? '<small>旧标签迁移，未记录原文依据。修改时请补充。</small>'
+      : '') +
+    '</label></div><button type="button" class="text-button" data-remove-tag="' +
+    i +
+    '">删除标签</button></section>'
   );
 }
 function relationRows() {
@@ -213,8 +270,30 @@ function paint() {
         : relationsFields();
   if (kind === 'tags') {
     $('#tag-scope').value = scope;
+    const add = $('#add-tag');
+    if (add)
+      add.onclick = () => {
+        const el = document.createElement('div');
+        el.innerHTML = tagRow(
+          {term: {label: '', meaning: ''}, evidence: {quote: ''}},
+          0,
+        );
+        $('#tag-rows').append(el.firstChild);
+        touched = fieldChanged = true;
+        $('#tag-rows').lastElementChild.querySelector('[name=label]').focus();
+      };
+    $('#tag-rows')?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-remove-tag]');
+      if (b) {
+        b.closest('[data-tag-row]').remove();
+        touched = fieldChanged = true;
+      }
+    });
     $('#tag-scope').onchange = (e) => {
-      capture();
+      if (!capture()) {
+        e.target.value = scope;
+        return;
+      }
       scope = e.target.value;
       paint();
       $('#tag-scope').focus();
@@ -293,7 +372,7 @@ export async function openEditor(next) {
 $('#editor-tabs').onclick = (e) => {
   const b = e.target.closest('[data-edit]');
   if (!b || b.dataset.edit === kind) return;
-  capture();
+  if (!capture()) return;
   kind = b.dataset.edit;
   paint();
 };
@@ -326,20 +405,13 @@ $('#editor-form').addEventListener('change', () => {
 });
 $('#editor-form').onsubmit = async (e) => {
   e.preventDefault();
-  capture();
   try {
+    if (!capture()) return;
     await saveDraft(context.id, working);
     touched = false;
     editorDialog.close();
     context.onSave();
   } catch (error) {
-    let p = $('#editor-error');
-    if (!p) {
-      p = document.createElement('p');
-      p.id = 'editor-error';
-      p.setAttribute('role', 'alert');
-      $('#editor-fields').prepend(p);
-    }
-    p.textContent = error.message;
+    showEditorError(error);
   }
 };

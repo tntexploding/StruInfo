@@ -1,11 +1,13 @@
+import {loadAnnotationVocabulary} from './annotation_vocabulary.js';
 import {z} from 'zod';
 import {isDeepStrictEqual} from 'node:util';
 import {
-  annotationDraftSchema,
+  storedAnnotationDraftSchema,
   annotationVocabularySchema,
   structuredAnnotationsSchema,
   EMPTY_ANNOTATION_VOCABULARY,
   validateAnnotationEvidence,
+  unifyAnnotationTerms,
 } from '../modules/entries/structured_annotations.js';
 import {
   deriveInformationEntryRevisionId,
@@ -30,7 +32,7 @@ export const annotationCommandSchemas = {
       includePrivate: z.boolean().default(false),
       expectedRevision: z.number().int().positive(),
       vocabularyRevision: z.number().int().min(0),
-      annotation: annotationDraftSchema,
+      annotation: storedAnnotationDraftSchema,
     })
     .strict(),
 };
@@ -64,9 +66,11 @@ export class AnnotationService {
     const parsed = schema.safeParse(input);
     if (!parsed.success)
       throw new OperationError('invalid_input', 'annotation_invalid');
-    const vocabulary =
-      (await this.deps.preferences.load(this.deps.workspaceId))
-        .annotationVocabulary ?? EMPTY_ANNOTATION_VOCABULARY;
+    const vocabulary = await loadAnnotationVocabulary(
+      this.deps.workspaceId,
+      this.deps.preferences,
+      this.deps.entries,
+    );
     authority.require('documents.read');
     if (name === 'annotation_vocabulary') return {vocabulary};
     if (name === 'annotation_vocabulary_save') {
@@ -96,14 +100,29 @@ export class AnnotationService {
             )
           )
             throw new OperationError('rejected', 'annotation_identity_changed');
-          const next = {...request.vocabulary, revision: before.revision + 1};
+          const learnedIds = new Set(
+            vocabulary.terms
+              .filter((t) => !before.terms.some((k) => k.id === t.id))
+              .map((t) => t.id),
+          );
+          const referenced = new Set([
+            ...request.vocabulary.aliases.map((a) => a.termId),
+            ...request.vocabulary.relations.flatMap((r) => [r.from, r.to]),
+          ]);
+          const next = {
+            ...request.vocabulary,
+            terms: request.vocabulary.terms.filter(
+              (t) => !learnedIds.has(t.id) || referenced.has(t.id),
+            ),
+            revision: before.revision + 1,
+          };
           return {
             next: patchReviewPreferences(current, {annotationVocabulary: next}),
             result: next,
           };
         },
       );
-      return {vocabulary: result};
+      return {vocabulary: {...result, terms: request.vocabulary.terms}};
     }
     const request = annotationCommandSchemas.entry_annotations_read
       .loose()
@@ -136,7 +155,29 @@ export class AnnotationService {
       throw new OperationError('conflict', 'stale_entry_revision');
     if (vocabulary.revision !== write.vocabularyRevision)
       throw new OperationError('conflict', 'stale_annotation_vocabulary');
-    const annotation = structuredAnnotationsSchema.parse({
+    const old = entry.value.annotations;
+    const beforeDraft = old
+      ? {
+          status: old.status,
+          note: old.note,
+          readingState: old.readingState,
+          labels: old.labels,
+          claims: old.claims,
+        }
+      : {
+          status: 'partial',
+          note: '',
+          readingState: 'unread',
+          labels: [],
+          claims: [],
+        };
+    const readingOnly =
+      write.annotation.readingState !== beforeDraft.readingState &&
+      isDeepStrictEqual(
+        {...write.annotation, readingState: beforeDraft.readingState},
+        beforeDraft,
+      );
+    let annotation = structuredAnnotationsSchema.parse({
       ...write.annotation,
       schemaVersion: 1,
       dimensions: vocabulary.dimensions,
@@ -150,7 +191,13 @@ export class AnnotationService {
           : 'external-agent-annotations.v1',
     });
     if (
-      !validateAnnotationEvidence(annotation, entry.value.body) ||
+      annotation.labels.some(
+        (label) =>
+          'legacy' in label &&
+          !old?.labels.some((previous) => isDeepStrictEqual(previous, label)),
+      ) ||
+      (!readingOnly &&
+        !validateAnnotationEvidence(annotation, entry.value.body)) ||
       annotation.labels.some((l) =>
         [
           ...vocabulary.terms,
@@ -161,10 +208,30 @@ export class AnnotationService {
       throw new OperationError('invalid_input', 'annotation_evidence_invalid');
     if (
       authority.identity.kind !== 'owner' &&
-      entry.value.annotations?.origin === 'manual'
+      (entry.value.annotations?.origin === 'manual' ||
+        ((!old || old.originVersion === 'reading-state.v1') &&
+          (entry.value.contentKeywords.some((t) => t.origin === 'manual') ||
+            entry.value.domains.some((d) => d.origin === 'manual'))))
     )
       throw new OperationError('conflict', 'manual_annotations_protected');
+    annotation = readingOnly
+      ? old
+        ? {...old, readingState: write.annotation.readingState}
+        : {...annotation, origin: 'rule', originVersion: 'reading-state.v1'}
+      : unifyAnnotationTerms(annotation, vocabulary);
     if (!entry.value.isPrivate) await this.deps.stage(entry.snapshotId);
+    const value = readingOnly
+      ? {...entry.value, annotations: annotation}
+      : {
+          ...entry.value,
+          annotations: annotation,
+          contentKeywords: [],
+          domains: [],
+        };
+    if (!readingOnly) {
+      delete value.typeKeyword;
+      delete value.typeCustomName;
+    }
     const outcome = await this.deps.entries.reviseEntry({
       workspaceId: this.deps.workspaceId,
       entryId: entry.entryId,
@@ -173,7 +240,7 @@ export class AnnotationService {
         entry.entryId,
         entry.revision + 1,
       ),
-      value: {...entry.value, annotations: annotation},
+      value,
     });
     if (outcome === 'stale' || outcome === 'not_found')
       throw new OperationError('conflict', 'stale_entry_revision');

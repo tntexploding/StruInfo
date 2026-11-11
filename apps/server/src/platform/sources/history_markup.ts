@@ -11,6 +11,7 @@ export function nodes(text: string): Tree.Element[] {
   const visit = (node: Node) => {
     if ('tagName' in node) result.push(node);
     if ('childNodes' in node) for (const child of node.childNodes) visit(child);
+    if ('content' in node) visit(node.content);
   };
   visit(parse(text));
   return result;

@@ -259,6 +259,19 @@ describe('M1C local HTTP transport', () => {
     expect(savedQueryResponse.status).toBe(200);
     expectPrivateHttpSecurityHeaders(savedQueryResponse);
     expect(savedQueryResponse.headers.get('cache-control')).toBe('no-store');
+    const aggregationRead = await fetch(
+      base + '/api/v1/entries/aggregations/read',
+      {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({viewId: '11111111-1111-4111-8111-111111111111'}),
+      },
+    );
+    expect(aggregationRead.status).toBe(404);
+    await expect(aggregationRead.json()).resolves.toEqual({
+      status: 'not_found',
+      issue: {code: 'saved_query_not_found'},
+    });
     const savedBody = {
       operation: 'save',
       expectedRevision: 0,
@@ -451,6 +464,13 @@ function stubApi(
       ),
     writeEntrySavedQuery: () =>
       Promise.resolve(result(200, {status: 'applied'})),
+    readEntryAggregation: () =>
+      Promise.resolve(
+        result(404, {
+          status: 'not_found',
+          issue: {code: 'saved_query_not_found'},
+        }),
+      ),
     previewEntryMarkdownExport: () =>
       Promise.resolve(result(200, {status: 'ready'})),
     generateEntryMarkdownExport: () =>
@@ -461,10 +481,8 @@ function stubApi(
       Promise.resolve(result(200, {status: 'applied'})),
     readEntryQueryContext: () =>
       Promise.resolve(result(404, {status: 'not_found'})),
-    loadReviewPreferences: () =>
-      Promise.resolve(result(200, {status: 'ok', quickTags: []})),
-    saveReviewPreferences: () =>
-      Promise.resolve(result(200, {status: 'ok', quickTags: []})),
+    loadRecommendationPreferences: () =>
+      Promise.resolve(result(200, {status: 'ok'})),
     loadInformationEntrySplitRuleProfile: () =>
       Promise.resolve(
         result(200, {
@@ -539,10 +557,17 @@ function stubApi(
       Promise.resolve(result(200, {status: 'applied'})),
     listInformationEntryDocuments: () =>
       Promise.resolve(result(200, {status: 'ok', documents: []})),
-    aggregateInformationDocumentTags: () =>
-      Promise.resolve(result(200, {status: 'applied'})),
-    reviseInformationDocumentTags: () =>
-      Promise.resolve(result(200, {status: 'applied'})),
+    readOverviewSummary: () =>
+      Promise.resolve(
+        result(200, {
+          status: 'ok',
+          documents: 0,
+          entries: 0,
+          tags: 0,
+          pendingCount: 0,
+          recentDocuments: [],
+        }),
+      ),
     listAiTagProposals: () =>
       Promise.resolve(result(200, {status: 'ok', proposals: []})),
     startAiTagProposal: () =>

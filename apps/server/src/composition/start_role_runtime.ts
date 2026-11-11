@@ -1,3 +1,4 @@
+import {loadAnnotationVocabulary} from '../application/annotation_vocabulary.js';
 import {modelUsageScope} from '../platform/ai/model_usage_scope.js';
 import {SystemAssistant} from '../application/system_assistant.js';
 import {createAssistantCommandTools} from '../application/assistant_tools.js';
@@ -10,17 +11,21 @@ import {ReportPipeline} from '../application/report_pipeline.js';
 import {PostgresResearchRepository} from '../platform/database/postgresql/postgres_research_repository.js';
 import {DeepSeekSearchProvider} from '../platform/ai/deepseek_search_provider.js';
 import {AiWorkQueue} from '../application/ai_work_queue.js';
-import {matchesAnnotationFilter} from '../modules/entries/structured_annotations.js';
+import {
+  matchesAnnotationFilter,
+  annotationRecallAliases,
+} from '../modules/entries/structured_annotations.js';
 import {TopicService} from '../application/topic_service.js';
 import {PostgresTopicRepository} from '../platform/database/postgresql/postgres_topic_repository.js';
 import {ResponsesTopicProvider} from '../platform/ai/responses_topic_provider.js';
 import {AnnotationService} from '../application/annotation_service.js';
-import {EMPTY_ANNOTATION_VOCABULARY} from '../modules/entries/structured_annotations.js';
 import {SourceHistoryService} from '../application/source_history_service.js';
+import {SourceHistoryCheckpoint} from '../storage/source_history_checkpoint.js';
 import {SourceDescriptionService} from '../application/source_description_service.js';
 import {SourceSplitService} from '../application/source_split_service.js';
 import {SourceDescriptionReader} from '../platform/sources/source_description_reader.js';
 import {PublicSourceHistoryReader} from '../platform/sources/source_history_reader.js';
+import {McpSourceConnector} from '../platform/sources/mcp_source_connector.js';
 import {importSourceConnectorDocuments} from '../modules/subscriptions/source_connector.js';
 import {
   DEFAULT_SOURCE_RECEIVING,
@@ -31,7 +36,6 @@ import {PostgresDocumentPublicationRepository} from '../platform/database/postgr
 import {
   DocumentPublicationService,
   publishedEntryRepository,
-  unpublishedSnapshots,
 } from '../application/document_publication.js';
 import {InboxPreviewService} from '../application/inbox_preview_service.js';
 import {ReportService} from '../application/report_service.js';
@@ -236,6 +240,8 @@ export async function startRoleRuntime(
       ? undefined
       : new AiSplitProposalService({
           workspaceId: config.workspaceId,
+          sourceEntryLimit: async (snapshotId): Promise<number | undefined> =>
+            (await sourceSplit.freeze(snapshotId)).sourceEntryLimit,
           blobStore: storage.blobStore,
           evidence: repositories.evidenceRead,
           entries: repositories.informationEntries,
@@ -245,6 +251,12 @@ export async function startRoleRuntime(
             modelFetch,
           ),
         });
+  const annotationVocabulary = () =>
+    loadAnnotationVocabulary(
+      config.workspaceId,
+      storage.reviewPreferences,
+      repositories.informationEntries,
+    );
   const aiTagProposals =
     config.aiProposalProvider === undefined
       ? undefined
@@ -255,9 +267,7 @@ export async function startRoleRuntime(
           provider: new ResponsesEntryTagProvider(
             config.aiProposalProvider,
             modelFetch,
-            async () =>
-              (await storage.reviewPreferences.load(config.workspaceId))
-                .annotationVocabulary ?? EMPTY_ANNOTATION_VOCABULARY,
+            annotationVocabulary,
           ),
         });
   const aiAssociationProposals =
@@ -273,9 +283,11 @@ export async function startRoleRuntime(
             modelFetch,
           ),
         });
-  const confirmedEntryAliases = async () =>
-    (await storage.reviewPreferences.load(config.workspaceId)).vocabulary
-      ?.aliases ?? [];
+  const confirmedEntryAliases = async () => [
+    ...annotationRecallAliases(await annotationVocabulary()),
+    ...((await storage.reviewPreferences.load(config.workspaceId)).vocabulary
+      ?.aliases ?? []),
+  ];
   const agentTaskRepository = new PostgresAgentTaskRepository(database.pool);
   const documentIntakeRepository = new PostgresDocumentIntakeRepository(
     database.pool,
@@ -287,19 +299,10 @@ export async function startRoleRuntime(
   );
   const knowledgeEntries = publishedEntryRepository(
     repositories.informationEntries,
-    async (entries) => {
-      const [records, tasks] = await Promise.all([
-        documentIntakeRepository.list(),
-        agentTaskRepository.listPublicationTasks(config.workspaceId),
-      ]);
-      return unpublishedSnapshots(records, tasks, entries);
-    },
     documentPublications,
   );
   const informationEntryRetrieval = new InformationEntryRetrievalService({
-    annotationVocabulary: async () =>
-      (await storage.reviewPreferences.load(config.workspaceId))
-        .annotationVocabulary ?? EMPTY_ANNOTATION_VOCABULARY,
+    annotationVocabulary: annotationVocabulary,
     aliases: confirmedEntryAliases,
     workspaceId: config.workspaceId,
     entries: knowledgeEntries,
@@ -434,9 +437,7 @@ export async function startRoleRuntime(
     entries: knowledgeEntries,
     associations: repositories.informationEntryAssociations,
     publications: documentPublications,
-    vocabulary: async () =>
-      (await storage.reviewPreferences.load(config.workspaceId))
-        .annotationVocabulary ?? EMPTY_ANNOTATION_VOCABULARY,
+    vocabulary: annotationVocabulary,
     checkModelCall: () => aiPrice.assertBackgroundAllowed(),
     executionSettings: () => aiPrice.executionSettings(),
     ...(config.aiProposalProvider
@@ -505,9 +506,7 @@ export async function startRoleRuntime(
       const confirmed = request.cutoff
         ? await documentPublications.confirmationTimes()
         : new Map<string, string>();
-      const vocab =
-        (await storage.reviewPreferences.load(config.workspaceId))
-          .annotationVocabulary ?? EMPTY_ANNOTATION_VOCABULARY;
+      const vocab = await annotationVocabulary();
       const topicRows = request.topicIds?.length
         ? await topicRepository.list('topic')
         : [];
@@ -578,6 +577,7 @@ export async function startRoleRuntime(
     config.workspaceId,
     agentTaskRepository,
     new AgentTaskActions({
+      vocabulary: annotationVocabulary,
       sourceSplit,
       publication,
       knowledgeEntries,
@@ -599,6 +599,8 @@ export async function startRoleRuntime(
     (task) => ingestion.guard(task),
     {
       check: () => aiPrice.assertBackgroundAllowed(),
+      withBudget: (batchId, run) => modelUsageScope.run({batchId}, run),
+      currentBudgetId: async () => (await usageJournal.budgetStatus())?.batchId,
       executionSettings: () => aiPrice.executionSettings(),
       checkOperations: () => aiPrice.assertBackgroundOperationsAllowed(),
       canResume: async (task) =>
@@ -632,12 +634,20 @@ export async function startRoleRuntime(
       new RssAtomSourceConnector(),
       new JsonApiSourceConnector(),
       new WebSourceConnector(),
+      new McpSourceConnector(),
       ...(dependencies.sourceConnectors ?? []),
     ]),
     blobStore: storage.blobStore,
     evidence: repositories.evidence,
     evidenceForSubscription: (subscriptionId, reception) =>
       captureRepository({kind: 'subscription', subscriptionId}, reception),
+    latestHistorySnapshot: async (sourceId, uri) => {
+      const [receipt] = await documentIntakeRepository.publicSourceReceipts(
+        [sourceId],
+        uri,
+      );
+      return receipt?.channel === 'history' ? receipt.snapshotId : undefined;
+    },
     pendingCounts: () => ingestionRepository.pendingSourceCounts(),
     evidenceRead: repositories.evidenceRead,
   });
@@ -653,7 +663,6 @@ export async function startRoleRuntime(
         agentTasks.start(automationAuthority, ingestionTaskKey(snapshotId), {
           kind: 'document',
           snapshotId,
-          maxEntries: policy.settings.maxEntries,
           maxModelCalls: policy.settings.maxModelCalls,
           intake: policy.settings.intake ?? {fetchFullText: true},
         }),
@@ -684,6 +693,8 @@ export async function startRoleRuntime(
     starters.push(() =>
       Promise.resolve(
         new IngestionScheduler(async () => {
+          if (config.role === 'api' || config.role === 'all')
+            sourceHistory.poll();
           if (config.role !== 'api') await ingestion.poll();
           await agentTasks.pollPriceDeferred();
           await reports.pollPriceDeferred();
@@ -713,6 +724,7 @@ export async function startRoleRuntime(
   const api =
     config.role === 'api' || config.role === 'all'
       ? new M1cApiService({
+          aggregationTopics: topicRepository,
           documentIntakeRepository,
           workspaceId: config.workspaceId,
           blobStore: storage.blobStore,
@@ -765,9 +777,7 @@ export async function startRoleRuntime(
       repositories.informationEntryAssociations,
     informationEntryRetrieval,
     entryAliases: confirmedEntryAliases,
-    annotationVocabulary: async () =>
-      (await storage.reviewPreferences.load(config.workspaceId))
-        .annotationVocabulary ?? EMPTY_ANNOTATION_VOCABULARY,
+    annotationVocabulary: annotationVocabulary,
     reviewPreferences: storage.reviewPreferences,
     entryTranslationSearch: repositories.entryTranslations,
   };
@@ -834,24 +844,104 @@ export async function startRoleRuntime(
       repositories.evidenceRead.listSnapshots(config.workspaceId),
   });
   const sourceHistory = new SourceHistoryService({
-    receiptSources: async () =>
-      new Map(
-        (await documentIntakeRepository.list()).flatMap((record) =>
-          record.value.captureOrigin?.kind === 'subscription'
-            ? [
-                [
-                  record.snapshotId,
-                  record.value.captureOrigin.subscriptionId,
-                ] as const,
-              ]
-            : [],
+    tasks: {
+      limits: async () => {
+        const [price, policy, budget] = await Promise.all([
+          aiPrice.status(),
+          ingestionRepository.policy(),
+          usageJournal.budgetStatus(),
+        ]);
+        return {
+          model: config.aiProposalProvider?.model ?? '',
+          allowed:
+            price.policy.operationsAllowed !== false &&
+            !price.policy.backgroundPaused &&
+            !price.blocked,
+          concurrency: price.policy.maxConcurrentRequests ?? 1,
+          maxModelCalls: policy.settings.maxModelCalls,
+          budget,
+        };
+      },
+      receipt: (id) => documentIntakeRepository.read(id),
+      tasks: (id) =>
+        agentTasks.list(ExecutionAuthority.owner(config.workspaceId), [id]),
+      read: (id) =>
+        agentTasks.read(ExecutionAuthority.owner(config.workspaceId), id),
+      start: async (key, request) => {
+        const policy = await ingestionRepository.policy();
+        return agentTasks.start(
+          ExecutionAuthority.owner(config.workspaceId),
+          key,
+          {
+            ...request,
+            intake: {
+              ...(policy.settings.intake ?? {
+                blockedKinds: ['promotion', 'event_notice', 'update_notice'],
+              }),
+              fetchFullText: false,
+            },
+          },
+        );
+      },
+      control: (task, action) =>
+        agentTasks.control(
+          ExecutionAuthority.owner(config.workspaceId),
+          task.taskId,
+          task.version,
+          action,
         ),
-      ),
+    },
+    onCheckpointError: () => {
+      logger.write('error', 'history_checkpoint_failed');
+    },
+    documentProgress: async (refs) => {
+      const other = refs.filter((r) => !r.taskId).map((r) => r.id);
+      const jobs = other.length
+        ? await agentTaskRepository.list(config.workspaceId, other)
+        : [];
+      return new Map(
+        await Promise.all(
+          refs.map(async ({id, taskId}) => {
+            const value = (await documentIntakeRepository.read(id))?.value;
+            const task = taskId
+              ? await agentTaskRepository.read(config.workspaceId, taskId)
+              : jobs.find(
+                  (j) =>
+                    j.request.kind === 'document' &&
+                    j.request.snapshotId === id &&
+                    !j.state.supersededBy,
+                );
+            return [
+              id,
+              {
+                receipt: value?.receipt,
+                decision: value?.decision,
+                publishedEntries:
+                  value?.publication && !value.publication.draft
+                    ? value.publication.entries.length
+                    : undefined,
+                phase: task?.state.phase,
+                status: task?.state.status,
+                errorCode: task?.state.errorCode,
+                calls: task?.state.calls,
+                entryLimit:
+                  task?.request.kind === 'document'
+                    ? task.request.maxEntries
+                    : undefined,
+              },
+            ] as const;
+          }),
+        ),
+      );
+    },
+    checkpoint: new SourceHistoryCheckpoint(
+      config.dataRoot + '/source-history/' + config.workspaceId,
+    ),
+    publicReceipts: (sourceIds) =>
+      documentIntakeRepository.publicSourceReceipts(sourceIds),
     sources: async () => (await sourceSubscriptions.list()).subscriptions,
-    snapshots: () =>
-      repositories.evidenceRead.listSnapshots(config.workspaceId),
     reader: new PublicSourceHistoryReader(),
-    importArticle: async (source, document) => {
+    importArticle: async (source, document, historyImportKey) => {
       const result = await importSourceConnectorDocuments(
         {
           blobStore: storage.blobStore,
@@ -866,6 +956,7 @@ export async function startRoleRuntime(
                   reviewOnly: true,
                   reception: {
                     channel: 'history',
+                    historyImportKey,
                     strategy: source.receiving ?? DEFAULT_SOURCE_RECEIVING,
                   },
                 },
@@ -1018,6 +1109,7 @@ export async function startRoleRuntime(
       drain: async () => {
         await Promise.all([
           agentTasks.drain(),
+          sourceHistory.drain(),
           reports.drain(),
           topics.drain(),
           assistantHttp?.service.settle(),

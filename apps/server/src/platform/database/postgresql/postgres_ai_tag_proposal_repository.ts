@@ -664,13 +664,17 @@ async function loadTagPayloads(
       expectedEntryRevision: integer(row.expected_entry_revision, 1),
       providerModel: text(row.provider_model),
       promptVersion: text(row.prompt_version),
-      contentKeywords: Object.freeze(keywords.get(proposalId) ?? []),
-      typeKeyword: enumValue(row.type_keyword, ENTRY_TYPE_KEYWORDS),
-      ...(typeCustomName === undefined ? {} : {typeCustomName}),
-      domains: Object.freeze(domains.get(proposalId) ?? []),
+      ...(row.type_keyword == null
+        ? {}
+        : {
+            contentKeywords: Object.freeze(keywords.get(proposalId) ?? []),
+            typeKeyword: enumValue(row.type_keyword, ENTRY_TYPE_KEYWORDS),
+            ...(typeCustomName === undefined ? {} : {typeCustomName}),
+            domains: Object.freeze(domains.get(proposalId) ?? []),
+          }),
     });
-    assertProcessingTagProposalPayload(payload);
-    result.set(proposalId, payload);
+    assertProcessingTagProposalPayload(payload as ProcessingTagProposalPayload);
+    result.set(proposalId, payload as ProcessingTagProposalPayload);
   }
   return result;
 }
@@ -707,8 +711,8 @@ async function insertTagPayload(
         payload.expectedEntryRevision,
         payload.providerModel,
         payload.promptVersion,
-        payload.typeKeyword,
-        payload.typeCustomName ?? null,
+        'typeKeyword' in payload ? payload.typeKeyword : null,
+        'typeCustomName' in payload ? (payload.typeCustomName ?? null) : null,
       ])
     ).rowCount,
   );
@@ -717,6 +721,7 @@ async function insertTagPayload(
       'INSERT INTO struinfo.processing_tag_annotation_payload (workspace_id, proposal_id, value_text) VALUES ($1, $2, $3)',
       [workspaceId, proposalId, JSON.stringify(payload.annotations)],
     );
+  if (!('contentKeywords' in payload)) return;
   for (const [ordinal, keyword] of payload.contentKeywords.entries()) {
     if (
       informationEntrySearchKey(keyword.displayValue) !==

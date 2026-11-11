@@ -342,19 +342,6 @@ export async function mount() {
         return false;
       }
     }
-    if (dialogId === 'keywords') {
-      if (
-        lines(dialogDraft.quickTags).length > 24 ||
-        lines(dialogDraft.excludedKeywords).length > 64 ||
-        [
-          ...lines(dialogDraft.quickTags),
-          ...lines(dialogDraft.excludedKeywords),
-        ].some((s) => Array.from(s).length > 120)
-      ) {
-        announce('快捷标签最多 24 个，排除词最多 64 个，每项最多 120 字。');
-        return false;
-      }
-    }
     return true;
   }
   $('#dialog-form').addEventListener('submit', async (ev) => {

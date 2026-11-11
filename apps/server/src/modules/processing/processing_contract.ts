@@ -71,6 +71,15 @@ export interface ProcessingSplitProposalEntry {
   }>[];
 }
 
+export type ProcessingTagProposalPayload =
+  | LegacyProcessingTagProposalPayload
+  | Readonly<{
+      annotations: StructuredAnnotations;
+      expectedEntryRevision: number;
+      providerModel: string;
+      promptVersion: string;
+    }>;
+
 /** Closed payload for one explicitly selected public Snapshot. */
 export interface ProcessingSplitProposalPayload {
   readonly providerModel: string;
@@ -101,7 +110,7 @@ export interface ProcessingTagProposalDomain {
 }
 
 /** Closed product payload for the first provider-backed proposal kind. */
-export interface ProcessingTagProposalPayload {
+export interface LegacyProcessingTagProposalPayload {
   readonly annotations?: StructuredAnnotations;
   readonly expectedEntryRevision: number;
   readonly providerModel: string;

@@ -29,12 +29,13 @@ const storedIngestionSettingsObject = z
   })
   .strict();
 export const ingestionSettingsSchema = storedIngestionSettingsObject
-  .omit({maxRelations: true, maxRelationCandidates: true})
+  .omit({maxEntries: true, maxRelations: true, maxRelationCandidates: true})
   .refine((s) => new Set(s.subscriptionIds).size === s.subscriptionIds.length);
 /** Earlier personal policies cannot restore the retired relation stage. */
 export function decodeStoredIngestionSettings(input: unknown) {
   const old = storedIngestionSettingsObject.parse(input);
   const current = {...old} as Partial<typeof old>;
+  delete current.maxEntries;
   delete current.maxRelations;
   delete current.maxRelationCandidates;
   return ingestionSettingsSchema.parse(current);

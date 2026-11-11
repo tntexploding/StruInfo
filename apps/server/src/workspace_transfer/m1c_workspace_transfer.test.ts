@@ -134,10 +134,7 @@ describe('M1C workspace transfer', () => {
     expect(serialized).toContain('"contentWeight":50');
     expect(serialized).toContain('"explorationPolicy"');
     expect(serialized).toContain('"resultShare":30');
-    expect(serialized).toContain('"entryPreferenceProfile"');
-    expect(serialized).toContain('"featureIdentity":"postgresql"');
-    expect(serialized).toContain('"entryAutomationPolicy"');
-    expect(serialized).toContain('"maximumEntriesPerRun":25');
+
     expect(new TextDecoder().decode(storedBytes)).toContain(
       'struinfo.m1d-entry',
     );
@@ -790,44 +787,6 @@ function memoryReviewPreferences(): ReviewPreferencesStore {
       serendipity: true,
     },
     undefined,
-    {
-      revision: 2,
-      enabled: true,
-      rules: [
-        {
-          ruleId: '77777777-7777-4777-8777-777777777777',
-          dimension: 'usefulness',
-          featureKind: 'content_keyword',
-          featureIdentity: 'postgresql',
-          displayValue: 'PostgreSQL',
-          effect: 'prefer',
-          weight: 5,
-        },
-      ],
-    },
-    {
-      revision: 3,
-      enabled: true,
-      paused: false,
-      profileRevision: 2,
-      minimumMatchedRuleCount: 1,
-      advanceThresholds: {
-        usefulness: 4,
-        interest: 3,
-        requiredDimensions: 1,
-      },
-      deferThresholds: {
-        usefulness: 4,
-        interest: 3,
-        requiredDimensions: 1,
-      },
-      budgets: {
-        maximumEntriesPerRun: 25,
-        maximumAdvanceCandidatesPerRun: 5,
-        maximumDeferCandidatesPerRun: 5,
-      },
-      failureMode: 'pause',
-    },
   );
   return {
     load(workspaceId) {
@@ -843,10 +802,7 @@ function memoryReviewPreferences(): ReviewPreferencesStore {
       associationPolicy,
       explorationPolicy,
       sourceSubscriptions,
-      entryPreferenceProfile,
-      entryAutomationPolicy,
       entrySplitRuleProfile,
-      entryClassificationProfile,
       entrySavedQueries,
     ) {
       if (workspaceId !== WORKSPACE_ID)
@@ -859,10 +815,7 @@ function memoryReviewPreferences(): ReviewPreferencesStore {
         associationPolicy,
         explorationPolicy,
         sourceSubscriptions,
-        entryPreferenceProfile,
-        entryAutomationPolicy,
         entrySplitRuleProfile,
-        entryClassificationProfile,
         entrySavedQueries,
       );
       return Promise.resolve(preferences);

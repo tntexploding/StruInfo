@@ -26,22 +26,13 @@ import {
 import {randomUUID} from 'node:crypto';
 import {lstat, readFile, rename, unlink, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
-
 import {
   decodeEntrySplitRuleProfile,
   DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
   type EntrySplitRuleProfile,
 } from '../../modules/entries/information_entry_split_rule.js';
 import {
-  decodeEntryClassificationProfile,
-  DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
-  type EntryClassificationProfile,
-} from '../../modules/entries/information_entry_deterministic_classification.js';
-
-import {
   createReviewPreferences,
-  decodeEntryAutomationPolicy,
-  decodeEntryPreferenceProfile,
   decodeReviewAssociationPolicyPreferences,
   decodeReviewAutomaticKeywordPreferences,
   decodeReviewExplorationPolicyPreferences,
@@ -49,8 +40,6 @@ import {
   decodeReviewQuickTags,
   decodeReviewVocabularyPreferences,
   DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
-  DEFAULT_ENTRY_AUTOMATION_POLICY,
-  DEFAULT_ENTRY_PREFERENCE_PROFILE,
   DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
   DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
   DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
@@ -58,8 +47,6 @@ import {
   REVIEW_PREFERENCES_VERSION,
   ReviewPreferencesStoreError,
   type ReviewPreferences,
-  type EntryAutomationPolicy,
-  type EntryPreferenceProfile,
   type ReviewAssociationPolicyPreferences,
   type ReviewAutomaticKeywordPreferences,
   type ReviewExplorationPolicyPreferences,
@@ -139,10 +126,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     associationPolicy?: Readonly<ReviewAssociationPolicyPreferences>,
     explorationPolicy?: Readonly<ReviewExplorationPolicyPreferences>,
     sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences> = DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
-    entryPreferenceProfile: Readonly<EntryPreferenceProfile> = DEFAULT_ENTRY_PREFERENCE_PROFILE,
-    entryAutomationPolicy: Readonly<EntryAutomationPolicy> = DEFAULT_ENTRY_AUTOMATION_POLICY,
     entrySplitRuleProfile: Readonly<EntrySplitRuleProfile> = DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
-    entryClassificationProfile: Readonly<EntryClassificationProfile> = DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
     entrySavedQueries: Readonly<EntrySavedQueries> = DEFAULT_ENTRY_SAVED_QUERIES,
     uiPreferences: Readonly<WorkspaceUiPreferences> = DEFAULT_WORKSPACE_UI_PREFERENCES,
     aiPricePolicy: Readonly<AiPricePolicy> = DEFAULT_AI_PRICE_POLICY,
@@ -162,10 +146,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
         associationPolicy,
         explorationPolicy,
         sourceSubscriptions,
-        entryPreferenceProfile,
-        entryAutomationPolicy,
         entrySplitRuleProfile,
-        entryClassificationProfile,
         entrySavedQueries,
         uiPreferences,
         aiPricePolicy,
@@ -246,11 +227,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       preferences.explorationPolicy,
       preferences.sourceSubscriptions ??
         DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES,
-      preferences.entryPreferenceProfile ?? DEFAULT_ENTRY_PREFERENCE_PROFILE,
-      preferences.entryAutomationPolicy ?? DEFAULT_ENTRY_AUTOMATION_POLICY,
       preferences.entrySplitRuleProfile ?? DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
-      preferences.entryClassificationProfile ??
-        DEFAULT_ENTRY_CLASSIFICATION_PROFILE,
       preferences.entrySavedQueries ?? DEFAULT_ENTRY_SAVED_QUERIES,
       preferences.uiPreferences ?? DEFAULT_WORKSPACE_UI_PREFERENCES,
       preferences.aiPricePolicy ?? DEFAULT_AI_PRICE_POLICY,
@@ -267,10 +244,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     associationPolicy: Readonly<ReviewAssociationPolicyPreferences> | undefined,
     explorationPolicy: Readonly<ReviewExplorationPolicyPreferences> | undefined,
     sourceSubscriptions: Readonly<ReviewSourceSubscriptionPreferences>,
-    entryPreferenceProfile: Readonly<EntryPreferenceProfile>,
-    entryAutomationPolicy: Readonly<EntryAutomationPolicy>,
     entrySplitRuleProfile: Readonly<EntrySplitRuleProfile>,
-    entryClassificationProfile: Readonly<EntryClassificationProfile>,
     entrySavedQueries: Readonly<EntrySavedQueries>,
     uiPreferences: Readonly<WorkspaceUiPreferences>,
     aiPricePolicy: Readonly<AiPricePolicy>,
@@ -300,17 +274,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
         : decodeReviewExplorationPolicyPreferences(explorationPolicy);
     const decodedSourceSubscriptions =
       decodeReviewSourceSubscriptionPreferences(sourceSubscriptions);
-    const decodedEntryPreferenceProfile = decodeEntryPreferenceProfile(
-      entryPreferenceProfile,
-    );
-    const decodedEntryAutomationPolicy = decodeEntryAutomationPolicy(
-      entryAutomationPolicy,
-    );
     const decodedEntrySplitRuleProfile = decodeEntrySplitRuleProfile(
       entrySplitRuleProfile,
-    );
-    const decodedEntryClassificationProfile = decodeEntryClassificationProfile(
-      entryClassificationProfile,
     );
     if (
       decodedUi === undefined ||
@@ -323,10 +288,7 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       (explorationPolicy !== undefined &&
         decodedExplorationPolicy === undefined) ||
       decodedSourceSubscriptions === undefined ||
-      decodedEntryPreferenceProfile === undefined ||
-      decodedEntryAutomationPolicy === undefined ||
-      decodedEntrySplitRuleProfile === undefined ||
-      decodedEntryClassificationProfile === undefined
+      decodedEntrySplitRuleProfile === undefined
     ) {
       throw invalid();
     }
@@ -338,18 +300,23 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
       decodedAssociationPolicy,
       decodedExplorationPolicy,
       decodedSourceSubscriptions,
-      decodedEntryPreferenceProfile,
-      decodedEntryAutomationPolicy,
       decodedEntrySplitRuleProfile,
-      decodedEntryClassificationProfile,
       savedQueries,
       decodedUi,
       decodedPrice.data,
       recipes.data,
       annotations.data,
     );
+    const serialized = {...preferences} as Record<string, unknown>;
+    if (!preferences.quickTags.length) delete serialized.quickTags;
+    if (!preferences.vocabulary?.aliases.length) delete serialized.vocabulary;
+    if (
+      !preferences.automaticKeywords?.enabled &&
+      !preferences.automaticKeywords?.excludedKeywords.length
+    )
+      delete serialized.automaticKeywords;
     const bytes = new TextEncoder().encode(
-      `${JSON.stringify(preferences, undefined, 2)}\n`,
+      `${JSON.stringify(serialized, undefined, 2)}\n`,
     );
     if (bytes.byteLength > MAXIMUM_PREFERENCES_FILE_BYTES) throw invalid();
     const temporaryPath = join(
@@ -431,11 +398,11 @@ function decodePreferences(
       ? DEFAULT_ENTRY_SAVED_QUERIES
       : decodeEntrySavedQueries(value.entrySavedQueries);
   if (savedQueries === undefined) throw invalid();
-  const quickTags = decodeReviewQuickTags(value.quickTags);
+  const quickTags = decodeReviewQuickTags(value.quickTags ?? []);
   if (quickTags === undefined) throw invalid();
   const automaticKeywords =
     value.automaticKeywords === undefined
-      ? DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES
+      ? {...DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES, enabled: false}
       : decodeReviewAutomaticKeywordPreferences(value.automaticKeywords);
   if (automaticKeywords === undefined) throw invalid();
   const vocabulary =
@@ -455,22 +422,10 @@ function decodePreferences(
     value.sourceSubscriptions === undefined
       ? DEFAULT_REVIEW_SOURCE_SUBSCRIPTION_PREFERENCES
       : decodeReviewSourceSubscriptionPreferences(value.sourceSubscriptions);
-  const entryPreferenceProfile =
-    value.entryPreferenceProfile === undefined
-      ? DEFAULT_ENTRY_PREFERENCE_PROFILE
-      : decodeEntryPreferenceProfile(value.entryPreferenceProfile);
-  const entryAutomationPolicy =
-    value.entryAutomationPolicy === undefined
-      ? DEFAULT_ENTRY_AUTOMATION_POLICY
-      : decodeEntryAutomationPolicy(value.entryAutomationPolicy);
   const entrySplitRuleProfile =
     value.entrySplitRuleProfile === undefined
       ? DEFAULT_ENTRY_SPLIT_RULE_PROFILE
       : decodeEntrySplitRuleProfile(value.entrySplitRuleProfile);
-  const entryClassificationProfile =
-    value.entryClassificationProfile === undefined
-      ? DEFAULT_ENTRY_CLASSIFICATION_PROFILE
-      : decodeEntryClassificationProfile(value.entryClassificationProfile);
   if (
     value.associationPolicy !== undefined &&
     associationPolicy === undefined
@@ -480,10 +435,7 @@ function decodePreferences(
   if (
     explorationPolicy === undefined ||
     sourceSubscriptions === undefined ||
-    entryPreferenceProfile === undefined ||
-    entryAutomationPolicy === undefined ||
-    entrySplitRuleProfile === undefined ||
-    entryClassificationProfile === undefined
+    entrySplitRuleProfile === undefined
   )
     throw invalid();
   return createReviewPreferences(
@@ -494,10 +446,7 @@ function decodePreferences(
     associationPolicy,
     explorationPolicy,
     sourceSubscriptions,
-    entryPreferenceProfile,
-    entryAutomationPolicy,
     entrySplitRuleProfile,
-    entryClassificationProfile,
     savedQueries,
     uiPreferences,
     price.data,

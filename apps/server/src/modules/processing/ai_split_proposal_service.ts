@@ -43,6 +43,7 @@ export type AiSplitProposalServiceErrorCode =
   | 'ai_proposal_not_found'
   | 'ai_proposal_invalid'
   | 'ai_proposal_terminal'
+  | 'entry_budget_exceeded'
   | 'stale_split_materialization';
 
 export class AiSplitProposalServiceError extends Error {
@@ -77,6 +78,7 @@ export interface AiSplitProposalServicePort {
   accept(
     snapshotId: string,
     proposalId: string,
+    options?: {maxEntries?: number; beforeWrite?: () => Promise<void>},
   ): Promise<Readonly<AiSplitProposalDecisionResult>>;
   reject(
     snapshotId: string,
@@ -84,6 +86,9 @@ export interface AiSplitProposalServicePort {
   ): Promise<Readonly<AiSplitProposalDecisionResult>>;
 }
 export interface AiSplitProposalServiceDependencies {
+  readonly sourceEntryLimit?: (
+    snapshotId: string,
+  ) => Promise<number | undefined>;
   readonly workspaceId: string;
   readonly blobStore: BlobStore;
   readonly evidence: EvidenceReadRepositoryPort;
@@ -265,8 +270,12 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
       throw new AiSplitProposalServiceError('ai_run_invalid_state');
     return Object.freeze({outcome: 'created' as const, run});
   }
-  public accept(snapshotId: string, proposalId: string) {
-    return this.#decide(snapshotId, proposalId, 'accepted');
+  public accept(
+    snapshotId: string,
+    proposalId: string,
+    options?: {maxEntries?: number; beforeWrite?: () => Promise<void>},
+  ) {
+    return this.#decide(snapshotId, proposalId, 'accepted', options);
   }
   public reject(snapshotId: string, proposalId: string) {
     return this.#decide(snapshotId, proposalId, 'rejected');
@@ -275,6 +284,7 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
     snapshotId: string,
     proposalId: string,
     decision: 'accepted' | 'rejected',
+    options?: {maxEntries?: number; beforeWrite?: () => Promise<void>},
   ) {
     const proposal = (await this.listForSnapshot(snapshotId)).find(
       (candidate) => candidate.proposalId === proposalId,
@@ -311,6 +321,11 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
     const payload = proposal.splitPayload;
     if (payload === undefined)
       throw new AiSplitProposalServiceError('ai_proposal_invalid');
+    const limit =
+      options?.maxEntries ??
+      (await this.#dependencies.sourceEntryLimit?.(snapshotId));
+    if (limit !== undefined && payload.entries.length > limit)
+      throw new AiSplitProposalServiceError('entry_budget_exceeded');
     const snapshot = await this.#loadPublicSnapshot(snapshotId);
     const materialized = await materializeEvidenceSnapshot(
       snapshot,
@@ -322,6 +337,7 @@ export class AiSplitProposalService implements AiSplitProposalServicePort {
     );
     if (rows === undefined || rows.length === 0)
       throw new AiSplitProposalServiceError('ai_proposal_invalid');
+    await options?.beforeWrite?.();
     const persisted =
       await this.#dependencies.entries.materializeEntriesIfSnapshotEmpty(rows);
     if (persisted.outcome === 'snapshot_not_empty')

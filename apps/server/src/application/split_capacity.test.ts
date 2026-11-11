@@ -1,11 +1,15 @@
 import {describe, expect, it, vi} from 'vitest';
 import {
   agentTaskRequestSchema,
+  storedAgentTaskRequestSchema,
   agentTaskStateSchema,
   type AgentTask,
   type AgentTaskStep,
 } from './agent_task_contract.js';
-import {ingestionSettingsSchema} from './ingestion_contract.js';
+import {
+  decodeStoredIngestionSettings,
+  ingestionSettingsSchema,
+} from './ingestion_contract.js';
 import {
   AgentTaskActions,
   type AgentTaskActionsDependencies,
@@ -48,13 +52,15 @@ function splitProposal(count = 64, fragments = 128): ProcessingProposal {
   };
 }
 describe('split capacity across durable task and proposal boundaries', () => {
-  it('accepts 64-entry task/policy limits without changing old or omitted budgets', () => {
+  it('accepts explicit task limits, reads old budgets and removes the global entry limit', () => {
     const request = {kind: 'document', snapshotId: id(1), maxEntries: 64};
     expect(agentTaskRequestSchema.parse(request)).toMatchObject({
       maxEntries: 64,
       maxModelCalls: 24,
     });
-    expect(ingestionSettingsSchema.parse({maxEntries: 64}).maxEntries).toBe(64);
+    expect(decodeStoredIngestionSettings({maxEntries: 64})).not.toHaveProperty(
+      'maxEntries',
+    );
     expect(
       agentTaskRequestSchema.safeParse({...request, maxEntries: 65}).success,
     ).toBe(false);
@@ -64,7 +70,10 @@ describe('split capacity across durable task and proposal boundaries', () => {
     expect(
       agentTaskRequestSchema.parse({...request, maxEntries: 24}),
     ).toMatchObject({maxEntries: 24, maxModelCalls: 24});
-    expect(ingestionSettingsSchema.parse({}).maxEntries).toBe(12);
+    expect(ingestionSettingsSchema.parse({})).not.toHaveProperty('maxEntries');
+    expect(
+      storedAgentTaskRequestSchema.parse({kind: 'document', snapshotId: id(1)}),
+    ).toMatchObject({maxEntries: 12});
   });
   it('admits 64 external groups through ordinal 127 and rejects both overflows', () => {
     const request = {
@@ -174,6 +183,6 @@ describe('split capacity across durable task and proposal boundaries', () => {
       step,
       splitProposal(),
     );
-    expect(accept).toHaveBeenCalledWith(id(203), id(201));
+    expect(accept).toHaveBeenCalledWith(id(203), id(201), {maxEntries: 64});
   });
 });

@@ -21,6 +21,10 @@ import type {CurrentInformationEntry} from '../modules/entries/index.js';
 import type {IntakeRecord} from './document_intake_contract.js';
 import type {JsonValue} from '../serialization/canonical_json.js';
 import {requireOperationValue} from './operation_error.js';
+import {
+  DEFAULT_SOURCE_SPLIT_ROUTING,
+  type SourceSplitRouting,
+} from '../modules/subscriptions/source_processing_profile.js';
 
 const roots: string[] = [];
 afterEach(() => {
@@ -228,7 +232,220 @@ function fixture() {
     enable,
   };
 }
+async function configureSource(
+  f: ReturnType<typeof fixture>,
+  overrides: Partial<SourceSplitRouting> = {},
+) {
+  const sourceId =
+    f.definition.scope.kind === 'source' ? f.definition.scope.sourceId : '';
+  await f.preferences.update(f.w, (current) => ({
+    next: patchReviewPreferences(current, {
+      sourceSubscriptions: {
+        revision: 1,
+        subscriptions: [
+          {
+            subscriptionId: sourceId,
+            kind: 'rss_atom',
+            label: 'Synthetic source',
+            feedUrl: 'https://example.invalid/feed',
+            sourceAlias: 'synthetic',
+            enabled: false,
+            isPrivate: false,
+            intervalMinutes: 1440,
+            itemLimit: 20,
+            processingProfile: {
+              split: 'Keep context when AI is needed.',
+              tags: '',
+              relations: '',
+              accent: '#c4b08b',
+              splitRouting: {...DEFAULT_SOURCE_SPLIT_ROUTING, ...overrides},
+            },
+          },
+        ],
+      },
+    }),
+    result: undefined,
+  }));
+  return sourceId;
+}
+
 describe('source splitting lifecycle', () => {
+  it('samples each observed format and keeps a holdout out of the model request', async () => {
+    const f = fixture();
+    const sourceId = await configureSource(f);
+    const heldOut = f.add(body.replace('Alpha', 'Unique holdout'));
+    f.add('# Separate guide\n\nA continuous guide without independent items.');
+    const grouped = (await f.service.execute(f.owner, 'split_source_sample', {
+      sourceId,
+    })) as {groups: {format: string; samples: unknown[]; ready: boolean}[]};
+    expect(
+      grouped.groups.map((g) => [g.format, g.samples.length, g.ready]),
+    ).toEqual(
+      expect.arrayContaining([
+        ['numbered:2', 3, true],
+        ['whole:0', 1, false],
+      ]),
+    );
+    const out = (await f.service.execute(f.owner, 'split_source_suggest', {
+      sourceId,
+      snapshotIds: [f.first, f.second, heldOut],
+    })) as {
+      definition: SourceSplitDefinition;
+      results: {snapshotId: string; heldOut: boolean}[];
+    };
+    expect(out.results.at(-1)).toMatchObject({
+      snapshotId: heldOut,
+      heldOut: true,
+    });
+    expect(
+      JSON.stringify(f.provider.suggestSplitRecipe.mock.calls),
+    ).not.toContain('Unique holdout');
+    expect(out.definition.match?.conditions).toHaveLength(4);
+    expect((await f.catalog()).recipes).toEqual([]);
+  });
+  it('uses configurable trials, routes despite freeform guidance and flags sustained exceptions without revising thresholds', async () => {
+    const f = fixture();
+    const sourceId = await configureSource(f, {
+      samplesPerFormat: 2,
+      reviewWindow: 5,
+      lowScoreRate: 0.6,
+    });
+    f.definition.settings = {...settings, onMismatch: 'ai'};
+    await f.save();
+    await f.trial();
+    await f.trial(f.second, 'variant');
+    await f.enable();
+    const frozen = await f.service.freeze(f.first);
+    expect(await f.service.decide(f.first, frozen)).toMatchObject({
+      outcome: 'rule',
+    });
+    const revision = (await f.catalog()).revision;
+    let last = '';
+    for (let i = 0; i < 5; i++) {
+      last = f.add(body.replace('## 2.', '## 9.'));
+      expect(await f.service.decide(last, frozen)).toMatchObject({
+        outcome: 'ai',
+        reason: 'recipe_number_sequence_changed',
+      });
+    }
+    await f.service.decide(last, frozen);
+    const feedback = (await f.service.execute(f.owner, 'split_source_read', {
+      sourceId,
+    })) as {feedback: {needsReview: boolean; count: number; low: number}[]};
+    expect(feedback.feedback).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({needsReview: true, count: 5, low: 5}),
+      ]),
+    );
+    expect((await f.catalog()).revision).toBe(revision);
+    expect((await f.catalog()).observations).toHaveLength(5);
+    expect(JSON.stringify(await f.catalog())).not.toContain(
+      'Synthetic complete alpha explanation',
+    );
+    expect(
+      (await f.service.freeze(f.first)).processingProfile?.splitRouting
+        ?.minimumScore,
+    ).toBe(80);
+    f.provider.suggestSplitRecipe.mockResolvedValueOnce({
+      name: 'Heading revision',
+      explanation: 'Use the independent headings after the sequence changes.',
+      settings: {...settings, template: 'headings'},
+    });
+    const revisionDraft = (await f.service.execute(
+      f.owner,
+      'split_source_calibrate',
+      {
+        sourceId,
+        format: 'numbered:2',
+        recipeId: f.definition.recipeId,
+        expectedRevision: revision,
+      },
+    )) as {
+      revision: number;
+      replaces: string;
+      definition: SourceSplitDefinition;
+      results: {snapshotId: string}[];
+    };
+    expect(revisionDraft.replaces).toBe(f.definition.recipeId);
+    expect(
+      (await f.service.freeze(last)).recipes.map((r) => r.recipeId),
+    ).toEqual([f.definition.recipeId]);
+    await f.service.execute(f.owner, 'split_recipe_control', {
+      snapshotId: last,
+      recipeId: revisionDraft.definition.recipeId,
+      expectedRevision: revisionDraft.revision,
+      action: 'enable',
+      note: 'Compared revision with samples.',
+    });
+    expect(
+      await f.service.decide(last, await f.service.freeze(last)),
+    ).toMatchObject({
+      outcome: 'rule',
+      recipeId: revisionDraft.definition.recipeId,
+    });
+    expect(frozen.recipes[0]?.recipeId).toBe(f.definition.recipeId);
+  });
+  it('counts human reports on high scores once per document and verifies rule conversion against published ranges', async () => {
+    const f = fixture(),
+      sourceId = await configureSource(f, {
+        samplesPerFormat: 2,
+        reviewWindow: 5,
+        lowScoreRate: 0.6,
+      });
+    await f.save();
+    await f.trial();
+    await f.trial(f.second, 'variant');
+    await f.enable();
+    const frozen = await f.service.freeze(f.first),
+      ids = [f.first, f.second, f.add(), f.add(), f.add()];
+    for (const id of ids) {
+      const d = await f.service.decide(id, frozen);
+      expect(d.score).toBe(100);
+      await f.service.apply(id, f.definition);
+      const original = requireOperationValue(f.records.get(id));
+      f.records.set(id, {
+        ...original,
+        value: {
+          ...original.value,
+          publication: {
+            origin: 'manual',
+            confirmedAt: new Date().toISOString(),
+            entries: f.entries
+              .filter((e) => e.snapshotId === id)
+              .map((e) => ({entryId: e.entryId, revision: e.revision})),
+          },
+        },
+      });
+    }
+    const feedback = {
+      sourceId,
+      recipeId: f.definition.recipeId,
+      recipeRevision: 1,
+      quality: 'title',
+    };
+    for (const snapshotId of [ids[0], ids[1], ids[2], ids[2]])
+      await f.service.execute(f.owner, 'split_source_feedback', {
+        ...feedback,
+        snapshotId,
+      });
+    const alerts = await f.service.execute(f.owner, 'split_source_status', {});
+    expect(alerts).toMatchObject({
+      sources: [{count: 5, low: 0, qualityIssues: 3, flagged: 3}],
+    });
+    const cal = {
+      sourceId,
+      recipeId: f.definition.recipeId,
+      expectedRevision: (await f.catalog()).revision,
+      format: 'numbered:2',
+      ruleOnly: true,
+    };
+    await expect(
+      f.service.execute(f.owner, 'split_source_calibrate', cal),
+    ).resolves.toMatchObject({
+      definition: {execution: 'rule', origin: 'verified_rule'},
+    });
+    expect(f.provider.suggestSplitRecipe).not.toHaveBeenCalled();
+  });
   it('persists source guidance and freezes it independently of later configuration edits', async () => {
     const f = fixture();
     if (f.definition.scope.kind !== 'source')
@@ -273,7 +490,7 @@ describe('source splitting lifecycle', () => {
     );
     expect(await f.service.decide(f.first, frozen)).toMatchObject({
       outcome: 'ai',
-      reason: 'source_processing_guidance',
+      reason: 'recipe_not_configured',
     });
     const reopened = await new LocalReviewPreferencesStore(f.root).load(f.w);
     expect(
@@ -299,6 +516,7 @@ describe('source splitting lifecycle', () => {
       code: 'recipe_trials_required',
     });
     await f.trial(f.second, 'variant');
+    await f.trial(f.add(body.replace('Alpha', 'Delta')));
     await f.enable();
     const frozen = await f.service.freeze(f.first);
     expect(frozen.recipes).toEqual([f.definition]);
@@ -327,7 +545,7 @@ describe('source splitting lifecycle', () => {
       replaces: f.definition.recipeId,
     });
     expect((await f.catalog()).recipes[0]?.status).toBe('paused');
-    for (const snapshotId of [f.first, f.second])
+    for (const snapshotId of [f.first, f.second, f.add()])
       await f.command(
         'split_recipe_trial',
         {
@@ -400,6 +618,7 @@ describe('source splitting lifecycle', () => {
     await f.save();
     await f.trial();
     await f.trial(f.second, 'variant');
+    await f.trial(f.add());
     await f.enable();
     const original = requireOperationValue(f.records.get(f.first));
     f.records.delete(f.second);
@@ -447,6 +666,7 @@ describe('source splitting lifecycle', () => {
     await f.save();
     await f.trial();
     await f.trial(f.second, 'variant');
+    await f.trial(f.add());
     await f.enable();
     await expect(
       f.service.execute(reader, 'split_recipe_apply', {
@@ -487,7 +707,7 @@ describe('source splitting lifecycle', () => {
     const view = (await f.service.execute(reader, 'split_recipes_read', {
       snapshotId: f.first,
     })) as SourceSplitCatalog;
-    expect(view.recipes[0]?.trials).toHaveLength(2);
+    expect(view.recipes[0]?.trials).toHaveLength(3);
     expect(JSON.stringify(view)).not.toContain(privateId);
   });
   it('persists recipes through sibling preference updates, reopening and personal backup round trips', async () => {

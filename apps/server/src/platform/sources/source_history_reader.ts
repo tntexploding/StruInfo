@@ -34,6 +34,13 @@ export class PublicSourceHistoryReader implements SourceHistoryReader {
     base: string,
   ): Promise<HistoryPageResult> {
     const response = await this.http.read(page.url, base);
+    if (
+      page.kind === 'html' &&
+      /<title[^>]*>\s*(?:Are we human\?|Just a moment|Attention Required)/iu.test(
+        response.text,
+      )
+    )
+      throw new HistoryReadError('history_access_challenge');
     const origin = new URL(base).origin;
     const articles: HistoryPageResult['articles'] = [],
       next: HistoryPage[] = [];
@@ -183,7 +190,8 @@ export class PublicSourceHistoryReader implements SourceHistoryReader {
       else throw new HistoryReadError('history_directory_invalid');
       return {articles, next, method: '站点地图'};
     }
-    for (const n of nodes(response.text).filter((n) => n.tagName === 'a')) {
+    const all = nodes(response.text);
+    for (const n of all.filter((n) => n.tagName === 'a')) {
       const href = attr(n, 'href');
       if (!href || href.startsWith('#')) continue;
       const url = historyUrl(href, response.url);
@@ -203,8 +211,47 @@ export class PublicSourceHistoryReader implements SourceHistoryReader {
       else if (
         urlDate(url) ||
         /\/(?:articles|bliki)\/[^/]+\.html$/u.test(path) ||
-        /\/blog\/\d{4}\/\d{2}\/[^/]+\.html$/u.test(path)
+        /\/posts\/\d+\/?$/u.test(path) ||
+        /\/blog\/\d{4}\/\d{2}\/[^/]+\.html$/u.test(path) ||
+        (/\/p\/[^/]+\/?$/u.test(path) &&
+          n.parentNode &&
+          'tagName' in n.parentNode &&
+          /^h[1-6]$/u.test(n.parentNode.tagName))
       ) {
+        const descendants = /\/posts\/\d+\/?$/u.test(path)
+          ? all.filter((item) => {
+              let parent = item.parentNode;
+              while (parent && parent !== n)
+                parent = 'parentNode' in parent ? parent.parentNode : null;
+              return parent === n;
+            })
+          : [];
+        const cardTitle = descendants.find((item) =>
+          /^h[1-6]$/u.test(item.tagName),
+        );
+        const cardDate = descendants
+          .map((item) => attr(item, 'datetime') || nodeText(item))
+          .find((value) => /^\d{4}[/-]\d{2}[/-]\d{2}$/u.test(value));
+        let container = n.parentNode;
+        while (
+          container &&
+          'tagName' in container &&
+          !['article', 'li', 'body', 'main'].includes(container.tagName)
+        )
+          container = container.parentNode;
+        const timestamp =
+          container &&
+          'tagName' in container &&
+          ['article', 'li'].includes(container.tagName)
+            ? all.find((item) => {
+                if (item.tagName !== 'time' || !attr(item, 'datetime'))
+                  return false;
+                let parent = item.parentNode;
+                while (parent && parent !== container)
+                  parent = 'parentNode' in parent ? parent.parentNode : null;
+                return parent === container;
+              })
+            : undefined;
         const context =
           n.parentNode &&
           'tagName' in n.parentNode &&
@@ -216,10 +263,20 @@ export class PublicSourceHistoryReader implements SourceHistoryReader {
         );
         add(
           url,
-          label.length > 3 ? label : undefined,
-          date
-            ? `${date[1] ?? ''}-${(date[2] ?? '').padStart(2, '0')}-${(date[3] ?? '').padStart(2, '0')}T00:00:00Z`
-            : undefined,
+          cardTitle
+            ? nodeText(cardTitle)
+            : cardDate && label.includes(cardDate)
+              ? label.slice(0, label.indexOf(cardDate)).trim()
+              : label.length > 3
+                ? label
+                : undefined,
+          (attr(timestamp, 'datetime') || undefined) ??
+            (cardDate
+              ? cardDate.replaceAll('/', '-') + 'T00:00:00Z'
+              : undefined) ??
+            (date
+              ? `${date[1] ?? ''}-${(date[2] ?? '').padStart(2, '0')}-${(date[3] ?? '').padStart(2, '0')}T00:00:00Z`
+              : undefined),
         );
       }
     }

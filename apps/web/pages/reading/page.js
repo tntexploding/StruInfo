@@ -1,3 +1,4 @@
+import {tagCategories} from '../../runtime/tags.js';
 import {notice} from '../../shared/notice.js';
 import {bindDialog} from '../../shared/dialog.js';
 import {preference, savePreference} from '../../runtime/preferences.js';
@@ -167,14 +168,11 @@ export async function mount() {
     const a = sectionAnnotations(d, index);
     return (
       '<dl class="section-tags">' +
-      [
-        ['domain', '领域'],
-        ['subject', '主题'],
-        ['purpose', '用途'],
-      ]
+      tagCategories
+        .filter(([key]) => a[key])
         .map(
           ([key, label]) =>
-            '<dt>' + label + '</dt><dd>' + esc(a[key] || '未填写') + '</dd>',
+            '<dt>' + label + '</dt><dd>' + esc(a[key]) + '</dd>',
         )
         .join('') +
       '</dl>'

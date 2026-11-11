@@ -20,6 +20,58 @@ const SUBSCRIPTION_ID = '22222222-2222-4222-8222-222222222222';
 const FEED_URL = 'https://example.invalid/feed.xml';
 
 describe('RssAtomSourceConnector', () => {
+  it('follows a public www move and rejects a redirect onto a private address', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 301,
+          headers: {location: 'https://publisher.invalid/feed'},
+        }),
+      )
+      .mockResolvedValueOnce(
+        xmlResponse(
+          '<rss><channel><item><title>Sample</title><link>https://publisher.invalid/post</link><description>Body</description></item></channel></rss>',
+          'application/xml',
+        ),
+      );
+    const reader = connectorWith(fetcher, '203.0.113.10');
+    expect(
+      (
+        await reader.read({
+          ...request(),
+          configuration: {
+            feedUrl: 'https://www.publisher.invalid/feed',
+            itemLimit: 1,
+          },
+        })
+      ).status,
+    ).toBe('changed');
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    const blockedFetch = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(null, {
+        status: 302,
+        headers: {location: 'https://publisher.invalid/feed'},
+      }),
+    );
+    const blocked = new RssAtomSourceConnector({
+      fetch: blockedFetch,
+      resolveAddresses: (host) =>
+        Promise.resolve([
+          host.startsWith('www.') ? '203.0.113.10' : '127.0.0.1',
+        ]),
+    });
+    await expect(
+      blocked.read({
+        ...request(),
+        configuration: {
+          feedUrl: 'https://www.publisher.invalid/feed',
+          itemLimit: 1,
+        },
+      }),
+    ).rejects.toMatchObject({code: 'connector_result_invalid'});
+    expect(blockedFetch).toHaveBeenCalledTimes(1);
+  });
   it('projects RSS items and reuses conditional request metadata', async () => {
     const requests: RequestInit[] = [];
     const feed = [

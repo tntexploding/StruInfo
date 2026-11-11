@@ -61,6 +61,7 @@ try {
       '--config',
       'vitest.config.ts',
       'apps/server/src/application/document_publication.postgres.test.ts',
+      ...process.argv.slice(2),
     ],
     {
       env: {

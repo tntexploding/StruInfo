@@ -7,8 +7,6 @@ import {agentCommandSchemas} from '../application/agent_commands.js';
 import {publicSubscriptionSchema} from '../application/agent_capture_service.js';
 import {sourceProcessingProfileSchema} from '../modules/subscriptions/source_processing_profile.js';
 import {
-  ENTRY_TYPE_KEYWORDS,
-  ENTRY_DOMAIN_KEYWORDS,
   INFORMATION_ENTRY_GRAPH_DIRECTIONS,
   INFORMATION_ENTRY_GRAPH_SEMANTIC_KINDS,
   INFORMATION_ENTRY_GRAPH_VERIFICATION_STATUSES,
@@ -223,29 +221,9 @@ export function createAssistantApiTools(
         includePrivate: r.includePrivate,
       }),
   );
-  add('document_tags_read', '读取文档标签与版本。', document, 'read', (r) =>
-    api.aggregateInformationDocumentTags(r.snapshotId, {
-      includePrivate: r.includePrivate,
-    }),
-  );
-  add(
-    'document_tags_save',
-    '编辑文档标签。',
-    document.extend({
-      expectedRevision: revision,
-      tags: z.array(z.string()).max(128),
-    }),
-    'change',
-    (r) =>
-      api.reviseInformationDocumentTags(r.snapshotId, {
-        expectedRevision: r.expectedRevision,
-        tags: r.tags,
-        includePrivate: r.includePrivate,
-      }),
-  );
   add(
     'entry_edit',
-    '修改条目正文及原有标签。先 entry_read 取得完整 annotation 及版本。',
+    '修改条目正文。标签使用 entry_annotations_save。',
     z
       .object({
         entryId: id,
@@ -256,15 +234,6 @@ export function createAssistantApiTools(
             annotation: z
               .object({
                 body: z.string(),
-                contentKeywords: z.array(z.string()),
-                typeKeyword: z.enum(ENTRY_TYPE_KEYWORDS),
-                typeCustomName: z.string().optional(),
-                domains: z.array(
-                  z.object({
-                    keyword: z.enum(ENTRY_DOMAIN_KEYWORDS),
-                    customName: z.string().optional(),
-                  }),
-                ),
                 usefulnessScore: z.number().int().min(0).max(100).optional(),
                 interestScore: z.number().int().min(0).max(100).optional(),
               })
@@ -585,38 +554,11 @@ export function createAssistantApiTools(
     (r) => api.saveWorkspaceUiPreferences(r.body),
   );
   add(
-    'review_settings_read',
-    '读取全局词表、规则及阅读偏好。',
+    'recommendation_settings_read',
+    '读取相似联系权重和探索推荐设置。',
     empty,
     'read',
-    () => api.loadReviewPreferences(),
-  );
-  add(
-    'review_settings_save',
-    '保存快捷标签、自动关键词和别名；先读取，完整保留不需修改的字段。',
-    body(
-      z
-        .object({
-          quickTags: z.array(z.string()),
-          automaticKeywords: z
-            .object({
-              enabled: z.boolean(),
-              includeLinkDomains: z.boolean(),
-              excludedKeywords: z.array(z.string()),
-            })
-            .strict(),
-          vocabulary: z
-            .object({
-              aliases: z.array(
-                z.object({source: z.string(), canonical: z.string()}).strict(),
-              ),
-            })
-            .strict(),
-        })
-        .strict(),
-    ),
-    'change',
-    (r) => api.saveReviewPreferences(r.body),
+    () => api.loadRecommendationPreferences(),
   );
   add('split_settings_read', '读取手动拆分规则。', empty, 'read', () =>
     api.loadInformationEntrySplitRuleProfile(),

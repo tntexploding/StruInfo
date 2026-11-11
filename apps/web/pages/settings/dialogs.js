@@ -14,7 +14,6 @@ export const dialogTitles = {
   terms: '规范词条',
   aliases: '同义词与翻译',
   'term-relations': '词条间的关系',
-  keywords: '快捷标签与关键词',
   weights: '相似联系',
   'notice-scope': '通知范围',
   'notice-time': '通知间隔与免打扰',
@@ -130,9 +129,14 @@ export function dialogContent(id, d, locked) {
       '</div>'
     );
   if (id === 'limits')
-    return (
-      number(d, 'maxEntries', '每篇最多条目', 1, 64, '个') +
-      number(d, 'maxModelCalls', '每篇模型请求', 1, 64, '次', '包括失败重试。')
+    return number(
+      d,
+      'maxModelCalls',
+      '每篇模型请求',
+      1,
+      64,
+      '次',
+      '包括失败重试。',
     );
   if (id === 'dimensions')
     return (
@@ -205,15 +209,6 @@ export function dialogContent(id, d, locked) {
           ) +
           '</div><button type="button" class="secondary-action" data-add="relation">添加并确认</button></div>'
         : '<p class="dialog-description">至少需要两个词条。</p>')
-    );
-  if (id === 'keywords')
-    return (
-      toggle(d, 'automaticKeywords', '生成本地关键词建议') +
-      toggle(d, 'includeLinkDomains', '将链接域名作为关键词') +
-      '<div class="dialog-fields" style="margin-top:22px">' +
-      textarea(d, 'quickTags', '快捷标签', '每行一个，最多 24 个。') +
-      textarea(d, 'excludedKeywords', '排除词', '每行一个，最多 64 个。') +
-      '</div>'
     );
   if (id === 'weights')
     return (

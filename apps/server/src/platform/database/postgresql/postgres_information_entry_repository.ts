@@ -1,4 +1,7 @@
-import {structuredAnnotationsSchema} from '../../../modules/entries/structured_annotations.js';
+import {
+  annotationTermSchema,
+  structuredAnnotationsSchema,
+} from '../../../modules/entries/structured_annotations.js';
 import {
   ENTRY_ANNOTATION_ORIGINS,
   ENTRY_CHUNK_MODES,
@@ -578,11 +581,19 @@ export class PostgresInformationEntryRepository
     const result = await this.#pool.query<Row>(
       `SELECT e.snapshot_id::text,
       count(*)::integer AS entry_count,
+      jsonb_agg(CASE WHEN a.value_text::jsonb->>'inputBodySha256'=e.body_sha256 AND a.value_text::jsonb->>'originVersion'<>'reading-state.v1'
+        THEN (SELECT jsonb_agg(l->'term'->>'label') FROM jsonb_array_elements(a.value_text::jsonb->'labels') l)
+        WHEN a.value_text IS NULL OR a.value_text::jsonb->>'originVersion'='reading-state.v1'
+        THEN (SELECT jsonb_agg(k.display_value) FROM struinfo.information_entry_content_keyword k WHERE k.workspace_id=e.workspace_id AND k.entry_id=e.entry_id)
+        ELSE '[]'::jsonb END) AS tag_groups,
       (array_agg(e.title_path ORDER BY e.document_order,e.entry_id))[1] AS title,
-      array_remove(array_agg(DISTINCT coalesce(e.type_custom_name,e.type_keyword)),NULL) AS types,
+      array_remove(array_agg(DISTINCT coalesce((SELECT l->'term'->>'label' FROM jsonb_array_elements(a.value_text::jsonb->'labels') l
+        WHERE a.value_text::jsonb->>'inputBodySha256'=e.body_sha256 AND l->>'dimensionId' IN
+          (SELECT d->>'id' FROM jsonb_array_elements(a.value_text::jsonb->'dimensions') d WHERE d->>'role'='form') LIMIT 1),
+        e.type_custom_name,e.type_keyword)),NULL) AS types,
       CASE WHEN bool_and(coalesce(a.value_text::jsonb->>'readingState','unread')='read') THEN 'read'
         WHEN bool_or(coalesce(a.value_text::jsonb->>'readingState','unread') IN ('reading','read')) THEN 'reading' ELSE 'unread' END AS reading_state,
-      count(*) FILTER (WHERE e.type_keyword IS NOT NULL
+      count(*) FILTER (WHERE (a.value_text::jsonb->>'inputBodySha256'=e.body_sha256 AND a.value_text::jsonb->>'status' IN ('complete','partial','none')) OR e.type_keyword IS NOT NULL
         OR EXISTS (SELECT 1 FROM struinfo.information_entry_content_keyword k WHERE k.workspace_id=e.workspace_id AND k.entry_id=e.entry_id)
         OR EXISTS (SELECT 1 FROM struinfo.information_entry_domain_keyword d WHERE d.workspace_id=e.workspace_id AND d.entry_id=e.entry_id))::integer AS annotated_entry_count
       FROM struinfo.information_entry e
@@ -597,8 +608,30 @@ export class PostgresInformationEntryRepository
       annotatedEntryCount: integer(row.annotated_entry_count, 0),
       ...(optionalText(row.title) ? {title: text(row.title)} : {}),
       types: Array.isArray(row.types) ? row.types.map(text) : [],
+      tagNames: [
+        ...new Set(
+          Array.isArray(row.tag_groups)
+            ? row.tag_groups.flatMap((group: unknown) =>
+                Array.isArray(group) ? group.map(text) : [],
+              )
+            : [],
+        ),
+      ],
       readingState: text(row.reading_state),
     }));
+  }
+
+  public async loadAnnotationTerms(workspaceId: string) {
+    const result = await this.#pool.query(
+      `SELECT DISTINCT label->'term' AS term
+       FROM struinfo.information_entry_annotation a
+       JOIN struinfo.information_entry e ON e.workspace_id=a.workspace_id AND e.entry_id=a.entry_id
+       CROSS JOIN LATERAL jsonb_array_elements(a.value_text::jsonb->'labels') AS label
+       WHERE e.workspace_id=$1 AND e.is_current_structure AND NOT e.is_private
+       AND a.value_text::jsonb->>'inputBodySha256'=e.body_sha256`,
+      [workspaceId],
+    );
+    return result.rows.map((row) => annotationTermSchema.parse(row.term));
   }
 
   public async loadCurrentEntriesForSnapshot(

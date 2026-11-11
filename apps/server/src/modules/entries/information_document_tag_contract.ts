@@ -50,6 +50,7 @@ export interface InformationDocumentTagWrite {
 }
 
 export interface InformationEntryDocumentView {
+  readonly tagNames?: readonly string[];
   readonly workspaceId: string;
   readonly resourceId: string;
   readonly snapshotId: string;

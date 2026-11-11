@@ -141,6 +141,83 @@ const fetched = (body: string): SourceConnectorReadResult => ({
   ],
 });
 describe('document intake decisions', () => {
+  it('fetches a long syndicated preview with a continuation link instead of accepting its length', async () => {
+    const f = fixture(false, 'application/rss+xml');
+    texts.set(
+      S,
+      '# Synthetic preview\n\n' +
+        'Context and background. '.repeat(60) +
+        '\n\n' +
+        'Technical setup without results. '.repeat(60) +
+        '\n\n[Read more](https://example.invalid/synthetic)\n\n[查看原始条目](https://example.invalid/synthetic)',
+    );
+    f.readWeb.mockResolvedValueOnce(
+      fetched('# Complete article\n\n' + 'Actual results. '.repeat(80)),
+    );
+    await f.service.prepare(S, {...policy, fetchFullText: true});
+    expect(f.readWeb).toHaveBeenCalledTimes(1);
+    expect(f.rows.get(S)?.value).toMatchObject({
+      bodySource: 'web_article',
+      decision: 'pending',
+    });
+  });
+  it('retains paid-page metadata after projection and stops before model review', async () => {
+    const f = fixture(false, 'application/rss+xml');
+    const response = fetched(
+      '# A long preview\n\n' +
+        'Preview without the paywall banner. '.repeat(100),
+    );
+    if (response.status !== 'changed') throw new Error('fixture');
+    f.readWeb.mockResolvedValueOnce({
+      ...response,
+      documents: response.documents.map((d) => ({
+        ...d,
+        accessRestriction: 'paid' as const,
+      })),
+    });
+    expect(
+      await f.service.needsReview(S, {...policy, fetchFullText: true}),
+    ).toBe(false);
+    expect(f.rows.get(S)?.value).toMatchObject({
+      decision: 'held',
+      origin: 'system',
+    });
+    expect(f.rows.get(S)?.value.restrictedSnapshotId).toBe(
+      f.rows.get(S)?.value.preparedSnapshotId,
+    );
+    await f.service.review(S, policy);
+    expect(f.provider.reviewIntake).not.toHaveBeenCalled();
+    const held = f.rows.get(S);
+    if (!held) throw new Error('fixture');
+    await f.service.prepare(S, policy, {
+      source: 'received',
+      expectedVersion: held.version,
+      refresh: false,
+    });
+    await f.service.review(S, policy);
+    expect(f.rows.get(S)?.value.decision).toBe('held');
+    expect(f.provider.reviewIntake).not.toHaveBeenCalled();
+  });
+  it('filters explicit paid previews with full-text disabled, preserves manual decisions and allows donation invitations', async () => {
+    const f = fixture();
+    texts.set(
+      S,
+      '# Preview\n\nThis post is for paid subscribers.\nSubscribe to continue.',
+    );
+    expect((await f.service.review(S, policy))?.value.decision).toBe('held');
+    expect(f.provider.reviewIntake).not.toHaveBeenCalled();
+    await f.service.control(S, 1, 'admit', 'Owner keeps this excerpt');
+    expect((await f.service.review(S, policy))?.value.origin).toBe('manual');
+    const complete = fixture();
+    texts.set(
+      S,
+      '# Complete\n\nAll results are here.\n\nTo support my work, consider becoming a free or paid subscriber.',
+    );
+    expect((await complete.service.review(S, policy))?.value.decision).toBe(
+      'admitted',
+    );
+    expect(complete.provider.reviewIntake).toHaveBeenCalledTimes(1);
+  });
   it('accepts only complete model-reviewed receipts, records provenance and defers further automation', async () => {
     const f = fixture();
     await f.service.receive([{snapshotId: S, expectedVersion: 0}], 'reset');

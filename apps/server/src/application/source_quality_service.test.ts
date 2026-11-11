@@ -99,6 +99,24 @@ async function fixture(records: IntakeRecord[]) {
   });
   return {service, preferences, snapshots};
 }
+it('scores the latest actual decisions, excluding capture failures and honoring owner overrides', async () => {
+  const records = [
+    review(1, 'accept'),
+    review(2, 'reject'),
+    ...Array.from({length: 20}, (_, i) => review(i + 3, 'capture')),
+  ];
+  const f = await fixture(records);
+  expect((await f.service.status()).sources[0]).toMatchObject({
+    trustScore: 50,
+    scoredReviews: 2,
+  });
+  const override = requireOperationValue(records[1]);
+  override.value.receipt = 'accepted';
+  expect((await f.service.status()).sources[0]).toMatchObject({
+    trustScore: 67,
+    scoredReviews: 2,
+  });
+});
 it('requires at least five adverse decisions and half the reviewed sample, without automatic suspension', async () => {
   const records = [
     review(1),

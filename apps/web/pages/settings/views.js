@@ -173,10 +173,10 @@ export function page(id, d) {
             '按 UTC 日期计数。',
           ) +
           openRow(
-            '单篇处理上限',
+            '每篇模型调用上限',
             'limits',
             '调整上限',
-            `最多 ${d.maxEntries} 个条目 · ${d.maxModelCalls} 次请求。`,
+            `最多 ${d.maxModelCalls} 次请求。`,
           ),
         'ai-card',
       ),
@@ -222,19 +222,11 @@ export function page(id, d) {
       card(
         '本地建议',
         openRow(
-          '快捷标签与关键词',
-          'keywords',
-          '编辑规则',
-          '控制本地标签建议使用的词。',
-        ) +
-          openRow('原有标签的别名', 'local-aliases', '编辑对应词') +
-          openRow(
-            '相似联系',
-            'weights',
-            '调整权重',
-            '按内容、类型和领域生成本地推荐。',
-          ) +
-          openRow('探索推荐', 'exploration', '调整推荐'),
+          '相似联系',
+          'weights',
+          '调整权重',
+          '按内容、类型和领域生成本地推荐。',
+        ) + openRow('探索推荐', 'exploration', '调整推荐'),
         'full-width',
       ),
     ].join('');

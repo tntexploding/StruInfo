@@ -8,6 +8,7 @@ import {OperationError} from './operation_error.js';
 import {AiPriceWindowClosedError} from '../modules/processing/ai_price_policy.js';
 import {informationEntryBodySha256} from '../modules/entries/information_entry_identity.js';
 import type {CurrentInformationEntry} from '../modules/entries/information_entry_contract.js';
+import type {InformationEntryAssociationRepositoryPort} from '../modules/entries/information_entry_association_repository.js';
 import {
   topicScopeSchema,
   type TopicRepository,
@@ -15,6 +16,7 @@ import {
   type TopicProvider,
   type TopicResponse,
   type TopicJob,
+  type TopicValue,
   topicSummaryStale,
 } from '../modules/entries/content_topics.js';
 import {selectTopicCandidates} from '../modules/entries/topic_candidates.js';
@@ -29,6 +31,14 @@ function entry(
   n: number,
   body = `Memory bandwidth limits computation for synthetic version ${String(n)}.`,
 ): CurrentInformationEntry {
+  const hash = informationEntryBodySha256(body);
+  const dimension = {
+    id: id(100),
+    name: '对象',
+    role: 'entity' as const,
+    description: '',
+    enabled: true,
+  };
   return {
     workspaceId: id(1),
     entryId: id(n),
@@ -41,6 +51,33 @@ function entry(
     capturedAt: '2026-10-24T00:00:00.000Z',
     publishedAt: '2026-01-02T00:00:00.000Z',
     value: {
+      annotations: {
+        schemaVersion: 1,
+        vocabularyRevision: 0,
+        dimensions: [dimension],
+        inputRevision: 1,
+        inputBodySha256: hash,
+        origin: 'manual',
+        originVersion: 'test',
+        status: 'complete',
+        note: '',
+        readingState: 'unread',
+        claims: [],
+        labels: [
+          {
+            dimensionId: dimension.id,
+            term: {
+              id: id(101),
+              dimensionId: dimension.id,
+              label: '内存',
+              meaning: '计算机内存',
+            },
+            wording: '内存',
+            primary: true,
+            evidence: {start: 0, end: body.length, quote: body},
+          },
+        ],
+      },
       titlePath: 'Memory bandwidth ' + String(n),
       body,
       bodySha256: informationEntryBodySha256(body),
@@ -121,6 +158,7 @@ function response(
 function fixture(
   custom?: TopicProvider['generate'],
   sourceGuidance?: (snapshotId: string) => Promise<string>,
+  associations?: InformationEntryAssociationRepositoryPort,
 ) {
   const rows = [entry(2), entry(3), entry(4)],
     repository = new MemoryTopics();
@@ -139,6 +177,7 @@ function fixture(
     },
     provider,
     ...(sourceGuidance ? {sourceGuidance} : {}),
+    ...(associations ? {associations} : {}),
     checkModelCall: check,
     executionSettings: () => Promise.resolve({automaticRetryLimit: 1}),
   });
@@ -161,6 +200,113 @@ function fixture(
   return {rows, repository, provider, service, start, job, done, check, scope};
 }
 describe('bounded background topics', () => {
+  it('lists large topic sets with bounded protection reads and preserves cross-batch overrides', async () => {
+    const blocked = {
+      workspaceId: id(1),
+      entryLowId: id(1000),
+      entryHighId: id(1105),
+      revision: 1,
+      revisionId: id(3000),
+      value: {action: 'block' as const, manualAdjustment: 0, isBlocked: true},
+    };
+    const scoped = vi.fn(
+      (_workspace: string, _private: boolean, ids: readonly string[]) => {
+        if (ids.length > 100) throw new Error('association read limit');
+        return Promise.resolve({
+          projections: [],
+          overrides:
+            ids.includes(blocked.entryLowId) ||
+            ids.includes(blocked.entryHighId)
+              ? [blocked]
+              : [],
+        });
+      },
+    );
+    const full = vi.fn(() => Promise.reject(new Error('unscoped read')));
+    const f = fixture(undefined, undefined, {
+      loadAssociationSnapshot: full,
+      loadAssociationSnapshotForEntries: scoped,
+      replaceAssociationProjections: () => Promise.resolve(0),
+      writeAssociationOverride: () => Promise.resolve('unchanged'),
+    });
+    f.rows.splice(
+      0,
+      f.rows.length,
+      ...Array.from({length: 130}, (_, i) => entry(i + 1000)),
+    );
+    const topic = (n: number, a: number, b: number): TopicRecord => {
+      const members = [required(f.rows[a]), required(f.rows[b])].map((e) => ({
+        entryId: e.entryId,
+        revision: e.revision,
+        quote: e.value.body,
+        reason: '同一主题',
+        decision: 'included' as const,
+        origin: 'ai' as const,
+      }));
+      return {
+        id: id(n + 2000),
+        version: 1,
+        updatedAt: '2026-11-05T00:00:00.000Z',
+        value: {
+          kind: 'topic',
+          name: '主题',
+          scope: '合成材料',
+          origin: 'ai',
+          members,
+          summary: '',
+          summaryVersions: [],
+          ruleVersion: 'topics.v1',
+          relations: [
+            {
+              from: required(members[0]),
+              to: required(members[1]),
+              kind: 'continues',
+              reason: '后续材料',
+              origin: 'ai',
+              blocked: false,
+            },
+          ],
+        },
+      };
+    };
+    for (let n = 0; n < 54; n++) {
+      const row = topic(n, n * 2, n * 2 + 1);
+      f.repository.rows.set(row.id, row);
+    }
+    const crossBatch = topic(54, 0, 105);
+    f.repository.rows.set(crossBatch.id, crossBatch);
+    const list = (input: Record<string, string>) =>
+      f.service.execute(owner, 'topics_list', input) as Promise<{
+        topics: {id: string; value: TopicValue}[];
+      }>;
+    const all = await list({});
+    expect(all.topics).toHaveLength(55);
+    expect(scoped.mock.calls.map((c) => c[2].length)).toEqual([100, 8]);
+    expect(
+      all.topics.find((t) => t.id === crossBatch.id)?.value.relations,
+    ).toEqual([]);
+    expect(all.topics[0]?.value.relations).toHaveLength(1);
+    expect(full).not.toHaveBeenCalled();
+
+    scoped.mockClear();
+    expect((await list({entryId: id(1000)})).topics).toHaveLength(2);
+    expect(scoped.mock.calls[0]?.[2]).toEqual([id(1000), id(1001), id(1105)]);
+    scoped.mockClear();
+    expect(
+      (await list({snapshotId: required(f.rows[2]).snapshotId})).topics,
+    ).toHaveLength(1);
+    expect(scoped.mock.calls[0]?.[2]).toEqual([id(1002), id(1003)]);
+    scoped.mockClear();
+    expect((await list({entryId: id(1129)})).topics).toEqual([]);
+    expect(scoped).not.toHaveBeenCalled();
+    f.rows[0] = {
+      ...required(f.rows[0]),
+      value: {...required(f.rows[0]).value, isPrivate: true},
+    };
+    scoped.mockClear();
+    expect((await list({entryId: id(1000)})).topics).toEqual([]);
+    expect(scoped).not.toHaveBeenCalled();
+  });
   it('freezes source guidance and includes changed guidance in job identity', async () => {
     let guidance = '比较带宽瓶颈';
     const f = fixture(undefined, () => Promise.resolve(guidance));
@@ -463,6 +609,19 @@ describe('bounded background topics', () => {
   });
 });
 describe('topic recall', () => {
+  it('does not send word-only similarities or empty label sets to the model', async () => {
+    const f = fixture();
+    for (const row of f.rows)
+      delete (row.value as {annotations?: unknown}).annotations;
+    expect(
+      selectTopicCandidates(f.rows, EMPTY_ANNOTATION_VOCABULARY, f.scope)
+        .candidates,
+    ).toEqual([]);
+    const {jobId} = await f.start();
+    await f.service.drain();
+    expect(f.job(jobId).status).toBe('succeeded');
+    expect(f.provider.generate).not.toHaveBeenCalled();
+  });
   it('keeps manual documents distinct when their canonical URI has no host', () => {
     const entries = Array.from({length: 8}, (_, i) => ({
       ...entry(i + 2),

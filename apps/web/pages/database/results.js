@@ -1,3 +1,4 @@
+import {entryTagWords} from '../../runtime/tags.js';
 import {pageContext} from '../../runtime/route.js';
 const page = pageContext('database');
 import {titleOf} from '../../runtime/documents.js';
@@ -13,6 +14,7 @@ import {escapeHtml as e, openDialog, toast} from './sample-ui.js';
 export const selection = new Map();
 let serial = 0,
   lastQuery,
+  lastAggregation,
   nextCursor;
 const results = page.root.querySelector('#result-space');
 const list = document.createElement('div');
@@ -72,7 +74,13 @@ function entryRows(items) {
   return items
     .map(
       ({entry}) =>
-        `<article class="search-result"><div class="result-source"><label class="inline-checks"><input type="checkbox" data-select="${entry.entryId}" ${selection.has(entry.entryId) ? 'checked' : ''}>${e(titleOf(entry))}</label><time>${e((entry.publishedAt || entry.capturedAt).slice(0, 10))}</time></div><h3><button data-entry="${entry.entryId}">${e(entry.value.titlePath)}</button></h3><p>${e(entry.value.body.slice(0, 480))}</p><div class="result-tags">${entry.value.contentKeywords.map((t) => `<span class="tag-chip">${e(t.displayValue)}</span>`).join('')}</div><div class="result-actions"><a href="#/reading?doc=${entry.snapshotId}">阅读全文</a><button data-links="${entry.entryId}">查看联系</button></div></article>`,
+        `<article class="search-result"><div class="result-source"><label class="inline-checks"><input type="checkbox" data-select="${entry.entryId}" ${selection.has(entry.entryId) ? 'checked' : ''}>${e(titleOf(entry))}</label><time>${e((entry.publishedAt || entry.capturedAt).slice(0, 10))}</time></div><h3><button data-entry="${entry.entryId}">${e(entry.value.titlePath)}</button></h3><p>${e(entry.value.body.slice(0, 480))}</p><div class="result-tags">${entryTagWords(
+          entry.value,
+        )
+          .map((t) => `<span class="tag-chip">${e(t)}</span>`)
+          .join(
+            '',
+          )}</div><div class="result-actions"><a href="#/reading?doc=${entry.snapshotId}">阅读全文</a><button data-links="${entry.entryId}">查看联系</button></div></article>`,
     )
     .join('');
 }
@@ -113,6 +121,7 @@ list.addEventListener('click', (ev) => {
         mode: 'search',
         evidence: 'local',
         query: {...lastQuery, after: nextCursor},
+        aggregation: lastAggregation,
       },
       true,
     );
@@ -121,7 +130,7 @@ toolButtons[0].onclick = () =>
   attempt(() => showRelations(selection.keys().next().value), toast);
 toolButtons[1].onclick = () => page.root.querySelector('#new-report').click();
 export async function executeSearch(
-  {mode, evidence, query, question, webQuery},
+  {mode, evidence, query, question, webQuery, aggregation},
   append = false,
 ) {
   const token = ++serial;
@@ -160,7 +169,16 @@ export async function executeSearch(
         .join('');
     } else {
       lastQuery = query;
-      const r = await request('entries/search', {...query, limit: 20});
+      lastAggregation = aggregation;
+      const r = aggregation
+        ? await request('entries/aggregations/read', {
+            viewId: aggregation.viewId,
+            includePrivate: query.includePrivate,
+            onlyPrivate: query.onlyPrivate ?? false,
+            limit: 20,
+            ...(query.after ? {after: query.after} : {}),
+          })
+        : await request('entries/search', {...query, limit: 20});
       if (token !== serial) return;
       nextCursor = r.nextCursor;
       currentItems = append ? [...currentItems, ...r.items] : r.items;
@@ -173,7 +191,16 @@ export async function executeSearch(
             : ''),
       );
       page.root.querySelector('#result-title').textContent =
-        `查询结果 · ${r.totalCount} 条`;
+        `${aggregation ? r.name : '查询结果'} · ${r.totalCount} 条`;
+      if (aggregation) {
+        page.root.querySelector('#result-scope').textContent =
+          '聚合 · 已保存引用';
+        if (r.unavailableCount && !append)
+          list.insertAdjacentHTML(
+            'beforeend',
+            `<p class="field-note">${r.unavailableCount} 条引用已移除或在当前范围不可见。</p>`,
+          );
+      }
     }
     empty.hidden = Boolean(list.textContent.trim());
     page.root.querySelector('#result-note').textContent = '没有匹配的内容';

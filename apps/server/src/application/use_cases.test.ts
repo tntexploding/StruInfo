@@ -340,7 +340,7 @@ describe('shared application use cases without HTTP', () => {
     },
   );
 
-  it('preserves manual origin, exact evidence and optimistic revision checks on direct entry writes', async () => {
+  it('preserves exact evidence and optimistic revision checks on manual body and score writes', async () => {
     const fixture = createFixture();
     const created = await new DocumentUseCases(
       OWNER,
@@ -368,7 +368,7 @@ describe('shared application use cases without HTTP', () => {
           body: SOURCE,
           usefulnessScore: 4,
           interestScore: 2,
-          contentKeywords: [{displayValue: 'Synthetic', origin: 'manual'}],
+          contentKeywords: [],
         },
       },
     });
@@ -499,11 +499,8 @@ function fullGroup() {
 function annotation() {
   return {
     body: SOURCE,
-    contentKeywords: ['Synthetic'],
-    typeKeyword: 'knowledge_explanation' as const,
     usefulnessScore: 4 as const,
     interestScore: 2 as const,
-    domains: [{keyword: 'engineering_computing' as const}],
   };
 }
 

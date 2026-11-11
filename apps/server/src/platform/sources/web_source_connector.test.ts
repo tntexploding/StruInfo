@@ -9,6 +9,35 @@ import {
 const SUBSCRIPTION_ID = '22222222-2222-4222-8222-222222222222';
 
 describe('WebSourceConnector', () => {
+  it('follows same-site article moves and preserves paywall metadata outside the body', async () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(null, {status: 301, headers: {location: '/new-article'}}),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          '<html><head><script type="application/ld+json">{"@type":"NewsArticle","isAccessibleForFree":false}</script></head><body><article><h1>Sample</h1><p>Public preview.</p></article></body></html>',
+          {headers: {'content-type': 'text/html'}},
+        ),
+      );
+    const connector = new WebSourceConnector({
+      fetch: fetcher,
+      resolveAddresses: () => Promise.resolve(['203.0.113.10']),
+    });
+    const result = await connector.read({
+      subscriptionId: SUBSCRIPTION_ID,
+      configuration: {
+        pageUrl: 'https://example.invalid/old',
+        additionalPaths: [],
+      },
+    });
+    expect(result.status === 'changed' && result.documents[0]).toMatchObject({
+      canonicalUri: 'https://example.invalid/new-article',
+      accessRestriction: 'paid',
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
   it('reads only explicit same-origin pages, extracts reading content and reuses validators', async () => {
     const calls: {url: string; headers: Headers}[] = [];
     let round = 0;

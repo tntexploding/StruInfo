@@ -1,4 +1,8 @@
 import {describe, it, expect, vi} from 'vitest';
+import {mkdtemp, rm} from 'node:fs/promises';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {SourceHistoryCheckpoint} from '../storage/source_history_checkpoint.js';
 import {DEFAULT_SOURCE_RECEIVING} from '../modules/subscriptions/source_receiving.js';
 import {SourceHistoryService} from './source_history_service.js';
 import {AgentCommands} from './agent_commands.js';
@@ -38,7 +42,9 @@ const row = (
   access: 'unknown',
   ...(date ? {publishedAt: date} : {}),
 });
-function fixture(scopedReceipts = false) {
+function fixture(
+  checkpoint?: Pick<SourceHistoryCheckpoint, 'load' | 'save' | 'remove'>,
+) {
   let sources: ReviewSourceSubscription[] = [source(A), source(B)];
   const snapshots: EvidenceSnapshotSummary[] = [];
   const read = vi.fn<SourceHistoryReader['read']>().mockResolvedValue({
@@ -94,25 +100,26 @@ function fixture(scopedReceipts = false) {
     },
   );
   const service = new SourceHistoryService({
-    ...(scopedReceipts
-      ? {
-          receiptSources: () =>
-            Promise.resolve(
-              new Map(
-                snapshots.flatMap((snapshot) => {
-                  const origin = sources.find(
-                    (s) => s.label === snapshot.sourceKey,
-                  );
-                  return origin
-                    ? [[snapshot.snapshotId, origin.subscriptionId] as const]
-                    : [];
-                }),
-              ),
-            ),
-        }
-      : {}),
+    ...(checkpoint ? {checkpoint} : {}),
     sources: () => Promise.resolve(sources),
-    snapshots: () => Promise.resolve(snapshots),
+    publicReceipts: (ids) =>
+      Promise.resolve(
+        snapshots.flatMap((snapshot) => {
+          const origin = sources.find((s) => s.label === snapshot.sourceKey);
+          return origin &&
+            ids.includes(origin.subscriptionId) &&
+            snapshot.canonicalUri &&
+            !snapshot.isPrivate
+            ? [
+                {
+                  snapshotId: snapshot.snapshotId,
+                  subscriptionId: origin.subscriptionId,
+                  canonicalUri: snapshot.canonicalUri,
+                },
+              ]
+            : [];
+        }),
+      ),
     reader: {read, article},
     importArticle: importer,
   });
@@ -158,8 +165,111 @@ function fixture(scopedReceipts = false) {
   };
 }
 describe('owner history backfill', () => {
+  it('recovers a committed directory page, finishes the remaining pages in the background, and retries only failed imports', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'struinfo-history-')),
+      store = new SourceHistoryCheckpoint(dir);
+    function latch() {
+      let resolve: () => void = () => undefined;
+      const promise = new Promise<void>((done) => {
+        resolve = done;
+      });
+      return {promise, resolve};
+    }
+    const arrived = latch(),
+      release = latch();
+    const first = fixture({
+      load: () => store.load(),
+      remove: (id) => store.remove(id),
+      save: async (s, rows) => {
+        await store.save(s, rows);
+        if (s.work === 'scan' && rows.length) {
+          arrived.resolve();
+          await release.promise;
+        }
+      },
+    });
+    try {
+      const {sessionId} = (await first.service.execute('history_open', {
+        sources: [{subscriptionId: A}],
+      })) as {sessionId: string};
+      first.read.mockResolvedValueOnce({
+        articles: [row('first')],
+        next: [{kind: 'html', url: 'https://example.invalid/next'}],
+        replaceQueue: true,
+        method: 'first page',
+      });
+      await first.service.execute('history_run', {sessionId, action: 'scan'});
+      await arrived.promise;
+      const stopped = first.service.drain();
+      release.resolve();
+      await stopped;
+      const second = fixture(store);
+      second.read.mockResolvedValueOnce({
+        articles: [row('second'), row('undated')],
+        next: [],
+        method: 'next page',
+      });
+      second.service.poll();
+      const status = async () =>
+        (
+          (await second.service.execute('history_status', {sessionId})) as {
+            sessions: {
+              work: string | null;
+              plan: {imported: number; failed: number; pending: number};
+            }[];
+          }
+        ).sessions[0];
+      await vi.waitFor(async () => {
+        expect((await status())?.work).toBeNull();
+      });
+      expect(second.read.mock.calls.map(([p]) => p.url)).toEqual([
+        'https://example.invalid/next',
+      ]);
+      const docs = (await second.list(sessionId)).articles;
+      expect(docs).toHaveLength(3);
+      const plan = await second.prepare({
+        sessionId,
+        ids: docs.map((d) => d.id),
+      });
+      await second.service.execute('history_run', {
+        sessionId,
+        ...plan,
+        action: 'import',
+      });
+      await vi.waitFor(async () => {
+        expect((await status())?.plan).toMatchObject({
+          imported: 2,
+          failed: 1,
+          pending: 0,
+        });
+      });
+      second.importer.mockResolvedValueOnce({
+        snapshotId: A,
+        outcome: 'created',
+      });
+      await second.service.execute('history_run', {
+        sessionId,
+        ...plan,
+        action: 'import',
+        retryFailed: true,
+      });
+      await vi.waitFor(async () => {
+        expect((await status())?.plan).toMatchObject({
+          imported: 3,
+          failed: 0,
+          pending: 0,
+        });
+      });
+      expect(second.importer).toHaveBeenCalledTimes(4);
+      await second.service.drain();
+    } finally {
+      release.resolve();
+      await first.service.drain();
+      await rm(dir, {recursive: true, force: true});
+    }
+  });
   it('keeps independent source receipts and never advances live cursors', async () => {
-    const f = fixture(true);
+    const f = fixture();
     const configured = [A, B].map((id) => ({
       ...source(id),
       cursor: {connectorCursor: 'live-unchanged'},
@@ -333,7 +443,7 @@ describe('owner history backfill', () => {
       f.list(sessionId, {from: '2025-01-01', to: '2024-01-01'}),
     ).rejects.toMatchObject({code: 'history_invalid_request'});
   });
-  it('deduplicates across sources, concurrent selections and retries while keeping per-item failures', async () => {
+  it('keeps separate receipts per source and deduplicates concurrent retries while reporting per-item failures', async () => {
     const f = fixture(),
       sessionId = await f.open();
     for (const subscriptionId of [A, B])
@@ -349,10 +459,10 @@ describe('owner history backfill', () => {
     ])) as {results: {status: string}[]}[];
     expect(first?.results.map((r) => r.status)).toEqual([
       'imported',
-      'existing',
+      'imported',
     ]);
     expect(second?.results.every((r) => r.status === 'existing')).toBe(true);
-    expect(f.importer).toHaveBeenCalledTimes(1);
+    expect(f.importer).toHaveBeenCalledTimes(2);
     const errors = (await f.importRows({
       sessionId,
       ids: [
@@ -375,7 +485,7 @@ describe('owner history backfill', () => {
       snapshotId: A,
       resourceId: A,
       resourceKind: 'remote_document',
-      sourceKey: 'already rejected',
+      sourceKey: source(A).label,
       canonicalUri: item.url,
       capturedAt: '2023-01-01T00:00:00Z',
       fragmentCount: 1,

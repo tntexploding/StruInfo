@@ -365,14 +365,44 @@ export function orderedInformationEntryAssociationPair(
 function createEntryFeatures(
   entry: Readonly<CurrentInformationEntry>,
 ): EntryFeatures {
+  const annotation = entry.value.annotations;
+  const unified = annotation && annotation.originVersion !== 'reading-state.v1';
+  const currentLabels =
+    annotation?.inputBodySha256 === entry.value.bodySha256
+      ? annotation.labels
+      : [];
   const contentKeywords = new Set(
-    entry.value.contentKeywords.map((value) => value.normalizedValue),
+    unified
+      ? currentLabels
+          .filter((l) =>
+            annotation.dimensions.some(
+              (d) =>
+                d.id === l.dimensionId &&
+                d.role !== 'form' &&
+                d.role !== 'domain',
+            ),
+          )
+          .map((l) => l.term.id)
+      : entry.value.contentKeywords.map((t) =>
+          informationEntrySearchKey(t.displayValue),
+        ),
   );
   const textTerms = buildTextTerms(
     `${entry.value.titlePath}\n${entry.value.body}`,
   );
-  const typeIdentity =
-    entry.value.typeKeyword === undefined
+  const roleIds = (role: string) =>
+    annotation?.inputBodySha256 === entry.value.bodySha256
+      ? annotation.labels
+          .filter((l) =>
+            annotation.dimensions.some(
+              (d) => d.id === l.dimensionId && d.role === role,
+            ),
+          )
+          .map((l) => l.term.id)
+      : [];
+  const typeIdentity = unified
+    ? roleIds('form')[0]
+    : entry.value.typeKeyword === undefined
       ? undefined
       : entry.value.typeKeyword === 'other'
         ? entry.value.typeCustomName === undefined
@@ -380,13 +410,15 @@ function createEntryFeatures(
           : `other:${informationEntrySearchKey(entry.value.typeCustomName)}`
         : entry.value.typeKeyword;
   const domainIdentities = new Set(
-    entry.value.domains.flatMap((domain) =>
-      domain.keyword === 'other'
-        ? domain.customName === undefined
-          ? []
-          : [`other:${informationEntrySearchKey(domain.customName)}`]
-        : [domain.keyword],
-    ),
+    unified
+      ? roleIds('domain')
+      : entry.value.domains.flatMap((domain) =>
+          domain.keyword === 'other'
+            ? domain.customName === undefined
+              ? []
+              : [`other:${informationEntrySearchKey(domain.customName)}`]
+            : [domain.keyword],
+        ),
   );
   const indexKeys = new Set<string>();
   for (const value of contentKeywords) indexKeys.add(`keyword:${value}`);

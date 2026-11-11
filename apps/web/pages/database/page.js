@@ -35,6 +35,7 @@ export async function mount() {
   let currentView = 'idle',
     mode = 'search',
     evidence = 'local';
+  let legacyFilters = {};
   const value = (form, name) => form.elements.namedItem(name)?.value ?? '';
   function closeConfig() {
     if (config.matches(':popover-open')) config.hidePopover();
@@ -117,25 +118,21 @@ export async function mount() {
     const notice = $('#query-notice');
     notice.hidden = !blocked;
     notice.textContent = '当前包含隐私资料。请切回公开范围后再使用 AI 或联网。';
-    for (const [selectName, customName] of [
-      ['typeKeyword', 'typeCustomName'],
-      ['domainKeyword', 'domainCustomName'],
-    ]) {
-      const custom = scope.elements.namedItem(customName);
-      custom.hidden = value(scope, selectName) !== 'other';
-      custom.required = !custom.hidden;
-    }
     const count =
       [
-        'typeKeyword',
-        'domainKeyword',
         'contentKeyword',
         'sourceKey',
         'readingState',
+        'dimensionId',
+        'termId',
       ].filter((n) => value(scope, n)).length +
       Number(Boolean(value(scope, 'timeFrom') || value(scope, 'timeTo'))) +
       Number(privateScope);
-    $('#filter-count').textContent = count ? count + ' 项筛选' : '全部公开资料';
+    $('#filter-count').textContent = Object.keys(legacyFilters).length
+      ? `${count} 项筛选 · 含旧版分类`
+      : count
+        ? count + ' 项筛选'
+        : '全部公开资料';
     updateResult();
     placeConfig();
   }
@@ -180,7 +177,9 @@ export async function mount() {
     $('#search-form').requestSubmit();
   });
   $('#clear-filters').addEventListener('click', () => {
+    legacyFilters = {};
     scope.reset();
+    scope.elements.namedItem('dimensionId').onchange?.();
     scope.elements.namedItem('timeTo').setCustomValidity('');
     sync();
   });
@@ -190,7 +189,7 @@ export async function mount() {
   });
   $('#search-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    if (!input.value.trim()) {
+    if (!input.value.trim() && (mode === 'ask' || evidence !== 'local')) {
       input.focus();
       return;
     }
@@ -322,6 +321,7 @@ export async function mount() {
   function readQuery() {
     if (!validScope()) return;
     const query = {
+      ...legacyFilters,
       retrievalMode: option('retrievalMode'),
       includePrivate: value(scope, 'privacy') !== 'public',
       onlyPrivate: value(scope, 'privacy') === 'only',
@@ -332,17 +332,8 @@ export async function mount() {
       query.textMode = option('textMode');
       query.textFields = appliedOptions.getAll('textFields');
     }
-    for (const key of [
-      'typeKeyword',
-      'domainKeyword',
-      'contentKeyword',
-      'sourceKey',
-    ])
+    for (const key of ['contentKeyword', 'sourceKey'])
       if (value(scope, key)) query[key] = value(scope, key);
-    if (query.typeKeyword === 'other')
-      query.typeCustomName = value(scope, 'typeCustomName');
-    if (query.domainKeyword === 'other')
-      query.domainCustomName = value(scope, 'domainCustomName');
     const filter = {
       ...(value(scope, 'readingState')
         ? {readingState: value(scope, 'readingState')}
@@ -361,8 +352,21 @@ export async function mount() {
       };
     return query;
   }
-  function applyQuery(query) {
+  function restoreSelect(name, selected) {
+    const select = scope.elements.namedItem(name);
+    if (selected && ![...select.options].some((o) => o.value === selected))
+      select.add(new Option('已保存项（待核对）', selected));
+    select.value = selected || '';
+  }
+  function applyQuery(query, aggregation, execute = true) {
+    legacyFilters = Object.fromEntries(
+      ['typeKeyword', 'typeCustomName', 'domainKeyword', 'domainCustomName']
+        .filter((k) => query[k])
+        .map((k) => [k, query[k]]),
+    );
+    const privacy = value(scope, 'privacy');
     scope.reset();
+    scope.elements.namedItem('privacy').value = privacy;
     options.reset();
     mode = 'search';
     input.value = query.text ?? '';
@@ -375,8 +379,12 @@ export async function mount() {
       'contentKeyword',
       'sourceKey',
     ])
-      if (scope.elements.namedItem(key))
+      if (key === 'sourceKey') restoreSelect(key, query[key]);
+      else if (scope.elements.namedItem(key))
         scope.elements.namedItem(key).value = query[key] ?? '';
+    restoreSelect('dimensionId', query.annotationFilter?.dimensionId);
+    scope.elements.namedItem('dimensionId').onchange?.();
+    restoreSelect('termId', query.annotationFilter?.termIds?.[0]);
     scope.elements.namedItem('readingState').value =
       query.annotationFilter?.readingState ?? '';
     if (query.time) {
@@ -386,6 +394,8 @@ export async function mount() {
     }
     options.elements.namedItem('textMode').value =
       query.textMode ?? 'substring';
+    options.elements.namedItem('retrievalMode').value =
+      query.retrievalMode ?? 'lexical';
     all('[name=textFields]', options).forEach(
       (el) =>
         (el.checked = (query.textFields ?? ['title', 'body', 'tags']).includes(
@@ -394,12 +404,27 @@ export async function mount() {
     );
     appliedOptions = new FormData(options);
     sync();
+    if (!execute) {
+      open.left = true;
+      renderSide('left');
+      all('.filter-group', scope).forEach((group) => {
+        if (
+          group.querySelector('input,select') &&
+          [...group.querySelectorAll('input,select')].some(
+            (el) => el.value && !['timeField', 'privacy'].includes(el.name),
+          )
+        )
+          group.open = true;
+      });
+      return;
+    }
     view('results');
-    void executeSearch({
+    return executeSearch({
       mode,
       evidence,
       query: readQuery(),
       question: input.value.trim(),
+      aggregation,
     });
   }
   paintIcons(page.root);
@@ -415,6 +440,8 @@ export async function mount() {
       new Option(label, ''),
       ...items.map(([id, name]) => new Option(name, id)),
     );
+    if (selected && ![...el.options].some((o) => o.value === selected))
+      el.add(new Option('已保存项（当前不可用）', selected));
     el.value = selected;
     el.disabled = false;
   }
@@ -422,7 +449,7 @@ export async function mount() {
     void attempt(async () => {
       const {index} = await request('entries/search/index');
       all('[name=retrievalMode] option').forEach((o) => {
-        if (o.value !== 'text') o.disabled = !index.semanticSearchAvailable;
+        if (o.value !== 'lexical') o.disabled = !index.semanticSearchAvailable;
       });
     }, toast);
     void attempt(async () => {
@@ -432,7 +459,10 @@ export async function mount() {
       fillOptions(
         dimensions,
         vocabulary.dimensions
-          .filter((d) => d.enabled)
+          .filter(
+            (d) =>
+              d.enabled || vocabulary.terms.some((t) => t.dimensionId === d.id),
+          )
           .map((d) => [d.id, d.name]),
         '不限维度',
       );

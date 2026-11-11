@@ -222,6 +222,11 @@ export function assertProcessingTagProposalPayload(
   positiveInteger(value.expectedEntryRevision);
   boundedText(value.providerModel, 120);
   boundedText(value.promptVersion, 120);
+  if (!('contentKeywords' in value)) {
+    if (!structuredAnnotationsSchema.safeParse(value.annotations).success)
+      fail();
+    return;
+  }
   member(value.typeKeyword, [
     'factual_material',
     'knowledge_explanation',

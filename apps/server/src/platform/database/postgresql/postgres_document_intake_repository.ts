@@ -28,6 +28,38 @@ export class PostgresDocumentIntakeRepository implements DocumentIntakeRepositor
     );
     return result.rows.map(decode);
   }
+  public async publicSourceReceipts(
+    sourceIds: string[],
+    canonicalUri?: string,
+  ) {
+    const result = await this.pool.query(
+      `SELECT s.snapshot_id, r.canonical_uri, d.state_text::jsonb #>> '{captureOrigin,subscriptionId}' AS subscription_id,
+              d.state_text::jsonb #>> '{reception,channel}' AS channel,
+              d.state_text::jsonb #>> '{reception,historyImportKey}' AS history_key
+       FROM struinfo.processing_document_intake d
+       JOIN struinfo.snapshot s USING (workspace_id, snapshot_id)
+       JOIN struinfo.resource r USING (workspace_id, resource_id)
+       WHERE d.workspace_id=$1 AND NOT r.is_private AND r.canonical_uri IS NOT NULL
+         AND d.state_text::jsonb #>> '{captureOrigin,kind}'='subscription'
+         AND d.state_text::jsonb #>> '{captureOrigin,subscriptionId}'=ANY($2::text[])
+       ` +
+        (canonicalUri
+          ? ' AND r.canonical_uri=$3 ORDER BY s.captured_at DESC,s.snapshot_id LIMIT 1'
+          : ' ORDER BY s.captured_at DESC,s.snapshot_id'),
+      canonicalUri
+        ? [this.workspaceId, sourceIds, canonicalUri]
+        : [this.workspaceId, sourceIds],
+    );
+    return result.rows.map((row) => ({
+      snapshotId: String(row.snapshot_id),
+      canonicalUri: String(row.canonical_uri),
+      subscriptionId: String(row.subscription_id),
+      channel: row.channel,
+      ...(typeof row.history_key === 'string'
+        ? {historyImportKey: row.history_key}
+        : {}),
+    }));
+  }
   public async save(
     snapshotId: string,
     expectedVersion: number,

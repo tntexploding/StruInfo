@@ -83,7 +83,7 @@ function fixture() {
             kind: 'document',
             maxRelations: 0,
             snapshotId: id,
-            maxEntries: p.settings.maxEntries,
+            maxEntries: 12,
             maxModelCalls: p.settings.maxModelCalls,
           },
           state: {status: 'queued', calls: 0, phase: 'split', steps: []},

@@ -23,8 +23,8 @@ import {
 } from './workspace_bundle.js';
 
 export const M1E_PROCESSING_BUNDLE_SECTION_TYPE = 'struinfo.m1e-processing';
-export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 19;
-export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v19';
+export const M1E_PROCESSING_BUNDLE_SECTION_VERSION = 20;
+export const M1E_PROCESSING_BUNDLE_SCHEMA = 'struinfo.m1e-processing.v20';
 export const M1E_PROCESSING_VERSION_FOURTEEN_BUNDLE_SECTION_VERSION = 14;
 export const M1E_PROCESSING_VERSION_FOURTEEN_BUNDLE_SCHEMA =
   'struinfo.m1e-processing.v14';
@@ -391,6 +391,7 @@ export const M1E_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescript
     table('document_organization_work', [
       'workspace_id',
       'publication_id',
+      'budget_id',
       'status',
       'current_version',
       'error_code',
@@ -419,8 +420,18 @@ export const M1E_PROCESSING_TABLES: readonly Readonly<M1eProcessingTableDescript
     ]),
   ]);
 
+const VERSION_NINETEEN_PROCESSING_TABLES = Object.freeze(
+  M1E_PROCESSING_TABLES.map((d) =>
+    d.name === 'document_organization_work'
+      ? table(
+          d.name,
+          d.columns.filter((c) => c !== 'budget_id'),
+        )
+      : d,
+  ),
+);
 const VERSION_EIGHTEEN_PROCESSING_TABLES = Object.freeze(
-  M1E_PROCESSING_TABLES.slice(0, -1),
+  VERSION_NINETEEN_PROCESSING_TABLES.slice(0, -1),
 );
 const VERSION_SEVENTEEN_PROCESSING_TABLES = Object.freeze(
   VERSION_EIGHTEEN_PROCESSING_TABLES.slice(0, -1),
@@ -500,6 +511,25 @@ export const M1E_PROCESSING_VERSION_FOURTEEN_BUNDLE_CODEC: WorkspaceBundleSectio
     decode(payload: JsonValue): unknown {
       return upgradePreviousSnapshot(normalizeVersionFourteenSnapshot(payload));
     },
+  });
+export const M1E_PROCESSING_VERSION_NINETEEN_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
+  Object.freeze({
+    type: M1E_PROCESSING_BUNDLE_SECTION_TYPE,
+    version: 19,
+    encode: (value: unknown) =>
+      normalizeSnapshot(
+        value,
+        'struinfo.m1e-processing.v19',
+        VERSION_NINETEEN_PROCESSING_TABLES,
+      ),
+    decode: (value: JsonValue) =>
+      upgradePreviousSnapshot(
+        normalizeSnapshot(
+          value,
+          'struinfo.m1e-processing.v19',
+          VERSION_NINETEEN_PROCESSING_TABLES,
+        ),
+      ),
   });
 export const M1E_PROCESSING_VERSION_EIGHTEEN_BUNDLE_CODEC: WorkspaceBundleSectionCodec =
   Object.freeze({
@@ -953,7 +983,15 @@ function upgradePreviousSnapshot(
                 end_code_point: row.end_code_point ?? null,
               })),
             }
-          : table,
+          : table.name === 'document_organization_work'
+            ? {
+                ...table,
+                rows: table.rows.map((row) => ({
+                  ...row,
+                  budget_id: row.budget_id ?? null,
+                })),
+              }
+            : table,
       ),
       ...M1E_PROCESSING_TABLES.slice(previous.tables.length).map(
         (descriptor) => ({name: descriptor.name, rows: []}),
@@ -1076,6 +1114,12 @@ function normalizeRow(
     }
     if (descriptor.name === 'document_organization_work') {
       organizationStatusSchema.parse(row.status);
+      if (
+        row.budget_id != null &&
+        (typeof row.budget_id !== 'string' ||
+          !/^[a-zA-Z0-9_-]{1,100}$/u.test(row.budget_id))
+      )
+        fail();
       if (
         typeof row.current_version !== 'number' ||
         !Number.isInteger(row.current_version) ||

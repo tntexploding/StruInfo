@@ -8,10 +8,10 @@ export const escape = (value) =>
     .replaceAll('"', '&quot;');
 export const kinds = {
   rss: 'RSS / Atom',
-  git: 'Git 文件',
+  git: 'Git 文档',
   web: '网页',
   json: 'JSON API',
-  plugin: '连接插件',
+  plugin: 'MCP / 插件',
 };
 const typeNames = {
   rss: 'rss_atom',
@@ -26,6 +26,11 @@ let sourceRevision,
 export let loadError = '';
 export const sources = [],
   states = {};
+export const connectors = [];
+export const connectionAddress = (s) =>
+  s.kind === 'plugin'
+    ? s.connection.profile || '配置引用待填写'
+    : s.connection.url || '地址待填写';
 export const initial = (source) => ({
   name: source.name,
   description: '',
@@ -41,10 +46,18 @@ export const initial = (source) => ({
   end: '18:00',
   retries: 2,
   ai: false,
+  maxEntriesPerDocument: 64,
   split: '',
   tags: '',
   relations: '',
-  rules: '',
+  splitRouting: {
+    samplesPerFormat: 3,
+    sampleLimit: 24,
+    minimumScore: 80,
+    minimumMargin: 10,
+    reviewWindow: 20,
+    lowScoreRate: 0.3,
+  },
   connection: {},
   saved: false,
 });
@@ -58,8 +71,8 @@ const cursor = (c, prefix) =>
     : undefined;
 function readSource(s) {
   const kind = Object.keys(typeNames).find((k) => typeNames[k] === s.kind),
-    r = s.receiving,
-    schedule = r.schedule;
+    r = s.receiving || {},
+    schedule = r.schedule || {mode: 'interval'};
   const c = {
     url: s.feedUrl || s.repositoryUri || s.pageUrl || s.endpointUrl || '',
     ref: s.repositoryRef,
@@ -86,18 +99,23 @@ function readSource(s) {
     description: s.description || '',
     accent: s.processingProfile?.accent || '#c4b08b',
     privacy: s.isPrivate ? 'private' : 'public',
-    priority: r.preference,
+    priority: r.preference ?? 50,
     enabled: s.enabled,
     mode: schedule.mode === 'manual' ? 'interval' : schedule.mode,
     interval: s.intervalMinutes,
     weekdays: schedule.weekdays || [1, 2, 3, 4, 5],
     start: time(schedule.startMinute ?? 540),
     end: time(schedule.endMinute ?? 1080),
-    retries: r.retryLimit,
+    retries: r.retryLimit ?? 2,
     ai: policy.settings.subscriptionIds.includes(s.subscriptionId),
+    maxEntriesPerDocument: s.processingProfile?.maxEntriesPerDocument ?? 64,
     split: s.processingProfile?.split || '',
     tags: s.processingProfile?.tags || '',
     relations: s.processingProfile?.relations || '',
+    splitRouting: {
+      ...initial({}).splitRouting,
+      ...s.processingProfile?.splitRouting,
+    },
     connection: c,
     saved: true,
   };
@@ -109,6 +127,11 @@ export async function load() {
     ingestion('intake_status'),
   ]);
   sourceRevision = result.revision;
+  connectors.splice(
+    0,
+    connectors.length,
+    ...(result.connectors || []).filter((c) => c.origin === 'plugin'),
+  );
   raw = result.subscriptions;
   policy = status.policy;
   sources.splice(
@@ -138,18 +161,17 @@ function writeSource(s, id) {
       s.mode === 'window'
         ? {
             mode: 'window',
-            timeZone: old?.receiving.schedule.timeZone || 'Asia/Shanghai',
+            timeZone: old?.receiving?.schedule.timeZone || 'Asia/Shanghai',
             weekdays: s.weekdays,
             startMinute: minutes(s.start),
             endMinute: minutes(s.end),
           }
         : {mode: s.mode},
-    history: old?.receiving.history || 'discover',
-    urgency: old?.receiving.urgency || 'normal',
+    history: old?.receiving?.history || 'discover',
+    urgency: old?.receiving?.urgency || 'normal',
     preference: s.priority,
     retryLimit: s.retries,
   };
-  const profile = [s.split, s.rules].filter(Boolean).join('\n\n');
   const base = {
     subscriptionId: id,
     label: s.name.trim(),
@@ -160,10 +182,12 @@ function writeSource(s, id) {
     intervalMinutes: s.interval,
     receiving,
     processingProfile: {
-      split: profile,
+      maxEntriesPerDocument: s.maxEntriesPerDocument,
+      split: s.split,
       tags: s.tags,
       relations: s.relations,
       accent: s.accent,
+      splitRouting: s.splitRouting,
     },
     kind: typeNames[s.kind],
   };
@@ -187,7 +211,11 @@ function writeSource(s, id) {
         .filter(Boolean),
     };
   if (s.kind === 'plugin')
-    return {...base, connectorId: c.component, configurationRef: c.profile};
+    return {
+      ...base,
+      connectorId: c.component || connectors[0]?.connectorId,
+      configurationRef: c.profile,
+    };
   return {
     ...base,
     endpointUrl: c.url,
@@ -211,6 +239,12 @@ export async function persist(id) {
   const s = states[id],
     isNew = id === 'new' && !s.persistedId,
     actual = s.persistedId || (isNew ? crypto.randomUUID() : id);
+  if (
+    !Number.isInteger(s.maxEntriesPerDocument) ||
+    s.maxEntriesPerDocument < 1 ||
+    s.maxEntriesPerDocument > 64
+  )
+    throw new Error('每篇最多条目须填 1–64 之间的整数');
   if (s.kind !== 'plugin' && !s.connection.url?.trim())
     throw new Error('先填写接收地址');
   const writes = raw.map((r) => {

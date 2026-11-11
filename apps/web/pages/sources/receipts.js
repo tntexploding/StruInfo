@@ -5,7 +5,6 @@ import {textOf, titleOf} from '../../runtime/documents.js';
 import {escape as e, sourceRecord} from './store.js';
 let rows = [],
   selected = 0,
-  sessionId,
   privateScope = false,
   generation = 0,
   readSequence = 0;
@@ -78,72 +77,7 @@ export async function reviewReceipt(action) {
   });
 }
 export async function checkSource(id) {
-  await request(`source-subscriptions/${id}/run`, {});
-}
-export async function searchHistory(root) {
-  const ids = [...root.querySelectorAll('[name="history-source"]:checked')].map(
-    (i) => i.value,
-  );
-  if (!ids.length) throw new Error('先选择来源');
-  if (sessionId) await ingestion('history_close', {sessionId});
-  const archiveUrl = root.querySelector('[data-archive]')?.value;
-  const opened = await ingestion('history_open', {
-    sources: ids.map((subscriptionId) => ({
-      subscriptionId,
-      ...(archiveUrl ? {archiveUrl} : {}),
-    })),
+  return request(`source-subscriptions/${id}/run`, {
+    requestKey: crypto.randomUUID(),
   });
-  sessionId = opened.sessionId;
-  for (const subscriptionId of ids)
-    await ingestion('history_scan', {sessionId, subscriptionId});
-  const filter = historyFilter(root);
-  const found = await ingestion('history_select', {sessionId, ...filter});
-  const chosen = new Set(found.ids),
-    articles = [];
-  const listFilter = {...filter};
-  delete listFilter.perSourceLimit;
-  let offset = 0,
-    total = Infinity;
-  while (offset < total) {
-    const page = await ingestion('history_list', {
-      sessionId,
-      ...listFilter,
-      offset,
-    });
-    articles.push(...page.articles.filter((a) => chosen.has(a.id)));
-    total = page.total;
-    offset += page.articles.length;
-    if (!page.articles.length) break;
-  }
-  root.querySelector('#history-results').hidden = false;
-  root.querySelector('#history-results').innerHTML =
-    articles
-      .map(
-        (a) =>
-          `<label><input type="checkbox" name="history-result" value="${a.id}"><span>${e(a.title)} · ${e(sourceRecord(a.subscriptionId)?.label || a.subscriptionId)}</span></label>`,
-      )
-      .join('') || '<p>未找到符合条件的往期资料</p>';
-}
-const historyFilter = (root) => ({
-  from: root.querySelector('#history-from').value || undefined,
-  to: root.querySelector('#history-to').value || undefined,
-  text: root.querySelector('#history-query').value,
-  perSourceLimit: Number(root.querySelector('#history-limit').value),
-});
-export async function importHistory(root) {
-  const ids = [...root.querySelectorAll('[name="history-result"]:checked')].map(
-    (i) => i.value,
-  );
-  const plan = await ingestion('history_prepare_import', {
-    sessionId,
-    ids,
-    ...historyFilter(root),
-  });
-  for (let i = 0; i < ids.length; i += 8)
-    await ingestion('history_import', {
-      sessionId,
-      planId: plan.planId,
-      ids: ids.slice(i, i + 8),
-    });
-  return ids.length;
 }

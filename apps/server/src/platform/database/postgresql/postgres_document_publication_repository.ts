@@ -17,7 +17,7 @@ type Row = Readonly<Record<string, unknown>>;
 const publicationFrom = `FROM struinfo.document_publication_pointer p
   JOIN struinfo.document_publication_version v USING (workspace_id, document_id, publication_id)
   JOIN struinfo.document_organization_work w USING (workspace_id, publication_id)`;
-const selectPublication = `SELECT v.*, w.status, w.current_version, w.error_code ${publicationFrom}`;
+const selectPublication = `SELECT v.*, w.status, w.current_version, w.error_code, w.budget_id ${publicationFrom}`;
 
 /** One transaction freezes reading, advances the pointer and records deferred work. */
 export class PostgresDocumentPublicationRepository implements DocumentPublicationRepository {
@@ -176,8 +176,12 @@ export class PostgresDocumentPublicationRepository implements DocumentPublicatio
             ],
           );
           await client.query(
-            `INSERT INTO struinfo.document_organization_work (workspace_id,publication_id) VALUES ($1,$2)`,
-            [this.workspaceId, publicationId],
+            `INSERT INTO struinfo.document_organization_work (workspace_id,publication_id,budget_id) VALUES ($1,$2,$3)`,
+            [
+              this.workspaceId,
+              publicationId,
+              input.organizationBudgetId ?? null,
+            ],
           );
           if (old)
             await client.query(
@@ -233,17 +237,34 @@ export class PostgresDocumentPublicationRepository implements DocumentPublicatio
     return row ? decodeStatus(row) : undefined;
   }
 
-  public async loadPublished(workspaceId: string, includePrivate: boolean) {
-    if (workspaceId !== this.workspaceId)
-      return {managedSnapshotIds: new Set<string>(), entries: []};
+  public async organizationWork(limit: number, budgetId: string) {
+    const rows = await this.pool.query(
+      `${selectPublication}
+       JOIN struinfo.processing_document_intake i ON i.workspace_id=p.workspace_id AND i.snapshot_id=p.document_id
+       WHERE p.workspace_id=$1 AND w.status IN ('pending','running')
+         AND w.budget_id=$2
+         AND i.state_text::jsonb->>'decision'='admitted'
+         AND COALESCE(i.state_text::jsonb->>'receipt','accepted')='accepted'
+         AND NOT EXISTS (SELECT 1 FROM struinfo.snapshot s JOIN struinfo.resource r USING(workspace_id,resource_id)
+           WHERE s.workspace_id=v.workspace_id AND s.snapshot_id IN (v.snapshot_id,v.document_id) AND r.is_private)
+         AND NOT EXISTS (SELECT 1 FROM struinfo.information_entry e WHERE e.workspace_id=v.workspace_id AND e.snapshot_id=v.snapshot_id AND e.is_private)
+       ORDER BY w.updated_at, v.publication_id LIMIT $3`,
+      [this.workspaceId, budgetId, limit],
+    );
+    return rows.rows.map(decodeStatus);
+  }
+
+  public async loadPublished(
+    workspaceId: string,
+    includePrivate: boolean,
+    entryIds?: readonly string[],
+  ) {
+    if (workspaceId !== this.workspaceId) return {entries: []};
+    if (entryIds?.length === 0) return {entries: []};
     return runPostgresTransaction(
       this.pool,
       'repeatable_read_only',
       async (client) => {
-        const all = await client.query(
-          `SELECT DISTINCT document_id::text,snapshot_id::text FROM struinfo.document_publication_version WHERE workspace_id=$1`,
-          [workspaceId],
-        );
         const rows = await client.query(
           `SELECT v.content_text, (r.is_private OR original_source.is_private) AS source_private,
             ARRAY(SELECT e.entry_id::text FROM struinfo.information_entry e
@@ -255,19 +276,16 @@ export class PostgresDocumentPublicationRepository implements DocumentPublicatio
         JOIN struinfo.snapshot original ON original.workspace_id=p.workspace_id AND original.snapshot_id=p.document_id
         JOIN struinfo.resource original_source ON original_source.workspace_id=original.workspace_id AND original_source.resource_id=original.resource_id
         WHERE p.workspace_id=$1 AND i.state_text::jsonb->>'decision'='admitted'
+          AND ($3::text[] IS NULL OR EXISTS (
+            SELECT 1 FROM jsonb_array_elements(v.content_text::jsonb->'entries') e
+            WHERE e->>'entryId'=ANY($3::text[])))
           AND COALESCE(i.state_text::jsonb->>'receipt','accepted')='accepted'
           AND ($2::boolean OR (NOT r.is_private AND NOT original_source.is_private AND NOT EXISTS (
             SELECT 1 FROM struinfo.information_entry e
             WHERE e.workspace_id=v.workspace_id AND e.snapshot_id=v.snapshot_id AND e.is_private)))`,
-          [workspaceId, includePrivate],
+          [workspaceId, includePrivate, entryIds ?? null],
         );
         return {
-          managedSnapshotIds: new Set(
-            all.rows.flatMap((r) => [
-              String(r.document_id),
-              String(r.snapshot_id),
-            ]),
-          ),
           entries: rows.rows
             .flatMap((r) =>
               publicationContentSchema
@@ -279,7 +297,11 @@ export class PostgresDocumentPublicationRepository implements DocumentPublicatio
                     : e,
                 ),
             )
-            .filter((e) => includePrivate || !e.value.isPrivate),
+            .filter(
+              (e) =>
+                (includePrivate || !e.value.isPrivate) &&
+                (!entryIds || entryIds.includes(e.entryId)),
+            ),
         };
       },
     );
@@ -291,7 +313,7 @@ export class PostgresDocumentPublicationRepository implements DocumentPublicatio
     >[0],
   ) {
     const allowed: Readonly<Record<string, readonly string[]>> = {
-      pending: ['running', 'paused'],
+      pending: ['running', 'paused', 'failed', 'succeeded'],
       running: ['succeeded', 'failed', 'paused'],
       paused: ['pending'],
       failed: ['pending'],
@@ -355,6 +377,7 @@ function decodeStatus(row: Row): PublicationStatus {
       status: organizationStatusSchema.parse(row.status),
       version: Number(row.current_version),
       errorCode: optionalText(row.error_code) ?? null,
+      ...(optionalText(row.budget_id) ? {budgetId: String(row.budget_id)} : {}),
     },
   };
 }

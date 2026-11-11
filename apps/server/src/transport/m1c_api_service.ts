@@ -1,4 +1,6 @@
 import type {InformationEntryRepositoryPort} from '../modules/entries/information_entry_repository.js';
+import {loadAnnotationVocabulary} from '../application/annotation_vocabulary.js';
+import {annotationRecallAliases} from '../modules/entries/structured_annotations.js';
 import {searchCurrentInformationEntries} from '../modules/entries/information_entry_search.js';
 import {Buffer} from 'node:buffer';
 import {
@@ -10,6 +12,8 @@ import {
   type EntryRevisionRequest,
 } from '../application/entry_use_cases.js';
 import {ExecutionAuthority} from '../application/execution_authority.js';
+import {EntryAggregationService} from '../application/entry_aggregation_service.js';
+import type {TopicRepository} from '../modules/entries/content_topics.js';
 import {OperationError} from '../application/operation_error.js';
 import {ProcessingUseCases} from '../application/processing_use_cases.js';
 import {
@@ -36,7 +40,6 @@ import {
 
 import {
   DEFAULT_ENTRY_SPLIT_RULE_PROFILE,
-  ENTRY_DOMAIN_KEYWORDS,
   ENTRY_TYPE_KEYWORDS,
   INFORMATION_ENTRY_ASSOCIATION_ACTIONS,
   INFORMATION_ENTRY_EXPLORATION_POLICY_VERSION,
@@ -74,7 +77,6 @@ import {
   validateInformationDocumentWorkingCopyText,
   type CurrentInformationDocumentTags,
   type CurrentInformationEntry,
-  type EntryDomainKeyword,
   type EntrySplitRuleProfile,
   type EntryTypeKeyword,
   type InformationDocumentTagRepositoryPort,
@@ -130,15 +132,9 @@ import {
 import type {BlobStore} from '../storage/blob_store.js';
 import {
   DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
-  DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
   DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
-  DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
-  decodeReviewAssociationPolicyPreferences,
-  decodeReviewAutomaticKeywordPreferences,
   decodeReviewExplorationPolicyPreferences,
-  decodeReviewQuickTags,
   decodeReviewSourceSubscriptionPreferences,
-  decodeReviewVocabularyPreferences,
   patchReviewPreferences,
   updateReviewPreferences,
   type ReviewAssociationPolicyPreferences,
@@ -159,6 +155,7 @@ import type {EntryMarkdownExportServicePort} from '../modules/entries/informatio
 import type {DocumentIntakeRepository} from '../application/document_intake_contract.js';
 
 export interface M1cApiServiceDependencies {
+  readonly aggregationTopics?: TopicRepository;
   readonly stageDocument?: (snapshotId: string) => Promise<void>;
   readonly knowledgeEntries?: InformationEntryRepositoryPort;
   readonly documentIntakeRepository?: DocumentIntakeRepository;
@@ -253,11 +250,11 @@ export interface M1cApiServicePort {
   ): Promise<M1cHttpResult>;
   loadEntrySavedQueries(): Promise<M1cHttpResult>;
   writeEntrySavedQuery(body: unknown): Promise<M1cHttpResult>;
+  readEntryAggregation(body: unknown): Promise<M1cHttpResult>;
   readEntryQueryContext(body: unknown): Promise<M1cHttpResult>;
   loadWorkspaceUiPreferences(): Promise<M1cHttpResult>;
   saveWorkspaceUiPreferences(body: unknown): Promise<M1cHttpResult>;
-  loadReviewPreferences(): Promise<M1cHttpResult>;
-  saveReviewPreferences(body: unknown): Promise<M1cHttpResult>;
+  loadRecommendationPreferences(): Promise<M1cHttpResult>;
   importMarkdown(body: unknown): Promise<M1cHttpResult>;
   importDocument(body: unknown): Promise<M1cHttpResult>;
   materializeInformationEntries(body: unknown): Promise<M1cHttpResult>;
@@ -313,14 +310,6 @@ export interface M1cApiServicePort {
     options?: unknown,
   ): Promise<M1cHttpResult>;
   readOverviewSummary(): Promise<M1cHttpResult>;
-  aggregateInformationDocumentTags(
-    snapshotId: string,
-    body: unknown,
-  ): Promise<M1cHttpResult>;
-  reviseInformationDocumentTags(
-    snapshotId: string,
-    body: unknown,
-  ): Promise<M1cHttpResult>;
   listProcessingRuns(limit?: unknown): Promise<M1cHttpResult>;
   cancelProcessingRun(runId: string, body: unknown): Promise<M1cHttpResult>;
   listSourceSubscriptions(): Promise<M1cHttpResult>;
@@ -380,18 +369,41 @@ export class M1cApiService implements M1cApiServicePort {
   readonly #dependencies: Readonly<M1cApiServiceDependencies>;
   readonly #documents: DocumentUseCases;
   readonly #entries: EntryUseCases;
+  readonly #aggregations: EntryAggregationService;
   readonly #relations: RelationUseCases;
   readonly #processing: ProcessingUseCases;
 
   public constructor(dependencies: Readonly<M1cApiServiceDependencies>) {
     this.#dependencies = dependencies;
     const authority = ExecutionAuthority.owner(dependencies.workspaceId);
+    this.#aggregations = new EntryAggregationService(authority, {
+      preferences: dependencies.reviewPreferences,
+      entries:
+        dependencies.knowledgeEntries ??
+        dependencies.informationEntryRepository,
+      associations: dependencies.informationEntryAssociationRepository,
+      ...(dependencies.aggregationTopics
+        ? {topics: dependencies.aggregationTopics}
+        : {}),
+      ...(dependencies.entryTranslationSearch
+        ? {translations: dependencies.entryTranslationSearch}
+        : {}),
+    });
     this.#documents = new DocumentUseCases(authority, dependencies);
     this.#entries = new EntryUseCases(authority, {
       ...dependencies,
-      entryAliases: async () =>
-        (await dependencies.reviewPreferences.load(dependencies.workspaceId))
-          .vocabulary?.aliases ?? [],
+      entryAliases: async () => [
+        ...annotationRecallAliases(
+          await loadAnnotationVocabulary(
+            dependencies.workspaceId,
+            dependencies.reviewPreferences,
+            dependencies.informationEntryRepository,
+          ),
+        ),
+        ...((
+          await dependencies.reviewPreferences.load(dependencies.workspaceId)
+        ).vocabulary?.aliases ?? []),
+      ],
     });
     this.#relations = new RelationUseCases(authority, dependencies);
     this.#processing = new ProcessingUseCases(authority, dependencies);
@@ -939,6 +951,15 @@ export class M1cApiService implements M1cApiServicePort {
   }
 
   public async writeEntrySavedQuery(body: unknown): Promise<M1cHttpResult> {
+    if (isRecord(body) && body.operation === 'aggregate') {
+      try {
+        return httpResult(200, await this.#aggregations.capture(body));
+      } catch (error) {
+        return error instanceof OperationError
+          ? operationFailure(error)
+          : reviewPreferencesFailure();
+      }
+    }
     const write = decodeEntrySavedQueryWrite(body);
     if (write === undefined) return inputFailure('body');
     try {
@@ -967,6 +988,16 @@ export class M1cApiService implements M1cApiServicePort {
         : httpResult(200, {status: result.status, savedQueries: result.state});
     } catch {
       return reviewPreferencesFailure();
+    }
+  }
+
+  public async readEntryAggregation(body: unknown): Promise<M1cHttpResult> {
+    try {
+      return httpResult(200, await this.#aggregations.read(body));
+    } catch (error) {
+      return error instanceof OperationError
+        ? operationFailure(error)
+        : reviewPreferencesFailure();
     }
   }
 
@@ -1066,7 +1097,7 @@ export class M1cApiService implements M1cApiServicePort {
     }
   }
 
-  public async loadReviewPreferences(): Promise<M1cHttpResult> {
+  public async loadRecommendationPreferences(): Promise<M1cHttpResult> {
     try {
       const preferences = await this.#dependencies.reviewPreferences.load(
         this.#dependencies.workspaceId,
@@ -1074,106 +1105,12 @@ export class M1cApiService implements M1cApiServicePort {
       return httpResult(200, {
         status: 'ok',
         workspaceId: preferences.workspaceId,
-        quickTags: preferences.quickTags,
-        automaticKeywords:
-          preferences.automaticKeywords ??
-          DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES,
-        vocabulary:
-          preferences.vocabulary ?? DEFAULT_REVIEW_VOCABULARY_PREFERENCES,
         associationPolicy:
           preferences.associationPolicy ??
           DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES,
         explorationPolicy:
           preferences.explorationPolicy ??
           DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES,
-      });
-    } catch {
-      return reviewPreferencesFailure();
-    }
-  }
-
-  public async saveReviewPreferences(body: unknown): Promise<M1cHttpResult> {
-    if (!isRecord(body)) return inputFailure('body');
-    const quickTags = decodeReviewQuickTags(body.quickTags);
-    if (quickTags === undefined) return inputFailure('body.quickTags');
-    const automaticKeywords =
-      body.automaticKeywords === undefined
-        ? DEFAULT_REVIEW_AUTOMATIC_KEYWORD_PREFERENCES
-        : decodeReviewAutomaticKeywordPreferences(body.automaticKeywords);
-    if (automaticKeywords === undefined) {
-      return inputFailure('body.automaticKeywords');
-    }
-    const vocabulary =
-      body.vocabulary === undefined
-        ? DEFAULT_REVIEW_VOCABULARY_PREFERENCES
-        : decodeReviewVocabularyPreferences(body.vocabulary);
-    if (vocabulary === undefined) {
-      return inputFailure('body.vocabulary');
-    }
-    const associationPolicy =
-      body.associationPolicy === undefined
-        ? undefined
-        : decodeReviewAssociationPolicyPreferences(body.associationPolicy);
-    if (
-      body.associationPolicy !== undefined &&
-      associationPolicy === undefined
-    ) {
-      return inputFailure('body.associationPolicy');
-    }
-    const explorationPolicy =
-      body.explorationPolicy === undefined
-        ? undefined
-        : decodeReviewExplorationPolicyPreferences(body.explorationPolicy);
-    if (
-      body.explorationPolicy !== undefined &&
-      explorationPolicy === undefined
-    ) {
-      return inputFailure('body.explorationPolicy');
-    }
-    try {
-      const update = await updateReviewPreferences<
-        Readonly<{
-          associationPolicy: Readonly<ReviewAssociationPolicyPreferences>;
-          explorationPolicy: Readonly<ReviewExplorationPolicyPreferences>;
-        }>
-      >(
-        this.#dependencies.reviewPreferences,
-        this.#dependencies.workspaceId,
-        (current) => {
-          const effectiveAssociationPolicy =
-            associationPolicy ??
-            current.associationPolicy ??
-            DEFAULT_REVIEW_ASSOCIATION_POLICY_PREFERENCES;
-          const effectiveExplorationPolicy =
-            explorationPolicy ??
-            current.explorationPolicy ??
-            DEFAULT_REVIEW_EXPLORATION_POLICY_PREFERENCES;
-          return Object.freeze({
-            next: patchReviewPreferences(current, {
-              quickTags,
-              automaticKeywords,
-              vocabulary,
-              associationPolicy: effectiveAssociationPolicy,
-              explorationPolicy: effectiveExplorationPolicy,
-            }),
-            result: Object.freeze({
-              associationPolicy: effectiveAssociationPolicy,
-              explorationPolicy: effectiveExplorationPolicy,
-            }),
-          });
-        },
-      );
-      const preferences = update.preferences;
-      return httpResult(200, {
-        status: 'ok',
-        workspaceId: preferences.workspaceId,
-        quickTags: preferences.quickTags,
-        automaticKeywords: preferences.automaticKeywords ?? automaticKeywords,
-        vocabulary: preferences.vocabulary ?? vocabulary,
-        associationPolicy:
-          preferences.associationPolicy ?? update.result.associationPolicy,
-        explorationPolicy:
-          preferences.explorationPolicy ?? update.result.explorationPolicy,
       });
     } catch {
       return reviewPreferencesFailure();
@@ -2672,122 +2609,6 @@ export class M1cApiService implements M1cApiServicePort {
     }
   }
 
-  public async aggregateInformationDocumentTags(
-    snapshotId: string,
-    body: unknown,
-  ): Promise<M1cHttpResult> {
-    const input = decodeDocumentTagWriteBody(body, false);
-    if (!CANONICAL_UUID.test(snapshotId)) {
-      return inputFailure('path.snapshotId');
-    }
-    if (input === undefined) return inputFailure('body');
-    return this.#writeInformationDocumentTags(snapshotId, input);
-  }
-
-  public async reviseInformationDocumentTags(
-    snapshotId: string,
-    body: unknown,
-  ): Promise<M1cHttpResult> {
-    const input = decodeDocumentTagWriteBody(body, true);
-    if (!CANONICAL_UUID.test(snapshotId)) {
-      return inputFailure('path.snapshotId');
-    }
-    if (input === undefined) return inputFailure('body');
-    return this.#writeInformationDocumentTags(snapshotId, input);
-  }
-
-  async #writeInformationDocumentTags(
-    snapshotId: string,
-    input: Readonly<{
-      expectedRevision: number;
-      includePrivate: boolean;
-      tags?: readonly string[];
-    }>,
-  ): Promise<M1cHttpResult> {
-    try {
-      const snapshot =
-        await this.#dependencies.evidenceReadRepository.loadSnapshot(
-          this.#dependencies.workspaceId,
-          snapshotId,
-        );
-      if (
-        snapshot === undefined ||
-        (snapshot.isPrivate === true && !input.includePrivate)
-      ) {
-        return httpResult(404, {
-          status: 'not_found',
-          issue: Object.freeze({code: 'snapshot_not_found'}),
-        });
-      }
-      const materialized = await materializeEvidenceSnapshot(
-        snapshot,
-        this.#dependencies.blobStore,
-      );
-      const normalizedText = materialized.structures[0]?.normalizedText;
-      if (normalizedText === undefined) {
-        return httpResult(422, {
-          status: 'rejected',
-          issue: Object.freeze({code: 'document_text_not_found'}),
-        });
-      }
-      const entries = (
-        await this.#dependencies.informationEntryRepository.loadCurrentEntries(
-          this.#dependencies.workspaceId,
-          input.includePrivate,
-        )
-      ).filter((entry) => entry.snapshotId === snapshotId);
-      const aggregationInput = Object.freeze({
-        normalizedText,
-        isPrivate: snapshot.isPrivate === true,
-        entries: Object.freeze(entries),
-      });
-      const value =
-        input.tags === undefined
-          ? prepareAggregatedInformationDocumentTags(aggregationInput)
-          : prepareManualInformationDocumentTags(aggregationInput, input.tags);
-      if (value === undefined) return inputFailure('body.tags');
-      if (!snapshot.isPrivate)
-        await this.#dependencies.stageDocument?.(snapshotId);
-      const outcome =
-        await this.#dependencies.informationDocumentTagRepository.writeDocumentTags(
-          {
-            workspaceId: this.#dependencies.workspaceId,
-            resourceId: snapshot.resourceId,
-            snapshotId,
-            expectedRevision: input.expectedRevision,
-            revisionId: deriveInformationDocumentTagRevisionId(
-              snapshotId,
-              input.expectedRevision + 1,
-            ),
-            value,
-          },
-        );
-      if (outcome === 'stale') {
-        return httpResult(409, {
-          status: 'rejected',
-          issue: Object.freeze({code: 'stale_document_tag_revision'}),
-        });
-      }
-      const current =
-        await this.#dependencies.informationDocumentTagRepository.loadCurrentDocumentTags(
-          this.#dependencies.workspaceId,
-          input.includePrivate,
-        );
-      const documentTags = current.find(
-        (candidate) => candidate.snapshotId === snapshotId,
-      );
-      if (documentTags === undefined) {
-        throw new Error('Committed document tags were not readable.');
-      }
-      return httpResult(200, {
-        status: outcome,
-        documentTags,
-      });
-    } catch {
-      return repositoryFailure();
-    }
-  }
-
   public async listProcessingRuns(
     limitInput: unknown = 20,
   ): Promise<M1cHttpResult> {
@@ -2975,11 +2796,13 @@ export class M1cApiService implements M1cApiServicePort {
     const service = this.#dependencies.aiSplitProposals;
     if (service === undefined) return aiProviderNotConfigured();
     try {
-      if (decision === 'accepted')
-        await this.#dependencies.stageDocument?.(snapshotId);
       const result =
         decision === 'accepted'
-          ? await service.accept(snapshotId, proposalId)
+          ? await service.accept(snapshotId, proposalId, {
+              beforeWrite: async () => {
+                await this.#dependencies.stageDocument?.(snapshotId);
+              },
+            })
           : await service.reject(snapshotId, proposalId);
       return httpResult(200, {
         status: result.outcome,
@@ -3573,59 +3396,27 @@ function decodeEntryRevisionBody(
   }
   const annotation = body.annotation;
   if (
+    Object.keys(annotation).some(
+      (k) => !['body', 'usefulnessScore', 'interestScore'].includes(k),
+    ) ||
     typeof annotation.body !== 'string' ||
-    !Array.isArray(annotation.contentKeywords) ||
-    !annotation.contentKeywords.every((value) => typeof value === 'string') ||
-    typeof annotation.typeKeyword !== 'string' ||
-    !ENTRY_TYPE_KEYWORDS.includes(annotation.typeKeyword as EntryTypeKeyword) ||
-    (annotation.typeCustomName !== undefined &&
-      typeof annotation.typeCustomName !== 'string') ||
     !isOptionalAssessmentScore(annotation.usefulnessScore) ||
-    !isOptionalAssessmentScore(annotation.interestScore) ||
-    !Array.isArray(annotation.domains)
-  ) {
+    !isOptionalAssessmentScore(annotation.interestScore)
+  )
     return undefined;
-  }
-  const domains = annotation.domains.flatMap((value) => {
-    if (
-      !isRecord(value) ||
-      typeof value.keyword !== 'string' ||
-      !ENTRY_DOMAIN_KEYWORDS.includes(value.keyword as EntryDomainKeyword) ||
-      (value.customName !== undefined && typeof value.customName !== 'string')
-    ) {
-      return [];
-    }
-    return [
-      Object.freeze({
-        keyword: value.keyword as EntryDomainKeyword,
-        ...(value.customName === undefined
-          ? {}
-          : {customName: value.customName}),
-      }),
-    ];
-  });
-  if (domains.length !== annotation.domains.length) return undefined;
-  return Object.freeze({
+  return {
     expectedRevision: body.expectedRevision,
     includePrivate: (body.includePrivate ?? false) as boolean,
-    annotation: Object.freeze({
+    annotation: {
       body: annotation.body,
-      contentKeywords: Object.freeze([
-        ...annotation.contentKeywords,
-      ] as string[]),
-      typeKeyword: annotation.typeKeyword as EntryTypeKeyword,
-      ...(annotation.typeCustomName === undefined
-        ? {}
-        : {typeCustomName: annotation.typeCustomName}),
       ...(annotation.usefulnessScore === undefined
         ? {}
         : {usefulnessScore: annotation.usefulnessScore}),
       ...(annotation.interestScore === undefined
         ? {}
         : {interestScore: annotation.interestScore}),
-      domains: Object.freeze(domains),
-    }),
-  });
+    },
+  };
 }
 
 function decodeInformationEntryTypeReviewBody(body: unknown):
@@ -3975,47 +3766,6 @@ function decodeInformationEntryAssociationOverride(body: unknown):
     expectedRevision: body.expectedRevision,
     includePrivate,
     action: body.action as InformationEntryAssociationAction,
-  });
-}
-
-function decodeDocumentTagWriteBody(
-  body: unknown,
-  requireTags: boolean,
-):
-  | Readonly<{
-      expectedRevision: number;
-      includePrivate: boolean;
-      tags?: readonly string[];
-    }>
-  | undefined {
-  if (!isRecord(body)) return undefined;
-  const includePrivate = body.includePrivate ?? false;
-  if (
-    typeof body.expectedRevision !== 'number' ||
-    !Number.isSafeInteger(body.expectedRevision) ||
-    body.expectedRevision < 0 ||
-    body.expectedRevision > 2_147_483_647 ||
-    typeof includePrivate !== 'boolean'
-  ) {
-    return undefined;
-  }
-  if (!requireTags) {
-    if (body.tags !== undefined) return undefined;
-    return Object.freeze({
-      expectedRevision: body.expectedRevision,
-      includePrivate,
-    });
-  }
-  if (
-    !Array.isArray(body.tags) ||
-    !body.tags.every((value) => typeof value === 'string')
-  ) {
-    return undefined;
-  }
-  return Object.freeze({
-    expectedRevision: body.expectedRevision,
-    includePrivate,
-    tags: Object.freeze([...body.tags] as string[]),
   });
 }
 
@@ -4569,6 +4319,7 @@ function aiSplitProposalFailure(error: unknown): M1cHttpResult {
   if (
     error.code === 'ai_private_snapshot_forbidden' ||
     error.code === 'ai_snapshot_already_materialized' ||
+    error.code === 'entry_budget_exceeded' ||
     error.code === 'ai_run_conflict' ||
     error.code === 'ai_run_invalid_state' ||
     error.code === 'ai_proposal_terminal' ||

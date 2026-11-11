@@ -1,5 +1,7 @@
 import {createHash} from 'node:crypto';
 import {lookup} from 'node:dns/promises';
+import {readSourceResponse} from './source_redirect.js';
+import {articleMetadata} from './history_markup.js';
 import {isIP} from 'node:net';
 
 import {projectStructuredDocument} from '../../modules/evidence/index.js';
@@ -50,7 +52,7 @@ interface WebCursor {
 /**
  * A deliberately constrained Web reader. It fetches only the explicitly
  * configured public HTTPS pages on one origin, never discovers links, follows
- * redirects, executes scripts or exposes a general crawler surface.
+ * off-site redirects, executes scripts or exposes a general crawler surface.
  */
 export class WebSourceConnector implements SourceConnectorPort {
   public readonly connectorId = WEB_SOURCE_CONNECTOR_ID;
@@ -86,7 +88,6 @@ export class WebSourceConnector implements SourceConnectorPort {
     if (firstPage === undefined) {
       throw new SourceConnectorError('connector_result_invalid');
     }
-    await this.#admitPublicHost(firstPage.hostname);
     const previousByKey = new Map(
       (previous?.pages ?? []).map((page) => [page.key, page]),
     );
@@ -128,11 +129,16 @@ export class WebSourceConnector implements SourceConnectorPort {
       if (previousPage?.token === token) continue;
 
       const projectionSha256 = digestBytes(projection.value.sourceUtf8);
+      const restricted = articleMetadata(
+        new TextDecoder().decode(response.bytes),
+        response.url,
+      ).restricted;
       changed.push(
         Object.freeze({
           externalId: `page:${key}`,
           version: `${digestBytes(response.bytes)}:${projectionSha256}`,
-          canonicalUri: pageUrl.toString(),
+          canonicalUri: response.url,
+          ...(restricted ? {accessRestriction: 'paid' as const} : {}),
           mediaType: response.mediaType,
           profile: 'commonmark-v1' as const,
           sourceUtf8: Uint8Array.from(projection.value.sourceUtf8),
@@ -160,6 +166,7 @@ export class WebSourceConnector implements SourceConnectorPort {
         status: 'changed';
         bytes: Uint8Array;
         mediaType: string;
+        url: string;
         etag?: string;
         lastModified?: string;
       }>
@@ -174,17 +181,16 @@ export class WebSourceConnector implements SourceConnectorPort {
     if (previous?.lastModified !== undefined) {
       headers.set('if-modified-since', previous.lastModified);
     }
-    let response: Response;
-    try {
-      response = await this.#fetch(pageUrl, {
+    const {response, url} = await readSourceResponse(
+      pageUrl,
+      {
         method: 'GET',
         headers,
-        redirect: 'manual',
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MILLISECONDS),
-      });
-    } catch {
-      throw new SourceConnectorError('connector_unavailable');
-    }
+      },
+      this.#fetch,
+      (host) => this.#admitPublicHost(host),
+    );
     if (response.status === 304) {
       return Object.freeze({status: 'unchanged' as const});
     }
@@ -218,6 +224,7 @@ export class WebSourceConnector implements SourceConnectorPort {
       status: 'changed' as const,
       bytes,
       mediaType,
+      url: url.href,
       ...boundedHeader('etag', response.headers.get('etag')),
       ...boundedHeader('lastModified', response.headers.get('last-modified')),
     });

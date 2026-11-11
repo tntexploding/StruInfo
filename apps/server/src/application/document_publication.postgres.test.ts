@@ -1,6 +1,8 @@
 import {PostgresResearchRepository} from '../platform/database/postgresql/postgres_research_repository.js';
 import {researchSettingsSchema, scheduleSchema} from './research_contract.js';
 import {TopicService} from './topic_service.js';
+import type {AgentTask} from './agent_task_contract.js';
+import {AiPriceWindowClosedError} from '../modules/processing/ai_price_policy.js';
 import {PostgresTopicRepository} from '../platform/database/postgresql/postgres_topic_repository.js';
 import {
   topicScopeSchema,
@@ -9,6 +11,8 @@ import {
   type TopicValue,
 } from '../modules/entries/content_topics.js';
 import {AiTagProposalService} from '../modules/processing/ai_tag_proposal_service.js';
+import {loadAnnotationVocabulary} from './annotation_vocabulary.js';
+import {decodeAnnotationResponse} from '../platform/ai/annotation_response.js';
 import {AnnotationService} from './annotation_service.js';
 import {
   EMPTY_ANNOTATION_VOCABULARY,
@@ -31,7 +35,6 @@ import {agentHttpMiddleware} from '../transport/agent_http.js';
 import {
   DocumentPublicationService,
   publishedEntryRepository,
-  unpublishedSnapshots,
 } from './document_publication.js';
 import {DocumentIntakeService} from './document_intake_service.js';
 import {AgentCaptureService} from './agent_capture_service.js';
@@ -225,12 +228,7 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
       () => Promise.resolve([]),
       ledger,
     );
-    const knowledge = publishedEntryRepository(
-      repo.informationEntries,
-      async (entries) =>
-        unpublishedSnapshots(await intakeRepo.list(), [], entries),
-      ledger,
-    );
+    const knowledge = publishedEntryRepository(repo.informationEntries, ledger);
     const retrieval = new InformationEntryRetrievalService({
       annotationVocabulary: async () =>
         (await preferences.load(w)).annotationVocabulary ??
@@ -352,6 +350,292 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
       confirm,
     };
   }
+
+  it('unified tags persist once and feed vocabulary, published search and manual editing', async () => {
+    const f = await fixture();
+    const entry = required((await f.prepare()).entries[0]);
+    const vocabulary = await loadAnnotationVocabulary(
+      f.w,
+      preferences,
+      f.repo.informationEntries,
+    );
+    const dimension = required(
+      vocabulary.dimensions.find((d) => d.role === 'issue'),
+    );
+    const quote = 'Confirmed alpha knowledge.';
+    const decoded = decodeAnnotationResponse(
+      {
+        status: 'complete',
+        note: '',
+        labels: [
+          {
+            dimensionId: dimension.id,
+            termId: null,
+            label: 'Alpha knowledge',
+            meaning: 'Synthetic alpha subject',
+            wording: 'alpha knowledge',
+            primary: true,
+            quote,
+          },
+        ],
+        claims: [],
+      },
+      entry,
+      vocabulary,
+    );
+    const tags = new AiTagProposalService({
+      workspaceId: f.w,
+      entries: f.repo.informationEntries,
+      processing: f.repo.processingRuns,
+      provider: {
+        providerKey: 'deepseek-responses-v1',
+        model: 'synthetic-no-network',
+        promptVersion: 'synthetic-unified',
+        proposeTags: () =>
+          Promise.resolve({summary: 'Synthetic', annotations: decoded}),
+      },
+    });
+    await tags.start(entry.entryId, 'unified');
+    const proposal = required((await tags.listForEntry(entry.entryId))[0]);
+    expect(proposal.tagPayload).not.toHaveProperty('contentKeywords');
+    expect(proposal.tagPayload?.annotations).toEqual(decoded);
+    await tags.accept(entry.entryId, proposal.proposalId);
+    const current = required(
+      (await f.repo.informationEntries.loadCurrentEntries(f.w, false))[0],
+    );
+    expect(current.value.contentKeywords).toEqual([]);
+    expect(current.value.typeKeyword).toBeUndefined();
+    expect(current.value.annotations).toEqual(decoded);
+    const catalog = await loadAnnotationVocabulary(
+      f.w,
+      preferences,
+      f.repo.informationEntries,
+    );
+    expect(catalog.terms).toEqual(decoded.labels.map((l) => l.term));
+    expect(
+      (await preferences.load(f.w)).annotationVocabulary?.terms ?? [],
+    ).toEqual([]);
+    await f.confirm();
+    const found = await f.entriesFor(f.owner).search({
+      text: 'Alpha knowledge',
+      textFields: ['tags'],
+      includePrivate: false,
+      limit: 20,
+      annotationFilter: {termIds: [required(catalog.terms[0]).id]},
+    });
+    expect(found.totalCount).toBe(1);
+    const label = required(decoded.labels[0]);
+    await f.commands(f.owner).execute('entry_annotations_save', {
+      entryId: entry.entryId,
+      expectedRevision: current.revision,
+      vocabularyRevision: catalog.revision,
+      annotation: {
+        status: 'complete',
+        note: '',
+        readingState: 'read',
+        labels: [{...label, term: {...label.term, id: randomUUID()}}],
+        claims: [],
+      },
+    });
+    const manual = required(
+      (await f.repo.informationEntries.loadCurrentEntries(f.w, false))[0],
+    );
+    expect(manual.value.annotations?.labels[0]?.term.id).toBe(label.term.id);
+    expect(manual.value.annotations?.origin).toBe('manual');
+    expect(
+      await f.repo.informationEntries.loadAnnotationTerms?.(f.w),
+    ).toHaveLength(1);
+    await f.confirm();
+    expect(
+      (await f.documents.list(false)).documents[0]?.entryCount,
+    ).toBeGreaterThan(0);
+    expect(
+      (await f.documents.list(false, false, {query: 'Alpha knowledge'}))
+        .totalCount,
+    ).toBe(1);
+    const beforeReading = required(
+      (await f.repo.informationEntries.loadCurrentEntries(f.w, false))[0],
+    );
+    const saved = required(beforeReading.value.annotations);
+    await f.commands(f.owner).execute('entry_annotations_save', {
+      entryId: entry.entryId,
+      expectedRevision: beforeReading.revision,
+      vocabularyRevision: catalog.revision,
+      annotation: {
+        status: saved.status,
+        note: saved.note,
+        readingState: 'archived',
+        labels: saved.labels,
+        claims: saved.claims,
+      },
+    });
+    const afterReading = required(
+      (await f.repo.informationEntries.loadCurrentEntries(f.w, false))[0],
+    );
+    expect(afterReading.value.annotations).toEqual({
+      ...saved,
+      readingState: 'archived',
+    });
+    await f.repo.informationEntries.reviseEntry({
+      workspaceId: f.w,
+      entryId: entry.entryId,
+      expectedRevision: afterReading.revision,
+      revisionId: randomUUID(),
+      value: {...afterReading.value, isPrivate: true},
+    });
+    expect(await f.repo.informationEntries.loadAnnotationTerms?.(f.w)).toEqual(
+      [],
+    );
+  });
+
+  it('dispatches published documents through the bound budget and finishes grounded topic work', async () => {
+    const f = await fixture();
+    await f.prepare();
+    const peer = await f.capture.importText(f.owner, {
+      requestKey: 'peer',
+      title: 'Peer guide',
+      markdown: '# Peer guide\n\nConfirmed beta knowledge.\n',
+    });
+    await f.intake.receive(
+      [
+        {
+          snapshotId: peer.snapshotId,
+          expectedVersion:
+            (await f.intakeRepo.read(peer.snapshotId))?.version ?? 0,
+        },
+      ],
+      'accept',
+    );
+    await f.documents.materialize({
+      snapshotId: peer.snapshotId,
+      includePrivate: false,
+      mode: 'deterministic',
+    });
+    const vocabulary = await loadAnnotationVocabulary(
+      f.w,
+      preferences,
+      f.repo.informationEntries,
+    );
+    const dimension = required(
+      vocabulary.dimensions.find((d) => d.role === 'issue'),
+    );
+    for (const e of await f.repo.informationEntries.loadCurrentEntries(
+      f.w,
+      false,
+    )) {
+      const annotations = decodeAnnotationResponse(
+        {
+          status: 'complete',
+          note: '',
+          labels: [
+            {
+              dimensionId: dimension.id,
+              termId: null,
+              label: 'Knowledge',
+              meaning: 'Synthetic subject',
+              wording: 'knowledge',
+              primary: true,
+              quote: e.value.body,
+            },
+          ],
+          claims: [],
+        },
+        e,
+        vocabulary,
+      );
+      await f.repo.informationEntries.reviseEntry({
+        workspaceId: f.w,
+        entryId: e.entryId,
+        expectedRevision: e.revision,
+        revisionId: randomUUID(),
+        value: {...e.value, annotations},
+      });
+    }
+    for (const snapshotId of [f.snapshotId, peer.snapshotId])
+      await f.publication.completeTask({
+        taskId: randomUUID(),
+        request: {
+          kind: 'document',
+          snapshotId,
+          budgetId: snapshotId === f.snapshotId ? 'automatic' : 'separate',
+        },
+        state: {steps: []},
+        createdAt: new Date().toISOString(),
+      } as unknown as AgentTask);
+    const repo = new PostgresTopicRepository(runtime, f.w);
+    let paused = true,
+      closed = false,
+      calls = 0;
+    const service = new TopicService({
+      workspaceId: f.w,
+      repository: repo,
+      entries: f.knowledge,
+      publications: f.ledger,
+      budgetStatus: () =>
+        Promise.resolve({
+          batchId: 'automatic',
+          paused,
+          limitCny: 1,
+          remainingCny: 1,
+        }),
+      checkModelCall: () =>
+        closed
+          ? Promise.reject(new AiPriceWindowClosedError())
+          : Promise.resolve(),
+      executionSettings: () =>
+        Promise.resolve({automaticRetryLimit: 0, maxConcurrentRequests: 2}),
+      provider: {
+        generate: (input, budget) => {
+          calls++;
+          expect(budget).toBe('automatic');
+          expect(input.entries).toHaveLength(2);
+          return Promise.resolve({
+            topics: [
+              {
+                topicId: null,
+                name: 'Knowledge',
+                scope: 'Synthetic subject',
+                summary: 'Both documents discuss knowledge.',
+                members: input.entries.map((e) => ({
+                  entryId: e.entryId,
+                  revision: e.revision,
+                  quote: e.body,
+                  reason: 'Shared subject',
+                })),
+              },
+            ],
+            relations: [],
+            note: '',
+          });
+        },
+      },
+    });
+    await service.poll();
+    expect(await repo.list('job')).toHaveLength(0);
+    paused = false;
+    closed = true;
+    await service.poll();
+    expect(await repo.list('job')).toHaveLength(0);
+    closed = false;
+    await service.poll();
+    await service.drain();
+    expect(calls).toBe(1);
+    expect((await f.ledger.read(f.snapshotId))?.organization.status).toBe(
+      'succeeded',
+    );
+    expect((await f.ledger.read(peer.snapshotId))?.organization.status).toBe(
+      'pending',
+    );
+    expect(await repo.list('topic')).toHaveLength(1);
+    const entryId = required(
+      (await f.ledger.read(f.snapshotId))?.entries[0],
+    ).entryId;
+    expect(
+      (await f.knowledge.loadCurrentEntriesByIds?.(f.w, false, [entryId]))?.map(
+        (e) => e.entryId,
+      ),
+    ).toEqual([entryId]);
+  });
 
   it('P5 persists manual topics, rejects stale writes and shares owner/Agent reads', async () => {
     const f = await fixture();
@@ -502,7 +786,9 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
     const current = required(
       (await f.repo.informationEntries.loadCurrentEntries(f.w, false))[0],
     );
-    expect(current.value.annotations?.labels[0]?.evidence.quote).toBe(quote);
+    expect(current.value.annotations?.labels[0]).toMatchObject({
+      evidence: {quote},
+    });
     await expect(
       command('entry_annotations_save', write),
     ).rejects.toMatchObject({code: 'stale_entry_revision'});
@@ -833,6 +1119,36 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
     await capture(sourceA, 'old', true);
     for (const id of ['a1', 'a2', 'a3']) await capture(sourceA, id);
     await capture(sourceB, 'b1');
+    const received = await f.intakeRepo.list();
+    const a = required(
+      received.find(
+        (r) =>
+          r.value.captureOrigin?.kind === 'subscription' &&
+          r.value.captureOrigin.subscriptionId === sourceA &&
+          r.value.reception?.channel === 'live',
+      ),
+    );
+    const b = required(
+      received.find(
+        (r) =>
+          r.value.captureOrigin?.kind === 'subscription' &&
+          r.value.captureOrigin.subscriptionId === sourceB,
+      ),
+    );
+    await f.intakeRepo.save(a.snapshotId, a.version, {
+      ...a.value,
+      receipt: 'rejected',
+      receiptOrigin: 'manual',
+      decision: 'blocked',
+      origin: 'manual',
+    });
+    await f.intakeRepo.save(b.snapshotId, b.version, {
+      ...b.value,
+      receipt: 'accepted',
+      receiptOrigin: 'manual',
+      decision: 'admitted',
+      origin: 'manual',
+    });
     const records = await f.intakeRepo.list();
     const history = required(
       records.find((r) => r.value.reception?.channel === 'history'),
@@ -840,6 +1156,10 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
     expect(history.value.receipt).toBe('pending');
     expect(await queue.read(history.snapshotId)).toBeUndefined();
     const firstTwo = await queue.dispatchCandidates(2);
+    expect(firstTwo[0]?.origin).toEqual({
+      kind: 'subscription',
+      subscriptionId: sourceB,
+    });
     expect(
       new Set(
         firstTwo.map((r) =>
@@ -974,9 +1294,6 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
         includePrivate: false,
         annotation: {
           body: 'Draft beta knowledge.',
-          contentKeywords: ['draft-only'],
-          typeKeyword: 'knowledge_explanation',
-          domains: [{keyword: 'engineering_computing'}],
         },
       });
       expect(
@@ -1224,9 +1541,6 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
         proposeTags: () =>
           Promise.resolve({
             summary: 'Synthetic annotations',
-            contentKeywords: [],
-            typeKeyword: 'knowledge_explanation',
-            domains: [],
             annotations,
           }),
       },
@@ -1244,9 +1558,6 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
       includePrivate: false,
       annotation: {
         body: 'Unconfirmed replacement.',
-        contentKeywords: ['replacement'],
-        typeKeyword: 'knowledge_explanation',
-        domains: [{keyword: 'engineering_computing'}],
       },
     });
     const topicRepo = new PostgresTopicRepository(runtime, f.w);
@@ -1381,8 +1692,12 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
       ]),
     ).toBe(false);
     const transfer = new PostgresM1cDomainTransferRepository(runtime);
+    await runtime.query(
+      'UPDATE struinfo.document_organization_work SET budget_id=$2 WHERE workspace_id=$1',
+      [f.w, 'restore-budget'],
+    );
     const bundle = await transfer.exportWorkspace(f.w);
-    expect(bundle.processing.schemaVersion).toBe('struinfo.m1e-processing.v19');
+    expect(bundle.processing.schemaVersion).toBe('struinfo.m1e-processing.v20');
     expect(
       bundle.processing.tables.find(
         (t) => t.name === 'processing_tag_annotation_payload',
@@ -1422,6 +1737,7 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
       expect((await ledger.read(f.snapshotId))?.organization).toMatchObject({
         status: 'paused',
         errorCode: 'restore_resume_required',
+        budgetId: 'restore-budget',
       });
       expect(
         (await ledger.loadPublished(f.w, false)).entries[0]?.value.body,

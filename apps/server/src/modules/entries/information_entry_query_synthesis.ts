@@ -1,3 +1,4 @@
+import {entryTagWords} from './entry_tags.js';
 import {rankQuestionEvidence} from './information_entry_question_recall.js';
 import {searchCurrentInformationEntries} from './information_entry_search.js';
 import type {InformationEntryAssociationRepositoryPort} from './information_entry_association_repository.js';
@@ -186,9 +187,7 @@ export function prepareInformationEntryQuerySynthesisEvidence(
         titlePath: entry.value.titlePath,
         excerpt: body.slice(0, excerptLimit).join(''),
         truncated: body.length > excerptLimit,
-        contentKeywords: Object.freeze(
-          entry.value.contentKeywords.map((keyword) => keyword.displayValue),
-        ),
+        contentKeywords: Object.freeze(entryTagWords(entry.value)),
         ...(entry.value.typeKeyword === undefined
           ? {}
           : {
