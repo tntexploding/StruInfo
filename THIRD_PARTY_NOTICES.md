@@ -2,7 +2,7 @@
 
 - Foundation task: `M0-S-FOUNDATION-MAINT-001`
 - Dependency increments: `M1A-MD-DEP-MAINT-001`, `M1E-5B-DOCUMENT-IMPORT`, `M1I-2-RSS-ATOM`, `UI-READING-20260908` (existing parser reuse)
-- Tracked lock SHA-256: `CA27FAAFF99760D3B0CB049B8533018A72F6B073D0E65F2606AA1A84B77206DC`
+- Tracked lock SHA-256: `6CFB53D0BAED2450291973C70F53289731352E7A101FCFDAC00FBCC40E5F4C53`
 - M1I-2 pre-increment lock SHA-256: `10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A`
 - M1E-5B pre-increment lock SHA-256: `99F261C35311919380BF6AEF018E0B2A9D076DC7937A5EDE1E0D7F26F56192A0`
 - Foundation pre-M1A lock SHA-256: `A783E1C5B2DADD8B653D8E16446847530473D5569BB08830D7FC03D79400880B`
@@ -34,6 +34,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `@humanfs/types@0.15.0` | transitive | `Apache-2.0` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/humanfs__core@0.19.2/LICENSE` (DECLARED_SPDX_WITH_CANONICAL_TEXT) |
 | `@humanwhocodes/module-importer@1.0.1` | transitive | `Apache-2.0` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/humanwhocodes__module-importer@1.0.1/LICENSE` |
 | `@humanwhocodes/retry@0.4.3` | transitive | `Apache-2.0` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/humanwhocodes__retry@0.4.3/LICENSE` |
+| `@isaacs/nonrecursive-glob-match@1.1.0` | transitive | `BlueOak-1.0.0` | NOTICE_REQUIRED | `docs/dependencies/licenses/npm/isaacs__nonrecursive-glob-match@1.1.0/LICENSE.md` |
 | `@jridgewell/sourcemap-codec@1.5.5` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/jridgewell__sourcemap-codec@1.5.5/LICENSE` |
 | `@lukeed/csprng@1.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/lukeed__csprng@1.1.0/license` |
 | `@nestjs/common@11.1.28` | runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/nestjs__common@11.1.28/LICENSE` |
@@ -211,7 +212,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `mime-db@1.54.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/mime-db@1.54.0/LICENSE` |
 | `mime-types@2.1.35` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/mime-types@2.1.35/LICENSE` |
 | `mime-types@3.0.2` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/mime-types@3.0.2/LICENSE` |
-| `minimatch@10.2.6` | transitive | `BlueOak-1.0.0` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/minimatch@10.2.6/LICENSE.md` |
+| `minimatch@11.0.1` | transitive | `BlueOak-1.0.0` | NOTICE_REQUIRED | `docs/dependencies/licenses/npm/minimatch@11.0.1/LICENSE.md` |
 | `ms@2.1.3` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ms@2.1.3/license.md` |
 | `nanoid@3.3.18` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/nanoid@3.3.18/LICENSE` |
 | `natural-compare@1.4.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm-source/natural-compare@1.4.0/canonical-MIT.txt` (SOURCE_LEGAL_TEXT_RETAINED) |

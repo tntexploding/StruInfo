@@ -4,7 +4,7 @@ Package manifests and `pnpm-lock.yaml` select the installed versions. The SPDX i
 
 ## Current release: v0.5.0
 
-This release includes the [October 28 security repair](evidence/security-reconciliation-2026-10-28.json). MCP, Vite, Vitest, request parsers and their selected dependencies move to patched versions. The npm SPDX inventory contains 373 dependency identities for Windows x64 and Linux x64/glibc, plus the application root. The Alpine runtime uses its JavaScript production subset without native bindings.
+This release includes the [October 28 security repair](evidence/security-reconciliation-2026-10-28.json) and November 11 parser, HTTP adapter and build-tool updates. The npm SPDX inventory contains 328 dependency identities plus the application root. The Alpine runtime uses its JavaScript production subset without native bindings. Its musl and zlib packages are pinned to their security fixes in the Dockerfile.
 
 | Component      | Version or reference                                           |
 | -------------- | -------------------------------------------------------------- |
@@ -31,7 +31,7 @@ Dependency changes require reviewing registry identity, archive integrity, licen
 - `licenses/npm-source/` and `evidence/source-license-reconciliation.json`: packages whose archive omits its standalone legal file.
 - `evidence/lzma-sdk-7zdec-review.json`: separate attribution retained for the action runtime.
 
-The existing conditional license decisions remain: CC-BY-4.0 for caniuse-lite, MPL-2.0 for Lightning CSS and selected bindings, `(MIT OR CC0-1.0)` for type-fest, and the recorded combined/runtime expressions. Security patch packages remain MIT or BSD-3-Clause and add no lifecycle script.
+The existing conditional license decisions remain: CC-BY-4.0 for caniuse-lite, MPL-2.0 for Lightning CSS and selected bindings, `(MIT OR CC0-1.0)` for type-fest, and the recorded combined/runtime expressions. The minimatch repair and its glob matcher use BlueOak-1.0.0; their full license texts are included. The updated packages add no install lifecycle script.
 
 ## Test and distribution tools
 

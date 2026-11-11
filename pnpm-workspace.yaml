@@ -32,6 +32,8 @@ overrides:
   # Build/test dependencies: GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7,
   # GHSA-6j4f-fj2g-mc7p and GHSA-68fv-2mgg-jv7q.
   brace-expansion: 5.0.12
+  # GHSA-g3hv-75wg-m249: bound glob pattern amplification in build tools.
+  minimatch: 11.0.1
   source-map-js: 1.2.2
 
   # October 28 security reconciliation: MCP/Vite direct pins and constrained parsers.

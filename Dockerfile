@@ -36,7 +36,8 @@ LABEL org.opencontainers.image.title="StruInfo" \
 
 # Build tools stay in the glibc build stage. The runtime uses only JavaScript
 # dependencies and static assets; optional native PDF Canvas is excluded above.
-RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v1.22.22 \
+RUN apk add --no-cache --upgrade musl=1.2.6-r3 musl-utils=1.2.6-r3 zlib=1.4-r0 \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v1.22.22 \
   && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/pnpm /usr/local/bin/pnpx /usr/local/bin/yarn /usr/local/bin/yarnpkg \
   && addgroup -g 10001 struinfo \
   && adduser -u 10001 -G struinfo -D -H -h /nonexistent -s /sbin/nologin struinfo
