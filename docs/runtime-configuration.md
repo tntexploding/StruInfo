@@ -79,10 +79,36 @@ Agent 入口默认关闭。非秘密字段 `STRUIINFO_AGENT_ID` 与 `STRUIINFO_A
 2026-09-12 的接入选择 `deepseek-flash`。
 
 DeepSeek 和 OpenAI Responses 同时配置会拒绝启动，防止含糊的供应商选择；
-OpenAI Embedding 仍是独立配置，DeepSeek 密钥不会用于 OpenAI 请求。
+Embedding 使用独立密钥，DeepSeek 密钥只用于 DeepSeek 请求。
 DeepSeek 固定请求 `https://api.deepseek.com/responses`，保留 JSON Schema、本地校验、
 调用预算及来源重建，并使用 `reasoning.effort=none` 避免默认思考占用输出预算。
 当前不开放任意代理地址、SDK 或动态供应商路由。
+
+### 阿里向量接口
+
+使用标准版 `qwen3.7-text-embedding`，固定 1024 维。
+通过进程环境 `DASHSCOPE_API_KEY` 或互斥的 `DASHSCOPE_API_KEY_FILE` 注入密钥，重启服务后生效。
+Docker 使用环境变量或挂载的 secret 文件；密钥留在仓库和镜像外。
+
+在「设置 → AI 执行 → 向量检索」填写 OpenAI 兼容地址。
+千问统一入口为 `https://maas.qianwenaiapi.com/compatible-mode/v1`。
+也支持百炼北京业务空间地址：`https://业务空间ID.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`。
+地址、累计费用上限和调用开关保存在工作区偏好中。默认关闭，上限默认 0 元。
+`ai_price_status` 返回接入与费用状态，`embedding_settings_save` 保存这些设置；只允许工作区所有者修改。
+
+费用按每百万输入 Token 0.50 元估算，实际账单以供应商为准。
+每批最多 20 条，按响应 Token 结算；用量未知时保留预留费用。
+记录保存到外部 `exports/<工作区ID>.embedding-usage.jsonl`，与文档批次预算分开。
+请求遵守 AI 总控、价格时段和共享并发。调整上限不清空累计用量。
+
+开启调用后，后台为已发布公开条目补齐向量；数据库页也可手动更新索引。
+长文按原文位置分片，每片最多 3000 字符、7500 UTF-8 字节。每批保存进度，重试复用已完成片段。
+综合搜索结合文字和向量，问答与报告使用同一检索入口及命中原文。向量不可用时使用文字搜索。
+主题候选以标签为主，向量参与排序并补充最多两项。主题和事实联系仍需模型核对依据。
+索引读取已确认版本，草稿不参与；索引失败不改变发布状态。
+已有 OpenAI 向量配置仍可使用，两种向量密钥同时配置会拒绝启动。
+模型或维度不同的旧向量不会混用。
+接口参数见[千问向量化说明](https://platform.qianwenai.com/docs/developer-guides/embeddings/embedding)，价格见[阿里云向量化说明](https://help.aliyun.com/zh/model-studio/embedding)。
 
 ## 4. 路径规则
 

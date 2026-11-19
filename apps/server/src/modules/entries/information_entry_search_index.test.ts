@@ -35,9 +35,18 @@ describe('InformationEntry derived search index', () => {
       }),
     );
 
-    expect(Buffer.byteLength(prepared.input, 'utf8')).toBeLessThanOrEqual(
-      INFORMATION_ENTRY_EMBEDDING_INPUT_MAXIMUM_UTF8_BYTES,
-    );
+    expect(prepared.chunks.length).toBeGreaterThan(0);
+    expect(
+      prepared.chunks
+        .map((chunk) => prepared.entry.value.body.slice(chunk.start, chunk.end))
+        .join(''),
+    ).toBe(prepared.entry.value.body);
+    for (const chunk of prepared.chunks) {
+      expect(Buffer.byteLength(chunk.input, 'utf8')).toBeLessThanOrEqual(
+        INFORMATION_ENTRY_EMBEDDING_INPUT_MAXIMUM_UTF8_BYTES,
+      );
+      expect(chunk.input).not.toContain('�');
+    }
     expect(prepared.projection).toMatchObject({
       entryId: prepared.entry.entryId,
       entryRevision: 1,
@@ -72,17 +81,17 @@ describe('InformationEntry derived search index', () => {
       },
     };
     const prepared = prepareInformationEntrySearchProjection(source);
+    const [first] = prepared.chunks;
+    if (!first) throw new Error('Missing embedding chunk');
     for (const tag of source.value.contentKeywords)
-      expect(prepared.input).toContain(tag.displayValue);
-    expect(prepared.input).toContain('正文\nword0');
+      expect(first.input).toContain(tag.displayValue);
+    expect(first.input).toContain('正文\nword0');
     expect(prepared.postings).toHaveLength(4_096);
     expect(prepared.postings).toContainEqual(
       expect.objectContaining({field: 'tags', term: '11'}),
     );
-    expect(Buffer.byteLength(prepared.input, 'utf8')).toBeLessThanOrEqual(
-      7_500,
-    );
-    expect(prepared.input).not.toContain('�');
+    expect(Buffer.byteLength(first.input, 'utf8')).toBeLessThanOrEqual(7_500);
+    expect(first.input).not.toContain('�');
   });
 
   it('preserves a preview of each extreme-length tag within the existing vector input budget', () => {
@@ -103,12 +112,12 @@ describe('InformationEntry derived search index', () => {
       },
     };
     const prepared = prepareInformationEntrySearchProjection(source);
+    const [first] = prepared.chunks;
+    if (!first) throw new Error('Missing embedding chunk');
     for (let n = 0; n < 32; n++)
-      expect(prepared.input).toContain(`tag${n.toString()}-`);
-    expect(prepared.input).toContain('正文事实');
-    expect(Buffer.byteLength(prepared.input, 'utf8')).toBeLessThanOrEqual(
-      7_500,
-    );
+      expect(first.input).toContain(`tag${n.toString()}-`);
+    expect(first.input).toContain('正文事实');
+    expect(Buffer.byteLength(first.input, 'utf8')).toBeLessThanOrEqual(7_500);
     expect(source.value.contentKeywords[31]?.displayValue).toContain(
       '界'.repeat(74),
     );
@@ -131,23 +140,25 @@ describe('InformationEntry derived search index', () => {
       prepareInformationEntrySearchProjection(currentEntry({isPrivate: true})),
     ).toThrow(/Private Entries/u);
 
-    const projection =
-      prepareInformationEntrySearchProjection(currentEntry()).projection;
+    const prepared = prepareInformationEntrySearchProjection(currentEntry());
+    const projection = prepared.projection;
+    const [first] = prepared.chunks;
+    if (!first) throw new Error('Missing embedding chunk');
     const vector = [1, 0];
     const embedded = withInformationEntryEmbedding(
       projection,
       'synthetic-provider',
       'synthetic-model',
-      vector,
+      [{...first, vector}],
     );
     vector[0] = 0;
-    expect(embedded.embedding).toEqual([1, 0]);
+    expect(embedded.embedding?.[0]?.vector).toEqual([1, 0]);
     expect(() =>
       withInformationEntryEmbedding(
         projection,
         'synthetic-provider',
         'synthetic-model',
-        [Number.NaN],
+        [{...first, vector: [Number.NaN]}],
       ),
     ).toThrow(/Invalid Information Entry embedding/u);
   });

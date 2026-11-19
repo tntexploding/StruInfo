@@ -2,7 +2,10 @@ import {sourceProcessingInstructions} from '../../application/source_processing_
 import {documentProcessingInstructions} from '../../modules/processing/document_processing_standard.js';
 import {splitSourceTitle} from './split_source_title.js';
 import {parseResponseJson} from './response_json.js';
-import {isPublicationOnly} from '../../modules/processing/publication_context.js';
+import {
+  isPublicationOnly,
+  isReferenceOnly,
+} from '../../modules/processing/publication_context.js';
 import {documentModelInputLimit} from './document_model_capacity.js';
 import {isAiDispatchWait} from '../../modules/processing/ai_price_policy.js';
 import {
@@ -25,7 +28,7 @@ import {
   RESPONSE_METADATA_INSTRUCTIONS,
 } from './responses_metadata.js';
 
-export const OPENAI_SPLIT_PROMPT_VERSION = 'struinfo.openai-entry-split.v16';
+export const OPENAI_SPLIT_PROMPT_VERSION = 'struinfo.openai-entry-split.v19';
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 
 export class ResponsesEntrySplitProvider implements AiSplitProposalProviderPort {
@@ -131,6 +134,8 @@ function createRequest(
       'Return a single JSON object without Markdown fences, commentary or schema-definition fields. Encode documentMode whole or independent_entries. Every group has exactly titlePath, startOrdinal, role and context. Return only the first ordinal of each group in strictly increasing order, starting with 0; do not emit endOrdinal. The application derives each end as the next start minus one, and the final end as the last source ordinal, so every section remains covered.',
       'Classify each span role before deciding independence: content means a substantive reading contribution; framing means a preface, cover, table of contents, sponsor or purchase invitation, recurring author catalogue, archive navigation, credits or subscription footer supporting the publication. Use framing even when it has a descriptive title. The application attaches framing to adjacent content and never creates a standalone Entry from it. Do not label a substantive product review, technical explanation or curated reference directory framing merely because it contains links or a brand. A mixed span containing substantive explanation remains content; do not discard its evidence.',
       'Mark each group context self, previous or next; the application merges adjacent dependencies. With a whole document return one group starting at 0. In an independent collection, separate self-contained linked stories or tools even if they share a category heading. For example, three unrelated source-linked recommendations in packets 1, 2 and 3 need separate starts, not one broad Tools group. linkedItemStarts, when present, identifies source-linked numbered packets, not proof that numbered steps in a tutorial are independent.',
+      'Within an independent collection, inspect nested numbering such as (1), (2), or （1）, （2） under Other news. Separate different events or subjects into their own groups even when each consists of one short paragraph and an image. Keep a comparison, a procedure or continuations about one subject together. A category-only heading starts the following item, never ends the previous one. For a group with an attached cover or preface, titlePath names the substantive article heading.',
+      'A weekly, monthly, quarterly or annual review can contain independent reports despite a common industry or time period. Judge the substantive subjects, not the shared publication title. Inspect every paragraph under broad headings such as Other news or Bits and Bytes. Separate unrelated incidents, companies, funding rounds or tools; retain sentences about one incident together. Some packets are sentences from a single source paragraph: their separation is only a choice, not a command to split. Mark a collection-wide introduction as framing and attach it to the first substantive item; do not give an introduction the title of a case whose body lies in a later group.',
       RESPONSE_METADATA_INSTRUCTIONS,
     ].join(' '),
     input: JSON.stringify({
@@ -263,6 +268,20 @@ function decodePayload(
       fail();
     boundaries[0] = {...initial, startOrdinal: 0};
   }
+  // Keep a run of heading-only packets with the following body, even when the
+  // model starts that body one packet too late. No prose is moved or dropped.
+  for (let index = 1; index < boundaries.length; index++) {
+    const boundary = boundaries[index];
+    const previous = boundaries[index - 1];
+    if (!boundary || !previous) continue;
+    let start = boundary.startOrdinal;
+    while (
+      start > previous.startOrdinal + 1 &&
+      headingOnly(sections[start - 1]?.text ?? '')
+    )
+      start--;
+    boundaries[index] = {...boundary, startOrdinal: start};
+  }
   // Model selects cuts, not two competing endpoints. Derivation preserves every
   // source ordinal exactly once, including a final appendix or continuation.
   const groups = boundaries.map((boundary, index) => ({
@@ -392,7 +411,25 @@ function decodePayload(
       });
     }
   });
-  if (merged.length > MAXIMUM_AI_SPLIT_ENTRIES) fail();
+  // An explicit miscellaneous-news list can contain several source-linked
+  // subitems even when the model returns one umbrella group.
+  const nested = nestedNewsStarts(sections);
+  const separated = merged.flatMap((group) => {
+    const starts = [group.startOrdinal, ...nested.keys()]
+      .filter(
+        (start, i, all) =>
+          start >= group.startOrdinal &&
+          start <= group.endOrdinal &&
+          all.indexOf(start) === i,
+      )
+      .sort((a, b) => a - b);
+    return starts.map((start, index) => ({
+      titlePath: nested.get(start) ?? group.titlePath,
+      startOrdinal: start,
+      endOrdinal: (starts[index + 1] ?? group.endOrdinal + 1) - 1,
+    }));
+  });
+  if (separated.length > MAXIMUM_AI_SPLIT_ENTRIES) fail();
   const framingOrdinals = new Set(
     groups
       .filter((group) => group.role === 'framing')
@@ -405,14 +442,14 @@ function decodePayload(
   );
   return Object.freeze({
     summary: decisionSummary(
-      `独立合集：${merged.length.toString()} 条；相邻上下文合并 ${(groups.length - merged.length).toString()} 处` +
+      `独立合集：${separated.length.toString()} 条；相邻上下文合并 ${(groups.length - merged.length).toString()} 处` +
         (numberedMerges
           ? `；编号边界归组 ${numberedMerges.toString()} 处`
           : ''),
       explanation,
     ),
     groups: Object.freeze(
-      merged.map((group) =>
+      separated.map((group) =>
         Object.freeze({
           ...group,
           titlePath: splitSourceTitle(sections, group, framingOrdinals),
@@ -424,6 +461,57 @@ function decodePayload(
 
 function decisionSummary(decision: string, explanation: string): string {
   return Array.from(`${decision}。${explanation}`).slice(0, 240).join('');
+}
+
+function nestedNewsStarts(sections: readonly AiSplitProposalSection[]) {
+  const starts = new Map<number, string>();
+  for (const [i, section] of sections.entries()) {
+    if (
+      !/^(?:#{1,6}\s+)?(?:\d+[.、．）)]\s*)?(?:其他|其它|其他科技动态|其他快讯|other(?: news| updates)?|miscellaneous(?: news)?)\s*$/iu.test(
+        section.text.trim(),
+      )
+    )
+      continue;
+    const items: {ordinal: number; title: string; url: string}[] = [];
+    for (const candidate of sections.slice(i + 1)) {
+      const text = candidate.text.trimStart();
+      if (/^(?:#{1,6}\s|\d+[.、．）)])/u.test(text)) break;
+      const match = /^[（(](\d{1,3})[)）]\s*([^\n]+)/u.exec(text);
+      if (!match) continue;
+      const paragraph = match[2] ?? '';
+      const url = /\[[^\]]+\]\((https?:\/\/[^\s)]+)\)/u
+        .exec(paragraph)?.[1]
+        ?.split('#')[0];
+      if (
+        Number(match[1]) !== items.length + 1 ||
+        !url ||
+        isReferenceOnly(paragraph)
+      ) {
+        items.length = 0;
+        break;
+      }
+      const title =
+        paragraph
+          .replace(/\[([^\]]+)\]\([^)]*\)/gu, '$1')
+          .replace(/[*_`]/gu, '')
+          .split(/[。！？]/u)[0]
+          ?.trim() ?? '';
+      if (!title || Array.from(title).length > 200) {
+        items.length = 0;
+        break;
+      }
+      items.push({ordinal: candidate.ordinal, title, url});
+    }
+    if (
+      items.length < 2 ||
+      new Set(items.map((item) => item.url)).size !== items.length
+    )
+      continue;
+    items.forEach((item, index) =>
+      starts.set(index === 0 ? section.ordinal : item.ordinal, item.title),
+    );
+  }
+  return starts;
 }
 
 function headingOnly(text: string): boolean {
@@ -474,10 +562,14 @@ function numberedCollectionHints(sections: readonly AiSplitProposalSection[]) {
 /** A source hint only: a linked list may still be one context-dependent article. */
 function linkedCollectionHints(sections: readonly AiSplitProposalSection[]) {
   const linkedItemStarts = sections
-    .filter((section) =>
-      /^\d{1,2}[.、．）)][ \t]*\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)/u.test(
-        section.text.trimStart(),
-      ),
+    .filter(
+      (section) =>
+        /^(?:\d{1,3}[.、．）)]|[（(]\d{1,3}[)）])[ \t]*\S/u.test(
+          section.text.trimStart(),
+        ) &&
+        /\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)/u.test(
+          section.text.trimStart().split('\n\n')[0] ?? '',
+        ),
     )
     .map((section) => section.ordinal);
   return linkedItemStarts.length >= 2 ? {linkedItemStarts} : {};

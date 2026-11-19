@@ -69,7 +69,7 @@ export class OpenAiInformationEntryEmbeddingProvider implements InformationEntry
   }
 }
 
-function decodeEmbeddings(
+export function decodeEmbeddings(
   value: unknown,
   expectedCount: number,
 ): readonly (readonly number[])[] {

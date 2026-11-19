@@ -31,6 +31,7 @@ const readNames = new Set([
   'system_status',
   'processing_standard',
   'documents_list',
+  'news_list',
   'document_read',
   'document_sections',
   'document_publication_status',
@@ -71,6 +72,8 @@ const readNames = new Set([
   'document_queue_status',
 ]);
 const descriptions: Record<string, string> = {
+  news_list:
+    '查询已审核快讯，支持标题、来源和日期筛选。快讯不生成文章条目、标签和主题。',
   entries_search:
     '搜索已确认条目：标题、正文、标签、来源、类型、日期。返回条目编号及文档编号。',
   documents_list:
@@ -163,6 +166,8 @@ const descriptions: Record<string, string> = {
   ai_price_status: '读取模型许可、队列开关、价格时段及版本。',
   ai_operations_save: '修改 AI 总开关。',
   ai_execution_save: '修改模型并发和失败重试次数。',
+  embedding_settings_save:
+    '设置阿里向量接口、累计费用上限和调用开关。不生成向量。',
   ai_price_save: '修改低价时段限制开关。',
   source_quality_status: '读取来源质量与需复核样本。',
   source_description_generate: '生成来源简介。',
@@ -207,6 +212,9 @@ export function createAssistantCommandTools(
       automaticRetryLimit:
         aiPricePolicySchema.shape.automaticRetryLimit.unwrap(),
     }),
+    embedding_settings_save: aiPricePolicySchema
+      .pick({revision: true})
+      .extend({embedding: aiPricePolicySchema.shape.embedding.unwrap()}),
     ai_price_save: aiPricePolicySchema.pick({revision: true, enabled: true}),
   };
   const tools: AssistantTools = {};

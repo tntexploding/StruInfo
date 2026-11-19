@@ -8,6 +8,7 @@ import {
   INFORMATION_ENTRY_TERM_MAXIMUM_POSTINGS_PER_ENTRY,
   INFORMATION_ENTRY_TERM_TOKENIZER_VERSION,
   type InformationEntrySearchIndexField,
+  type InformationEntryEmbeddingChunk,
   type InformationEntrySearchProjection,
   type InformationEntryTermPosting,
   type PreparedInformationEntrySearchProjection,
@@ -71,34 +72,35 @@ export function prepareInformationEntrySearchProjection(
     tags: tagText,
   });
   const postings = createPostings(entry.entryId, fields);
-  const input = informationEntryEmbeddingInput(entry);
+  const chunks = informationEntryEmbeddingChunks(entry);
   return Object.freeze({
     entry,
-    input,
+    chunks,
     projection: Object.freeze({
       entryId: entry.entryId,
       entryRevision: entry.revision,
       entryRevisionId: entry.revisionId,
       projectionSha256: createHash('sha256')
-        .update(input, 'utf8')
+        .update(
+          JSON.stringify(chunks.map((chunk) => chunk.inputSha256)),
+          'utf8',
+        )
         .digest('hex'),
       tokenizerVersion: INFORMATION_ENTRY_TERM_TOKENIZER_VERSION,
+      embeddingChunkCount: chunks.length,
     }),
     postings,
   });
 }
 
-export function informationEntryEmbeddingInput(
+export function informationEntryEmbeddingChunks(
   entry: Readonly<CurrentInformationEntry>,
-): string {
+): PreparedInformationEntrySearchProjection['chunks'] {
   if (entry.value.isPrivate)
     throw new Error('Private Entries cannot enter the derived search index.');
   const tags = entryTagWords(entry.value);
   const tagText = tags.join(' ');
-  // Reserve metadata before body text. Ordinary labels remain complete; when
-  // metadata alone is extreme, retain a preview of EVERY tag rather than dropping
-  // later tags. Full labels still enter postings and cited RAG evidence.
-  const tagBudget = 5_400;
+  const tagBudget = 1_600;
   const embeddedTags =
     Buffer.byteLength(tagText, 'utf8') <= tagBudget
       ? tagText
@@ -108,16 +110,44 @@ export function informationEntryEmbeddingInput(
               truncateUtf8(tag, Math.floor(tagBudget / tags.length) - 4) + '…',
           )
           .join(' ');
-  const metadata = `标题\n${truncateUtf8(entry.value.titlePath, 1_000)}\n\n标签\n${embeddedTags}\n\n正文\n`;
-  const input =
-    metadata +
-    truncateUtf8(
-      entry.value.body,
-      INFORMATION_ENTRY_EMBEDDING_INPUT_MAXIMUM_UTF8_BYTES -
-        Buffer.byteLength(metadata, 'utf8'),
+  const metadata = `标题\n${truncateUtf8(entry.value.titlePath, 800)}\n\n标签\n${embeddedTags}\n\n正文\n`;
+  const maximum =
+    INFORMATION_ENTRY_EMBEDDING_INPUT_MAXIMUM_UTF8_BYTES -
+    Buffer.byteLength(metadata, 'utf8');
+  const body = entry.value.body;
+  const chunks: PreparedInformationEntrySearchProjection['chunks'][number][] =
+    [];
+  let start = 0;
+  do {
+    const bounded = truncateUtf8(
+      Array.from(body.slice(start, start + 6001))
+        .slice(0, 3000)
+        .join(''),
+      maximum,
     );
-
-  return input;
+    let length = bounded.length;
+    if (start + length < body.length) {
+      for (const separator of ['\n\n', '\n', '。', '. ', ' ']) {
+        const boundary = bounded.lastIndexOf(separator);
+        if (boundary >= length * 0.6) {
+          length = boundary + separator.length;
+          break;
+        }
+      }
+    }
+    const end = start + length;
+    const input = metadata + body.slice(start, end);
+    chunks.push(
+      Object.freeze({
+        start,
+        end,
+        input,
+        inputSha256: createHash('sha256').update(input, 'utf8').digest('hex'),
+      }),
+    );
+    start = end;
+  } while (start < body.length);
+  return Object.freeze(chunks);
 }
 
 export function hasCurrentInformationEntryEmbeddingInput(
@@ -126,7 +156,14 @@ export function hasCurrentInformationEntryEmbeddingInput(
 ): boolean {
   return (
     createHash('sha256')
-      .update(informationEntryEmbeddingInput(entry), 'utf8')
+      .update(
+        JSON.stringify(
+          informationEntryEmbeddingChunks(entry).map(
+            (chunk) => chunk.inputSha256,
+          ),
+        ),
+        'utf8',
+      )
       .digest('hex') === projection.projectionSha256
   );
 }
@@ -135,14 +172,35 @@ export function withInformationEntryEmbedding(
   projection: Readonly<InformationEntrySearchProjection>,
   providerKey: string,
   model: string,
-  embedding: readonly number[],
+  embedding: readonly Readonly<InformationEntryEmbeddingChunk>[],
 ): Readonly<InformationEntrySearchProjection> {
-  validateEmbedding(embedding);
+  if (!embedding.length || embedding.length > projection.embeddingChunkCount)
+    throw new Error('Invalid embedding chunks.');
+  const dimensions = embedding[0]?.vector.length;
+  const ranges = new Set<number>();
+  for (const chunk of embedding) {
+    validateEmbedding(chunk.vector);
+    if (
+      !Number.isSafeInteger(chunk.start) ||
+      !Number.isSafeInteger(chunk.end) ||
+      chunk.start < 0 ||
+      chunk.end < chunk.start ||
+      ranges.has(chunk.start) ||
+      !/^[a-f0-9]{64}$/u.test(chunk.inputSha256) ||
+      chunk.vector.length !== dimensions
+    )
+      throw new Error('Invalid embedding chunk.');
+    ranges.add(chunk.start);
+  }
   return Object.freeze({
     ...projection,
     embeddingProvider: providerKey,
     embeddingModel: model,
-    embedding: Object.freeze([...embedding]),
+    embedding: Object.freeze(
+      embedding.map((chunk) =>
+        Object.freeze({...chunk, vector: Object.freeze([...chunk.vector])}),
+      ),
+    ),
   });
 }
 

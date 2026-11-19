@@ -6,7 +6,10 @@ import {
   type PublicationCommit,
   type PublicationStatus,
 } from '../../../application/document_publication_contract.js';
-import {intakeRecordValueSchema} from '../../../application/document_intake_contract.js';
+import {
+  intakeRecordValueSchema,
+  isNewsReceipt,
+} from '../../../application/document_intake_contract.js';
 import type {PostgresPoolBoundary} from './postgres_pool.js';
 import {runPostgresTransaction} from './postgres_transaction.js';
 import {acquireWorkspaceWriteLock} from './workspace_write_lock.js';
@@ -53,7 +56,8 @@ export class PostgresDocumentPublicationRepository implements DocumentPublicatio
           : undefined;
         if (
           previous &&
-          (previous.decision !== 'admitted' ||
+          (isNewsReceipt(previous) ||
+            previous.decision !== 'admitted' ||
             (previous.receipt && previous.receipt !== 'accepted'))
         )
           return {status: 'not_admitted' as const};
@@ -245,6 +249,7 @@ export class PostgresDocumentPublicationRepository implements DocumentPublicatio
          AND w.budget_id=$2
          AND i.state_text::jsonb->>'decision'='admitted'
          AND COALESCE(i.state_text::jsonb->>'receipt','accepted')='accepted'
+         AND i.state_text::jsonb #>> '{reception,strategy,contentMode}' IS DISTINCT FROM 'news'
          AND NOT EXISTS (SELECT 1 FROM struinfo.snapshot s JOIN struinfo.resource r USING(workspace_id,resource_id)
            WHERE s.workspace_id=v.workspace_id AND s.snapshot_id IN (v.snapshot_id,v.document_id) AND r.is_private)
          AND NOT EXISTS (SELECT 1 FROM struinfo.information_entry e WHERE e.workspace_id=v.workspace_id AND e.snapshot_id=v.snapshot_id AND e.is_private)
@@ -280,6 +285,7 @@ export class PostgresDocumentPublicationRepository implements DocumentPublicatio
             SELECT 1 FROM jsonb_array_elements(v.content_text::jsonb->'entries') e
             WHERE e->>'entryId'=ANY($3::text[])))
           AND COALESCE(i.state_text::jsonb->>'receipt','accepted')='accepted'
+          AND i.state_text::jsonb #>> '{reception,strategy,contentMode}' IS DISTINCT FROM 'news'
           AND ($2::boolean OR (NOT r.is_private AND NOT original_source.is_private AND NOT EXISTS (
             SELECT 1 FROM struinfo.information_entry e
             WHERE e.workspace_id=v.workspace_id AND e.snapshot_id=v.snapshot_id AND e.is_private)))`,
@@ -334,6 +340,7 @@ export class PostgresDocumentPublicationRepository implements DocumentPublicatio
         AND i.workspace_id=p.workspace_id AND i.snapshot_id=p.document_id
         AND i.state_text::jsonb->>'decision'='admitted'
         AND COALESCE(i.state_text::jsonb->>'receipt','accepted')='accepted'
+        AND i.state_text::jsonb #>> '{reception,strategy,contentMode}' IS DISTINCT FROM 'news'
         AND NOT EXISTS (
           SELECT 1 FROM struinfo.document_publication_version v
           JOIN struinfo.snapshot s ON s.workspace_id=v.workspace_id AND s.snapshot_id IN (v.snapshot_id,v.document_id)

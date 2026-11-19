@@ -1,7 +1,7 @@
 # 运行与维护
 
 适用范围：单所有者、单个 all 进程、PostgreSQL 18 和外部数据目录。
-当前源码版本为 v0.5.0。首次部署见[安装指南](getting-started.md)。
+当前源码版本为 v0.5.1。首次部署见[安装指南](getting-started.md)。
 应用和维护命令显式使用同一个 STRUIINFO_IMAGE。
 升级时填写目标镜像，应用和维护命令使用相同版本。
 
@@ -26,7 +26,7 @@ STRUIINFO_MIGRATION_DATABASE_URL_SECRET_FILE
 在 PowerShell 中选择版本，随后检查 Compose：
 
 ```powershell
-$env:STRUIINFO_IMAGE = 'struinfo:0.5.0'
+$env:STRUIINFO_IMAGE = 'struinfo:0.5.1'
 docker compose -f compose.production.yaml config --quiet
 docker compose -f compose.production.yaml -f compose.maintenance.yaml --profile maintenance config --quiet
 docker compose -f compose.production.yaml -f compose.maintenance.yaml --profile maintenance run --rm migrate

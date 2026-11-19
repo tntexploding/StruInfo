@@ -105,6 +105,9 @@ export const intakeRecordValueSchema = z
   })
   .strict();
 export type IntakeRecordValue = z.infer<typeof intakeRecordValueSchema>;
+export function isNewsReceipt(value: IntakeRecordValue | undefined): boolean {
+  return value?.reception?.strategy?.contentMode === 'news';
+}
 export interface IntakeRecord {
   readonly snapshotId: string;
   readonly version: number;
@@ -136,6 +139,10 @@ export const intakePreparationSchema = z
   .refine((value) => !value.refresh || value.source === 'web_article');
 export type IntakePreparation = z.infer<typeof intakePreparationSchema>;
 export interface DocumentIntakeRepository {
+  listNews?(query: NewsQuery): Promise<{
+    items: NewsItem[];
+    nextCursor?: {at: string; snapshotId: string};
+  }>;
   read(snapshotId: string): Promise<IntakeRecord | undefined>;
   list(): Promise<readonly IntakeRecord[]>;
   save(
@@ -146,7 +153,40 @@ export interface DocumentIntakeRepository {
   saveInboxSummary?(snapshotId: string, summary: InboxSummary): Promise<void>;
   withLock<T>(snapshotId: string, action: () => Promise<T>): Promise<T>;
 }
+export const newsQuerySchema = z
+  .object({
+    text: z.string().trim().max(300).default(''),
+    includePrivate: z.boolean().default(false),
+    onlyPrivate: z.boolean().default(false),
+    sourceId: z.uuid().optional(),
+    from: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/u)
+      .optional(),
+    to: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/u)
+      .optional(),
+    limit: z.number().int().min(1).max(50).default(20),
+    after: z
+      .object({at: z.iso.datetime(), snapshotId: z.uuid()})
+      .strict()
+      .optional(),
+  })
+  .strict()
+  .refine((q) => !q.onlyPrivate || q.includePrivate, 'private_scope_required');
+export type NewsQuery = z.infer<typeof newsQuerySchema>;
+export interface NewsItem {
+  snapshotId: string;
+  bodySnapshotId?: string;
+  title: string;
+  sourceId?: string;
+  source: string;
+  canonicalUri?: string;
+  publishedAt: string;
+}
 export interface IntakeReviewInput {
+  readonly contentMode?: 'article' | 'news';
   readonly text: string;
   readonly preparation: 'received' | 'web_article';
   readonly policy: IntakePolicy;

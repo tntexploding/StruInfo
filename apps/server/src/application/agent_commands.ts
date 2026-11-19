@@ -53,6 +53,7 @@ import type {DocumentIntakeService} from './document_intake_service.js';
 import {
   intakePolicySchema,
   intakePreparationSchema,
+  newsQuerySchema,
 } from './document_intake_contract.js';
 import {
   ingestionSettingsSchema,
@@ -108,6 +109,7 @@ export const inboxOwnerSchemas = {
   intake_summarize: z.object({snapshotId: id}).strict(),
 };
 export const agentCommandSchemas = {
+  news_list: newsQuerySchema,
   ...splitRecipeReadSchemas,
   ...annotationCommandSchemas,
   ...topicCommandSchemas,
@@ -376,7 +378,11 @@ export class AgentCommands {
         this.authority.require('processing.read');
         if (!this.deps.aiPrice)
           throw new OperationError('rejected', 'ai_price_unavailable');
-        return this.deps.aiPrice.status();
+        return this.deps.aiPrice.status(true);
+      case 'embedding_settings_save':
+        if (!this.deps.aiPrice)
+          throw new OperationError('rejected', 'ai_price_unavailable');
+        return this.deps.aiPrice.save(this.authority, input, 'embedding');
       case 'ai_operations_save':
         if (!this.deps.aiPrice)
           throw new OperationError('rejected', 'ai_price_unavailable');
@@ -536,6 +542,8 @@ export class AgentCommands {
             limit: 1,
           });
           for (const record of received.records) {
+            if (record.value.reception?.strategy?.contentMode === 'news')
+              continue;
             try {
               if (!status.modelConfigured)
                 throw new OperationError('rejected', 'ai_not_configured');
@@ -636,6 +644,11 @@ export class AgentCommands {
           request.expectedVersion,
           request.action,
         );
+      }
+      case 'news_list': {
+        const query = parse(newsQuerySchema, input);
+        this.authority.require('documents.read', query.includePrivate);
+        return this.intake().news(query);
       }
       case 'documents_list': {
         const request = parse(agentCommandSchemas.documents_list, input);

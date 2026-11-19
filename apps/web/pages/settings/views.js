@@ -134,6 +134,39 @@ export function page(id, d) {
         `<div class="connection-summary"><span class="connection-glyph">${icon('bolt')}</span><div><strong>${e(d.connection || '读取中')}</strong><small>配置保存在服务端。</small></div><button type="button" class="secondary-action" data-open="connection" aria-haspopup="dialog">接入说明 ${icon('chevron')}</button></div><div class="connections-list"><span><i></i>拆分</span><span><i></i>标签</span><span><i></i>联系</span><span><i></i>翻译</span><span><i></i>问答</span></div>`,
         'full-width',
       ),
+      card(
+        '向量检索',
+        row(
+          '阿里标准版',
+          '<span>qwen3.7-text-embedding · 1024 维</span>',
+          '开启后为已确认内容补齐向量。用于综合搜索和主题候选排序。',
+        ) +
+          row(
+            'API key',
+            `<span>${d.embeddingConfigured ? '已配置' : '未配置'}</span>`,
+            '服务端配置 DASHSCOPE_API_KEY 或 DASHSCOPE_API_KEY_FILE，随后重启。',
+          ) +
+          row(
+            '接口地址',
+            `<input type="url" id="setting-embedding-baseUrl" data-bind="embedding.baseUrl" value="${e(d.embedding.baseUrl)}" placeholder="https://maas.qianwenaiapi.com/compatible-mode/v1">`,
+            '支持千问统一入口和百炼北京业务空间地址。',
+            'embedding.baseUrl',
+          ) +
+          row(
+            '累计费用上限',
+            `<input type="number" id="setting-embedding-limitCny" data-bind="embedding.limitCny" value="${d.embedding.limitCny}" min="0" max="10000" step="0.01"><span class="control-unit">元</span>`,
+            `已用约 ${Number(d.embeddingSpentCny || 0).toFixed(4)} 元。0 元暂停调用；调高上限可继续。`,
+            'embedding.limitCny',
+          ) +
+          toggle(
+            d,
+            'embedding.enabled',
+            '允许向量调用',
+            '需要 API key、接口地址和可用额度。遵守 AI 总控与调用时段。',
+            !d.embeddingConfigured,
+          ),
+        'full-width',
+      ),
     ].join('');
   if (id === 'automation')
     return [

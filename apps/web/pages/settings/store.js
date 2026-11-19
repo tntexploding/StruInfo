@@ -49,6 +49,11 @@ export async function loadSettings(onGroup = () => {}, only) {
         automaticRetryLimit: ai.policy.automaticRetryLimit ?? 0,
         priceEnabled: ai.policy.enabled,
         connection: ing.modelConfigured ? '模型已配置' : '模型未配置',
+        embedding: structuredClone(
+          ai.policy.embedding ?? defaults.ai.embedding,
+        ),
+        embeddingConfigured: ai.embedding?.configured ?? false,
+        embeddingSpentCny: ai.embedding?.budget?.spentCny ?? 0,
       });
     },
     automation: async () => {
@@ -161,9 +166,14 @@ export async function saveSettings(section, value, previous) {
         result = response.result || response;
       if (endpoint.id === 'interface') context.ui = result.preferences;
       if (
-        ['operations', 'execution', 'price', 'queue', 'assistant'].includes(
-          endpoint.id,
-        )
+        [
+          'operations',
+          'execution',
+          'price',
+          'queue',
+          'assistant',
+          'embedding',
+        ].includes(endpoint.id)
       )
         context.ai = result.policy;
       if (endpoint.id === 'ingestion') context.ingestion = result;

@@ -48,6 +48,15 @@ import {ResponsesDocumentIntelligenceProvider} from '../platform/ai/responses_do
 import {AgentCaptureService} from '../application/agent_capture_service.js';
 import {IngestionService} from '../application/ingestion_service.js';
 import {AiPriceService} from '../application/ai_price_service.js';
+import {DEFAULT_EMBEDDING_SETTINGS} from '../modules/processing/ai_price_policy.js';
+import {
+  updateReviewPreferences,
+  patchReviewPreferences,
+} from '../storage/review_preferences_store.js';
+import {
+  AliyunInformationEntryEmbeddingProvider,
+  ALIYUN_EMBEDDING_MODEL,
+} from '../platform/ai/aliyun_information_entry_embedding_provider.js';
 import {priceAwareFetch} from '../platform/ai/price_aware_fetch.js';
 import {LocalModelUsageJournal} from '../platform/ai/model_usage_journal.js';
 import {
@@ -217,10 +226,65 @@ export async function startRoleRuntime(
   const listenerFactory =
     dependencies.healthListenerFactory ?? new NestHealthListenerFactory();
   const address = listenerAddress(config);
+  const embeddingSettings = async () =>
+    (await storage.reviewPreferences.load(config.workspaceId)).aiPricePolicy
+      ?.embedding ?? DEFAULT_EMBEDDING_SETTINGS;
+  const embeddingJournal = new LocalModelUsageJournal(
+    config.dataRoot + '/exports',
+    config.workspaceId,
+    undefined,
+    {
+      readBudget: async () => {
+        const settings = await embeddingSettings();
+        return {
+          format: 'struinfo.ai-batch-budget.v1',
+          workspaceId: config.workspaceId,
+          batchId: 'embedding',
+          model: ALIYUN_EMBEDDING_MODEL,
+          limitCny: settings.limitCny,
+          paused: !settings.enabled,
+          offPeakOnly: false,
+          inputCnyPerMillion: 0.5,
+          cachedInputCnyPerMillion: 0.5,
+          outputCnyPerMillion: 0,
+        };
+      },
+      pause: async () => {
+        await updateReviewPreferences(
+          storage.reviewPreferences,
+          config.workspaceId,
+          (current) => {
+            const policy = current.aiPricePolicy ?? {
+              revision: 0,
+              enabled: false,
+            };
+            return {
+              next: patchReviewPreferences(current, {
+                aiPricePolicy: {
+                  ...policy,
+                  revision: policy.revision + 1,
+                  embedding: {
+                    ...(policy.embedding ?? DEFAULT_EMBEDDING_SETTINGS),
+                    enabled: false,
+                  },
+                },
+              }),
+              result: undefined,
+            };
+          },
+        );
+      },
+    },
+  );
   const aiPrice = new AiPriceService(
     config.workspaceId,
     storage.reviewPreferences,
     config.aiProposalProvider?.providerKey,
+    undefined,
+    {
+      configured: Boolean(config.dashScopeApiKey),
+      budgetStatus: () => embeddingJournal.budgetStatus(),
+    },
   );
   const usageJournal = new LocalModelUsageJournal(
     config.dataRoot + '/exports',
@@ -308,14 +372,29 @@ export async function startRoleRuntime(
     entries: knowledgeEntries,
     associations: repositories.informationEntryAssociations,
     index: repositories.informationEntrySearchIndex,
+    embeddingEnabled: async () =>
+      !config.dashScopeApiKey || (await embeddingSettings()).enabled,
     translations: repositories.entryTranslations,
-    ...(config.embeddingProvider === undefined
-      ? {}
-      : {
-          embeddingProvider: new OpenAiInformationEntryEmbeddingProvider(
-            config.embeddingProvider,
+    ...(config.dashScopeApiKey
+      ? {
+          embeddingProvider: new AliyunInformationEntryEmbeddingProvider(
+            config.dashScopeApiKey,
+            embeddingSettings,
+            priceAwareFetch(
+              aiPrice,
+              globalThis.fetch,
+              embeddingJournal,
+              sharedAiQueue,
+            ),
           ),
-        }),
+        }
+      : config.embeddingProvider === undefined
+        ? {}
+        : {
+            embeddingProvider: new OpenAiInformationEntryEmbeddingProvider(
+              config.embeddingProvider,
+            ),
+          }),
   });
   const aiQuerySynthesis =
     config.aiProposalProvider === undefined
@@ -429,6 +508,7 @@ export async function startRoleRuntime(
     config.workspaceId,
   );
   const topics = new TopicService({
+    similarities: (entryId) => informationEntryRetrieval.related(entryId, 64),
     sourceGuidance: async (snapshotId) =>
       (await sourceSplit.freeze(snapshotId)).processingProfile?.relations ?? '',
     budgetStatus: () => usageJournal.budgetStatus(),
@@ -622,6 +702,9 @@ export async function startRoleRuntime(
           ) ||
             config.agentInterface.capture)),
     },
+    () => {
+      if (config.role === 'api' || config.role === 'all') sourceHistory.poll();
+    },
   );
   const sourceSubscriptions = new SourceSubscriptionService({
     workspaceId: config.workspaceId,
@@ -700,6 +783,25 @@ export async function startRoleRuntime(
           await reports.pollPriceDeferred();
           await topics.poll();
           await reportPipeline.poll();
+          // Publication remains complete while its derived index catches up.
+          if (
+            config.role !== 'api' &&
+            config.dashScopeApiKey &&
+            (await embeddingSettings()).enabled
+          ) {
+            const status = await aiPrice.status();
+            if (
+              !status.blocked &&
+              status.policy.operationsAllowed !== false &&
+              !status.policy.backgroundPaused
+            ) {
+              const result = await informationEntryRetrieval.refresh(17);
+              if (result.progress.outcome === 'provider_failed')
+                logger.write('warn', 'embedding_refresh_failed', {
+                  code: 'embedding_provider_unavailable',
+                });
+            }
+          }
         }, logger),
       ),
     );
@@ -893,6 +995,17 @@ export async function startRoleRuntime(
     },
     onCheckpointError: () => {
       logger.write('error', 'history_checkpoint_failed');
+    },
+    onProcessingError: ({sessionId, code, error}) => {
+      logger.write('error', 'history_processing_failed', {
+        sessionId,
+        code,
+        error,
+        frames:
+          error instanceof Error
+            ? error.stack?.split('\n').filter((line) => /^\s+at /u.test(line))
+            : undefined,
+      });
     },
     documentProgress: async (refs) => {
       const other = refs.filter((r) => !r.taskId).map((r) => r.id);

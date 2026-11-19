@@ -7,6 +7,7 @@ import type {AgentTask} from './agent_task_contract.js';
 import {
   intakeSnapshotIds,
   intakeTargetSnapshot,
+  isNewsReceipt,
 } from './document_intake_contract.js';
 import type {InformationEntryRepositoryPort} from '../modules/entries/information_entry_repository.js';
 import type {DocumentPublicationRepository} from './document_publication_contract.js';
@@ -86,6 +87,8 @@ export class DocumentPublicationService {
     origin: 'manual' | 'external_agent' = 'external_agent',
   ) {
     const record = await this.intake.record(snapshotId);
+    if (isNewsReceipt(record?.value))
+      throw new OperationError('rejected', 'news_article_processing_disabled');
     const root = record?.snapshotId ?? snapshotId;
     await this.repository.withLock(root, async () => {
       const current = await this.intake.record(root);
@@ -146,6 +149,8 @@ export class DocumentPublicationService {
   ) {
     await this.intake.publicSnapshot(snapshotId);
     const record = await this.intake.record(snapshotId);
+    if (isNewsReceipt(record?.value))
+      throw new OperationError('rejected', 'news_article_processing_disabled');
     const root = record?.snapshotId ?? snapshotId;
     return this.repository.withLock(root, async () => {
       const current = await this.intake.record(root);
@@ -207,9 +212,6 @@ export class DocumentPublicationService {
         publication,
       };
       const committed = await this.publications.commit({
-        ...(task?.request.kind === 'document' && task.request.budgetId
-          ? {organizationBudgetId: task.request.budgetId}
-          : {}),
         documentId: root,
         snapshotId: target,
         expectedIntakeVersion: current?.version ?? 0,

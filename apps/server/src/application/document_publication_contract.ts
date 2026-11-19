@@ -108,6 +108,7 @@ export const publicationContentSchema = z
   .strict();
 export type PublicationContent = z.infer<typeof publicationContentSchema>;
 export const organizationStatusSchema = z.enum([
+  'not_requested',
   'pending',
   'running',
   'succeeded',

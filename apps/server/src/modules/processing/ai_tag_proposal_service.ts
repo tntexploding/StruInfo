@@ -20,9 +20,10 @@ import {
   deriveProcessingProposalId,
   deriveProcessingRunId,
 } from './processing_identity.js';
-import type {
-  AiTagProposalProviderErrorCode,
-  AiTagProposalProviderPort,
+import {
+  AiTagProposalProviderError,
+  type AiTagProposalProviderErrorCode,
+  type AiTagProposalProviderPort,
 } from './ai_tag_proposal.js';
 import type {
   ProcessingProposal,
@@ -126,7 +127,7 @@ export class AiTagProposalService implements AiTagProposalServicePort {
     return typeof this.#dependencies.provider.proposeTagsBatch === 'function';
   }
 
-  /** Generate once, validate the entire response, then persist ordinary per-entry proposals. */
+  /** Generate once; persist valid entries and individual failures independently. */
   public async startBatch(
     requests: readonly Readonly<{
       entryId: string;
@@ -182,26 +183,27 @@ export class AiTagProposalService implements AiTagProposalServicePort {
     // A partially saved batch is resumed through its individual durable runs.
     if (existing.some((run) => run !== undefined))
       throw new AiTagProposalServiceError('ai_run_conflict');
-    const results = await provider.proposeTagsBatch(entries);
+    const results: Awaited<
+      ReturnType<NonNullable<AiTagProposalProviderPort['proposeTagsBatch']>>
+    > = await provider.proposeTagsBatch(entries).catch((error: unknown) => {
+      if (
+        !(error instanceof AiTagProposalProviderError) ||
+        error.code !== 'ai_provider_invalid_response'
+      )
+        throw error;
+      return entries.map((entry) => ({
+        entryId: entry.entryId,
+        expectedRevision: entry.revision,
+        errorCode: error.code as 'ai_provider_invalid_response',
+        ...(error.detail ? {errorDetail: error.detail} : {}),
+      }));
+    });
     if (
       results.length !== entries.length ||
       new Set(results.map((item) => item.entryId)).size !== entries.length
     )
       throw new AiTagProposalServiceError('ai_provider_invalid_response');
     const byId = new Map(results.map((item) => [item.entryId, item]));
-    for (const entry of entries) {
-      const item = byId.get(entry.entryId);
-      if (item?.expectedRevision !== entry.revision)
-        throw new AiTagProposalServiceError('ai_provider_invalid_response');
-      // No proposal from a malformed batch may become eligible for acceptance.
-      const payload = toStoredPayload(entry, provider, item.result);
-      try {
-        assertProcessingTagProposalPayload(payload);
-        entryValueFromProposal(entry, payload);
-      } catch {
-        throw new AiTagProposalServiceError('ai_provider_invalid_response');
-      }
-    }
     const prepared = new AiTagProposalService({
       ...this.#dependencies,
       provider: {
@@ -210,8 +212,15 @@ export class AiTagProposalService implements AiTagProposalServicePort {
         promptVersion: provider.promptVersion,
         proposeTags: (entry) => {
           const item = byId.get(entry.entryId);
-          if (item?.expectedRevision !== entry.revision)
-            throw new AiTagProposalServiceError('stale_entry_revision');
+          if (
+            item?.expectedRevision !== entry.revision ||
+            !item.result ||
+            item.errorCode
+          )
+            throw new AiTagProposalProviderError(
+              'ai_provider_invalid_response',
+              item?.errorDetail,
+            );
           return Promise.resolve(item.result);
         },
       },
@@ -283,6 +292,8 @@ export class AiTagProposalService implements AiTagProposalServicePort {
         this.#dependencies.provider,
         generated,
       );
+      assertProcessingTagProposalPayload(payload);
+      entryValueFromProposal(entry, payload);
       const proposalId = deriveProcessingProposalId(runId, 0);
       const appended = await this.#dependencies.processing.appendTagProposal({
         workspaceId: this.#dependencies.workspaceId,
@@ -320,7 +331,10 @@ export class AiTagProposalService implements AiTagProposalServicePort {
         expectedVersion: 2,
         status: 'failed',
         currentStage: 'tags',
-        currentStep: '标签提案生成失败',
+        currentStep:
+          error instanceof AiTagProposalProviderError && error.detail
+            ? `标签校验失败：${error.detail}`
+            : '标签提案生成失败',
         completedUnits: 0,
         totalUnits: 1,
         errorCode: code,

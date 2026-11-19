@@ -26,6 +26,7 @@ import {
   type TopicProvider,
 } from '../modules/entries/content_topics.js';
 import {prepareTopicInput} from '../modules/entries/topic_candidates.js';
+import type {RelatedInformationEntry} from '../modules/entries/information_entry_search_index_contract.js';
 import type {CurrentInformationEntry} from '../modules/entries/information_entry_contract.js';
 import type {ExecutionAuthority} from './execution_authority.js';
 import type {DocumentPublicationRepository} from './document_publication_contract.js';
@@ -90,6 +91,9 @@ interface Dependencies {
   repository: TopicRepository;
   entries: InformationEntryRepositoryPort;
   vocabulary?: () => Promise<AnnotationVocabulary>;
+  similarities?: (
+    entryId: string,
+  ) => Promise<ReadonlyMap<string, RelatedInformationEntry>>;
   associations?: InformationEntryAssociationRepositoryPort;
   publications?: DocumentPublicationRepository;
   provider?: TopicProvider;
@@ -103,7 +107,6 @@ interface Dependencies {
 export class TopicService {
   private readonly running = new Map<string, Promise<void>>();
   private closing = false;
-  private dispatching = false;
   private concurrency = 1;
   constructor(private readonly deps: Dependencies) {}
   private current() {
@@ -175,6 +178,10 @@ export class TopicService {
       const selectedTopics = topics.filter(
         (t) =>
           this.visible(t, ids) &&
+          (t.value.kind !== 'topic' ||
+            t.value.origin !== 'ai' ||
+            t.value.members.filter((m) => m.decision !== 'excluded').length >=
+              2) &&
           (!req.snapshotId ||
             (t.value.kind === 'topic' &&
               t.value.members.some((m) => selectedIds.has(m.entryId)))) &&
@@ -359,6 +366,7 @@ export class TopicService {
         value.name = request.name;
         value.scope = request.scope;
         value.origin = origin;
+        value.summary = '';
         value.summaryVersions = [];
       } else {
         if (!row) throw new OperationError('not_found', 'topic_unavailable');
@@ -379,6 +387,7 @@ export class TopicService {
             ...value.members.filter((m) => m.entryId !== member.entryId),
             {...member, origin},
           ];
+          value.summary = '';
           value.summaryVersions = [];
         } else {
           const {relation} =
@@ -451,7 +460,16 @@ export class TopicService {
         Date.now() - Date.parse(row.updatedAt) < 20 * 60_000
       ) &&
       (Boolean(job.result) || job.attempts < job.maxAttempts) &&
-      !(job.status === 'failed' && job.errorCode !== 'ai_provider_unavailable')
+      !(
+        job.status === 'failed' &&
+        job.errorCode !== 'ai_provider_unavailable' &&
+        !(
+          job.result &&
+          ['topic_version_changed', 'topic_output_invalid'].includes(
+            job.errorCode ?? '',
+          )
+        )
+      )
     );
   }
   private async prepare(
@@ -472,6 +490,7 @@ export class TopicService {
         scope,
         topics,
         [],
+        await this.deps.similarities?.(scope.entryId),
       );
       prepared.input.protectedPairs = await this.protectedPairs(
         prepared.input.entries.map((e) => e.entryId),
@@ -487,8 +506,6 @@ export class TopicService {
           const text = guidance.get(entry.snapshotId)?.trim();
           if (text) entry.ownerRelationGuidance = text;
         }
-        if (Array.from(JSON.stringify(prepared.input)).length > 100000)
-          throw new Error('topic_input_too_large');
       }
       return prepared;
     } catch (e) {
@@ -539,13 +556,24 @@ export class TopicService {
       return;
     const work = this.run(id)
       .catch(() => undefined)
-      .finally(() => this.running.delete(id));
+      .finally(() => {
+        this.running.delete(id);
+        // Continue waiting work when a slot becomes free, including no-model jobs.
+        // Leave unchanged queued records to the timed poll after a storage failure.
+        if (!this.closing)
+          void this.deps.repository
+            .read(id)
+            .then((row) => {
+              if (row?.value.kind === 'job' && row.value.status !== 'queued')
+                return this.poll();
+            })
+            .catch(() => undefined);
+      });
     this.running.set(id, work);
   }
   private async enqueue(
     prepared: ReturnType<typeof prepareTopicInput>,
     budgetId: string,
-    publicationId?: string,
   ) {
     const fingerprint = topicFingerprint(prepared.input);
     const jobId = deriveProcessingRunId(
@@ -561,7 +589,6 @@ export class TopicService {
       ...prepared,
       fingerprint,
       budgetId,
-      ...(publicationId ? {publicationId} : {}),
       status: 'queued',
       attempts: 0,
       maxAttempts: 1 + Math.min(2, settings.automaticRetryLimit),
@@ -577,104 +604,10 @@ export class TopicService {
     this.schedule(jobId);
     return {jobId, reused: !saved};
   }
-  private async dispatchPublications() {
-    if (
-      this.dispatching ||
-      !this.deps.publications?.organizationWork ||
-      !this.deps.provider
-    )
-      return;
-    this.dispatching = true;
-    try {
-      const budget = await this.deps.budgetStatus?.();
-      if (!budget || budget.paused || budget.remainingCny <= 0) return;
-      await this.deps.checkModelCall();
-      const publications = await this.deps.publications.organizationWork(
-        4,
-        budget.batchId,
-      );
-      if (!publications.length) return;
-      const entries = await this.current();
-      const jobs = await this.deps.repository.list('job');
-      let started = 0;
-      for (const publication of publications) {
-        const visible = publication.entries.every((e) =>
-          entries.some(
-            (v) => v.entryId === e.entryId && v.revision === e.revision,
-          ),
-        );
-        if (!visible) continue;
-        for (const entry of publication.entries) {
-          const existing = jobs.find(
-            (r) =>
-              r.value.kind === 'job' &&
-              r.value.input.scope.entryId === entry.entryId &&
-              r.value.input.entries.some(
-                (e) =>
-                  e.entryId === entry.entryId && e.revision === entry.revision,
-              ),
-          );
-          if (existing?.value.kind === 'job') {
-            if (existing.value.status === 'succeeded')
-              await this.syncPublication(existing.value, 'succeeded');
-            else if (existing.value.status === 'failed')
-              await this.syncPublication(
-                existing.value,
-                'failed',
-                existing.value.errorCode ?? 'topic_job_failed',
-              );
-            else if (['cancelled', 'paused'].includes(existing.value.status))
-              await this.syncPublication(existing.value, 'paused');
-            if (
-              ['failed', 'cancelled', 'paused'].includes(existing.value.status)
-            )
-              break;
-            continue;
-          }
-          if (started >= this.concurrency) return;
-          try {
-            const prepared = await this.prepare(
-              topicScopeSchema.parse({entryId: entry.entryId}),
-              entries,
-            );
-            await this.enqueue(
-              prepared,
-              budget.batchId,
-              publication.publicationId,
-            );
-            started++;
-          } catch (error) {
-            if (isAiDispatchWait(error)) throw error;
-            const latest = await this.deps.publications.read(
-              publication.documentId,
-            );
-            if (latest?.publicationId === publication.publicationId)
-              await this.deps.publications.transitionOrganization({
-                publicationId: latest.publicationId,
-                expectedVersion: latest.organization.version,
-                from: latest.organization.status,
-                to: 'failed',
-                errorCode:
-                  error instanceof OperationError &&
-                  /^[a-z0-9_]{1,160}$/.test(error.code)
-                    ? error.code
-                    : 'topic_input_invalid',
-              });
-            break;
-          }
-        }
-      }
-    } catch (error) {
-      if (!isAiDispatchWait(error)) throw error;
-    } finally {
-      this.dispatching = false;
-    }
-  }
   async poll() {
     if (this.closing) return;
     this.concurrency =
       (await this.deps.executionSettings()).maxConcurrentRequests ?? 1;
-    await this.dispatchPublications();
     const jobs = await this.deps.repository.list('job');
     for (const row of jobs) {
       if (
@@ -822,7 +755,7 @@ export class TopicService {
       const row = await this.get(id);
       if (row.value.kind !== 'job' || row.value.status === 'cancelled') return;
       const job = row.value,
-        result = job.result;
+        result = job.result ? structuredClone(job.result) : undefined;
       if (!result) throw new Error('topic_result_missing');
       const entries = await this.current();
       this.validateInput(job.input, entries);
@@ -839,6 +772,10 @@ export class TopicService {
       ]);
       if (result.relations.length > job.input.scope.maxRelations)
         throw new OperationError('rejected', 'topic_relation_limit');
+      // The original response remains in job.result. Only valid groups are applied.
+      result.topics = result.topics.filter(
+        (t) => new Set(t.members.map((m) => m.entryId)).size >= 2,
+      );
       const topicIds = result.topics.flatMap((t) =>
         t.topicId ? [t.topicId] : [],
       );
@@ -850,12 +787,18 @@ export class TopicService {
       if (new Set(relationPairs).size !== relationPairs.length)
         throw new OperationError('rejected', 'topic_output_invalid');
       for (const t of result.topics) {
-        if (new Set(t.members.map((m) => m.entryId)).size !== t.members.length)
-          throw new Error('topic_duplicate_member');
         t.members.forEach((m) => {
           this.evidence(() => {
             checkTopicEvidence(m, evidence);
           });
+        });
+        // Validate every quotation, then retain one membership per entry.
+        // The original paid response stays in job.result.
+        const seen = new Set<string>();
+        t.members = t.members.filter((m) => {
+          if (seen.has(m.entryId)) return false;
+          seen.add(m.entryId);
+          return true;
         });
       }
       for (const r of result.relations) {
@@ -873,7 +816,23 @@ export class TopicService {
           : undefined;
         if (t.topicId && !prior) throw new Error('topic_unknown_id');
         const latest = prior ? await this.get(prior.id) : undefined;
-        if (latest && latest.version !== prior?.version)
+        if (
+          latest &&
+          latest.version !== prior?.version &&
+          !(
+            prior &&
+            latest.value.kind === 'topic' &&
+            prior.value.origin === 'ai' &&
+            latest.value.origin === 'ai' &&
+            prior.value.name === latest.value.name &&
+            prior.value.scope === latest.value.scope &&
+            [prior.value, latest.value].every(
+              (v) =>
+                v.members.every((m) => m.origin === 'ai') &&
+                v.relations.every((r) => r.origin === 'ai'),
+            )
+          )
+        )
           throw new OperationError('conflict', 'topic_version_changed');
         const old = latest?.value.kind === 'topic' ? latest.value : undefined;
         if (
@@ -981,6 +940,8 @@ export class TopicService {
     to: 'running' | 'succeeded' | 'failed' | 'paused',
     errorCode?: string,
   ) {
+    // Checkpoints are retained only for historical publication-bound jobs.
+    if (!job.publicationId) return;
     const repo = this.deps.publications,
       seed = job.input.entries.find(
         (e) => e.entryId === job.input.scope.entryId,

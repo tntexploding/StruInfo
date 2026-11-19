@@ -19,7 +19,10 @@ import {
   type TopicValue,
   topicSummaryStale,
 } from '../modules/entries/content_topics.js';
-import {selectTopicCandidates} from '../modules/entries/topic_candidates.js';
+import {
+  selectTopicCandidates,
+  prepareTopicInput,
+} from '../modules/entries/topic_candidates.js';
 import {
   EMPTY_ANNOTATION_VOCABULARY,
   type AnnotationVocabulary,
@@ -27,6 +30,59 @@ import {
 const id = (n: number) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const owner = ExecutionAuthority.owner(id(1));
+it('retains domain-only local candidates without sending them to the model', () => {
+  const rows = [entry(2), entry(3)];
+  for (const e of rows) {
+    const a = e.value.annotations;
+    if (!a?.dimensions[0]) throw new Error('Missing fixture annotation');
+    a.dimensions[0].role = 'domain';
+  }
+  const prepared = prepareTopicInput(
+    rows,
+    EMPTY_ANNOTATION_VOCABULARY,
+    topicScopeSchema.parse({entryId: id(2)}),
+    [],
+    [],
+  );
+  expect(prepared.candidates).toHaveLength(1);
+  expect(prepared.candidates[0]?.eligibleForAi).toBe(false);
+  expect(prepared.input.entries).toHaveLength(1);
+});
+it('keeps label candidates first and bounds vector-only additions under the same scope', () => {
+  const rows = [2, 3, 4, 5, 6, 7].map((n) => {
+    const row = entry(n);
+    if (n < 4) return row;
+    const annotations = row.value.annotations;
+    if (!annotations) throw new Error('Missing fixture annotation');
+    return {
+      ...row,
+      value: {
+        ...row.value,
+        isPrivate: n === 7,
+        annotations: {...annotations, labels: []},
+      },
+    };
+  });
+  const result = selectTopicCandidates(
+    rows,
+    EMPTY_ANNOTATION_VOCABULARY,
+    topicScopeSchema.parse({entryId: id(2), candidateLimit: 8}),
+    new Map([
+      [id(3), 6000],
+      [id(4), 9500],
+      [id(5), 9400],
+      [id(6), 9300],
+      [id(7), 9900],
+    ]),
+  );
+  expect(result.candidates.map((c) => c.entryId)).toEqual([
+    id(3),
+    id(4),
+    id(5),
+  ]);
+  expect(result.candidates[0]?.labelCandidate).toBe(true);
+  expect(result.candidates.every((c) => c.uncertain)).toBe(true);
+});
 function entry(
   n: number,
   body = `Memory bandwidth limits computation for synthetic version ${String(n)}.`,
@@ -200,6 +256,31 @@ function fixture(
   return {rows, repository, provider, service, start, job, done, check, scope};
 }
 describe('bounded background topics', () => {
+  it('starts the next queued group when the prior group finishes without a timer tick', async () => {
+    let release: (() => void) | undefined;
+    const first = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    const f = fixture(async () => {
+      calls++;
+      if (calls === 1) await first;
+      return {topics: [], relations: [], note: ''};
+    });
+    const a = await f.start();
+    const b = (await f.service.execute(owner, 'topic_job_start', {
+      scope: {...f.scope, entryId: id(3)},
+      budgetId: 'synthetic-p5',
+    })) as {jobId: string};
+    expect(f.job(b.jobId).status).toBe('queued');
+    required(release)();
+    await vi.waitFor(() => {
+      expect(f.job(a.jobId).status).toBe('succeeded');
+      expect(f.job(b.jobId).status).toBe('succeeded');
+    });
+    expect(calls).toBe(2);
+    await f.service.drain();
+  });
   it('lists large topic sets with bounded protection reads and preserves cross-batch overrides', async () => {
     const blocked = {
       workspaceId: id(1),
@@ -408,6 +489,119 @@ describe('bounded background topics', () => {
     expect(f.job(r.jobId).result).toBeDefined();
     expect(await f.repository.list('topic')).toHaveLength(0);
   });
+  it('keeps the original response, deduplicates members and skips single-entry topics', async () => {
+    for (const onlyOneEntry of [false, true]) {
+      const f = fixture((input) => {
+        const v = response(input);
+        const t = required(v.topics[0]);
+        const first = required(t.members[0]);
+        t.members = onlyOneEntry
+          ? [first, {...first}]
+          : [...t.members, {...first}];
+        return Promise.resolve(v);
+      });
+      const {jobId} = await f.start();
+      await f.service.drain();
+      expect(f.job(jobId).status).toBe('succeeded');
+      expect(f.job(jobId).result?.topics[0]?.members).toHaveLength(
+        onlyOneEntry ? 2 : 4,
+      );
+      const topics = await f.repository.list('topic');
+      if (onlyOneEntry) expect(topics).toHaveLength(0);
+      else {
+        const topic = required(topics[0]).value as TopicValue;
+        expect(topic.members).toHaveLength(3);
+      }
+    }
+  });
+  it('applies a valid group alongside single-member and empty proposals without retrying', async () => {
+    const f = fixture((input) => {
+      const result = response(input),
+        good = required(result.topics[0]);
+      result.topics.push(
+        {...good, name: 'Singleton', members: [required(good.members[0])]},
+        {...good, name: 'Empty', members: []},
+      );
+      return Promise.resolve(result);
+    });
+    const {jobId} = await f.start();
+    await f.service.drain();
+    expect(f.job(jobId).status).toBe('succeeded');
+    expect(f.job(jobId).result?.topics).toHaveLength(3);
+    expect(await f.repository.list('topic')).toHaveLength(1);
+    expect(f.provider.generate).toHaveBeenCalledTimes(1);
+  });
+  it('resumes a paid result after an AI-only version conflict without calling the model again', async () => {
+    const f = fixture();
+    const first = await f.start();
+    await vi.waitFor(() => {
+      expect(f.job(first.jobId).status).toBe('succeeded');
+    });
+    const initial = required((await f.repository.list('topic'))[0]);
+    if (initial.value.kind !== 'topic') throw new Error('fixture');
+    f.rows[0] = {...required(f.rows[0]), revision: 2};
+    let release: (() => void) | undefined;
+    f.provider.generate.mockImplementationOnce(
+      (input) =>
+        new Promise((resolve) => {
+          release = () => {
+            resolve(response(input));
+          };
+        }),
+    );
+    const next = await f.start();
+    await vi.waitFor(() => {
+      expect(release).toBeDefined();
+    });
+    await f.repository.save([
+      {
+        id: initial.id,
+        expectedVersion: initial.version,
+        value: {...initial.value, scope: 'Changed AI scope'},
+      },
+    ]);
+    required(release)();
+    await vi.waitFor(() => {
+      expect(f.job(next.jobId).status).toBe('failed');
+    });
+    const changed = required(await f.repository.read(initial.id));
+    const extra = entry(5);
+    f.rows.push(extra);
+    await f.repository.save([
+      {
+        id: initial.id,
+        expectedVersion: changed.version,
+        value: {
+          ...initial.value,
+          members: [
+            ...initial.value.members,
+            {
+              entryId: extra.entryId,
+              revision: extra.revision,
+              quote: extra.value.body,
+              reason: 'Concurrent AI membership',
+              decision: 'included',
+              origin: 'ai',
+            },
+          ],
+        },
+      },
+    ]);
+    const job = required(await f.repository.read(next.jobId));
+    await f.service.execute(owner, 'topic_job_control', {
+      jobId: next.jobId,
+      expectedVersion: job.version,
+      action: 'resume',
+    });
+    await vi.waitFor(() => {
+      expect(f.job(next.jobId).status).toBe('succeeded');
+    });
+    await f.service.drain();
+    expect(f.provider.generate).toHaveBeenCalledTimes(2);
+    const topic = required(await f.repository.read(initial.id))
+      .value as TopicValue;
+    expect(topic.members.map((m) => m.entryId)).toContain(extra.entryId);
+  });
   it('checks cancellation again before dispatch and retains its reservation', async () => {
     let reserve: (() => Promise<void>) | undefined;
     let fail: ((error: unknown) => void) | undefined;
@@ -483,6 +677,7 @@ describe('bounded background topics', () => {
     expect(f.job(next.jobId).result).toBeDefined();
     expect((await f.repository.read(initial.id))?.value).toMatchObject({
       name: '人工确定的范围',
+      summary: '',
     });
   });
   it('keeps price waits unspent and retries only transport failures within frozen attempts', async () => {
@@ -523,6 +718,34 @@ describe('bounded background topics', () => {
     expect(invalid.job(c.jobId).attempts).toBe(1);
     expect(invalid.job(c.jobId).status).toBe('failed');
   });
+  it('hides an AI topic with fewer than two retained members and keeps its exclusions', async () => {
+    const f = fixture();
+    await f.start();
+    await f.service.drain();
+    let t = required((await f.repository.list('topic'))[0]);
+    if (t.value.kind !== 'topic') throw new Error('fixture');
+    for (const member of t.value.members.slice(0, -1)) {
+      const {origin: ignored, ...evidence} = member;
+      void ignored;
+      await f.service.execute(owner, 'topic_member_set', {
+        topicId: t.id,
+        expectedVersion: t.version,
+        member: {
+          ...evidence,
+          decision: 'excluded',
+          reason: 'Evidence does not support the topic',
+        },
+      });
+      t = required(await f.repository.read(t.id));
+    }
+    expect(await f.service.execute(owner, 'topics_list', {})).toMatchObject({
+      topics: [],
+    });
+    expect(
+      t.value.kind === 'topic' &&
+        t.value.members.filter((m) => m.decision === 'excluded'),
+    ).toHaveLength(2);
+  });
   it('preserves manual exclusions and rejects agent overwrite, stale summaries and private reads', async () => {
     const f = fixture();
     const first = await f.start();
@@ -549,6 +772,7 @@ describe('bounded background topics', () => {
       'agent.relations',
     ]);
     t = required(await f.repository.read(t.id));
+    expect(t.value).toMatchObject({summary: '', summaryVersions: []});
     await expect(
       f.service.execute(a, 'topic_member_set', {
         topicId: t.id,
@@ -609,6 +833,95 @@ describe('bounded background topics', () => {
   });
 });
 describe('topic recall', () => {
+  it('excludes stale and single-current-member old topics while retaining current manual exclusions', () => {
+    const rows = [entry(2), entry(3), entry(4)];
+    const members = rows.map((e) => ({
+      entryId: e.entryId,
+      revision: e.revision,
+      quote: e.value.body,
+      reason: 'Prior evidence',
+      decision: 'included' as const,
+      origin: 'ai' as const,
+    }));
+    const value: TopicValue = {
+      kind: 'topic',
+      name: 'Prior',
+      scope: 'A shared question',
+      origin: 'ai',
+      members,
+      relations: [],
+      summary: 'Old summary',
+      summaryVersions: [],
+      ruleVersion: 'old',
+    };
+    const topics: TopicRecord[] = [
+      {id: id(10), version: 1, updatedAt: '', value},
+      {
+        id: id(11),
+        version: 1,
+        updatedAt: '',
+        value: {...value, members: [required(members[0])]},
+      },
+      {
+        id: id(12),
+        version: 1,
+        updatedAt: '',
+        value: {...value, members: members.map((m) => ({...m, revision: 99}))},
+      },
+    ];
+    const p = prepareTopicInput(
+      rows,
+      EMPTY_ANNOTATION_VOCABULARY,
+      topicScopeSchema.parse({entryId: id(2)}),
+      topics,
+      [],
+    );
+    expect(p.input.topics.map((t) => t.id)).toEqual([id(10)]);
+    expect(p.input.topics[0]?.value.summary).toBe('');
+    expect(topics[0]?.value).toEqual(value);
+  });
+  it('retains complete originals while the provider limits transmitted excerpts', () => {
+    const rows = [entry(2), entry(3)].map((e) => {
+      const body = e.value.body + '\n' + 'A'.repeat(60_000);
+      const bodySha256 = informationEntryBodySha256(body);
+      return {
+        ...e,
+        value: {
+          ...e.value,
+          body,
+          bodySha256,
+          annotations: {
+            ...required(e.value.annotations),
+            inputBodySha256: bodySha256,
+          },
+        },
+      };
+    });
+    const scope = topicScopeSchema.parse({entryId: id(2), candidateLimit: 2});
+    const prepared = prepareTopicInput(
+      rows,
+      EMPTY_ANNOTATION_VOCABULARY,
+      scope,
+      [],
+      [],
+    );
+    expect(prepared.input.entries.map((e) => e.body)).toEqual(
+      rows.map((e) => e.value.body),
+    );
+    const oversized = rows.map((e) => ({
+      ...e,
+      value: {...e.value, body: e.value.body.repeat(2)},
+    }));
+    expect(
+      prepareTopicInput(
+        oversized,
+        EMPTY_ANNOTATION_VOCABULARY,
+        scope,
+        [],
+        [],
+      ).input.entries.map((e) => e.body),
+    ).toEqual(oversized.map((e) => e.value.body));
+  });
   it('does not send word-only similarities or empty label sets to the model', async () => {
     const f = fixture();
     for (const row of f.rows)

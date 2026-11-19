@@ -36,12 +36,18 @@ export function splitInputPackets(
       points.slice(range.start, range.end).join('') !== leaf.selectedText
     )
       return [[whole]];
-    inputs.push({
-      ...whole,
-      nodeKind: leaf.nodeKind,
-      codePointRange: {start: end, end: range.end},
-      selectedText: points.slice(end, range.end).join(''),
-    });
+    const text = points.slice(end, range.end).join('');
+    let start = end;
+    for (const part of linkedSentenceParts(leaf.nodeKind, text)) {
+      const next = start + Array.from(part).length;
+      inputs.push({
+        ...whole,
+        nodeKind: leaf.nodeKind,
+        codePointRange: {start, end: next},
+        selectedText: part,
+      });
+      start = next;
+    }
     end = range.end;
   }
   if (!inputs.length) return [[whole]];
@@ -53,6 +59,41 @@ export function splitInputPackets(
       selectedText: points.slice(last.codePointRange.start).join(''),
     };
   return splitReadingPackets(inputs);
+}
+
+/** Offer cuts inside paragraphs containing multiple linked reports. The model
+ * still decides whether the sentences are independent or belong together. */
+export function linkedSentenceParts(kind: string, text: string): string[] {
+  if (
+    kind !== 'paragraph' ||
+    text.trimStart().startsWith('|') ||
+    !text.includes('](http')
+  )
+    return [text];
+  // Mask link targets so punctuation in URLs cannot create sentence boundaries.
+  const masked = text.replace(
+    /\]\(https?:\/\/[^\s)]+\)/gu,
+    (match) => '](' + 'x'.repeat(match.length - 3) + ')',
+  );
+  const spans = [
+    ...new Intl.Segmenter('en', {granularity: 'sentence'}).segment(masked),
+  ];
+  const parts = spans.map((span, index) =>
+    text.slice(span.index, spans[index + 1]?.index),
+  );
+  const choices: string[] = [];
+  let linked = false;
+  for (const part of parts) {
+    const hasLink = /\]\(https?:\/\//u.test(part);
+    const newReport =
+      /^(?:(?:Also|Meanwhile|Separately|Elsewhere|Additionally|In other news)\b|此外|另外|另一方面)/iu.test(
+        part.trimStart(),
+      );
+    if (!choices.length || (hasLink && linked && newReport)) choices.push(part);
+    else choices[choices.length - 1] = (choices.at(-1) ?? '') + part;
+    linked ||= hasLink;
+  }
+  return choices;
 }
 
 /** Reading packets only: their boundaries never establish independent Entries. */

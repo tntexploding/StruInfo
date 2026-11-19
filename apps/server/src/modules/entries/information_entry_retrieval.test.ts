@@ -18,6 +18,26 @@ import {
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('InformationEntryRetrievalService', () => {
+  it('returns paired source ranges from cached vectors without another embedding request', async () => {
+    const f = harness(true);
+    await f.service.rebuild();
+    f.embed.mockClear();
+    const seed = f.entries[0];
+    if (!seed) throw new Error('Missing source entry');
+    const matches = await f.service.related(seed.entryId, 8);
+    expect(matches.size).toBe(1);
+    for (const [id, match] of matches) {
+      const other = f.entries.find((e) => e.entryId === id);
+      if (!other) throw new Error('Unknown related entry');
+      expect(match.sourcePassage).toEqual({
+        start: 0,
+        end: seed.value.body.length,
+      });
+      expect(match.passage).toEqual({start: 0, end: other.value.body.length});
+      expect(Number.isFinite(match.score)).toBe(true);
+    }
+    expect(f.embed).not.toHaveBeenCalled();
+  });
   it('keeps alias-only candidates when an accelerated index would return no literal matches', async () => {
     const fixture = harness(false);
     const source = currentEntry(
@@ -74,7 +94,7 @@ describe('InformationEntryRetrievalService', () => {
     expect(fixture.embed).not.toHaveBeenCalled();
   });
 
-  it('requires an explicit rebuild before treating old embedding input hashes as current', async () => {
+  it('falls back to lexical retrieval for outdated embedding hashes', async () => {
     const fixture = harness(true);
     await fixture.service.rebuild();
     const current = fixture.snapshot;
@@ -97,7 +117,10 @@ describe('InformationEntryRetrievalService', () => {
         includePrivate: false,
         limit: 10,
       }),
-    ).rejects.toMatchObject({code: 'semantic_search_index_not_ready'});
+    ).resolves.toMatchObject({
+      retrievalFallback: 'index_incomplete',
+      totalCount: 1,
+    });
     expect(fixture.embed).not.toHaveBeenCalled();
     await fixture.service.rebuild();
     expect((await fixture.service.status()).semanticSearchReady).toBe(true);
@@ -241,7 +264,7 @@ describe('InformationEntryRetrievalService', () => {
     expect(hybrid.items[0]).toMatchObject({
       entry: {entryId: source.entryId},
       matchReasons: ['translation_body'],
-      retrievalScore: 10_000,
+      retrievalScore: 4_500,
     });
     expect(hybrid.items[0]?.semanticMatch).toBeUndefined();
     expect(fixture.embed).toHaveBeenLastCalledWith(['literal-only']);
@@ -296,7 +319,7 @@ describe('InformationEntryRetrievalService', () => {
       fixture.entries[1]?.entryId,
     ]);
     expect(hybrid.items[0]?.semanticMatch).toBeUndefined();
-    expect(hybrid.items[0]?.retrievalScore).toBe(9_000);
+    expect(hybrid.items[0]?.retrievalScore).toBe(4_050);
   });
 
   it('rejects private semantic scope before loading data or calling a provider', async () => {
@@ -368,7 +391,10 @@ describe('InformationEntryRetrievalService', () => {
         onlyPrivate: false,
         limit: 10,
       }),
-    ).rejects.toMatchObject({code: 'semantic_search_not_configured'});
+    ).resolves.toMatchObject({
+      retrievalFallback: 'embedding_unavailable',
+      totalCount: 1,
+    });
   });
 
   it('hydrates only indexed lexical candidates and falls back for fuzzy search', async () => {
@@ -583,7 +609,7 @@ describe('InformationEntryRetrievalService', () => {
     });
   });
 
-  it('rejects a partially current index instead of returning incomplete semantic results', async () => {
+  it('uses available current vectors and reports incomplete coverage', async () => {
     const fixture = harness();
     await fixture.service.rebuild();
     const firstProjection = fixture.snapshot.projections[0];
@@ -606,8 +632,11 @@ describe('InformationEntryRetrievalService', () => {
         onlyPrivate: false,
         limit: 10,
       }),
-    ).rejects.toMatchObject({code: 'semantic_search_index_not_ready'});
-    expect(fixture.embed).not.toHaveBeenCalled();
+    ).resolves.toMatchObject({
+      retrievalFallback: 'index_incomplete',
+      totalCount: 1,
+    });
+    expect(fixture.embed).toHaveBeenCalledTimes(1);
   });
 });
 

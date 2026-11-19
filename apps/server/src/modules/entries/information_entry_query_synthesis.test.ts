@@ -14,6 +14,18 @@ import {
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('InformationEntryQuerySynthesisService', () => {
+  it('quotes a matched tail passage rather than the beginning of a long entry', () => {
+    const original = entry(0);
+    const body = '前文😀'.repeat(4000) + '尾部证据：低电压可降低动态功耗。';
+    const start = body.indexOf('尾部证据');
+    const evidence = prepareInformationEntryQuerySynthesisEvidence(
+      [{...original, value: {...original.value, body}}],
+      new Map([[original.entryId, {start, end: body.length}]]),
+    );
+    expect(evidence[0]?.excerpt).toBe('尾部证据：低电压可降低动态功耗。');
+    expect(evidence[0]?.truncated).toBe(true);
+  });
+
   it('reruns the public query and maps top evidence through request-local handles', async () => {
     const entries = Array.from({length: 9}, (_, index) => entry(index));
     const synthesize = vi.fn<

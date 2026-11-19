@@ -10,12 +10,14 @@ const readCommands = new Set([
   'ai_price_status',
   'ingestion_status',
   'intake_status',
+  'news_list',
   'intake_origins',
   'source_quality_status',
   'annotation_vocabulary',
   'tasks_list',
   'document_publication_status',
   'topics_list',
+  'topics_preview',
   'research_status',
   'report_pipeline_status',
   'reports_list',
@@ -187,6 +189,10 @@ export const lines = (value) =>
     .filter(Boolean);
 export function failure(error) {
   const names = {
+    embedding_configuration_required: '请先配置 API key、接口地址和费用上限。',
+    embedding_disabled: '向量调用已关闭。',
+    embedding_input_too_large: '文本超出向量模型的单批容量。',
+    embedding_dimensions_mismatch: '向量维度与当前索引不一致。',
     history_batch_busy: '批次正在运行。请先暂停再修改清单。',
     history_budget_required: '当前批次预算不可用，请核对预算、模型和余额。',
     entry_budget_exceeded: '拆分结果超过本篇条目上限。',

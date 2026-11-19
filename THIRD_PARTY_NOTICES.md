@@ -2,7 +2,7 @@
 
 - Foundation task: `M0-S-FOUNDATION-MAINT-001`
 - Dependency increments: `M1A-MD-DEP-MAINT-001`, `M1E-5B-DOCUMENT-IMPORT`, `M1I-2-RSS-ATOM`, `UI-READING-20260908` (existing parser reuse)
-- Tracked lock SHA-256: `6CFB53D0BAED2450291973C70F53289731352E7A101FCFDAC00FBCC40E5F4C53`
+- Tracked lock SHA-256: `E81F005FD813C931D466CB65A569115BAC8AE6A3F3EB42EFD8E8A9D88AD6E258`
 - M1I-2 pre-increment lock SHA-256: `10FB9E8A9E6403A7D7F5BE445776C50F6DF748D33F85923E54CDBE9B18471C4A`
 - M1E-5B pre-increment lock SHA-256: `99F261C35311919380BF6AEF018E0B2A9D076DC7937A5EDE1E0D7F26F56192A0`
 - Foundation pre-M1A lock SHA-256: `A783E1C5B2DADD8B653D8E16446847530473D5569BB08830D7FC03D79400880B`
@@ -326,7 +326,7 @@ attested source release, or canonical SPDX text. The complete decisions are in
 | `body-parser@2.4.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/body-parser@2.4.0/LICENSE` |
 | `content-type@2.1.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/content-type@2.1.0/LICENSE` |
 | `fast-uri@3.1.9` | transitive | `BSD-3-Clause` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/fast-uri@3.1.9/LICENSE` |
-| `hono@4.13.11` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/hono@4.13.11/LICENSE` |
+| `hono@4.13.16` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/hono@4.13.16/LICENSE` |
 | `ip-address@10.7.4` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ip-address@10.7.4/LICENSE` |
 | `multer@2.5.0` | transitive | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/multer@2.5.0/LICENSE` |
 | `qs@6.16.1` | transitive | `BSD-3-Clause` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/qs@6.16.1/LICENSE.md` |
@@ -460,7 +460,7 @@ Official MCP TypeScript SDK 1.30.0 implements the stdio protocol. Zod 4.4.3 is a
 
 | Package | Role | SPDX license | Review | Legal material |
 | --- | --- | --- | --- | --- |
-| `@hono/node-server@2.1.3` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/@hono__node-server@2.1.3/LICENSE` |
+| `@hono/node-server@2.1.6` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/@hono__node-server@2.1.6/LICENSE` |
 | `ajv-formats@3.0.1` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ajv-formats@3.0.1/LICENSE` |
 | `ajv@8.20.0` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/ajv@8.20.0/LICENSE` |
 | `eventsource-parser@3.1.1` | transitive runtime | `MIT` | ROUTINE_REVIEW | `docs/dependencies/licenses/npm/eventsource-parser@3.1.1/LICENSE` |

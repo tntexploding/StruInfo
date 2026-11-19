@@ -16,6 +16,14 @@ const timezone = z
 /** Transport and update cadence are independent, workspace-owned settings. */
 export const sourceReceivingSchema = z
   .object({
+    contentMode: z.enum(['article', 'news']).optional(),
+    contentFilter: z
+      .object({
+        includeAny: z.array(z.string().trim().min(1).max(100)).max(40),
+        excludeAny: z.array(z.string().trim().min(1).max(100)).max(40),
+      })
+      .strict()
+      .optional(),
     schedule: z.discriminatedUnion('mode', [
       z.object({mode: z.literal('manual')}).strict(),
       z.object({mode: z.literal('once')}).strict(),
@@ -71,6 +79,7 @@ export type SourceCheckState = Readonly<{
 
 export const receptionSchema = z
   .object({
+    title: z.string().max(240).optional(),
     channel: z.enum(['live', 'history', 'manual']),
     historyImportKey: z
       .string()
@@ -80,6 +89,28 @@ export const receptionSchema = z
   })
   .strict();
 export type Reception = z.infer<typeof receptionSchema>;
+
+/** Source scope is a deterministic title/URL filter, not an AI annotation. */
+export function sourceContentMatches(
+  title: string,
+  url: string,
+  strategy?: SourceReceiving,
+) {
+  const filter = strategy?.contentFilter;
+  if (!filter) return true;
+  const text = title.toLocaleLowerCase();
+  const has = (term: string) => {
+    const word = term.toLocaleLowerCase();
+    if (word.includes('/')) return url.toLocaleLowerCase().includes(word);
+    if (/^[a-z]{1,3}$/u.test(word))
+      return new RegExp(`(^|[^a-z0-9])${word}($|[^a-z0-9])`, 'u').test(text);
+    return text.includes(word);
+  };
+  return (
+    (!filter.includeAny.length || filter.includeAny.some(has)) &&
+    !filter.excludeAny.some(has)
+  );
+}
 
 export interface SourceScheduleInput {
   enabled: boolean;

@@ -1,11 +1,35 @@
 import {expect, it} from 'vitest';
-import {splitReadingPackets, splitInputPackets} from './ai_split_input.js';
+import {
+  splitReadingPackets,
+  splitInputPackets,
+  linkedSentenceParts,
+} from './ai_split_input.js';
 import {assertProcessingSplitProposalPayload} from './processing.js';
 import {
   orderedSectionFragments,
   providerSections,
 } from './ai_split_proposal_service.js';
 import {prepareAiSplitInformationEntries} from '../entries/information_entry.js';
+
+it('offers exact cuts between linked reports inside a paragraph without splitting URL punctuation or tables', () => {
+  const first =
+    '😀 A [device](https://example.invalid/a.b) measures pressure. Its sensor is calibrated. ';
+  const second =
+    'Elsewhere, a [protocol](https://example.invalid/c.d) changes packet routing.';
+  const parts = linkedSentenceParts('paragraph', first + second);
+  expect(parts).toEqual([first, second]);
+  expect(parts.join('')).toBe(first + second);
+  expect(
+    linkedSentenceParts('paragraph', '| ' + first + second + ' |'),
+  ).toHaveLength(1);
+  expect(linkedSentenceParts('code', first + second)).toHaveLength(1);
+  expect(
+    linkedSentenceParts(
+      'paragraph',
+      'A [sensor](https://example.invalid/a) measures pressure. Its [calibration](https://example.invalid/b) improves the measurement.',
+    ),
+  ).toHaveLength(1);
+});
 
 it('keeps quote and list markers through exact source ranges, including non-BMP text', () => {
   const text =

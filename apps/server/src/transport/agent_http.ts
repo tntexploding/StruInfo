@@ -100,6 +100,7 @@ export function agentHttpMiddleware(options: AgentHttpOptions) {
                 'ai_price_save',
                 'ai_operations_save',
                 'ai_execution_save',
+                'embedding_settings_save',
                 'ai_queue_save',
                 'assistant_settings_save',
               ]
@@ -121,6 +122,7 @@ export function agentHttpMiddleware(options: AgentHttpOptions) {
                     'source_quality_control',
                     'source_description_generate',
                     'intake_previews',
+                    'news_list',
                     'intake_origins',
                     'intake_summarize',
                     'intake_translate',

@@ -29,6 +29,136 @@ const SECTIONS: readonly Readonly<AiSplitProposalSection>[] = Object.freeze([
   Object.freeze({ordinal: 2, text: 'Synthetic public section C.'}),
 ]);
 
+it('moves a trailing category heading to its following reading item', async () => {
+  const provider = new ResponsesEntrySplitProvider(BASE_CONFIG, () =>
+    Promise.resolve(
+      responseEnvelope({
+        summary: 'Two reports',
+        documentMode: 'independent_entries',
+        groups: [
+          {titlePath: 'First report', startOrdinal: 0, endOrdinal: 2},
+          {titlePath: 'Second report', startOrdinal: 3, endOrdinal: 3},
+        ],
+      }),
+    ),
+  );
+  const result = await provider.proposeSplit([
+    {ordinal: 0, text: '# Synthetic issue'},
+    {ordinal: 1, text: 'First substantive report.'},
+    {ordinal: 2, text: '## Next category'},
+    {ordinal: 3, text: 'Second substantive report.'},
+  ]);
+  expect(
+    result.groups.map(({startOrdinal, endOrdinal}) => [
+      startOrdinal,
+      endOrdinal,
+    ]),
+  ).toEqual([
+    [0, 1],
+    [2, 3],
+  ]);
+});
+
+it.each(['independent_entries', 'whole'] as const)(
+  'separates nested news only in an independent collection (%s)',
+  async (documentMode) => {
+    const provider = new ResponsesEntrySplitProvider(BASE_CONFIG, () =>
+      Promise.resolve(
+        responseEnvelope({
+          documentMode,
+          summary: 'Source-linked news',
+          groups: [{titlePath: 'Other news', startOrdinal: 0, endOrdinal: 4}],
+        }),
+      ),
+    );
+    const result = await provider.proposeSplit([
+      {ordinal: 0, text: '4、其他'},
+      {
+        ordinal: 1,
+        text: '（1）A [study](https://example.invalid/a) describes fabricated stars.',
+      },
+      {
+        ordinal: 2,
+        text: '（2）A [browser](https://example.invalid/b) changes its search display.',
+      },
+      {
+        ordinal: 3,
+        text: '![Browser screenshot](https://example.invalid/image.png)',
+      },
+      {
+        ordinal: 4,
+        text: '（3）An [observatory](https://example.invalid/c) opens a lunar exhibition.',
+      },
+    ]);
+    expect(
+      result.groups.map(({startOrdinal, endOrdinal}) => [
+        startOrdinal,
+        endOrdinal,
+      ]),
+    ).toEqual(
+      documentMode === 'whole'
+        ? [[0, 4]]
+        : [
+            [0, 1],
+            [2, 3],
+            [4, 4],
+          ],
+    );
+  },
+);
+
+it('leaves a nested reference list together', async () => {
+  const provider = new ResponsesEntrySplitProvider(BASE_CONFIG, () =>
+    Promise.resolve(
+      responseEnvelope({
+        summary: 'Related references',
+        groups: [{titlePath: 'References', startOrdinal: 0, endOrdinal: 2}],
+      }),
+    ),
+  );
+  const result = await provider.proposeSplit([
+    {ordinal: 0, text: '4、其他'},
+    {ordinal: 1, text: '（1）[Specification](https://example.invalid/a)'},
+    {ordinal: 2, text: '（2）[Manual](https://example.invalid/b)'},
+  ]);
+  expect(result.groups).toHaveLength(1);
+});
+
+it('offers nested source-linked news as separate boundaries', async () => {
+  let input: {linkedItemStarts?: number[]} = {};
+  const provider = new ResponsesEntrySplitProvider(
+    BASE_CONFIG,
+    (_url, init) => {
+      if (typeof init?.body !== 'string')
+        throw new Error('Expected a JSON request');
+      input = JSON.parse(
+        (JSON.parse(init.body) as {input: string}).input,
+      ) as typeof input;
+      return Promise.resolve(
+        responseEnvelope({
+          summary: 'Two different events',
+          groups: [
+            {titlePath: 'Lunar suit', startOrdinal: 0, endOrdinal: 1},
+            {titlePath: 'Storm preparation', startOrdinal: 2, endOrdinal: 2},
+          ],
+        }),
+      );
+    },
+  );
+  await provider.proposeSplit([
+    {ordinal: 0, text: '## Other news'},
+    {
+      ordinal: 1,
+      text: '\n\n（1）A [lunar suit](https://example.invalid/a) was introduced.',
+    },
+    {
+      ordinal: 2,
+      text: '\n\n（2）A [storm](https://example.invalid/b) required roof reinforcement.',
+    },
+  ]);
+  expect(input.linkedItemStarts).toEqual([1, 2]);
+});
+
 describe.each([
   BASE_CONFIG,
   {

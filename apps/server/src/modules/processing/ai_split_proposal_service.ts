@@ -1,4 +1,8 @@
-import {splitReadingPackets, splitInputPackets} from './ai_split_input.js';
+import {
+  splitReadingPackets,
+  splitInputPackets,
+  linkedSentenceParts,
+} from './ai_split_input.js';
 import {
   MAXIMUM_ENTRY_BODY_CODE_POINTS,
   type MaterializedEvidenceSnapshot,
@@ -393,7 +397,10 @@ export function orderedSectionFragments(
   // preserves all bytes and provenance without manufacturing standalone entries.
   if (
     sections.length > MAXIMUM_AI_SPLIT_FRAGMENTS ||
-    splitReadingPackets(sections).length > MAXIMUM_AI_SPLIT_FRAGMENTS
+    splitReadingPackets(sections).length > MAXIMUM_AI_SPLIT_FRAGMENTS ||
+    sections.some(
+      (s) => linkedSentenceParts(s.nodeKind, s.selectedText).length > 1,
+    )
   ) {
     const whole = structure.fragments.find(
       (f) =>

@@ -11,7 +11,10 @@ import {
   type EntryTranslation,
   type EntryTranslationSearchRepositoryPort,
 } from './information_entry_translation.js';
-import {refreshInformationEntrySearchIndex} from './information_entry_search_index_refresh.js';
+import {
+  refreshInformationEntrySearchIndex,
+  embedSearchProjectionBatch,
+} from './information_entry_search_index_refresh.js';
 import type {InformationEntryAssociationRepositoryPort} from './information_entry_association_repository.js';
 import type {
   CurrentInformationEntry,
@@ -26,10 +29,8 @@ import {
   hasCurrentInformationEntryEmbeddingInput,
   prepareInformationEntrySearchProjection,
   tokenizeInformationEntryText,
-  withInformationEntryEmbedding,
 } from './information_entry_search_index.js';
 import {
-  INFORMATION_ENTRY_EMBEDDING_BATCH_MAXIMUM,
   INFORMATION_ENTRY_SEARCH_INDEX_VERSION,
   INFORMATION_ENTRY_TERM_TOKENIZER_VERSION,
   InformationEntryRetrievalServiceError,
@@ -43,6 +44,8 @@ import {
   type InformationEntrySearchIndexSnapshot,
   type InformationEntrySearchIndexStatus,
   type InformationEntrySearchIndexRefreshResult,
+  type InformationEntryEmbeddingChunk,
+  type RelatedInformationEntry,
 } from './information_entry_search_index_contract.js';
 
 export interface InformationEntryRetrievalServiceDependencies {
@@ -52,6 +55,7 @@ export interface InformationEntryRetrievalServiceDependencies {
   readonly associations: InformationEntryAssociationRepositoryPort;
   readonly index: InformationEntrySearchIndexRepositoryPort;
   readonly embeddingProvider?: InformationEntryEmbeddingProviderPort;
+  readonly embeddingEnabled?: () => Promise<boolean>;
   readonly translations?: EntryTranslationSearchRepositoryPort;
   readonly aliases?: () => Promise<readonly Readonly<ConfirmedEntryAlias>[]>;
 }
@@ -76,7 +80,15 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
   public async search(
     request: Readonly<InformationEntrySearchRequest>,
   ): Promise<Readonly<InformationEntrySearchResult>> {
-    const mode = request.retrievalMode ?? 'lexical';
+    const mode = !(request.text ?? '').trim()
+      ? 'lexical'
+      : (request.retrievalMode ??
+        (this.#dependencies.embeddingProvider &&
+        !request.includePrivate &&
+        !request.onlyPrivate
+          ? 'hybrid'
+          : 'lexical'));
+    request = {...request, retrievalMode: mode};
     if (mode !== 'lexical') this.#assertSemanticRequest(request);
     const translations = await loadCachedEntrySearchTranslations(
       this.#dependencies.workspaceId,
@@ -145,21 +157,46 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
             request.includePrivate,
           ),
     ]);
+    const fallback = (
+      reason: 'index_incomplete' | 'embedding_unavailable',
+    ) => ({
+      ...searchCurrentInformationEntries(
+        entries,
+        request,
+        associations,
+        undefined,
+        translations,
+        aliases,
+        vocabulary,
+        true,
+      ),
+      retrievalFallback: reason,
+    });
     const provider = this.#dependencies.embeddingProvider;
-    if (provider === undefined) {
-      throw new InformationEntryRetrievalServiceError(
-        'semantic_search_not_configured',
-      );
-    }
+    if (
+      !provider ||
+      (this.#dependencies.embeddingEnabled &&
+        !(await this.#dependencies.embeddingEnabled()))
+    )
+      return fallback('embedding_unavailable');
+    const {after: ignoredAfter, ...scope} = request;
+    void ignoredAfter;
+    const eligible = searchCurrentInformationEntries(
+      entries,
+      {...scope, text: '', retrievalMode: 'lexical', limit: entries.length},
+      associations,
+      undefined,
+      translations,
+      aliases,
+      vocabulary,
+    ).items.map((item) => item.entry);
+    if (!eligible.length) return searchCurrentInformationEntries([], request);
     const index = await this.#dependencies.index.loadSearchIndex(
       this.#dependencies.workspaceId,
+      false,
     );
-    const current = currentEmbeddedProjections(entries, index, provider);
-    if (entries.length === 0 || current.size !== entries.length) {
-      throw new InformationEntryRetrievalServiceError(
-        'semantic_search_index_not_ready',
-      );
-    }
+    const current = currentEmbeddedProjections(eligible, index, provider);
+    if (!current.size) return fallback('index_incomplete');
     let queryEmbedding: readonly number[];
     try {
       const vectors = await provider.embed([request.text ?? '']);
@@ -167,9 +204,7 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
       if (vectors.length !== 1 || first === undefined) throw new Error();
       queryEmbedding = first;
     } catch {
-      throw new InformationEntryRetrievalServiceError(
-        'semantic_search_provider_failure',
-      );
+      return fallback('embedding_unavailable');
     }
     const semanticMatches = new Map<
       string,
@@ -178,29 +213,77 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
         provider: string;
         model: string;
         indexVersion: string;
+        passage: Readonly<{start: number; end: number}>;
       }>
     >();
-    for (const [entryId, embedding] of current) {
-      const score = cosineSimilarityBasisPoints(queryEmbedding, embedding);
-      if (score === 0) continue;
-      semanticMatches.set(
-        entryId,
-        Object.freeze({
-          score,
-          provider: provider.providerKey,
-          model: provider.model,
-          indexVersion: INFORMATION_ENTRY_SEARCH_INDEX_VERSION,
-        }),
-      );
+    for (const [entryId, chunks] of current) {
+      const ranked = chunks
+        .map((chunk) => ({
+          chunk,
+          score: cosineSimilarityBasisPoints(queryEmbedding, chunk.vector),
+        }))
+        .sort((a, b) => b.score - a.score);
+      const best = ranked[0];
+      if (!best || best.score < 2500) continue;
+      semanticMatches.set(entryId, {
+        score: best.score,
+        provider: provider.providerKey,
+        model: provider.model,
+        indexVersion: INFORMATION_ENTRY_SEARCH_INDEX_VERSION,
+        passage: {start: best.chunk.start, end: best.chunk.end},
+      });
     }
-    return searchCurrentInformationEntries(
-      entries,
+    const result = searchCurrentInformationEntries(
+      eligible,
       request,
       associations,
       semanticMatches,
       translations,
       aliases,
       vocabulary,
+    );
+    return current.size < eligible.length
+      ? {...result, retrievalFallback: 'index_incomplete'}
+      : result;
+  }
+
+  public async related(
+    entryId: string,
+    limit: number,
+  ): Promise<ReadonlyMap<string, RelatedInformationEntry>> {
+    const provider = this.#dependencies.embeddingProvider;
+    if (!provider) return new Map();
+    const entries = await this.#dependencies.entries.loadCurrentEntries(
+      this.#dependencies.workspaceId,
+      false,
+    );
+    const index = await this.#dependencies.index.loadSearchIndex(
+      this.#dependencies.workspaceId,
+      false,
+    );
+    const current = currentEmbeddedProjections(entries, index, provider);
+    const seed = current.get(entryId);
+    if (!seed) return new Map();
+    const scores: [string, RelatedInformationEntry][] = [];
+    for (const [id, chunks] of current) {
+      if (id === entryId) continue;
+      let best: RelatedInformationEntry | undefined;
+      for (const a of seed)
+        for (const b of chunks) {
+          const score = cosineSimilarityBasisPoints(a.vector, b.vector);
+          if (!best || score > best.score)
+            best = {
+              score,
+              sourcePassage: {start: a.start, end: a.end},
+              passage: {start: b.start, end: b.end},
+            };
+        }
+      if (best) scores.push([id, best]);
+    }
+    return new Map(
+      scores
+        .sort((a, b) => b[1].score - a[1].score || a[0].localeCompare(b[0]))
+        .slice(0, limit),
     );
   }
 
@@ -261,85 +344,44 @@ export class InformationEntryRetrievalService implements InformationEntryRetriev
       this.#dependencies.workspaceId,
       false,
     );
-    const prepared = entries.map(prepareInformationEntrySearchProjection);
-    let projections = prepared.map((item) => item.projection);
-    const provider = this.#dependencies.embeddingProvider;
-    if (provider !== undefined && prepared.length > 0) {
-      const embedded = new Map<
-        string,
-        ReturnType<typeof withInformationEntryEmbedding>
-      >();
-      try {
-        for (
-          let offset = 0;
-          offset < prepared.length;
-          offset += INFORMATION_ENTRY_EMBEDDING_BATCH_MAXIMUM
-        ) {
-          const selected = prepared.slice(
-            offset,
-            offset + INFORMATION_ENTRY_EMBEDDING_BATCH_MAXIMUM,
-          );
-          const loadCurrent =
-            this.#dependencies.entries.loadCurrentEntriesByIds?.bind(
-              this.#dependencies.entries,
-            );
-          const fresh =
-            loadCurrent === undefined
-              ? selected.map((item) => item.entry)
-              : await loadCurrent(
-                  this.#dependencies.workspaceId,
-                  false,
-                  selected.map((item) => item.entry.entryId),
-                );
-          const current = new Map(
-            fresh
-              .filter((entry) => !entry.value.isPrivate)
-              .map((entry) => [entry.entryId, entry]),
-          );
-          const batch = selected.filter((item) => {
-            const entry = current.get(item.entry.entryId);
-            return (
-              entry?.revision === item.entry.revision &&
-              entry.revisionId === item.entry.revisionId
-            );
-          });
-          if (batch.length === 0) continue;
-          const vectors = await provider.embed(batch.map((item) => item.input));
-          if (vectors.length !== batch.length)
-            throw new Error('Incomplete embedding batch.');
-          batch.forEach((item, position) => {
-            const vector = vectors[position];
-            if (vector === undefined) throw new Error('Missing embedding.');
-            embedded.set(
-              item.entry.entryId,
-              withInformationEntryEmbedding(
-                item.projection,
-                provider.providerKey,
-                provider.model,
-                vector,
-              ),
-            );
-          });
-        }
-        projections = [...embedded.values()];
-      } catch {
+    let prepared = entries.map(prepareInformationEntrySearchProjection);
+    let projections = (
+      await this.#dependencies.index.loadSearchIndex(
+        this.#dependencies.workspaceId,
+      )
+    ).projections;
+    for (;;) {
+      const result = await embedSearchProjectionBatch(
+        prepared,
+        projections,
+        this.#dependencies.embeddingProvider,
+      );
+      projections = result.projections;
+      await this.#dependencies.index.replaceSearchIndex(
+        this.#dependencies.workspaceId,
+        {
+          projections,
+          postings: prepared.flatMap((item) => item.postings),
+        },
+      );
+      if (result.providerFailed)
         throw new InformationEntryRetrievalServiceError(
           'semantic_search_provider_failure',
         );
-      }
+      if (
+        !this.#dependencies.embeddingProvider ||
+        projections.every((p) => p.embedding?.length === p.embeddingChunkCount)
+      )
+        break;
+      prepared = (
+        await this.#dependencies.entries.loadCurrentEntries(
+          this.#dependencies.workspaceId,
+          false,
+        )
+      )
+        .filter((entry) => !entry.value.isPrivate)
+        .map(prepareInformationEntrySearchProjection);
     }
-    const accepted = new Set(
-      projections.map((projection) => projection.entryId),
-    );
-    await this.#dependencies.index.replaceSearchIndex(
-      this.#dependencies.workspaceId,
-      {
-        projections,
-        postings: prepared
-          .filter((item) => accepted.has(item.entry.entryId))
-          .flatMap((item) => item.postings),
-      },
-    );
     return this.status();
   }
 
@@ -515,7 +557,7 @@ function currentEmbeddedProjections(
   entries: readonly Readonly<CurrentInformationEntry>[],
   index: Readonly<InformationEntrySearchIndexSnapshot>,
   provider: Readonly<InformationEntryEmbeddingProviderPort>,
-): ReadonlyMap<string, readonly number[]> {
+): ReadonlyMap<string, readonly Readonly<InformationEntryEmbeddingChunk>[]> {
   const current = new Map(entries.map((entry) => [entry.entryId, entry]));
   return new Map(
     index.projections.flatMap((projection) => {
@@ -524,7 +566,10 @@ function currentEmbeddedProjections(
         entry.revisionId === projection.entryRevisionId &&
         projection.embeddingProvider === provider.providerKey &&
         projection.embeddingModel === provider.model &&
-        isUsableInformationEntryEmbedding(projection.embedding) &&
+        projection.embedding?.length === projection.embeddingChunkCount &&
+        projection.embedding.every((chunk) =>
+          isUsableInformationEntryEmbedding(chunk.vector),
+        ) &&
         hasCurrentInformationEntryEmbeddingInput(entry, projection)
         ? [[projection.entryId, projection.embedding] as const]
         : [];

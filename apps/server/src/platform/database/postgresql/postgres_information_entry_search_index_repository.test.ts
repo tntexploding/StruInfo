@@ -35,7 +35,10 @@ describe('PostgresInformationEntrySearchIndexRepository', () => {
             embedding_provider: 'synthetic-provider',
             embedding_model: 'synthetic-model',
             embedding_dimensions: 2,
-            embedding: ['1', '0'],
+            embedding: [
+              {start: 0, end: 10, inputSha256: 'a'.repeat(64), vector: [1, 0]},
+            ],
+            embedding_chunk_count: 1,
           });
         }
         if (sql === READ_INFORMATION_ENTRY_TERM_POSTINGS_SQL) {
@@ -58,9 +61,12 @@ describe('PostgresInformationEntrySearchIndexRepository', () => {
           entryRevisionId: REVISION_ID,
           projectionSha256: 'a'.repeat(64),
           tokenizerVersion: INFORMATION_ENTRY_TERM_TOKENIZER_VERSION,
+          embeddingChunkCount: 1,
           embeddingProvider: 'synthetic-provider',
           embeddingModel: 'synthetic-model',
-          embedding: [1, 0],
+          embedding: [
+            {start: 0, end: 10, inputSha256: 'a'.repeat(64), vector: [1, 0]},
+          ],
         },
       ],
       postings: [
@@ -99,6 +105,7 @@ describe('PostgresInformationEntrySearchIndexRepository', () => {
           entryRevisionId: REVISION_ID,
           projectionSha256: 'b'.repeat(64),
           tokenizerVersion: INFORMATION_ENTRY_TERM_TOKENIZER_VERSION,
+          embeddingChunkCount: 1,
         },
       ],
       postings: [

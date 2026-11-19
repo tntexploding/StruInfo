@@ -36,6 +36,33 @@ function fixture() {
   };
 }
 describe('DeepSeek price timing', () => {
+  it('saves embedding settings without enabling calls or exposing a key', async () => {
+    const f = fixture();
+    const embedding = {
+      enabled: false,
+      baseUrl: 'https://maas.qianwenaiapi.com/compatible-mode/v1',
+      limitCny: 1,
+    };
+    const saved = await f.service.save(
+      ExecutionAuthority.owner(W),
+      {revision: 0, embedding},
+      'embedding',
+    );
+    expect(saved.embedding).toMatchObject({
+      configured: false,
+      settings: embedding,
+    });
+    await expect(
+      f.service.save(
+        ExecutionAuthority.owner(W),
+        {revision: 1, embedding: {...embedding, enabled: true}},
+        'embedding',
+      ),
+    ).rejects.toMatchObject({code: 'embedding_configuration_required'});
+    expect((await f.store.load(W)).aiPricePolicy?.embedding?.enabled).toBe(
+      false,
+    );
+  });
   it.each([
     ['2026-09-14T00:59:59.999Z', false, null],
     ['2026-09-14T01:00:00Z', true, '2026-09-14T04:00:00.000Z'],

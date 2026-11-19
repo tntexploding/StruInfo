@@ -3,6 +3,10 @@ import {
   type SourceProcessingProfile,
 } from '../modules/subscriptions/source_processing_profile.js';
 import {
+  jsonSourceOptionsSchema,
+  type JsonSourceOptions,
+} from '../modules/subscriptions/json_source_options.js';
+import {
   EMPTY_ANNOTATION_VOCABULARY,
   annotationVocabularySchema,
   type AnnotationVocabulary,
@@ -113,7 +117,8 @@ export interface ReviewRssSourceSubscription extends ReviewSourceSubscriptionBas
   readonly itemLimit: number;
   readonly cursor?: Readonly<ReviewRssSourceSubscriptionCursor>;
 }
-export interface ReviewJsonApiSourceSubscription extends ReviewSourceSubscriptionBase {
+export interface ReviewJsonApiSourceSubscription
+  extends ReviewSourceSubscriptionBase, JsonSourceOptions {
   readonly kind: 'json_api';
   readonly endpointUrl: string;
   /** Empty means that the response root is the record array. */
@@ -122,6 +127,10 @@ export interface ReviewJsonApiSourceSubscription extends ReviewSourceSubscriptio
   readonly titlePath: string;
   readonly bodyPath: string;
   readonly canonicalUriPath?: string;
+  readonly canonicalUriTemplate?: string;
+  readonly requestTimeParameter?: string;
+  readonly publishedAtFormat?: 'iso' | 'unix_seconds';
+  readonly bodyFormat?: 'text' | 'html';
   readonly publishedAtPath?: string;
   readonly versionPath?: string;
   readonly recordLimit: number;
@@ -611,7 +620,7 @@ function decodeSourceSubscription(
       value.routeAfterImport !== false) ||
     typeof value.intervalMinutes !== 'number' ||
     !Number.isSafeInteger(value.intervalMinutes) ||
-    value.intervalMinutes < 15 ||
+    value.intervalMinutes < 1 ||
     value.intervalMinutes > 10080 ||
     (value.qualityReview !== undefined &&
       (!isRecord(value.qualityReview) ||
@@ -708,13 +717,33 @@ function decodeSourceSubscription(
     });
   }
   if (kind === 'json_api') {
+    const options = jsonSourceOptionsSchema.safeParse(value);
     if (
+      !options.success ||
       typeof value.endpointUrl !== 'string' ||
       typeof value.recordsPath !== 'string' ||
       typeof value.externalIdPath !== 'string' ||
       typeof value.titlePath !== 'string' ||
       typeof value.bodyPath !== 'string' ||
       !optionalJsonApiPath(value.canonicalUriPath) ||
+      (value.canonicalUriTemplate !== undefined &&
+        (typeof value.canonicalUriTemplate !== 'string' ||
+          value.canonicalUriTemplate.length > 2000 ||
+          !value.canonicalUriTemplate.includes('{id}') ||
+          !decodePublicHttpsUri(
+            value.canonicalUriTemplate.replaceAll('{id}', 'example'),
+          ))) ||
+      (value.requestTimeParameter !== undefined &&
+        (typeof value.requestTimeParameter !== 'string' ||
+          !/^[A-Za-z_][A-Za-z0-9_.-]{0,79}$/u.test(
+            value.requestTimeParameter,
+          ))) ||
+      (value.publishedAtFormat !== undefined &&
+        value.publishedAtFormat !== 'iso' &&
+        value.publishedAtFormat !== 'unix_seconds') ||
+      (value.bodyFormat !== undefined &&
+        value.bodyFormat !== 'text' &&
+        value.bodyFormat !== 'html') ||
       !optionalJsonApiPath(value.publishedAtPath) ||
       !optionalJsonApiPath(value.versionPath) ||
       !Number.isSafeInteger(value.recordLimit) ||
@@ -751,6 +780,12 @@ function decodeSourceSubscription(
         incrementalCursor === undefined) ||
       (pageCursor !== undefined &&
         incrementalCursor?.queryParameter === pageCursor.queryParameter) ||
+      (options.data.pollingCursor !== undefined &&
+        (pageCursor !== undefined ||
+          incrementalCursor !== undefined ||
+          new URL(endpointUrl).searchParams.has(
+            options.data.pollingCursor.queryParameter,
+          ))) ||
       authentication === undefined ||
       (value.cursor !== undefined && cursor === undefined)
     ) {
@@ -759,12 +794,26 @@ function decodeSourceSubscription(
     return Object.freeze({
       ...common,
       kind: 'json_api' as const,
+      ...options.data,
       endpointUrl,
       recordsPath,
       externalIdPath,
       titlePath,
       bodyPath,
       ...(canonicalUriPath === undefined ? {} : {canonicalUriPath}),
+      ...(typeof value.canonicalUriTemplate === 'string'
+        ? {canonicalUriTemplate: value.canonicalUriTemplate}
+        : {}),
+      ...(typeof value.requestTimeParameter === 'string'
+        ? {requestTimeParameter: value.requestTimeParameter}
+        : {}),
+      ...(value.publishedAtFormat === 'iso' ||
+      value.publishedAtFormat === 'unix_seconds'
+        ? {publishedAtFormat: value.publishedAtFormat}
+        : {}),
+      ...(value.bodyFormat === 'text' || value.bodyFormat === 'html'
+        ? {bodyFormat: value.bodyFormat}
+        : {}),
       ...(publishedAtPath === undefined ? {} : {publishedAtPath}),
       ...(versionPath === undefined ? {} : {versionPath}),
       recordLimit: value.recordLimit as number,

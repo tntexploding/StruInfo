@@ -50,6 +50,7 @@ export class AgentTaskService {
         automaticRetryLimit: number;
       }>;
     },
+    private readonly onTaskSettled?: () => void,
   ) {
     this.#queue = new AiWorkQueue(
       async () =>
@@ -188,7 +189,8 @@ export class AgentTaskService {
       model:
         request.kind === 'document' || request.kind === 'intake'
           ? requireOperationValue(
-              request.kind === 'intake'
+              request.kind === 'intake' ||
+                (await this.actions.isNews(request.snapshotId))
                 ? this.actions.intakeModel
                 : this.actions.model,
             )
@@ -671,6 +673,15 @@ export class AgentTaskService {
               return;
             }
             if (task.request.kind === 'document' && state.phase === 'intake') {
+              if (await this.actions.isNews(task.request.snapshotId)) {
+                state = {
+                  ...clearRetryWait(state),
+                  status: 'succeeded',
+                  phase: 'complete',
+                };
+                await save();
+                return;
+              }
               state = {
                 ...state,
                 phase: 'split',
@@ -950,8 +961,7 @@ export class AgentTaskService {
                 results.some(
                   ({run: generated}, i) =>
                     generated.runId !==
-                      reserved.get(tagGroup[i]?.targetId ?? '')?.runId ||
-                    !generated.proposals.length,
+                    reserved.get(tagGroup[i]?.targetId ?? '')?.runId,
                 )
               )
                 throw new OperationError(
@@ -1227,7 +1237,10 @@ export class AgentTaskService {
       .catch(() => {
         this.#interrupted.add(taskId);
       })
-      .finally(() => this.#running.delete(taskId));
+      .finally(() => {
+        this.#running.delete(taskId);
+        if (!this.#closing) this.onTaskSettled?.();
+      });
     this.#running.set(taskId, running);
   }
   private authorize(authority: ExecutionAuthority, write = true) {

@@ -82,6 +82,12 @@ export function splitSourceTitle(
     const level = headingMatch?.[1]?.length ?? 0;
     if (heading && heading === documentTitle) continue;
     if (heading && !hasHeadingBody(lines, i, level)) continue;
+    if (
+      heading &&
+      bodyStarted &&
+      /^(?:table|summary table|tables|附表|汇总表)$/iu.test(heading)
+    )
+      continue;
     const namedLink =
       /^(?:\d+\s*[).、]\s*)?\[([^\]]+)\]\(https?:\/\/[^\s]+\)(?:\s*[（(][^()（）\n]{1,40}[)）])?\s*$/u.exec(
         line,
@@ -124,11 +130,38 @@ export function splitSourceTitle(
   const headings = candidates.filter((candidate) => candidate.level > 0);
   const level = Math.min(...headings.map((candidate) => candidate.level));
   const topHeadings = headings.filter((candidate) => candidate.level === level);
+  const contentHeadings = topHeadings.filter(
+    (candidate) =>
+      !/^(?:封面(?:图|图片)?|cover(?: photo| image)?)$/iu.test(
+        candidate.text.trim(),
+      ),
+  );
   // Use the proposed subject only when the final source contains that heading.
   // This lets the article outrank its attached cover without trusting outside titles.
-  const heading =
-    topHeadings.find((candidate) => titleKey(candidate.text) === proposedKey) ??
+  let heading =
+    contentHeadings.find(
+      (candidate) => titleKey(candidate.text) === proposedKey,
+    ) ??
+    contentHeadings[0] ??
     topHeadings[0];
+  // A category followed immediately by a child heading does not name the item.
+  while (
+    heading &&
+    heading.level >= 2 &&
+    !/^\d+\s*[).、]/u.test(heading.text)
+  ) {
+    const parent = heading;
+    const child = headings.find(
+      (candidate) =>
+        candidate.line > parent.line &&
+        candidate.level > parent.level &&
+        lines
+          .slice(parent.line + 1, candidate.line)
+          .every((line) => !line.trim()),
+    );
+    if (!child) break;
+    heading = child;
+  }
   const linked = candidates.find(
     (candidate) => candidate.level === 0 && candidate.leading,
   );
@@ -144,6 +177,23 @@ export function splitSourceTitle(
     heading && !columnItem && (!CATEGORY.test(heading.text) || !linked)
       ? heading
       : linked;
+  if (selected === heading && heading) {
+    const first =
+      lines
+        .slice(heading.line + 1)
+        .find((line) => line.trim())
+        ?.trim() ?? '';
+    const subject = /^([A-Z][A-Za-z0-9.+-]{2,})\b/u.exec(first)?.[1];
+    if (
+      subject &&
+      !/^(?:The|This|That|These|Those|After|Before|Once|When|With|For|From|Our|Here|There)$/u.test(
+        subject,
+      ) &&
+      proposedKey.includes(subject.toLowerCase()) &&
+      !titleKey(heading.text).includes(subject.toLowerCase())
+    )
+      return group.titlePath.replace(/^#{1,6}\s+/u, '');
+  }
   // Preserve a correct "category: item" title when both parts occur in the source.
   if (selected === linked && linked) {
     const proposed = /^(.*?)[:：]\s*(.+)$/u.exec(group.titlePath);
@@ -161,5 +211,24 @@ export function splitSourceTitle(
     )
       return group.titlePath;
   }
-  return selected?.text ?? group.titlePath.replace(/^#{1,6}\s+/u, '');
+  const nextHeadings =
+    /^(?:#{1,6}\s+[^\n]+\s*)+/u.exec(
+      (sections[group.endOrdinal + 1]?.text ?? '').trimStart(),
+    )?.[0] ?? '';
+  const unsupported = [
+    ...lines.filter((line, index) => {
+      const level = /^\s*(#{1,6})\s/u.exec(line)?.[1]?.length;
+      return level && !hasHeadingBody(lines, index, level);
+    }),
+    ...nextHeadings.split('\n'),
+  ].some((line) => {
+    const title = /^\s*#{1,6}\s+(.+)/u.exec(line)?.[1];
+    return title && proposedKey.includes(titleKey(title));
+  });
+  return (
+    selected?.text ??
+    (group.startOrdinal === 0 && documentTitle && unsupported
+      ? documentTitle
+      : group.titlePath.replace(/^#{1,6}\s+/u, ''))
+  );
 }

@@ -2,9 +2,9 @@
 
 Package manifests and `pnpm-lock.yaml` select the installed versions. The SPDX inventory and `THIRD_PARTY_NOTICES.md` record their sources and legal material. StruInfo uses MIT; each third-party package retains its own license.
 
-## Current release: v0.5.0
+## Current release: v0.5.1
 
-This release includes the [October 28 security repair](evidence/security-reconciliation-2026-10-28.json) and November 11 parser, HTTP adapter and build-tool updates. The npm SPDX inventory contains 328 dependency identities plus the application root. The Alpine runtime uses its JavaScript production subset without native bindings. Its musl and zlib packages are pinned to their security fixes in the Dockerfile.
+This release includes the [October 28 security repair](evidence/security-reconciliation-2026-10-28.json), the November 11 parser and build-tool updates, and the November 19 Hono and HTTP adapter updates. The npm SPDX inventory contains 328 dependency identities plus the application root. The Alpine runtime uses its JavaScript production subset without native bindings. Its musl and zlib packages are pinned to their security fixes in the Dockerfile.
 
 | Component      | Version or reference                                           |
 | -------------- | -------------------------------------------------------------- |

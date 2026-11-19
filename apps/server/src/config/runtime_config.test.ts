@@ -20,6 +20,23 @@ const RUNTIME_ENVIRONMENT = {
 };
 
 describe('parseRuntimeConfig', () => {
+  it('accepts an independent DashScope key without enabling a response model', () => {
+    const config = parseRuntimeConfig('all', {
+      ...RUNTIME_ENVIRONMENT,
+      DASHSCOPE_API_KEY: 'synthetic-dashscope',
+    });
+    expect(config.dashScopeApiKey).toBe('synthetic-dashscope');
+    expect(config.aiProposalProvider).toBeUndefined();
+    expect(
+      parseRuntimeConfig('all', RUNTIME_ENVIRONMENT).dashScopeApiKey,
+    ).toBeUndefined();
+    expect(() =>
+      parseRuntimeConfig('all', {
+        ...RUNTIME_ENVIRONMENT,
+        DASHSCOPE_API_KEY: 'invalid key',
+      }),
+    ).toThrow('Invalid DASHSCOPE_API_KEY');
+  });
   it('keeps Agent access off and separates read, annotation and model grants', () => {
     expect(
       parseRuntimeConfig('all', RUNTIME_ENVIRONMENT).agentInterface,

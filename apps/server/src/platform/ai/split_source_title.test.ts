@@ -10,6 +10,62 @@ const sections = [
     text: 'Moonrock profiler\n[Details](https://example.invalid/b)\n\nMeasures memory usage.',
   },
 ];
+it('keeps an item name backed by the opening prose instead of its shared category', () => {
+  expect(
+    splitSourceTitle(
+      [
+        {
+          ordinal: 0,
+          text: '## Instruments\n\nStarvine raised funding for its pressure sensor.',
+        },
+      ],
+      {startOrdinal: 0, endOrdinal: 0, titlePath: 'Starvine压力传感器融资'},
+    ),
+  ).toBe('Starvine压力传感器融资');
+  expect(
+    splitSourceTitle(
+      [
+        {
+          ordinal: 0,
+          text: 'Starvine raised funding.\n\n## Table\n\n| Company | Funding |\n| Starvine | 7 |',
+        },
+      ],
+      {startOrdinal: 0, endOrdinal: 0, titlePath: 'Starvine funding'},
+    ),
+  ).toBe('Starvine funding');
+});
+it('uses the case heading below a shared category', () => {
+  expect(
+    splitSourceTitle(
+      [
+        {
+          ordinal: 0,
+          text: '## Causes\n\n### Region A\n\nThe network lost power.',
+        },
+      ],
+      {startOrdinal: 0, endOrdinal: 0, titlePath: 'Network interruption'},
+    ),
+  ).toBe('Region A');
+});
+it('does not name a collection introduction after a case outside its final range', () => {
+  const input = [
+    {
+      ordinal: 0,
+      text: '# Synthetic quarterly disruptions\n\nSeveral causes were observed.\n\n## Shutdowns',
+    },
+    {
+      ordinal: 1,
+      text: '### Region A\n\nA complete report of the regional event.',
+    },
+  ];
+  expect(
+    splitSourceTitle(input, {
+      startOrdinal: 0,
+      endOrdinal: 0,
+      titlePath: 'Shutdowns: Region A',
+    }),
+  ).toBe('Synthetic quarterly disruptions');
+});
 it('uses an item heading before its subheadings while excluding the publication title', () => {
   const input = [
     {
@@ -124,6 +180,21 @@ it('keeps a source-backed article title when the range also includes a cover', (
     }),
   ).toBe('Attention and interruptions');
 });
+
+it.each(['Unrelated generated title', '封面图'])(
+  'prefers the article after an attached cover: %s',
+  (titlePath) => {
+    const text =
+      '# Synthetic issue\n\n## 封面图\n\n![Harbour](https://example.invalid/photo)\n\nA harbour photograph.\n\n## Storage latency\n\nA cache reduces repeated reads.';
+    expect(
+      splitSourceTitle([{ordinal: 0, text}], {
+        startOrdinal: 0,
+        endOrdinal: 0,
+        titlePath,
+      }),
+    ).toBe('Storage latency');
+  },
+);
 
 it.each(['4、', '4. ', '4) '])(
   'uses a numbered item name, not the next category at the end: %s',

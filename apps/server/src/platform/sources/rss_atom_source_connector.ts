@@ -304,7 +304,7 @@ function requestHeaders(cursor: Readonly<RssAtomCursor> | undefined): Headers {
   const headers = new Headers({
     accept:
       'application/atom+xml, application/rss+xml, application/xml;q=0.9, text/xml;q=0.8',
-    'user-agent': 'StruInfo/1.0 (+local-source-subscription)',
+    'user-agent': 'Mozilla/5.0 StruInfo/1.0',
   });
   if (cursor?.etag !== undefined) headers.set('if-none-match', cursor.etag);
   if (cursor?.lastModified !== undefined) {

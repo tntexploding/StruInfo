@@ -187,17 +187,23 @@ export function isPublicationOnly(text: string): boolean {
 }
 
 /** Request-only projection. Never changes stored text or suppresses a whole document. */
-export function withoutPublicationContext(text: string): string {
+export function publicationContentRanges(text: string): readonly TextRange[] {
   const ranges = publicationRanges(text);
-  if (!ranges.length) return text;
+  if (!ranges.length) return [{start: 0, end: text.length}];
   let offset = 0;
-  const retained: string[] = [];
+  const retained: TextRange[] = [];
   for (const range of ranges) {
-    retained.push(text.slice(offset, range.start));
+    if (offset < range.start) retained.push({start: offset, end: range.start});
     offset = range.end;
   }
-  retained.push(text.slice(offset));
-  const body = retained.join('');
+  if (offset < text.length) retained.push({start: offset, end: text.length});
+  const body = retained.map((r) => text.slice(r.start, r.end)).join('');
   // An article about publication or an author is still valid source material.
-  return substantiveText(body) ? body : text;
+  return substantiveText(body) ? retained : [{start: 0, end: text.length}];
+}
+
+export function withoutPublicationContext(text: string): string {
+  return publicationContentRanges(text)
+    .map((r) => text.slice(r.start, r.end))
+    .join('');
 }

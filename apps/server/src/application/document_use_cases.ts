@@ -20,6 +20,7 @@ import type {DocumentIntakeRepository} from './document_intake_contract.js';
 import {
   intakeSnapshotIds,
   intakeTargetSnapshot,
+  isNewsReceipt,
 } from './document_intake_contract.js';
 import type {BlobStore} from '../storage/blob_store.js';
 
@@ -47,6 +48,7 @@ export interface DocumentUseCasesDependencies {
 }
 
 export interface DocumentBrowseOptions {
+  readonly contentMode?: 'article' | 'news' | 'all';
   readonly limit?: number;
   readonly query?: string;
   readonly type?: string;
@@ -83,21 +85,25 @@ export class DocumentUseCases {
         'includePrivate',
       );
     }
+    const receipt =
+      await this.#dependencies.documentIntakeRepository?.read(snapshotId);
     return {
       status: 'ok' as const,
-      entries: this.#dependencies.informationEntryRepository
-        .loadCurrentEntriesForSnapshot
-        ? await this.#dependencies.informationEntryRepository.loadCurrentEntriesForSnapshot(
-            this.#authority.workspaceId,
-            includePrivate,
-            snapshotId,
-          )
-        : (
-            await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+      entries: isNewsReceipt(receipt?.value)
+        ? []
+        : this.#dependencies.informationEntryRepository
+              .loadCurrentEntriesForSnapshot
+          ? await this.#dependencies.informationEntryRepository.loadCurrentEntriesForSnapshot(
               this.#authority.workspaceId,
               includePrivate,
+              snapshotId,
             )
-          ).filter((entry) => entry.snapshotId === snapshotId),
+          : (
+              await this.#dependencies.informationEntryRepository.loadCurrentEntries(
+                this.#authority.workspaceId,
+                includePrivate,
+              )
+            ).filter((entry) => entry.snapshotId === snapshotId),
       snapshot: await materializeEvidenceSnapshot(
         snapshot,
         this.#dependencies.blobStore,
@@ -172,7 +178,17 @@ export class DocumentUseCases {
     const countsBySnapshot = new Map(
       entryCounts.map((row) => [row.snapshotId, row]),
     );
+    const newsSnapshots = new Set(
+      intake.filter((r) => isNewsReceipt(r.value)).flatMap(intakeSnapshotIds),
+    );
+    const contentMode =
+      options.contentMode ?? (includeInbox ? 'all' : 'article');
     let documents = snapshots
+      .filter(
+        (s) =>
+          contentMode === 'all' ||
+          newsSnapshots.has(s.snapshotId) === (contentMode === 'news'),
+      )
       .filter((snapshot) => !evidenceCopies.has(snapshot.snapshotId))
       .filter((snapshot) => includeInbox || !inboxOnly.has(snapshot.snapshotId))
       .filter((snapshot) => includePrivate || snapshot.isPrivate !== true)
@@ -191,7 +207,9 @@ export class DocumentUseCases {
           (origin !== snapshot.snapshotId ? origin : undefined);
         return Object.freeze({
           ...snapshot,
-          entryCount: counts?.entryCount ?? 0,
+          entryCount: newsSnapshots.has(snapshot.snapshotId)
+            ? 0
+            : (counts?.entryCount ?? 0),
           annotatedEntryCount: counts?.annotatedEntryCount ?? 0,
           ...(counts?.title ? {title: counts.title} : {}),
           types: counts?.types ?? [],
@@ -384,9 +402,12 @@ export class DocumentUseCases {
       (snapshot.isPrivate === true && !input.includePrivate)
     )
       throw new OperationError('not_found', 'snapshot_not_found');
-    const receipt = (
-      await this.#dependencies.documentIntakeRepository?.read(input.snapshotId)
-    )?.value.receipt;
+    const intake = await this.#dependencies.documentIntakeRepository?.read(
+      input.snapshotId,
+    );
+    if (isNewsReceipt(intake?.value))
+      throw new OperationError('rejected', 'news_article_processing_disabled');
+    const receipt = intake?.value.receipt;
     if (receipt && receipt !== 'accepted')
       throw new OperationError(
         'rejected',

@@ -14,8 +14,9 @@ describe('StruInfo MCP protocol', () => {
     await client.connect(b);
     try {
       const tools = await client.listTools();
-      expect(tools.tools).toHaveLength(46);
+      expect(tools.tools).toHaveLength(47);
       for (const name of [
+        'news_list',
         'split_recipes_read',
         'split_recipe_preview',
         'annotation_vocabulary',
