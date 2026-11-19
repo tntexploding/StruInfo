@@ -173,7 +173,7 @@ export class WebSourceConnector implements SourceConnectorPort {
   > {
     const headers = new Headers({
       accept: 'text/html, application/xhtml+xml;q=0.9',
-      'user-agent': 'StruInfo/1.0 (+local-source-subscription)',
+      'user-agent': 'Mozilla/5.0 StruInfo/1.0',
     });
     if (previous?.etag !== undefined) {
       headers.set('if-none-match', previous.etag);

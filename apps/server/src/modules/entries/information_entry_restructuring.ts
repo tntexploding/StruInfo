@@ -211,6 +211,10 @@ export function prepareInformationEntryRestructure(
       preservesExistingStructure && exact.value.fragmentRanges === undefined
         ? withoutFragmentRanges(prepared.value)
         : prepared.value;
+    const retainedAnnotations =
+      exact?.value.bodySha256 === prepared.value.bodySha256
+        ? exact.value.annotations
+        : undefined;
     const value = Object.freeze({
       ...preparedValue,
       chunkMode: preservesExistingStructure
@@ -220,9 +224,7 @@ export function prepareInformationEntryRestructure(
         ? exact.value.splitRuleVersion
         : MANUAL_ENTRY_RESTRUCTURE_RULE_VERSION,
       ...annotations.value,
-      ...(preservesExistingStructure && exact.value.annotations
-        ? {annotations: exact.value.annotations}
-        : {}),
+      ...(retainedAnnotations ? {annotations: retainedAnnotations} : {}),
     });
     const operation =
       exact === undefined
@@ -251,7 +253,11 @@ export function prepareInformationEntryRestructure(
         predecessorEntryIds: Object.freeze(
           predecessors.map((entry) => entry.entryId),
         ),
-        annotationStatus: annotations.status,
+        annotationStatus:
+          !retainedAnnotations &&
+          predecessors.some((entry) => entry.value.annotations)
+            ? 'requires_review'
+            : annotations.status,
       }),
     );
   }

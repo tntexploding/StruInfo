@@ -1861,7 +1861,7 @@ describe('M1cApiService', () => {
 
   it('accepts only bounded incremental index requests and reports busy maintenance', async () => {
     const index = {
-      indexVersion: 'struinfo.entry-search-index.v1' as const,
+      indexVersion: 'struinfo.entry-search-index.v2' as const,
       tokenizerVersion: 'struinfo.entry-terms.unicode-v1' as const,
       publicEntryCount: 3,
       currentProjectionCount: 3,

@@ -43,6 +43,7 @@ const ENVIRONMENT_ONLY_KEYS = new Set([
   'DATABASE_URL',
   'OPENAI_API_KEY',
   'DEEPSEEK_API_KEY',
+  'DASHSCOPE_API_KEY',
   'STRUIINFO_AGENT_TOKEN',
   'STRUIINFO_MIGRATION_DATABASE_URL',
   RUNTIME_CONFIG_PATH_VARIABLE,
@@ -209,6 +210,7 @@ function mergeRuntimeEnvironment(
     DATABASE_URL: processEnvironment.DATABASE_URL,
     OPENAI_API_KEY: processEnvironment.OPENAI_API_KEY,
     DEEPSEEK_API_KEY: processEnvironment.DEEPSEEK_API_KEY,
+    DASHSCOPE_API_KEY: processEnvironment.DASHSCOPE_API_KEY,
     STRUIINFO_AGENT_TOKEN: processEnvironment.STRUIINFO_AGENT_TOKEN,
   };
   for (const key of FILE_CONFIG_KEYS) {

@@ -14,6 +14,7 @@ import type {
   IntakeRecord,
   IntakeRecordValue,
   IntakePreparation,
+  NewsQuery,
 } from './document_intake_contract.js';
 import {
   intakeAssessmentSchema,
@@ -21,6 +22,7 @@ import {
   intakePreparationSchema,
   intakeSnapshotIds,
   intakeTargetSnapshot,
+  isNewsReceipt,
 } from './document_intake_contract.js';
 import {
   OperationError,
@@ -104,6 +106,11 @@ export class DocumentIntakeService {
     if (snapshot.isPrivate)
       throw new OperationError('forbidden', 'private_model_transfer_forbidden');
     return snapshot;
+  }
+  public async news(query: NewsQuery) {
+    if (!this.deps.repository.listNews)
+      throw new OperationError('rejected', 'news_unavailable');
+    return this.deps.repository.listNews(query);
   }
 
   public async list(): Promise<readonly IntakeRecord[]> {
@@ -331,6 +338,8 @@ export class DocumentIntakeService {
       const received = await this.sourceText(root);
       if (!options && paidPreview(received.text))
         return this.holdRestricted(root, current, root);
+      // News is reviewed in its received form; explicit owner full-text recovery remains available.
+      if (!options && isNewsReceipt(current?.value)) return current;
       const key =
         'intake-fulltext:' +
         root +
@@ -622,7 +631,11 @@ export class DocumentIntakeService {
     if (!this.deps.provider)
       throw new OperationError('rejected', 'ai_not_configured');
     const examples = selectManualIntakeExamples(
-      await this.list(),
+      (await this.list()).filter(
+        (r) =>
+          (r.value.reception?.strategy?.contentMode ?? 'article') ===
+          (current?.value.reception?.strategy?.contentMode ?? 'article'),
+      ),
       await this.deps.evidence.listSnapshots(this.deps.workspaceId),
       current,
       current?.snapshotId ?? snapshotId,
@@ -651,6 +664,8 @@ export class DocumentIntakeService {
     const assessment = intakeAssessmentSchema.parse(
       await this.deps.provider.reviewIntake({
         text: source.text,
+        contentMode:
+          current?.value.reception?.strategy?.contentMode ?? 'article',
         preparation: current?.value.preparation ?? 'received',
         policy,
         ...(manualReviews.length ? {manualReviews} : {}),

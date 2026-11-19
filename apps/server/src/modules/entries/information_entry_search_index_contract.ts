@@ -5,7 +5,7 @@ import type {
 } from './information_entry_contract.js';
 
 export const INFORMATION_ENTRY_SEARCH_INDEX_VERSION =
-  'struinfo.entry-search-index.v1' as const;
+  'struinfo.entry-search-index.v2' as const;
 export const INFORMATION_ENTRY_TERM_TOKENIZER_VERSION =
   'struinfo.entry-terms.unicode-v1' as const;
 export const INFORMATION_ENTRY_EMBEDDING_INPUT_MAXIMUM_UTF8_BYTES = 7_500;
@@ -13,6 +13,14 @@ export const INFORMATION_ENTRY_EMBEDDING_BATCH_MAXIMUM = 32;
 export const INFORMATION_ENTRY_TERM_MAXIMUM_POSTINGS_PER_ENTRY = 4_096;
 
 export type InformationEntrySearchIndexField = 'title' | 'body' | 'tags';
+
+/** UTF-16 source offsets, matching JavaScript's slice and the stored original. */
+export interface InformationEntryEmbeddingChunk {
+  readonly start: number;
+  readonly end: number;
+  readonly inputSha256: string;
+  readonly vector: readonly number[];
+}
 
 export interface InformationEntryTermPosting {
   readonly entryId: string;
@@ -29,7 +37,8 @@ export interface InformationEntrySearchProjection {
   readonly tokenizerVersion: typeof INFORMATION_ENTRY_TERM_TOKENIZER_VERSION;
   readonly embeddingProvider?: string;
   readonly embeddingModel?: string;
-  readonly embedding?: readonly number[];
+  readonly embeddingChunkCount: number;
+  readonly embedding?: readonly Readonly<InformationEntryEmbeddingChunk>[];
 }
 
 export interface InformationEntrySearchIndexSnapshot {
@@ -98,6 +107,7 @@ export interface InformationEntrySearchIndexRepositoryPort {
   ): Promise<Readonly<InformationEntrySearchIndexRefreshCommit>>;
   loadSearchIndex(
     workspaceId: string,
+    includePostings?: boolean,
   ): Promise<Readonly<InformationEntrySearchIndexSnapshot>>;
   /** Returns aggregate status without materializing the complete index. */
   loadSearchIndexMetrics?(
@@ -123,6 +133,7 @@ export interface InformationEntrySearchIndexRepositoryPort {
 export interface InformationEntryEmbeddingProviderPort {
   readonly providerKey: string;
   readonly model: string;
+  readonly maximumBatchSize?: number;
   embed(inputs: readonly string[]): Promise<readonly (readonly number[])[]>;
 }
 
@@ -163,11 +174,21 @@ export interface InformationEntrySearchEvaluationResult {
   readonly cases: readonly Readonly<InformationEntrySearchEvaluationCaseResult>[];
 }
 
+export interface RelatedInformationEntry {
+  readonly score: number;
+  readonly sourcePassage: Readonly<{start: number; end: number}>;
+  readonly passage: Readonly<{start: number; end: number}>;
+}
+
 export interface InformationEntryRetrievalServicePort {
   readonly semanticSearchAvailable: boolean;
   search(
     request: Readonly<InformationEntrySearchRequest>,
   ): Promise<Readonly<InformationEntrySearchResult>>;
+  related?(
+    entryId: string,
+    limit: number,
+  ): Promise<ReadonlyMap<string, RelatedInformationEntry>>;
   status(): Promise<Readonly<InformationEntrySearchIndexStatus>>;
   readonly incrementalRefreshAvailable?: boolean;
   refresh(
@@ -183,7 +204,12 @@ export interface InformationEntryRetrievalServicePort {
 
 export interface PreparedInformationEntrySearchProjection {
   readonly entry: Readonly<CurrentInformationEntry>;
-  readonly input: string;
+  readonly chunks: readonly Readonly<{
+    start: number;
+    end: number;
+    input: string;
+    inputSha256: string;
+  }>[];
   readonly projection: Readonly<InformationEntrySearchProjection>;
   readonly postings: readonly Readonly<InformationEntryTermPosting>[];
 }

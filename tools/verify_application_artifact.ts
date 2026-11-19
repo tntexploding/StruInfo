@@ -236,7 +236,7 @@ export function createApplicationArtifactManifest(
 
 export function verifyApplicationArtifact(repositoryRoot: string): void {
   const description = readPnpmPackDescription(repositoryRoot);
-  if (description.name !== 'struinfo' || description.version !== '0.5.0') {
+  if (description.name !== 'struinfo' || description.version !== '0.5.1') {
     throw new ApplicationArtifactError(
       'pnpm enumerated an unexpected candidate package.',
     );

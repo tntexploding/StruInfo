@@ -12,6 +12,48 @@ import {
 const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 
 describe('incremental Entry index maintenance', () => {
+  it('resumes a long entry after a failed chunk batch without re-embedding saved chunks', async () => {
+    const f = harness();
+    f.revise(1, {
+      body:
+        Array.from({length: 9000}, (_, i) => String(Math.floor(i / 3000))).join(
+          '',
+        ) + ' Tail evidence.',
+    });
+    const service = f.service(true, 'synthetic-model', 2);
+    await service.refresh(1);
+    const firstInputs = f.embed.mock.calls[0]?.[0] ?? [];
+    expect(f.snapshot.projections[0]?.embedding).toHaveLength(2);
+    expect(f.snapshot.projections[0]?.embeddingChunkCount).toBeGreaterThan(2);
+    f.embed.mockRejectedValueOnce(new Error('temporary provider failure'));
+    expect((await service.refresh(1)).progress.outcome).toBe('provider_failed');
+    expect(f.snapshot.projections[0]?.embedding).toHaveLength(2);
+    const recovered = await service.refresh(1);
+    expect(recovered.progress.outcome).toBe('more');
+    expect(f.snapshot.projections[0]?.embedding?.length).toBe(
+      f.snapshot.projections[0]?.embeddingChunkCount,
+    );
+    expect(
+      f.embed.mock.calls
+        .at(-1)?.[0]
+        .every((text) => !firstInputs.includes(text)),
+    ).toBe(true);
+  });
+
+  it('caps each checkpoint at the provider batch size and reuses committed vectors', async () => {
+    const f = harness();
+    const first = await f.service(true, 'synthetic-model', 2).refresh(32);
+    expect(first.progress).toMatchObject({
+      loadedEntryCount: 2,
+      remainingEntryCount: 1,
+    });
+    const next = await f.service(true, 'synthetic-model', 2).refresh(32);
+    expect(next.progress).toMatchObject({
+      loadedEntryCount: 1,
+      outcome: 'complete',
+    });
+    expect(f.embed.mock.calls.map((call) => call[0].length)).toEqual([2, 1]);
+  });
   it('hydrates finite windows and resumes from committed projections in a new service', async () => {
     const fixture = harness();
     const first = await fixture.service().refresh(2);
@@ -291,9 +333,8 @@ function harness() {
   ) =>
     projection.embeddingProvider === provider &&
     projection.embeddingModel === model &&
-    projection.embedding !== undefined &&
-    projection.embedding.length > 0 &&
-    projection.embedding.every(Number.isFinite);
+    projection.embedding?.length === projection.embeddingChunkCount &&
+    projection.embedding.every((chunk) => chunk.vector.every(Number.isFinite));
   const loadAll = vi.fn(() => Promise.resolve(currentPublic()));
   const loadByIds = vi.fn(
     (_workspaceId: string, _includePrivate: boolean, ids: readonly string[]) =>
@@ -450,7 +491,11 @@ function harness() {
         value: {...entry.value, ...patch},
       });
     },
-    service(withProvider = true, model = 'synthetic-model') {
+    service(
+      withProvider = true,
+      model = 'synthetic-model',
+      maximumBatchSize = 32,
+    ) {
       return new InformationEntryRetrievalService({
         workspaceId: WORKSPACE_ID,
         entries: repository,
@@ -470,6 +515,7 @@ function harness() {
           ? {
               embeddingProvider: {
                 providerKey: 'synthetic-provider',
+                maximumBatchSize,
                 model,
                 embed,
               },

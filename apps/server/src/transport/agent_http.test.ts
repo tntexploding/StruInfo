@@ -121,6 +121,7 @@ describe('Agent HTTP authentication and dispatch', () => {
     ['source_quality_control', '/api/v1/ingestion/commands'],
     ['source_description_generate', '/api/v1/ingestion/commands'],
     ['ai_execution_save', '/api/v1/ai-price/commands'],
+    ['embedding_settings_save', '/api/v1/ai-price/commands'],
   ])('keeps %s on the owner route', async (operation, path) => {
     const f = fixture();
     await f.send(path, undefined, {operation, input: {}});

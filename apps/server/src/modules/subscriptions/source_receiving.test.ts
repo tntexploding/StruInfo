@@ -2,6 +2,7 @@ import {describe, expect, it} from 'vitest';
 import {
   DEFAULT_SOURCE_RECEIVING,
   sourceReceivingSchema,
+  sourceContentMatches,
   sourceSchedule,
   type SourceScheduleInput,
 } from './source_receiving.js';
@@ -9,6 +10,53 @@ import {
 const source: SourceScheduleInput = {enabled: true, intervalMinutes: 60};
 const now = '2026-10-24T03:00:00.000Z';
 describe('source receiving schedules', () => {
+  it('filters a source by configured title/address scope without changing the content', () => {
+    const settings = {
+      ...DEFAULT_SOURCE_RECEIVING,
+      contentFilter: {
+        includeAny: ['芯片', '/press/key/'],
+        excludeAny: ['股价'],
+      },
+    };
+    expect(
+      sourceContentMatches('芯片量产', 'https://example.invalid/1', settings),
+    ).toBe(true);
+    expect(
+      sourceContentMatches(
+        'Policy speech',
+        'https://example.invalid/press/key/2',
+        settings,
+      ),
+    ).toBe(true);
+    expect(sourceContentMatches('芯片公司股价上涨', '', settings)).toBe(false);
+    expect(sourceContentMatches('股市收盘', '', settings)).toBe(false);
+    const ai = {
+      ...DEFAULT_SOURCE_RECEIVING,
+      contentFilter: {includeAny: ['AI'], excludeAny: []},
+    };
+    expect(
+      sourceContentMatches(
+        'Retail prices',
+        'https://example.invalid/detail/2',
+        ai,
+      ),
+    ).toBe(false);
+    expect(
+      sourceContentMatches('AI 芯片', 'https://example.invalid/detail/2', ai),
+    ).toBe(true);
+    expect(
+      sourceContentMatches('Any complete news', '', DEFAULT_SOURCE_RECEIVING),
+    ).toBe(true);
+  });
+  it('honors one-minute and five-minute intervals', () => {
+    for (const intervalMinutes of [1, 5])
+      expect(
+        sourceSchedule({...source, intervalMinutes, lastAttemptAt: now}, now)
+          .nextCheckAt,
+      ).toBe(
+        new Date(Date.parse(now) + intervalMinutes * 60_000).toISOString(),
+      );
+  });
   it('continues a partial batch after one minute while preserving pauses and failure backoff', () => {
     const pending = {
       ...source,

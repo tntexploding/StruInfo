@@ -7,7 +7,10 @@ import type {
   CurrentInformationEntry,
   InformationEntryRepositoryPort,
 } from '../entries/index.js';
-import type {AiTagProposalProviderPort} from './ai_tag_proposal.js';
+import {
+  AiTagProposalProviderError,
+  type AiTagProposalProviderPort,
+} from './ai_tag_proposal.js';
 import {AiTagProposalService} from './ai_tag_proposal_service.js';
 import type {ProcessingProposal, ProcessingRun} from './processing_contract.js';
 import type {AiTagProposalRepositoryPort} from './processing_repository.js';
@@ -16,6 +19,85 @@ const WORKSPACE_ID = '11111111-1111-4111-8111-111111111111';
 const ENTRY_ID = '22222222-2222-4222-8222-222222222222';
 
 describe('unified tag proposal writes', () => {
+  it('records a batch envelope failure on the affected durable runs', async () => {
+    const f = createFixture(false, {
+      proposeTagsBatch: () =>
+        Promise.reject(
+          new AiTagProposalProviderError(
+            'ai_provider_invalid_response',
+            'response_incomplete',
+          ),
+        ),
+    });
+    const second = {
+      ...f.current,
+      entryId: '22222222-2222-4222-8222-222222222223',
+    };
+    vi.spyOn(f.entries, 'loadCurrentEntries').mockResolvedValue([
+      f.current,
+      second,
+    ]);
+    const result = await f.service.startBatch(
+      [f.current, second].map((entry) => ({
+        entryId: entry.entryId,
+        expectedRevision: 1,
+        requestKey: 'incomplete',
+      })),
+    );
+    expect(result[0]?.run).toMatchObject({
+      status: 'failed',
+      currentStep: '标签校验失败：response_incomplete',
+      errorCode: 'ai_provider_invalid_response',
+    });
+  });
+  it('persists valid batch entries and retries only the failed entry', async () => {
+    const secondId = '22222222-2222-4222-8222-222222222223';
+    const batch = vi.fn<
+      NonNullable<AiTagProposalProviderPort['proposeTagsBatch']>
+    >((entries) =>
+      Promise.resolve(
+        entries.map((e) =>
+          e.entryId === ENTRY_ID
+            ? {
+                entryId: e.entryId,
+                expectedRevision: e.revision,
+                result: {summary: 'Valid', annotations: labelsFor(e)},
+              }
+            : {
+                entryId: e.entryId,
+                expectedRevision: e.revision,
+                errorCode: 'ai_provider_invalid_response' as const,
+              },
+        ),
+      ),
+    );
+    const f = createFixture(false, {proposeTagsBatch: batch});
+    const second = {...f.current, entryId: secondId};
+    vi.spyOn(f.entries, 'loadCurrentEntries').mockResolvedValue([
+      f.current,
+      second,
+    ]);
+    const requests = [ENTRY_ID, secondId].map((entryId) => ({
+      entryId,
+      expectedRevision: 1,
+      requestKey: 'batch',
+    }));
+    const runs = await f.service.startBatch(requests);
+    expect(runs.map((r) => r.run.status)).toEqual(['succeeded', 'failed']);
+    expect(runs[0]?.run.proposals).toHaveLength(1);
+    expect(runs[1]?.run.proposals).toHaveLength(0);
+    await f.service.startBatch(requests);
+    expect(batch).toHaveBeenCalledTimes(1);
+    f.proposeTags.mockResolvedValue({
+      summary: 'Retry',
+      annotations: labelsFor(second),
+    });
+    expect((await f.service.start(secondId, 'retry')).run.status).toBe(
+      'succeeded',
+    );
+    expect(f.proposeTags).toHaveBeenCalledTimes(1);
+    expect(f.proposeTags.mock.calls[0]?.[0].entryId).toBe(secondId);
+  });
   it('writes only annotations, preserves raw text and reuses an accepted result', async () => {
     const f = createFixture(false);
     const body = f.current.value.body;

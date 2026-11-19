@@ -1,5 +1,27 @@
 import {z} from 'zod';
 
+export const embeddingSettingsSchema = z
+  .object({
+    enabled: z.boolean(),
+    baseUrl: z
+      .string()
+      .refine(
+        (s) =>
+          s === '' ||
+          s === 'https://maas.qianwenaiapi.com/compatible-mode/v1' ||
+          /^https:\/\/[a-zA-Z0-9-]+\.cn-beijing\.maas\.aliyuncs\.com\/compatible-mode\/v1$/u.test(
+            s,
+          ),
+      ),
+    limitCny: z.number().nonnegative().max(10000),
+  })
+  .strict();
+export const DEFAULT_EMBEDDING_SETTINGS = {
+  enabled: false,
+  baseUrl: '',
+  limitCny: 0,
+} as const;
+
 /** DeepSeek's published tariff, verified 2026-09-14. All boundaries are Beijing time. */
 export const AI_PRICE_RULE = 'deepseek-weekday-peak-2026-09-14' as const;
 export const aiPricePolicySchema = z
@@ -11,6 +33,7 @@ export const aiPricePolicySchema = z
     assistantPriceRestricted: z.boolean().optional(),
     maxConcurrentRequests: z.number().int().min(1).max(4).optional(),
     automaticRetryLimit: z.number().int().min(0).max(2).optional(),
+    embedding: embeddingSettingsSchema.optional(),
   })
   .strict();
 export type AiPricePolicy = z.infer<typeof aiPricePolicySchema>;

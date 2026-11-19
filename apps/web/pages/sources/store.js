@@ -38,9 +38,12 @@ export const initial = (source) => ({
   kind: source.kind,
   privacy: 'public',
   priority: 50,
+  contentMode: 'article',
+  includeAny: '',
+  excludeAny: '',
   enabled: false,
   mode: 'interval',
-  interval: 120,
+  interval: 5,
   weekdays: [1, 2, 3, 4, 5],
   start: '09:00',
   end: '18:00',
@@ -85,6 +88,18 @@ function readSource(s) {
     title: s.titlePath,
     body: s.bodyPath,
     canonical: s.canonicalUriPath,
+    canonicalTemplate: s.canonicalUriTemplate,
+    requestTime: s.requestTimeParameter,
+    requestAsAjax: s.requestAsAjax ? 'yes' : 'no',
+    pollParam: s.pollingCursor?.queryParameter,
+    pollPath: s.pollingCursor?.recordPath,
+    pollResponse: s.pollingCursor?.responsePath,
+    timeZone: s.timeZoneOffset,
+    paid: s.paidContentPath,
+    signature: s.querySignature?.algorithm || '',
+    signatureParam: s.querySignature?.parameter,
+    publishedFormat: s.publishedAtFormat,
+    bodyFormat: s.bodyFormat,
     published: s.publishedAtPath,
     version: s.versionPath,
     pageParam: s.pageCursor?.queryParameter,
@@ -100,6 +115,9 @@ function readSource(s) {
     accent: s.processingProfile?.accent || '#c4b08b',
     privacy: s.isPrivate ? 'private' : 'public',
     priority: r.preference ?? 50,
+    contentMode: r.contentMode ?? 'article',
+    includeAny: r.contentFilter?.includeAny.join('\n') ?? '',
+    excludeAny: r.contentFilter?.excludeAny.join('\n') ?? '',
     enabled: s.enabled,
     mode: schedule.mode === 'manual' ? 'interval' : schedule.mode,
     interval: s.intervalMinutes,
@@ -171,6 +189,17 @@ function writeSource(s, id) {
     urgency: old?.receiving?.urgency || 'normal',
     preference: s.priority,
     retryLimit: s.retries,
+    contentMode: s.contentMode,
+    contentFilter: {
+      includeAny: s.includeAny
+        .split('\n')
+        .map((v) => v.trim())
+        .filter(Boolean),
+      excludeAny: s.excludeAny
+        .split('\n')
+        .map((v) => v.trim())
+        .filter(Boolean),
+    },
   };
   const base = {
     subscriptionId: id,
@@ -224,6 +253,25 @@ function writeSource(s, id) {
     titlePath: c.title,
     bodyPath: c.body,
     canonicalUriPath: c.canonical || undefined,
+    canonicalUriTemplate: c.canonicalTemplate || undefined,
+    requestTimeParameter: c.requestTime || undefined,
+    requestAsAjax: c.requestAsAjax === 'yes',
+    pollingCursor:
+      c.pollParam && (c.pollPath || c.pollResponse)
+        ? {
+            queryParameter: c.pollParam,
+            ...(c.pollResponse
+              ? {responsePath: c.pollResponse}
+              : {recordPath: c.pollPath}),
+          }
+        : undefined,
+    timeZoneOffset: c.timeZone || undefined,
+    paidContentPath: c.paid || undefined,
+    querySignature: c.signature
+      ? {algorithm: c.signature, parameter: c.signatureParam || 'sign'}
+      : undefined,
+    publishedAtFormat: c.publishedFormat || undefined,
+    bodyFormat: c.bodyFormat || undefined,
     publishedAtPath: c.published || undefined,
     versionPath: c.version || undefined,
     recordLimit: old?.recordLimit || 20,

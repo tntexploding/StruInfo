@@ -10,6 +10,7 @@ import {
   type InformationEntrySearchIndexMetrics,
   type InformationEntrySearchIndexSnapshot,
   type InformationEntrySearchProjection,
+  type InformationEntryEmbeddingChunk,
   type InformationEntryTermPosting,
 } from '../../../modules/entries/index.js';
 
@@ -33,7 +34,7 @@ type Row = Readonly<Record<string, unknown>>;
 export const READ_INFORMATION_ENTRY_SEARCH_PROJECTIONS_SQL = [
   'SELECT entry_id::text, entry_revision, entry_revision_id::text,',
   '  projection_sha256, tokenizer_version, embedding_provider,',
-  '  embedding_model, embedding_dimensions, embedding',
+  '  embedding_model, embedding_dimensions, embedding, embedding_chunk_count',
   'FROM struinfo.information_entry_search_projection',
   'WHERE workspace_id = $1',
   'ORDER BY entry_id',
@@ -49,12 +50,12 @@ export const READ_INFORMATION_ENTRY_TERM_POSTINGS_SQL = [
 export const READ_INFORMATION_ENTRY_SEARCH_INDEX_READINESS_SQL = [
   'SELECT',
   '  (SELECT count(*)::integer',
-  '   FROM struinfo.information_entry AS entry',
+  '   FROM struinfo.published_search_entry AS entry',
   '   WHERE entry.workspace_id = $1 AND entry.is_current_structure',
   '     AND NOT entry.is_private) AS public_entry_count,',
   '  (SELECT count(*)::integer',
   '   FROM struinfo.information_entry_search_projection AS projection',
-  '   JOIN struinfo.information_entry AS entry',
+  '   JOIN struinfo.published_search_entry AS entry',
   '     ON entry.workspace_id = projection.workspace_id',
   '    AND entry.entry_id = projection.entry_id',
   '    AND entry.current_revision = projection.entry_revision',
@@ -72,9 +73,9 @@ export const READ_INFORMATION_ENTRY_SEARCH_INDEX_READINESS_SQL = [
 export const READ_INFORMATION_ENTRY_SEARCH_INDEX_METRICS_SQL = [
   'WITH projection_status AS (',
   '  SELECT projection.embedding_provider, projection.embedding_model,',
-  '    projection.embedding, entry.entry_id IS NOT NULL AS is_current',
+  '    projection.embedding, projection.embedding_chunk_count, entry.entry_id IS NOT NULL AS is_current',
   '  FROM struinfo.information_entry_search_projection AS projection',
-  '  LEFT JOIN struinfo.information_entry AS entry',
+  '  LEFT JOIN struinfo.published_search_entry AS entry',
   '    ON entry.workspace_id = projection.workspace_id',
   '   AND entry.entry_id = projection.entry_id',
   '   AND entry.current_revision = projection.entry_revision',
@@ -87,13 +88,13 @@ export const READ_INFORMATION_ENTRY_SEARCH_INDEX_METRICS_SQL = [
   ')',
   'SELECT',
   '  (SELECT count(*)::integer',
-  '   FROM struinfo.information_entry AS entry',
+  '   FROM struinfo.published_search_entry AS entry',
   '   WHERE entry.workspace_id = $1 AND entry.is_current_structure',
   '     AND NOT entry.is_private) AS public_entry_count,',
   '  count(*) FILTER (WHERE is_current)::integer AS current_projection_count,',
   '  count(*) FILTER (WHERE is_current AND $2::text IS NOT NULL',
   '    AND embedding_provider = $2::text AND embedding_model = $3::text',
-  '    AND embedding IS NOT NULL)::integer AS embedded_projection_count,',
+  '    AND embedding IS NOT NULL AND jsonb_array_length(embedding) = embedding_chunk_count AND embedding_chunk_count > 0)::integer AS embedded_projection_count,',
   '  count(*) FILTER (WHERE NOT is_current)::integer AS stale_projection_count,',
   '  (SELECT count(*)::integer',
   '   FROM struinfo.information_entry_term_posting AS posting',
@@ -107,7 +108,7 @@ export const FIND_INFORMATION_ENTRY_LEXICAL_CANDIDATES_SQL = [
   'JOIN struinfo.information_entry_search_projection AS projection',
   '  ON projection.workspace_id = posting.workspace_id',
   ' AND projection.entry_id = posting.entry_id',
-  'JOIN struinfo.information_entry AS entry',
+  'JOIN struinfo.published_search_entry AS entry',
   '  ON entry.workspace_id = projection.workspace_id',
   ' AND entry.entry_id = projection.entry_id',
   ' AND entry.current_revision = projection.entry_revision',
@@ -130,8 +131,8 @@ const INSERT_PROJECTION_SQL = [
   'INSERT INTO struinfo.information_entry_search_projection (',
   '  workspace_id, entry_id, entry_revision, entry_revision_id,',
   '  projection_sha256, tokenizer_version, embedding_provider,',
-  '  embedding_model, embedding_dimensions, embedding',
-  ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+  '  embedding_model, embedding_dimensions, embedding, embedding_chunk_count',
+  ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11)',
 ].join('\n');
 const INSERT_POSTING_SQL = [
   'INSERT INTO struinfo.information_entry_term_posting (',
@@ -142,7 +143,7 @@ const INSERT_POSTING_SQL = [
 export const READ_INFORMATION_ENTRY_INDEX_REFRESH_BATCH_SQL = [
   'WITH pending AS (',
   '  SELECT entry.entry_id, false AS obsolete',
-  '  FROM struinfo.information_entry AS entry',
+  '  FROM struinfo.published_search_entry AS entry',
   '  LEFT JOIN struinfo.information_entry_search_projection AS projection',
   '    ON projection.workspace_id = entry.workspace_id AND projection.entry_id = entry.entry_id',
   '  WHERE entry.workspace_id = $1 AND entry.is_current_structure AND NOT entry.is_private',
@@ -154,14 +155,15 @@ export const READ_INFORMATION_ENTRY_INDEX_REFRESH_BATCH_SQL = [
   '        projection.embedding_provider IS DISTINCT FROM $3::text',
   '        OR projection.embedding_model IS DISTINCT FROM $4::text',
   '        OR projection.embedding IS NULL OR projection.embedding_dimensions IS NULL',
+  '        OR jsonb_array_length(projection.embedding) < projection.embedding_chunk_count OR projection.embedding_chunk_count = 0',
   '        OR projection.embedding_dimensions NOT BETWEEN 1 AND 16384',
   '      )))',
   '  UNION ALL',
   '  SELECT projection.entry_id, true AS obsolete',
   '  FROM struinfo.information_entry_search_projection AS projection',
-  '  JOIN struinfo.information_entry AS entry',
+  '  LEFT JOIN struinfo.published_search_entry AS entry',
   '    ON entry.workspace_id = projection.workspace_id AND entry.entry_id = projection.entry_id',
-  '  WHERE projection.workspace_id = $1 AND (NOT entry.is_current_structure OR entry.is_private)',
+  '  WHERE projection.workspace_id = $1 AND (entry.entry_id IS NULL OR NOT entry.is_current_structure OR entry.is_private)',
   '), selected AS (',
   '  SELECT entry_id, obsolete FROM pending ORDER BY obsolete DESC, entry_id LIMIT $5',
   ')',
@@ -174,7 +176,7 @@ export const READ_INFORMATION_ENTRY_INDEX_REFRESH_BATCH_SQL = [
 
 export const READ_INFORMATION_ENTRY_INDEX_COMMIT_STATE_SQL = [
   'SELECT entry_id::text, current_revision, current_revision_id::text, is_private, is_current_structure',
-  'FROM struinfo.information_entry WHERE workspace_id = $1 AND entry_id = ANY($2::uuid[])',
+  'FROM struinfo.published_search_entry WHERE workspace_id = $1 AND entry_id = ANY($2::uuid[])',
 ].join('\n');
 
 const DELETE_SELECTED_POSTINGS_SQL =
@@ -197,6 +199,7 @@ export class PostgresInformationEntrySearchIndexRepository implements Informatio
 
   public async loadSearchIndex(
     workspaceIdInput: string,
+    includePostings = true,
   ): Promise<Readonly<InformationEntrySearchIndexSnapshot>> {
     const workspaceId = canonicalUuid(workspaceIdInput);
     return runPostgresTransaction(
@@ -207,10 +210,11 @@ export class PostgresInformationEntrySearchIndexRepository implements Informatio
           READ_INFORMATION_ENTRY_SEARCH_PROJECTIONS_SQL,
           [workspaceId],
         );
-        const postings = await client.query<Row>(
-          READ_INFORMATION_ENTRY_TERM_POSTINGS_SQL,
-          [workspaceId],
-        );
+        const postings = includePostings
+          ? await client.query<Row>(READ_INFORMATION_ENTRY_TERM_POSTINGS_SQL, [
+              workspaceId,
+            ])
+          : {rows: []};
         return Object.freeze({
           projections: Object.freeze(projections.rows.map(mapProjection)),
           postings: Object.freeze(postings.rows.map(mapPosting)),
@@ -413,8 +417,9 @@ export class PostgresInformationEntrySearchIndexRepository implements Informatio
         const removed = entryIds.filter((entryId) => {
           const row = current.get(entryId);
           return (
-            row !== undefined &&
-            (row.is_private === true || row.is_current_structure === false)
+            row === undefined ||
+            row.is_private === true ||
+            row.is_current_structure === false
           );
         });
         const updatedEntryIds = accepted.map(
@@ -528,8 +533,11 @@ async function insertProjection(
     projection.tokenizerVersion,
     projection.embeddingProvider ?? null,
     projection.embeddingModel ?? null,
-    projection.embedding?.length ?? null,
-    projection.embedding === undefined ? null : [...projection.embedding],
+    projection.embedding?.[0]?.vector.length ?? null,
+    projection.embedding === undefined
+      ? null
+      : JSON.stringify(projection.embedding),
+    projection.embeddingChunkCount,
   ]);
 }
 
@@ -544,7 +552,7 @@ function mapProjection(row: Row): Readonly<InformationEntrySearchProjection> {
   if (
     (provider === undefined) !== (model === undefined) ||
     (provider === undefined) !== (embedding === undefined) ||
-    (embedding !== undefined && embedding.length !== dimensions)
+    embedding?.some((chunk) => chunk.vector.length !== dimensions)
   ) {
     throw new PostgresAdapterError();
   }
@@ -554,6 +562,7 @@ function mapProjection(row: Row): Readonly<InformationEntrySearchProjection> {
     entryRevisionId: canonicalUuid(row.entry_revision_id),
     projectionSha256: sha256(row.projection_sha256),
     tokenizerVersion: tokenizerVersion(row.tokenizer_version),
+    embeddingChunkCount: integer(row.embedding_chunk_count),
   } as const;
   if (provider === undefined) return Object.freeze(base);
   if (model === undefined || embedding === undefined) {
@@ -580,21 +589,33 @@ function mapPosting(row: Row): Readonly<InformationEntryTermPosting> {
   });
 }
 
-function optionalEmbedding(value: unknown): readonly number[] | undefined {
+function optionalEmbedding(
+  value: unknown,
+): readonly Readonly<InformationEntryEmbeddingChunk>[] | undefined {
   if (value === null) return undefined;
-  if (
-    !Array.isArray(value) ||
-    value.length < 1 ||
-    value.length > 16_384 ||
-    value.some(
-      (item) =>
-        (typeof item !== 'number' && typeof item !== 'string') ||
-        !Number.isFinite(Number(item)),
-    )
-  ) {
-    throw new PostgresAdapterError();
-  }
-  return Object.freeze(value.map((item) => Number(item)));
+  if (!Array.isArray(value) || !value.length) throw new PostgresAdapterError();
+  return Object.freeze(
+    value.map((value: unknown) => {
+      if (!value || typeof value !== 'object') throw new PostgresAdapterError();
+      const item = value as Record<string, unknown>;
+      if (
+        !Array.isArray(item.vector) ||
+        item.vector.length < 1 ||
+        item.vector.length > 16384 ||
+        item.vector.some((v) => typeof v !== 'number' || !Number.isFinite(v))
+      )
+        throw new PostgresAdapterError();
+      const start = integer(item.start),
+        end = integer(item.end);
+      if (end < start) throw new PostgresAdapterError();
+      return Object.freeze({
+        start,
+        end,
+        inputSha256: sha256(item.inputSha256),
+        vector: Object.freeze(item.vector as number[]),
+      });
+    }),
+  );
 }
 
 function tokenizerVersion(

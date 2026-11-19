@@ -34,6 +34,7 @@ const owner = ExecutionAuthority.owner(W);
 function fixture(
   guard?: (task: AgentTask) => Promise<string | undefined>,
   priceGate?: ConstructorParameters<typeof AgentTaskService>[4],
+  onSettled?: () => void,
 ) {
   const rows = new Map<string, AgentTask>();
   const locks = new Set<string>();
@@ -80,6 +81,7 @@ function fixture(
   };
   let count = 0;
   const actions = {
+    isNews: vi.fn(() => Promise.resolve(false)),
     freezeSourceSplit: vi.fn<() => Promise<FrozenSourceSplit | undefined>>(() =>
       Promise.resolve(undefined),
     ),
@@ -191,6 +193,7 @@ function fixture(
     actions as unknown as AgentTaskActions,
     guard,
     priceGate,
+    onSettled,
   );
   const done = async (id: string) => {
     await vi.waitFor(() => {
@@ -216,6 +219,19 @@ function fixture(
   };
 }
 describe('bounded Agent tasks', () => {
+  it('notifies batch admission after a task releases its runtime slot', async () => {
+    const settled = vi.fn();
+    const f = fixture(undefined, undefined, settled);
+    const t = await f.service.start(owner, 'notify-batch', {
+      kind: 'document',
+      snapshotId: S,
+    });
+    await f.done(t.taskId);
+    await vi.waitFor(() => {
+      expect(settled).toHaveBeenCalledTimes(1);
+    });
+    expect((await f.service.read(owner, t.taskId)).runtimeStatus).toBe('idle');
+  });
   it('freezes the active budget and preserves it when the same request is replayed', async () => {
     let budget = 'first-batch';
     const f = fixture(undefined, {
@@ -993,6 +1009,26 @@ describe('bounded Agent tasks', () => {
 });
 
 describe('intake and multilingual task stages', () => {
+  it('completes news after review without splitting, tagging or publishing entries', async () => {
+    const f = fixture();
+    f.actions.isNews.mockResolvedValue(true);
+    const task = await f.service.start(owner, 'news-review-only', {
+      kind: 'document',
+      snapshotId: S,
+      intake: {fetchFullText: false},
+    });
+    const result = await f.done(task.taskId);
+    expect(result.state).toMatchObject({
+      status: 'succeeded',
+      phase: 'complete',
+      calls: 1,
+    });
+    expect(f.actions.reviewIntake).toHaveBeenCalledTimes(1);
+    expect(f.actions.finishDocumentIntake).toHaveBeenCalledTimes(1);
+    expect(f.actions.generate).not.toHaveBeenCalled();
+    expect(f.actions.tagSteps).not.toHaveBeenCalled();
+    expect(f.actions.publish).not.toHaveBeenCalled();
+  });
   it('holds before splitting, then uses reselected evidence without resetting spent calls', async () => {
     const f = fixture();
     let held = false;

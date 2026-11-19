@@ -19,6 +19,43 @@ const RESOURCE_ID = '22222222-2222-4222-8222-222222222222';
 const SNAPSHOT_ID = '33333333-3333-4333-8333-333333333333';
 
 describe('complete InformationEntry search', () => {
+  it('does not reward a weaker vector result for having no lexical match', () => {
+    const relevant = currentEntry('00000000-0000-4000-8000-000000000001', {
+      titlePath: 'Needle',
+      body: '',
+      contentKeywords: [],
+    });
+    const unrelated = currentEntry('00000000-0000-4000-8000-000000000002');
+    const match = (score: number) => ({
+      score,
+      provider: 'synthetic',
+      model: 'synthetic',
+      indexVersion: 'synthetic',
+    });
+    const result = searchCurrentInformationEntries(
+      [unrelated, relevant],
+      {
+        text: 'needle several absent words describing a particular use case',
+        textMode: 'fuzzy',
+        textFields: ['title'],
+        retrievalMode: 'hybrid',
+        includePrivate: false,
+        limit: 5,
+      },
+      undefined,
+      new Map([
+        [relevant.entryId, match(7_900)],
+        [unrelated.entryId, match(5_000)],
+      ]),
+    );
+    expect(result.items.map((item) => item.entry.entryId)).toEqual([
+      relevant.entryId,
+      unrelated.entryId,
+    ]);
+    expect(result.items[0]?.textMatch).toBeDefined();
+    expect(result.items[1]?.textMatch).toBeUndefined();
+  });
+
   it('expands only confirmed whole-tag equivalents with original labels, field scope and privacy intact', () => {
     const originals = [
       currentEntry('00000000-0000-4000-8000-000000000001', {

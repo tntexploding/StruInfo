@@ -60,7 +60,7 @@ export function createAssistantApiTools(
         sourceAlias: z.string(),
         enabled: z.boolean(),
         isPrivate: privateFlag,
-        intervalMinutes: z.number().int().min(15),
+        intervalMinutes: z.number().int().min(1).max(10080).default(5),
         connectorId: z.string(),
         configurationRef: z.string(),
         receiving: sourceReceivingSchema.optional(),

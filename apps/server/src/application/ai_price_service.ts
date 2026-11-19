@@ -4,6 +4,7 @@ import {
   aiPricePolicySchema,
   aiPriceWindow,
   DEFAULT_AI_PRICE_POLICY,
+  DEFAULT_EMBEDDING_SETTINGS,
 } from '../modules/processing/ai_price_policy.js';
 import {
   patchReviewPreferences,
@@ -20,13 +21,30 @@ export class AiPriceService {
     private readonly preferences: ReviewPreferencesStore,
     private readonly provider: string | undefined,
     private readonly now: () => Date = () => new Date(),
+    private readonly embedding?: {
+      configured: boolean;
+      budgetStatus(): Promise<unknown>;
+    },
   ) {}
 
-  public async status() {
+  public async status(includeEmbedding = false) {
     const policy =
       (await this.preferences.load(this.workspaceId)).aiPricePolicy ??
       DEFAULT_AI_PRICE_POLICY;
-    return aiPriceWindow(policy, this.provider, this.now());
+    return {
+      ...aiPriceWindow(policy, this.provider, this.now()),
+      ...(includeEmbedding
+        ? {
+            embedding: {
+              configured: this.embedding?.configured ?? false,
+              model: 'qwen3.7-text-embedding',
+              dimensions: 1024,
+              settings: policy.embedding ?? DEFAULT_EMBEDDING_SETTINGS,
+              budget: (await this.embedding?.budgetStatus()) ?? null,
+            },
+          }
+        : {}),
+    };
   }
   public async executionSettings() {
     const {policy} = await this.status();
@@ -64,7 +82,8 @@ export class AiPriceService {
   public async save(
     authority: ExecutionAuthority,
     input: unknown,
-    operationsOnly: boolean | 'execution' | 'assistant' | 'queue' = false,
+    operationsOnly:
+      boolean | 'execution' | 'assistant' | 'queue' | 'embedding' = false,
   ) {
     if (
       authority.identity.kind !== 'owner' ||
@@ -72,32 +91,44 @@ export class AiPriceService {
     )
       throw new OperationError('forbidden', 'ai_price_owner_required');
     const schema =
-      operationsOnly === 'queue'
-        ? aiPricePolicySchema.pick({revision: true}).extend({
-            backgroundPaused:
-              aiPricePolicySchema.shape.backgroundPaused.unwrap(),
-          })
-        : operationsOnly === 'assistant'
+      operationsOnly === 'embedding'
+        ? aiPricePolicySchema
+            .pick({revision: true})
+            .extend({embedding: aiPricePolicySchema.shape.embedding.unwrap()})
+        : operationsOnly === 'queue'
           ? aiPricePolicySchema.pick({revision: true}).extend({
-              assistantPriceRestricted:
-                aiPricePolicySchema.shape.assistantPriceRestricted.unwrap(),
+              backgroundPaused:
+                aiPricePolicySchema.shape.backgroundPaused.unwrap(),
             })
-          : operationsOnly === 'execution'
+          : operationsOnly === 'assistant'
             ? aiPricePolicySchema.pick({revision: true}).extend({
-                maxConcurrentRequests:
-                  aiPricePolicySchema.shape.maxConcurrentRequests.unwrap(),
-                automaticRetryLimit:
-                  aiPricePolicySchema.shape.automaticRetryLimit.unwrap(),
+                assistantPriceRestricted:
+                  aiPricePolicySchema.shape.assistantPriceRestricted.unwrap(),
               })
-            : operationsOnly
+            : operationsOnly === 'execution'
               ? aiPricePolicySchema.pick({revision: true}).extend({
-                  operationsAllowed:
-                    aiPricePolicySchema.shape.operationsAllowed.unwrap(),
+                  maxConcurrentRequests:
+                    aiPricePolicySchema.shape.maxConcurrentRequests.unwrap(),
+                  automaticRetryLimit:
+                    aiPricePolicySchema.shape.automaticRetryLimit.unwrap(),
                 })
-              : aiPricePolicySchema.pick({revision: true, enabled: true});
+              : operationsOnly
+                ? aiPricePolicySchema.pick({revision: true}).extend({
+                    operationsAllowed:
+                      aiPricePolicySchema.shape.operationsAllowed.unwrap(),
+                  })
+                : aiPricePolicySchema.pick({revision: true, enabled: true});
     const parsed = schema.safeParse(input);
     if (!parsed.success || parsed.data.revision >= 2147483646)
       throw new OperationError('invalid_input', 'invalid_ai_price_policy');
+    if (
+      'embedding' in parsed.data &&
+      parsed.data.embedding.enabled &&
+      (!this.embedding?.configured ||
+        !parsed.data.embedding.baseUrl ||
+        parsed.data.embedding.limitCny <= 0)
+    )
+      throw new OperationError('rejected', 'embedding_configuration_required');
     await updateReviewPreferences(
       this.preferences,
       this.workspaceId,
@@ -117,6 +148,6 @@ export class AiPriceService {
         };
       },
     );
-    return this.status();
+    return this.status(operationsOnly === 'embedding');
   }
 }

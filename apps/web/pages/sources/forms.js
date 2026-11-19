@@ -19,6 +19,7 @@ export function settingsMarkup(s) {
         ${field('来源名称', 'name', s.name, 'maxlength="80"', 'name-field')}
         <label class="setting-field color-field"><span>来源颜色</span><input aria-label="来源颜色" type="color" data-field="accent" value="${s.accent}"></label>
         ${select('接入类型', 'kind', kinds, s.kind)}
+        ${select('内容处理', 'contentMode', {article: '文章', news: '快讯'}, s.contentMode)}
         ${select('文档隐私', 'privacy', {public: '公开', private: '私密'}, s.privacy)}
         ${field('来源优先级', 'priority', s.priority, 'type="number" min="0" max="100" step="1"')}
         <div class="description-field"><div class="field-heading"><label for="source-description">来源简介</label><button class="text-action" data-action="description">AI 生成</button></div><textarea id="source-description" data-field="description" rows="2" maxlength="500" placeholder="内容范围和文章形式">${e(s.description)}</textarea></div>
@@ -28,7 +29,7 @@ export function settingsMarkup(s) {
       <header><h3 id="receiving-title">接收设置</h3>${toggle('自动检查', 'enabled', s.enabled)}</header>
       <div class="receiving-grid">
         ${select('检查方式', 'mode', {once: '收取一次', interval: '按间隔', window: '按日期与时段'}, s.mode)}
-        <label class="setting-field interval-field"><span>检查间隔</span><span class="unit-input"><input aria-label="检查间隔" type="number" min="15" max="10080" data-field="interval" value="${s.interval}"><span>分钟</span></span></label>
+        <label class="setting-field interval-field"><span>检查间隔</span><span class="unit-input"><input aria-label="检查间隔" type="number" min="1" max="10080" data-field="interval" value="${s.interval}"><span>分钟</span></span></label>
         <div class="schedule-field" ${s.mode === 'window' ? '' : 'hidden'}><span class="field-label">检查日期</span><div class="weekdays" role="group" aria-label="每周检查日期">${['日', '一', '二', '三', '四', '五', '六'].map((day, i) => `<button type="button" aria-label="星期${day}" aria-pressed="${s.weekdays.includes(i)}" data-weekday="${i}">${day}</button>`).join('')}</div><div class="time-window"><label>从 <input aria-label="检查开始时间" type="time" data-field="start" value="${s.start}"></label><label>至 <input aria-label="检查结束时间" type="time" data-field="end" value="${s.end}"></label></div></div>
         ${field('失败重试次数', 'retries', s.retries, 'type="number" min="0" max="5" step="1"', 'retry-field')}
         <div class="parameter-field"><div class="field-heading"><span>接收参数</span><button class="text-action" data-panel="connection" aria-haspopup="dialog">编辑参数 <span data-icon="arrow"></span></button></div><div class="connection-summary"><span id="connection-kind">${kinds[s.kind]}</span><span id="connection-address">${e(connectionAddress(s))}</span></div></div>
@@ -42,6 +43,7 @@ export function settingsMarkup(s) {
       <label class="setting-field prompt-field"><span>标签要求</span><textarea data-field="tags" rows="3" placeholder="补充标签要求">${e(s.tags)}</textarea></label>
       <label class="setting-field prompt-field"><span>联系要求</span><textarea data-field="relations" rows="3" placeholder="补充联系要求">${e(s.relations)}</textarea></label>
     </div>
+    <p class="news-processing-note" hidden>审核通过后进入数据库的快讯列表，不拆分，不生成标签与主题。</p>
   </section>
   <section class="special-settings" aria-labelledby="special-title"><h3 id="special-title">特殊设置</h3><button class="compact-button" data-panel="history" aria-haspopup="dialog"><span data-icon="history"></span>往期补收 <span data-icon="arrow"></span></button></section>`;
 }
@@ -122,6 +124,53 @@ export function connectionMarkup(s) {
           ),
         )
         .join('') +
+      input(
+        '原文链接模板',
+        'canonicalTemplate',
+        c.canonicalTemplate,
+        'placeholder="https://example.invalid/articles/{id}"',
+      ) +
+      input(
+        '当前时间请求参数',
+        'requestTime',
+        c.requestTime,
+        'placeholder="可留空；发送 Unix 秒时间戳"',
+      ) +
+      `<label class="setting-field"><span>请求方式</span><select data-connection="requestAsAjax"><option value="no">标准</option><option value="yes" ${c.requestAsAjax === 'yes' ? 'selected' : ''}>Ajax</option></select></label>` +
+      `<label class="setting-field"><span>发布时间格式</span><select data-connection="publishedFormat"><option value="iso">日期文本</option><option value="unix_seconds" ${c.publishedFormat === 'unix_seconds' ? 'selected' : ''}>Unix 秒</option></select></label>` +
+      `<label class="setting-field"><span>正文格式</span><select data-connection="bodyFormat"><option value="text">文本 / Markdown</option><option value="html" ${c.bodyFormat === 'html' ? 'selected' : ''}>HTML</option></select></label>` +
+      input(
+        '日期时区',
+        'timeZone',
+        c.timeZone,
+        'placeholder="日期未含时区时使用，如 +08:00"',
+      ) +
+      input(
+        '付费标记字段',
+        'paid',
+        c.paid,
+        'placeholder="值为 1 或 true 的记录跳过"',
+      ) +
+      `<h3 class="form-separator">快讯续拉</h3>` +
+      input(
+        '续拉请求参数',
+        'pollParam',
+        c.pollParam,
+        'placeholder="如 nid 或 last_time"',
+      ) +
+      input(
+        '末条记录的游标字段',
+        'pollPath',
+        c.pollPath,
+        'placeholder="如 id 或 ctime"',
+      ) +
+      input(
+        '响应中的下一页字段',
+        'pollResponse',
+        c.pollResponse,
+        'placeholder="如 page_time；与末条游标择一填写"',
+      ) +
+      `<p class="field-note">用于从新到旧的列表。首次只读当前页，此后读取到上次接收位置。与下方普通分页配置择一使用。</p>` +
       `<h3 class="form-separator">分页与增量</h3>` +
       ['分页请求参数', '分页响应字段', '增量请求参数', '增量响应字段']
         .map((label, i) =>
@@ -133,13 +182,20 @@ export function connectionMarkup(s) {
         )
         .join('') +
       `<h3 class="form-separator">鉴权</h3><label class="setting-field"><span>方式</span><select data-connection="auth"><option value="none">无</option><option value="bearer" ${c.auth === 'bearer' ? 'selected' : ''}>Bearer</option></select></label>` +
+      `<label class="setting-field"><span>公开请求校验</span><select data-connection="signature"><option value="">无</option><option value="sha1_md5" ${c.signature === 'sha1_md5' ? 'selected' : ''}>SHA1 → MD5</option></select></label>` +
+      input(
+        '校验参数名',
+        'signatureParam',
+        c.signatureParam,
+        'placeholder="sign"',
+      ) +
       input(
         '密钥环境变量名',
         'credential',
         c.credential,
         'placeholder="使用外部密钥配置"',
       );
-  return `<p class="panel-context">${kinds[s.kind]}</p><div class="dialog-form">${fields}</div><footer class="panel-footer"><button class="compact-button" data-close>取消</button><button class="compact-button primary" data-action="save-connection">保存参数</button></footer>`;
+  return `<p class="panel-context">${kinds[s.kind]}</p><div class="dialog-form">${fields}<h3 class="form-separator">接收范围</h3><label class="setting-field"><span>标题或地址包含</span><textarea data-field="includeAny" rows="3" maxlength="4040" placeholder="每行一项，匹配任意一项。留空接收全部。">${e(s.includeAny)}</textarea></label><label class="setting-field"><span>排除文字</span><textarea data-field="excludeAny" rows="3" maxlength="4040" placeholder="每行一项">${e(s.excludeAny)}</textarea></label></div><footer class="panel-footer"><button class="compact-button" data-close>取消</button><button class="compact-button primary" data-action="save-connection">保存参数</button></footer>`;
 }
 export function historyMarkup() {
   return `<div class="history-form"><div class="history-toolbar"><label class="setting-field">补收批次<select id="history-batch"><option value="">新查询</option></select></label><button class="text-action" data-history="discard" hidden>移除批次记录</button></div><div id="history-filters"><fieldset class="source-checks"><legend>来源范围</legend>${sources

@@ -24,6 +24,9 @@ export const defaults = {
     maxConcurrentRequests: 1,
     automaticRetryLimit: 0,
     priceEnabled: false,
+    embedding: {enabled: false, baseUrl: '', limitCny: 0},
+    embeddingConfigured: false,
+    embeddingSpentCny: 0,
   },
   automation: {
     enabled: false,

@@ -38,6 +38,7 @@ export interface AgentInterfaceConfig {
 }
 
 export interface RuntimeConfig {
+  readonly dashScopeApiKey?: string;
   readonly assistantToken?: string;
   readonly agentInterface?: AgentInterfaceConfig;
   readonly role: ProcessRole;
@@ -130,6 +131,16 @@ export function parseRuntimeConfig(
   );
 
   const agentInterface = parseAgentInterface(environment);
+  const dashScopeApiKey = environment.DASHSCOPE_API_KEY;
+  if (
+    dashScopeApiKey !== undefined &&
+    (!dashScopeApiKey.length ||
+      dashScopeApiKey.length > 4096 ||
+      containsWhitespaceOrControl(dashScopeApiKey))
+  )
+    throw new ConfigurationError('Invalid DASHSCOPE_API_KEY.');
+  if (dashScopeApiKey && embeddingProvider)
+    throw new ConfigurationError('Configure only one embedding provider.');
   const assistantToken = environment.STRUIINFO_ASSISTANT_TOKEN;
   if (
     assistantToken !== undefined &&
@@ -137,6 +148,7 @@ export function parseRuntimeConfig(
   )
     throw new ConfigurationError('Invalid system assistant token.');
   return Object.freeze({
+    ...(dashScopeApiKey ? {dashScopeApiKey} : {}),
     ...(assistantToken ? {assistantToken} : {}),
     ...(agentInterface ? {agentInterface} : {}),
     role,

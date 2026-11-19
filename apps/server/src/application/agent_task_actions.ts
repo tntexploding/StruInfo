@@ -78,7 +78,15 @@ export interface AgentTaskActionsDependencies {
 }
 export class AgentTaskActions {
   public constructor(private readonly deps: AgentTaskActionsDependencies) {}
-  public freezeSourceSplit(request: AgentTaskRequest) {
+  public async isNews(snapshotId: string) {
+    return (
+      (await this.deps.intake?.record(snapshotId))?.value.reception?.strategy
+        ?.contentMode === 'news'
+    );
+  }
+  public async freezeSourceSplit(request: AgentTaskRequest) {
+    if ('snapshotId' in request && (await this.isNews(request.snapshotId)))
+      return undefined;
     return request.kind === 'document' || request.kind === 'split'
       ? this.deps.sourceSplit?.freeze(request.snapshotId)
       : undefined;
@@ -155,8 +163,18 @@ export class AgentTaskActions {
       return;
     }
     if (request.kind === 'document' || request.kind === 'split') {
+      const news = await this.isNews(request.snapshotId);
+      if (
+        news &&
+        (request.kind === 'split' || request.reprocess || !request.intake)
+      )
+        throw new OperationError(
+          'rejected',
+          'news_article_processing_disabled',
+        );
       if (
         request.kind === 'document' &&
+        !news &&
         (!this.deps.tags || (!request.reprocess && !this.deps.split))
       )
         throw new OperationError('rejected', 'ai_not_configured');
@@ -201,6 +219,11 @@ export class AgentTaskActions {
         throw new OperationError('conflict', 'snapshot_already_materialized');
     } else {
       const entry = await this.entry(request.entryId);
+      if (await this.isNews(entry.snapshotId))
+        throw new OperationError(
+          'rejected',
+          'news_article_processing_disabled',
+        );
       if (entry.revision !== request.expectedRevision)
         throw new OperationError('conflict', 'stale_entry_revision');
       if (

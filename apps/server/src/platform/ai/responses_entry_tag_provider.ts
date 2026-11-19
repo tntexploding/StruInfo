@@ -4,6 +4,7 @@ import {
   annotationResponseSchema,
   ANNOTATION_INSTRUCTIONS,
   annotationModelContext,
+  annotationModelSubject,
   decodeAnnotationResponse,
 } from './annotation_response.js';
 import {
@@ -13,7 +14,6 @@ import {
 } from '../../modules/entries/structured_annotations.js';
 import {documentProcessingInstructions} from '../../modules/processing/document_processing_standard.js';
 import {parseResponseJson} from './response_json.js';
-import {entryTagSubject} from './entry_tag_subject.js';
 import {
   MAXIMUM_AI_BATCH_ENTRIES,
   MAXIMUM_TAG_BATCH_CHARACTERS,
@@ -39,7 +39,7 @@ import {
   RESPONSE_METADATA_INSTRUCTIONS,
 } from './responses_metadata.js';
 
-export const OPENAI_TAG_PROMPT_VERSION = 'struinfo.openai-entry-tags.v12';
+export const OPENAI_TAG_PROMPT_VERSION = 'struinfo.openai-entry-tags.v15';
 
 const MAXIMUM_RESPONSE_BYTES = 1024 * 1024;
 
@@ -79,10 +79,12 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
     const active = withDefaultAnnotationDimensions(
       (await this.vocabulary?.()) ?? EMPTY_ANNOTATION_VOCABULARY,
     );
+    const context = annotationModelContext(active, [entry]);
     return decodePayload(
-      await this.request(createRequest(this.#config, entry, active)),
+      await this.request(createRequest(this.#config, entry, context)),
       entry,
       active,
+      context.terms,
     );
   }
 
@@ -104,14 +106,14 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
     );
     const firstEntry = entries[0];
     if (!firstEntry) fail();
-    const first = createRequest(this.#config, firstEntry, active);
+    const context = annotationModelContext(active, entries);
+    const first = createRequest(this.#config, firstEntry, context);
     const input = JSON.stringify({
-      annotationVocabulary: annotationModelContext(active, entries),
+      annotationVocabulary: modelVocabulary(context),
       items: entries.map((entry) => {
         return {
-          entryId: entry.entryId,
           expectedRevision: entry.revision,
-          ...entryTagSubject(entry),
+          ...annotationModelSubject(entry),
         };
       }),
     });
@@ -121,7 +123,7 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
       ...first,
       max_output_tokens: Math.max(
         this.#config.maxOutputTokens,
-        entries.length * 2048 + 128,
+        entries.length * 4096 + 128,
       ),
       instructions: [
         ANNOTATION_INSTRUCTIONS,
@@ -165,32 +167,36 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
         },
       },
     });
-    if (
-      !isClosedRecord(payload, ['items']) ||
-      !Array.isArray(payload.items) ||
-      payload.items.length !== entries.length
-    )
-      fail();
-    const seen = new Set<string>();
-    const results = payload.items.map((item: unknown) => {
-      if (
-        !isClosedRecord(item, ['entryId', 'expectedRevision', 'tags']) ||
-        typeof item.entryId !== 'string'
-      )
-        fail();
-      const entry = entries.find((entry) => entry.entryId === item.entryId);
-      if (
-        !entry ||
-        seen.has(entry.entryId) ||
-        item.expectedRevision !== entry.revision
-      )
-        fail();
-      seen.add(entry.entryId);
-      return {
+    if (!isClosedRecord(payload, ['items']) || !Array.isArray(payload.items))
+      fail('batch_items');
+    const items: unknown[] = payload.items;
+    const results = entries.map((entry) => {
+      const identity = {
         entryId: entry.entryId,
         expectedRevision: entry.revision,
-        result: decodePayload(item.tags, entry, active),
       };
+      const matches = items.filter(
+        (item) => isRecord(item) && item.entryId === entry.entryId,
+      );
+      const item = matches[0];
+      try {
+        if (
+          matches.length !== 1 ||
+          !isClosedRecord(item, ['entryId', 'expectedRevision', 'tags']) ||
+          item.expectedRevision !== entry.revision
+        )
+          fail('batch_identity');
+        return {
+          ...identity,
+          result: decodePayload(item.tags, entry, active, context.terms),
+        };
+      } catch (error) {
+        return {
+          ...identity,
+          errorCode: 'ai_provider_invalid_response' as const,
+          errorDetail: validationDetail(error),
+        };
+      }
     });
     return results;
   }
@@ -245,22 +251,32 @@ export class ResponsesEntryTagProvider implements AiTagProposalProviderPort {
     try {
       payload = parseResponseJson(outputText);
     } catch {
-      throw new AiTagProposalProviderError('ai_provider_invalid_response');
+      fail('response_json');
     }
     return payload;
   }
 }
 
+function modelVocabulary(context: ReturnType<typeof annotationModelContext>) {
+  return {
+    ...context,
+    terms: context.terms.map((term, index) => ({
+      ...term,
+      id: `T${String(index + 1)}`,
+    })),
+  };
+}
+
 function createRequest(
   config: Readonly<AiProposalProviderConfig>,
   entry: Readonly<CurrentInformationEntry>,
-  vocabulary: AnnotationVocabulary,
+  context: ReturnType<typeof annotationModelContext>,
 ) {
   return {
     model: config.model,
     ...responsesOptions(config),
     store: false,
-    max_output_tokens: Math.max(config.maxOutputTokens, 2176),
+    max_output_tokens: Math.max(config.maxOutputTokens, 8192),
     instructions: [
       documentProcessingInstructions('tags'),
       sourceProcessingInstructions('tags'),
@@ -269,8 +285,8 @@ function createRequest(
       RESPONSE_METADATA_INSTRUCTIONS,
     ].join(' '),
     input: JSON.stringify({
-      ...entryTagSubject(entry),
-      annotationVocabulary: annotationModelContext(vocabulary, [entry]),
+      ...annotationModelSubject(entry),
+      annotationVocabulary: modelVocabulary(context),
     }),
     text: {
       format: {
@@ -291,12 +307,14 @@ function createRequest(
   };
 }
 function extractOutputText(value: unknown): string {
+  if (isRecord(value) && value.status === 'incomplete')
+    fail('response_incomplete');
   if (
     !isRecord(value) ||
     value.status !== 'completed' ||
     !Array.isArray(value.output)
   ) {
-    fail();
+    fail('response_envelope');
   }
   const texts: string[] = [];
   for (const item of value.output) {
@@ -327,8 +345,9 @@ function decodePayload(
   value: unknown,
   entry: CurrentInformationEntry,
   vocabulary: AnnotationVocabulary,
+  suppliedTerms: AnnotationVocabulary['terms'],
 ): Readonly<AiTagProposalProviderResult> {
-  if (!isClosedRecord(value, ['summary', 'annotations'])) fail();
+  if (!isClosedRecord(value, ['summary', 'annotations'])) fail('tags_fields');
   const summary = boundedText(value.summary, 240);
   try {
     return {
@@ -337,10 +356,11 @@ function decodePayload(
         value.annotations,
         entry,
         vocabulary,
+        suppliedTerms,
       ),
     };
-  } catch {
-    return fail();
+  } catch (error) {
+    return fail(validationDetail(error));
   }
 }
 function boundedText(value: unknown, maximum: number): string {
@@ -366,6 +386,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function fail(): never {
-  throw new AiTagProposalProviderError('ai_provider_invalid_response');
+function validationDetail(error: unknown): string {
+  if (error instanceof AiTagProposalProviderError)
+    return error.detail ?? 'response_format';
+  if (error instanceof z.ZodError)
+    return error.issues
+      .slice(0, 3)
+      .map((issue) => `${issue.path.join('.')}:${issue.code}`)
+      .join(';')
+      .slice(0, 160);
+  const known: Record<string, string> = {
+    'Unknown annotation evidence.': 'unknown_evidence',
+    'Unknown annotation term.': 'unknown_term',
+    'Annotation term dimension mismatch.': 'term_dimension_mismatch',
+    'Annotation term identity changed.': 'term_identity_changed',
+    'Invalid annotation evidence.': 'invalid_evidence_or_labels',
+    'Duplicate annotation term.': 'duplicate_term',
+    'Unknown annotation dimension.': 'unknown_dimension',
+    'Annotation status conflicts with content.': 'status_content_conflict',
+  };
+  return error instanceof Error
+    ? (known[error.message] ?? 'annotation_validation')
+    : 'annotation_validation';
+}
+function fail(detail = 'response_format'): never {
+  throw new AiTagProposalProviderError('ai_provider_invalid_response', detail);
 }

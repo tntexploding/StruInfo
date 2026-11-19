@@ -9,6 +9,7 @@ import {AgentCommands} from './agent_commands.js';
 import {ExecutionAuthority} from './execution_authority.js';
 import type {EvidenceSnapshotSummary} from '../modules/evidence/index.js';
 import type {ReviewSourceSubscription} from '../storage/review_preferences_store.js';
+import {ReviewPreferencesStoreError} from '../storage/review_preferences_store.js';
 import type {
   HistoryArticle,
   HistoryPageResult,
@@ -99,9 +100,12 @@ function fixture(
       return {snapshotId, outcome: 'created' as const};
     },
   );
+  const sourcesRead = vi.fn(() => Promise.resolve(sources));
+  const onProcessingError = vi.fn();
   const service = new SourceHistoryService({
     ...(checkpoint ? {checkpoint} : {}),
-    sources: () => Promise.resolve(sources),
+    sources: sourcesRead,
+    onProcessingError,
     publicReceipts: (ids) =>
       Promise.resolve(
         snapshots.flatMap((snapshot) => {
@@ -151,6 +155,8 @@ function fixture(
     service.execute('history_import', {...input, ...(await prepare(input))});
   return {
     service,
+    sourcesRead,
+    onProcessingError,
     prepare,
     importRows,
     read,
@@ -165,6 +171,51 @@ function fixture(
   };
 }
 describe('owner history backfill', () => {
+  it('retains configuration errors and the processing diagnostic instead of a generic interruption', async () => {
+    const f = fixture();
+    const sessionId = await f.open();
+    f.sourcesRead
+      .mockResolvedValueOnce([source(A), source(B)])
+      .mockResolvedValueOnce([source(A), source(B)])
+      .mockRejectedValueOnce(
+        new ReviewPreferencesStoreError('preferences_invalid'),
+      );
+    await f.service.execute('history_run', {sessionId, action: 'scan'});
+    await vi.waitFor(() => {
+      expect(f.onProcessingError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId,
+          code: 'preferences_invalid',
+        }),
+      );
+    });
+    expect(
+      await f.service.execute('history_status', {sessionId}),
+    ).toMatchObject({sessions: [{problem: 'preferences_invalid', work: null}]});
+    expect(f.read).not.toHaveBeenCalled();
+    await f.service.drain();
+  });
+  it('retains a completion wakeup received during the current poll', async () => {
+    const f = fixture();
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const run = vi
+      .spyOn(f.service as unknown as {run(): Promise<void>}, 'run')
+      .mockReturnValueOnce(blocked)
+      .mockResolvedValue(undefined);
+    f.service.poll();
+    f.service.poll();
+    f.service.poll();
+    expect(run).toHaveBeenCalledTimes(1);
+    release();
+    await vi.waitFor(() => {
+      expect(run).toHaveBeenCalledTimes(2);
+    });
+    await f.service.drain();
+    expect(run).toHaveBeenCalledTimes(2);
+  });
   it('recovers a committed directory page, finishes the remaining pages in the background, and retries only failed imports', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'struinfo-history-')),
       store = new SourceHistoryCheckpoint(dir);

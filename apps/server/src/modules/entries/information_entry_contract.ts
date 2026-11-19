@@ -255,6 +255,7 @@ export interface InformationEntrySearchItem {
     provider: string;
     model: string;
     indexVersion: string;
+    passage?: Readonly<{start: number; end: number}>;
   }>;
   readonly retrievalScore?: number;
   readonly filterReasons: readonly InformationEntryFilterReason[];
@@ -262,6 +263,7 @@ export interface InformationEntrySearchItem {
 }
 
 export interface InformationEntrySearchResult {
+  readonly retrievalFallback?: 'index_incomplete' | 'embedding_unavailable';
   readonly querySha256: string;
   readonly retrievalMode?: EntryRetrievalMode;
   readonly totalCount: number;

@@ -379,6 +379,24 @@ export function evaluateSourceSplit(
   const measured = recipe.match
     ? scoreSourceStructure(structure, recipe.match)
     : {score: implicit, checks: []};
+  // Similar link/number ratios cannot compensate for a completely different
+  // chapter structure when a rule would retain the entire document as one item.
+  if (
+    recipe.execution !== 'ai' &&
+    recipe.scope.kind === 'source' &&
+    recipe.settings.template === 'whole' &&
+    measured.checks.some(
+      (check) =>
+        (check.feature === 'sectionCount' ||
+          check.feature === 'headingLevel') &&
+        check.fit === 0,
+    )
+  ) {
+    plan.outcome = 'review';
+    plan.reason = 'recipe_structure_mismatch';
+    plan.groups = [];
+    plan.completeCoverage = false;
+  }
   return {...measured, plan, format: structure.format};
 }
 

@@ -1,3 +1,5 @@
+import {AsyncLocalStorage} from 'node:async_hooks';
+
 /** Limits independent documents and model dispatches without renewing their budgets. */
 export class AiWorkQueue {
   private active = 0;
@@ -10,7 +12,7 @@ export class AiWorkQueue {
   run<T>(operation: () => Promise<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       this.waiting.push({
-        run: async () => {
+        run: AsyncLocalStorage.bind(async () => {
           try {
             resolve(await operation());
           } catch (error) {
@@ -18,7 +20,7 @@ export class AiWorkQueue {
               error instanceof Error ? error : new Error('ai_queue_failed'),
             );
           }
-        },
+        }),
         fail: reject,
       });
       void this.pump();

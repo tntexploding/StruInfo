@@ -86,6 +86,13 @@ export async function mount() {
     const s = currentState();
     $('.schedule-field').hidden = s.mode !== 'window';
     $('.interval-field').hidden = s.mode === 'once';
+    const news = s.contentMode === 'news';
+    $('.ai-fields').hidden = news;
+    $('.source-entry-limit').hidden = news;
+    $('.news-processing-note').hidden = !news;
+    $('.source-ai-controls .switch-label > span').textContent = news
+      ? 'AI 自动审核'
+      : 'AI 自动处理';
     $$('.receiving-grid input,.receiving-grid select,.weekdays button').forEach(
       (el) => (el.disabled = !s.enabled),
     );
@@ -263,7 +270,7 @@ export async function mount() {
     if (key === 'accent') accent();
     if (key === 'name')
       $('#selection-title').textContent = el.value || '未命名来源';
-    if (['mode', 'enabled'].includes(key)) conditional();
+    if (['mode', 'enabled', 'contentMode'].includes(key)) conditional();
     if (key === 'kind') {
       const draft = currentState();
       draft.connectionDrafts ??= {};
@@ -379,6 +386,21 @@ export async function mount() {
       );
       if (invalid) {
         invalid.reportValidity();
+        return;
+      }
+      const pollParam = $('[data-connection="pollParam"]')?.value.trim();
+      const pollPath = $('[data-connection="pollPath"]')?.value.trim();
+      if (Boolean(pollParam) !== Boolean(pollPath)) {
+        notify('快讯续拉需要同时填写请求参数和游标字段');
+        return;
+      }
+      if (
+        pollParam &&
+        ['pageParam', 'pagePath', 'sinceParam', 'sincePath'].some((field) =>
+          $(`[data-connection="${field}"]`)?.value.trim(),
+        )
+      ) {
+        notify('快讯续拉和普通分页配置只能使用一种');
         return;
       }
       $$('[data-connection]').forEach(

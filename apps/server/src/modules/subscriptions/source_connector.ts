@@ -206,6 +206,9 @@ export interface SourceConnectorImportDependencies {
   readonly evidenceRead?: EvidenceReadRepositoryPort;
   readonly blobStore: BlobStore;
   readonly evidenceRepository: EvidenceRepositoryPort;
+  readonly evidenceForDocument?: (
+    document: SourceConnectorDocument,
+  ) => EvidenceRepositoryPort;
   readonly importEvidence?: typeof importMarkdownEvidence;
 }
 
@@ -378,7 +381,9 @@ export async function importSourceConnectorDocuments(
     )(
       {
         blobStore: dependencies.blobStore,
-        evidenceRepository: dependencies.evidenceRepository,
+        evidenceRepository:
+          dependencies.evidenceForDocument?.(document) ??
+          dependencies.evidenceRepository,
       },
       Object.freeze({
         workspaceId: input.workspaceId,

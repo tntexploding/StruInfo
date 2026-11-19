@@ -13,7 +13,10 @@ export type AiTagProposalProviderErrorCode =
 export class AiTagProposalProviderError extends Error {
   public readonly code: AiTagProposalProviderErrorCode;
 
-  public constructor(code: AiTagProposalProviderErrorCode) {
+  public constructor(
+    code: AiTagProposalProviderErrorCode,
+    public readonly detail?: string,
+  ) {
     super('The AI tag proposal provider operation failed.');
     this.name = 'AiTagProposalProviderError';
     this.code = code;
@@ -35,14 +38,16 @@ export interface AiTagProposalProviderPort {
     entry: Readonly<CurrentInformationEntry>,
   ): Promise<Readonly<AiTagProposalProviderResult>>;
 
-  /** One bounded request; results must match every identity and frozen revision. */
+  /** One request; each identity retains its own success or validation failure. */
   proposeTagsBatch?(
     entries: readonly Readonly<CurrentInformationEntry>[],
   ): Promise<
     readonly Readonly<{
       entryId: string;
       expectedRevision: number;
-      result: Readonly<AiTagProposalProviderResult>;
+      result?: Readonly<AiTagProposalProviderResult>;
+      errorCode?: 'ai_provider_invalid_response';
+      errorDetail?: string;
     }>[]
   >;
 }

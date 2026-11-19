@@ -1,4 +1,5 @@
 import type {CurrentInformationEntry} from './information_entry_contract.js';
+import type {RelatedInformationEntry} from './information_entry_search_index_contract.js';
 import {
   equivalentTermIds,
   type AnnotationVocabulary,
@@ -29,6 +30,9 @@ export function topicLabels(
             l.term.id,
           label: l.term.label,
           role,
+          ...('evidence' in l && entry.value.body.includes(l.evidence.quote)
+            ? {evidence: l.evidence.quote}
+            : {}),
         },
       ];
     })
@@ -46,6 +50,7 @@ export function selectTopicCandidates(
   entries: readonly CurrentInformationEntry[],
   vocabulary: AnnotationVocabulary,
   scope: TopicScope,
+  similarities: ReadonlyMap<string, number> = new Map(),
 ) {
   const visible = entries.filter((e) => !e.value.isPrivate);
   const seed = visible.find((e) => e.entryId === scope.entryId);
@@ -133,14 +138,36 @@ export function selectTopicCandidates(
     const samples = Math.max(0, ...near.map((l) => neighbors.get(l.id) ?? 0));
     const score =
       weighted + Math.min(0.8, near.length * 0.12) * (samples < 2 ? 0.25 : 1);
-    if (!common.length && !near.length) continue;
+    const similarity = similarities.get(e.entryId);
+    const vectorCandidate = similarity !== undefined && similarity >= 7200;
+    if (!common.length && !near.length && !vectorCandidate) continue;
+    const meaningful = common.filter(
+      (l) => !['domain', 'condition', 'form'].includes(l.role),
+    );
+    const labelCandidate =
+      meaningful.some((l) => ['entity', 'issue'].includes(l.role)) ||
+      new Set(meaningful.map((l) => l.id)).size >= 2 ||
+      near.filter(
+        (l) =>
+          !['domain', 'condition', 'form'].includes(l.role) &&
+          (neighbors.get(l.id) ?? 0) >= 2,
+      ).length >= 2;
+    const eligibleForAi = labelCandidate || vectorCandidate;
     candidates.push({
       entryId: e.entryId,
       revision: e.revision,
       title: e.value.titlePath,
       source: publisher(e),
-      score: Math.round(score * 1000) / 1000,
+      score: Math.round((score + (similarity ?? 0) / 10000) * 1000) / 1000,
+      ...(similarity === undefined ? {} : {semanticSimilarity: similarity}),
+      labelCandidate,
       reasons: [
+        ...(similarity === undefined
+          ? []
+          : [`正文相似度 ${(similarity / 100).toFixed(1)}%`]),
+        ...(!eligibleForAi
+          ? ['仅供本地候选：缺少共同对象、议题或多个有效标签。']
+          : []),
         ...(common.length
           ? ['共同标注：' + common.map((l) => l.label).join('、')]
           : []),
@@ -150,15 +177,22 @@ export function selectTopicCandidates(
       ],
       samples,
       uncertain: true,
+      eligibleForAi,
     });
   }
   const selected: TopicCandidate[] = [],
     sources = new Map<string, number>(),
     docs = new Set<string>(),
     bodies = new Set([seed.value.bodySha256]);
+  let vectorOnly = 0;
   for (const c of candidates.sort(
-    (a, b) => b.score - a.score || a.entryId.localeCompare(b.entryId),
+    (a, b) =>
+      Number(b.labelCandidate) - Number(a.labelCandidate) ||
+      Number(b.eligibleForAi) - Number(a.eligibleForAi) ||
+      b.score - a.score ||
+      a.entryId.localeCompare(b.entryId),
   )) {
+    if (c.eligibleForAi && !c.labelCandidate && vectorOnly >= 2) continue;
     const e = required(visible.find((v) => v.entryId === c.entryId));
     if (
       (sources.get(c.source) ?? 0) >= 2 ||
@@ -167,6 +201,7 @@ export function selectTopicCandidates(
     )
       continue;
     selected.push(c);
+    if (c.eligibleForAi && !c.labelCandidate) vectorOnly += 1;
     sources.set(c.source, (sources.get(c.source) ?? 0) + 1);
     docs.add(e.snapshotId);
     bodies.add(e.value.bodySha256);
@@ -180,9 +215,18 @@ export function prepareTopicInput(
   scope: TopicScope,
   topics: readonly TopicRecord[],
   protectedPairs: readonly string[],
+  similarities: ReadonlyMap<string, RelatedInformationEntry> = new Map(),
 ) {
-  const {seed, candidates} = selectTopicCandidates(entries, vocabulary, scope);
-  const ids = [seed.entryId, ...candidates.map((c) => c.entryId)];
+  const {seed, candidates} = selectTopicCandidates(
+    entries,
+    vocabulary,
+    scope,
+    new Map([...similarities].map(([id, match]) => [id, match.score])),
+  );
+  const ids = [
+    seed.entryId,
+    ...candidates.filter((c) => c.eligibleForAi).map((c) => c.entryId),
+  ];
   const input: TopicInput = {
     ruleVersion: TOPIC_RULE_VERSION,
     scope,
@@ -197,44 +241,63 @@ export function prepareTopicInput(
         publishedAt: e.publishedAt ?? null,
         title: e.value.titlePath,
         body: e.value.body,
+        evidenceRanges:
+          id === seed.entryId
+            ? ids.flatMap((candidateId) => {
+                const match = similarities.get(candidateId);
+                return match ? [match.sourcePassage] : [];
+              })
+            : similarities.has(id)
+              ? [required(similarities.get(id)).passage]
+              : [],
         labels: topicLabels(e, vocabulary),
       };
     }),
     topics: topics
-      .filter(
-        (t) =>
-          t.value.kind === 'topic' &&
-          t.value.members.some((m) => ids.includes(m.entryId)),
+      .flatMap((t) => {
+        if (t.value.kind !== 'topic') return [];
+        const current = (m: {entryId: string; revision: number}) =>
+          ids.includes(m.entryId) &&
+          entries.some(
+            (e) => e.entryId === m.entryId && e.revision === m.revision,
+          );
+        const members = t.value.members.filter(
+          (m) =>
+            current(m) ||
+            (m.decision === 'excluded' && ids.includes(m.entryId)),
+        );
+        if (
+          new Set(
+            members
+              .filter((m) => m.decision !== 'excluded')
+              .map((m) => m.entryId),
+          ).size < 2
+        )
+          return [];
+        return [
+          {
+            id: t.id,
+            version: t.version,
+            value: {
+              ...t.value,
+              members,
+              relations: t.value.relations.filter(
+                (r) => current(r.from) && current(r.to),
+              ),
+              summary: '',
+              summaryVersions: [],
+            },
+          },
+        ];
+      })
+      .sort(
+        (a, b) =>
+          b.value.members.length - a.value.members.length ||
+          a.id.localeCompare(b.id),
       )
-      .slice(0, 8)
-      .flatMap((t) =>
-        t.value.kind === 'topic'
-          ? [
-              {
-                id: t.id,
-                version: t.version,
-                value: {
-                  ...t.value,
-                  members: t.value.members.filter((m) =>
-                    ids.includes(m.entryId),
-                  ),
-                  relations: t.value.relations.filter(
-                    (r) =>
-                      ids.includes(r.from.entryId) &&
-                      ids.includes(r.to.entryId),
-                  ),
-                  // Prior summaries may describe members outside this bounded input.
-                  summary: '',
-                  summaryVersions: [],
-                },
-              },
-            ]
-          : [],
-      ),
+      .slice(0, 8),
     protectedPairs: [...protectedPairs].sort().slice(0, 512),
   };
-  if (Array.from(JSON.stringify(input)).length > 100000)
-    throw new Error('topic_input_too_large');
   return {input, candidates};
 }
 

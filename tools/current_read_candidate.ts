@@ -7,6 +7,7 @@ import {
   InformationEntryRetrievalService,
   type InformationEntrySearchRequest,
   type InformationEntrySearchResult,
+  prepareInformationEntrySearchProjection,
   withInformationEntryEmbedding,
 } from '../apps/server/src/modules/entries/index.js';
 import {
@@ -264,16 +265,25 @@ export async function verifyCurrentReadCandidate(
 
   // Disturb only synthetic current state; original Snapshot/Fragment bytes stay intact.
   const snapshot = await index.loadSearchIndex(workspaceId);
+  const entriesById = new Map(initial.map((entry) => [entry.entryId, entry]));
   await index.replaceSearchIndex(workspaceId, {
     ...snapshot,
-    projections: snapshot.projections.map((projection) =>
-      withInformationEntryEmbedding(
+    projections: snapshot.projections.map((projection) => {
+      const entry = entriesById.get(projection.entryId);
+      ok(entry);
+      const {chunks} = prepareInformationEntrySearchProjection(entry);
+      return withInformationEntryEmbedding(
         projection,
         'synthetic',
         'synthetic-2d',
-        [1, 0],
-      ),
-    ),
+        chunks.map(({start, end, inputSha256}) => ({
+          start,
+          end,
+          inputSha256,
+          vector: [1, 0],
+        })),
+      );
+    }),
   });
   for (const [ordinal, item] of initial.slice(0, 4).entries()) {
     deepStrictEqual(

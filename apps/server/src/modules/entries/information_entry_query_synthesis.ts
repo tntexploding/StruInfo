@@ -1,11 +1,7 @@
 import {entryTagWords} from './entry_tags.js';
-import {rankQuestionEvidence} from './information_entry_question_recall.js';
 import {searchCurrentInformationEntries} from './information_entry_search.js';
 import type {InformationEntryAssociationRepositoryPort} from './information_entry_association_repository.js';
-import type {
-  CurrentInformationEntry,
-  InformationEntrySearchResult,
-} from './information_entry_contract.js';
+import type {CurrentInformationEntry} from './information_entry_contract.js';
 import type {InformationEntryRepositoryPort} from './information_entry_repository.js';
 import type {InformationEntryRetrievalServicePort} from './information_entry_search_index_contract.js';
 import {
@@ -98,59 +94,37 @@ export class InformationEntryQuerySynthesisService implements InformationEntryQu
     void ignoredLimit;
     const boundedQuery = Object.freeze({
       ...semanticQuery,
-      ...(request.retrieveForQuestion ? {text: request.question} : {}),
+      ...(request.retrieveForQuestion
+        ? {text: request.question, textMode: 'fuzzy' as const}
+        : {}),
       includePrivate: false,
       onlyPrivate: false,
       limit: INFORMATION_ENTRY_QUERY_SYNTHESIS_MAXIMUM_EVIDENCE,
     });
-    let search: Readonly<InformationEntrySearchResult>;
-    if (
-      request.retrieveForQuestion &&
-      (!semanticQuery.retrievalMode ||
-        semanticQuery.retrievalMode === 'lexical')
-    ) {
-      const entries = await this.#dependencies.entries.loadCurrentEntries(
-        this.#dependencies.workspaceId,
-        false,
-      );
-      const eligible = searchCurrentInformationEntries(
-        entries,
-        {...boundedQuery, text: '', limit: entries.length},
-        semanticQuery.association === undefined
-          ? {projections: [], overrides: []}
-          : await this.#dependencies.associations.loadAssociationSnapshot(
-              this.#dependencies.workspaceId,
-              false,
-            ),
-      );
-      search = rankQuestionEvidence(
-        eligible,
-        request.question,
-        INFORMATION_ENTRY_QUERY_SYNTHESIS_MAXIMUM_EVIDENCE,
-      );
-    } else {
-      search =
-        this.#dependencies.retrieval === undefined
-          ? searchCurrentInformationEntries(
-              await this.#dependencies.entries.loadCurrentEntries(
+    const search = this.#dependencies.retrieval
+      ? await this.#dependencies.retrieval.search(boundedQuery)
+      : searchCurrentInformationEntries(
+          await this.#dependencies.entries.loadCurrentEntries(
+            this.#dependencies.workspaceId,
+            false,
+          ),
+          boundedQuery,
+          semanticQuery.association === undefined
+            ? undefined
+            : await this.#dependencies.associations.loadAssociationSnapshot(
                 this.#dependencies.workspaceId,
                 false,
               ),
-              boundedQuery,
-              semanticQuery.association === undefined
-                ? Object.freeze({
-                    projections: Object.freeze([]),
-                    overrides: Object.freeze([]),
-                  })
-                : await this.#dependencies.associations.loadAssociationSnapshot(
-                    this.#dependencies.workspaceId,
-                    false,
-                  ),
-            )
-          : await this.#dependencies.retrieval.search(boundedQuery);
-    }
+        );
     const evidence = prepareInformationEntryQuerySynthesisEvidence(
       search.items.map((item) => item.entry),
+      new Map(
+        search.items.flatMap((item) =>
+          item.semanticMatch?.passage
+            ? [[item.entry.entryId, item.semanticMatch.passage] as const]
+            : [],
+        ),
+      ),
     );
     return {querySha256: search.querySha256, evidence};
   }
@@ -158,6 +132,10 @@ export class InformationEntryQuerySynthesisService implements InformationEntryQu
 
 export function prepareInformationEntryQuerySynthesisEvidence(
   entries: readonly Readonly<CurrentInformationEntry>[],
+  passages: ReadonlyMap<
+    string,
+    Readonly<{start: number; end: number}>
+  > = new Map(),
 ): readonly Readonly<InformationEntryQuerySynthesisEvidence>[] {
   const selected = entries.slice(
     0,
@@ -178,6 +156,12 @@ export function prepareInformationEntryQuerySynthesisEvidence(
   return Object.freeze(
     selected.map((entry, index) => {
       const body = Array.from(entry.value.body);
+      const passage = passages.get(entry.entryId);
+      // Embedding ranges use JS string offsets; excerpt limits use Unicode code points.
+      const start = passage
+        ? Array.from(entry.value.body.slice(0, passage.start)).length
+        : 0;
+      const excerpt = body.slice(start, start + excerptLimit).join('');
       return Object.freeze({
         handle: `E${String(index + 1).padStart(2, '0')}`,
         entryId: entry.entryId,
@@ -185,7 +169,7 @@ export function prepareInformationEntryQuerySynthesisEvidence(
         snapshotId: entry.snapshotId,
         fragmentIds: Object.freeze([...entry.value.fragmentIds]),
         titlePath: entry.value.titlePath,
-        excerpt: body.slice(0, excerptLimit).join(''),
+        excerpt,
         truncated: body.length > excerptLimit,
         contentKeywords: Object.freeze(entryTagWords(entry.value)),
         ...(entry.value.typeKeyword === undefined

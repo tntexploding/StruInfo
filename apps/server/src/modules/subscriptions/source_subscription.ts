@@ -1,7 +1,12 @@
 import {createHash} from 'node:crypto';
+import {
+  jsonSourceOptionsSchema,
+  type JsonSourceOptions,
+} from './json_source_options.js';
 import type {SourceProcessingProfile} from './source_processing_profile.js';
 import {
   DEFAULT_SOURCE_RECEIVING,
+  sourceContentMatches,
   sourceSchedule,
   type Reception,
   type SourceReceiving,
@@ -82,7 +87,8 @@ export interface RssSourceSubscriptionWrite extends SourceSubscriptionWriteBase 
   readonly itemLimit: number;
 }
 
-export interface JsonApiSourceSubscriptionWrite extends SourceSubscriptionWriteBase {
+export interface JsonApiSourceSubscriptionWrite
+  extends SourceSubscriptionWriteBase, JsonSourceOptions {
   readonly kind: 'json_api';
   readonly endpointUrl: string;
   readonly recordsPath: string;
@@ -90,6 +96,10 @@ export interface JsonApiSourceSubscriptionWrite extends SourceSubscriptionWriteB
   readonly titlePath: string;
   readonly bodyPath: string;
   readonly canonicalUriPath?: string;
+  readonly canonicalUriTemplate?: string;
+  readonly requestTimeParameter?: string;
+  readonly publishedAtFormat?: 'iso' | 'unix_seconds';
+  readonly bodyFormat?: 'text' | 'html';
   readonly publishedAtPath?: string;
   readonly versionPath?: string;
   readonly recordLimit: number;
@@ -734,6 +744,22 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
           : {previousCursor: subscription.cursor.connectorCursor}),
       });
     }
+    if (read.status === 'changed') {
+      const documents = read.documents.filter((d) =>
+        sourceContentMatches(
+          connectorTitle(d.sourceUtf8),
+          d.canonicalUri,
+          subscription.receiving,
+        ),
+      );
+      read = documents.length
+        ? {...read, documents}
+        : {
+            status: 'unchanged',
+            cursor: read.cursor,
+            ...(read.hasMore ? {hasMore: true} : {}),
+          };
+    }
     if (read.status === 'unchanged') {
       await this.#recordSubscriptionState(subscription, configurationIdentity, {
         checkState: {
@@ -776,6 +802,15 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
     )(
       {
         blobStore: this.#dependencies.blobStore,
+        evidenceForDocument: (document) =>
+          this.#dependencies.evidenceForSubscription?.(
+            subscription.subscriptionId,
+            {
+              channel: 'live',
+              title: connectorTitle(document.sourceUtf8),
+              strategy: subscription.receiving ?? DEFAULT_SOURCE_RECEIVING,
+            },
+          ) ?? this.#dependencies.evidence,
         evidenceRepository:
           this.#dependencies.evidenceForSubscription?.(
             subscription.subscriptionId,
@@ -957,6 +992,17 @@ export class SourceSubscriptionService implements SourceSubscriptionServicePort 
   }
 }
 
+function connectorTitle(bytes: Uint8Array): string {
+  const text = new TextDecoder().decode(bytes);
+  return (
+    /^#\s+(.+)$/mu.exec(text)?.[1] ??
+    text.split('\n').find((line) => line.trim()) ??
+    ''
+  )
+    .trim()
+    .slice(0, 240);
+}
+
 function subscriptionImportInput(
   workspaceId: string,
   subscription: Readonly<ReviewGitSourceSubscription>,
@@ -1049,6 +1095,11 @@ function sourceConfigurationIdentity(
           subscription.titlePath,
           subscription.bodyPath,
           subscription.canonicalUriPath ?? null,
+          subscription.canonicalUriTemplate ?? null,
+          subscription.requestTimeParameter ?? null,
+          jsonSourceOptionsSchema.parse(subscription),
+          subscription.publishedAtFormat ?? null,
+          subscription.bodyFormat ?? null,
           subscription.publishedAtPath ?? null,
           subscription.versionPath ?? null,
           subscription.recordLimit,
@@ -1196,10 +1247,23 @@ function connectorConfiguration(
   }
   return Object.freeze({
     endpointUrl: subscription.endpointUrl,
+    ...jsonSourceOptionsSchema.parse(subscription),
     recordsPath: subscription.recordsPath,
     externalIdPath: subscription.externalIdPath,
     titlePath: subscription.titlePath,
     bodyPath: subscription.bodyPath,
+    ...(subscription.canonicalUriTemplate === undefined
+      ? {}
+      : {canonicalUriTemplate: subscription.canonicalUriTemplate}),
+    ...(subscription.requestTimeParameter === undefined
+      ? {}
+      : {requestTimeParameter: subscription.requestTimeParameter}),
+    ...(subscription.publishedAtFormat === undefined
+      ? {}
+      : {publishedAtFormat: subscription.publishedAtFormat}),
+    ...(subscription.bodyFormat === undefined
+      ? {}
+      : {bodyFormat: subscription.bodyFormat}),
     ...(subscription.canonicalUriPath === undefined
       ? {}
       : {canonicalUriPath: subscription.canonicalUriPath}),

@@ -24,7 +24,8 @@ import {
   type WorkspaceUiPreferences,
 } from '../../storage/workspace_ui_preferences.js';
 import {randomUUID} from 'node:crypto';
-import {lstat, readFile, rename, unlink, writeFile} from 'node:fs/promises';
+import {constants} from 'node:fs';
+import {lstat, open, rename, unlink, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {
   decodeEntrySplitRuleProfile,
@@ -105,9 +106,21 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     ) {
       throw invalid();
     }
+    // A writer can replace the path after lstat. Stat and read the same open
+    // file so a valid replacement is never compared with the previous size.
+    const file = await open(
+      path,
+      constants.O_RDONLY |
+        (process.platform === 'win32' ? 0 : constants.O_NOFOLLOW),
+    ).catch(() => {
+      throw unavailable();
+    });
     try {
-      const bytes = await readFile(path);
-      if (bytes.byteLength !== status.size) throw invalid();
+      const opened = await file.stat();
+      if (!opened.isFile() || opened.size > MAXIMUM_PREFERENCES_FILE_BYTES)
+        throw invalid();
+      const bytes = await file.readFile();
+      if (bytes.byteLength !== opened.size) throw invalid();
       const parsed = JSON.parse(
         new TextDecoder('utf-8', {fatal: true}).decode(bytes),
       ) as unknown;
@@ -115,6 +128,8 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     } catch (error) {
       if (error instanceof ReviewPreferencesStoreError) throw error;
       throw invalid();
+    } finally {
+      await file.close();
     }
   }
 
@@ -325,7 +340,9 @@ export class LocalReviewPreferencesStore implements ReviewPreferencesStore {
     );
     try {
       await writeFile(temporaryPath, bytes, {flag: 'wx', mode: 0o600});
-      await replaceFile(temporaryPath, this.#path(workspaceId));
+      // Keep the previous file if replacement fails. Unlinking it first makes
+      // concurrent readers observe an empty workspace and can lose settings.
+      await rename(temporaryPath, this.#path(workspaceId));
       return preferences;
     } catch (error) {
       await removeIfPresent(temporaryPath);
@@ -453,18 +470,6 @@ function decodePreferences(
     recipes.data,
     annotations.data,
   );
-}
-
-async function replaceFile(source: string, target: string): Promise<void> {
-  try {
-    await rename(source, target);
-  } catch (error) {
-    if (!hasErrorCode(error, 'EEXIST') && !hasErrorCode(error, 'EPERM')) {
-      throw error;
-    }
-    await removeIfPresent(target);
-    await rename(source, target);
-  }
 }
 
 async function removeIfPresent(path: string): Promise<void> {

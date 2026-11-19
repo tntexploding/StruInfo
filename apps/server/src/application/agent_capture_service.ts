@@ -1,4 +1,5 @@
 import {sourceReceivingSchema} from '../modules/subscriptions/source_receiving.js';
+import {jsonSourceOptionsSchema} from '../modules/subscriptions/json_source_options.js';
 import {z} from 'zod';
 import {deriveProcessingRunId} from '../modules/processing/processing_identity.js';
 import {
@@ -32,7 +33,7 @@ const common = {
   description: z.string().trim().max(500).optional(),
   sourceAlias: z.string().trim().min(1).max(500),
   enabled: z.boolean().default(false),
-  intervalMinutes: z.number().int().min(15).max(10080).default(60),
+  intervalMinutes: z.number().int().min(1).max(10080).default(5),
 };
 const url = z.url().max(2048);
 export const publicSubscriptionSchema = z.discriminatedUnion('kind', [
@@ -68,12 +69,20 @@ export const publicSubscriptionSchema = z.discriminatedUnion('kind', [
     .object({
       ...common,
       kind: z.literal('json_api'),
+      ...jsonSourceOptionsSchema.shape,
       endpointUrl: url,
       recordsPath: z.string().max(200),
       externalIdPath: z.string().min(1).max(200),
       titlePath: z.string().min(1).max(200),
       bodyPath: z.string().min(1).max(200),
       canonicalUriPath: z.string().max(200).optional(),
+      canonicalUriTemplate: z.string().max(2000).optional(),
+      requestTimeParameter: z
+        .string()
+        .regex(/^[A-Za-z_][A-Za-z0-9_.-]{0,79}$/u)
+        .optional(),
+      publishedAtFormat: z.enum(['iso', 'unix_seconds']).optional(),
+      bodyFormat: z.enum(['text', 'html']).optional(),
       publishedAtPath: z.string().max(200).optional(),
       versionPath: z.string().max(200).optional(),
       recordLimit: z.number().int().min(1).max(32).default(5),

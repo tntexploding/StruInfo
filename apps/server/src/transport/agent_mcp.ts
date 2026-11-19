@@ -78,6 +78,8 @@ const descriptions: Record<AgentCommandName, string> = {
   subscriptions_list:
     'List configured public subscription identities and status for choosing a processing scope.',
   documents_list: 'List public source documents and entry counts.',
+  news_list:
+    'List accepted news by title, source and date. News is separate from article entries, tags and topics.',
   document_publish:
     'Confirm the complete document for knowledge search, RAG, graph and reports after external processing. Supply every current Entry identity and revision; structure grant required. Rejected, running or stale documents cannot be published.',
   document_publication_status:
@@ -99,7 +101,7 @@ const descriptions: Record<AgentCommandName, string> = {
 export function createAgentMcpServer(
   call: (operation: AgentCommandName, input: unknown) => Promise<unknown>,
 ) {
-  const server = new McpServer({name: 'struinfo', version: '0.5.0'});
+  const server = new McpServer({name: 'struinfo', version: '0.5.1'});
   for (const [key, schema] of Object.entries(agentCommandSchemas)) {
     const name = key as AgentCommandName;
     server.registerTool(

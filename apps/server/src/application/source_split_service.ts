@@ -1200,7 +1200,9 @@ export class SourceSplitService {
     snapshotId: string,
     includePrivate = false,
   ): Promise<FrozenSourceSplit> {
-    const {sourceId} = await this.context(snapshotId, includePrivate);
+    const {sourceId, record} = await this.context(snapshotId, includePrivate);
+    if (record?.value.reception?.strategy?.contentMode === 'news')
+      throw new OperationError('rejected', 'news_article_processing_disabled');
     const preferences = await this.deps.preferences.load(this.deps.workspaceId);
     const catalog =
       preferences.sourceSplitRecipes ?? EMPTY_SOURCE_SPLIT_CATALOG;
@@ -1302,6 +1304,8 @@ export class SourceSplitService {
     }
     check?.(prepared.rows);
     const {record, snapshot} = await this.context(snapshotId, includePrivate);
+    if (record?.value.reception?.strategy?.contentMode === 'news')
+      throw new OperationError('rejected', 'news_article_processing_disabled');
     if (record && intakeTargetSnapshot(record) !== snapshotId)
       throw new OperationError('conflict', 'intake_body_not_selected');
     if (

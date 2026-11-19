@@ -132,6 +132,80 @@ describe('InformationEntry restructuring', () => {
     );
   });
 
+  it('keeps annotations when a preceding entry splits and flags changed evidence', () => {
+    const {snapshot, entries} = fixture();
+    const annotated = entries.map((entry) => ({
+      ...entry,
+      value: {
+        ...entry.value,
+        annotations: {
+          schemaVersion: 1 as const,
+          vocabularyRevision: 1,
+          dimensions: [],
+          inputRevision: entry.revision,
+          inputBodySha256: entry.value.bodySha256,
+          origin: 'manual' as const,
+          originVersion: 'manual-annotations.v1',
+          status: 'complete' as const,
+          note: 'Reviewed source.',
+          readingState: 'read' as const,
+          labels: [],
+          claims: [
+            {
+              statement: entry.value.body,
+              speaker: '',
+              stance: 'reports' as const,
+              conditions: '',
+              time: '',
+              evidence: {
+                start: 0,
+                end: entry.value.body.length,
+                quote: entry.value.body,
+              },
+            },
+          ],
+        },
+      },
+    }));
+    const groups = [
+      {
+        titlePath: 'Alpha one',
+        fragments: [
+          {fragmentId: FIRST_FRAGMENT_ID, startCodePoint: 0, endCodePoint: 5},
+        ],
+      },
+      {
+        titlePath: 'Alpha two',
+        fragments: [
+          {
+            fragmentId: FIRST_FRAGMENT_ID,
+            startCodePoint: 5,
+            endCodePoint: FIRST_TEXT.length,
+          },
+        ],
+      },
+      {titlePath: 'Beta', fragments: [range(SECOND_FRAGMENT_ID, SECOND_TEXT)]},
+    ];
+    const plan = prepareInformationEntryRestructure(
+      snapshot,
+      annotated,
+      groups,
+      [],
+    );
+    expect(plan?.annotationReviewCount).toBe(2);
+    expect(plan?.successors.slice(0, 2).map((s) => s.annotationStatus)).toEqual(
+      ['requires_review', 'requires_review'],
+    );
+    expect(
+      plan?.resultingEntries.slice(0, 2).every((e) => !e.value.annotations),
+    ).toBe(true);
+    expect(plan?.resultingEntries[2]?.value.documentOrder).toBe(2);
+    expect(plan?.resultingEntries[2]?.value.annotations).toEqual(
+      annotated[1]?.value.annotations,
+    );
+    expect(plan?.successors[2]?.annotationStatus).toBe('preserved');
+  });
+
   it('treats full deterministic Fragment coverage as the same saved structure', () => {
     const {snapshot, entries} = fixture();
     const deterministicEntries = entries.map((entry) => {

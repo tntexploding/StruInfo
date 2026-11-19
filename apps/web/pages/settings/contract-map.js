@@ -18,6 +18,17 @@ const revision = (v, name) => {
 };
 export const settingsEndpoints = [
   {
+    id: 'embedding',
+    section: 'ai',
+    location: '向量检索',
+    method: 'POST',
+    path: '/api/v1/ai-price/commands',
+    operation: 'embedding_settings_save',
+    read: 'ai_price_status',
+    fields: ['embedding'],
+    version: 'revision',
+  },
+  {
     id: 'queue',
     section: 'ai',
     location: '运行控制',
@@ -172,6 +183,11 @@ export const localFields = {
   ],
 };
 export function prepareSettingsRequest(id, d, c) {
+  if (id === 'embedding')
+    return command('ai-price', 'embedding_settings_save', {
+      revision: revision(c.ai.revision, id),
+      embedding: structuredClone(d.embedding),
+    });
   if (id === 'interface')
     return put('preferences/interface', {
       revision: revision(c.ui.revision, id),

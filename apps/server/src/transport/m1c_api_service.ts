@@ -4052,7 +4052,16 @@ function decodeSourceSubscriptionReplace(body: unknown):
     'titlePath',
   ];
   const jsonAllowedKeys = [
+    'pollingCursor',
+    'timeZoneOffset',
+    'paidContentPath',
+    'querySignature',
+    'requestAsAjax',
     ...jsonRequiredKeys,
+    'canonicalUriTemplate',
+    'requestTimeParameter',
+    'publishedAtFormat',
+    'bodyFormat',
     'canonicalUriPath',
     'incrementalCursor',
     'pageCursor',

@@ -149,6 +149,7 @@ export class DocumentQueue {
           ...(task.state.errorCode ? {errorCode: task.state.errorCode} : {}),
         });
       }
+      if (record?.value.reception?.strategy?.contentMode === 'news') continue;
       if (
         blockedSources.has(doc.canonicalUri ?? doc.sourceKey) ||
         record?.value.receipt === 'rejected' ||

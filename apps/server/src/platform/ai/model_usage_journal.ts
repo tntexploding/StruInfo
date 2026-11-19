@@ -16,15 +16,16 @@ const budgetSchema = z
     workspaceId: z.uuid(),
     batchId: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/u),
     model: z.string().min(1).max(160),
-    limitCny: z.number().positive().max(10000),
+    limitCny: z.number().nonnegative().max(10000),
     paused: z.boolean(),
     offPeakOnly: z.boolean().default(false),
     inputCnyPerMillion: z.number().positive().max(1000),
     cachedInputCnyPerMillion: z.number().nonnegative().max(1000),
-    outputCnyPerMillion: z.number().positive().max(1000),
+    outputCnyPerMillion: z.number().nonnegative().max(1000),
   })
   .strict();
-type Budget = z.infer<typeof budgetSchema>;
+export type ModelUsageBudget = z.infer<typeof budgetSchema>;
+type Budget = ModelUsageBudget;
 const usageSchema = z.object({
   input_tokens: z.number().int().nonnegative().max(10_000_000),
   output_tokens: z.number().int().nonnegative().max(1_000_000),
@@ -76,16 +77,30 @@ export class LocalModelUsageJournal implements ModelUsageJournal {
     exportsRoot: string,
     private readonly workspaceId: string,
     private readonly clock: () => Date = () => new Date(),
+    private readonly embedding?: {
+      readBudget(): Promise<Budget>;
+      pause(): Promise<void>;
+    },
   ) {
     if (!z.uuid().safeParse(workspaceId).success) throw new AiBudgetWaitError();
     this.budgetPath = join(exportsRoot, workspaceId + '.ai-batch-budget.json');
-    this.journalPath = join(exportsRoot, workspaceId + '.ai-usage.jsonl');
+    this.journalPath = join(
+      exportsRoot,
+      workspaceId + (embedding ? '.embedding-usage.jsonl' : '.ai-usage.jsonl'),
+    );
+  }
+  private async readBudget() {
+    if (this.embedding)
+      return budgetSchema.parse(await this.embedding.readBudget());
+    const source = await safeRead(this.budgetPath, 16_384);
+    return source === undefined
+      ? undefined
+      : budgetSchema.parse(JSON.parse(source));
   }
   public budgetStatus() {
     return this.lock(async () => {
-      const source = await safeRead(this.budgetPath, 16_384);
-      if (source === undefined) return null;
-      const budget = budgetSchema.parse(JSON.parse(source));
+      const budget = await this.readBudget();
+      if (budget === undefined) return null;
       if (budget.workspaceId !== this.workspaceId)
         throw new AiBudgetWaitError();
       const rows = (await this.records()).filter(
@@ -97,21 +112,22 @@ export class LocalModelUsageJournal implements ModelUsageJournal {
         paused: budget.paused || this.failedPauseBatch === budget.batchId,
         model: budget.model,
         limitCny: budget.limitCny,
+        spentCny: chargedNanoCny / 1e9,
         remainingCny: Math.max(0, budget.limitCny - chargedNanoCny / 1e9),
       };
     });
   }
   public reserve(request: string): Promise<ModelUsageTicket | undefined> {
     return this.lock(async () => {
-      const source = await safeRead(this.budgetPath, 16_384);
-      if (source === undefined) {
+      const budget = await this.readBudget();
+      if (budget === undefined) {
         if (modelUsageScope.getStore()) throw new AiBudgetWaitError();
         return undefined;
       }
-      const budget = budgetSchema.parse(JSON.parse(source));
       if (
         budget.workspaceId !== this.workspaceId ||
-        (modelUsageScope.getStore() &&
+        (!this.embedding &&
+          modelUsageScope.getStore() &&
           modelUsageScope.getStore()?.batchId !== budget.batchId) ||
         budget.paused ||
         this.failedPauseBatch === budget.batchId
@@ -126,20 +142,27 @@ export class LocalModelUsageJournal implements ModelUsageJournal {
         ).blocked
       )
         throw new AiPriceWindowClosedError();
-      const input = z
-        .object({
-          model: z.literal(budget.model),
-          input: z.string(),
-          max_output_tokens: z.number().int().min(1).max(131_072),
-          text: z.object({format: z.object({name: z.string().max(100)})}),
-        })
-        .parse(JSON.parse(request));
+      const input = this.embedding
+        ? z
+            .object({
+              model: z.literal(budget.model),
+              input: z.array(z.string()).min(1).max(20),
+            })
+            .parse(JSON.parse(request))
+        : z
+            .object({
+              model: z.literal(budget.model),
+              input: z.string(),
+              max_output_tokens: z.number().int().min(1).max(131_072),
+              text: z.object({format: z.object({name: z.string().max(100)})}),
+            })
+            .parse(JSON.parse(request));
       // UTF-8 bytes conservatively bound text tokens; reserve all permitted output.
       // Additional framing is reserved separately. Unknown responses keep this charge.
       const reservedNanoCny = charge(
         budget,
         Buffer.byteLength(request) + 2048,
-        input.max_output_tokens,
+        'max_output_tokens' in input ? input.max_output_tokens : 0,
         0,
       );
       const records = await this.records();
@@ -154,15 +177,16 @@ export class LocalModelUsageJournal implements ModelUsageJournal {
         at: new Date().toISOString(),
         batchId: budget.batchId,
         model: budget.model,
-        stage: input.text.format.name,
+        stage: 'text' in input ? input.text.format.name : 'embedding',
         reservedNanoCny,
       };
       await this.append(record);
-      await modelUsageScope.getStore()?.record?.({
-        id: record.id,
-        batchId: record.batchId,
-        reservedNanoCny: record.reservedNanoCny,
-      });
+      if (!this.embedding)
+        await modelUsageScope.getStore()?.record?.({
+          id: record.id,
+          batchId: record.batchId,
+          reservedNanoCny: record.reservedNanoCny,
+        });
       return {record, budget};
     });
   }
@@ -173,10 +197,32 @@ export class LocalModelUsageJournal implements ModelUsageJournal {
       if (!existing) throw new AiBudgetWaitError();
       if (existing.settled) return;
       let usage: z.infer<typeof usageSchema> | undefined;
-      if (body && body.byteLength <= 1_048_576) {
+      if (body && body.byteLength <= (this.embedding ? 8_388_608 : 1_048_576)) {
         try {
           const envelope: unknown = JSON.parse(new TextDecoder().decode(body));
-          const parsed = z.object({usage: usageSchema}).safeParse(envelope);
+          const embeddingUsage = this.embedding
+            ? z
+                .object({
+                  usage: z.object({
+                    prompt_tokens: z
+                      .number()
+                      .int()
+                      .nonnegative()
+                      .max(10_000_000),
+                  }),
+                })
+                .safeParse(envelope)
+            : undefined;
+          const parsed = z.object({usage: usageSchema}).safeParse(
+            embeddingUsage?.success
+              ? {
+                  usage: {
+                    input_tokens: embeddingUsage.data.usage.prompt_tokens,
+                    output_tokens: 0,
+                  },
+                }
+              : envelope,
+          );
           if (
             parsed.success &&
             (parsed.data.usage.input_tokens_details?.cached_tokens ?? 0) <=
@@ -204,13 +250,14 @@ export class LocalModelUsageJournal implements ModelUsageJournal {
           : ticket.record.reservedNanoCny,
       };
       await this.append(settlement);
-      await modelUsageScope.getStore()?.record?.({
-        id: ticket.record.id,
-        batchId: ticket.record.batchId,
-        reservedNanoCny: ticket.record.reservedNanoCny,
-        chargedNanoCny: settlement.chargedNanoCny,
-        usageKnown: settlement.usageKnown,
-      });
+      if (!this.embedding)
+        await modelUsageScope.getStore()?.record?.({
+          id: ticket.record.id,
+          batchId: ticket.record.batchId,
+          reservedNanoCny: ticket.record.reservedNanoCny,
+          chargedNanoCny: settlement.chargedNanoCny,
+          usageKnown: settlement.usageKnown,
+        });
       // Count completed responses in completion order, including across restart.
       // A full HTTP 200 resets transport failures even if its model JSON is bad.
       const previous = records
@@ -227,6 +274,12 @@ export class LocalModelUsageJournal implements ModelUsageJournal {
       // Pause the batch durably; later in-flight success cannot reopen it.
       // An older batch's response must not pause a replacement budget.
       if (immediateStop || repeatedFailure) {
+        if (this.embedding) {
+          this.failedPauseBatch = ticket.record.batchId;
+          await this.embedding.pause();
+          this.failedPauseBatch = undefined;
+          return;
+        }
         const source = await safeRead(this.budgetPath, 16_384);
         if (source === undefined) return;
         const current = budgetSchema.parse(JSON.parse(source));

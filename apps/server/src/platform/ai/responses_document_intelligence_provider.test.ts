@@ -34,6 +34,43 @@ const response = (value: unknown) =>
 describe.each(['openai-responses-v1', 'deepseek-responses-v1'] as const)(
   '%s shared processing instructions',
   (providerKey) => {
+    it('reviews concise news as complete events without long-form or tagging requirements', async () => {
+      const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+        response(
+          observed({
+            completeness: 'complete',
+            contentKind: 'article',
+            decision: 'admit',
+            reason: '说明了产品发布的主体和事件。',
+          }),
+        ),
+      );
+      const provider = new ResponsesDocumentIntelligenceProvider(
+        {...config, providerKey},
+        fetcher,
+      );
+      const result = await provider.reviewIntake({
+        text: 'Synthetic company released its new chip today.',
+        preparation: 'received',
+        contentMode: 'news',
+        policy: intakePolicySchema.parse({}),
+      });
+      expect(result.decision).toBe('admit');
+      const serialized = fetcher.mock.calls[0]?.[1]?.body;
+      if (typeof serialized !== 'string')
+        throw new Error('Expected serialized request');
+      const body = JSON.parse(serialized) as {
+        instructions: string;
+        input: string;
+      };
+      expect(body.instructions).toContain(
+        'Review a news brief for receipt only',
+      );
+      expect(body.instructions).not.toContain(
+        documentProcessingInstructions('intake'),
+      );
+      expect(body.input).toContain('Synthetic company released');
+    });
     it('uses the same intake and recall rules for single and batched inputs without mixing evidence into instructions', async () => {
       const concept = {
         term: '合成星藤缓冲',
@@ -390,7 +427,7 @@ it.each([
       excludedTopics: input.policy.excludedTopics,
     });
     expect(JSON.parse(request.input)).not.toHaveProperty('policy');
-    expect(request.text.format.name).toBe('document_intake_v12');
+    expect(request.text.format.name).toBe('document_intake_v13');
     expect(request.instructions).toContain('news roundup');
     expect(request.instructions).toContain('feed teaser');
   },

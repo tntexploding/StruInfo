@@ -5,6 +5,8 @@ import {
   type DocumentIntakeRepository,
   type IntakeRecord,
   type IntakeRecordValue,
+  type NewsQuery,
+  type NewsItem,
 } from '../../../application/document_intake_contract.js';
 import type {PostgresPoolBoundary} from './postgres_pool.js';
 import {OperationError} from '../../../application/operation_error.js';
@@ -20,6 +22,59 @@ export class PostgresDocumentIntakeRepository implements DocumentIntakeRepositor
       [this.workspaceId, snapshotId],
     );
     return result.rows[0] ? decode(result.rows[0]) : undefined;
+  }
+  public async listNews(query: NewsQuery) {
+    const result = await this.pool.query(
+      `SELECT s.snapshot_id, r.source_key, r.canonical_uri,
+      CASE WHEN d.state_text::jsonb->>'bodySource' IS DISTINCT FROM 'received' THEN d.prepared_snapshot_id END AS body_snapshot_id,
+      COALESCE(s.published_at,s.captured_at) AS at,
+      d.state_text::jsonb #>> '{reception,title}' AS title,
+      d.state_text::jsonb #>> '{captureOrigin,subscriptionId}' AS source_id
+      FROM struinfo.processing_document_intake d
+      JOIN struinfo.snapshot s USING(workspace_id,snapshot_id)
+      JOIN struinfo.resource r USING(workspace_id,resource_id)
+      WHERE d.workspace_id=$1 AND ($9::boolean OR NOT r.is_private) AND (NOT $10::boolean OR r.is_private)
+        AND d.state_text::jsonb #>> '{reception,strategy,contentMode}'='news'
+        AND d.state_text::jsonb->>'receipt'='accepted' AND d.state_text::jsonb->>'decision'='admitted'
+        AND ($2='' OR strpos(lower(COALESCE(d.state_text::jsonb #>> '{reception,title}',r.source_key)),lower($2))>0)
+        AND ($3::text IS NULL OR d.state_text::jsonb #>> '{captureOrigin,subscriptionId}'=$3)
+        AND ($4::date IS NULL OR COALESCE(s.published_at,s.captured_at)>=$4::date::timestamp AT TIME ZONE 'UTC')
+        AND ($5::date IS NULL OR COALESCE(s.published_at,s.captured_at)<($5::date+1)::timestamp AT TIME ZONE 'UTC')
+        AND ($6::timestamptz IS NULL OR (COALESCE(s.published_at,s.captured_at),s.snapshot_id)<($6::timestamptz,$7::uuid))
+      ORDER BY at DESC,s.snapshot_id DESC LIMIT $8`,
+      [
+        this.workspaceId,
+        query.text,
+        query.sourceId ?? null,
+        query.from ?? null,
+        query.to ?? null,
+        query.after?.at ?? null,
+        query.after?.snapshotId ?? null,
+        query.limit + 1,
+        query.includePrivate,
+        query.onlyPrivate,
+      ],
+    );
+    const items: NewsItem[] = result.rows.slice(0, query.limit).map((r) => ({
+      snapshotId: String(r.snapshot_id),
+      title: String(r.title ?? r.source_key),
+      ...(typeof r.body_snapshot_id === 'string'
+        ? {bodySnapshotId: r.body_snapshot_id}
+        : {}),
+      source: String(r.source_key).replace(/#(?:sha256:)?[a-f0-9]+$/u, ''),
+      ...(typeof r.source_id === 'string' ? {sourceId: r.source_id} : {}),
+      ...(typeof r.canonical_uri === 'string'
+        ? {canonicalUri: r.canonical_uri}
+        : {}),
+      publishedAt: r.at instanceof Date ? r.at.toISOString() : String(r.at),
+    }));
+    const last = items.at(-1);
+    return {
+      items,
+      ...(result.rows.length > query.limit && last
+        ? {nextCursor: {at: last.publishedAt, snapshotId: last.snapshotId}}
+        : {}),
+    };
   }
   public async list() {
     const result = await this.pool.query(

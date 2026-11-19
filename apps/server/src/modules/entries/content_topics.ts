@@ -2,7 +2,8 @@ import {z} from 'zod';
 import {createHash} from 'node:crypto';
 import type {CurrentInformationEntry} from './information_entry_contract.js';
 
-export const TOPIC_RULE_VERSION = 'topics.v1';
+export const TOPIC_RULE_VERSION = 'topics.v5';
+export const MAXIMUM_TOPIC_INPUT_CHARACTERS = 160_000;
 const id = z.uuid();
 export const topicScopeSchema = z
   .object({
@@ -75,7 +76,6 @@ export const topicResponseSchema = z
                   reason: z.string().trim().min(1).max(500),
                 }),
               )
-              .min(2)
               .max(12),
           })
           .strict(),
@@ -89,6 +89,8 @@ export const topicResponseSchema = z
   .strict();
 export type TopicResponse = z.infer<typeof topicResponseSchema>;
 export interface TopicCandidate {
+  semanticSimilarity?: number;
+  labelCandidate?: boolean;
   entryId: string;
   revision: number;
   title: string;
@@ -97,6 +99,7 @@ export interface TopicCandidate {
   reasons: string[];
   samples: number;
   uncertain: boolean;
+  eligibleForAi?: boolean;
 }
 export const topicInputEntrySchema = z
   .object({
@@ -107,9 +110,27 @@ export const topicInputEntrySchema = z
     publishedAt: z.string().nullable(),
     title: z.string(),
     body: z.string(),
+    evidenceRanges: z
+      .array(
+        z
+          .object({
+            start: z.number().int().nonnegative(),
+            end: z.number().int().positive(),
+          })
+          .strict(),
+      )
+      .max(12)
+      .optional(),
     ownerRelationGuidance: z.string().max(4000).optional(),
     labels: z.array(
-      z.object({id: z.string(), label: z.string(), role: z.string()}).strict(),
+      z
+        .object({
+          id: z.string(),
+          label: z.string(),
+          role: z.string(),
+          evidence: z.string().optional(),
+        })
+        .strict(),
     ),
   })
   .strict();
@@ -161,6 +182,9 @@ export const topicJobSchema = z
           reasons: z.array(z.string()),
           samples: z.number(),
           uncertain: z.boolean(),
+          eligibleForAi: z.boolean().optional(),
+          labelCandidate: z.boolean().optional(),
+          semanticSimilarity: z.number().int().optional(),
         })
         .strict(),
     ),
@@ -175,7 +199,7 @@ export const topicJobSchema = z
     ]),
     attempts: z.number().int().nonnegative(),
     maxAttempts: z.number().int().min(1).max(4),
-    usage: z.array(topicUsageSchema).max(4),
+    usage: z.array(topicUsageSchema).max(8),
     errorCode: z.string().max(160).optional(),
     result: topicResponseSchema.optional(),
     appliedTopicIds: z.array(id).default([]),

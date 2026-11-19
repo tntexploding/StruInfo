@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.1 - 2026-11-19
+
+- Indexes long entries in passages and combines text, labels and vector retrieval. Optional topic generation uses cited passages and distinct members.
+- Keeps news flashes in a separate feed after review. Adds cursor-based receipt and recovery for supported sources.
+- Corrects task scheduling and preference reads, local tag references, and collection boundaries and titles.
+- Updates the pinned Hono dependencies and the runtime inventory.
+
+See [v0.5.1 release notes](docs/releases/v0.5.1.md) for upgrade steps.
+
 ## 0.5.0 - 2026-10-28
 
 - Completes the refactored receiving, source recipes, annotations, topics and research/report pipeline.

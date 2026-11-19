@@ -2,6 +2,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {z} from 'zod';
 import type {SourceConnectorDocument} from '../modules/subscriptions/source_connector.js';
 import type {ReviewSourceSubscription} from '../storage/review_preferences_store.js';
+import {ReviewPreferencesStoreError} from '../storage/review_preferences_store.js';
 import type {
   HistoryArticle,
   HistoryPage,
@@ -169,6 +170,11 @@ interface Dependencies {
   tasks?: HistoryTaskPorts;
   checkpoint?: HistoryCheckpointStore;
   onCheckpointError?: () => void;
+  onProcessingError?: (details: {
+    sessionId: string;
+    code: string;
+    error: unknown;
+  }) => void;
   documentProgress?: (refs: {id: string; taskId?: string}[]) => Promise<
     Map<
       string,
@@ -205,6 +211,7 @@ export class SourceHistoryService {
   private write: Promise<unknown> = Promise.resolve();
   private initialized: Promise<void> | undefined;
   private running: Promise<void> | undefined;
+  private wakeRequested = false;
   private stopping = false;
   public constructor(private readonly deps: Dependencies) {}
   private ready() {
@@ -1133,9 +1140,15 @@ export class SourceHistoryService {
     };
   }
   public poll() {
-    if (this.stopping || this.running) return;
+    if (this.stopping) return;
+    if (this.running) {
+      this.wakeRequested = true;
+      return;
+    }
+    this.wakeRequested = false;
     this.running = this.run().finally(() => {
       this.running = undefined;
+      if (this.wakeRequested) this.poll();
     });
     void this.running.catch(() => this.deps.onCheckpointError?.());
   }
@@ -1218,9 +1231,15 @@ export class SourceHistoryService {
           )
             throw error;
           session.problem =
-            error instanceof OperationError
+            error instanceof OperationError ||
+            error instanceof ReviewPreferencesStoreError
               ? error.code
               : 'history_batch_interrupted';
+          this.deps.onProcessingError?.({
+            sessionId: session.id,
+            code: session.problem,
+            error,
+          });
           if (session.plan?.processing?.state === 'running')
             session.plan.processing.state = 'paused';
         }

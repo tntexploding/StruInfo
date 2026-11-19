@@ -1,9 +1,10 @@
 import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {readFile} from 'node:fs/promises';
+import * as filesystem from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {
   DEFAULT_ENTRY_SAVED_QUERIES,
@@ -18,13 +19,56 @@ const roots: string[] = [];
 const WORKSPACE_A = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE_B = '22222222-2222-4222-8222-222222222222';
 
+vi.mock('node:fs/promises', async (original) => ({
+  ...(await original<typeof filesystem>()),
+}));
+
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0).reverse()) {
     rmSync(root, {recursive: true, force: true});
   }
 });
 
 describe('LocalReviewPreferencesStore', () => {
+  it('reads a replacement consistently when its size changes after path inspection', async () => {
+    const {store, root} = createStore();
+    await store.save(WORKSPACE_A, ['before']);
+    const inspect = filesystem.lstat;
+    vi.spyOn(filesystem, 'lstat').mockImplementationOnce(async (path) => {
+      const status = await inspect(path);
+      const replacement = new LocalReviewPreferencesStore(root);
+      await replacement.save(WORKSPACE_A, ['a longer replacement value']);
+      return status;
+    });
+    expect((await store.load(WORKSPACE_A)).quickTags).toEqual([
+      'a longer replacement value',
+    ]);
+  });
+
+  it('keeps the previous configuration when atomic replacement is denied', async () => {
+    const {store} = createStore();
+    await store.save(WORKSPACE_A, ['keep']);
+    vi.spyOn(filesystem, 'rename').mockRejectedValueOnce(
+      Object.assign(new Error('synthetic locked file'), {code: 'EPERM'}),
+    );
+    await expect(store.save(WORKSPACE_A, ['new'])).rejects.toMatchObject({
+      code: 'preferences_unavailable',
+    });
+    expect((await store.load(WORKSPACE_A)).quickTags).toEqual(['keep']);
+  });
+
+  it('rejects reads during restore without waiting for its database callback', async () => {
+    const {store} = createStore();
+    const before = await store.save(WORKSPACE_A, ['before']);
+    await store.replaceForRestore(WORKSPACE_A, before, async () => {
+      await expect(store.load(WORKSPACE_A)).rejects.toMatchObject({
+        code: 'preferences_unavailable',
+      });
+    });
+    expect((await store.load(WORKSPACE_A)).quickTags).toEqual(['before']);
+  });
+
   it('serializes saved-query revisions with sibling preference writes and reopens the file', async () => {
     const {store, root} = createStore();
     const view = {

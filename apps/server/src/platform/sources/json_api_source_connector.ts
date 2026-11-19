@@ -1,6 +1,11 @@
 import {createHash} from 'node:crypto';
 import {isIP} from 'node:net';
 import {lookup} from 'node:dns/promises';
+import {plainHtml} from './history_markup.js';
+import {
+  jsonSourceOptionsSchema,
+  type JsonSourceOptions,
+} from '../../modules/subscriptions/json_source_options.js';
 
 import {
   SourceConnectorError,
@@ -34,13 +39,17 @@ export interface JsonApiCursorMapping {
 export type JsonApiAuthentication =
   Readonly<{kind: 'none'}> | Readonly<{kind: 'bearer_env'; variable: string}>;
 
-export interface JsonApiSourceConnectorConfiguration {
+export interface JsonApiSourceConnectorConfiguration extends JsonSourceOptions {
   readonly endpointUrl: string;
   readonly recordsPath: string;
   readonly externalIdPath: string;
   readonly titlePath: string;
   readonly bodyPath: string;
   readonly canonicalUriPath?: string;
+  readonly canonicalUriTemplate?: string;
+  readonly requestTimeParameter?: string;
+  readonly publishedAtFormat?: 'iso' | 'unix_seconds';
+  readonly bodyFormat?: 'text' | 'html';
   readonly publishedAtPath?: string;
   readonly versionPath?: string;
   readonly recordLimit: number;
@@ -50,9 +59,13 @@ export interface JsonApiSourceConnectorConfiguration {
 }
 
 interface JsonApiCursor {
-  readonly version: 1;
+  readonly version: 1 | 2;
   readonly itemTokens: readonly string[];
   readonly checkpoint?: string;
+  readonly pending?: {
+    readonly next: string;
+    readonly headTokens: readonly string[];
+  };
 }
 
 interface ProjectedRecord {
@@ -108,6 +121,15 @@ export class JsonApiSourceConnector implements SourceConnectorPort {
     }
     await this.#admitPublicHost(endpoint.hostname);
     const headers = this.#requestHeaders(configuration.authentication);
+    if (configuration.requestAsAjax)
+      headers.set('X-Requested-With', 'XMLHttpRequest');
+    if (configuration.pollingCursor)
+      return this.#readPolling(
+        configuration,
+        endpoint,
+        headers,
+        previousCursor,
+      );
     const projected: ProjectedRecord[] = [];
     const externalIds = new Set<string>();
     const pageCursors = new Set<string>();
@@ -118,6 +140,11 @@ export class JsonApiSourceConnector implements SourceConnectorPort {
     do {
       pagesRead += 1;
       const requestUrl = new URL(endpoint);
+      if (configuration.requestTimeParameter)
+        requestUrl.searchParams.set(
+          configuration.requestTimeParameter,
+          String(Math.floor(Date.now() / 1000)),
+        );
       if (
         configuration.incrementalCursor !== undefined &&
         previousCursor?.checkpoint !== undefined
@@ -136,7 +163,10 @@ export class JsonApiSourceConnector implements SourceConnectorPort {
           nextPageCursor,
         );
       }
-      const page = await this.#readPage(requestUrl, headers);
+      const page = await this.#readPage(
+        signRequest(requestUrl, configuration),
+        headers,
+      );
       const root = parseJson(page.bytes);
       const records = readPath(root, configuration.recordsPath);
       if (!Array.isArray(records)) {
@@ -146,6 +176,7 @@ export class JsonApiSourceConnector implements SourceConnectorPort {
         throw new SourceConnectorError('connector_too_large');
       }
       for (const record of records as readonly unknown[]) {
+        if (isPaid(record, configuration)) continue;
         const candidate = projectRecord(
           record,
           configuration,
@@ -202,6 +233,106 @@ export class JsonApiSourceConnector implements SourceConnectorPort {
           cursor,
           documents: Object.freeze(changed.map((record) => record.document)),
         });
+  }
+
+  async #readPolling(
+    configuration: Readonly<JsonApiSourceConnectorConfiguration>,
+    endpoint: URL,
+    headers: Headers,
+    previous: JsonApiCursor | undefined,
+  ): Promise<Readonly<SourceConnectorReadResult>> {
+    const mapping = configuration.pollingCursor;
+    if (!mapping) throw new SourceConnectorError('connector_result_invalid');
+    const initial = !previous?.itemTokens.length;
+    const stop = new Set(previous?.itemTokens ?? []);
+    const headTokens = [...(previous?.pending?.headTokens ?? [])];
+    const documents: SourceConnectorDocument[] = [];
+    const seen = new Set<string>();
+    let next = previous?.pending?.next;
+    let pending: JsonApiCursor['pending'];
+    let reached = false;
+    for (let attempt = 0; attempt < JSON_API_MAX_PAGES_PER_CHECK; attempt++) {
+      const url = new URL(endpoint);
+      if (configuration.requestTimeParameter)
+        url.searchParams.set(
+          configuration.requestTimeParameter,
+          String(Math.floor(Date.now() / 1000)),
+        );
+      if (next !== undefined)
+        url.searchParams.set(mapping.queryParameter, next);
+      const page = await this.#readPage(
+        signRequest(url, configuration),
+        headers,
+      );
+      const root = parseJson(page.bytes);
+      const records = readPath(root, configuration.recordsPath);
+      if (!Array.isArray(records) || records.length > configuration.recordLimit)
+        throw new SourceConnectorError('connector_too_large');
+      if (records.length === 0) {
+        if (!initial)
+          throw new SourceConnectorError('connector_result_invalid');
+        break;
+      }
+      const projected = records
+        .filter((record: unknown) => !isPaid(record, configuration))
+        .map((record: unknown) =>
+          projectRecord(
+            record,
+            configuration,
+            endpoint,
+            page.bytes,
+            page.mediaType,
+          ),
+        );
+      if (attempt === 0 && !previous?.pending)
+        headTokens.push(
+          ...projected.slice(0, 16).map((record) => record.token),
+        );
+      // Retain the page boundary; never save an offset into a changing page.
+      if (documents.length + projected.length > configuration.recordLimit) {
+        if (next === undefined)
+          throw new SourceConnectorError('connector_too_large');
+        pending = {next, headTokens};
+        break;
+      }
+      for (const record of projected) {
+        if (!initial && stop.has(record.token)) {
+          reached = true;
+          break;
+        }
+        if (seen.has(record.document.externalId)) continue;
+        seen.add(record.document.externalId);
+        documents.push(record.document);
+      }
+      if (initial || reached) break;
+      const following = optionalCursorValue(
+        mapping.responsePath
+          ? readPath(root, mapping.responsePath)
+          : readPath(records.at(-1), mapping.recordPath ?? ''),
+      );
+      if (following === undefined || following === next)
+        throw new SourceConnectorError('connector_result_invalid');
+      next = following;
+      if (
+        documents.length >= configuration.recordLimit ||
+        attempt === JSON_API_MAX_PAGES_PER_CHECK - 1
+      )
+        pending = {next, headTokens};
+      if (pending) break;
+    }
+    const cursor = encodeCursor({
+      version: 2,
+      itemTokens: pending
+        ? (previous?.itemTokens ?? [])
+        : headTokens.length
+          ? headTokens
+          : (previous?.itemTokens ?? []),
+      ...(pending ? {pending} : {}),
+    });
+    const continuation = pending ? {hasMore: true} : {};
+    return documents.length
+      ? {status: 'changed', cursor, documents, ...continuation}
+      : {status: 'unchanged', cursor, ...continuation};
   }
 
   #requestHeaders(authentication: Readonly<JsonApiAuthentication>): Headers {
@@ -310,12 +441,18 @@ export function decodePublicJsonApiUrl(value: unknown): URL | undefined {
 function decodeConfiguration(
   value: unknown,
 ): Readonly<JsonApiSourceConnectorConfiguration> | undefined {
+  const options = jsonSourceOptionsSchema.safeParse(value);
   if (
+    !options.success ||
     !isRecord(value) ||
     !exactOptionalKeys(value, [
       'authentication',
       'bodyPath',
       'canonicalUriPath',
+      'canonicalUriTemplate',
+      'requestTimeParameter',
+      'publishedAtFormat',
+      'bodyFormat',
       'endpointUrl',
       'externalIdPath',
       'incrementalCursor',
@@ -325,6 +462,7 @@ function decodeConfiguration(
       'recordsPath',
       'titlePath',
       'versionPath',
+      ...Object.keys(jsonSourceOptionsSchema.shape),
     ]) ||
     typeof value.endpointUrl !== 'string' ||
     typeof value.recordsPath !== 'string' ||
@@ -336,6 +474,22 @@ function decodeConfiguration(
     typeof value.bodyPath !== 'string' ||
     !validPath(value.bodyPath, false) ||
     !optionalPath(value.canonicalUriPath) ||
+    (value.canonicalUriTemplate !== undefined &&
+      (typeof value.canonicalUriTemplate !== 'string' ||
+        value.canonicalUriTemplate.length > 2000 ||
+        !value.canonicalUriTemplate.includes('{id}') ||
+        !decodePublicJsonApiUrl(
+          value.canonicalUriTemplate.replaceAll('{id}', 'example'),
+        ))) ||
+    (value.requestTimeParameter !== undefined &&
+      (typeof value.requestTimeParameter !== 'string' ||
+        !QUERY_PARAMETER.test(value.requestTimeParameter))) ||
+    (value.publishedAtFormat !== undefined &&
+      value.publishedAtFormat !== 'iso' &&
+      value.publishedAtFormat !== 'unix_seconds') ||
+    (value.bodyFormat !== undefined &&
+      value.bodyFormat !== 'text' &&
+      value.bodyFormat !== 'html') ||
     !optionalPath(value.publishedAtPath) ||
     !optionalPath(value.versionPath) ||
     !Number.isSafeInteger(value.recordLimit) ||
@@ -359,20 +513,50 @@ function decodeConfiguration(
   ) {
     return undefined;
   }
+  if (
+    options.data.pollingCursor &&
+    (pageCursor ||
+      incrementalCursor ||
+      endpoint.searchParams.has(options.data.pollingCursor.queryParameter))
+  )
+    return undefined;
+  if (
+    options.data.querySignature &&
+    (endpoint.searchParams.has(options.data.querySignature.parameter) ||
+      options.data.querySignature.parameter ===
+        options.data.pollingCursor?.queryParameter ||
+      options.data.querySignature.parameter === value.requestTimeParameter)
+  )
+    return undefined;
   for (const mapping of [pageCursor, incrementalCursor]) {
     if (
       mapping !== undefined &&
-      endpoint.searchParams.has(mapping.queryParameter)
+      (endpoint.searchParams.has(mapping.queryParameter) ||
+        mapping.queryParameter === value.requestTimeParameter)
     ) {
       return undefined;
     }
   }
   return Object.freeze({
+    ...options.data,
     endpointUrl: endpoint.toString(),
     recordsPath: value.recordsPath,
     externalIdPath: value.externalIdPath,
     titlePath: value.titlePath,
     bodyPath: value.bodyPath,
+    ...(typeof value.canonicalUriTemplate === 'string'
+      ? {canonicalUriTemplate: value.canonicalUriTemplate}
+      : {}),
+    ...(typeof value.requestTimeParameter === 'string'
+      ? {requestTimeParameter: value.requestTimeParameter}
+      : {}),
+    ...(value.publishedAtFormat === 'iso' ||
+    value.publishedAtFormat === 'unix_seconds'
+      ? {publishedAtFormat: value.publishedAtFormat}
+      : {}),
+    ...(value.bodyFormat === 'text' || value.bodyFormat === 'html'
+      ? {bodyFormat: value.bodyFormat}
+      : {}),
     ...(typeof value.canonicalUriPath === 'string'
       ? {canonicalUriPath: value.canonicalUriPath}
       : {}),
@@ -444,21 +628,35 @@ function projectRecord(
     throw new SourceConnectorError('connector_result_invalid');
   }
   const externalId = boundedIdentity(externalIdValue);
-  const title = normalizedTitle(titleValue);
-  const body = normalizedBody(bodyValue);
-  if (externalId === undefined || title === undefined || body === undefined) {
+  const body = normalizedBody(
+    configuration.bodyFormat === 'html' ? plainHtml(bodyValue) : bodyValue,
+  );
+  const title = normalizedTitle(
+    titleValue.trim() ||
+      Array.from(body ?? '')
+        .slice(0, 100)
+        .join(''),
+  );
+  if (externalId === undefined || title === undefined || !body) {
     throw new SourceConnectorError('connector_result_invalid');
   }
   const canonicalUri = recordUri(
     configuration.canonicalUriPath === undefined
-      ? undefined
+      ? configuration.canonicalUriTemplate?.replaceAll(
+          '{id}',
+          encodeURIComponent(externalId),
+        )
       : readPath(value, configuration.canonicalUriPath),
     endpoint,
   );
   const publication =
     configuration.publishedAtPath === undefined
       ? undefined
-      : publicationFrom(readPath(value, configuration.publishedAtPath));
+      : publicationFrom(
+          readPath(value, configuration.publishedAtPath),
+          configuration.publishedAtFormat,
+          configuration.timeZoneOffset,
+        );
   if (
     configuration.publishedAtPath !== undefined &&
     readPath(value, configuration.publishedAtPath) !== undefined &&
@@ -543,11 +741,23 @@ function optionalCursorValue(value: unknown): string | undefined {
   return text;
 }
 
-function publicationFrom(value: unknown) {
+function publicationFrom(
+  value: unknown,
+  format: 'iso' | 'unix_seconds' = 'iso',
+  timeZoneOffset = 'Z',
+) {
   if (value === undefined || value === null || value === '') return undefined;
   const text = scalarText(value);
   if (text === undefined) return undefined;
-  const instant = new Date(text);
+  const instant = new Date(
+    format === 'unix_seconds'
+      ? Number(text) * 1000
+      : /(?:Z|[+-]\d\d:\d\d)$/u.test(text)
+        ? text
+        : (text.includes('T') || text.includes(' ')
+            ? text.replace(' ', 'T')
+            : text + 'T00:00:00') + timeZoneOffset,
+  );
   return Number.isNaN(instant.valueOf())
     ? undefined
     : Object.freeze({
@@ -647,8 +857,13 @@ function decodeCursor(value: string | undefined): JsonApiCursor | undefined {
   }
   if (
     !isRecord(parsed) ||
-    !exactOptionalKeys(parsed, ['checkpoint', 'itemTokens', 'version']) ||
-    parsed.version !== 1 ||
+    !exactOptionalKeys(parsed, [
+      'checkpoint',
+      'itemTokens',
+      'version',
+      'pending',
+    ]) ||
+    (parsed.version !== 1 && parsed.version !== 2) ||
     !Array.isArray(parsed.itemTokens) ||
     parsed.itemTokens.length > JSON_API_MAX_RECORDS_PER_CHECK ||
     parsed.itemTokens.some(
@@ -662,13 +877,58 @@ function decodeCursor(value: string | undefined): JsonApiCursor | undefined {
   ) {
     return undefined;
   }
+  const pending = parsed.pending;
+  if (
+    pending !== undefined &&
+    (!isRecord(pending) ||
+      !exactKeys(pending, ['next', 'headTokens']) ||
+      typeof pending.next !== 'string' ||
+      !pending.next.length ||
+      pending.next.length > MAX_CURSOR_VALUE_CODE_POINTS ||
+      containsControlCodePoint(pending.next) ||
+      !Array.isArray(pending.headTokens) ||
+      pending.headTokens.length > 16 ||
+      pending.headTokens.some((t) => typeof t !== 'string' || !TOKEN.test(t)))
+  )
+    return undefined;
   return Object.freeze({
-    version: 1 as const,
+    version: parsed.version,
     itemTokens: Object.freeze([...(parsed.itemTokens as string[])]),
     ...(typeof parsed.checkpoint === 'string'
       ? {checkpoint: parsed.checkpoint}
       : {}),
+    ...(pending === undefined
+      ? {}
+      : {pending: pending as NonNullable<JsonApiCursor['pending']>}),
   });
+}
+
+function isPaid(
+  record: unknown,
+  configuration: JsonApiSourceConnectorConfiguration,
+): boolean {
+  const value = configuration.paidContentPath
+    ? readPath(record, configuration.paidContentPath)
+    : undefined;
+  return value === true || value === 1 || value === '1';
+}
+
+function signRequest(
+  url: URL,
+  configuration: JsonApiSourceConnectorConfiguration,
+): URL {
+  if (configuration.querySignature) {
+    const query = [...url.searchParams]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, v]) => `${k}=${v}`)
+      .join('&');
+    const sha = createHash('sha1').update(query).digest('hex');
+    url.searchParams.set(
+      configuration.querySignature.parameter,
+      createHash('md5').update(sha).digest('hex'),
+    );
+  }
+  return url;
 }
 
 function parseJson(bytes: Uint8Array): unknown {

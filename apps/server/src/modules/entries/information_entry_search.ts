@@ -1,3 +1,4 @@
+import {lexicalQuestionScores} from './information_entry_question_recall.js';
 import {entryTagWords} from './entry_tags.js';
 import {
   EMPTY_ANNOTATION_VOCABULARY,
@@ -59,11 +60,13 @@ export function searchCurrentInformationEntries(
       provider: string;
       model: string;
       indexVersion: string;
+      passage?: Readonly<{start: number; end: number}>;
     }>
   > = new Map(),
   translations: ReadonlyMap<string, Readonly<EntryTranslation>> = new Map(),
   aliases: readonly Readonly<ConfirmedEntryAlias>[] = [],
   vocabulary: AnnotationVocabulary = EMPTY_ANNOTATION_VOCABULARY,
+  forceLexical = false,
 ): Readonly<InformationEntrySearchResult> {
   const querySha256 = informationEntryQuerySha256(request, aliases, vocabulary);
   const expanded = prepareEntrySearchAliases(request, aliases);
@@ -88,9 +91,15 @@ export function searchCurrentInformationEntries(
           request.association,
         );
   const query = informationEntrySearchKey(request.text ?? '');
-  const retrievalMode = request.retrievalMode ?? 'lexical';
+  const retrievalMode = forceLexical
+    ? 'lexical'
+    : (request.retrievalMode ?? 'lexical');
   const textMode = request.textMode ?? 'substring';
   const textFields = canonicalTextSearchFields(request.textFields);
+  const termScores =
+    query && textMode === 'fuzzy'
+      ? lexicalQuestionScores(visibleEntries, query, textFields, vocabulary)
+      : new Map<string, number>();
   const matches = visibleEntries.flatMap((entry) => {
     if (
       !matchesAnnotationFilter(
@@ -111,7 +120,7 @@ export function searchCurrentInformationEntries(
     const association = associationMatches?.get(entry.entryId);
     if (associationMatches !== undefined && association === undefined)
       return [];
-    const textMatch = matchInformationEntryText(
+    let textMatch = matchInformationEntryText(
       entry,
       query,
       textMode,
@@ -120,6 +129,9 @@ export function searchCurrentInformationEntries(
       expanded.text,
       vocabulary,
     );
+    const termScore = termScores.get(entry.entryId);
+    if (termScore && (!textMatch || termScore > textMatch.score))
+      textMatch = {score: termScore, reasons: textMatch?.reasons ?? []};
     const aliasMatches = entry.value.contentKeywords
       .flatMap((keyword) => {
         const matched = keyword.normalizedValue;
@@ -764,7 +776,5 @@ function effectiveRetrievalScore(
 ): number {
   if (mode === 'lexical') return lexicalScore ?? 0;
   if (mode === 'semantic') return semanticScore ?? 0;
-  if (lexicalScore === undefined) return semanticScore ?? 0;
-  if (semanticScore === undefined) return lexicalScore;
-  return Math.round(lexicalScore * 0.45 + semanticScore * 0.55);
+  return Math.round((lexicalScore ?? 0) * 0.45 + (semanticScore ?? 0) * 0.55);
 }

@@ -2,6 +2,7 @@ import type {InformationEntryRepositoryPort} from './information_entry_repositor
 import {
   prepareInformationEntrySearchProjection,
   withInformationEntryEmbedding,
+  isUsableInformationEntryEmbedding,
 } from './information_entry_search_index.js';
 import {
   INFORMATION_ENTRY_EMBEDDING_BATCH_MAXIMUM,
@@ -9,6 +10,9 @@ import {
   type InformationEntrySearchIndexRefreshProgress,
   type InformationEntrySearchIndexRepositoryPort,
   type InformationEntryEmbeddingProviderPort,
+  type InformationEntrySearchProjection,
+  type PreparedInformationEntrySearchProjection,
+  type InformationEntryEmbeddingChunk,
 } from './information_entry_search_index_contract.js';
 
 interface SearchIndexRefreshDependencies {
@@ -57,6 +61,7 @@ export async function refreshInformationEntrySearchIndex(
     );
   }
   const provider = dependencies.embeddingProvider;
+  limit = Math.min(limit, provider?.maximumBatchSize ?? limit);
   const scope =
     provider === undefined
       ? {}
@@ -65,9 +70,6 @@ export async function refreshInformationEntrySearchIndex(
           embeddingModel: provider.model,
         };
   const batch = await loadBatch(dependencies.workspaceId, {limit, ...scope});
-  const previous = new Map(
-    batch.previousProjections.map((item) => [item.entryId, item]),
-  );
   const entries = await loadEntries(
     dependencies.workspaceId,
     false,
@@ -76,67 +78,12 @@ export async function refreshInformationEntrySearchIndex(
   const prepared = entries
     .filter((entry) => !entry.value.isPrivate)
     .map(prepareInformationEntrySearchProjection);
-  const reused = new Set<string>();
-  let projections = prepared.map((item) => {
-    const prior = previous.get(item.entry.entryId);
-    if (
-      prior?.projectionSha256 === item.projection.projectionSha256 &&
-      prior.embedding !== undefined &&
-      prior.embeddingProvider !== undefined &&
-      prior.embeddingModel !== undefined &&
-      (provider === undefined ||
-        (prior.embeddingProvider === provider.providerKey &&
-          prior.embeddingModel === provider.model))
-    ) {
-      try {
-        const projection = withInformationEntryEmbedding(
-          item.projection,
-          prior.embeddingProvider,
-          prior.embeddingModel,
-          prior.embedding,
-        );
-        reused.add(item.entry.entryId);
-        return projection;
-      } catch {
-        // A damaged derived vector is regenerated from the current public Entry.
-      }
-    }
-    return item.projection;
-  });
-  const needsEmbedding =
-    provider === undefined
-      ? []
-      : prepared.filter((item) => !reused.has(item.entry.entryId));
-  let providerFailed = false;
-  if (provider !== undefined && needsEmbedding.length > 0) {
-    try {
-      const vectors = await provider.embed(
-        needsEmbedding.map((item) => item.input),
-      );
-      if (vectors.length !== needsEmbedding.length)
-        throw new Error('Incomplete embedding batch.');
-      const embedded = new Map(
-        needsEmbedding.map((item, position) => {
-          const vector = vectors[position];
-          if (vector === undefined) throw new Error('Missing embedding.');
-          return [
-            item.entry.entryId,
-            withInformationEntryEmbedding(
-              item.projection,
-              provider.providerKey,
-              provider.model,
-              vector,
-            ),
-          ] as const;
-        }),
-      );
-      projections = projections.map(
-        (projection) => embedded.get(projection.entryId) ?? projection,
-      );
-    } catch {
-      providerFailed = true;
-    }
-  }
+  const {projections, reused, providerFailed, embeddingInputCount} =
+    await embedSearchProjectionBatch(
+      prepared,
+      batch.previousProjections,
+      provider,
+    );
   const committed = await applyBatch(
     dependencies.workspaceId,
     {
@@ -162,8 +109,103 @@ export async function refreshInformationEntrySearchIndex(
     reusedEmbeddingCount: committed.updatedEntryIds.filter((entryId) =>
       reused.has(entryId),
     ).length,
-    embeddingInputCount: needsEmbedding.length,
+    embeddingInputCount,
     remainingEntryCount: remaining.remainingEntryCount,
     remainingObsoleteCount: remaining.remainingObsoleteCount,
   });
+}
+
+/** One paid request per checkpoint. Long entries continue in subsequent batches. */
+export async function embedSearchProjectionBatch(
+  prepared: readonly Readonly<PreparedInformationEntrySearchProjection>[],
+  previous: readonly Readonly<InformationEntrySearchProjection>[],
+  provider?: InformationEntryEmbeddingProviderPort,
+) {
+  const prior = new Map(previous.map((p) => [p.entryId, p]));
+  const values = new Map<string, InformationEntryEmbeddingChunk[]>();
+  const pending: {
+    entryId: string;
+    chunk: PreparedInformationEntrySearchProjection['chunks'][number];
+  }[] = [];
+  const reused = new Set<string>();
+  for (const item of prepared) {
+    const old = prior.get(item.entry.entryId);
+    const compatible =
+      old &&
+      (!provider ||
+        (old.embeddingProvider === provider.providerKey &&
+          old.embeddingModel === provider.model));
+    const cache = new Map(
+      (compatible ? (old.embedding ?? []) : []).map((c) => [
+        c.inputSha256,
+        c.vector,
+      ]),
+    );
+    const chunks: InformationEntryEmbeddingChunk[] = [];
+    for (const chunk of item.chunks) {
+      const vector = cache.get(chunk.inputSha256);
+      if (vector)
+        chunks.push({
+          start: chunk.start,
+          end: chunk.end,
+          inputSha256: chunk.inputSha256,
+          vector,
+        });
+      else if (provider) pending.push({entryId: item.entry.entryId, chunk});
+    }
+    values.set(item.entry.entryId, chunks);
+    if (chunks.length === item.chunks.length) reused.add(item.entry.entryId);
+  }
+  const selected = pending.slice(
+    0,
+    provider?.maximumBatchSize ?? INFORMATION_ENTRY_EMBEDDING_BATCH_MAXIMUM,
+  );
+  let providerFailed = false;
+  if (provider && selected.length) {
+    try {
+      const vectors = await provider.embed(selected.map((p) => p.chunk.input));
+      if (vectors.length !== selected.length)
+        throw new Error('Incomplete embedding batch.');
+      if (
+        vectors.some(
+          (vector) =>
+            !isUsableInformationEntryEmbedding(vector) ||
+            vector.length !== vectors[0]?.length,
+        )
+      )
+        throw new Error('Invalid embedding batch.');
+      selected.forEach((item, i) => {
+        const vector = vectors[i];
+        if (vector)
+          values.get(item.entryId)?.push({
+            start: item.chunk.start,
+            end: item.chunk.end,
+            inputSha256: item.chunk.inputSha256,
+            vector,
+          });
+      });
+    } catch {
+      providerFailed = true;
+    }
+  }
+  const projections = prepared.map((item) => {
+    const chunks = values.get(item.entry.entryId) ?? [];
+    const old = prior.get(item.entry.entryId);
+    const providerKey = provider?.providerKey ?? old?.embeddingProvider;
+    const model = provider?.model ?? old?.embeddingModel;
+    return chunks.length && providerKey && model
+      ? withInformationEntryEmbedding(
+          item.projection,
+          providerKey,
+          model,
+          chunks.sort((a, b) => a.start - b.start),
+        )
+      : item.projection;
+  });
+  return {
+    projections,
+    reused,
+    providerFailed,
+    embeddingInputCount: selected.length,
+  };
 }

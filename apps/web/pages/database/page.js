@@ -76,17 +76,26 @@ export async function mount() {
     }),
   );
   function updateResult() {
-    $('#result-title').textContent = mode === 'ask' ? '回答与引用' : '查询结果';
-    $('#result-scope').textContent = {
-      local: '库内资料',
-      web: '网页资料',
-      mixed: '库内＋网页',
-    }[evidence];
+    $('#result-title').textContent =
+      mode === 'news' ? '快讯' : mode === 'ask' ? '回答与引用' : '查询结果';
+    $('#result-scope').textContent =
+      mode === 'news'
+        ? '按发布时间排序'
+        : {
+            local: '库内资料',
+            web: '网页资料',
+            mixed: '库内＋网页',
+          }[evidence];
 
-    $('#result-tools').hidden = evidence === 'web' || mode === 'ask';
+    $('#result-tools').hidden = evidence === 'web' || mode !== 'search';
   }
   function sync() {
-    evidence = option('evidenceMode');
+    evidence = mode === 'news' ? 'local' : option('evidenceMode');
+    const news = mode === 'news';
+    configToggle.hidden = news;
+    all('[data-article-filter]', scope).forEach((el) => (el.hidden = news));
+    all('[data-news-filter]', scope).forEach((el) => (el.hidden = !news));
+    scope.elements.namedItem('timeField').closest('label').hidden = news;
     const draftEvidence = value(options, 'evidenceMode');
     const privateScope = value(scope, 'privacy') !== 'public';
     $('#search-module').dataset.mode = mode;
@@ -97,6 +106,9 @@ export async function mount() {
     mixed.hidden = mode !== 'ask';
     mixed.disabled = mode !== 'ask';
     $('#local-options').hidden = draftEvidence === 'web';
+    const retrievalSelect = options.elements.namedItem('retrievalMode');
+    retrievalSelect.disabled = privateScope;
+    if (privateScope) retrievalSelect.value = 'lexical';
     $('#matching-details').hidden = mode === 'ask';
     $('#web-query-field').hidden = !(
       mode === 'ask' && draftEvidence !== 'local'
@@ -106,8 +118,9 @@ export async function mount() {
     $('#query-submit').textContent = mode === 'ask' ? '提问' : '搜索';
     $('#config-label').textContent = mode === 'ask' ? '提问设置' : '搜索设置';
     $('#config-title').textContent = mode === 'ask' ? '提问设置' : '搜索设置';
-    input.placeholder =
-      mode === 'ask'
+    input.placeholder = news
+      ? '搜索快讯标题'
+      : mode === 'ask'
         ? '输入你的问题'
         : evidence === 'web'
           ? '输入公开搜索词'
@@ -128,11 +141,13 @@ export async function mount() {
       ].filter((n) => value(scope, n)).length +
       Number(Boolean(value(scope, 'timeFrom') || value(scope, 'timeTo'))) +
       Number(privateScope);
-    $('#filter-count').textContent = Object.keys(legacyFilters).length
-      ? `${count} 项筛选 · 含旧版分类`
-      : count
-        ? count + ' 项筛选'
-        : '全部公开资料';
+    $('#filter-count').textContent = news
+      ? '快讯 · 审核后展示'
+      : Object.keys(legacyFilters).length
+        ? `${count} 项筛选 · 含旧版分类`
+        : count
+          ? count + ' 项筛选'
+          : '全部公开资料';
     updateResult();
     placeConfig();
   }
@@ -144,6 +159,8 @@ export async function mount() {
         appliedOptions.set('evidenceMode', 'local');
       }
       sync();
+      view('idle');
+      if (mode === 'news') $('#search-form').requestSubmit();
     }),
   );
   function validScope() {
@@ -320,9 +337,23 @@ export async function mount() {
   }
   function readQuery() {
     if (!validScope()) return;
+    if (mode === 'news')
+      return {
+        text: input.value.trim(),
+        includePrivate: value(scope, 'privacy') !== 'public',
+        onlyPrivate: value(scope, 'privacy') === 'only',
+        ...(value(scope, 'newsSource')
+          ? {sourceId: value(scope, 'newsSource')}
+          : {}),
+        ...(value(scope, 'timeFrom') ? {from: value(scope, 'timeFrom')} : {}),
+        ...(value(scope, 'timeTo') ? {to: value(scope, 'timeTo')} : {}),
+      };
     const query = {
       ...legacyFilters,
-      retrievalMode: option('retrievalMode'),
+      retrievalMode:
+        input.value.trim() && value(scope, 'privacy') === 'public'
+          ? option('retrievalMode')
+          : 'lexical',
       includePrivate: value(scope, 'privacy') !== 'public',
       onlyPrivate: value(scope, 'privacy') === 'only',
       domainScope: 'any',
@@ -395,7 +426,7 @@ export async function mount() {
     options.elements.namedItem('textMode').value =
       query.textMode ?? 'substring';
     options.elements.namedItem('retrievalMode').value =
-      query.retrievalMode ?? 'lexical';
+      query.retrievalMode ?? 'hybrid';
     all('[name=textFields]', options).forEach(
       (el) =>
         (el.checked = (query.textFields ?? ['title', 'body', 'tags']).includes(
@@ -447,10 +478,14 @@ export async function mount() {
   }
   page.onStart(() => {
     void attempt(async () => {
-      const {index} = await request('entries/search/index');
-      all('[name=retrievalMode] option').forEach((o) => {
-        if (o.value !== 'lexical') o.disabled = !index.semanticSearchAvailable;
-      });
+      const response = await request('source-subscriptions');
+      fillOptions(
+        scope.elements.namedItem('newsSource'),
+        response.subscriptions
+          .filter((s) => s.receiving?.contentMode === 'news')
+          .map((s) => [s.subscriptionId, s.label]),
+        '全部快讯来源',
+      );
     }, toast);
     void attempt(async () => {
       const {vocabulary} = await ingestion('annotation_vocabulary');

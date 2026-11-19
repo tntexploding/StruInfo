@@ -12,7 +12,10 @@ import {
 } from '../modules/entries/content_topics.js';
 import {AiTagProposalService} from '../modules/processing/ai_tag_proposal_service.js';
 import {loadAnnotationVocabulary} from './annotation_vocabulary.js';
-import {decodeAnnotationResponse} from '../platform/ai/annotation_response.js';
+import {
+  decodeAnnotationResponse,
+  annotationModelSubject,
+} from '../platform/ai/annotation_response.js';
 import {AnnotationService} from './annotation_service.js';
 import {
   EMPTY_ANNOTATION_VOCABULARY,
@@ -340,6 +343,7 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
       ledger,
       publication,
       knowledge,
+      retrieval,
       documents,
       entriesFor,
       commands,
@@ -350,6 +354,95 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
       confirm,
     };
   }
+
+  it('news stays outside article entries and becomes readable only after acceptance', async () => {
+    const f = await fixture();
+    const sourceId = randomUUID();
+    const pending = required(await f.intakeRepo.read(f.snapshotId));
+    await f.intakeRepo.save(f.snapshotId, pending.version, {
+      ...pending.value,
+      captureOrigin: {kind: 'subscription', subscriptionId: sourceId},
+      reception: {
+        channel: 'live',
+        title: 'Synthetic product news',
+        strategy: {...DEFAULT_SOURCE_RECEIVING, contentMode: 'news'},
+      },
+    });
+    expect(await f.commands(f.owner).execute('news_list', {})).toMatchObject({
+      items: [],
+    });
+    await f.accept();
+    expect(
+      await f
+        .commands(f.owner)
+        .execute('news_list', {sourceId, text: 'product'}),
+    ).toMatchObject({
+      items: [{snapshotId: f.snapshotId, title: 'Synthetic product news'}],
+    });
+    expect(
+      await f.commands(f.owner).execute('news_list', {sourceId: randomUUID()}),
+    ).toMatchObject({items: []});
+    expect(
+      await f.commands(f.owner).execute('news_list', {to: '2000-01-01'}),
+    ).toMatchObject({items: []});
+    expect((await f.documents.read(f.snapshotId)).snapshot).toBeDefined();
+    expect((await f.documents.list()).documents).toEqual([]);
+    expect(await f.knowledge.loadCurrentEntries(f.w, false)).toEqual([]);
+    await expect(
+      f.documents.materialize({
+        snapshotId: f.snapshotId,
+        includePrivate: false,
+        mode: 'deterministic',
+      }),
+    ).rejects.toMatchObject({code: 'news_article_processing_disabled'});
+    await expect(f.sourceSplit.freeze(f.snapshotId)).rejects.toMatchObject({
+      code: 'news_article_processing_disabled',
+    });
+    const accepted = required(await f.intakeRepo.read(f.snapshotId));
+    await f.intake.receive(
+      [{snapshotId: f.snapshotId, expectedVersion: accepted.version}],
+      'reject',
+    );
+    expect(await f.commands(f.owner).execute('news_list', {})).toMatchObject({
+      items: [],
+    });
+  });
+  it('removes reclassified legacy news from published candidates while retaining its revision history', async () => {
+    const f = await fixture();
+    await f.prepare();
+    await f.confirm();
+    expect(await f.knowledge.loadCurrentEntries(f.w, false)).toHaveLength(1);
+    expect((await f.retrieval.refresh(10)).index).toMatchObject({
+      publicEntryCount: 1,
+      currentProjectionCount: 1,
+    });
+    const record = required(await f.intakeRepo.read(f.snapshotId));
+    await f.intakeRepo.save(f.snapshotId, record.version, {
+      ...record.value,
+      reception: {
+        channel: 'live',
+        title: 'Old news',
+        strategy: {...DEFAULT_SOURCE_RECEIVING, contentMode: 'news'},
+      },
+    });
+    expect(await f.knowledge.loadCurrentEntries(f.w, false)).toEqual([]);
+    expect(await f.retrieval.status()).toMatchObject({
+      publicEntryCount: 0,
+      currentProjectionCount: 0,
+      staleProjectionCount: 1,
+    });
+    expect(await f.retrieval.refresh(10)).toMatchObject({
+      index: {publicEntryCount: 0, staleProjectionCount: 0, postingCount: 0},
+      progress: {outcome: 'complete', removedProjectionCount: 1},
+    });
+    expect(await f.commands(f.owner).execute('news_list', {})).toMatchObject({
+      items: [{snapshotId: f.snapshotId}],
+    });
+    expect(await f.ledger.read(f.snapshotId)).toBeDefined();
+    expect(
+      await f.repo.informationEntries.loadCurrentEntries(f.w, false),
+    ).toHaveLength(1);
+  });
 
   it('unified tags persist once and feed vocabulary, published search and manual editing', async () => {
     const f = await fixture();
@@ -375,7 +468,11 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
             meaning: 'Synthetic alpha subject',
             wording: 'alpha knowledge',
             primary: true,
-            quote,
+            evidenceId: required(
+              annotationModelSubject(entry).passages.find((p) =>
+                p.text.includes(quote),
+              ),
+            ).id,
           },
         ],
         claims: [],
@@ -488,7 +585,7 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
     );
   });
 
-  it('dispatches published documents through the bound budget and finishes grounded topic work', async () => {
+  it('publishes without automatic grouping and starts a topic only on request', async () => {
     const f = await fixture();
     await f.prepare();
     const peer = await f.capture.importText(f.owner, {
@@ -535,7 +632,11 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
               meaning: 'Synthetic subject',
               wording: 'knowledge',
               primary: true,
-              quote: e.value.body,
+              evidenceId: required(
+                annotationModelSubject(e).passages.find((p) =>
+                  p.text.includes('knowledge'),
+                ),
+              ).id,
             },
           ],
           claims: [],
@@ -618,13 +719,20 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
     expect(await repo.list('job')).toHaveLength(0);
     closed = false;
     await service.poll();
+    expect(calls).toBe(0);
+    expect(await repo.list('job')).toHaveLength(0);
+    const seed = required((await f.ledger.read(f.snapshotId))?.entries[0]);
+    await service.execute(f.owner, 'topic_job_start', {
+      scope: {entryId: seed.entryId},
+      budgetId: 'automatic',
+    });
     await service.drain();
     expect(calls).toBe(1);
     expect((await f.ledger.read(f.snapshotId))?.organization.status).toBe(
-      'succeeded',
+      'not_requested',
     );
     expect((await f.ledger.read(peer.snapshotId))?.organization.status).toBe(
-      'pending',
+      'not_requested',
     );
     expect(await repo.list('topic')).toHaveLength(1);
     const entryId = required(
@@ -899,7 +1007,7 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
       }),
     ).rejects.toMatchObject({code: 'document_structure_changed'});
     expect((await f.ledger.read(f.snapshotId))?.organization.status).toBe(
-      'pending',
+      'not_requested',
     );
   });
 
@@ -1267,7 +1375,7 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
       const first = required(await f.ledger.read(f.snapshotId));
       expect(first.times.sourcePublishedAt).toBe(null);
       expect(first.times.eventAt).toBe(null);
-      expect(first.organization.status).toBe('pending');
+      expect(first.organization.status).toBe('not_requested');
       expect(
         (await http('entries_search', {text: 'alpha'})).body.result,
       ).toMatchObject({totalCount: 1});
@@ -1315,6 +1423,10 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
           )
         ).status,
       ).toBe(409);
+      await runtime.query(
+        "UPDATE struinfo.document_organization_work SET status='pending' WHERE workspace_id=$1 AND publication_id=$2",
+        [f.w, first.publicationId],
+      );
       expect(
         await f.ledger.transitionOrganization({
           publicationId: first.publicationId,
@@ -1369,7 +1481,7 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
         }),
       ).toBe(false);
       expect((await f.ledger.read(f.snapshotId))?.organization.status).toBe(
-        'pending',
+        'not_requested',
       );
       const raw = await f.repo.evidenceRead.loadSnapshot(f.w, f.snapshotId);
       expect(raw).toBeDefined();
@@ -1693,7 +1805,7 @@ describe.skipIf(!port)('P1 disposable PostgreSQL publication', () => {
     ).toBe(false);
     const transfer = new PostgresM1cDomainTransferRepository(runtime);
     await runtime.query(
-      'UPDATE struinfo.document_organization_work SET budget_id=$2 WHERE workspace_id=$1',
+      "UPDATE struinfo.document_organization_work SET budget_id=$2,status='pending' WHERE workspace_id=$1",
       [f.w, 'restore-budget'],
     );
     const bundle = await transfer.exportWorkspace(f.w);

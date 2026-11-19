@@ -43,6 +43,29 @@ const definition = (settings = collection): SourceSplitDefinition => ({
 });
 
 describe('source-bound split templates', () => {
+  it('routes a much larger collection to AI despite matching link and numbering ratios', () => {
+    const recipe = definition({...whole, onMismatch: 'ai'});
+    recipe.match = learnSourceStructure([
+      '# Guide\n\n## One\n\nExplanation.\n\n## Two\n\nConclusion.',
+    ]);
+    const text =
+      '# Roundup\n\n' +
+      Array.from(
+        {length: 12},
+        (_, i) => `## Topic ${String(i)}\n\nSeparate report.\n\n`,
+      ).join('');
+    expect(
+      chooseSourceSplit(text, {
+        engine: SOURCE_SPLIT_ENGINE,
+        catalogRevision: 1,
+        recipes: [recipe],
+      }),
+    ).toMatchObject({
+      outcome: 'ai',
+      reason: 'recipe_structure_mismatch',
+      score: 80,
+    });
+  });
   it('keeps semantic strategies on the AI route without inventing rule cuts', () => {
     const recipe = {
       ...definition(collection),
